@@ -46,6 +46,17 @@ struct JDBCScanContext {
     std::string sql;
     std::vector<int32_t> strict_numeric_columns;
     std::map<std::string, std::string> properties;
+
+    // Why the remote SQL does or does not carry a runtime filter. Neither EXPLAIN's `probe runtime
+    // filters` nor the join's build_runtime_filter_timer can answer that, so without this the
+    // "the filter reaches the scan but never the remote query" failure mode is invisible: reported
+    // through the scan profile by JDBCScanner::_init_profile.
+    int64_t pushed_runtime_filter_count = 0;
+    int64_t pushed_runtime_filter_value_count = 0;
+    // What was pushed down, as "<column>:<value count>", e.g. "c_custkey:37".
+    std::string runtime_filter_pushed_columns;
+    // Reason codes for filters that were not pushed down, e.g. "c_custkey:unsupported_type".
+    std::string runtime_filter_skip_reasons;
 };
 
 struct JDBCScannerProfile {

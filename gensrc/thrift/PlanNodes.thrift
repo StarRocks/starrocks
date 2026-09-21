@@ -963,6 +963,11 @@ struct TJDBCScanNode {
   6: optional bool preserve_remote_order
   // Zero-based result positions mapped from PostgreSQL unconstrained numeric to DECIMAL(38,18).
   7: optional list<i32> strict_numeric_columns
+  // Remote column reference, already quoted, for each materialized slot that may carry a join
+  // runtime filter. Filled by the same loop as `columns` so the two cannot disagree -- a derived
+  // table's column is addressed by a generated alias (jdbc_proj_N / sr_cN), not its base name.
+  // Absent or empty means "do not push down"; that is how FE vetoes (see R1, the limit gate).
+  8: optional map<Types.TSlotId, string> runtime_filter_columns
 }
 
 // Extension point for TLakeScanNode. DO NOT MODIFY: do not add fields here,

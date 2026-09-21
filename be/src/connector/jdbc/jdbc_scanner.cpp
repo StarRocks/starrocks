@@ -255,6 +255,25 @@ void JDBCScanner::_init_profile() {
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunkTime");
     _runtime_profile->add_info_string("Query", _scan_ctx.sql);
+
+    // "Query" shows the remote SQL, but reading an IN list out of it is guesswork once the SQL is
+    // long, and it says nothing about the filters that were dropped on the way. Report both halves
+    // explicitly: how much made it into the remote query, and why the rest did not. Both counters
+    // are emitted even when they are zero, so "no runtime filter was pushed down" and "this build
+    // predates the feature" stay distinguishable in a profile.
+    COUNTER_SET(ADD_COUNTER(_runtime_profile, "PushdownRuntimeFilters", TUnit::UNIT),
+                _scan_ctx.pushed_runtime_filter_count);
+    COUNTER_SET(ADD_COUNTER(_runtime_profile, "PushdownRuntimeFilterValues", TUnit::UNIT),
+                _scan_ctx.pushed_runtime_filter_value_count);
+    // Per-column rather than just the totals above: which column carried how many values is what
+    // explains whether a pushed-down filter was worth anything, and it is the only place the
+    // pairing between a slot and its remote column reference becomes visible after the fact.
+    _runtime_profile->add_info_string(
+            "PushdownRuntimeFilterColumns",
+            _scan_ctx.runtime_filter_pushed_columns.empty() ? "none" : _scan_ctx.runtime_filter_pushed_columns);
+    _runtime_profile->add_info_string("PushdownRuntimeFilterSkipped", _scan_ctx.runtime_filter_skip_reasons.empty()
+                                                                              ? "none"
+                                                                              : _scan_ctx.runtime_filter_skip_reasons);
 }
 
 StatusOr<LogicalType> JDBCScanner::_precheck_data_type(const std::string& java_class, SlotDescriptor* slot_desc) {

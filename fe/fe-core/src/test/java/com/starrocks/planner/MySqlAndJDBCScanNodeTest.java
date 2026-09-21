@@ -70,12 +70,20 @@ public class MySqlAndJDBCScanNodeTest {
         tuple.addSlot(skippedSlot);
         tuple.addSlot(createSlotDescriptor(2, amount));
         JDBCScanNode node = new JDBCScanNode(new PlanNodeId(1), tuple, table);
+        // The positions are collected by the same pass that builds the SELECT list, so that pass has
+        // to have run -- which is the point: there is no second walk of the slots that could decide
+        // differently about which ones are materialized.
+        node.createJDBCTableColumns();
         TPlanNode thrift = new TPlanNode();
         node.toThrift(thrift);
+        Assertions.assertEquals(List.of("amount"), thrift.jdbc_scan_node.getColumns());
         Assertions.assertEquals(List.of(0), thrift.jdbc_scan_node.getStrict_numeric_columns());
+
         table.setUnboundedNumericColumns(Set.of());
+        JDBCScanNode unmarkedNode = new JDBCScanNode(new PlanNodeId(2), tuple, table);
+        unmarkedNode.createJDBCTableColumns();
         TPlanNode unmarked = new TPlanNode();
-        node.toThrift(unmarked);
+        unmarkedNode.toThrift(unmarked);
         Assertions.assertFalse(unmarked.jdbc_scan_node.isSetStrict_numeric_columns());
     }
 

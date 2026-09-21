@@ -1117,6 +1117,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_jdbc_array_subscript_push_down";
     public static final String ENABLE_JDBC_ARRAY_LOWER_BOUND_CORRECTION =
             "enable_jdbc_array_lower_bound_correction";
+    public static final String ENABLE_JDBC_RUNTIME_FILTER_PUSH_DOWN = "enable_jdbc_runtime_filter_push_down";
     public static final String JDBC_PREDICATE_PUSHDOWN_MAX_IN_LIST_SIZE = "jdbc_predicate_pushdown_max_in_list_size";
     public static final String ENABLE_JDBC_COLUMN_STATISTICS = "enable_jdbc_column_statistics";
     public static final String MAX_PUSHDOWN_OR_PREDICATES = "max_pushdown_or_predicates";
@@ -3400,6 +3401,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // rather than a new estimate.
     @VarAttr(name = ENABLE_JDBC_COLUMN_STATISTICS, flag = VariableMgr.INVISIBLE)
     private boolean enableJdbcColumnStatistics = true;
+
+    // Let a JDBC scan render the join runtime filters it already receives into the remote SQL's
+    // outermost WHERE, instead of dropping them and pulling every row back. Off by default while
+    // the type coverage is still narrow. Deliberately not INVISIBLE, unlike three of the four
+    // push-down switches above: those do not show up in SHOW VARIABLES LIKE '%jdbc%', which makes
+    // it easy to conclude a switch does not exist while diagnosing a scan that is not pushing down.
+    @VarAttr(name = ENABLE_JDBC_RUNTIME_FILTER_PUSH_DOWN)
+    private boolean enableJdbcRuntimeFilterPushDown = false;
 
     // Max items in a literal IN list that predicate/HAVING pushdown will send to a JDBC source:
     // -1 = no limit; 0 = never push an IN down; N > 0 = push only lists of at most N items.
@@ -6363,6 +6372,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableJdbcArrayLowerBoundCorrection(boolean enableJdbcArrayLowerBoundCorrection) {
         this.enableJdbcArrayLowerBoundCorrection = enableJdbcArrayLowerBoundCorrection;
+    }
+
+    public boolean isEnableJdbcRuntimeFilterPushDown() {
+        return enableJdbcRuntimeFilterPushDown;
+    }
+
+    public void setEnableJdbcRuntimeFilterPushDown(boolean enableJdbcRuntimeFilterPushDown) {
+        this.enableJdbcRuntimeFilterPushDown = enableJdbcRuntimeFilterPushDown;
     }
 
     public long getOneTabletOptMaxTabletRows() {

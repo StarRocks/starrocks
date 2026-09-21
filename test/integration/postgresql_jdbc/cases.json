@@ -124,13 +124,18 @@
     "sql": "SELECT id FROM {table} ORDER BY created_z ASC NULLS FIRST, id ASC LIMIT 7"
   },
   {
-    "name": "offset_fallback",
-    "sql": "SELECT id FROM {table} ORDER BY amount DESC NULLS LAST, id ASC LIMIT 5 OFFSET 2"
+    "name": "offset_topn",
+    "sql": "SELECT id FROM {table} ORDER BY amount DESC NULLS LAST, id ASC LIMIT 5 OFFSET 2",
+    "topn_limit": 5,
+    "remote_offset": 2
   },
   {
-    "name": "aggregate_offset_fallback",
+    "name": "aggregate_offset_topn",
     "sql": "SELECT grp, SUM(amount) AS total FROM {table} GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3 OFFSET 1",
-    "aggregate": "group"
+    "aggregate": "group",
+    "topn_limit": 3,
+    "topn_requires_aggregate": true,
+    "remote_offset": 1
   },
   {
     "name": "derived_timestamp_order_fallback",
@@ -144,8 +149,11 @@
   },
   {
     "name": "aggregate_above_limited_input",
-    "sql": "SELECT grp, SUM(amount) AS total FROM (SELECT grp, amount FROM {table} ORDER BY id ASC NULLS FIRST LIMIT 12) s GROUP BY grp ORDER BY total DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
-    "topn_limit": 12
+    "sql": "SELECT grp, SUM(amount) AS total FROM (SELECT grp, amount FROM {table} ORDER BY id ASC NULLS FIRST LIMIT 12) s GROUP BY grp ORDER BY ABS(SUM(amount)) DESC NULLS LAST, grp ASC NULLS FIRST LIMIT 3",
+    "topn_limit": 12,
+    "aggregate": "group",
+    "aggregate_requires_topn": true,
+    "local_topn_retained": true
   },
   {
     "name": "text_default_collation_topn",
@@ -193,9 +201,11 @@
     "sql": "SELECT id, ratio FROM {table} ORDER BY ratio DESC NULLS LAST, id ASC LIMIT 7"
   },
   {
-    "name": "text_min_aggregate_order_fallback",
-    "sql": "SELECT grp, MIN(label) AS first_label FROM {table} GROUP BY grp ORDER BY first_label ASC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
-    "aggregate": "group"
+    "name": "text_minmax_aggregate_order_fallback",
+    "sql": "SELECT grp, MIN(label) AS first_label, MAX(label) AS last_label FROM {table} GROUP BY grp ORDER BY first_label ASC NULLS LAST, grp ASC NULLS FIRST LIMIT 4",
+    "aggregate": "group",
+    "aggregate_collate": 2,
+    "pg_sql": "SELECT grp, MIN(label COLLATE \"C\") AS first_label, MAX(label COLLATE \"C\") AS last_label FROM {table} GROUP BY grp ORDER BY MIN(label COLLATE \"C\") ASC NULLS LAST, grp ASC NULLS FIRST LIMIT 4"
   },
   {
     "name": "array_lower_bound_one_subscript",
@@ -469,5 +479,218 @@
     "name": "array_timestamptz_column_is_unsupported",
     "sql": "SELECT id, zoned[1] AS z FROM {table} WHERE id <= 4 ORDER BY id ASC",
     "expect_error": "Datatype of external table column [zoned] is not supported"
+  },
+  {
+    "name": "rf_integer_key_push_down",
+    "sql": "SELECT f.customer_id, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (1),(3),(5),(7)) d(k) ON f.customer_id = d.k GROUP BY f.customer_id ORDER BY f.customer_id",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 4,
+      "columns": "customer_id:4",
+      "remote_predicate": "\"customer_id\" IN (1,3,5,7)"
+    }
+  },
+  {
+    "name": "rf_scan_limit_veto",
+    "sql": "SELECT COUNT(*) AS n, SUM(s.id) AS si FROM (SELECT id, customer_id FROM {table} WHERE id <= 20 LIMIT 20) s JOIN {bc}(VALUES (1),(3),(5),(7)) d(k) ON s.customer_id = d.k",
+    "remote_limit": 20,
+    "runtime_filter": {
+      "fe_allowed_columns": null,
+      "filters": 0,
+      "values": 0,
+      "skipped": "scan_has_limit",
+      "off_skipped": "scan_has_limit"
+    }
+  },
+  {
+    "name": "rf_null_safe_join",
+    "sql": "SELECT COUNT(*) AS n, SUM(COALESCE(f.grp, -1)) AS sg, SUM(f.id) AS si FROM {table} f JOIN {bc}(VALUES (1),(3),(CAST(NULL AS INT))) d(k) ON f.grp <=> d.k",
+    "pg_sql": "SELECT COUNT(*) AS n, SUM(COALESCE(f.grp, -1)) AS sg, SUM(f.id) AS si FROM {table} f JOIN (VALUES (1),(3),(CAST(NULL AS INT))) d(k) ON f.grp IS NOT DISTINCT FROM d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 2,
+      "columns": "grp:2",
+      "remote_predicate": "\"grp\" IN (1,3) OR \"grp\" IS NULL"
+    }
+  },
+  {
+    "name": "rf_string_key_special_characters",
+    "sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES ('quote''single'),('double\"quote'),('percent%underscore_'),('中文字符串'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "pg_sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES ('quote''single'),('double\"quote'),('percent%underscore_'),('中文字符串'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "comment": "The values are rendered into the statement now, so this is where the escaping is measured rather than asserted: the single quote has to arrive doubled, and %, _ and a double quote have to arrive untouched. The backslash key that used to be in this list moved to rf_backslash_value_veto, because a backslash in a value now refuses the whole filter.",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 5,
+      "columns": "join_key:5",
+      "remote_predicate": "\"join_key\" IN ('double\"quote','percent%underscore_','plain','quote''single','中文字符串')"
+    }
+  },
+  {
+    "name": "rf_backslash_value_veto",
+    "sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES ('back\\\\slash'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "pg_sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES ('back\\slash'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "comment": "Doubling the single quote is correct only while the remote reads a backslash as an ordinary character, and standard_conforming_strings (PostgreSQL) and NO_BACKSLASH_ESCAPES (MySQL) are session settings the BE cannot see. So one backslash in one value refuses the whole filter, and the two modes still have to answer identically and identically to PostgreSQL -- the filter is an optimization, and dropping it may cost time but never rows.",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 0,
+      "values": 0,
+      "skipped": "join_key:value_not_representable"
+    }
+  },
+  {
+    "name": "rf_supplementary_character_veto",
+    "sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES ('😀'),('𠀁'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "pg_sql": "SELECT f.join_key, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES ('😀'),('𠀁'),('plain')) d(k) ON f.join_key = d.k GROUP BY f.join_key ORDER BY f.join_key",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 0,
+      "values": 0,
+      "skipped": "join_key:value_not_representable"
+    }
+  },
+  {
+    "name": "rf_over_pushed_aggregate",
+    "sql": "SELECT a.grp, a.n FROM (SELECT grp, COUNT(*) AS n FROM {table} GROUP BY grp) a JOIN {bc}(VALUES (1),(3),(5)) d(k) ON a.grp = d.k ORDER BY a.grp",
+    "aggregate": "group",
+    "runtime_filter": {
+      "session": {
+        "enable_jdbc_agg_push_down": true
+      },
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 3,
+      "columns": "grp:3",
+      "remote_predicate": ") sr_inline WHERE (\"grp\" IN (1,3,5))"
+    }
+  },
+  {
+    "name": "rf_over_pushed_join",
+    "sql": "SELECT COUNT(*) AS n, SUM(j.id) AS s FROM (SELECT f1.id AS id, f1.customer_id AS ck FROM {table} f1 JOIN {table} f2 ON f1.id = f2.id) j JOIN {bc}(VALUES (1),(3),(5),(7)) d(k) ON j.ck = d.k",
+    "runtime_filter": {
+      "session": {
+        "enable_jdbc_join_push_down": true
+      },
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 4,
+      "columns": "sr_c4:4",
+      "remote_predicate": ") sr_inline WHERE (\"sr_c4\" IN (1,3,5,7))"
+    }
+  },
+  {
+    "name": "rf_build_side_over_threshold",
+    "sql": "SELECT f.customer_id, COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (1),(3),(5),(7)) d(k) ON f.customer_id = d.k GROUP BY f.customer_id ORDER BY f.customer_id",
+    "runtime_filter": {
+      "session": {
+        "max_pushdown_conditions_per_column": 2
+      },
+      "fe_allowed_columns": 2,
+      "filters": 0,
+      "values": 0
+    }
+  },
+  {
+    "name": "rf_unbounded_numeric_type_veto",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST(0 AS DECIMAL(38,18))),(CAST(1 AS DECIMAL(38,18))),(CAST(2 AS DECIMAL(38,18)))) d(k) ON f.unbounded_amount = d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 1,
+      "filters": 0,
+      "values": 0,
+      "skipped": "unbounded_amount:column_not_authorized_by_fe"
+    }
+  },
+  {
+    "name": "rf_float_key_push_down",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST(0.1 AS FLOAT)),(CAST(0.2 AS FLOAT)),(CAST('3.4028235e38' AS FLOAT))) d(k) ON f.ratio_f = d.k",
+    "pg_sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES (CAST(0.1 AS real)),(CAST(0.2 AS real)),(CAST('3.4028235e38' AS real))) d(k) ON f.ratio_f = d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 3,
+      "columns": "ratio_f:3",
+      "remote_predicate": "\"ratio_f\" IN ('0.1','0.2','3.4028235e+38')"
+    }
+  },
+  {
+    "name": "rf_double_key_push_down",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST(0.1 AS DOUBLE)),(CAST(0.2 AS DOUBLE)),(CAST(0.3 AS DOUBLE))) d(k) ON f.ratio = d.k",
+    "pg_sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES (CAST(0.1 AS double precision)),(CAST(0.2 AS double precision)),(CAST(0.3 AS double precision))) d(k) ON f.ratio = d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 3,
+      "columns": "ratio:3",
+      "remote_predicate": "\"ratio\" IN ('0.1','0.2','0.3')"
+    }
+  },
+  {
+    "name": "rf_date_key_push_down",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST('0001-01-01' AS DATE)),(CAST('1582-10-10' AS DATE)),(CAST('9999-12-31' AS DATE))) d(k) ON f.created_date = d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 3,
+      "columns": "created_date:3",
+      "remote_predicate": "\"created_date\" IN ('0001-01-01','1582-10-10','9999-12-31')"
+    }
+  },
+  {
+    "name": "rf_timestamp_key_push_down",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST('0001-01-01 00:00:00.000001' AS DATETIME)),(CAST('2026-03-08 02:30:00.123456' AS DATETIME)),(CAST('9999-12-31 23:59:59.999999' AS DATETIME))) d(k) ON f.created_at = d.k",
+    "pg_sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES (CAST('0001-01-01 00:00:00.000001' AS timestamp)),(CAST('2026-03-08 02:30:00.123456' AS timestamp)),(CAST('9999-12-31 23:59:59.999999' AS timestamp))) d(k) ON f.created_at = d.k",
+    "runtime_filter": {
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 3,
+      "columns": "created_at:3",
+      "remote_predicate": "\"created_at\" IN ('0001-01-01 00:00:00.000001','2026-03-08 02:30:00.123456','9999-12-31 23:59:59.999999')"
+    }
+  },
+  {
+    "name": "rf_timestamptz_key_veto",
+    "sql": "SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN {bc}(VALUES (CAST('2026-11-01 01:30:00' AS DATETIME))) d(k) ON f.created_z = d.k",
+    "pg_sql": "SET TIME ZONE 'America/New_York'; SELECT COUNT(*) AS n, SUM(f.id) AS s FROM {table} f JOIN (VALUES (CAST('2026-11-01 01:30:00' AS timestamp))) d(k) ON (f.created_z AT TIME ZONE 'America/New_York') = d.k",
+    "runtime_filter": {
+      "session": {
+        "time_zone": "America/New_York"
+      },
+      "fe_allowed_columns": 1,
+      "filters": 0,
+      "values": 0,
+      "skipped": "created_z:column_not_authorized_by_fe"
+    }
+  },
+  {
+    "name": "rf_date_key_over_pushed_aggregate",
+    "sql": "SELECT a.created_date, a.n FROM (SELECT created_date, COUNT(*) AS n FROM {table} GROUP BY created_date) a JOIN {bc}(VALUES (CAST('1582-10-10' AS DATE)),(CAST('9999-12-31' AS DATE))) d(k) ON a.created_date = d.k ORDER BY a.created_date",
+    "aggregate": "group",
+    "runtime_filter": {
+      "session": {
+        "enable_jdbc_agg_push_down": true
+      },
+      "fe_allowed_columns": 2,
+      "filters": 1,
+      "values": 2,
+      "columns": "created_date:2",
+      "remote_predicate": ") sr_inline WHERE (\"created_date\" IN ('1582-10-10','9999-12-31'))"
+    }
+  },
+  {
+    "name": "rf_datetime_key_over_pushed_aggregate_veto",
+    "sql": "SELECT a.created_at, a.n FROM (SELECT created_at, COUNT(*) AS n FROM {table} GROUP BY created_at) a JOIN {bc}(VALUES (CAST('2026-03-08 02:30:00.123456' AS DATETIME))) d(k) ON a.created_at = d.k ORDER BY a.created_at",
+    "pg_sql": "SELECT a.created_at, a.n FROM (SELECT created_at, COUNT(*) AS n FROM {table} GROUP BY created_at) a JOIN (VALUES (CAST('2026-03-08 02:30:00.123456' AS timestamp))) d(k) ON a.created_at = d.k ORDER BY a.created_at",
+    "aggregate": "group",
+    "runtime_filter": {
+      "session": {
+        "enable_jdbc_agg_push_down": true
+      },
+      "fe_allowed_columns": 1,
+      "filters": 0,
+      "values": 0,
+      "skipped": "created_at:column_not_authorized_by_fe"
+    }
   }
 ]

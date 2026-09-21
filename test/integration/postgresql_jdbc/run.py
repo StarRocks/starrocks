@@ -24,12 +24,27 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 import uuid
 
 
 HERE = Path(__file__).resolve().parent
 MODES = (("local", False, False), ("aggregate", True, False),
          ("topn", False, True), ("both", True, True))
+# A runtime filter case is compared against PostgreSQL in both switch positions instead: the
+# filter is a pure optimization, so the two have to agree with each other and with PostgreSQL.
+# The agg/TopN switches a runtime filter case needs are fixed per case, in its "session" block,
+# because the shape it is testing (a filter landing outside an already pushed GROUP BY, say)
+# only exists in one of the four combinations.
+RF_MODES = (("rf_off", False), ("rf_on", True))
+# StarRocks-only join hint. A runtime filter is an in-filter built by a broadcast hash join, so
+# every runtime filter case has to ask for one; PostgreSQL gets the same text without the hint.
+BROADCAST = "[broadcast] "
+# The scan waits this long for a filter to arrive before starting to read. The default is 20ms,
+# which is not enough for a JDBC scan to reliably see one: without this the ON executions would
+# pass or fail depending on how fast the build side finished.
+RF_SCAN_WAIT_MS = 3000
+QUERY_ID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\Z")
 NUMBER = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?\Z")
 TIMESTAMP = re.compile(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\Z")
 
@@ -97,7 +112,11 @@ def assert_plan(case, plan, aggregate_enabled, topn_enabled):
     if len(queries) != 1:
         errors.append("Expected exactly one JDBC QUERY, found {}".format(len(queries)))
     remote = "\n".join(queries)
-    aggregate_expected = bool(case.get("aggregate")) and aggregate_enabled
+    # An aggregate sitting above a subquery's own LIMIT can only be pushed once that LIMIT has
+    # itself been pushed into the scan, so such a case declares that its aggregate depends on the
+    # TopN switch as well; the reverse dependency already exists as topn_requires_aggregate.
+    aggregate_expected = bool(case.get("aggregate")) and aggregate_enabled and (
+        not case.get("aggregate_requires_topn") or topn_enabled)
     aggregate_actual = bool(re.search(r"\bGROUP\s+BY\b|\b(?:sum|count|min|max|avg)\s*\(",
                                       remote, re.IGNORECASE))
     if aggregate_actual != aggregate_expected:
@@ -121,18 +140,43 @@ def assert_plan(case, plan, aggregate_enabled, topn_enabled):
             errors.append("Expected only remote LIMIT {}, found {}".format(case["topn_limit"], limits))
         if not re.search(r"\b(?:ASC|DESC)\s+NULLS\s+(?:FIRST|LAST)\b", remote, re.IGNORECASE):
             errors.append("Expected explicit remote direction and NULL ordering")
+        offsets = [int(offset) for offset in re.findall(r"\bOFFSET\s+(\d+)\b", remote, re.IGNORECASE)]
+        expected_offset = case.get("remote_offset")
+        if expected_offset is None:
+            if offsets:
+                errors.append("Unexpected remote OFFSET: {}".format(offsets))
+        elif offsets != [expected_offset]:
+            errors.append("Expected one remote OFFSET {}, found {}".format(expected_offset, offsets))
         # The remote ORDER BY replaces the local TopN: leaving one behind would mean the rows
-        # still needed reordering, which is exactly what the pushdown is supposed to avoid.
-        if "TOP-N" in plan:
+        # still needed reordering, which is exactly what the pushdown is supposed to avoid. A query
+        # written with a second TopN the rule cannot take -- one above a local aggregate, say --
+        # says so, and then that one is required to still be there rather than merely tolerated.
+        if case.get("local_topn_retained"):
+            if "TOP-N" not in plan:
+                errors.append("Expected the unpushable local TOP-N to remain")
+        elif "TOP-N" in plan:
             errors.append("Unexpected local TOP-N alongside a pushed ORDER BY")
-    # A string sort key has to carry COLLATE "C" so PostgreSQL orders it by bytes, the way
-    # StarRocks does; a non-string key must not carry one.
-    collate_expected = case.get("remote_collate", 0) if topn_expected else 0
+    # A pushed string comparison has to carry COLLATE "C" so PostgreSQL evaluates it by bytes, the
+    # way StarRocks does; a non-string one must not carry one. A sort key gets it from the pushed
+    # ORDER BY and a MIN/MAX argument from the pushed aggregate, so each is counted against the
+    # switch that put it there.
+    collate_expected = (case.get("remote_collate", 0) if topn_expected else 0) + (
+        case.get("aggregate_collate", 0) if aggregate_expected else 0)
     collate_actual = len(re.findall(r'COLLATE\s+"C"', remote, re.IGNORECASE))
     if collate_actual != collate_expected:
         errors.append('Expected {} remote COLLATE "C", found {}'.format(collate_expected, collate_actual))
-    if not topn_expected and limits:
-        errors.append("Unexpected remote LIMIT during TopN fallback: {}".format(limits))
+    if not topn_expected:
+        # A runtime filter case may push an ordinary row limit into the scan, which is not a TopN
+        # pushdown and carries no ORDER BY. It is declared per case so an unexpected limit is still
+        # a failure; cases without the key keep rejecting every remote LIMIT.
+        allowed = case.get("remote_limit")
+        unexpected = [limit for limit in limits if limit != allowed]
+        if unexpected:
+            errors.append("Unexpected remote LIMIT during TopN fallback: {}".format(unexpected))
+        if allowed and not limits:
+            errors.append("Expected remote LIMIT {}, found none".format(allowed))
+        if re.search(r"\bOFFSET\b", remote, re.IGNORECASE):
+            errors.append("Unexpected remote OFFSET during TopN fallback")
     # Direct assertions on the remote statement itself. Rows alone cannot tell a subscript that
     # PostgreSQL evaluated from one StarRocks evaluated locally, nor say which columns were asked
     # for; both are visible here and nowhere else. Substrings are matched case-sensitively against
@@ -144,6 +188,141 @@ def assert_plan(case, plan, aggregate_enabled, topn_enabled):
         if fragment in remote:
             errors.append("Expected remote SQL not to contain {!r}".format(fragment))
     return queries, errors
+
+
+IN_LIST = re.compile(r" IN \(")
+
+
+def in_list_values(text, start):
+    """Splits the rendered ``IN`` list that begins at ``start`` into its values.
+
+    Returns ``(values, index_of_closing_bracket)``, or ``(None, None)`` when the list does not
+    terminate. A value is a SQL literal that may hold a comma or a bracket, so the scan tracks
+    quoting; ``''`` inside a literal is an escaped quote, which this sees as a close immediately
+    followed by an open and which therefore needs no case of its own.
+    """
+    values = []
+    current = []
+    quoted = False
+    index = start
+    while index < len(text):
+        char = text[index]
+        if char == "'":
+            quoted = not quoted
+        elif not quoted and char == ")":
+            values.append("".join(current))
+            return values, index
+        elif not quoted and char == ",":
+            values.append("".join(current))
+            current = []
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    return None, None
+
+
+def canonical_in_lists(sql):
+    """Sorts the values inside every rendered ``IN (...)`` list of ``sql``.
+
+    A runtime filter's values are rendered into the statement in the iteration order of the BE's
+    hash set, which nothing defines and nothing keeps stable across executions. Sorting the
+    expected fragment and the finished statement the same way keeps the assertion on the exact
+    literal text -- quoting and escaping included, which is the half the remote engine's behaviour
+    turns on -- without pinning an order that would make the case flaky.
+    """
+    out = []
+    position = 0
+    while True:
+        match = IN_LIST.search(sql, position)
+        if not match:
+            out.append(sql[position:])
+            return "".join(out)
+        values, end = in_list_values(sql, match.end())
+        if values is None:
+            out.append(sql[position:])
+            return "".join(out)
+        out.append(sql[position:match.end()])
+        out.append(",".join(sorted(values)))
+        position = end
+
+
+def profile_fields(profile, name):
+    return [value.strip() for value in
+            re.findall(r"^\s*-\s*" + name + r":\s*(.*?)\s*$", profile, re.MULTILINE)]
+
+
+def profile_counter(profile, name, errors):
+    values = profile_fields(profile, name)
+    if not values:
+        errors.append("Profile has no {} counter".format(name))
+        return None
+    if len(set(values)) != 1:
+        errors.append("Profile reports conflicting {}: {}".format(name, values))
+        return None
+    try:
+        return int(values[0])
+    except ValueError:
+        errors.append("Profile {} is not a plain count: {}".format(name, values[0]))
+        return None
+
+
+def profile_info(profile, name, expected, errors):
+    values = profile_fields(profile, name)
+    if not values:
+        errors.append("Profile has no {} entry".format(name))
+    elif any(value != expected for value in values):
+        errors.append("Expected {} {!r}, found {!r}".format(name, expected, values))
+
+
+def assert_runtime_filter(spec, plan, profile, rf_enabled):
+    """Check what the remote SQL actually carried, not merely what the plan allowed.
+
+    The FE half comes from EXPLAIN VERBOSE, which says whether the FE authorized the push down at
+    all. The BE half comes from the scan's own profile, which records the finished remote SQL plus
+    how many filters and values went into it -- the only place the runtime shape is visible, since
+    a plan is printed before any filter exists. Reading it here rather than PostgreSQL's statement
+    log keeps the assertion independent of the remote server's logging configuration.
+    """
+    errors = []
+    allowed = re.findall(r"^\s*RUNTIME FILTER PUSH DOWN: allowed on (\d+) column\(s\)$",
+                         plan, re.MULTILINE)
+    expected_allowed = spec.get("fe_allowed_columns") if rf_enabled else None
+    if expected_allowed is None:
+        if allowed:
+            errors.append("Expected no FE runtime filter authorization, found {}".format(allowed))
+    elif allowed != [str(expected_allowed)]:
+        errors.append("Expected FE to authorize {} column(s), found {}".format(
+            expected_allowed, allowed or "none"))
+
+    expected_filters = spec.get("filters", 0) if rf_enabled else 0
+    expected_values = spec.get("values", 0) if rf_enabled else 0
+    filters = profile_counter(profile, "PushdownRuntimeFilters", errors)
+    values = profile_counter(profile, "PushdownRuntimeFilterValues", errors)
+    if filters is not None and filters != expected_filters:
+        errors.append("Expected PushdownRuntimeFilters {}, found {}".format(expected_filters, filters))
+    if values is not None and values != expected_values:
+        errors.append("Expected PushdownRuntimeFilterValues {}, found {}".format(expected_values, values))
+    profile_info(profile, "PushdownRuntimeFilterColumns",
+                 spec.get("columns", "none") if rf_enabled else "none", errors)
+    profile_info(profile, "PushdownRuntimeFilterSkipped",
+                 spec.get("skipped", "none") if rf_enabled else spec.get("off_skipped",
+                                                                         "not_authorized_by_fe"),
+                 errors)
+
+    remote = profile_fields(profile, "Query")
+    if len(remote) != 1:
+        errors.append("Expected exactly one remote query in the profile, found {}".format(len(remote)))
+    else:
+        predicate = spec.get("remote_predicate") if rf_enabled else None
+        if predicate and canonical_in_lists(predicate) not in canonical_in_lists(remote[0]):
+            errors.append("Expected remote SQL to contain {!r}".format(predicate))
+        # The values are rendered into the statement, so nothing is bound and no placeholder may
+        # appear whether or not a filter was pushed. A `?` that reaches the driver is a parameter
+        # the bridge has no value for, which fails the whole statement.
+        if "?" in remote[0]:
+            errors.append("Expected no placeholder in the remote SQL")
+    return remote, errors
 
 
 def arguments():
@@ -194,7 +373,7 @@ def main():
         return run_client(psql, "SET TIME ZONE 'UTC'; SET DateStyle = 'ISO, YMD'; "
                           "SET statement_timeout = '{}s';\n{}\n".format(args.timeout, sql), args.timeout)
 
-    def sr(sql, agg, topn, session=None):
+    def sr_settings(agg, topn, session=None):
         settings = ("SET time_zone = '+00:00'; SET query_timeout = {}; "
                     "SET enable_jdbc_project_push_down = true; "
                     "SET enable_jdbc_agg_push_down = {}; "
@@ -204,7 +383,43 @@ def main():
         # without the field appends nothing, so what the older cases send is unchanged.
         for name in sorted(session or ()):
             settings += setting(name, session[name]) + "\n"
-        return run_client(mysql, settings + sql + ";\n", args.timeout)
+        return settings
+
+    def sr(sql, agg, topn, session=None):
+        return run_client(mysql, sr_settings(agg, topn, session) + sql + ";\n", args.timeout)
+
+    def sr_profiled(sql, agg, topn, session):
+        """Run one statement with profiling on and return its rows and its query id.
+
+        Both have to come out of a single client invocation: session variables and
+        last_query_id() do not survive a new connection, and picking the statement back out of
+        SHOW PROFILELIST would race every other session on a shared cluster.
+        """
+        settings = sr_settings(agg, topn, session)
+        settings += "SET enable_profile = true;\n"
+        settings += "SET runtime_filter_scan_wait_time = {};\n".format(RF_SCAN_WAIT_MS)
+        output = run_client(mysql, settings + sql + ";\nSELECT last_query_id();\n", args.timeout)
+        lines = output.splitlines()
+        if not lines or not QUERY_ID.fullmatch(lines[-1]):
+            raise RuntimeError("Statement did not report a query id; last line: {!r}".format(
+                lines[-1] if lines else ""))
+        return [line.split("\t") for line in lines[:-1]], lines[-1]
+
+    def sr_profile(query_id):
+        # The BE reports its profile to the FE after the statement has already returned, so the
+        # first read can legitimately come back empty.
+        deadline = time.monotonic() + args.timeout
+        profile = ""
+        while True:
+            profile = run_client(
+                mysql, "SELECT get_query_profile('{}');\n".format(query_id), args.timeout)
+            if "PushdownRuntimeFilters" in profile:
+                return profile
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    "Profile for {} never reported a JDBC scan within {} seconds".format(
+                        query_id, args.timeout))
+            time.sleep(1)
 
     evidence = {"started_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "schema": schema, "catalog": args.catalog, "cases": [],
@@ -235,7 +450,7 @@ def main():
             expect_error = case.get("expect_error")
             expected = None
             if expect_error is None:
-                pg_sql = case.get("pg_sql", case["sql"]).format(table=pg_table)
+                pg_sql = case.get("pg_sql", case["sql"]).format(table=pg_table, bc="")
                 entry["postgresql_sql"] = pg_sql
                 try:
                     expected = rows(pg(pg_sql + ";"))
@@ -245,20 +460,37 @@ def main():
                     evidence["errors"].append(case["name"] + ": PostgreSQL reference failed: " + str(error))
                     print("FAIL {}: PostgreSQL reference failed".format(case["name"]), flush=True)
                     continue
-            for mode, agg, topn in MODES:
-                sql = case["sql"].format(table=sr_table)
+            sql = case["sql"].format(table=sr_table, bc=BROADCAST)
+            spec = case.get("runtime_filter")
+            if spec is None:
+                modes = [(mode, agg, topn, session, None) for mode, agg, topn in MODES]
+            else:
+                # A runtime filter case fixes the other two switches itself, because the shape it
+                # exercises exists in only one of their combinations. Its own session block is
+                # layered over whatever the case already pinned for every mode.
+                rf_session = dict(session or {}, **spec.get("session", {}))
+                agg = bool(rf_session.get("enable_jdbc_agg_push_down", False))
+                topn = bool(rf_session.get("enable_jdbc_topn_push_down", False))
+                modes = [(mode, agg, topn,
+                          dict(rf_session, enable_jdbc_runtime_filter_push_down=rf), rf)
+                         for mode, rf in RF_MODES]
+            for mode, agg, topn, extra, rf in modes:
                 result = {"name": mode, "aggregate_enabled": agg, "topn_enabled": topn,
-                          "starrocks_sql": sql, "session": session, "errors": [], "passed": False}
+                          "starrocks_sql": sql, "session": extra, "errors": [], "passed": False}
                 entry["modes"].append(result)
                 try:
                     if expect_error is None:
-                        actual = rows(sr(sql, agg, topn, session))
+                        if spec is None:
+                            actual = rows(sr(sql, agg, topn, extra))
+                        else:
+                            actual, query_id = sr_profiled(sql, agg, topn, extra)
+                            result["query_id"] = query_id
                         result["starrocks_rows"] = actual
                         if comparable(actual) != comparable(expected):
                             result["errors"].append("Ordered result differs from PostgreSQL reference")
                     else:
                         try:
-                            result["starrocks_rows"] = rows(sr(sql, agg, topn, session))
+                            result["starrocks_rows"] = rows(sr(sql, agg, topn, extra))
                             result["errors"].append(
                                 "Expected StarRocks to fail with {!r}".format(expect_error))
                         except RuntimeError as error:
@@ -268,7 +500,7 @@ def main():
                                     "Expected a StarRocks failure containing {!r}".format(expect_error))
                     plan = None
                     try:
-                        plan = sr("EXPLAIN VERBOSE " + sql, agg, topn, session)
+                        plan = sr("EXPLAIN VERBOSE " + sql, agg, topn, extra)
                     except RuntimeError as error:
                         # A column whose type the catalog cannot map is refused while the
                         # statement is analysed, so EXPLAIN refuses it too and there is no plan to
@@ -281,6 +513,14 @@ def main():
                         result["plan"] = plan
                         result["jdbc_queries"], plan_errors = assert_plan(case, plan, agg, topn)
                         result["errors"].extend(plan_errors)
+                        # Only a case that ran to completion has a profile to read: an
+                        # expect_error case never reaches sr_profiled and carries no query id.
+                        if spec is not None and result.get("query_id"):
+                            profile = sr_profile(result["query_id"])
+                            result["profile"] = profile
+                            remote, rf_errors = assert_runtime_filter(spec, plan, profile, rf)
+                            result["remote_sql"] = remote
+                            result["errors"].extend(rf_errors)
                 except Exception as error:
                     result["errors"].append(str(error))
                 result["passed"] = not result["errors"]
@@ -299,16 +539,18 @@ def main():
                 evidence["cleanup_error"] = str(error)
         mode_results = [mode for case in evidence["cases"] for mode in case["modes"]]
         passed = sum(result["passed"] for result in mode_results)
-        evidence["summary"] = {"expected_executions": len(cases) * len(MODES),
+        expected_executions = sum(
+            len(RF_MODES) if "runtime_filter" in case else len(MODES) for case in cases)
+        evidence["summary"] = {"expected_executions": expected_executions,
                                "completed_executions": len(mode_results), "passed": passed,
                                "failed": len(mode_results) - passed}
-        evidence["passed"] = (passed == len(cases) * len(MODES)
+        evidence["passed"] = (passed == expected_executions
                               and not evidence["errors"] and not evidence["cleanup_error"])
         evidence["finished_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(evidence, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         print("{}: {}/{} executions passed; evidence: {}".format(
-            "PASS" if evidence["passed"] else "FAIL", passed, len(cases) * len(MODES), args.output), flush=True)
+            "PASS" if evidence["passed"] else "FAIL", passed, expected_executions, args.output), flush=True)
         for error in evidence["errors"]:
             print(error, file=sys.stderr)
         if evidence["cleanup_error"]:

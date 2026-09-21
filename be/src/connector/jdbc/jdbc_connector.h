@@ -14,15 +14,60 @@
 
 #pragma once
 
+#include <map>
+#include <string>
+#include <vector>
+
 #include "column/vectorized_fwd.h"
+#include "common/global_types.h"
 #include "common/object_pool.h"
 #include "connector_primitive/connector.h"
 
 namespace starrocks {
 
 class JDBCScanner;
+struct JDBCScanContext;
+class ExprContext;
+class TupleDescriptor;
 
 namespace connector {
+
+// What rendering this scan's join runtime filters into remote SQL produced.
+struct JDBCRuntimeFilterPushdown {
+    // One SQL fragment per pushed-down filter, values already rendered as literals.
+    std::vector<std::string> predicates;
+
+    int64_t filter_count = 0;
+    int64_t value_count = 0;
+    // What was pushed down, comma-separated as "<column>:<value count>", e.g. "c_custkey:37". The
+    // totals above say how much travelled; this says which column carried how much of it, which is
+    // the part that explains why a filter did or did not pay off. Empty when nothing was pushed.
+    std::string pushed_columns;
+    // Reason codes for filters that were not pushed down, comma-separated, e.g.
+    // "c_name:unsupported_type". Empty when nothing was turned away.
+    std::string skip_reasons;
+};
+
+// The text a FLOAT or DOUBLE value is rendered as, before it is quoted: fmt's shortest round-trip
+// form, with the three non-finite values respelled the way PostgreSQL accepts them.
+//
+// Declared here so the non-finite spellings can be tested directly. They cannot be reached through
+// a runtime filter in a unit test: the in-filter's value set is a phmap flat_hash_set, and
+// inserting a NaN into one trips its "constructed value does not match the lookup key" assertion,
+// because NaN compares unequal to itself. See the note in jdbc_connector_test.cpp.
+std::string jdbc_ieee754_to_java_text(float value);
+std::string jdbc_ieee754_to_java_text(double value);
+
+// Renders the join runtime filters among `conjunct_ctxs` into remote predicates for the outermost
+// WHERE of the remote SQL, and reports why any of them was left behind.
+//
+// Declared here rather than kept private to the .cpp so its correctness rules -- NULL handling, the
+// superset law, the limit gate -- can be unit-tested without a JVM, a JDBC driver or a remote
+// database. `max_values` is the caller's already-resolved ceiling on the size of one IN list.
+void build_jdbc_runtime_filter_pushdown(const std::map<SlotId, std::string>& runtime_filter_columns,
+                                        bool scan_has_limit, const std::vector<ExprContext*>& conjunct_ctxs,
+                                        const TupleDescriptor& tuple_desc, size_t max_values,
+                                        JDBCRuntimeFilterPushdown* out);
 
 class JDBCConnector final : public Connector {
 public:
@@ -74,6 +119,12 @@ public:
 
 private:
     Status _create_scanner(RuntimeState* state);
+
+    // Renders the join runtime filters this scan carries into remote predicates, values already
+    // written into them as literals, and appends them to `filters`. Also records in `scan_ctx`
+    // what was pushed and why any filter was left out, so the scan profile can explain a missing
+    // pushdown.
+    void _append_runtime_filters(RuntimeState* state, JDBCScanContext* scan_ctx, std::vector<std::string>* filters);
 
     // ====================================
     const JDBCDataSourceProvider* _provider;

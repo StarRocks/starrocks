@@ -727,6 +727,12 @@ FROM test;
 * **默认值**：true
 * **数据类型**：Boolean
 
+### enable_jdbc_runtime_filter_push_down
+
+* **描述**：是否将 Join 生成的 Runtime Filter 以 `IN` 的形式下推到 JDBC Catalog Scan 的远端 SQL 中，即把 Build 侧产生的精确值集发往远端数据库，使其只返回可能匹配的行。取值以 SQL 字面量的形式直接写进语句，而非作为参数绑定。有效值：`true` 和 `false`。只有 Local RF 能够到达 Scan，因此该 Join 必须是 Broadcast Hash Join，且 JDBC 表位于 Probe 侧；Shuffle Join 生成的是 Global RF，不会下推。当 Build 侧的行数超过 `max_pushdown_conditions_per_column`（`be.conf` 中默认为 `1024`）时，Runtime Filter 本身不会生成。所有方言均支持的 Join Key 类型为 `TINYINT`、`SMALLINT`、`INT`、`BIGINT`，以及已知远端源类型为文本类型的字符串列（PostgreSQL 上的 VARCHAR 列无需此项证明）。此外，仅在 PostgreSQL 上还支持 `FLOAT` 与 `DATE` 列，以及已知远端源类型分别为 `double precision`（`float8`）与 `timestamp without time zone` 的 `DOUBLE` 与 `DATETIME` 列。`timestamp with time zone` 列一律不下推：StarRocks 将其按查询时区读成墙钟时间，夏令时回拨重复的那一小时内两个不同的时刻会塌成同一个墙钟值，下推后远端 `IN` 返回的行会变少而非一致。同理，经过聚合、投影或 Join 下推生成的派生表上远端源类型已不可知，`DOUBLE` 与 `DATETIME` 的 Filter 在那里仍留在本地，而 `FLOAT` 与 `DATE` 仍可下推。其余类型的 Filter 仍在本地执行，包括 `TIME`、`CHAR`、`DECIMAL`、`JSON`，以及由未声明精度的 PostgreSQL `numeric` 映射而来的 DECIMAL(38,18) 列。若字符串列的值中含有基本多文种平面（BMP）之外的字符，其 Filter 同样留在本地：向 JDBC bridge 传递完整语句的那段接口按 modified UTF-8 解码，而此类字符在其中是六字节的代理对，因此其四字节 UTF-8 形式会被截断——既改变匹配到的行，也可能把语句截停在某个字面量中间。这不仅限于 emoji，也包括人名生僻字所在的 CJK 扩展 B 区。若字符串列的值中含有反斜杠，其 Filter 同样留在本地：值自带的单引号靠加倍来转义，而这只有在远端把反斜杠当作普通字符时才成立，PostgreSQL 的 `standard_conforming_strings` 与 MySQL 的 `NO_BACKSLASH_ESCAPES` 都是 BE 看不到的会话级设置。Scan 自身带有行数限制时一律不下推：远端语句先执行 WHERE 再执行行数限制，而本地计划是先按行数限制取数再过滤，下推会使返回的行不同，而非更少。此限制出于正确性要求，并非性能取舍。如需确认某个查询的实际行为，可查看 `EXPLAIN VERBOSE` 输出中的 `RUNTIME FILTER PUSH DOWN` 一行，它表示 FE 是否授权该 Scan 下推；并结合 Query Profile 中的 `PushdownRuntimeFilters` 与 `PushdownRuntimeFilterSkipped` 指标，它们表示 BE 实际写入远端语句的内容，以及未下推的原因。
+* **默认值**：false
+* **数据类型**：Boolean
+
 ### enable_jdbc_topn_push_down
 
 * **描述**：是否向 PostgreSQL JDBC Catalog 下推满足条件的 `ORDER BY ... LIMIT` 操作。通过 `RESOURCE` 创建的 JDBC 外表保留在 StarRocks 中执行 TopN。有效值：`true` 和 `false`。支持 `TINYINT`、`SMALLINT`、`INT`、`BIGINT` 排序键（包括已下推聚合的对应类型结果）。此外，在已知源类型的前提下，还支持以下 PostgreSQL 列类型：`date` 和 `timestamp without time zone`；`boolean`；`text` 和 `varchar`；以及声明精度不超过 38 的 `numeric`/`decimal`。支持的日期时间范围为公元 0001 至 9999 年。不支持已下推表达式或聚合的日期时间结果。`text` 和 `varchar` 排序键在远端使用 `COLLATE "C"` 排序，以匹配 StarRocks 的字节序；这可能导致 PostgreSQL 无法使用按其他 collation 建立的索引。远端 ORDER BY 取代本地 TopN，而非作为其输入；Scan 保持读取到的行序。包含 OFFSET、Scan 已有限制行数，或需要在本地执行过滤或聚合的查询不下推。不支持浮点数、`char`/`bpchar`、`enum`、`timestamp with time zone`，以及声明精度超过 38 的 `numeric` 排序键。需同时升级 FE、所有 BE/CN 节点及其 JDBC Bridge。早于本特性的 BE/CN 会重排读取到的行，而此时已不存在用于恢复顺序的本地 TopN；日期时间排序还依赖 Bridge 中无损读取 PostgreSQL 日期时间的实现。
