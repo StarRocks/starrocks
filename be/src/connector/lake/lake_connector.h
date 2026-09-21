@@ -188,6 +188,9 @@ private:
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _expr_filter_counter = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
+    // Segment-level zone map prune. Runs during iterator creation, so it is a child of
+    // CreateSegmentIter, not of SegmentInit.
+    RuntimeProfile::Counter* _segment_zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;
@@ -205,6 +208,20 @@ private:
     RuntimeProfile::Counter* _seg_init_timer = nullptr;
     RuntimeProfile::Counter* _column_iterator_init_timer = nullptr;
     RuntimeProfile::Counter* _bitmap_index_iterator_init_timer = nullptr;
+<<<<<<< HEAD
+=======
+    // Remaining SegmentInit phases. Reported unconditionally, like every other SegmentInit child: a
+    // display threshold would drop a phase below it, and the point of these counters is that
+    // SegmentInit minus the sum of its children is a residual you can compute rather than guess at.
+    RuntimeProfile::Counter* _segment_init_prepare_timer = nullptr;
+    RuntimeProfile::Counter* _rowid_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _precomputed_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _tablet_range_filter_timer = nullptr;
+    RuntimeProfile::Counter* _del_vector_apply_timer = nullptr;
+    RuntimeProfile::Counter* _segment_init_finalize_timer = nullptr;
+    RuntimeProfile::Counter* _rewrite_predicates_timer = nullptr;
+    RuntimeProfile::Counter* _init_context_timer = nullptr;
+>>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
     RuntimeProfile::Counter* _zone_map_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_filter_timer = nullptr;
     RuntimeProfile::Counter* _rows_key_range_counter = nullptr;

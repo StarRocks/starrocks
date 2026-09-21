@@ -1323,6 +1323,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
+    _segment_zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentZoneMapFilter", "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -1360,6 +1361,17 @@ void LakeDataSource::init_counter(RuntimeState* state) {
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
+<<<<<<< HEAD
+=======
+    _segment_init_prepare_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInitPrepare", segment_init_name);
+    _rowid_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "RowidRangeFilter", segment_init_name);
+    _precomputed_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PrecomputedRangeFilter", segment_init_name);
+    _tablet_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "TabletRangeFilter", segment_init_name);
+    _del_vector_apply_timer = ADD_CHILD_TIMER(_runtime_profile, "DelVectorApply", segment_init_name);
+    _segment_init_finalize_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInitFinalize", segment_init_name);
+    _rewrite_predicates_timer = ADD_CHILD_TIMER(_runtime_profile, "RewritePredicates", segment_init_name);
+    _init_context_timer = ADD_CHILD_TIMER(_runtime_profile, "InitContext", segment_init_name);
+>>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
@@ -1560,6 +1572,7 @@ void LakeDataSource::update_realtime_counter(Chunk* chunk) {
 }
 
 void LakeDataSource::update_counter(RuntimeState* state) {
+<<<<<<< HEAD
     const auto& reader_stats = _reader->stats();
     COUNTER_UPDATE(_create_seg_iter_timer, reader_stats.create_segment_iter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
@@ -1587,6 +1600,43 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_read_pk_index_timer, reader_stats.read_pk_index_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, reader_stats.raw_rows_read);
+=======
+    COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
+    COUNTER_UPDATE(_segment_zone_map_filter_timer, _reader->stats().segment_zone_map_filter_ns);
+    COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
+
+    COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
+    COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
+    COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
+
+    COUNTER_UPDATE(_block_load_timer, _reader->stats().block_load_ns);
+    COUNTER_UPDATE(_block_load_counter, _reader->stats().blocks_load);
+    COUNTER_UPDATE(_block_fetch_timer, _reader->stats().block_fetch_ns);
+    COUNTER_UPDATE(_block_seek_timer, _reader->stats().block_seek_ns);
+
+    COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
+    COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
+    COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+    COUNTER_UPDATE(_column_iterator_init_timer, _reader->stats().column_iterator_init_ns);
+    COUNTER_UPDATE(_bitmap_index_iterator_init_timer, _reader->stats().bitmap_index_iterator_init_ns);
+    COUNTER_UPDATE(_segment_init_prepare_timer, _reader->stats().segment_init_prepare_ns);
+    COUNTER_UPDATE(_rowid_range_filter_timer, _reader->stats().rowid_range_filter_ns);
+    COUNTER_UPDATE(_precomputed_range_filter_timer, _reader->stats().precomputed_range_filter_ns);
+    COUNTER_UPDATE(_tablet_range_filter_timer, _reader->stats().tablet_range_filter_ns);
+    COUNTER_UPDATE(_del_vector_apply_timer, _reader->stats().del_vector_apply_ns);
+    COUNTER_UPDATE(_segment_init_finalize_timer, _reader->stats().segment_init_finalize_ns);
+    COUNTER_UPDATE(_rewrite_predicates_timer, _reader->stats().rewrite_predicates_ns);
+    COUNTER_UPDATE(_init_context_timer, _reader->stats().init_context_ns);
+    COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
+    COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
+    COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);
+    COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
+
+    COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
+>>>>>>> 1e5aec6147d... [Enhancement] Attribute _rewrite_predicates and the context build in SegmentInit (#63296)
 
     int64_t cond_evaluate_ns = 0;
     cond_evaluate_ns += reader_stats.vec_cond_evaluate_ns;
