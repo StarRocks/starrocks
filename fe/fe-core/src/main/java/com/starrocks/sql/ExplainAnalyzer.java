@@ -1113,6 +1113,8 @@ public class ExplainAnalyzer {
         appendMetric(uniqueMetrics, nodeInfo, "TabletRangeFilter");
         appendMetric(uniqueMetrics, nodeInfo, "DelVectorApply");
         appendMetric(uniqueMetrics, nodeInfo, "SegmentInitFinalize");
+        appendMetric(uniqueMetrics, nodeInfo, "RewritePredicates");
+        appendMetric(uniqueMetrics, nodeInfo, "InitContext");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonInit");
         appendMetric(uniqueMetrics, nodeInfo, "FlatJsonMerge");
         popIndent();
@@ -1784,6 +1786,7 @@ public class ExplainAnalyzer {
                 "SegmentInit", "ColumnIteratorInit", "BitmapIndexIteratorInit", "FlatJsonInit", "FlatJsonMerge",
                 "SegmentInitPrepare", "RowidRangeFilter", "PrecomputedRangeFilter", "TabletRangeFilter",
                 "DelVectorApply", "SegmentInitFinalize",
+                "RewritePredicates", "InitContext", "SegmentZoneMapFilter",
                 "IOTaskExecTime", "IOTaskWaitTime", "SubmitTaskCount", "SubmitTaskTime", "PrepareChunkSourceTime",
                 "MorselsCount", "PeakIOTasks", "PeakScanTaskQueueSize", "PeakChunkBufferMemoryUsage",
                 "PeakChunkBufferSize", "ChunkBufferCapacity", "DefaultChunkBufferCapacity",

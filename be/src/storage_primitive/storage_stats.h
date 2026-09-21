@@ -104,7 +104,18 @@ struct OlapReaderStatistics {
     // _init_scan_range_and_context after the last filtering phase.
     int64_t segment_init_finalize_ns = 0;
 
+    // _rewrite_predicates and the context build, the two largest untimed phases left inside
+    // segment_init_ns. Reported by the lake scan path only, like the phases above.
+    int64_t rewrite_predicates_ns = 0;
+    // _init_context and _init_column_predicates share one field: they are adjacent calls that together
+    // form the context build, and splitting them buys nothing a reader would act on.
+    int64_t init_context_ns = 0;
+
     int64_t segment_stats_filtered = 0;
+    // Time spent in Segment::_prune_by_segment_zone_map, the counterpart of segment_stats_filtered.
+    // This runs while the segment iterator is being created, not inside segment_init_ns, so the lake
+    // connector reports it under CreateSegmentIter rather than under SegmentInit.
+    int64_t segment_zone_map_filter_ns = 0;
     int64_t rows_key_range_filtered = 0;
     int64_t rows_after_key_range = 0;
     int64_t rows_key_range_num = 0;

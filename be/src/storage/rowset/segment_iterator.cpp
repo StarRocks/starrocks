@@ -2243,6 +2243,7 @@ struct ExprPredicateChecker {
 };
 
 void SegmentIterator::_init_column_predicates() {
+    SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
     PredicateAndNode useless_pred_root;
     PredicateAndNode used_pred_root;
     _opts.pred_tree.root().partition_copy([](const auto& node) { return node.visit(IndexOnlyPredicateChecker()); },
@@ -4272,6 +4273,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 }
 
 Status SegmentIterator::_init_context() {
+    SCOPED_RAW_TIMER(&_opts.stats->init_context_ns);
     _late_materialization_ratio = config::late_materialization_ratio;
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
@@ -4453,6 +4455,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
 
 Status SegmentIterator::_rewrite_predicates() {
     RETURN_IF(_scan_range.empty(), Status::OK());
+
+    SCOPED_RAW_TIMER(&_opts.stats->rewrite_predicates_ns);
 
     {
         // in normal case it can always rewrite the predicate,

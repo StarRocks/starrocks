@@ -1411,6 +1411,7 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
 
     _create_seg_iter_timer = ADD_TIMER(_runtime_profile, "CreateSegmentIter");
+    _segment_zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentZoneMapFilter", "CreateSegmentIter");
 
     _read_compressed_counter = ADD_COUNTER(_runtime_profile, "CompressedBytesRead", TUnit::BYTES);
     _read_uncompressed_counter = ADD_COUNTER(_runtime_profile, "UncompressedBytesRead", TUnit::BYTES);
@@ -1454,6 +1455,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _tablet_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "TabletRangeFilter", segment_init_name);
     _del_vector_apply_timer = ADD_CHILD_TIMER(_runtime_profile, "DelVectorApply", segment_init_name);
     _segment_init_finalize_timer = ADD_CHILD_TIMER(_runtime_profile, "SegmentInitFinalize", segment_init_name);
+    _rewrite_predicates_timer = ADD_CHILD_TIMER(_runtime_profile, "RewritePredicates", segment_init_name);
+    _init_context_timer = ADD_CHILD_TIMER(_runtime_profile, "InitContext", segment_init_name);
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFilter", segment_init_name);
     _rows_key_range_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ShortKeyFilter", segment_init_name);
     _bf_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "BloomFilterFilter", segment_init_name);
@@ -1712,6 +1715,7 @@ void LakeDataSource::_update_bm25_counter() {
 
 void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_create_seg_iter_timer, _reader->stats().create_segment_iter_ns);
+    COUNTER_UPDATE(_segment_zone_map_filter_timer, _reader->stats().segment_zone_map_filter_ns);
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
@@ -1737,6 +1741,8 @@ void LakeDataSource::update_counter(RuntimeState* state) {
     COUNTER_UPDATE(_tablet_range_filter_timer, _reader->stats().tablet_range_filter_ns);
     COUNTER_UPDATE(_del_vector_apply_timer, _reader->stats().del_vector_apply_ns);
     COUNTER_UPDATE(_segment_init_finalize_timer, _reader->stats().segment_init_finalize_ns);
+    COUNTER_UPDATE(_rewrite_predicates_timer, _reader->stats().rewrite_predicates_ns);
+    COUNTER_UPDATE(_init_context_timer, _reader->stats().init_context_ns);
     COUNTER_UPDATE(_zone_map_filter_timer, _reader->stats().zone_map_filter_ns);
     COUNTER_UPDATE(_rows_key_range_filter_timer, _reader->stats().rows_key_range_filter_ns);
     COUNTER_UPDATE(_bf_filter_timer, _reader->stats().bf_filter_ns);

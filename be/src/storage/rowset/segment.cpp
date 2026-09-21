@@ -360,6 +360,7 @@ struct SegmentZoneMapPruner {
 };
 
 Status Segment::_prune_by_segment_zone_map(const SegmentReadOptions& read_options) {
+    SCOPED_RAW_TIMER(&read_options.stats->segment_zone_map_filter_ns);
     const auto pruned = config::enable_index_segment_level_zonemap_filter &&
                         read_options.pred_tree_for_zone_map.visit(SegmentZoneMapPruner{this, read_options});
     if (pruned) {
