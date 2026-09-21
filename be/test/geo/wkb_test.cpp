@@ -163,6 +163,38 @@ TEST(WkbCodecTest, SupportsEmptyChildrenInMultiGeometries) {
     }
 }
 
+TEST(WkbCodecTest, RoundTripsManyEmptyPointsWithinSharedElementBudget) {
+    constexpr size_t kEmptyPoints = 600'000;
+    std::string input = "MULTIPOINT (";
+    input.reserve(input.size() + kEmptyPoints * 7);
+    for (size_t i = 0; i < kEmptyPoints; ++i) {
+        if (i != 0) {
+            input.append(", ");
+        }
+        input.append("EMPTY");
+    }
+    input.push_back(')');
+
+    WkbGeometry geometry;
+    Status status = WkbCodec::parse_wkt(input, &geometry);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+    ASSERT_EQ(kEmptyPoints, geometry.children.size());
+
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb).ok());
+    constexpr size_t kCollectionHeaderSize = sizeof(uint8_t) + 2 * sizeof(uint32_t);
+    constexpr size_t kEmptyPointWkbSize = sizeof(uint8_t) + sizeof(uint32_t) + 2 * sizeof(double);
+    EXPECT_EQ(kCollectionHeaderSize + kEmptyPoints * kEmptyPointWkbSize, wkb.size());
+
+    geometry = WkbGeometry();
+    WkbGeometry decoded;
+    status = WkbCodec::parse_wkb(Slice(wkb), &decoded);
+    ASSERT_TRUE(status.ok()) << status.to_string();
+    ASSERT_EQ(kEmptyPoints, decoded.children.size());
+    EXPECT_TRUE(decoded.children.front().empty);
+    EXPECT_TRUE(decoded.children.back().empty);
+}
+
 TEST(WkbCodecTest, RejectsCumulativeChildAllocationDeclarations) {
     constexpr uint32_t kInnerChildren = 999'999;
     constexpr size_t kMinimumChildWkbSize = sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t);

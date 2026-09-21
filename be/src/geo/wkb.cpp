@@ -458,7 +458,6 @@ private:
     }
 
     Status parse_point(bool little_endian, WkbGeometry* output) {
-        RETURN_IF_ERROR(consume_elements(1));
         WkbCoordinate coordinate;
         RETURN_IF_ERROR(read_double(little_endian, &coordinate.x));
         RETURN_IF_ERROR(read_double(little_endian, &coordinate.y));
@@ -466,6 +465,7 @@ private:
             output->empty = true;
             return Status::OK();
         }
+        RETURN_IF_ERROR(consume_elements(1));
         if (!std::isfinite(coordinate.x) || !std::isfinite(coordinate.y)) {
             return invalid_wkb("POINT coordinates must be finite or both NaN for EMPTY");
         }
