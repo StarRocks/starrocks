@@ -3279,6 +3279,47 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 "assert expect {} is not found in plan {}".format(expect, res["result"]),
             )
 
+<<<<<<< HEAD
+=======
+    def assert_query_not_contains(self, query, *expects):
+        """
+        assert query result does not contain expect string
+        """
+        res = self.execute_sql(query, True)
+        for expect in expects:
+            tools.assert_true(
+                str(res["result"]).find(expect) < 0,
+                "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
+            )
+
+    def print_query_columns(self, query, *columns):
+        """
+        Run `query` and print only the named columns, one row per line, tab separated.
+
+        SHOW statements answer with job ids, timestamps and progress counters that differ on every
+        run, so their output cannot go into an R file as it stands. Projecting to the columns that
+        are stable makes the rest recordable -- which is worth more than asserting a substring is
+        or is not present, because the recorded rows say what actually came back.
+
+        Column names are matched against the result's own description, case-insensitively, and an
+        unknown name fails rather than silently projecting nothing.
+        """
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "execute failed: %s, sql: %s" % (res["msg"], query))
+
+        names = [col[0] for col in res["desc"]]
+        indexes = []
+        for column in columns:
+            matched = [i for i, name in enumerate(names) if name.lower() == str(column).lower()]
+            tools.assert_true(
+                len(matched) == 1,
+                "column %s is not one of %s, sql: %s" % (column, names, query),
+            )
+            indexes.append(matched[0])
+
+        return "\n".join("\t".join(str(row[i]) for i in indexes) for row in res["result"])
+
+>>>>>>> e9b568f ([UT] Assert the partitions SHOW PARTITIONS actually returns (#79284))
     def assert_query_contains_times(self, query, expect, expected_times: int):
         """
         Assert query result contains `expect` exactly `expected_times` times.
