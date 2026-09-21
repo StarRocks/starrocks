@@ -424,6 +424,12 @@ under the License.
             <artifactId>protobuf-java-util</artifactId>
         </dependency>
 
+        <!-- section payload compression of the persist image (format v3) -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
@@ -1333,11 +1339,13 @@ under the License.
                 </executions>
             </plugin>
 
-            <!-- protoc -> Java for FE-owned .proto files (src/main/proto, src/test/proto), e.g. the persist image
-                 v3 format. Unlike the jprotobuf antrun chain above this produces regular protobuf-java messages.
-                 protoc is resolved as a Maven artifact pinned to the protobuf-java runtime version, so generated
-                 code is never newer than the runtime. Output (target/generated-sources/protobuf/java) is added
-                 as a compile source root by the plugin itself. -->
+            <!-- protoc -> Java for FE-owned .proto files. Sources live under src/main/proto/<domain>/ (persist/ holds
+                 the metadata image format) and src/test/proto/<domain>/; imports are relative to those roots,
+                 e.g. import "persist/image.proto". Unlike the jprotobuf antrun chain above this produces regular
+                 protobuf-java messages. protoc is resolved as a Maven artifact pinned to the protobuf-java runtime
+                 version, so generated code is never newer than the runtime. Output goes to
+                 target/generated-sources/protobuf/java and target/generated-test-sources/protobuf/java, which the
+                 plugin registers as compile / test-compile source roots itself. -->
             <plugin>
                 <groupId>org.xolstice.maven.plugins</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>

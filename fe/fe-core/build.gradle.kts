@@ -97,6 +97,7 @@ dependencies {
     implementation("com.github.ben-manes.caffeine:caffeine")
     testImplementation("com.github.hazendaz.jmockit:jmockit")
     implementation("com.github.oshi:oshi-core")
+    implementation("com.github.luben:zstd-jni")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
     implementation("com.google.code.gson:gson")
