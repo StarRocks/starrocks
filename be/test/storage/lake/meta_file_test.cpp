@@ -2006,6 +2006,78 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_del_num_rows) {
     EXPECT_EQ(100, total); // 70 + 30
 }
 
+// batch path: every op_write of a multi-statement transaction goes into one merged rowset. A row-mode
+// partial update keys its rewritten segments by position in its own op_write, and each rewrite must
+// land on that op_write's segment of the merged rowset -- found by segment POSITION, which an
+// op_write without segments does not advance although it takes an rssid slot. Only the rewritten
+// segments stop being bundled: another op_write's segment keeps its place inside its bundle file.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_places_rewrites_on_their_own_segments) {
+    const int64_t tablet_id = 31012;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    auto rewrite = [](const std::string& path) {
+        SegmentFileInfo info;
+        info.path = path;
+        info.size = 100;
+        return info;
+    };
+
+    // Statement 1: a row-mode partial update whose only segment, bundled, is rewritten.
+    TxnLogPB_OpWrite partial1;
+    {
+        auto* segment = partial1.mutable_rowset()->add_segment_metas();
+        segment->set_filename("partial1.dat");
+        segment->set_bundle_file_offset(0);
+    }
+    builder.batch_apply_opwrite(partial1, {{0, rewrite("rewrite1.dat")}}, {});
+    // Statement 2: nothing for this tablet -- no segment, one rssid slot.
+    TxnLogPB_OpWrite empty;
+    empty.mutable_rowset();
+    builder.batch_apply_opwrite(empty, {}, {});
+    // Statement 3: a plain write whose segment lives inside a bundle file.
+    TxnLogPB_OpWrite plain;
+    {
+        auto* segment = plain.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle3.dat");
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(plain, {}, {});
+    // Statement 4: a row-mode partial update of two segments, both rewritten.
+    TxnLogPB_OpWrite partial4;
+    partial4.mutable_rowset()->add_segment_metas()->set_filename("partial4a.dat");
+    partial4.mutable_rowset()->add_segment_metas()->set_filename("partial4b.dat");
+    builder.batch_apply_opwrite(partial4, {{0, rewrite("rewrite4a.dat")}, {1, rewrite("rewrite4b.dat")}}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(300u, rowset.id());
+    ASSERT_EQ(4, rowset.segment_metas_size());
+    // Statement 2 took segment index 1 without adding a position, so positions and indexes part there.
+    EXPECT_EQ("rewrite1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(0u, rowset.segment_metas(0).segment_idx());
+    EXPECT_EQ("bundle3.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ(2u, rowset.segment_metas(1).segment_idx());
+    EXPECT_EQ("rewrite4a.dat", rowset.segment_metas(2).filename());
+    EXPECT_EQ(3u, rowset.segment_metas(2).segment_idx());
+    EXPECT_EQ("rewrite4b.dat", rowset.segment_metas(3).filename());
+    EXPECT_EQ(4u, rowset.segment_metas(3).segment_idx());
+    // A rewrite is a standalone file; the plain write's segment is still at its offset in its bundle.
+    EXPECT_FALSE(rowset.segment_metas(0).has_bundle_file_offset());
+    ASSERT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(4096, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(2).has_bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(3).has_bundle_file_offset());
+    // The merged rowset takes every statement's slots, the segmentless one's included.
+    EXPECT_EQ(305u, metadata->next_rowset_id());
+}
+
 // The partial-update replace path refreshes segment_vector_index_uid wholesale from the replace
 // FileInfo (apply_replace_segment): a recorded owner overwrites whatever the replaced segment
 // carried, and an unset owner (-1) clears a stale one. Non-replaced segments are carried verbatim.
