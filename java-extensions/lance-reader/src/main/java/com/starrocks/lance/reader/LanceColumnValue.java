@@ -19,6 +19,7 @@ import com.starrocks.jni.connector.ColumnValue;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.BitVector;
 import org.apache.arrow.vector.DateDayVector;
+import org.apache.arrow.vector.DateMilliVector;
 import org.apache.arrow.vector.DecimalVector;
 import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.Float4Vector;
@@ -36,6 +37,7 @@ import org.apache.arrow.vector.types.TimeUnit;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -90,7 +92,7 @@ public class LanceColumnValue implements ColumnValue {
     public String getString(ColumnType.TypeValue type) {
         if (vector instanceof VarCharVector) {
             byte[] bytes = ((VarCharVector) vector).get(rowIndex);
-            return new String(bytes);
+            return new String(bytes, StandardCharsets.UTF_8);
         }
         return vector.getObject(rowIndex).toString();
     }
@@ -117,7 +119,10 @@ public class LanceColumnValue implements ColumnValue {
             int daysSinceEpoch = ((DateDayVector) vector).get(rowIndex);
             return LocalDate.ofEpochDay(daysSinceEpoch);
         }
-        return LocalDate.ofEpochDay(0);
+        if (vector instanceof DateMilliVector) {
+            return LocalDate.ofEpochDay(Math.floorDiv(((DateMilliVector) vector).get(rowIndex), 86_400_000L));
+        }
+        throw new UnsupportedOperationException("Unsupported Arrow date vector: " + vector.getClass().getSimpleName());
     }
 
     @Override
