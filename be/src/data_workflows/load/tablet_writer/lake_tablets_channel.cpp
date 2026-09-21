@@ -349,6 +349,10 @@ private:
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
 
+    // Wakes whoever is parked in `_txn_log_collector.wait()` with |reason|, for the paths that
+    // end the load without every sender's eos arriving.
+    void _release_txn_log_waiters(const Status& reason);
+
     // combined_txn_log collection strategy, latched from the open RPC's
     // `lake_tablet_params.enable_per_partition_coordinator` (FE-controlled,
     // uniform per transaction).
@@ -1038,6 +1042,7 @@ void LakeTabletsChannel::abort() {
     for (auto& it : _delta_writers) {
         it.second->close();
     }
+    _release_txn_log_waiters(Status::Cancelled("tablet channel aborted"));
 }
 
 void LakeTabletsChannel::cancel(const std::string& reason) {
@@ -1046,6 +1051,21 @@ void LakeTabletsChannel::cancel(const std::string& reason) {
     for (auto& it : _delta_writers) {
         it.second->cancel(cancel_status);
     }
+    _release_txn_log_waiters(cancel_status);
+}
+
+// In combined-txn-log mode the elected coordinator parks in `_txn_log_collector.wait()` until
+// every sender's eos has been processed, and only that makes `close_channel` -- and with it
+// `notify()` -- happen. A cancelled load has no more eos coming, so without this the coordinator
+// waits out `request.timeout_ms()`, which is `insert_timeout`: four hours by default. It holds
+// the closure of its tablet_writer_add_chunks for all of it, so the connection is never recycled
+// and the BE cannot finish brpc's Server::Join() on exit.
+void LakeTabletsChannel::_release_txn_log_waiters(const Status& reason) {
+    if (_finish_mode != lake::DeltaWriterFinishMode::kDontWriteTxnLog) {
+        return;
+    }
+    _txn_log_collector.update_status(reason);
+    _txn_log_collector.notify();
 }
 
 StatusOr<std::unique_ptr<LakeTabletsChannel::WriteContext>> LakeTabletsChannel::_create_write_context(
