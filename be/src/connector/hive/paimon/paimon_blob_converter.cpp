@@ -35,10 +35,6 @@ constexpr int64_t kBlobDescriptorMagic = 0x424C4F4244455343LL; // "BLOBDESC"
 constexpr size_t kBlobDescriptorHeaderSize = sizeof(int8_t) + sizeof(int64_t) + sizeof(int32_t);
 constexpr size_t kBlobDescriptorTrailerSize = sizeof(int64_t) + sizeof(int64_t);
 
-constexpr int8_t kBlobViewVersion = 1;
-constexpr int64_t kBlobViewMagic = 0x424C4F4256494557LL; // "BLOBVIEW"
-constexpr size_t kBlobViewHeaderSize = sizeof(int8_t) + sizeof(int64_t);
-
 template <typename T>
 T read_le(const char* p) {
     T v;
@@ -77,25 +73,10 @@ std::optional<BlobDescriptor> parse_blob_descriptor(std::string_view value) {
     return desc;
 }
 
-// Mirrors paimon's BlobViewStruct::IsBlobViewStruct: a blob-view-field value that paimon-cpp did
-// not resolve into a BlobDescriptor (blob-view-resolve-enabled=false).
-bool is_blob_view_struct(std::string_view value) {
-    if (value.size() < kBlobViewHeaderSize) {
-        return false;
-    }
-    const char* p = value.data();
-    return read_le<int8_t>(p) == kBlobViewVersion && read_le<int64_t>(p + 1) == kBlobViewMagic;
-}
-
 StatusOr<Datum> to_file_datum(std::string_view value) {
-    if (is_blob_view_struct(value)) {
-        return Status::NotSupported(
-                "Paimon BLOB value is a serialized BlobViewStruct; StarRocks requires paimon-cpp to resolve "
-                "blob-view-field values into BlobDescriptors (blob-view.resolve.enabled=true)");
-    }
     if (auto desc = parse_blob_descriptor(value)) {
-        return FileDatumBuilder::make(Slice(desc->uri.data(), desc->uri.size()), desc->offset, desc->length, std::nullopt,
-                                      std::nullopt, std::nullopt);
+        return FileDatumBuilder::make(Slice(desc->uri.data(), desc->uri.size()), desc->offset, desc->length,
+                                      std::nullopt, std::nullopt, std::nullopt);
     }
     return FileDatumBuilder::make(std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
                                   Slice(value.data(), value.size()));

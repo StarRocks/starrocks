@@ -22,6 +22,8 @@
 #include <paimon/table/source/table_read.h>
 
 #include <algorithm>
+#include <optional>
+#include <string_view>
 #include <utility>
 
 #include "column/arrow/type_to_arrow_converter.h"
@@ -46,6 +48,34 @@ constexpr int64_t kPaimonReadBatchSize = 10000;
 constexpr int32_t kPaimonParquetExecutorThreadCount = 0;
 constexpr bool kPaimonEnableMultiThreadRowToBatch = true;
 constexpr uint32_t kPaimonRowToBatchThreadNum = 3;
+
+// paimon-cpp resolves blob-view references by rebuilding the upstream table path as
+// <warehouse>/<db>[.db]/<table> under a FileSystemCatalog, and it has no catalog access of its own,
+// so the warehouse has to be handed in. Every table paimon-cpp can resolve against sits in that
+// same layout, hence the current table's grandparent directory is the warehouse. Returns nullopt
+// when the path is too shallow for that layout (e.g. a custom table location right under a bucket).
+std::optional<std::string> paimon_warehouse_from_table_path(std::string_view table_path) {
+    // Keep "scheme://authority" intact: never cut into or before it.
+    size_t root_end = 0;
+    if (size_t scheme = table_path.find("://"); scheme != std::string_view::npos) {
+        root_end = scheme + 3;
+    }
+    std::string_view path = table_path;
+    for (int level = 0; level < 2; ++level) {
+        while (path.size() > root_end && path.back() == '/') {
+            path.remove_suffix(1);
+        }
+        size_t slash = path.rfind('/');
+        if (slash == std::string_view::npos || slash < root_end) {
+            return std::nullopt;
+        }
+        path = path.substr(0, slash);
+    }
+    if (path.size() <= root_end) {
+        return std::nullopt;
+    }
+    return std::string(path);
+}
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& io_stats) {
     const std::string paimon_fs_section = "PaimonFileSystem";
@@ -133,6 +163,15 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
     }
 
     context_builder.AddOption(paimon::Options::READ_BATCH_SIZE, std::to_string(kPaimonReadBatchSize));
+    // Blob-view columns must come back as BlobDescriptors: paimon_blob_converter only understands
+    // blob descriptor bytes and raw payloads
+    context_builder.AddOption(paimon::Options::BLOB_VIEW_RESOLVE_ENABLED, "true");
+    if (auto warehouse = paimon_warehouse_from_table_path(table_path)) {
+        context_builder.AddOption(paimon::Options::BLOB_VIEW_UPSTREAM_WAREHOUSE, *warehouse);
+    } else {
+        LOG(WARNING) << "Paimon table path " << table_path
+                     << " does not follow the <warehouse>/<db>/<table> layout; blob-view columns cannot be resolved";
+    }
     // These option keys are defined in paimon-cpp's internal parquet_format_defs.h, which is not
     // part of its installed public headers, so they have to be spelled out as string literals here.
     context_builder.AddOption("parquet.read.cache-option.hole-size-limit",
