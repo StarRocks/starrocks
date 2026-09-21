@@ -41,6 +41,8 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.12</jacoco.version>
         <jprotobuf-precompile-plugin.version>2.2.12</jprotobuf-precompile-plugin.version>
+        <protobuf-maven-plugin.version>0.6.1</protobuf-maven-plugin.version>
+        <os-maven-plugin.version>1.7.1</os-maven-plugin.version>
         <python>python</python>
         
         <!-- async-profiler in UT -->
@@ -1085,6 +1087,14 @@ under the License.
     </dependencies>
 
     <build>
+        <extensions>
+            <!-- provides ${os.detected.classifier}, used below to pick the protoc binary for this platform -->
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>${os-maven-plugin.version}</version>
+            </extension>
+        </extensions>
         <plugins>
             <!-- fe proto precompile plugin-->
             <plugin>
@@ -1323,6 +1333,30 @@ under the License.
                 </executions>
             </plugin>
 
+            <!-- protoc -> Java for FE-owned .proto files (src/main/proto, src/test/proto), e.g. the persist image
+                 v3 format. Unlike the jprotobuf antrun chain above this produces regular protobuf-java messages.
+                 protoc is resolved as a Maven artifact pinned to the protobuf-java runtime version, so generated
+                 code is never newer than the runtime. Output (target/generated-sources/protobuf/java) is added
+                 as a compile source root by the plugin itself. -->
+            <plugin>
+                <groupId>org.xolstice.maven.plugins</groupId>
+                <artifactId>protobuf-maven-plugin</artifactId>
+                <version>${protobuf-maven-plugin.version}</version>
+                <configuration>
+                    <protocArtifact>com.google.protobuf:protoc:${protobuf-java.version}:exe:${os.detected.classifier}</protocArtifact>
+                    <!-- keep the .proto files out of fe-core.jar -->
+                    <attachProtoSources>false</attachProtoSources>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>protoc-java</id>
+                        <goals>
+                            <goal>compile</goal>
+                            <goal>test-compile</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
 
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
