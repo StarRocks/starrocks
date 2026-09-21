@@ -14,7 +14,16 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.DescriptorTable;
+=======
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.alter.reshard.presplit.LoadKind;
+import com.starrocks.alter.reshard.presplit.PreSplitProfile;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
+>>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -41,6 +50,12 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
+import com.starrocks.sql.ast.DeleteStmt;
+>>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -414,6 +429,57 @@ public class StmtExecutorTest {
             Assertions.assertTrue(queryDetail.getSql().contains("***"));
         } finally {
             Config.enable_collect_query_detail_info = oldCollect;
+        }
+    }
+
+    @Test
+    public void testAnalyzeProfileRechecksAccessWhenProfileAppearsAfterAnalysis() throws Exception {
+        // The analyzer allows an id whose profile is absent, and a running query publishes its profile every
+        // runtime_profile_report_interval -- so one can appear between the analyzer's lookup and the executor's.
+        // The executor therefore checks the element it actually serves. This mock is that race: absent on the
+        // first lookup (analysis), present on the second (execution).
+        RuntimeProfile profile = new RuntimeProfile("Query");
+        RuntimeProfile summary = new RuntimeProfile("Summary");
+        summary.addInfoString(ProfileManager.QUERY_ID, "raced-query-id");
+        summary.addInfoString(ProfileManager.QUERY_TYPE, "Query");
+        summary.addInfoString(ProfileManager.USER, "someone_else");
+        summary.addInfoString(ProfileManager.SQL_STATEMENT, "select 1");
+        profile.addChild(summary);
+        ProfileManager.ProfileElement published = ProfileManager.getInstance().createElement(summary, profile);
+
+        new MockUp<ProfileManager>() {
+            private int lookups = 0;
+
+            @Mock
+            public ProfileManager.ProfileElement getProfileElement(String queryId) {
+                return lookups++ == 0 ? null : published;
+            }
+        };
+        new MockUp<Authorizer>() {
+            @Mock
+            public void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+                    throws AccessDeniedException {
+                throw new AccessDeniedException("Access denied; OPERATE on SYSTEM required");
+            }
+        };
+
+        Config.authorization_enable_query_profile_access_check = true;
+        try {
+            ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+            ConnectContext.threadLocalInfo.set(ctx);
+            UUID queryId = UUIDUtil.genUUID();
+            ctx.setQueryId(queryId);
+            ctx.setExecutionId(UUIDUtil.toTUniqueId(queryId));
+            StatementBase stmt = SqlParser.parseSingleStatement(
+                    "ANALYZE PROFILE FROM 'raced-query-id'", SqlModeHelper.MODE_DEFAULT);
+
+            new StmtExecutor(ctx, stmt).execute();
+
+            Assertions.assertTrue(ctx.getState().isError());
+            Assertions.assertTrue(ctx.getState().getErrorMessage().contains("Access denied"),
+                    ctx.getState().getErrorMessage());
+        } finally {
+            Config.authorization_enable_query_profile_access_check = false;
         }
     }
 

@@ -53,6 +53,15 @@ This topic introduces the following types of FE configurations:
 
 ## User, role, and privilege
 
+### `authorization_enable_query_profile_access_check`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to restrict who can read cached query profiles. When set to `true`, SHOW PROFILELIST, ANALYZE PROFILE, the `get_query_profile` function, the `/api/profile` and `/api/query/progress` HTTP endpoints, and the `/query` and `/query_profile` Web UI pages return a profile only to the user who ran the query or to a user with the SYSTEM-level OPERATE privilege. Profiles that record no user (for example, EXPORT jobs and stream loads) are readable only with OPERATE. The `/api/query_detail` and `/api/v2/query_detail` endpoints keep listing every query but omit the `profile` field, and the `explain` field when it holds a plan rendered from that profile, under the same rule. When `authorization_enable_admin_user_protection` is also enabled, profiles of queries run by `root` are readable only by `root`. When set to `false` (the default), every authenticated user can read every profile, which is the behavior of earlier versions. Each FE enforces the check for the profiles it holds, so to restrict access cluster-wide, set this item in `fe.conf` on every FE after all FEs have been upgraded to a version that supports it. Enabling it has two further consequences to plan for: `/api/query/progress` stops accepting anonymous requests, because the rule needs a caller identity, so an existing anonymous poller of that endpoint starts receiving `401`; and `get_query_profile()` requires the OPERATE privilege for a `query_id` whose profile is not cached on the FE the session is connected to, because the RPC that fetches it from the other FEs carries no caller identity to authorize there, which restricts the cross-FE lookup to OPERATE holders while the check is on.
+- Introduced in: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - Default: true

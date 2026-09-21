@@ -10,7 +10,7 @@ This feature is supported from v3.1 onwards.
 
 > **CAUTION**
 >
-> Only users with the SELECT privilege on a specific table can perform this operation.
+> By default, no privilege is required to perform this operation. If the FE configuration item `authorization_enable_query_profile_access_check` is set to `true`, a user can analyze only the profiles of the queries they ran, and analyzing the profile of a query run by another user requires the SYSTEM-level OPERATE privilege.
 
 ## Syntax
 

@@ -33,7 +33,9 @@ displayed_sidebar: docs
 
 该 API 需要使用 **HTTP Basic 认证**。
 
-接口不会进行额外的权限校验，只要登录成功即可访问。任何已认证用户都可以查看所有缓存的查询详情；如果指定了 `user` 参数，则只返回对应用户的记录。
+默认情况下，接口不会进行额外的权限校验，只要登录成功即可访问。任何已认证用户都可以查看所有缓存的查询详情；如果指定了 `user` 参数，则只返回对应用户的记录。
+
+如果将 FE 配置项 `authorization_enable_query_profile_access_check` 设置为 `true`，则只有当前用户自己执行的查询才会返回 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段；拥有 SYSTEM 级 OPERATE 权限的用户可以获取所有查询的这些字段。其他记录仍会列出，但不包含上述字段。
 
 ## QueryDetail 字段说明
 

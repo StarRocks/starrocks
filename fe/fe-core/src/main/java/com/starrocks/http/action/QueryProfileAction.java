@@ -35,11 +35,18 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+<<<<<<< HEAD
+=======
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ExplainAnalyzer;
+import com.starrocks.sql.analyzer.Authorizer;
+>>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.logging.log4j.LogManager;
@@ -74,12 +81,43 @@ public class QueryProfileAction extends WebBaseAction {
             return;
         }
 
+<<<<<<< HEAD
         // HTML encode the queryId to prevent XSS
         String encodedQueryId = Encode.forHtml(queryId);
         String queryProfileStr = ProfileManager.getInstance().getProfile(queryId);
         if (queryProfileStr != null) {
             appendCopyButton(response.getContent());
             appendQueryProfile(response.getContent(), queryProfileStr);
+=======
+        ProfileManager.ProfileElement queryProfile = ProfileManager.getInstance().getProfileElement(queryId);
+        if (queryProfile != null) {
+            // Same rule as ANALYZE PROFILE. The web gate admits NODE holders, who are not thereby OPERATE
+            // holders, so the owner-or-OPERATE rule has to be applied here too.
+            try {
+                Authorizer.checkQueryProfileAccess(ConnectContext.get(), queryProfile);
+            } catch (AccessDeniedException e) {
+                appendContent(response.getContent(), "Access denied: the profile of query " + Encode.forHtml(queryId)
+                        + " belongs to another user and reading it requires the OPERATE privilege.");
+                getPageFooter(response.getContent());
+                writeResponse(request, response, HttpResponseStatus.FORBIDDEN);
+                return;
+            }
+            String content;
+            String contentType = request.getSingleParameter("content_type");
+            if ("sql".equalsIgnoreCase(contentType)) {
+                content = getFormattedSql(queryProfile);
+            } else if ("analyze".equalsIgnoreCase(contentType)) {
+                content = getAnalyzeProfileResult(queryProfile);
+            } else {
+                // Profile String
+                content = ProfileManager.getInstance().getProfile(queryId);
+                if (content == null) {
+                    content = String.format("Failed to decompress profile content of %s\n", queryId);
+                }
+            }
+            appendButtons(response.getContent());
+            appendContent(response.getContent(), content);
+>>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
             getPageFooter(response.getContent());
             writeResponse(request, response);
         } else {

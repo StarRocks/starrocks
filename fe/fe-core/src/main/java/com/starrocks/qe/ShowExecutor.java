@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -97,6 +98,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -304,6 +306,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 // Execute one show statement.
@@ -985,18 +988,22 @@ public class ShowExecutor {
         public ShowResultSet visitShowProfilelistStatement(ShowProfilelistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
+            // A user lists the profiles of the queries they ran; listing other users' needs SYSTEM OPERATE,
+            // evaluated at most once for the whole listing (see Authorizer#canReadQueryProfile). The knob is
+            // read once up front so a flip mid-listing cannot produce a half-filtered result.
+            boolean checkAccess = Config.authorization_enable_query_profile_access_check;
+            Supplier<Boolean> hasOperate =
+                    Suppliers.memoize(() -> Authorizer.hasSystemAction(context, PrivilegeType.OPERATE));
             List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
             Collections.reverse(profileElements);
-            Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
-            int count = 0;
-            while (iterator.hasNext()) {
-                ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow(context);
-                rowSet.add(row);
-                count++;
-                if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
+            for (ProfileManager.ProfileElement element : profileElements) {
+                if (statement.getLimit() >= 0 && rowSet.size() >= statement.getLimit()) {
                     break;
                 }
+                if (checkAccess && !Authorizer.canReadQueryProfile(context, element, hasOperate)) {
+                    continue;
+                }
+                rowSet.add(element.toRow(context));
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);

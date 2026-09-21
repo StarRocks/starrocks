@@ -53,6 +53,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## ユーザー、ロール、権限
 
+### `authorization_enable_query_profile_access_check`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：キャッシュされた query profile の読み取りを制限するかどうか。`true` に設定すると、SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 関数、`/api/profile` および `/api/query/progress` HTTP エンドポイント、ならびに `/query` および `/query_profile` Web UI ページは、そのクエリを実行したユーザー、または SYSTEM レベルの OPERATE 権限を持つユーザーにのみ profile を返します。ユーザーが記録されていない profile（例：EXPORT ジョブや Stream Load）は、OPERATE 権限を持つ場合のみ読み取れます。`/api/query_detail` および `/api/v2/query_detail` エンドポイントはすべてのクエリを一覧に含めますが、同じルールに従って `profile` フィールド、およびその profile から生成された `explain` フィールドを省略します。`authorization_enable_admin_user_protection` も有効な場合、`root` が実行したクエリの profile は `root` 自身のみが読み取れます。`false`（デフォルト）の場合、認証済みのすべてのユーザーがすべての profile を読み取れます。これは以前のバージョンと同じ動作です。各 FE は自身が保持する profile に対してのみこのチェックを行います。クラスター全体でアクセスを制限するには、すべての FE をこの項目をサポートするバージョンにアップグレードした後、各 FE の `fe.conf` にこの項目を設定してください。有効にする際は、さらに次の 2 点に注意してください。1 つは、権限判定に呼び出し元の識別情報が必要なため `/api/query/progress` が匿名リクエストを受け付けなくなり、このエンドポイントを匿名でポーリングしていた処理が `401` を受け取るようになることです。もう 1 つは、`query_id` に対応する profile がセッションの接続先 FE にキャッシュされていない場合、`get_query_profile()` に OPERATE 権限が必要になることです。他の FE から profile を取得する RPC は呼び出し元の識別情報を持たず対向側で認可できないため、このチェックが有効な間、FE をまたぐ取得は OPERATE 権限を持つユーザーに限られます。
+- 導入時期：v4.1
+
 ### `enable_task_info_mask_credential`
 
 - デフォルト：true
