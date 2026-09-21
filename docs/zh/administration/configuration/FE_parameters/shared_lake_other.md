@@ -717,6 +717,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离（lake）模式下，PublishVersionDaemon 重试上次发布失败的分区之前的最小间隔。单事务发布路径和批量发布路径均适用。只有真正失败的分区才会等待：首次尝试即成功发布的分区不会被延迟，仅在等待前序版本可见的分区不算作失败。增大该值可以降低发布持续失败时 leader 和对象存储的负载，但问题恢复后的追赶速度也会变慢。设置为 `0` 表示每个守护线程周期都重试，即退避机制引入之前的行为。负值按 `0` 处理。
+- 引入版本: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - 默认值: true
