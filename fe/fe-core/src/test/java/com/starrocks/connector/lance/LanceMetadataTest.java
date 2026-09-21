@@ -158,4 +158,20 @@ public class LanceMetadataTest {
         Assertions.assertNotNull(embeddingCol);
         Assertions.assertTrue(embeddingCol.getType().isArrayType());
     }
+    @Test
+    public void testCatalogIdentityAndAzureSasConfiguration() {
+        LanceMetadata metadata = new LanceMetadata("azure_lance", java.util.Map.of(
+                "table.rows.uri", "abfss://data@account.dfs.core.windows.net/rows.lance",
+                "table.rows.schema", "id:int64",
+                "azure.adls2.storage_account", "account",
+                "azure.adls2.sas_token", "sig=test-sas"));
+        Assertions.assertEquals("azure_lance", metadata.getTable(null, "default", "rows").getCatalogName());
+        Assertions.assertTrue(metadata.getTable(null, "default", "rows").isSupported());
+        com.starrocks.thrift.TCloudConfiguration thrift = new com.starrocks.thrift.TCloudConfiguration();
+        metadata.getCloudConfiguration().toThrift(thrift);
+        Assertions.assertEquals(com.starrocks.thrift.TCloudType.AZURE, thrift.getCloud_type());
+        Assertions.assertEquals("sig=test-sas",
+                thrift.getCloud_properties().get("fs.azure.sas.fixed.token.account.dfs.core.windows.net"));
+    }
+
 }

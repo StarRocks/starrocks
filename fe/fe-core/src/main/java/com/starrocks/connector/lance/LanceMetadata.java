@@ -21,6 +21,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
 
 import java.util.ArrayList;
@@ -32,6 +34,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class LanceMetadata implements ConnectorMetadata {
     private final String catalogName;
+    private final CloudConfiguration cloudConfiguration;
     private final Map<String, String> properties;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<String, List<Table>> tables = new ConcurrentHashMap<>();
@@ -39,6 +42,7 @@ public class LanceMetadata implements ConnectorMetadata {
     public LanceMetadata(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         bootstrapMetadata();
     }
 
@@ -70,10 +74,16 @@ public class LanceMetadata implements ConnectorMetadata {
                         }
                     }
                 }
-                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, columns, uri);
+                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
+                        tblName, columns, uri, catalogName);
                 addTable(dbName, table);
             }
         }
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 
     @Override

@@ -27,9 +27,22 @@ public class LanceTable extends Table {
     @SerializedName(value = "uri")
     private final String uri;
 
+    @SerializedName(value = "catalogName")
+    private final String catalogName;
+
     public LanceTable(long id, String name, List<Column> schema, String uri) {
+        this(id, name, schema, uri, null);
+    }
+
+    public LanceTable(long id, String name, List<Column> schema, String uri, String catalogName) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
+        this.catalogName = catalogName;
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
     }
 
     public String getUri() {
@@ -43,8 +56,7 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
-        // Enable SQL only when the planner, JNI reader, and BE connector are available together.
-        return false;
+        return true;
     }
 
     @Override

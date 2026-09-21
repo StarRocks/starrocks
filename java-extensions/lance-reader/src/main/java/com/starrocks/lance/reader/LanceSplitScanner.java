@@ -24,6 +24,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.lance.Dataset;
+import org.lance.ReadOptions;
 import org.lance.ipc.LanceScanner;
 import org.lance.ipc.ScanOptions;
 
@@ -38,6 +39,7 @@ public class LanceSplitScanner extends ConnectorScanner {
     private final String datasetUri;
     private final String[] requiredFields;
     private final int fetchSize;
+    private final Map<String, String> storageOptions;
 
     private Dataset dataset;
     private LanceScanner scanner;
@@ -52,14 +54,15 @@ public class LanceSplitScanner extends ConnectorScanner {
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(
                 params.get("required_fields"), ",");
         this.datasetUri = params.get("lance_dataset_uri");
+        this.storageOptions = LanceStorageOptions.from(datasetUri, params);
     }
 
     @Override
     public void open() throws IOException {
         try {
-            LOG.info("Open lance reader with dataset URI: {}", datasetUri);
+            LOG.debug("Open Lance reader");
 
-            dataset = Dataset.open(datasetUri);
+            dataset = Dataset.open(datasetUri, new ReadOptions.Builder().setStorageOptions(storageOptions).build());
             Schema schema = dataset.getSchema();
             Map<String, String> typeMap = LanceTypeUtils.buildTypeMapping(schema);
 
@@ -85,15 +88,15 @@ public class LanceSplitScanner extends ConnectorScanner {
         } catch (Exception e) {
             close();
             String msg = "Failed to open the lance reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            // Native storage errors can contain signed URLs or credentials. Do not expose their text.
+            throw new IOException(msg + " Error type: " + e.getClass().getSimpleName());
         }
     }
 
     @Override
     public void close() throws IOException {
         try {
-            LOG.info("Closing lance reader for dataset: {}", datasetUri);
+            LOG.debug("Close Lance reader");
             if (arrowReader != null) {
                 arrowReader.close();
                 arrowReader = null;
@@ -108,8 +111,8 @@ public class LanceSplitScanner extends ConnectorScanner {
             }
         } catch (Exception e) {
             String msg = "Failed to close the lance reader.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            // Native storage errors can contain signed URLs or credentials. Do not expose their text.
+            throw new IOException(msg + " Error type: " + e.getClass().getSimpleName());
         }
     }
 
@@ -138,8 +141,8 @@ public class LanceSplitScanner extends ConnectorScanner {
         } catch (Exception e) {
             close();
             String msg = "Failed to get the next off-heap table chunk of lance.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
+            // Native storage errors can contain signed URLs or credentials. Do not expose their text.
+            throw new IOException(msg + " Error type: " + e.getClass().getSimpleName());
         }
     }
 
@@ -165,8 +168,7 @@ public class LanceSplitScanner extends ConnectorScanner {
     @Override
     public String toString() {
         return "LanceSplitScanner{"
-                + "datasetUri='" + datasetUri + '\''
-                + ", requiredFields=" + Arrays.toString(requiredFields)
+                + "requiredFields=" + Arrays.toString(requiredFields)
                 + ", fetchSize=" + fetchSize
                 + '}';
     }
