@@ -15,12 +15,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -69,8 +69,10 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
         analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
 
-        analyzeFail("select ST_GeogFromText(ta) = ST_GeogFromText(ta) from tall");
-        analyzeFail("select ST_GeogFromText(ta) <=> ST_GeogFromText(ta) from tall");
+        String unsupportedComparison =
+                "Column type GEOGRAPHY does not support binary predicate operation with type GEOGRAPHY";
+        analyzeFail("select ST_GeogFromText(ta) = ST_GeogFromText(ta) from tall", unsupportedComparison);
+        analyzeFail("select ST_GeogFromText(ta) <=> ST_GeogFromText(ta) from tall", unsupportedComparison);
         analyzeFail("select ST_GeogFromText(ta) from tall group by ST_GeogFromText(ta)");
         analyzeFail("select distinct ST_GeogFromText(ta) from tall");
         analyzeFail("select ST_GeogFromText(ta) from tall order by ST_GeogFromText(ta)");

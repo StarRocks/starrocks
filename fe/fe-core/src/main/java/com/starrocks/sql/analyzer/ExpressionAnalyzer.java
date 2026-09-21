@@ -761,11 +761,14 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
+            if (type1.isGeoType() || type2.isGeoType()) {
+                throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
+            }
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
