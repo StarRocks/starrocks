@@ -1776,6 +1776,8 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
                                  const std::map<int, SegmentFileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
                                  const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows) {
+    // Where this op_write's segments start in the merged rowset's segment_metas.
+    const int segment_pos_base = _pending_rowset_data.rowset_pb.segment_metas_size();
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1806,9 +1808,20 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
         }
     }
 
-    // Merge replace_segments
-    for (const auto& replace_seg : replace_segments) {
-        _pending_rowset_data.replace_segments[replace_seg.first] = replace_seg.second;
+    // Merge replace_segments. A row-mode partial update keys its rewrites by the segment's position
+    // in its OWN op_write (RowsetUpdateState::rewrite_segment), and set_final_rowset() applies each
+    // entry at that position of the MERGED rowset, so shift the key by the position this op_write's
+    // segments were appended at above. Merging the key as-is let a later statement's rewrite of its
+    // segment 0 overwrite an earlier statement's, and set_final_rowset() then put that file at the
+    // earlier statement's segment and left the later statement's own segment as the partial file
+    // (only the updated columns): the earlier statement's rows were lost and the later statement's
+    // rows read back defaults for every column it did not write. The base is a segment POSITION, not
+    // assigned_segment_idx: that counts rssid slots, and an op_write without segments (a statement
+    // that routed no row to this tablet) reserves a slot but adds no position.
+    for (const auto& [segment_pos, file_info] : replace_segments) {
+        DCHECK(segment_pos >= 0 && segment_pos < rowset_pb.segment_metas_size())
+                << "replace segment position " << segment_pos << " out of " << rowset_pb.segment_metas_size();
+        _pending_rowset_data.replace_segments[segment_pos_base + segment_pos] = file_info;
     }
 
     // Merge orphan_files
@@ -1854,6 +1867,15 @@ Status MetaFileBuilder::set_final_rowset() {
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0 && _pending_rowset_data.dels.empty()) {
         return Status::OK(); // Nothing to do
     }
+    // add_rowset() keyed every rewrite by its position in the merged rowset. Check them before touching
+    // the metadata: an entry outside that range would index past segment_metas.
+    for (const auto& replace_seg : _pending_rowset_data.replace_segments) {
+        if (replace_seg.first < 0 || replace_seg.first >= _pending_rowset_data.rowset_pb.segment_metas_size()) {
+            return Status::InternalError(fmt::format(
+                    "tablet {} replace segment position {} is out of the merged rowset's {} segments",
+                    _tablet_meta->id(), replace_seg.first, _pending_rowset_data.rowset_pb.segment_metas_size()));
+        }
+    }
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
@@ -1863,6 +1885,14 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // The rewrite file is standalone, so it has no offset inside a bundle file. Clear the offset per
+        // rewritten segment: unlike apply_opwrite(), whose rowset is the one op_write that was
+        // rewritten, the merged rowset also carries the other statements' segments, and a bundled one
+        // among them still lives at its offset in a bundle file shared with sibling tablets. Without
+        // the offset a reader takes the segment from the start of that file (another tablet's bytes,
+        // or a failed footer check), and vacuum takes the file for unshared and may delete it while the
+        // siblings still reference it.
+        segment_meta->clear_bundle_file_offset();
         // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
         // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
         // "unfiltered".
@@ -1891,10 +1921,6 @@ Status MetaFileBuilder::set_final_rowset() {
         }
     }
     if (!_pending_rowset_data.replace_segments.empty()) {
-        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
-        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
-            segment_metadata.clear_bundle_file_offset();
-        }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
         // identity. If any segment was physically rewritten, the data is now private to this
