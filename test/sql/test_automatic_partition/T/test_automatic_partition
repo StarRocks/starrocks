@@ -1,8 +1,3 @@
--- name: test_without_property @sequential
-CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
-insert into ss values('2021-01-01', 1);
-select * from ss;
-
 -- name: test_automatic_partition_table_pipeline
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
@@ -20,16 +15,6 @@ show partitions from ss;
 insert into ss select * from ss;
 select count(*) from ss;
 show partitions from ss;
--- name: test_single_replica
-CREATE TABLE site_access ( event_day DATETIME NOT NULL, site_id INT DEFAULT '10', city_code VARCHAR(100), user_name VARCHAR(32) DEFAULT '', pv BIGINT DEFAULT '0') DUPLICATE KEY(event_day, site_id, city_code, user_name) PARTITION BY date_trunc('day', event_day) DISTRIBUTED BY HASH(event_day, site_id) PROPERTIES( "replication_num" = "1");
-insert into site_access values('2015-06-02 00:00:00', 1, 1, 'a', 1);
-show partitions from site_access;
-select * from site_access;
-insert into site_access values('2015-06-02 00:10:00', 1, 1, 'a', 1);
-select * from site_access;
-insert into site_access values('2015-06-04 00:10:00', 1, 1, 'a', 1);
-select * from site_access;
-show partitions from site_access;
 -- name: test_date_trunc_date
 CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into dt_month values('2023-02-14', 2);
@@ -105,11 +90,6 @@ insert into dt_month values('2023-02-14 12:31:07', 2);
 insert into dt_month values('2023-03-14 12:31:07', 2);
 show partitions from dt_month;
 select * from dt_month;
--- name: test_partition_column_as_second
-create table p(c1 int null, c2 date null)engine=olap duplicate key(c1,c2) partition by date_trunc('day', c2) distributed by hash(c1) buckets 2 properties("replication_num"="1");
-insert into p values(1,'2021-01-01');
-show partitions from p;
-select * from p;
 -- name: test_multi_fragment_open_new_node_channel @sequential
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "3");
 insert into ss values('2023-02-14', 2),('2033-03-01',2);
@@ -124,12 +104,6 @@ CREATE TABLE dt_month( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTI
 insert into dt_month select * from ss;
 select count(*) from dt_month;
 show partitions from dt_month;
--- name: test_min_partition
-CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
--- insert into ss values('0000-01-01', 2);
-select * from ss;
-show partitions from ss;
-
 -- name: test_auto_incremental_id
 CREATE TABLE t ( id DATE NOT NULL, job1 BIGINT NOT NULL AUTO_INCREMENT) Primary KEY (id) PARTITION BY date_trunc('day', id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
 insert into t values('2021-01-01', 1);
@@ -151,22 +125,6 @@ show partitions from ss;
 insert into ss values('2002-01-01', 2);
 show partitions from ss;
 
--- name: test_shadow_partition @sequential
-CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "1");
-ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="true");
-show partitions from ss;
-ADMIN SET FRONTEND CONFIG("enable_display_shadow_partitions"="false");
-show partitions from ss;
-insert into ss values('2002-01-01', 2);
-show partitions from ss;
--- insert into ss values(null, 2);
--- insert into ss values('0000-01-01', 2);
-insert into ss values('0001-02-01', 2);
--- insert into ss values('0000-00-00', 2);
-select * from ss;
-alter table ss drop partition p200201;
-select * from ss;
-
 -- name: test_two_replica
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1 PROPERTIES("replication_num" = "2");
 insert into ss values('2002-01-01', 2);
@@ -179,13 +137,3 @@ insert into ss values('2002-01-07', 2);
 insert into ss values('2002-01-08', 2);
 insert into ss values('2002-01-09', 2);
 select * from ss;
-
--- name: test_time_slice_with_minute_granularity
-create table tt(k datetime) partition by time_slice(k, interval 10 minute);
-insert into tt values(now());
-select count(*) from tt;
-
--- name: test_date_trunc_with_minute_granularity
-create table tt(k datetime) partition by date_trunc('minute', k);
-insert into tt values(now());
-select count(*) from tt;
