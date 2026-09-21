@@ -35,12 +35,9 @@
 package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
-<<<<<<< HEAD
-=======
 import com.google.common.base.Suppliers;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.Config;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;

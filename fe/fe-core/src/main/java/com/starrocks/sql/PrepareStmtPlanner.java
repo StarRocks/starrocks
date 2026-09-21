@@ -18,11 +18,7 @@ import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -54,17 +50,11 @@ public class PrepareStmtPlanner {
             if (!queryStmt.isPointQuery()) {
                 return StatementPlanner.plan(stmt, session);
             }
-<<<<<<< HEAD
-=======
-            if (ResolvedAIFunctionDetector.contains(queryStmt)) {
-                return StatementPlanner.plan(stmt, session);
-            }
             // get_query_profile() is authorized at analysis time against the literal query id; a cached plan would
             // let a later EXECUTE rebind that parameter without the check (Authorizer#checkGetQueryProfileAccess).
             if (Authorizer.containsGetQueryProfile(queryStmt)) {
                 return StatementPlanner.plan(stmt, session);
             }
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 
             PrepareStmtContext prepareStmtContext = session.getPreparedStmt(executeStmt.getStmtName());
             if (!prepareStmtContext.isCached()) {

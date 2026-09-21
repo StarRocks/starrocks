@@ -40,11 +40,7 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.Function;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.FunctionName;
 import com.starrocks.catalog.FunctionSet;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarFunction;
@@ -97,24 +93,14 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
-=======
 import com.starrocks.sql.ast.ShowProfilelistStmt;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.UserAuthOption;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.sql.ast.UserRef;
-import com.starrocks.sql.ast.expression.ArithmeticExpr;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.warehouse.cngroup.AlterCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.CreateCnGroupStmt;
 import com.starrocks.sql.ast.warehouse.cngroup.DropCnGroupStmt;
@@ -133,13 +119,6 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
-<<<<<<< HEAD
-=======
-import com.starrocks.type.IntegerType;
-import com.starrocks.type.StringType;
-import com.starrocks.type.Type;
-import com.starrocks.type.VarcharType;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
@@ -4255,11 +4234,11 @@ public class PrivilegeCheckerTest extends StarRocksTestBase {
             Assertions.assertFalse(Authorizer.containsGetQueryProfile(plain));
             // The gate keys off the builtin's metadata, so a SQL-defined function sharing the name is left alone
             // even though, unlike a jar-backed UDF, it records no location.
-            Function builtin = ExprUtils.getBuiltinFunction(FunctionSet.GET_QUERY_PROFILE,
-                    new Type[] {VarcharType.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+            Function builtin = Expr.getBuiltinFunction(FunctionSet.GET_QUERY_PROFILE,
+                    new Type[] {Type.VARCHAR}, Function.CompareMode.IS_IDENTICAL);
             Assertions.assertTrue(Authorizer.isGetQueryProfileBuiltin(builtin));
             SqlFunction sqlNamesake = new SqlFunction(new FunctionName("db1", FunctionSet.GET_QUERY_PROFILE),
-                    new Type[] {IntegerType.INT}, IntegerType.INT, new String[] {"x"}, "x + 1");
+                    new Type[] {Type.INT}, Type.INT, new String[] {"x"}, "x + 1");
             Assertions.assertFalse(Authorizer.isGetQueryProfileBuiltin(sqlNamesake));
             ctxToTestUser();
 

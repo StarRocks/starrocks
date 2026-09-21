@@ -15,6 +15,7 @@
 package com.starrocks.http.rest.v2;
 
 import com.google.gson.reflect.TypeToken;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -45,14 +46,7 @@ public class ProfileActionV2 extends RestBaseAction {
     }
 
     @Override
-<<<<<<< HEAD
-    protected void executeWithoutPassword(BaseRequest request, BaseResponse response) {
-=======
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
-        // enable_http_auth's OPERATE requirement predates, and is independent of, the profile access check below.
-        requireOperateIfHttpAuthEnabled();
-
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
         String authorization = request.getAuthorizationHeader();
         String queryId = request.getSingleParameter("query_id");
         String isRequestAllStr = request.getSingleParameter("is_request_all_frontend", "false");

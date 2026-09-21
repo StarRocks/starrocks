@@ -34,6 +34,9 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.QueryProgressUtils;
 import com.starrocks.http.ActionController;
@@ -59,24 +62,21 @@ public class QueryProgressAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/query/progress", new QueryProgressAction(controller));
     }
 
-<<<<<<< HEAD
+    // Historically anonymous. The profile access check needs a caller identity, so turning it on requires
+    // authentication here as well -- an anonymous poller of this endpoint starts getting 401 the moment an
+    // operator enables that check, which is called out in the config docs as an upgrade step.
     @Override
-    public void execute(BaseRequest request, BaseResponse response) {
-=======
-    // Historically anonymous; gated for backward compatibility until enable_http_auth flips on. The profile
-    // access check needs a caller identity, so turning it on requires authentication here as well -- an
-    // anonymous poller of this endpoint starts getting 401 the moment an operator enables that check, which is
-    // called out in the config docs as an upgrade step.
-    @Override
-    public boolean needAuth() {
-        return Config.enable_http_auth || Config.authorization_enable_query_profile_access_check;
+    public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
+        if (Config.authorization_enable_query_profile_access_check) {
+            // Authenticates the caller, then calls executeWithoutPassword below.
+            super.execute(request, response);
+            return;
+        }
+        executeWithoutPassword(request, response);
     }
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
-        requireOperateIfHttpAuthEnabled();
-
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
         String queryId = request.getSingleParameter("query_id");
         if (queryId == null) {
             response.getContent().append("not valid parameter");

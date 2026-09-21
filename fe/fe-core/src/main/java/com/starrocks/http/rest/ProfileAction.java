@@ -34,6 +34,7 @@
 
 package com.starrocks.http.rest;
 
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -59,14 +60,7 @@ public class ProfileAction extends RestBaseAction {
     }
 
     @Override
-<<<<<<< HEAD
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) {
-=======
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
-        // enable_http_auth's OPERATE requirement predates, and is independent of, the profile access check below.
-        requireOperateIfHttpAuthEnabled();
-
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
         String queryId = request.getSingleParameter("query_id");
         if (queryId == null) {
             response.getContent().append("not valid parameter");

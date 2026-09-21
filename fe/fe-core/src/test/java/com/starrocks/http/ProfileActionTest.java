@@ -133,23 +133,6 @@ public class ProfileActionTest extends StarRocksHttpTestCase {
     }
 
     @Test
-    public void testHttpAuthOperateGateStaysWhileCheckOff() throws IOException {
-        // enable_http_auth's OPERATE requirement predates the access check and must survive it being off.
-        pushProfileRunBy("root");
-        stubOperateCheck(new AccessDeniedException("Access denied; OPERATE on SYSTEM required"));
-        Config.authorization_enable_query_profile_access_check = false;
-        Config.enable_http_auth = true;
-        try {
-            Response response = getProfileAsRoot();
-            String body = response.body().string();
-            Assertions.assertEquals(401, response.code(), body);
-            Assertions.assertTrue(body.contains("Access denied"), body);
-        } finally {
-            Config.enable_http_auth = false;
-        }
-    }
-
-    @Test
     public void testOperateHolderReadsOtherUsersProfile() throws IOException {
         pushProfileRunBy("someone_else");
         stubOperateCheck(null);

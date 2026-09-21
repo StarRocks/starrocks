@@ -18,12 +18,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.base.Suppliers;
 import com.google.common.collect.ImmutableList;
-<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-=======
 import com.starrocks.authentication.AuthenticationMgr;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AccessDeniedException;
@@ -37,12 +37,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.TableName;
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.qe.ConnectContext;
@@ -51,15 +46,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.UserIdentity;
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.FunctionCallExpr;
-import com.starrocks.sql.ast.expression.StringLiteral;
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.thrift.TFunctionBinaryType;
 import com.starrocks.warehouse.Warehouse;

@@ -53,7 +53,7 @@ public class ProfileActionV2Test extends StarRocksHttpTestCase {
         summary.addInfoString(ProfileManager.USER, "root");
         summary.addInfoString(ProfileManager.SQL_STATEMENT, "select count(*) from lineorder");
         profile.addChild(summary);
-        return ProfileManager.getInstance().createElement(summary, profile);
+        return ProfileManager.getInstance().createElement(summary, profile.toString());
     }
 
     @Test

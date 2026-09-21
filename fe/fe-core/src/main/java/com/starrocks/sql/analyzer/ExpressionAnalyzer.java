@@ -1112,85 +1112,9 @@ public class ExpressionAnalyzer {
             Type[] argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             // check fn & throw exception direct if analyze failed
             checkFunction(fnName, node, argumentTypes);
-<<<<<<< HEAD
             // get function by function expression and argument types
             Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
             if (fn == null) {
-=======
-
-            // Handle named arguments reordering before function lookup
-            List<String> exprsNames = node.getParams().getExprsNames();
-            if (exprsNames != null && !exprsNames.isEmpty()) {
-                // Named arguments are used - we need to find the function first, then reorder
-                Function fn = FunctionAnalyzer.getAnalyzedFunctionForNamedArgs(session, node, argumentTypes, exprsNames);
-                if (fn == null) {
-                    // Try to provide a more user-friendly error message
-                    FunctionAnalyzer.throwFriendlyNamedArgError(fnName, argumentTypes, exprsNames);
-                    // Fallback to generic error if no specific error was thrown
-                    String msg = String.format("No matching function with signature: %s(%s)",
-                            fnName, FunctionAnalyzer.getNamedArgStr(node.getParams()));
-                    throw new SemanticException(msg, node.getPos());
-                }
-
-                // This prevents confusing IllegalStateException when duplicate parameters exist.
-                // validateNamedArgumentsStructure checks: duplicates, unknown params, missing required params
-                FunctionAnalyzer.validateNamedArgumentsStructure(fnName, fn, exprsNames);
-
-                // Reorder arguments according to function definition
-                FunctionAnalyzer.reorderNamedArgAndAppendDefaults(node.getParams(), fn);
-
-                // Update children to match reordered params
-                node.clearChildren();
-                node.addChildren(node.getParams().exprs());
-
-                // Re-analyze children after reordering (includes default values)
-                for (Expr child : node.getChildren()) {
-                    if (!child.isAnalyzed()) {
-                        visit(child, scope);
-                    }
-                }
-
-                // Validate NULL constraints AFTER reordering
-                // This must be after reordering because it depends on parameter positions
-                FunctionAnalyzer.validateNullConstraints(fnName, fn, node);
-
-                node.setFn(fn);
-                node.setType(fn.getReturnType());
-                FunctionAnalyzer.analyze(node);
-                verifyNoAiInConditionalFunction(node);
-                checkGetQueryProfileAccess(node);
-                return null;
-            }
-
-            // get function by function expression and argument types
-            Function fn = FunctionAnalyzer.getAnalyzedFunction(session, node, argumentTypes);
-            if (fn == null) {
-                // Try to find a function with named arguments that can accept positional arguments
-                fn = FunctionAnalyzer.getAnalyzedFunctionForPositionalCallWithNamedArgs(
-                        session, fnName, argumentTypes);
-                if (fn != null) {
-                    // Append default values for remaining parameters
-                    FunctionAnalyzer.appendDefaultsForPositionalArgs(node.getParams(), fn);
-                    // Update children to match the expanded params
-                    node.clearChildren();
-                    node.addChildren(node.getParams().exprs());
-                    // Re-analyze new children (default values)
-                    for (Expr child : node.getChildren()) {
-                        if (!child.isAnalyzed()) {
-                            visit(child, scope);
-                        }
-                    }
-                    node.setFn(fn);
-                    node.setType(fn.getReturnType());
-                    FunctionAnalyzer.analyze(node);
-                    verifyNoAiInConditionalFunction(node);
-                    checkGetQueryProfileAccess(node);
-                    return null;
-                }
-                // Try to provide a more user-friendly error message for positional calls
-                FunctionAnalyzer.throwFriendlyPositionalArgError(fnName, argumentTypes);
-                // Fallback to generic error if no specific error was thrown
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
                 String msg = String.format("No matching function with signature: %s(%s)",
                         fnName,
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
@@ -1200,12 +1124,6 @@ public class ExpressionAnalyzer {
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
-<<<<<<< HEAD
-            return null;
-        }
-
-=======
-            verifyNoAiInConditionalFunction(node);
             checkGetQueryProfileAccess(node);
             return null;
         }
@@ -1219,18 +1137,6 @@ public class ExpressionAnalyzer {
             }
         }
 
-        private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {
-            String resolvedFunctionName = node.getFn().functionName();
-            if (FunctionSet.IF.equalsIgnoreCase(resolvedFunctionName)
-                    || FunctionSet.IFNULL.equalsIgnoreCase(resolvedFunctionName)
-                    || FunctionSet.NULLIF.equalsIgnoreCase(resolvedFunctionName)
-                    || FunctionSet.COALESCE.equalsIgnoreCase(resolvedFunctionName)) {
-                AIFunctionUsageAnalyzer.verifyNoAIFunctions(
-                        node, AIFunctionUsageAnalyzer.PlacementContext.CONDITIONAL_EXPRESSION);
-            }
-        }
-
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
         /**
          * Handle backward compatible parameter conversion for functions.
          * This method converts old-style function calls to new-style calls to maintain backward compatibility.

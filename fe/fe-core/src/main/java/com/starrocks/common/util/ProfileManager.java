@@ -212,7 +212,6 @@ public class ProfileManager implements MemoryTrackable {
         return element;
     }
 
-<<<<<<< HEAD
     private String generateProfileString(RuntimeProfile profile) {
         if (profile == null) {
             return "";
@@ -234,12 +233,10 @@ public class ProfileManager implements MemoryTrackable {
         return profileString;
     }
 
-=======
     /**
      * Publishes a profile. The element is finished (info strings, serialized content, plan) before it is put
      * into the map under the write lock, which is what lets readers use it lock-free after a snapshot.
      */
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
     public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
         String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);

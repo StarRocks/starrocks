@@ -100,19 +100,10 @@ public class ProfileManagerTest {
         RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
         manager.pushProfile(null, profile1);
 
-<<<<<<< HEAD
         RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
         manager.pushProfile(null, profile2);
-=======
-            assertEquals(1, manager.getAllQueries(element -> true).size());
-        } finally {
-            Config.profile_info_reserved_num = original;
-            manager.clearProfiles();
-        }
-    }
->>>>>>> d0bbc92 ([BugFix] Add RBAC check for reading query profiles (#79375))
 
-        assertEquals(1, manager.getAllQueries().size());
+        assertEquals(1, manager.getAllQueries(element -> true).size());
 
         manager.clearProfiles();
     }
