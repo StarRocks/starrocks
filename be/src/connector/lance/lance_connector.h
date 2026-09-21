@@ -54,7 +54,7 @@ protected:
 
 class LanceDataSource final : public DataSource {
 public:
-    ~LanceDataSource() override = default;
+    ~LanceDataSource() override;
 
     LanceDataSource(const LanceDataSourceProvider* provider, const TScanRange& scan_range);
     std::string name() const override;

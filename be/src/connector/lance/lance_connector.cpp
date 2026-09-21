@@ -39,6 +39,8 @@ const TupleDescriptor* LanceDataSourceProvider::tuple_descriptor(RuntimeState* s
 LanceDataSource::LanceDataSource(const LanceDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.hdfs_scan_range) {}
 
+LanceDataSource::~LanceDataSource() = default;
+
 std::string LanceDataSource::name() const {
     return "LanceDataSource";
 }
@@ -58,8 +60,30 @@ Status LanceDataSource::open(RuntimeState* state) {
     }
 
     std::map<std::string, std::string> jni_scanner_params;
-    jni_scanner_params["lance_split_info"] = _scan_range.lance_split_info;
+    if (_scan_range.__isset.lance_split_info && !_scan_range.lance_split_info.empty()) {
+        return Status::NotSupported("Lance fragment splits are not supported yet");
+    }
     jni_scanner_params["lance_dataset_uri"] = std::string(lance_table->lance_dataset_uri());
+
+    if (hdfs_scan_node.__isset.cloud_configuration) {
+        const auto& cloud = hdfs_scan_node.cloud_configuration;
+        switch (cloud.cloud_type) {
+        case TCloudType::DEFAULT:
+            jni_scanner_params["lance.cloud_type"] = "DEFAULT";
+            break;
+        case TCloudType::AWS:
+            jni_scanner_params["lance.cloud_type"] = "AWS";
+            break;
+        case TCloudType::AZURE:
+            jni_scanner_params["lance.cloud_type"] = "AZURE";
+            break;
+        default:
+            return Status::NotSupported("Unsupported Lance catalog cloud configuration");
+        }
+        for (const auto& [key, value] : cloud.cloud_properties) {
+            jni_scanner_params["lance.cloud." + key] = value;
+        }
+    }
 
     std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
     _scanner = std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
@@ -67,6 +91,8 @@ Status LanceDataSource::open(RuntimeState* state) {
     _scanner_ctx.tuple_desc = _tuple_desc;
     _scanner_ctx.runtime_filter_collector = _runtime_filters;
     _scanner_ctx.format_scan_context.conjuncts.all_ctxs = _conjunct_ctxs;
+    // Lance does not push predicates into its reader; evaluate every scan conjunct on the decoded chunk.
+    _scanner_ctx.format_scan_context.conjuncts.scanner_ctxs = _conjunct_ctxs;
     for (int i = 0; i < _tuple_desc->slots().size(); i++) {
         auto* slot = _tuple_desc->slots()[i];
         _scanner_ctx.materialize_slots.push_back(slot);
