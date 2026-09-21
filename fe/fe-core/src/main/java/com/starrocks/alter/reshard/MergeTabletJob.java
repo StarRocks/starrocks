@@ -123,11 +123,70 @@ public class MergeTabletJob extends TabletReshardJob {
     @Override
     public void init() throws StarRocksException {
         try (LockedObject<OlapTable> lockedTable = getLockedTable(LockType.WRITE)) {
-            reserveTableForReshard(dbId, lockedTable.get(), reshardingPhysicalPartitions);
+            OlapTable olapTable = lockedTable.get();
+            reserveTableForReshard(dbId, olapTable, reshardingPhysicalPartitions);
+            rejectIfSourceRegainedSharedFiles(olapTable);
         } catch (TabletReshardException e) {
-            // Surface admission rejection (table not NORMAL / dropped) as a checked exception so
-            // callers' StarRocksException handling (e.g. TabletPreSplitCoordinator) takes effect.
+            // Surface admission rejection (table not NORMAL / dropped, or a merge source regained
+            // shared data files) as a checked exception so callers' StarRocksException handling
+            // (e.g. TabletPreSplitCoordinator) takes effect.
             throw new StarRocksException(e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Re-checks every merge source under this reservation's own WRITE lock. MergeTabletJobFactory
+     * proves each source tablet free of merge-blocking shared data files while holding only a READ
+     * lock, and releases that lock before this WRITE lock is taken to flip the table to
+     * TABLET_RESHARD; this re-read closes the window between that selection and this reservation
+     * for whatever might set a source's shared-file flag in between. Because this merge's
+     * transaction is already committed by publish time, admitting a tablet that still co-owns a
+     * file has no fallback -- it wedges the partition.
+     *
+     * <p>No writer in a supported configuration can flip a source's flag inside this specific
+     * window today: a split's cross-publish cannot run while the table is not NORMAL, compaction
+     * only carries existing flags forward, and ingest writes private files. This check does not
+     * depend on that holding, though -- an earlier version of this filter rested on an equivalent
+     * enumeration of "nothing can install a shared file after selection," and it turned out to be
+     * wrong (an OpAddIndex cross-publish could). This is defense in depth, not a fix for a
+     * currently reachable bug, and it does not make admission airtight by itself: a stale clean
+     * reading that already landed before this re-read is still believed.
+     *
+     * <p>Reverts the reservation back to NORMAL before rejecting, so a caller that catches the
+     * thrown exception finds the table exactly as it was before this job started reserving it.
+     */
+    private void rejectIfSourceRegainedSharedFiles(OlapTable olapTable) {
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            PhysicalPartition physicalPartition =
+                    olapTable.getPhysicalPartition(reshardingPhysicalPartition.getPhysicalPartitionId());
+            if (physicalPartition == null) {
+                // Dropped in the same gap; reserveTableForReshard's own index re-check already
+                // tolerates this, so follow the same precedent here rather than rejecting.
+                continue;
+            }
+            for (ReshardingMaterializedIndex reshardingIndex :
+                    reshardingPhysicalPartition.getReshardingIndexes().values()) {
+                MaterializedIndex liveIndex =
+                        physicalPartition.getLatestIndex(reshardingIndex.getMaterializedIndex().getMetaId());
+                if (liveIndex == null) {
+                    continue;
+                }
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    MergingTablet mergingTablet = reshardingTablet.getMergingTablet();
+                    if (mergingTablet == null) {
+                        continue;
+                    }
+                    for (Long oldTabletId : mergingTablet.getOldTabletIds()) {
+                        Tablet tablet = liveIndex.getTablet(oldTabletId);
+                        if (tablet != null && ((LakeTablet) tablet).hasSharedFiles()) {
+                            olapTable.setState(OlapTable.OlapTableState.NORMAL);
+                            throw new TabletReshardException("Tablet " + oldTabletId
+                                    + " has gained merge-blocking shared data files since this merge"
+                                    + " job's tablets were selected and cannot be merged");
+                        }
+                    }
+                }
+            }
         }
     }
 
