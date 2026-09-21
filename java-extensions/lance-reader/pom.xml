@@ -13,7 +13,9 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <lance.version>7.0.0</lance.version>
+        <!-- Native dispatch must use the reader's isolated BE classloader. -->
+        <lance.version>8.0.1</lance.version>
+        <arrow.version>18.3.0</arrow.version>
     </properties>
 
     <dependencies>
@@ -51,6 +53,7 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -81,6 +84,7 @@
                         </goals>
                         <configuration>
                             <outputDirectory>${project.build.directory}/lance-reader-lib</outputDirectory>
+                            <includeScope>runtime</includeScope>
                             <overWriteIfNewer>true</overWriteIfNewer>
                         </configuration>
                     </execution>
