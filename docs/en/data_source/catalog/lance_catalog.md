@@ -64,3 +64,5 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 - Scalar values, dates, timestamps, and lists are supported by the reader. Arrow date64 values are interpreted as UTC dates. Map and struct materialization is not supported.
 - The catalog is read-only. Local file URIs must be accessible on the BE selected for the scan.
 - Reader dependencies are packaged in `be/lib/lance-reader-lib`, with the scanner factory JAR also in `be/lib/jni-packages`.
+
+To build without Lance, pass `--without-connector-lance` to `build.sh`. This disables the BE connector, skips the reader Maven module, and excludes its JARs from the BE package.
