@@ -90,6 +90,7 @@ description: "StarRocks 提供多种 HTTP 接口方便集群维护和操作。"
 | GET              | `/api/pipeline_blocking_drivers/{action}`                         | |
 | GET              | `/greplog`                                                        | |
 | GET              | `/varz`                                                           | 查看当前 BE 配置。                                                                                                     |
+| GET              | `/api/publish_property?type=pk&tablet_id={}`                      | 查看某个存算分离主键表 tablet 上当前生效的 publish 调优属性。必须指定 `type=pk` 和 `tablet_id`。 |
 
 ## CN
 
@@ -104,3 +105,4 @@ description: "StarRocks 提供多种 HTTP 接口方便集群维护和操作。"
 | GET              | `/pprof/cmdline`                                                  | |
 | HEAD/GET/POST    | `/pprof/symbol`                                                   | |
 | GET              | `/metrics`                                                        | 查看当前 CN 的 metrics。                                                                                                 |
+| GET              | `/api/publish_property?type=pk&tablet_id={}`                      | 查看某个存算分离主键表 tablet 上当前生效的 publish 调优属性。必须指定 `type=pk` 和 `tablet_id`。 |

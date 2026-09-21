@@ -53,6 +53,7 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_service.pb.h"
 #include "platform/key_cache.h"
 #include "platform/store_path.h"
 #include "runtime/descriptors.h"
@@ -82,6 +83,7 @@
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "storage/lake/vacuum_full.h"
+#include "storage/pk_publish_config.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
@@ -131,7 +133,7 @@ inline StatusOr<MutableTabletMetadataPtr> merge_tablet_or_read_alias(lake::Table
                                                                      int64_t new_version, const TxnInfoPB& txn_info,
                                                                      bool read_alias) {
     return read_alias ? lake::virtual_merge_for_read(tablet_manager, sources, merging, new_version, txn_info)
-                      : lake::merge_tablet(tablet_manager, sources, merging, new_version, txn_info);
+                      : lake::merge_tablet(tablet_manager, sources, merging, new_version, txn_info, std::nullopt);
 }
 
 class LakeTabletReshardTest : public testing::Test {
@@ -251,7 +253,7 @@ protected:
             *splitting.add_new_tablet_ranges()->mutable_lower_bound() = generate_sort_key(50);
             splitting.mutable_new_tablet_ranges(1)->set_lower_bound_included(true);
         }
-        return lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB());
+        return lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB(), std::nullopt);
     }
 
     TabletMetadataPtr cache_reshard_metadata(int64_t key_id, int64_t metadata_id, int64_t version, int64_t gtid,
@@ -535,7 +537,8 @@ protected:
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
                                     std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
-                                    const std::function<void()>& before_merge = {}) {
+                                    const std::function<void()>& before_merge = {},
+                                    std::optional<PublishPropertyPBRef> publish_property = std::nullopt) {
         for (const auto& source : merge_fixture_sources(sources)) RETURN_IF_ERROR(put_tablet_metadata(source));
         if (before_merge) before_merge();
         ReshardingTabletInfoPB resharding_tablet;
@@ -550,7 +553,8 @@ protected:
         txn_info.set_gtid(1);
         std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
         return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
-                                               txn_info, false, tablet_metadatas, tablet_ranges);
+                                               txn_info, false, tablet_metadatas, tablet_ranges,
+                                               lake::InitialMetadataOrder::kPerTabletFirst, publish_property);
     }
 
     StatusOr<TabletMetadataPtr> merge_modern_shared_occurrences(const TabletMetadataPtr& child_a,
@@ -2084,7 +2088,7 @@ protected:
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
     }
 
     StatusOr<TabletMetadataPtr> publish_followup_delete(int64_t tablet_id, int64_t base_version, int32_t delete_key) {
@@ -2138,7 +2142,7 @@ protected:
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
     }
 
     StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base) {
@@ -2152,7 +2156,7 @@ protected:
         txn_info.set_txn_type(TXN_NORMAL);
         txn_info.set_commit_time(1);
         return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
-                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
     }
 
     StatusOr<TabletMetadataPtr> create_lifecycle_source(int64_t tablet_id, int lower, int upper, int32_t key,
@@ -2659,7 +2663,7 @@ protected:
                 expected[key] = value;
                 deleted.erase(key);
                 if (enable_tde) {
-                    ASSIGN_OR_RETURN(child, _update_manager->flush_pk_memtable(child, child->version()));
+                    ASSIGN_OR_RETURN(child, _update_manager->flush_pk_memtable(child, child->version(), std::nullopt));
                     RETURN_IF_ERROR(put_tablet_metadata(child));
                     if (child->sstable_meta().sstables_size() == 0) {
                         return Status::InternalError("TDE repeated lifecycle source flush emitted no SST");
@@ -3274,8 +3278,8 @@ protected:
         TxnInfoPB txn;
         txn.set_txn_id(next_id());
         txn.set_commit_time(1);
-        ASSIGN_OR_RETURN(auto children,
-                         lake::split_tablet(_tablet_manager.get(), source, split, source->version() + 1, txn));
+        ASSIGN_OR_RETURN(auto children, lake::split_tablet(_tablet_manager.get(), source, split, source->version() + 1,
+                                                           txn, std::nullopt));
         if (children.size() != child_count) {
             return Status::InternalError("fixed-point split returned the wrong number of children");
         }
@@ -3531,7 +3535,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_compaction_partial_merge_rejoin
         ASSIGN_OR_ABORT(auto untouched,
                         lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(children[2]->id()),
                                               children[2]->version(), partial->version(),
-                                              std::span<const TxnInfoPB>(&empty_txn, 1), false));
+                                              std::span<const TxnInfoPB>(&empty_txn, 1), false, std::nullopt));
         ASSERT_NE(partial->rowsets(0).max_compact_input_rowset_id(),
                   untouched->rowsets(0).max_compact_input_rowset_id());
         std::vector<TabletMetadataPtr> rejoin{partial, untouched};
@@ -3587,7 +3591,7 @@ TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke
     EXPECT_EQ(baseline, signature);
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(current, current->version()));
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(current, current->version(), std::nullopt));
     ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
     ASSERT_OK(put_tablet_metadata(flushed));
     _update_manager->unload_and_remove_primary_index(flushed->id());
@@ -4638,8 +4642,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
         set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
         DeferOp restore_index_flush(
                 [&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
-        ASSIGN_OR_ABORT(auto after_dml,
-                        _update_manager->flush_pk_memtable(published_after_dml, published_after_dml->version()));
+        ASSIGN_OR_ABORT(auto after_dml, _update_manager->flush_pk_memtable(
+                                                published_after_dml, published_after_dml->version(), std::nullopt));
         ASSERT_OK(put_tablet_metadata(after_dml));
         EXPECT_GT(after_dml->sstable_meta().sstables_size(), 0) << "explicitly flushed classifier-stage snapshot";
         ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
@@ -5050,8 +5054,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
 
         // Drain the real source writers before constructing the classifier
         // shape. MERGE will flush once more at its own mandatory boundary.
-        ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-        ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+        ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+        ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version(), std::nullopt));
 
         auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
         auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
@@ -5231,8 +5235,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_uses_native
     prepare_tablet_dirs(target_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version(), std::nullopt));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
@@ -5302,8 +5306,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
     prepare_tablet_dirs(merged_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100, /*include_delete=*/false));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600, /*include_delete=*/false));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version(), std::nullopt));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
@@ -5437,8 +5441,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     prepare_tablet_dirs(merged_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version(), std::nullopt));
     auto mutable_left = std::make_shared<TabletMetadataPB>(*left);
     auto mutable_right = std::make_shared<TabletMetadataPB>(*right);
     mutable_left->mutable_sstable_meta()->mutable_sstables(0)->set_shared(true);
@@ -5458,7 +5462,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
 
     // The writer is allowed to keep its rebuilt index cache-only. Persist it explicitly because the rest of this
     // fixture needs one physical SST cohort to prove identical metadata reuse after compaction and SPLIT.
-    ASSIGN_OR_ABORT(auto persisted_index, _update_manager->flush_pk_memtable(recovered, recovered->version()));
+    ASSIGN_OR_ABORT(auto persisted_index,
+                    _update_manager->flush_pk_memtable(recovered, recovered->version(), std::nullopt));
     ASSERT_OK(put_tablet_metadata(persisted_index));
     ASSERT_GT(persisted_index->sstable_meta().sstables_size(), 0);
 
@@ -5573,8 +5578,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
     prepare_tablet_dirs(target_id);
     ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
     ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
-    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version()));
-    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version()));
+    ASSIGN_OR_ABORT(left, _update_manager->flush_pk_memtable(left, left->version(), std::nullopt));
+    ASSIGN_OR_ABORT(right, _update_manager->flush_pk_memtable(right, right->version(), std::nullopt));
 
     MergingTabletInfoPB merging;
     merging.add_old_tablet_ids(left_id);
@@ -5653,6 +5658,72 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_tde_failure_retry_ma
         ASSIGN_OR_ABORT(auto restarted,
                         _tablet_manager->get_tablet_metadata(result->target_tablet_id, recovered->version()));
         expect_lifecycle_oracle(restarted, {{20, 2000}, {60, 600}}, {10});
+    }
+}
+
+// A reshard is published by a request like any other publish and prepares primary key indexes the same
+// way, so what the table set has to reach it here too. Left out, a split or merge prepares -- and, for
+// an index that is not in memory, rebuilds -- on this node's configuration, at the point the flush
+// holds the most memory and on exactly the two values a table sets to hold that down. Both reshard
+// shapes flush, so both are checked.
+//
+// Asserted on the revision rather than on one property's effect: the revision is what every set of them
+// has in common, so this keeps testing delivery as the set grows.
+TEST_F(LakeTabletReshardTest, test_reshard_publish_delivers_publish_property) {
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+
+    PublishPropertyPB property;
+    property.set_revision(7);
+    (*property.mutable_properties())["pk_index_memtable_max_count"] = "8";
+
+    auto expect_carried = [&](int64_t tablet_id, const char* which) {
+        auto config = _update_manager->get_publish_config(tablet_id);
+        ASSERT_NE(nullptr, config) << which << " tablet " << tablet_id << " holds no primary key index";
+        EXPECT_EQ(7, config->revision()) << which << " tablet " << tablet_id;
+        EXPECT_EQ(8, config->memtable_max_count()) << which << " tablet " << tablet_id;
+    };
+
+    // MERGE flushes every source on the way in, so every source's index takes the values.
+    {
+        const int64_t left_id = next_id();
+        const int64_t right_id = next_id();
+        const int64_t merged_id = next_id();
+        prepare_tablet_dirs(merged_id);
+        ASSIGN_OR_ABORT(auto left, create_lifecycle_source(left_id, 0, 50, 10, 100));
+        ASSIGN_OR_ABORT(auto right, create_lifecycle_source(right_id, 50, 100, 60, 600));
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        ASSERT_OK(publish_resharding_merge({left, right}, merged_id, left->version(), left->version() + 1, next_id(),
+                                           published, {}, std::cref(property)));
+        expect_carried(left_id, "merge source");
+        expect_carried(right_id, "merge source");
+    }
+
+    // SPLIT flushes its one source before that source's metadata is spliced into the children.
+    {
+        const int64_t source_id = next_id();
+        const int64_t child_a = next_id();
+        const int64_t child_b = next_id();
+        prepare_tablet_dirs(child_a);
+        prepare_tablet_dirs(child_b);
+        ASSIGN_OR_ABORT(auto source, create_lifecycle_source(source_id, 0, 100, 10, 100));
+        ASSERT_OK(put_tablet_metadata(source));
+
+        ReshardingTabletInfoPB resharding;
+        auto& splitting = *resharding.mutable_splitting_tablet_info();
+        splitting.set_old_tablet_id(source_id);
+        splitting.add_new_tablet_ids(child_a);
+        splitting.add_new_tablet_ids(child_b);
+        TxnInfoPB txn;
+        txn.set_txn_id(next_id());
+        txn.set_commit_time(1);
+        txn.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        std::unordered_map<int64_t, TabletRangePB> ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, source->version(),
+                                                  source->version() + 1, txn, false, published, ranges,
+                                                  lake::InitialMetadataOrder::kPerTabletFirst, std::cref(property)));
+        expect_carried(source_id, "split source");
     }
 }
 
@@ -5826,7 +5897,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_source_fallback_does_not_mas
             boundary.to_proto(left->mutable_upper_bound());
             *right->mutable_lower_bound() = left->upper_bound();
         }
-        auto result = lake::split_tablet(_tablet_manager.get(), metadata, splitting, 2, TxnInfoPB());
+        auto result = lake::split_tablet(_tablet_manager.get(), metadata, splitting, 2, TxnInfoPB(), std::nullopt);
         EXPECT_TRUE(result.status().is_invalid_argument()) << "malformed range case " << malformed;
         EXPECT_EQ(0, flushes) << "malformed range case " << malformed;
     }
@@ -7605,8 +7676,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_zero_active_weights_omit_
         txn.set_txn_id(next_id());
         txn.set_commit_time(1);
         txn.set_gtid(1);
-        ASSIGN_OR_ABORT(auto mutable_children,
-                        lake::split_tablet(_tablet_manager.get(), input, splitting, input->version() + 1, txn));
+        ASSIGN_OR_ABORT(auto mutable_children, lake::split_tablet(_tablet_manager.get(), input, splitting,
+                                                                  input->version() + 1, txn, std::nullopt));
         std::vector<TabletMetadataPtr> children;
         for (const int64_t child_id : child_ids) children.push_back(mutable_children.at(child_id));
         return children;
@@ -8895,7 +8966,7 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_sets_rowset_range_in_txn_
     txn_info.set_force_publish(false);
 
     auto published_or = lake::publish_version(_tablet_manager.get(), tablet_info, base_version, new_version,
-                                              std::span<const TxnInfoPB>(&txn_info, 1), false);
+                                              std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
     ASSERT_OK(published_or.status());
 
     ASSIGN_OR_ABORT(auto published_meta, _tablet_manager->get_tablet_metadata(new_tablet_id, new_version));
@@ -9013,7 +9084,7 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_multi_stmt_batch_keeps_sc
                                             /*split_count=*/2, split_index);
         auto txn_info = make_txn_info();
         auto published_or = lake::publish_version(_tablet_manager.get(), tablet_info, base_version, new_version,
-                                                  std::span<const TxnInfoPB>(&txn_info, 1), false);
+                                                  std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt);
         EXPECT_OK(published_or.status());
         ASSIGN_OR_ABORT(auto meta, _tablet_manager->get_tablet_metadata(child_id, new_version));
         EXPECT_EQ(1, meta->rowsets_size());
@@ -9109,7 +9180,7 @@ TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_b
     cross_txn_info.set_commit_time(1);
     ASSIGN_OR_ABORT(auto cross_published,
                     lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
-                                          std::span<const TxnInfoPB>(&cross_txn_info, 1), false));
+                                          std::span<const TxnInfoPB>(&cross_txn_info, 1), false, std::nullopt));
     ASSERT_EQ(1, cross_published->rowsets_size());
     const auto& published_rowset = cross_published->rowsets(0);
     EXPECT_EQ(25, published_rowset.num_rows());
@@ -9449,9 +9520,9 @@ TEST_F(LakeTabletReshardTest, test_mixed_zero_row_delete_slot_survives_split_mer
     txn.set_txn_id(txn_id);
     txn.set_txn_type(TXN_NORMAL);
     txn.set_commit_time(1);
-    ASSIGN_OR_ABORT(auto written,
-                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), seeded->version(),
-                                          seeded->version() + 1, std::span<const TxnInfoPB>(&txn, 1), false));
+    ASSIGN_OR_ABORT(auto written, lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id),
+                                                        seeded->version(), seeded->version() + 1,
+                                                        std::span<const TxnInfoPB>(&txn, 1), false, std::nullopt));
 
     const RowsetMetadataPB* mixed = nullptr;
     for (const auto& rowset : written->rowsets()) {
@@ -9728,8 +9799,8 @@ TEST_F(LakeTabletReshardTest, test_skewed_child_exact_deletes_survive_resplit_me
     nested_info.set_txn_id(next_id());
     nested_info.set_commit_time(1);
     nested_info.set_gtid(2);
-    ASSIGN_OR_ABORT(auto nested_children,
-                    lake::split_tablet(_tablet_manager.get(), left_deleted, nested_split, kMergeVersion, nested_info));
+    ASSIGN_OR_ABORT(auto nested_children, lake::split_tablet(_tablet_manager.get(), left_deleted, nested_split,
+                                                             kMergeVersion, nested_info, std::nullopt));
     int64_t nested_rows = 0;
     int64_t nested_dels = 0;
     bool saw_dels_above_rows = false;
@@ -15057,7 +15128,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_near_rssid_boundary_remains_wr
     write_txn.set_commit_time(1);
     auto published =
             lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(merged_tablet), merged_version,
-                                  merged_version + 1, std::span<const TxnInfoPB>(&write_txn, 1), false);
+                                  merged_version + 1, std::span<const TxnInfoPB>(&write_txn, 1), false, std::nullopt);
     ASSERT_OK(published.status());
     EXPECT_EQ(3, published.value()->next_rowset_id());
     if (!published.value()->sstable_meta().sstables().empty()) {
@@ -19294,7 +19365,7 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_stamps_fresh_sstable_with_new_v
     auto meta = make_single_segment_pk_tablet(tablet_id, base_version, seg_name, seg_size, kNumRows);
     ASSERT_OK(put_tablet_metadata(meta));
 
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, new_version));
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, new_version, std::nullopt));
 
     ASSERT_NE(flushed, nullptr);
     EXPECT_EQ(base_version, flushed->version());           // returned metadata keeps base_version (restore)
@@ -19323,7 +19394,7 @@ TEST_F(LakeTabletReshardTest, test_reshard_flush_uses_unpersisted_in_memory_meta
     // per-tablet aggregate-publish RPC before the coordinator writes the partition bundle.
     ASSERT_TRUE(_tablet_manager->get_tablet_metadata(tablet_id, in_memory_version).status().is_not_found());
 
-    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, in_memory_version));
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(meta, in_memory_version, std::nullopt));
     ASSERT_NE(flushed, nullptr);
     EXPECT_EQ(in_memory_version, flushed->version());
     ASSERT_EQ(1, flushed->sstable_meta().sstables_size());

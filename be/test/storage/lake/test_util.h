@@ -232,7 +232,8 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
                                                                int64_t new_version, int64_t txn_id,
                                                                bool rebuild_pindex) {
     auto txns = std::vector<TxnInfoPB>{TEST_txn_info(txn_id, time(nullptr), rebuild_pindex)};
-    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns, false);
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns, false,
+                                  std::nullopt);
     if (!result.ok()) {
         return Status::InternalError(fmt::format("failed to publish version. tablet_id={} txn_id={} new_version={}: {}",
                                                  tablet_id, txn_id, new_version, result.status().to_string()));
@@ -246,8 +247,8 @@ inline Status TEST_aggregate_publish_version(TabletManager* tablet_mgr, std::vec
     auto txns = std::vector<TxnInfoPB>{std::move(txn_info)};
     std::map<int64_t, TabletMetadataPB> tablet_metas;
     for (auto tablet_id : tablet_ids) {
-        auto result =
-                publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns, true);
+        auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), new_version - 1, new_version, txns,
+                                      true, std::nullopt);
         if (!result.ok()) {
             return Status::InternalError(
                     fmt::format("failed to publish version. tablet_id={} tablet_sz={} txn_id={} new_version={}: {}",
@@ -268,7 +269,8 @@ inline StatusOr<TabletMetadataPtr> TEST_batch_publish(TabletManager* tablet_mgr,
     for (auto& txn_id : txn_ids) {
         txns.emplace_back(TEST_txn_info(txn_id, commit_time));
     }
-    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false);
+    auto result = publish_version(tablet_mgr, PublishTabletInfo(tablet_id), base_version, new_version, txns, false,
+                                  std::nullopt);
     if (!result.ok()) {
         return Status::InternalError(
                 fmt::format("failed to publish version. tablet_id={} txn_ids={} base_version={} new_version={}: {}",

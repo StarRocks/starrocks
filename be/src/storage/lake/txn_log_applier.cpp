@@ -350,13 +350,15 @@ void collect_idg_orphan_files(const IndexDeltaGroupMetadataPB& old_idg_meta,
 class PrimaryKeyTxnLogApplier : public TxnLogApplier {
 public:
     PrimaryKeyTxnLogApplier(const Tablet& tablet, MutableTabletMetadataPtr metadata, int64_t new_version,
-                            bool rebuild_pindex, bool skip_write_tablet_metadata)
+                            bool rebuild_pindex, bool skip_write_tablet_metadata,
+                            std::optional<PublishPropertyPBRef> publish_property)
             : _tablet(tablet),
               _metadata(std::move(metadata)),
               _base_version(_metadata->version()),
               _new_version(new_version),
               _builder(_tablet, _metadata),
-              _rebuild_pindex(rebuild_pindex) {
+              _rebuild_pindex(rebuild_pindex),
+              _publish_property(publish_property) {
         _metadata->set_version(_new_version);
         _skip_write_tablet_metadata = skip_write_tablet_metadata;
     }
@@ -400,8 +402,9 @@ public:
             _metadata->clear_sstable_meta();
             _guard.reset(nullptr);
             _index_entry = nullptr;
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->rebuild_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.update_mgr()->rebuild_primary_index(_metadata, &_builder, _base_version,
+                                                                         _new_version, _guard, _publish_property));
             _rebuild_pindex = false;
         }
         return Status::OK();
@@ -599,8 +602,9 @@ private:
     // in `TxnLogApplier.init`, because we have to build primary index after apply `schema_change_log` finish.
     Status prepare_primary_index() {
         if (_index_entry == nullptr) {
-            ASSIGN_OR_RETURN(_index_entry, _tablet.update_mgr()->prepare_primary_index(
-                                                   _metadata, &_builder, _base_version, _new_version, _guard));
+            ASSIGN_OR_RETURN(_index_entry,
+                             _tablet.update_mgr()->prepare_primary_index(_metadata, &_builder, _base_version,
+                                                                         _new_version, _guard, _publish_property));
             // Reset publish SST stats so we only count SSTs flushed during this publish session
             _index_entry->value().reset_publish_sst_stats();
             _publish_begin_time = UnixMillis();
@@ -971,6 +975,9 @@ private:
     MetaFileBuilder _builder;
     DynamicCache<uint64_t, LakePersistentIndex>::Entry* _index_entry{nullptr};
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> _guard{nullptr};
+    // What the table set for this publish, owned by the request being served and outliving this
+    // applier. Empty when the request carried nothing, which leaves the index on what it already has.
+    std::optional<PublishPropertyPBRef> _publish_property;
     // True when finalize meta file success.
     bool _has_finalized = false;
     bool _rebuild_pindex = false;
@@ -1528,10 +1535,11 @@ private:
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-                                                   bool skip_write_tablet_metadata) {
+                                                   bool skip_write_tablet_metadata,
+                                                   std::optional<PublishPropertyPBRef> publish_property) {
     if (metadata->schema().keys_type() == PRIMARY_KEYS) {
         return std::make_unique<PrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version, rebuild_pindex,
-                                                         skip_write_tablet_metadata);
+                                                         skip_write_tablet_metadata, publish_property);
     }
     return std::make_unique<NonPrimaryKeyTxnLogApplier>(tablet, std::move(metadata), new_version,
                                                         skip_write_tablet_metadata);

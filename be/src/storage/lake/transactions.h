@@ -19,6 +19,7 @@
 #include "common/statusor.h"
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/pk_publish_config.h"
 
 namespace starrocks {
 class TxnInfoPB;
@@ -57,9 +58,13 @@ class PublishTabletInfo;
 // kSharedFirst tells them to try the partition-shared version-1 object before the per-tablet key that
 // a bundled partition never writes. A preference only -- either order resolves the metadata. Has no
 // effect unless |base_version| is 1. See InitialMetadataOrder.
+// |publish_property| is what the table has set for this publish, and is empty when the request
+// carried nothing -- which an FE too old to send it and a table that has never set one look alike.
+// Empty leaves the tablet on the values it already has rather than clearing them.
 StatusOr<TabletMetadataPtr> publish_version(
         TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
-        std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata, int64_t fe_built_version = 0,
+        std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
+        std::optional<PublishPropertyPBRef> publish_property, int64_t fe_built_version = 0,
         InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
 
 // Publish a batch new versions of transaction logs.

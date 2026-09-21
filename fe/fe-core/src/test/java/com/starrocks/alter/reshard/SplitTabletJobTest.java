@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletRange;
@@ -400,7 +401,7 @@ public class SplitTabletJobTest {
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                       boolean preferSharedInitialMetadata) {
+                                       boolean preferSharedInitialMetadata, PublishProperty publishProperty) {
                 actualResource.set(computeResource);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
@@ -472,7 +473,7 @@ public class SplitTabletJobTest {
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                       boolean preferSharedInitialMetadata) {
+                                       boolean preferSharedInitialMetadata, PublishProperty publishProperty) {
                 actualBaseVersion.set(baseVersion);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }

@@ -22,6 +22,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
@@ -405,6 +406,7 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
             if (table == null) {
                 return false;
             }
+            PublishProperty publishProperty = table.getPublishProperty();
             // Publish each physical partition at its commit version. Utils
             // publishVersion handles the per-tablet PublishVersionTask fan-out
             // and collects results; a single boolean return drives the
@@ -444,12 +446,12 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
                         tablets.addAll(idx.getTablets());
                     } else {
                         Utils.publishVersion(idx.getTablets(), txnInfo, commitVersion - 1,
-                                commitVersion, computeResource, false);
+                                commitVersion, computeResource, false, publishProperty);
                     }
                 }
                 if (useAggregatePublish) {
                     Utils.publishVersion(tablets, txnInfo, commitVersion - 1,
-                            commitVersion, computeResource, true);
+                            commitVersion, computeResource, true, publishProperty);
                 }
             }
             return true;
@@ -618,7 +620,8 @@ public abstract class LakeTableIndexFastPathJobBase extends AlterJobV2 {
         // The index fast path's normal publish does not use a gtid (its TxnInfoPB
         // leaves gtid=0), so pass 0 here for consistency.
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, /*watershedGtid=*/ 0L,
-                commitVersionMap, tabletsByPartition, computeResource, useAggregatePublish);
+                commitVersionMap, tabletsByPartition, computeResource, useAggregatePublish,
+                table.getPublishProperty());
     }
 
     @Override

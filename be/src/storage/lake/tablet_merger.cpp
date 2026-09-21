@@ -3416,14 +3416,16 @@ void record_merge_sstable_meta_result(const MergeSstableMetaResult& result) {
 }
 
 Status merge_sstables(TabletManager* tablet_manager, std::vector<TabletMergeContext>& merge_contexts,
-                      const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata) {
+                      const TabletMergeAllocationPlan& allocation_plan, TabletMetadataPB* new_metadata,
+                      std::optional<PublishPropertyPBRef> publish_property) {
     auto* update_manager = tablet_manager->update_mgr();
     for (auto& context : merge_contexts) {
         bool skip_source_flush = false;
         FAIL_POINT_TRIGGER_EXECUTE(skip_lake_pk_index_merge_source_flush, { skip_source_flush = true; });
         if (skip_source_flush) continue;
         TEST_SYNC_POINT_CALLBACK("merge_sstables:source_pk_flush", nullptr);
-        ASSIGN_OR_RETURN(auto flushed, update_manager->flush_pk_memtable(context.metadata(), new_metadata->version()));
+        ASSIGN_OR_RETURN(auto flushed, update_manager->flush_pk_memtable(context.metadata(), new_metadata->version(),
+                                                                         publish_property));
         context.set_metadata(std::move(flushed));
     }
 
@@ -3598,7 +3600,8 @@ DEFINE_FAIL_POINT(tablet_merge_after_rssid_reassign);
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
-                                                const TxnInfoPB& txn_info) {
+                                                const TxnInfoPB& txn_info,
+                                                std::optional<PublishPropertyPBRef> publish_property) {
     if (old_tablet_metadatas.empty()) {
         return Status::InvalidArgument("No old tablet metadata to merge");
     }
@@ -3708,7 +3711,8 @@ StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
     }
 
     if (uses_cloud_native_pk_index(*new_tablet_metadata)) {
-        RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, allocation_plan, new_tablet_metadata.get()));
+        RETURN_IF_ERROR(merge_sstables(tablet_manager, merge_contexts, allocation_plan, new_tablet_metadata.get(),
+                                       publish_property));
     } else {
         // SST classification and source flushing are cloud-native PK contracts. Other key/index modes retain
         // their merged rowset and sidecar metadata without manufacturing a primary-index attachment.

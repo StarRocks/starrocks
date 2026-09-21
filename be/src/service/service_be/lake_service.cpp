@@ -389,6 +389,14 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     // lake::InitialMetadataOrder.
     auto base_version_order = request->prefer_shared_initial_metadata() ? lake::InitialMetadataOrder::kSharedFirst
                                                                         : lake::InitialMetadataOrder::kPerTabletFirst;
+    // The one place a request's own answer to "did FE send any" is read, and read once for the whole
+    // request rather than per tablet: both kinds of task below prepare primary key indexes, so both
+    // have to hand the same values down. Most tables never set a publish property, and those carry an
+    // empty optional the whole way rather than a message nobody will look at.
+    std::optional<PublishPropertyPBRef> publish_property;
+    if (request->has_publish_property()) {
+        publish_property = std::cref(request->publish_property());
+    }
 
     for (const auto& tablet_info : publish_tablet_infos) {
         auto task = std::make_shared<CancellableRunnable>(
@@ -448,7 +456,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     StatusOr<TabletMetadataPtr> res;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
-                                                    skip_write_tablet_metadata, fe_built_version, base_version_order);
+                                                    skip_write_tablet_metadata, publish_property, fe_built_version,
+                                                    base_version_order);
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -611,7 +620,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                         if (std::chrono::system_clock::now() < timeout_deadline) {
                             res = lake::publish_resharding_tablet(_tablet_mgr, resharding_tablet_info, base_version,
                                                                   new_version, txn_info, skip_write_tablet_metadata,
-                                                                  tablet_metadatas, tablet_ranges, base_version_order);
+                                                                  tablet_metadatas, tablet_ranges, base_version_order,
+                                                                  publish_property);
                         } else {
                             auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                             res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
@@ -771,6 +781,14 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
     const auto& publish_req = request.publish_reqs(0);
     const auto& txn_info = publish_req.txn_infos(publish_req.txn_infos_size() - 1);
     const int64_t new_version = publish_req.new_version();
+    // Read from the same sub-request the txn info and version come from. One aggregate publish puts
+    // the same snapshot on every sub-request, so the first one answers for the request. Building the
+    // alias merges the children, and that merge flushes each child's primary key index -- an index
+    // preparation like any other, so it gets the request's values rather than this node's.
+    std::optional<PublishPropertyPBRef> publish_property;
+    if (publish_req.has_publish_property()) {
+        publish_property = std::cref(publish_req.publish_property());
+    }
     for (const auto& parent_info : request.parent_tablet_publish_infos()) {
         if (!parent_info.has_parent_tablet_id() || parent_info.child_tablet_ids_size() < 1) {
             return Status::InvalidArgument("parent tablet publish requires one parent and at least one child");
@@ -820,8 +838,8 @@ static Status build_parent_tablet_metadata(lake::TabletManager* tablet_mgr,
             ASSIGN_OR_RETURN(parent_meta, lake::virtual_merge_for_read(tablet_mgr, child_metas, merging_info,
                                                                        new_version, txn_info));
         } else {
-            ASSIGN_OR_RETURN(parent_meta,
-                             lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version, txn_info));
+            ASSIGN_OR_RETURN(parent_meta, lake::merge_tablet(tablet_mgr, child_metas, merging_info, new_version,
+                                                             txn_info, publish_property));
         }
         // This runs on the publish critical path once per parent per version, so keep its cost
         // visible: it is what wedged loads while it went through the full tablet merge.

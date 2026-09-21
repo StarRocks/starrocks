@@ -20,6 +20,7 @@
 #include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/pk_publish_config.h"
 
 namespace starrocks {
 class TxnLogPB;
@@ -69,6 +70,7 @@ protected:
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
                                                    int64_t new_version, bool rebuild_pindex,
-                                                   bool skip_write_tablet_metadata);
+                                                   bool skip_write_tablet_metadata,
+                                                   std::optional<PublishPropertyPBRef> publish_property);
 
 } // namespace starrocks::lake

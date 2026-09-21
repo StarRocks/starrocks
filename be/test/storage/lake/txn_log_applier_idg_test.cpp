@@ -63,7 +63,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_op_add_index_populates_idg_meta) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70001);
     auto meta = make_npk_meta(70001, /*version=*/4);
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/5, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true);
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
 
     TxnLogPB log;
     log.set_tablet_id(70001);
@@ -107,7 +107,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_op_drop_index_records_tombstone) {
     ix->add_col_unique_id(7);
 
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/7, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true);
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
     TxnLogPB log;
     log.set_tablet_id(70002);
     log.set_txn_id(7200);
@@ -131,7 +131,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_replication_carries_idg_meta) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 70003);
     auto meta = make_npk_meta(70003, /*version=*/1);
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/2, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true);
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
 
     TxnLogPB log;
     log.set_tablet_id(70003);
@@ -175,7 +175,7 @@ TEST(TxnLogApplierIdgTest, npk_apply_replication_collects_old_idx_orphans) {
     still_ref->set_shared_file(false);
 
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/2, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true);
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
     TxnLogPB log;
     log.set_tablet_id(70004);
     log.set_txn_id(7400);
@@ -216,7 +216,7 @@ TEST(TxnLogApplierIdgTest, pk_apply_replication_carries_idg_meta) {
     stale.add_entries()->set_index_file("pk_stale.idx");
 
     auto applier = new_txn_log_applier(tablet, meta, /*new_version=*/2, /*rebuild_pindex=*/false,
-                                       /*skip_write_tablet_metadata=*/true);
+                                       /*skip_write_tablet_metadata=*/true, std::nullopt);
     TxnLogPB log;
     log.set_tablet_id(70005);
     log.set_txn_id(7500);

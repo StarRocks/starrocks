@@ -35,6 +35,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -841,6 +842,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             // do not create partition for external table
             if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
+                    validateAndStorePublishProperties(table, properties);
+
                     // In AutoMV standalone tools, when query dump contains external table and query spans
                     // multiple catalogs, the query dump replaying that automv standalone tools depends on 
                     // fails because query dump can not handle multiple catalogs and specifies the catalog
@@ -886,6 +889,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         if (hasMedium) {
                             table.setStorageMedium(dataProperty.getStorageMedium());
                         }
+                        validateAndStorePublishProperties(table, properties);
                         if (!FeConstants.isReplayFromQueryDump && properties != null && !properties.isEmpty()) {
                             // here, all properties should be checked
                             throw new DdlException("Unknown properties: " + properties);
@@ -928,6 +932,21 @@ public class OlapTableFactory implements AbstractTableFactory {
         }
 
         return table;
+    }
+
+    // Must run before the "Unknown properties" check that follows each call site, so a registered
+    // name is not mistaken for one nobody recognizes. Writing the unset literal here removes the
+    // property, which leaves the table as if it had never been written.
+    private void validateAndStorePublishProperties(OlapTable table, Map<String, String> properties)
+            throws DdlException {
+        try {
+            PublishProperty.Changes changes = PublishProperty.validateAndExtract(properties, table);
+            table.getTableProperty().applyPublishProperties(changes);
+        } catch (SemanticException e) {
+            // Report the analyzer's message verbatim, so CREATE and ALTER read the same, but as a
+            // DdlException: createTable() only unwinds (and unbinds the storage volume) for that.
+            throw new DdlException(e.getMessage(), e);
+        }
     }
 
     private void processConstraint(

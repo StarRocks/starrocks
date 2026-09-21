@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -947,7 +948,7 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, PublishProperty publishProperty) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
             }

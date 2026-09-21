@@ -149,7 +149,7 @@ protected:
         }
         std::vector<TxnInfoPB> txns{info};
         auto res = publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), base_version,
-                                   new_version, txns, false);
+                                   new_version, txns, false, std::nullopt);
         RETURN_IF_ERROR(res.status());
         return res;
     }

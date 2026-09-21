@@ -170,7 +170,7 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
     // (no _pipelined flag, no sub-chunk slicing, no per-chunk RAFs). next_values
     // will service every call via _rfile->read_at_fully, exactly like the
     // pre-pipelining behavior.
-    const int32_t K = std::max(1, config::lake_rows_mapper_read_parallelism);
+    const int32_t K = std::max(1, _publish_config->rows_mapper_read_parallelism());
     if (K <= 1) {
         return Status::OK();
     }
@@ -183,7 +183,7 @@ Status RowsMapperIterator::prepare_segments(const std::vector<size_t>& segment_r
     // Sub-chunks never cross segment boundaries, so consuming a segment of M
     // sub-chunks consumes exactly M front entries from _in_flight.
     const int64_t sub_chunk_bytes_cfg =
-            std::max<int64_t>(static_cast<int64_t>(EACH_ROW_SIZE), config::lake_rows_mapper_sub_chunk_bytes);
+            std::max<int64_t>(static_cast<int64_t>(EACH_ROW_SIZE), _publish_config->rows_mapper_read_batch_bytes());
     const size_t sub_chunk_rows = std::max<size_t>(1, static_cast<size_t>(sub_chunk_bytes_cfg) / EACH_ROW_SIZE);
 
     _sub_chunks.clear();

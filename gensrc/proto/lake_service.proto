@@ -72,6 +72,25 @@ message PublishVersionRequest {
     // never reach another index's tablets. Absent from an older FE, which simply keeps the default
     // order.
     optional bool prefer_shared_initial_metadata = 12;
+
+    // Table-level tuning this publish runs with. Absent from an older FE, and also absent for the
+    // many tables that have never set one; either way the CN keeps whatever it last cached and each
+    // read site falls back to this node's config. Present on every sub-request of an aggregate
+    // publish, each carrying its own table's values.
+    optional PublishPropertyPB publish_property = 13;
+}
+
+// One table's publish properties and the revision that names them.
+//
+// The two travel together because the revision is what a CN compares to decide whether to re-read
+// the values at all: a request carrying one without the other would either update a cache with no
+// way to order it against what is already there, or claim a version for values it did not bring.
+// A request always carries the whole set, never a delta against an earlier revision, so a CN that
+// missed any number of publishes still rebuilds from the next one it receives, and a property that
+// was removed is gone simply by not being here.
+message PublishPropertyPB {
+    optional int64 revision = 1;
+    map<string, string> properties = 2;
 }
 
 // Per-tablet stats returned by the lake publish RPC. The FE also reuses this as a plain in-process

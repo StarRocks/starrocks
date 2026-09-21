@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
+#include "storage/pk_publish_config.h"
 
 namespace starrocks {
 
@@ -106,6 +107,14 @@ public:
     // own RandomAccessFile. Sum of `segment_row_counts` must equal the file's
     // total row count.
     Status prepare_segments(const std::vector<size_t>& segment_row_counts);
+    // What the table set for the publish driving this read. A null argument is ignored rather than
+    // stored, so an iterator nobody hands one to keeps the empty set it starts with and every
+    // accessor then answers with this node's config.
+    void set_publish_config(PkPublishConfigPtr publish_config) {
+        if (publish_config != nullptr) {
+            _publish_config = std::move(publish_config);
+        }
+    }
     // get `fetch_cnt` rows and move to next position
     Status next_values(size_t fetch_cnt, std::vector<uint64_t>* rssid_rowids);
     // Must be called when iterator end.
@@ -158,6 +167,7 @@ private:
     size_t _next_segment_to_serve = 0;            // index into _segment_sizes
     std::deque<InFlightChunk> _in_flight;         // FIFO of in-flight sub-chunks
     bool _pipelined = false;                      // true after a successful prepare_segments
+    PkPublishConfigPtr _publish_config = std::make_shared<const PkPublishConfig>();
 };
 
 // rows mapper file's name for lake table

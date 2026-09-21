@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
@@ -146,7 +147,7 @@ public class LakeAggregatePublishTest {
             warehouseMgrField.set(GlobalStateMgr.getCurrentState(), mockManager);
 
             Assertions.assertThrows(NoAliveBackendException.class, () -> Utils.aggregatePublishVersion(tablets, null, 1, 2, null,
-                        null, WarehouseManager.DEFAULT_RESOURCE, null, null));
+                        null, WarehouseManager.DEFAULT_RESOURCE, null, null, PublishProperty.NEVER_SET));
 
             when(mockManager.getAliveComputeNodes(any())).thenReturn(null);
             LakeAggregator lakeAggregator = new LakeAggregator();

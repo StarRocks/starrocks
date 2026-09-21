@@ -197,7 +197,8 @@ public:
     // get or create primary index, and prepare primary index state
     StatusOr<IndexEntry*> prepare_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
+                                                std::optional<PublishPropertyPBRef> publish_property);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -221,11 +222,26 @@ public:
     // exclusion between publish_resharding_tablet and publish_version, so
     // the cached _data_version cannot advance past metadata->version()
     // during this call.
-    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version);
+    //
+    // |publish_property| is the snapshot carried by the publish request this flush runs under, and
+    // goes to the index prepared below. std::nullopt means that request carried none -- an FE too old
+    // to send the field, or a table that has never set one -- and never that a caller holding one
+    // declined to pass it: preparing the index can rebuild a cold one, and a rebuild inserts every key
+    // through the memtable, so a snapshot dropped here drops a table's memory bound at the point this
+    // flush holds the most of it.
+    StatusOr<TabletMetadataPtr> flush_pk_memtable(const TabletMetadataPtr& metadata, int64_t generation_version,
+                                                  std::optional<PublishPropertyPBRef> publish_property);
 
     StatusOr<IndexEntry*> rebuild_primary_index(const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
                                                 int64_t base_version, int64_t new_version,
-                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock);
+                                                std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& lock,
+                                                std::optional<PublishPropertyPBRef> publish_property);
+
+    // What the table set for the primary key index of `tablet_id`, for a reader outside any publish.
+    // Null when no index is loaded for that tablet -- it has never published, its entry was evicted,
+    // or it is not a primary key tablet. Neither creates an entry nor loads an index, so asking does
+    // not change what the node is doing.
+    PkPublishConfigPtr get_publish_config(int64_t tablet_id);
 
     DynamicCache<uint64_t, LakePersistentIndex>& index_cache() { return _index_cache; }
 

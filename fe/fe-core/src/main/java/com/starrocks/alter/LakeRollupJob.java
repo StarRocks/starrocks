@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -751,6 +752,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     protected boolean lakePublishVersion() {
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             OlapTable table = getTableOrThrow();
+            PublishProperty publishProperty = table.getPublishProperty();
             boolean useAggregatePublish = table.isFileBundling();
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
@@ -773,10 +775,11 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 if (!useAggregatePublish) {
                     // publish rollup tablets
                     Utils.publishVersion(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), rollUpTxnInfo,
-                            1, commitVersion, computeResource, false);
+                            1, commitVersion, computeResource, false, publishProperty);
                 } else {
-                    Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(), 
-                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request);
+                    Utils.createSubRequestForAggregatePublish(physicalPartitionIdToRollupIndex.get(partitionId).getTablets(),
+                            Lists.newArrayList(rollUpTxnInfo), 1, commitVersion, null, computeResource, request,
+                            publishProperty);
                 }
 
                 TxnInfoPB originTxnInfo = new TxnInfoPB();
@@ -788,10 +791,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 if (!useAggregatePublish) {
                     // publish origin tablets
                     Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1,
-                            commitVersion, computeResource, false);
+                            commitVersion, computeResource, false, publishProperty);
                 } else {
-                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo), 
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                    Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
+                            commitVersion - 1, commitVersion, null, computeResource, request, publishProperty);
                 }
 
                 if (useAggregatePublish) {

@@ -124,7 +124,7 @@ Status ColumnModePartialUpdateHandler::_load_update_state(const RowsetUpdateStat
         // Must precede init(): the selection is built inside _load().
         pk_iters[i]->set_row_selector(_row_selector.get());
         RETURN_IF_ERROR(pk_iters[i]->init(segment_iters[i], pkey_schema, true /*lazy_load*/, pk_encoding_type,
-                                          true /*defer_data_load*/));
+                                          params.publish_config, true /*defer_data_load*/));
     }
 
     // Parallel query PK index: each segment's PKs are loaded chunk-by-chunk (lazy)

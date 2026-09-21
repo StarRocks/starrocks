@@ -2220,7 +2220,8 @@ Status apply_segment_ownership_to_new_tablet_rowset(RowsetMetadataPB* rowset, co
 
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& tablet_metadata,
-        const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info) {
+        const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info,
+        std::optional<PublishPropertyPBRef> publish_property) {
     if (tablet_metadata == nullptr) {
         return Status::InvalidArgument("tablet metadata is null");
     }
@@ -2280,7 +2281,7 @@ StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
     // fallback must inherit this flushed metadata rather than the input snapshot.
     TEST_SYNC_POINT_CALLBACK("tablet_splitter:pk_flush", nullptr);
     ASSIGN_OR_RETURN(TabletMetadataPtr old_tablet_metadata,
-                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version));
+                     tablet_manager->update_mgr()->flush_pk_memtable(tablet_metadata, new_version, publish_property));
     if (status.ok() && !is_external_boundaries && separate_sort) {
         status = get_tablet_split_ranges_from_pk_index_impl(tablet_manager, old_tablet_metadata,
                                                             splitting_tablet.new_tablet_ids_size(), &split_ranges,

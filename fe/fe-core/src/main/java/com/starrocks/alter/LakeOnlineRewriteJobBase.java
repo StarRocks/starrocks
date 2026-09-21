@@ -30,6 +30,7 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -1596,11 +1597,13 @@ public abstract class LakeOnlineRewriteJobBase
      */
     protected boolean lakePublishVersion() {
         // Collect all per-partition tablet lists under a single lock, then publish outside the lock.
+        PublishProperty publishProperty;
         boolean isFileBundling;
         List<PartitionPublishInfo> publishInfos = new ArrayList<>();
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             OlapTable table = getTableOrThrow();
             isFileBundling = table.isFileBundling();
+            publishProperty = table.getPublishProperty();
             for (long physicalPartitionId : partitionStates.keySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkNotNull(physicalPartition, physicalPartitionId);
@@ -1655,15 +1658,16 @@ public abstract class LakeOnlineRewriteJobBase
                 shadowTxnInfo.shadowRewriteSourceEmpty = info.sourceEmpty;
                 if (!isFileBundling) {
                     Utils.publishVersion(info.shadowTablets, shadowTxnInfo, 1, info.commitVersion,
-                            computeResource, false);
+                            computeResource, false, publishProperty);
                     Utils.publishVersion(info.originTablets, originTxnInfo, info.commitVersion - 1,
-                            info.commitVersion, computeResource, false);
+                            info.commitVersion, computeResource, false, publishProperty);
                 } else {
                     AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                     Utils.createSubRequestForAggregatePublish(info.shadowTablets, Lists.newArrayList(shadowTxnInfo),
-                            1, info.commitVersion, null, computeResource, request);
+                            1, info.commitVersion, null, computeResource, request, publishProperty);
                     Utils.createSubRequestForAggregatePublish(info.originTablets, Lists.newArrayList(originTxnInfo),
-                            info.commitVersion - 1, info.commitVersion, null, computeResource, request);
+                            info.commitVersion - 1, info.commitVersion, null, computeResource, request,
+                            publishProperty);
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.sendAggregatePublishVersionRequest(request, 1, computeResource, null, null,
                             vectorIndexBuildInfos);
@@ -1712,12 +1716,14 @@ public abstract class LakeOnlineRewriteJobBase
         // still route correctly. Mirrors LakeTableSchemaChangeJob.lakePublishVersionWithSkip.
         // Collect all per-partition tablet lists under a single lock, then publish outside the lock.
         boolean useAggregatePublish = false;
+        PublishProperty publishProperty = PublishProperty.NEVER_SET;
         Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
         try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
             // Use the null-returning getTable so a concurrent db/table drop is a benign skip.
             OlapTable table = getTable();
             if (table != null) {
                 useAggregatePublish = table.isFileBundling();
+                publishProperty = table.getPublishProperty();
                 for (long physicalPartitionId : partitionStates.keySet()) {
                     PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                     if (physicalPartition == null) {
@@ -1733,7 +1739,8 @@ public abstract class LakeOnlineRewriteJobBase
             }
         }
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid,
-                commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish);
+                commitVersionMapView(), tabletsByPartition, computeResource, useAggregatePublish,
+                publishProperty);
     }
 
     /**

@@ -20,6 +20,7 @@ import com.starrocks.alter.reshard.PublishTabletsInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.NoAliveBackendException;
@@ -298,7 +299,7 @@ public class UtilsTest {
 
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()),
-                1L, 2L, null, WarehouseManager.DEFAULT_RESOURCE, request);
+                1L, 2L, null, WarehouseManager.DEFAULT_RESOURCE, request, PublishProperty.NEVER_SET);
 
         Assertions.assertEquals(1, request.getComputeNodes().size());
         Assertions.assertEquals("10.0.0.7", request.getComputeNodes().get(0).getHost());
@@ -335,7 +336,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 12345;
         try {
             Utils.publishVersionBatch(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, WarehouseManager.DEFAULT_RESOURCE, null, null, PublishProperty.NEVER_SET);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }
@@ -379,7 +380,7 @@ public class UtilsTest {
         Config.lake_publish_version_timeout_ms = 23456;
         try {
             Utils.aggregatePublishVersion(Lists.newArrayList(), Lists.newArrayList(new TxnInfoPB()), 1L, 2L,
-                    null, null, null, WarehouseManager.DEFAULT_RESOURCE, null, null);
+                    null, null, null, WarehouseManager.DEFAULT_RESOURCE, null, null, PublishProperty.NEVER_SET);
         } finally {
             Config.lake_publish_version_timeout_ms = savedTimeoutMs;
         }

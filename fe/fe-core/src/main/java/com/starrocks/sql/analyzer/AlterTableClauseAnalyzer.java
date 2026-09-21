@@ -36,6 +36,7 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -533,6 +534,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
                         "Property " + PropertyAnalyzer.PROPERTIES_LIGHT_WEIGHT_TABLET_CREATION +
                                 " can only be set for cloud native tables");
             }
+        } else if (PublishProperty.declaresAny(properties)) {
+            if (!(table instanceof OlapTable)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
+            }
+            // Checks the type, range and both scopes, and is given a copy because it takes the names
+            // it recognized out of the map -- and the statement still has to carry them onward.
+            PublishProperty.validateAndExtract(new LinkedHashMap<>(properties), (OlapTable) table);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }

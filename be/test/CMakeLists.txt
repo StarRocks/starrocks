@@ -130,6 +130,7 @@ set(EXEC_FILES
         ./http/greplog_action_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
+        ./http/publish_property_action_test.cpp
         ./http/stop_be_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
@@ -402,6 +403,7 @@ SET(DW_TEST_FILES
     ./storage/rowset/unique_rowset_id_generator_test.cpp
     ./storage/rowset_update_state_test.cpp
     ./storage/rowset/zone_map_index_test.cpp
+    ./storage/pk_publish_config_test.cpp
     ./storage/rows_mapper_test.cpp
     ./storage/row_store_encoder_test.cpp
     ./storage/schema_change_test.cpp

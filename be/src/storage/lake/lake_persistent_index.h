@@ -25,6 +25,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/persistent_index.h"
+#include "storage/pk_publish_config.h"
 #include "storage/sstable/filter_policy.h"
 #include "storage/sstable/table_builder.h"
 
@@ -338,6 +339,15 @@ public:
     Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
                         ParallelUpsertContext* ctx);
 
+    // What this table set for publish, or an empty set standing for "the table set nothing" -- never
+    // null, so callers read values without asking whether anything was set.
+    const PkPublishConfigPtr& publish_config() const { return _publish_config; }
+
+    // Takes the values a publish request brought, if it brought a newer revision than this index
+    // already holds. Called once at the start of a publish, under the index's own guard, so the
+    // values cannot change while that publish runs.
+    void update_publish_config(const PublishPropertyPB& publish_property);
+
 private:
     // Refuse an operation on an index init() has not built. LakePrimaryIndex used to express this by
     // holding a possibly-null pointer to this class and checking it in each of its nineteen
@@ -395,6 +405,9 @@ private:
 private:
     std::shared_ptr<PersistentIndexMemtable> _memtable;
     std::vector<std::shared_ptr<PersistentIndexMemtable>> _inactive_memtables;
+    // Replaced whole rather than edited, so work this publish started keeps reading the set it began
+    // with even after a later publish brings a newer one.
+    PkPublishConfigPtr _publish_config = std::make_shared<const PkPublishConfig>();
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     size_t _need_rebuild_file_cnt{0};

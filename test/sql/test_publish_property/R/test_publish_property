@@ -1,0 +1,342 @@
+-- name: test_publish_property @cloud
+CREATE DATABASE db_${uuid0};
+-- result:
+-- !result
+USE db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k INT NOT NULL, v INT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('pk_index_memtable_max_count' = '8', 'pk_index_memtable_max_bytes' = '134217728');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_index_memtable_max_bytes" = "134217728",
+"pk_index_memtable_max_count" = "8",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '16', 'pk_rows_mapper_read_parallelism' = '64');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Can only set one table property at a time.')
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '16');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_rows_mapper_read_parallelism' = '64');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_compaction_replace_batch_rows' = '4096');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_compaction_replace_batch_rows" = "4096",
+"pk_index_memtable_max_bytes" = "134217728",
+"pk_index_memtable_max_count" = "16",
+"pk_rows_mapper_read_parallelism" = "64",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_compaction_replace_batch_rows" = "4096",
+"pk_index_memtable_max_count" = "16",
+"pk_rows_mapper_read_parallelism" = "64",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '65');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property pk_index_memtable_max_count must be between 1 and 64: 65.')
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '0');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property pk_index_memtable_max_count must be between 1 and 64: 0.')
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = 'eight');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property pk_index_memtable_max_count must be an integer: eight.')
+-- !result
+ALTER TABLE t1 SET ('pk_index_rebuild_files_threshold' = '0');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_compaction_replace_batch_rows" = "4096",
+"pk_index_memtable_max_count" = "16",
+"pk_index_rebuild_files_threshold" = "0",
+"pk_rows_mapper_read_parallelism" = "64",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE t_dup (k INT NOT NULL, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('pk_index_memtable_max_count' = '8');
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Property pk_index_memtable_max_count is only supported for PRIMARY KEY tables.')
+-- !result
+INSERT INTO t1 VALUES (1, 1), (2, 2), (3, 3);
+-- result:
+-- !result
+SELECT * FROM t1 ORDER BY k;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '32');
+-- result:
+-- !result
+INSERT INTO t1 VALUES (4, 4);
+-- result:
+-- !result
+SELECT COUNT(*) FROM t1;
+-- result:
+4
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '134217728');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_index_rebuild_rows_threshold' = '5000000');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_index_parallel_execution_min_rows' = '8192');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_column_read_batch_bytes' = '1048576');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_rows_mapper_read_batch_bytes' = '2097152');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_column_read_batch_bytes" = "1048576",
+"pk_compaction_replace_batch_rows" = "4096",
+"pk_index_memtable_max_bytes" = "134217728",
+"pk_index_memtable_max_count" = "32",
+"pk_index_parallel_execution_min_rows" = "8192",
+"pk_index_rebuild_files_threshold" = "0",
+"pk_index_rebuild_rows_threshold" = "5000000",
+"pk_rows_mapper_read_batch_bytes" = "2097152",
+"pk_rows_mapper_read_parallelism" = "64",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t1
+-- result:
+0
+t1={"revision":12,"properties":{"pk_index_memtable_max_count":32,"pk_index_memtable_max_bytes":134217728,"pk_index_rebuild_files_threshold":0,"pk_index_rebuild_rows_threshold":5000000,"pk_index_parallel_execution_min_rows":8192,"pk_column_read_batch_bytes":1048576,"pk_rows_mapper_read_parallelism":64,"pk_rows_mapper_read_batch_bytes":2097152,"pk_compaction_replace_batch_rows":4096}}
+-- !result
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_column_read_batch_bytes' = '');
+-- result:
+-- !result
+ALTER TABLE t1 SET ('pk_rows_mapper_read_batch_bytes' = '');
+-- result:
+-- !result
+SHOW CREATE TABLE t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"pk_compaction_replace_batch_rows" = "4096",
+"pk_index_memtable_max_count" = "32",
+"pk_index_parallel_execution_min_rows" = "8192",
+"pk_index_rebuild_files_threshold" = "0",
+"pk_index_rebuild_rows_threshold" = "5000000",
+"pk_rows_mapper_read_parallelism" = "64",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t1
+-- result:
+0
+t1={"revision":15,"properties":{"pk_index_memtable_max_count":32,"pk_index_rebuild_files_threshold":0,"pk_index_rebuild_rows_threshold":5000000,"pk_index_parallel_execution_min_rows":8192,"pk_rows_mapper_read_parallelism":64,"pk_compaction_replace_batch_rows":4096}}
+-- !result
+CREATE TABLE t_unbundled (k INT NOT NULL, v INT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('file_bundling' = 'false');
+-- result:
+-- !result
+INSERT INTO t_unbundled VALUES (1, 1), (2, 2);
+-- result:
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+-- result:
+0
+t_unbundled={"revision":0,"properties":{}}
+-- !result
+ALTER TABLE t_unbundled SET ('pk_index_memtable_max_count' = '32');
+-- result:
+-- !result
+ALTER TABLE t_unbundled SET ('pk_rows_mapper_read_parallelism' = '16');
+-- result:
+-- !result
+ALTER TABLE t_unbundled SET ('pk_index_rebuild_files_threshold' = '0');
+-- result:
+-- !result
+INSERT INTO t_unbundled VALUES (3, 3);
+-- result:
+-- !result
+SELECT * FROM t_unbundled ORDER BY k;
+-- result:
+1	1
+2	2
+3	3
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+-- result:
+0
+t_unbundled={"revision":3,"properties":{"pk_index_memtable_max_count":32,"pk_index_rebuild_files_threshold":0,"pk_rows_mapper_read_parallelism":16}}
+-- !result
+ALTER TABLE t_unbundled SET ('pk_index_memtable_max_count' = '');
+-- result:
+-- !result
+ALTER TABLE t_unbundled SET ('pk_rows_mapper_read_parallelism' = '');
+-- result:
+-- !result
+ALTER TABLE t_unbundled SET ('pk_index_rebuild_files_threshold' = '');
+-- result:
+-- !result
+SHOW CREATE TABLE t_unbundled;
+-- result:
+t_unbundled	CREATE TABLE `t_unbundled` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+-- result:
+0
+t_unbundled={"revision":6,"properties":{}}
+-- !result
+shell: env mysql_cmd="${mysql_cmd}" bash ${root_path}/sql/test_publish_property/T/check_publish_property_errors.sh
+-- result:
+0
+absent=NOT_FOUND
+unknown_type=INVALID_ARGUMENT
+missing_type=INVALID_ARGUMENT
+missing_tablet_id=INVALID_ARGUMENT
+bad_tablet_id=INVALID_ARGUMENT
+-- !result
+DROP DATABASE db_${uuid0} FORCE;
+-- result:
+-- !result

@@ -283,6 +283,7 @@ set(STORAGE_FILES
     lake/column_mode_partial_update_handler.cpp
     lake/tablet_write_log_manager.cpp
     primary_key_dump.cpp
+    pk_publish_config.cpp
     rows_mapper.cpp
     primary_key_compaction_conflict_resolver.cpp
     local_primary_key_compaction_conflict_resolver.cpp

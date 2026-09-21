@@ -834,6 +834,62 @@ PROPERTIES (
       您可以通过为 FE 动态配置 `lake_autovacuum_grace_period_minutes` 设置一个较低的值来缩短此间隔。但是，请记住在修改 `file_bundling` 属性后将配置重置为其原始值。
 :::
 
+### 存算分离主键表的 Publish 调优
+
+以下属性用于调节表在 Publish 版本期间的工作方式。这些属性从 v26.2 开始支持，仅适用于存算分离集群中的云原生主键表，可以在 CREATE TABLE 时设置，也可以之后通过 [ALTER TABLE](ALTER_TABLE.md) 修改；与其他表属性一样，一条 ALTER TABLE 语句只能设置其中一项。
+
+每一项都只为当前表覆盖一个 BE 配置项：
+
+- 未设置的属性沿用对应的 BE 配置项，因此之后对该配置项的修改仍会作用于该表。
+- 将属性设置为空串（`""`）会将其移除，该表重新沿用对应的 BE 配置项。这与显式写入该配置项的当前值不同：显式写入的值会一直跟随该表，即使之后配置项发生了变化。
+
+```SQL
+PROPERTIES (
+    "pk_index_memtable_max_count" = "<int_value>",
+    "pk_index_memtable_max_bytes" = "<int_value>"
+)
+```
+
+| 属性 | 说明 | 取值范围 | 未设置时沿用的 BE 配置项 |
+| ---- | ---- | -------- | ------------------------ |
+| `pk_index_memtable_max_count` | 一个 tablet 最多可持有多少个主键索引 memtable，超过后将同步刷写而非后台刷写。 | 1 至 64 | `pk_index_memtable_max_count` |
+| `pk_index_memtable_max_bytes` | 单个主键索引 memtable 增长到多少字节后触发刷写。 | 1 至 4294967296 | `l0_max_mem_usage` |
+| `pk_index_rebuild_files_threshold` | 后续重建主键索引最多需要重放多少个文件，超过后 Publish 会额外刷写一次以缩短该重建。设为 `0` 表示关闭该触发条件。 | 0 至 100000 | `cloud_native_pk_index_rebuild_files_threshold` |
+| `pk_index_rebuild_rows_threshold` | 同上，按行数计。设为 `0` 表示关闭该触发条件。 | 0 至 10000000000 | `cloud_native_pk_index_rebuild_rows_threshold` |
+| `pk_index_parallel_execution_min_rows` | 低于该行数时，Publish 不将主键相关工作拆分到多个线程执行。同时也是切分一批主键所使用的行数。 | 1 至 100000000 | `pk_index_parallel_execution_min_rows` |
+| `pk_column_read_batch_bytes` | 一批主键列数据累积多少字节后交给下游处理。与 `pk_index_parallel_execution_min_rows` 共同决定一批的结束位置：哪个先达到就按哪个切分。 | 1 至 4294967296 | `pk_column_lazy_load_threshold_bytes` |
+| `pk_rows_mapper_read_parallelism` | Compaction Publish 期间，对行映射文件保持多少个并发读取。 | 1 至 256 | `lake_rows_mapper_read_parallelism` |
+| `pk_rows_mapper_read_batch_bytes` | 上述每次读取的字节数。与 `pk_rows_mapper_read_parallelism` 相乘，即为该读取占用内存的上界。 | 1 至 67108864 | `lake_rows_mapper_sub_chunk_bytes` |
+| `pk_compaction_replace_batch_rows` | Compaction Publish 期间，累积多少行后向主键索引发起一次更新。设为 `1` 表示不累积。 | 1 至 10000000 | `primary_key_compaction_replace_batch_rows` |
+
+:::note
+
+- `pk_rows_mapper_read_parallelism`、`pk_rows_mapper_read_batch_bytes` 和 `pk_compaction_replace_batch_rows` 仅在 Compaction Publish 期间生效，不影响导入数据的 Publish。
+- 修改从每个 tablet 的下一次 Publish 开始生效，而非在 ALTER TABLE 返回时生效。因此同一张表的不同 tablet 可能在不同时刻开始使用新值，未发生 Publish 的 tablet 则要等到其下一次 Publish 才会收到。
+
+:::
+
+要查看某个 tablet 当前在用的取值，可以向发布它的节点查询：
+
+```bash
+curl -s -u root: "http://<be_host>:<be_http_port>/api/publish_property?type=pk&tablet_id=<tablet_id>"
+```
+
+```json
+{
+    "status": "OK",
+    "message": "",
+    "revision": 7,
+    "properties": {
+        "pk_index_memtable_max_count": 32
+    }
+}
+```
+
+返回中只包含该表设置过的属性，即节点实际收到并接受的内容，而非语句里写了什么：未设置的属性不会出现，
+被该节点判定为非法而拒绝的取值同样不会出现。`revision` 是该表修改过的次数；当该 tablet 的主键索引不在
+内存中时，`status` 为 `NOT_FOUND`——这份信息只保存在内存里，不会持久化。
+
 ### 快速 Schema 演进
 
 - `fast_schema_evolution`：是否为表启用快速 Schema 演进。有效值为 `TRUE` 或 `FALSE`（默认）。启用快速 Schema 演进可以提高 Schema 变更的速度，并减少添加或删除列时的资源使用。目前，此属性只能在表创建时启用，创建表后不能使用 ALTER TABLE 进行修改。

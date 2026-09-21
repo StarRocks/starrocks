@@ -90,6 +90,7 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | GET                 | `/api/pipeline_blocking_drivers/{action}`                       | |
 | GET                 | `/greplog`                                                      | |
 | GET                 | `/varz`                                                         | View current BE configuration.                                                                                       |
+| GET                 | `/api/publish_property?type=pk&tablet_id={}`                    | View the publish tuning a table has set for a shared-data Primary Key tablet, as this node currently holds it. Requires `type=pk` and `tablet_id`. |
 
 ## CN
 
@@ -104,3 +105,4 @@ To facilitate the maintenance of StarRocks clusters, StarRocks provides various 
 | GET                 | `/pprof/cmdline`                                                | |
 | HEAD/GET/POST       | `/pprof/symbol`                                                 | |
 | GET                 | `/metrics`                                                      | View metrics of the current CN.                                                                                      |
+| GET                 | `/api/publish_property?type=pk&tablet_id={}`                    | View the publish tuning a table has set for a shared-data Primary Key tablet, as this node currently holds it. Requires `type=pk` and `tablet_id`. |

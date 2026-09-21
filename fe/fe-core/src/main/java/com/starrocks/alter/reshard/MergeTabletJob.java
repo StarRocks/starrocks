@@ -26,6 +26,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -324,8 +325,10 @@ public class MergeTabletJob extends TabletReshardJob {
                     // partition-shared object, so tell the BE where to look, exactly as a normal load does.
                     boolean preferSharedInitialMetadata =
                             Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
+                    PublishProperty publishProperty = olapTable.getPublishProperty();
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
+                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata,
+                            publishProperty));
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -655,7 +658,8 @@ public class MergeTabletJob extends TabletReshardJob {
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
-            boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
+            boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata,
+            PublishProperty publishProperty) {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = transactionId;
@@ -671,7 +675,8 @@ public class MergeTabletJob extends TabletReshardJob {
             // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata);
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata,
+                    publishProperty);
 
             return tabletRange;
         } catch (Exception e) {

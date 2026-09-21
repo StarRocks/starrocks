@@ -2930,7 +2930,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_cdc_maps_reset_on_empty_publish) {
         txn_info.set_force_publish(false);
         std::vector<TxnInfoPB> txns{txn_info};
         ASSIGN_OR_ABORT(auto empty_meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), version,
-                                                         version + 1, txns, false));
+                                                         version + 1, txns, false, std::nullopt));
         version++;
         EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_input_delvecs().empty());
         EXPECT_TRUE(empty_meta->cdc_metadata().pk_change_locator().compaction_output_delvecs().empty());

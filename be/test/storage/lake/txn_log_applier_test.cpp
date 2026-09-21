@@ -125,7 +125,7 @@ bool make_tablet(int64_t tablet_id, Tablet* out_tablet) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10001); // 修改参数顺序
     auto meta = build_non_pk_metadata(10001);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     logs.push_back(make_op_write_log(10001, 10, 5, 100, {"seg_a"}));
@@ -151,7 +151,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBasic) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10020);
     auto meta = build_non_pk_metadata(10020);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log0 = make_op_write_log(10020, 20, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
     auto log1 = make_op_write_log(10020, 21, /*num_rows=*/10, /*data_size=*/200, {"seg_data"});
@@ -176,7 +176,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchZeroNumRowsKeepsSegmentAndUid) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10021);
     auto meta = build_non_pk_metadata(10021);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     logs.push_back(make_op_write_log(10021, 22, 0, 0, {"seg_x"}));
@@ -198,7 +198,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchAllZeroNumRowsKeepsSegments) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogZeroNumRowsKeepsSegments) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10120);
     auto meta = build_non_pk_metadata(10120);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = make_op_write_log(10120, 30, /*num_rows=*/0, /*data_size=*/0, {"seg_zero"});
     log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(7);
@@ -214,7 +214,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogZeroNumRowsKeepsSegments) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogNoSegmentsAttachesNothing) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10121);
     auto meta = build_non_pk_metadata(10121);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = make_op_write_log(10121, 31, /*num_rows=*/0, /*data_size=*/0, {});
     Status st = applier->apply(*log);
@@ -229,7 +229,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogNoSegmentsAttachesNothing) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogEmptySegmentAttachesNothing) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10122);
     auto meta = build_non_pk_metadata(10122);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = make_op_write_log(10122, 32, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
     log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
@@ -243,7 +243,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogEmptySegmentAttachesNothing) 
 TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10123);
     auto meta = build_non_pk_metadata(10123);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = make_op_write_log(10123, 33, /*num_rows=*/0, /*data_size=*/0, {"seg_uncounted"});
     ASSERT_FALSE(log->op_write().rowset().segment_metas(0).has_num_rows());
@@ -263,7 +263,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeySingleLogUncountedSegmentIsKept) {
 TEST(TxnLogApplierBatchTest, PrimaryKeySingleLogEmptySegmentIsSkipped) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
     auto meta = build_pk_metadata(30010);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = make_op_write_log(30010, 60, /*num_rows=*/0, /*data_size=*/0, {"seg_empty"});
     log->mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->set_num_rows(0);
@@ -278,7 +278,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeySingleLogEmptySegmentIsSkipped) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10004);
     auto meta = build_non_pk_metadata(10004);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(10004);
@@ -310,7 +310,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeSparseSegmentIdStep) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10005);
     auto meta = build_non_pk_metadata(10005);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log1 = std::make_shared<TxnLogPB>();
     log1->set_tablet_id(10005);
@@ -355,7 +355,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeRemapSegmentId) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10002); // 修改参数顺序
     auto meta = build_non_pk_metadata(10002);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     Status st = applier->apply(logs);
@@ -366,7 +366,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchApplyEmptyVector) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10003); // 修改参数顺序
     auto meta = build_non_pk_metadata(10003);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log1 = make_op_write_log(10003, 20, 10, 100, {"seg1"});
     auto log2 = std::make_shared<TxnLogPB>();
@@ -392,7 +392,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchDeletePredicateUnsupported) {
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20001); // 修改参数顺序
     auto meta = build_pk_metadata(20001);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log1 = std::make_shared<TxnLogPB>();
     log1->set_tablet_id(20001);
@@ -410,7 +410,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsNonWriteOp) {
 TEST(TxnLogApplierBatchTest, PrimaryKeyBatchRejectsLogWithoutWrite) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 20002); // 修改参数顺序
     auto meta = build_pk_metadata(20002);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(20002);
@@ -469,7 +469,7 @@ TEST(TxnLogApplierBatchTest, PrimaryKeyLakeReplicationFinishSkipsPrepareIndex) {
     // Use metadata with LOCAL persistent index enabled - this is the scenario that would
     // trigger prepare_primary_index() in finish() for normal transactions
     auto meta = build_pk_metadata_with_local_persistent_index(30001);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     // Create a lake replication log with tablet_metadata
     // This sets _is_lake_replication = true in apply_replication_log()
@@ -531,7 +531,7 @@ std::shared_ptr<TxnLogPB> make_replication_log_without_tablet_metadata(int64_t t
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyLakeReplicationApply) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30002);
     auto meta = build_non_pk_metadata(30002);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     // Create a lake replication log with tablet_metadata
     auto log = make_lake_replication_log_with_tablet_metadata(30002, 60, 200, 4096, 15);
@@ -611,7 +611,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyIncrementalReplicationRssidRemapMatche
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30010);
     auto meta = build_non_pk_metadata(30010);
     ASSERT_EQ(0u, meta->next_rowset_id());
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     std::vector<TxnLogPB_OpWrite> op_writes{
             make_replication_op_write(/*source_rowset_id=*/100, /*rowset_num_rows=*/5, {5}),
@@ -665,7 +665,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyIncrementalReplicationRssidRemapMatche
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10010);
     auto meta = build_non_pk_metadata(10010);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     // Simulate two statements in a multi-statement transaction, each with bundled segments
     TxnLogVector logs;
@@ -696,7 +696,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleFileOffsets) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10011);
     auto meta = build_non_pk_metadata(10011);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     logs.push_back(make_op_write_log(10011, 10, 5, 100, {"seg_a"}));
@@ -717,7 +717,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoBundleOffsets) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsError) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10012);
     auto meta = build_non_pk_metadata(10012);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     // First log has bundle offsets
@@ -735,7 +735,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReturnsErr
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseReturnsError) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10013);
     auto meta = build_non_pk_metadata(10013);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     // First log does NOT have bundle offsets
@@ -752,7 +752,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverseRet
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchReturnsError) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10014);
     auto meta = build_non_pk_metadata(10014);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     // 2 segments but only 1 offset → mismatch within single TxnLog
@@ -772,7 +772,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeBundleOffsetSizeMismatchRetu
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 10015);
     auto meta = build_non_pk_metadata(10015);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     TxnLogVector logs;
     auto log = make_op_write_log(10015, 10, 5, 100, {"seg_a"});
@@ -788,7 +788,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeNoUidBackfills) {
 TEST(TxnLogApplierBatchTest, NonPrimaryKeyReplicationWithoutTabletMetaSparseSegmentIdStep) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 30003);
     auto meta = build_non_pk_metadata(30003);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(30003);
@@ -860,7 +860,7 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyFullReplicationWithoutTabletMetaClears
     incoming_dcg.add_column_files("new_dcg_file.cols");
     incoming_dcg.add_shared_files(false);
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
     Status st = applier->apply(*log);
     EXPECT_TRUE(st.ok()) << st.to_string();
 
@@ -896,7 +896,7 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[99];
         stale_dcg.add_column_files("stale_pk.cols");
         stale_dcg.add_shared_files(true);
-        auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+        auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
         auto log = std::make_shared<TxnLogPB>();
         log->set_tablet_id(50001);
@@ -959,7 +959,7 @@ TEST(TxnLogApplierBatchTest, PKFullReplicationWithDcg) {
         meta->set_next_rowset_id(5);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
         stale_dcg.add_column_files("stale_lake_pk.cols");
-        auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+        auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
         auto log = std::make_shared<TxnLogPB>();
         log->set_tablet_id(50002);
@@ -1016,7 +1016,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationWithDcg) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50005);
     auto meta = build_pk_metadata(50005);
     meta->set_next_rowset_id(10);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(50005);
@@ -1074,7 +1074,7 @@ TEST(TxnLogApplierBatchTest, PKIncrementalReplicationMarksCdcNotTrackable) {
     // The replication path only marks the change locator not-trackable when CDC is enabled.
     meta->mutable_cdc_metadata()->set_enable_cdc(true);
     meta->set_next_rowset_id(10);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(50007);
@@ -1109,7 +1109,7 @@ TEST(TxnLogApplierBatchTest, NonPKReplicationMarksCdcNotTrackable) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50009);
     auto meta = build_non_pk_metadata(50009);
     meta->set_next_rowset_id(10);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(50009);
@@ -1144,7 +1144,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 50003);
         auto meta = build_non_pk_metadata(50003);
         meta->set_next_rowset_id(10);
-        auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+        auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
         auto log = std::make_shared<TxnLogPB>();
         log->set_tablet_id(50003);
@@ -1203,7 +1203,7 @@ TEST(TxnLogApplierBatchTest, NonPKFullReplicationWithDcg) {
         meta->set_next_rowset_id(10);
         auto& stale_dcg = (*meta->mutable_dcg_meta()->mutable_dcgs())[88];
         stale_dcg.add_column_files("stale_nonpk.cols");
-        auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+        auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
         auto log = std::make_shared<TxnLogPB>();
         log->set_tablet_id(50004);
@@ -1249,7 +1249,7 @@ TEST(TxnLogApplierBatchTest, NonPKIncrementalReplicationWithDcg) {
     Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), 40001);
     auto meta = build_non_pk_metadata(40001);
     meta->set_next_rowset_id(10);
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40001);
@@ -1351,7 +1351,7 @@ TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
     ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
     ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40050);
@@ -1393,7 +1393,7 @@ TEST(TxnLogApplierCompactionTest, NonPKLakeReplicationDropsDeletePredicate) {
     ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
     ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40060);
@@ -1441,7 +1441,7 @@ TEST(TxnLogApplierCompactionTest, NonPKNonLakeReplicationDropsDeletePredicate) {
     ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
     ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40061);
@@ -1482,7 +1482,7 @@ TEST(TxnLogApplierCompactionTest, PKLakeReplicationDropsDeletePredicate) {
     ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
     ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40070);
@@ -1530,7 +1530,7 @@ TEST(TxnLogApplierCompactionTest, PKNonLakeReplicationDropsDeletePredicate) {
     ASSERT_TRUE(meta->rowsets(0).has_delete_predicate());
     ASSERT_TRUE(meta->rowsets(1).has_delete_predicate());
 
-    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true, std::nullopt);
 
     auto log = std::make_shared<TxnLogPB>();
     log->set_tablet_id(40071);

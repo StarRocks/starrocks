@@ -340,7 +340,7 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean())).thenReturn(true);
+                    any(), any(), any(), anyBoolean(), any())).thenReturn(true);
 
             assertTrue(job.cancelImpl("force skip", true));
 
@@ -378,7 +378,7 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean())).thenReturn(false);
+                    any(), any(), any(), anyBoolean(), any())).thenReturn(false);
 
             assertFalse(job.cancelImpl("force skip", true));
 
@@ -430,7 +430,7 @@ public class LakeTableIndexFastPathJobBaseTest {
             assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
             assertFalse(job.isForceSkippedAtCommitted());
             utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean()), never());
+                    any(), any(), any(), anyBoolean(), any()), never());
         }
     }
 
@@ -462,13 +462,13 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean())).thenReturn(true);
+                    any(), any(), any(), anyBoolean(), any())).thenReturn(true);
 
             assertTrue(job.cancelImpl("force skip", true));
 
             // useAggregatePublish (last arg) must be true for a file-bundling table.
             utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), eq(true)), times(1));
+                    any(), any(), any(), eq(true), any()), times(1));
         }
     }
 
@@ -503,13 +503,13 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             utilsStatic.when(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(),
-                    any(), any(), any(), anyBoolean())).thenReturn(true);
+                    any(), any(), any(), anyBoolean(), any())).thenReturn(true);
 
             assertTrue(job.lakePublishVersionWithSkip("force skip"));
 
             ArgumentCaptor<Map<Long, List<Tablet>>> tabletsCaptor = ArgumentCaptor.forClass(Map.class);
             utilsStatic.verify(() -> Utils.noOpPublishForForceSkip(anyLong(), any(), anyLong(), anyLong(), any(),
-                    tabletsCaptor.capture(), any(), eq(false)), times(1));
+                    tabletsCaptor.capture(), any(), eq(false), any()), times(1));
             Map<Long, List<Tablet>> tabletsByPartition = tabletsCaptor.getValue();
             assertEquals(List.of(latestTablet), tabletsByPartition.get(100L));
             assertEquals(201L, tabletsByPartition.get(100L).get(0).getId());
@@ -1548,13 +1548,13 @@ public class LakeTableIndexFastPathJobBaseTest {
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
             // Utils.publishVersion is a no-op overload accepting (List, TxnInfoPB, long, long, ComputeResource, boolean).
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
             // Per-tablet publish (useAggregatePublish=false); the aggregate path is NOT used.
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(false), any()),
                     times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true), any()),
                     never());
         }
     }
@@ -1593,14 +1593,14 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(false)), times(2));
+                    eq(false), any()), times(2));
             List<List<Tablet>> published = tabletsCaptor.getAllValues();
             assertEquals(List.of(List.of(latestBaseTablet), List.of(latestRollupTablet)), published);
             assertEquals(201L, published.get(0).get(0).getId());
@@ -1641,19 +1641,19 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(invocation -> null);
 
             assertTrue(job.lakePublishVersion());
 
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L), any(),
-                    eq(true)), times(1));
+                    eq(true), any()), times(1));
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(List.of(latestBaseTablet, latestRollupTablet), published);
             assertEquals(201L, published.get(0).getId());
             assertEquals(202L, published.get(1).getId());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false), any()),
                     never());
         }
     }
@@ -1683,7 +1683,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
         }
@@ -1729,7 +1729,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1739,8 +1739,8 @@ public class LakeTableIndexFastPathJobBaseTest {
             @SuppressWarnings("unchecked")
             ArgumentCaptor<List<Tablet>> tabletsCaptor = ArgumentCaptor.forClass(List.class);
             utilsStatic.verify(() -> Utils.publishVersion(tabletsCaptor.capture(), any(), eq(4L), eq(5L),
-                    any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+                    any(), eq(true), any()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false), any()),
                     never());
             List<Tablet> published = tabletsCaptor.getValue();
             assertEquals(2, published.size());
@@ -1789,7 +1789,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(inv -> null);
 
             assertTrue(job.lakePublishVersion());
@@ -1797,12 +1797,12 @@ public class LakeTableIndexFastPathJobBaseTest {
             // Exactly one aggregate publish per partition, each carrying only its own
             // tablet at its own base->commit version; no cross-partition mixing.
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true)), times(1));
+                    argThat(l -> l.size() == 1 && l.contains(tA)), any(), eq(4L), eq(5L), any(), eq(true), any()), times(1));
             utilsStatic.verify(() -> Utils.publishVersion(
-                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true)), times(1));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)),
+                    argThat(l -> l.size() == 1 && l.contains(tB)), any(), eq(7L), eq(8L), any(), eq(true), any()), times(1));
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true), any()),
                     times(2));
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(false), any()),
                     never());
         }
     }
@@ -1833,7 +1833,7 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true)))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), eq(true), any()))
                     .thenThrow(new RuntimeException("rpc fail"));
             assertFalse(job.lakePublishVersion());
         }
@@ -1868,10 +1868,10 @@ public class LakeTableIndexFastPathJobBaseTest {
         try (MockedStatic<GlobalStateMgr> gsmStatic = Mockito.mockStatic(GlobalStateMgr.class);
                 MockedStatic<Utils> utilsStatic = Mockito.mockStatic(Utils.class)) {
             gsmStatic.when(GlobalStateMgr::getCurrentState).thenReturn(gsm);
-            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean()))
+            utilsStatic.when(() -> Utils.publishVersion(any(), any(), anyLong(), anyLong(), any(), anyBoolean(), any()))
                     .thenAnswer(inv -> null);
             assertTrue(job.lakePublishVersion());
-            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true)),
+            utilsStatic.verify(() -> Utils.publishVersion(any(), any(), eq(4L), eq(5L), any(), eq(true), any()),
                     times(1));
         }
     }

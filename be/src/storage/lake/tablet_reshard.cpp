@@ -108,7 +108,8 @@ Status handle_splitting_tablet(TabletManager* tablet_manager, const SplittingTab
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
                                std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
-                               InitialMetadataOrder base_version_order) {
+                               InitialMetadataOrder base_version_order,
+                               std::optional<PublishPropertyPBRef> publish_property) {
     {
         std::unordered_map<int64_t, TabletMetadataPtr> cached_metadatas;
         std::unordered_map<int64_t, TabletRangePB> cached_ranges;
@@ -187,8 +188,8 @@ CONTINUE_HANDLE_SPLITTING_TABLET:
     new_metadatas.emplace(splitting_tablet.old_tablet_id(), std::move(old_tablet_new_metadata));
 
     auto split_start_ts = butil::gettimeofday_us();
-    auto split_new_metadatas_or =
-            split_tablet(tablet_manager, old_tablet_old_metadata, splitting_tablet, new_version, txn_info);
+    auto split_new_metadatas_or = split_tablet(tablet_manager, old_tablet_old_metadata, splitting_tablet, new_version,
+                                               txn_info, publish_property);
     if (!split_new_metadatas_or.ok()) {
         g_tablet_reshard_split_failed << 1;
         return split_new_metadatas_or.status();
@@ -207,7 +208,8 @@ Status handle_merging_tablet(TabletManager* tablet_manager, const MergingTabletI
                              int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                              std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
                              std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
-                             InitialMetadataOrder base_version_order) {
+                             InitialMetadataOrder base_version_order,
+                             std::optional<PublishPropertyPBRef> publish_property) {
     {
         std::unordered_map<int64_t, TabletMetadataPtr> cached_metadatas;
         for (auto old_tablet_id : merging_tablet.old_tablet_ids()) {
@@ -278,7 +280,7 @@ CONTINUE_HANDLE_MERGING_TABLET:
 
     auto merge_start_ts = butil::gettimeofday_us();
     auto new_tablet_metadata_or =
-            merge_tablet(tablet_manager, old_tablet_metadatas, merging_tablet, new_version, txn_info);
+            merge_tablet(tablet_manager, old_tablet_metadatas, merging_tablet, new_version, txn_info, publish_property);
     if (!new_tablet_metadata_or.ok()) {
         g_tablet_reshard_merge_failed << 1;
         return new_tablet_metadata_or.status();
@@ -295,7 +297,8 @@ DEFINE_FAIL_POINT(tablet_reshard_after_identical_pk_flush);
 Status handle_identical_tablet(TabletManager* tablet_manager, const IdenticalTabletInfoPB& identical_tablet,
                                int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                std::unordered_map<int64_t, TabletMetadataPtr>& new_metadatas,
-                               InitialMetadataOrder base_version_order) {
+                               InitialMetadataOrder base_version_order,
+                               std::optional<PublishPropertyPBRef> publish_property) {
     {
         auto source = lookup_exact_cached_metadata(tablet_manager, identical_tablet.old_tablet_id(), new_version,
                                                    txn_info.gtid());
@@ -348,8 +351,8 @@ CONTINUE_HANDLE_IDENTICAL_TABLET:
     // rebuild then re-derives an index inconsistent with the inherited delvec, surfacing as a
     // duplicate-key on rebuild or a delvec-inconsistency when a cross-published op_write is applied.
     // flush_pk_memtable is a no-op for non-PK / non-cloud-native-persistent-index tablets.
-    auto flushed_old_metadata_or =
-            tablet_manager->update_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(), new_version);
+    auto flushed_old_metadata_or = tablet_manager->update_mgr()->flush_pk_memtable(old_tablet_old_metadata_or.value(),
+                                                                                   new_version, publish_property);
     if (!flushed_old_metadata_or.ok()) {
         g_tablet_reshard_identical_failed << 1;
         return flushed_old_metadata_or.status();
@@ -569,7 +572,8 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
-                                 InitialMetadataOrder base_version_order) {
+                                 InitialMetadataOrder base_version_order,
+                                 std::optional<PublishPropertyPBRef> publish_property) {
     g_tablet_reshard_total << 1;
     auto reshard_start_ts = butil::gettimeofday_us();
 
@@ -593,16 +597,17 @@ Status publish_resharding_tablet(TabletManager* tablet_manager, const Resharding
 
     auto handle_status = Status::OK();
     if (resharding_tablet.has_splitting_tablet_info()) {
-        handle_status =
-                handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
-                                        new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
+        handle_status = handle_splitting_tablet(tablet_manager, resharding_tablet.splitting_tablet_info(), base_version,
+                                                new_version, txn_info, tablet_metadatas, tablet_ranges,
+                                                base_version_order, publish_property);
     } else if (resharding_tablet.has_merging_tablet_info()) {
-        handle_status =
-                handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
-                                      new_version, txn_info, tablet_metadatas, tablet_ranges, base_version_order);
+        handle_status = handle_merging_tablet(tablet_manager, resharding_tablet.merging_tablet_info(), base_version,
+                                              new_version, txn_info, tablet_metadatas, tablet_ranges,
+                                              base_version_order, publish_property);
     } else if (resharding_tablet.has_identical_tablet_info()) {
-        handle_status = handle_identical_tablet(tablet_manager, resharding_tablet.identical_tablet_info(), base_version,
-                                                new_version, txn_info, tablet_metadatas, base_version_order);
+        handle_status =
+                handle_identical_tablet(tablet_manager, resharding_tablet.identical_tablet_info(), base_version,
+                                        new_version, txn_info, tablet_metadatas, base_version_order, publish_property);
     }
 
     if (!handle_status.ok()) {

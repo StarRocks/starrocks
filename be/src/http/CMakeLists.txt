@@ -45,6 +45,7 @@ set(HTTP_SERVICE_FILES
   action/query_cache_action.cpp
   action/datacache_action.cpp
   action/pipeline_blocking_drivers_action.cpp
+  action/publish_property_action.cpp
   action/lake/dump_tablet_metadata_action.cpp
   action/lake/dump_tablet_metadata_serializer.cpp
   action/stop_be_action.cpp)

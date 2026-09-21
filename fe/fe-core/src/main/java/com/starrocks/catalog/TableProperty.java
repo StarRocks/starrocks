@@ -189,6 +189,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
+    // How many times this table's publish properties have changed. Persisted because a CN that has
+    // cached revision 7 rejects everything below it, so a restart that reset the count would strand
+    // every later ALTER. It needs no room in the edit log: every follower replays the same property
+    // change through the same code below, and arrives at the same number.
+    @SerializedName(value = "ppr")
+    private long publishPropertyRevision = PublishProperty.INITIAL_REVISION;
+
+    // The publish properties as the publish path reads them, derived from `properties` above.
+    // Filtering that whole map instead would cost once per transaction and once per compaction,
+    // while the answer changes only when a property does.
+    private volatile PublishProperty publishProperty = PublishProperty.NEVER_SET;
+
     private FlatJsonConfig flatJsonConfig;
 
     private transient DynamicPartitionProperty dynamicPartitionProperty =
@@ -1121,6 +1133,47 @@ public class TableProperty implements Writable, GsonPostProcessable {
         properties.putAll(modifyProperties);
     }
 
+    // Applies one statement's changes, and moves the revision on when the set of publish properties
+    // actually changed.
+    //
+    // The two happen here together so they can never disagree. Were the revision to move while the
+    // set stayed behind, a CN would cache the older values under the newer revision and -- since it
+    // never re-reads a revision it has already seen -- serve them until the next ALTER. Leaving both
+    // behind instead costs the change one more publish to arrive, and the next rebuild repairs it.
+    //
+    // A change that writes a property the value it already holds is not a change: the comparison below
+    // leaves the revision alone, so a CN is not asked to re-read a set it is already serving, and the
+    // one log line it prints per revision stays a reliable sign that something really moved.
+    //
+    // Runs on the leader as a statement is applied, and again on every follower replaying that same
+    // entry: same code, same input, same number.
+    public TableProperty applyPublishProperties(PublishProperty.Changes changes) {
+        properties.putAll(changes.upserts());
+        changes.removals().forEach(properties::remove);
+
+        Map<String, String> current = PublishProperty.selectFrom(properties);
+        if (current.equals(publishProperty.getProperties())) {
+            return this;
+        }
+        long next = publishPropertyRevision + 1;
+        publishProperty = new PublishProperty(next, current);
+        publishPropertyRevision = next;
+        return this;
+    }
+
+    // Restores the derived publish properties after an image load, at the revision the image carried.
+    public TableProperty buildPublishProperty() {
+        publishProperty = new PublishProperty(publishPropertyRevision, PublishProperty.selectFrom(properties));
+        return this;
+    }
+
+    // Never null, and never edited after it is handed out: a caller asks the result what the table
+    // set instead of testing for null, and a concurrent ALTER swaps in a new one rather than changing
+    // the one already in a caller's hand.
+    public PublishProperty getPublishProperty() {
+        return publishProperty;
+    }
+
     public void modifyTableProperties(String key, String value) {
         properties.put(key, value);
     }
@@ -1560,6 +1613,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildMutableBucketNum();
         buildCompactionStrategy();
         buildLoadInitialOpenPartitionNumber();
+        // Not a property being rebuilt from its string form, but the publish path's view of several
+        // of them, which has nowhere else to be restored after an image load.
+        buildPublishProperty();
         // NOTE: new properties should not be built here, just add SerializedName to the field.
     }
 }

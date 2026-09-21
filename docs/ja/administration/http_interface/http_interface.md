@@ -90,6 +90,7 @@ StarRocks クラスターのメンテナンスを容易にするために、Star
 | GET                     | `/api/pipeline_blocking_drivers/{action}`                       | |
 | GET                     | `/greplog`                                                      | |
 | GET                     | `/varz`                                                         | 現在の BE 設定を表示します。                                                                                         |
+| GET                     | `/api/publish_property?type=pk&tablet_id={}`                    | 共有データの主キーテーブルの tablet について、このノードが現在保持している Publish チューニングを表示します。`type=pk` と `tablet_id` が必要です。 |
 
 ## CN
 
@@ -104,3 +105,4 @@ StarRocks クラスターのメンテナンスを容易にするために、Star
 | GET                 | `/pprof/cmdline`                                                | |
 | HEAD/GET/POST       | `/pprof/symbol`                                                 | |
 | GET                 | `/metrics`                                                      | 現在の CN のメトリクスを表示します。                                                                                 |
+| GET                 | `/api/publish_property?type=pk&tablet_id={}`                    | 共有データの主キーテーブルの tablet について、このノードが現在保持している Publish チューニングを表示します。`type=pk` と `tablet_id` が必要です。 |

@@ -812,6 +812,63 @@ PROPERTIES (
       You can foreshorten this interval by setting a lower value for the FE dynamic configuration `lake_autovacuum_grace_period_minutes`. However, remember to reset the configuration to its original value after you modify the `file_bundling` property.
   :::
 
+### Publish tuning for shared-data Primary Key tables
+
+These properties tune the work a table does while publishing a version. They are supported from v26.2 onwards. They apply only to cloud-native Primary Key tables in shared-data clusters. CREATE TABLE can set any number of them at once; [ALTER TABLE](ALTER_TABLE.md) changes one per statement, as with any other table property.
+
+Each of them overrides one BE configuration item for this table alone:
+
+- A property you do not set follows the BE configuration item, so a later change to that item still reaches the table.
+- Setting a property to an empty string (`""`) removes it, and the table follows the BE configuration item again. This is not the same as writing that item's current value, because a value you write stays with the table even after the item changes.
+
+```SQL
+PROPERTIES (
+    "pk_index_memtable_max_count" = "<int_value>",
+    "pk_index_memtable_max_bytes" = "<int_value>"
+)
+```
+
+| Property | Description | Range | BE configuration when unset |
+| -------- | ----------- | ----- | --------------------------- |
+| `pk_index_memtable_max_count` | How many primary key index memtables a tablet may hold before one is flushed inline instead of in the background. | 1 to 64 | `pk_index_memtable_max_count` |
+| `pk_index_memtable_max_bytes` | The size, in bytes, one primary key index memtable grows to before it is flushed. | 1 to 4294967296 | `l0_max_mem_usage` |
+| `pk_index_rebuild_files_threshold` | How many files a later primary key index rebuild may have to replay before a publish spends an extra flush to shorten that rebuild. `0` turns this trigger off. | 0 to 100000 | `cloud_native_pk_index_rebuild_files_threshold` |
+| `pk_index_rebuild_rows_threshold` | The same, counted in rows. `0` turns this trigger off. | 0 to 10000000000 | `cloud_native_pk_index_rebuild_rows_threshold` |
+| `pk_index_parallel_execution_min_rows` | The number of rows below which a publish does not split primary key work across threads. It is also the number of rows at which one batch of primary keys is cut. | 1 to 100000000 | `pk_index_parallel_execution_min_rows` |
+| `pk_column_read_batch_bytes` | How many bytes of primary key column data one batch accumulates before it is handed on. Together with `pk_index_parallel_execution_min_rows`, it decides where a batch ends: whichever limit is reached first. | 1 to 4294967296 | `pk_column_lazy_load_threshold_bytes` |
+| `pk_rows_mapper_read_parallelism` | How many concurrent reads of the row-mapping file a Compaction publish keeps in flight. | 1 to 256 | `lake_rows_mapper_read_parallelism` |
+| `pk_rows_mapper_read_batch_bytes` | The size, in bytes, of each of those reads. Multiplied by `pk_rows_mapper_read_parallelism`, it bounds the memory that read holds. | 1 to 67108864 | `lake_rows_mapper_sub_chunk_bytes` |
+| `pk_compaction_replace_batch_rows` | How many rows accumulate before one update into the primary key index during a Compaction publish. `1` accumulates nothing. | 1 to 10000000 | `primary_key_compaction_replace_batch_rows` |
+
+:::note
+
+- `pk_rows_mapper_read_parallelism`, `pk_rows_mapper_read_batch_bytes`, and `pk_compaction_replace_batch_rows` take effect only during a Compaction publish. They do not affect the publish of loaded data.
+- A change takes effect from each tablet's next publish onwards, not when ALTER TABLE returns. Tablets of the same table can therefore begin using a new value at different times, and a tablet that is not publishing does not receive it until it does.
+
+:::
+
+To see what a tablet is running with, ask a node that publishes it:
+
+```bash
+curl -s -u root: "http://<be_host>:<be_http_port>/api/publish_property?type=pk&tablet_id=<tablet_id>"
+```
+
+```json
+{
+    "status": "OK",
+    "message": "",
+    "revision": 7,
+    "properties": {
+        "pk_index_memtable_max_count": 32
+    }
+}
+```
+
+The reply lists only the properties the table set, so it shows what the node received rather than what
+was asked for: a property left unset is absent, and so is one whose value the node refused. `revision`
+counts the changes this table has made, and `status` is `NOT_FOUND` when the tablet has no Primary Key
+index in memory, because that is the only place this is kept and it is never persisted.
+
 ### Fast Schema Evolution
 
 - `fast_schema_evolution`: Whether to enable Fast Schema Evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling Fast Schema Evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using ALTER TABLE after table creation.

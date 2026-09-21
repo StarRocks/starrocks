@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -591,14 +592,15 @@ public class MergeTabletJobTest {
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                       boolean preferSharedInitialMetadata) throws Exception {
+                                       boolean preferSharedInitialMetadata, PublishProperty publishProperty)
+                    throws Exception {
                 throw new RuntimeException("mock");
             }
         };
 
         Assertions.assertThrows(TabletReshardException.class,
                 () -> Deencapsulation.invoke(mergeJob, "publishVersion", List.of(), 2L, false,
-                        WarehouseManager.DEFAULT_RESOURCE, false));
+                        WarehouseManager.DEFAULT_RESOURCE, false, PublishProperty.NEVER_SET));
     }
 
     @Test
@@ -627,7 +629,7 @@ public class MergeTabletJobTest {
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
                                        List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                       boolean preferSharedInitialMetadata) {
+                                       boolean preferSharedInitialMetadata, PublishProperty publishProperty) {
                 actualResource.set(computeResource);
                 actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }

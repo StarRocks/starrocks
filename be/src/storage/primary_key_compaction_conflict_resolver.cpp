@@ -58,7 +58,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 // (including negatives, which would otherwise wrap when cast to size_t) collapse to
                 // a per-chunk threshold of 1, reverting to pre-patch behaviour.
                 const size_t batch_rows_threshold =
-                        static_cast<size_t>(std::max<int32_t>(1, config::primary_key_compaction_replace_batch_rows));
+                        static_cast<size_t>(std::max<int32_t>(1, _publish_config->compaction_replace_batch_rows()));
                 // Metadata row counts, used only to advance the mapper past a lost segment (see below).
                 const auto seg_num_rows = output_segment_num_rows();
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
@@ -261,6 +261,7 @@ Status PrimaryKeyCompactionConflictResolver::execute_without_update_index() {
                         per_segment_rows.push_back(num_rows);
                     }
                 }
+                mapper_iter.set_publish_config(_publish_config);
                 RETURN_IF_ERROR(mapper_iter.prepare_segments(per_segment_rows));
 
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;

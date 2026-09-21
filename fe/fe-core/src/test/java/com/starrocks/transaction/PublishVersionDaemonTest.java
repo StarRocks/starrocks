@@ -17,6 +17,7 @@ package com.starrocks.transaction;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
@@ -770,7 +771,7 @@ public class PublishVersionDaemonTest {
             public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
                     long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource computeResource, AggregatePublishVersionRequest request,
-                    boolean preferSharedInitialMetadata) {
+                    boolean preferSharedInitialMetadata, PublishProperty publishProperty) {
                 capturedTablets.add(tablets);
                 capturedTxnInfos.add(txnInfos);
                 capturedRequests.add(request);
@@ -802,7 +803,7 @@ public class PublishVersionDaemonTest {
 
         PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
                 4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
-                new java.util.HashMap<>(), new ArrayList<>(), true);
+                new java.util.HashMap<>(), new ArrayList<>(), true, PublishProperty.NEVER_SET);
 
         // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
         // same physical partition, so a hint that covered only the touched tablets would leave them

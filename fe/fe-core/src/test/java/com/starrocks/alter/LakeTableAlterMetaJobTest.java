@@ -26,6 +26,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -275,7 +276,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, PublishProperty publishProperty) {
             }
         };
         job.runPendingJob();
@@ -304,7 +305,7 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
                                        long newVersion, com.starrocks.warehouse.cngroup.ComputeResource computeResource,
-                                       boolean useAggregatePublish) {
+                                       boolean useAggregatePublish, PublishProperty publishProperty) {
                 publishCalls.incrementAndGet();
                 lastNoOp.set(txnInfo.noOpPublish);
                 lastAggregate.set(useAggregatePublish);

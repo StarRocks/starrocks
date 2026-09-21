@@ -707,7 +707,7 @@ TEST_F(LakeRowsetTest, test_load_segments_ignore_lost_segment) {
 TEST_F(LakeRowsetTest, test_segment_pk_iterator_tolerates_null_slot) {
     SegmentPKIterator it;
     ASSERT_OK(it.init(nullptr, *_schema, /*lazy_load=*/true, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
-                      /*defer_data_load=*/true));
+                      std::make_shared<const PkPublishConfig>(), /*defer_data_load=*/true));
     EXPECT_TRUE(it.done()); // an empty slot yields no rows
     it.close();             // must not crash on the null underlying iterator
 }

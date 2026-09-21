@@ -1,0 +1,92 @@
+-- name: test_publish_property @cloud
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+
+-- The properties survive CREATE TABLE and are shown back, so a user can see what the table pins.
+CREATE TABLE t1 (k INT NOT NULL, v INT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('pk_index_memtable_max_count' = '8', 'pk_index_memtable_max_bytes' = '134217728');
+SHOW CREATE TABLE t1;
+
+-- One per ALTER, like every other table property.
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '16', 'pk_rows_mapper_read_parallelism' = '64');
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '16');
+ALTER TABLE t1 SET ('pk_rows_mapper_read_parallelism' = '64');
+ALTER TABLE t1 SET ('pk_compaction_replace_batch_rows' = '4096');
+SHOW CREATE TABLE t1;
+
+-- The empty string removes one and leaves the rest, returning that one to the BE configuration.
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '');
+SHOW CREATE TABLE t1;
+
+-- Out of range on either side, and a value that is not a number at all.
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '65');
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '0');
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = 'eight');
+
+-- Zero is inside the range only where a read site reads it as a switch.
+ALTER TABLE t1 SET ('pk_index_rebuild_files_threshold' = '0');
+SHOW CREATE TABLE t1;
+
+-- The table's own storage and keys type decide, and each reports its own failure.
+CREATE TABLE t_dup (k INT NOT NULL, v INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('pk_index_memtable_max_count' = '8');
+
+-- Loading keeps working while the table carries them: the values ride along with every publish.
+INSERT INTO t1 VALUES (1, 1), (2, 2), (3, 3);
+SELECT * FROM t1 ORDER BY k;
+ALTER TABLE t1 SET ('pk_index_memtable_max_count' = '32');
+INSERT INTO t1 VALUES (4, 4);
+SELECT COUNT(*) FROM t1;
+
+-- The remaining five, so that every property this release registers has been carried to a CN once.
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '134217728');
+ALTER TABLE t1 SET ('pk_index_rebuild_rows_threshold' = '5000000');
+ALTER TABLE t1 SET ('pk_index_parallel_execution_min_rows' = '8192');
+ALTER TABLE t1 SET ('pk_column_read_batch_bytes' = '1048576');
+ALTER TABLE t1 SET ('pk_rows_mapper_read_batch_bytes' = '2097152');
+SHOW CREATE TABLE t1;
+
+-- All nine, read back from a table whose partition writes one bundled metadata file.
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t1
+
+-- Removing three leaves the other six and moves the revision on again. A CN that went on serving a
+-- removed value would still be showing it here.
+ALTER TABLE t1 SET ('pk_index_memtable_max_bytes' = '');
+ALTER TABLE t1 SET ('pk_column_read_batch_bytes' = '');
+ALTER TABLE t1 SET ('pk_rows_mapper_read_batch_bytes' = '');
+SHOW CREATE TABLE t1;
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t1
+
+-- A partition whose tablets each write their own metadata file publishes over the other request
+-- shape, so the values have to ride along with that one too. Started with none of them set, so that
+-- the three states this table passes through can be compared against each other.
+CREATE TABLE t_unbundled (k INT NOT NULL, v INT) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES('file_bundling' = 'false');
+INSERT INTO t_unbundled VALUES (1, 1), (2, 2);
+
+-- A table that has never set one: its revision has not moved off the value a table starts at, and a
+-- publish sends no property at all rather than an empty set.
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+
+ALTER TABLE t_unbundled SET ('pk_index_memtable_max_count' = '32');
+ALTER TABLE t_unbundled SET ('pk_rows_mapper_read_parallelism' = '16');
+ALTER TABLE t_unbundled SET ('pk_index_rebuild_files_threshold' = '0');
+INSERT INTO t_unbundled VALUES (3, 3);
+SELECT * FROM t_unbundled ORDER BY k;
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+
+-- Removing every one of them is not the same as never having set any, which the first reading of
+-- this table above shows: the revision keeps going up and the empty set still travels, which is what
+-- tells a CN to stop serving what it last cached.
+ALTER TABLE t_unbundled SET ('pk_index_memtable_max_count' = '');
+ALTER TABLE t_unbundled SET ('pk_rows_mapper_read_parallelism' = '');
+ALTER TABLE t_unbundled SET ('pk_index_rebuild_files_threshold' = '');
+SHOW CREATE TABLE t_unbundled;
+shell: env mysql_cmd="${mysql_cmd}" database=db_${uuid0} bash ${root_path}/sql/test_publish_property/T/check_publish_property.sh t_unbundled
+
+-- A tablet id no index is loaded for, and two malformed requests. Every reply is HTTP 200, so what
+-- is read is the status in the body rather than the status line.
+shell: env mysql_cmd="${mysql_cmd}" bash ${root_path}/sql/test_publish_property/T/check_publish_property_errors.sh
+
+-- CLEANUP
+DROP DATABASE db_${uuid0} FORCE;

@@ -448,7 +448,7 @@ TEST_F(PublishVersionAncestorsTest, testFastPathPublishAncestors) {
         info.set_gtid(base_version);
         std::vector<TxnInfoPB> txns{info};
         ASSIGN_OR_ABORT(auto meta, publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()),
-                                                   base_version, base_version + 1, txns, false));
+                                                   base_version, base_version + 1, txns, false, std::nullopt));
         ASSERT_EQ(base_version + 1, meta->version());
         ASSERT_EQ(base_version, meta->metadata_ancestors_size());
         for (int64_t i = 0; i < base_version; ++i) {
@@ -497,7 +497,7 @@ TEST_F(NoOpPublishTest, no_op_publish_advances_version_without_txnlog) {
 
     std::vector<TxnInfoPB> txns{txn_info};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_OK(result.status());
 
     auto new_metadata = result.value();
@@ -518,7 +518,7 @@ TEST_F(NoOpPublishTest, aggregate_publish_caches_bundled_metadata_marker) {
 
     std::vector<TxnInfoPB> txns{txn_info};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns,
-                                  /*skip_write_tablet_metadata=*/true);
+                                  /*skip_write_tablet_metadata=*/true, std::nullopt);
     ASSERT_OK(result.status());
 
     EXPECT_TRUE(_tablet_mgr->lookup_cached_bundled_metadata_partition_marker(tablet_id));
@@ -550,7 +550,7 @@ TEST_F(NoOpPublishTest, no_op_publish_bypasses_stale_metacache) {
 
     std::vector<TxnInfoPB> txns{txn_info};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_OK(result.status());
 
     auto new_metadata = result.value();
@@ -581,7 +581,7 @@ TEST_F(NoOpPublishTest, force_publish_with_missing_txnlog_legacy_fallback) {
 
     std::vector<TxnInfoPB> txns{txn_info};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_OK(result.status());
 
     auto new_metadata = result.value();
@@ -611,7 +611,7 @@ TEST_F(NoOpPublishTest, missing_txnlog_without_force_publish_errors) {
     std::vector<TxnLogVector> dummy;
     std::vector<TxnInfoPB> txns{txn_info};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 2, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_FALSE(result.ok());
 }
 
@@ -648,7 +648,7 @@ TEST_F(NoOpPublishTest, force_publish_skips_missing_txnlog_in_middle_of_batch) {
 
     std::vector<TxnInfoPB> txns{t1, t2};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 3, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_OK(result.status());
 
     auto new_metadata = result.value();
@@ -677,7 +677,7 @@ TEST_F(NoOpPublishTest, multi_txn_first_missing_txnlog_no_force_publish_errors) 
 
     std::vector<TxnInfoPB> txns{t1, t2};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 3, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_FALSE(result.ok());
 }
 
@@ -726,7 +726,7 @@ TEST_F(NoOpPublishTest, single_to_batch_conversion_keeps_base_version_in_sync) {
     // Re-sent as one batch with the stale base_version=1.
     std::vector<TxnInfoPB> txns{t1, t2, t3};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 4, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_OK(result.status());
 
     auto new_metadata = result.value();
@@ -764,7 +764,7 @@ TEST_F(NoOpPublishTest, mid_batch_missing_txnlog_without_force_publish_errors) {
 
     std::vector<TxnInfoPB> txns{t1, t2};
     auto result = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), 1, 3, txns,
-                                  /*skip_write_tablet_metadata=*/false);
+                                  /*skip_write_tablet_metadata=*/false, std::nullopt);
     ASSERT_FALSE(result.ok());
 }
 

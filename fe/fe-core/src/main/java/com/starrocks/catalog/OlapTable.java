@@ -2467,6 +2467,17 @@ public class OlapTable extends Table {
         return tableProperty.enableLoadProfile();
     }
 
+    /**
+     * What this table has set for a publish to carry. Never null.
+     *
+     * <p>A table built without any property carries no table property object at all, so every publish
+     * path that asked through that object would need the same null guard. Answering with the never-set
+     * instance says the same thing once, here.
+     */
+    public PublishProperty getPublishProperty() {
+        return tableProperty == null ? PublishProperty.NEVER_SET : tableProperty.getPublishProperty();
+    }
+
     public int getLoadInitialOpenPartitionNumber() {
         return tableProperty == null ? TableProperty.INVALID : tableProperty.getLoadInitialOpenPartitionNumber();
     }

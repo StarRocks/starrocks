@@ -42,7 +42,6 @@
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/persistent_index_sstable_fileset.h"
-#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet_manager.h"
@@ -180,9 +179,13 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
     }
 }
 
+void LakePersistentIndex::update_publish_config(const PublishPropertyPB& publish_property) {
+    _publish_config = PkPublishConfig::update(_publish_config, _tablet_id, publish_property);
+}
+
 bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
-    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
+    const bool mem_size_exceed = memtable_mem_size >= _publish_config->memtable_max_bytes();
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
             _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
@@ -191,13 +194,13 @@ bool LakePersistentIndex::is_memtable_full() const {
 }
 
 bool LakePersistentIndex::too_many_rebuild_files() const {
-    return config::cloud_native_pk_index_rebuild_files_threshold > 0 &&
-           _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
+    const int32_t threshold = _publish_config->rebuild_files_threshold();
+    return threshold > 0 && _need_rebuild_file_cnt >= static_cast<size_t>(threshold);
 }
 
 bool LakePersistentIndex::too_many_rebuild_rows() const {
-    return config::cloud_native_pk_index_rebuild_rows_threshold > 0 &&
-           _need_rebuild_row_cnt >= config::cloud_native_pk_index_rebuild_rows_threshold;
+    const int64_t threshold = _publish_config->rebuild_rows_threshold();
+    return threshold > 0 && _need_rebuild_row_cnt >= threshold;
 }
 
 Status LakePersistentIndex::merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable) {
@@ -357,7 +360,7 @@ Status LakePersistentIndex::flush_memtable(bool force) {
         }
         // 3. flush current memtable
         bool flush_async = false;
-        if (_inactive_memtables.size() + 1 < config::pk_index_memtable_max_count) {
+        if (_inactive_memtables.size() + 1 < static_cast<size_t>(_publish_config->memtable_max_count())) {
             if (RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool()->submit(_memtable).ok()) {
                 flush_async = true;
             }
@@ -517,7 +520,7 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     // parallel_upsert. Task granularity is governed by the same config the upsert side uses:
     // SegmentPKIterator splits each segment into pk_index_parallel_execution_min_rows-row chunks (one
     // task each), so use that as both the per-task subset size and the serial/parallel threshold.
-    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const size_t min_rows_per_task = _publish_config->parallel_execution_min_rows();
     const bool have_backing_store = !_sstable_filesets.empty() || !_inactive_memtables.empty();
     const bool parallel_worthwhile = have_backing_store && not_founds.size() > min_rows_per_task;
 
@@ -571,7 +574,7 @@ Status LakePersistentIndex::bulk_erase(size_t n, const Slice* keys, IndexValue* 
     //    old_values so the caller can build the delete vector. Read-only, so parallelise it across
     //    contiguous key-index chunks. Each task builds its own small KeyIndexSet inside the task (avoiding
     //    one giant not_founds set for a large delete).
-    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const size_t min_rows_per_task = _publish_config->parallel_execution_min_rows();
     const bool parallel_worthwhile =
             n > min_rows_per_task && (!_sstable_filesets.empty() || !_inactive_memtables.empty());
     const size_t num_tasks = (n + min_rows_per_task - 1) / min_rows_per_task;

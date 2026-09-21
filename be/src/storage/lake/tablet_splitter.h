@@ -15,6 +15,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -22,6 +23,7 @@
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/pk_publish_config.h"
 #include "storage/variant_tuple.h"
 
 namespace starrocks {
@@ -127,9 +129,13 @@ StatusOr<RangeSplitResult> calculate_range_split_boundaries(const std::vector<Se
                                                             const TabletRange* tablet_range = nullptr,
                                                             int32_t colocate_column_count = 0);
 
+// |publish_property| belongs to the publish request this split runs under and reaches the primary key
+// index through the pre-split flush. Deliberately without a default: the flush can rebuild a cold
+// index, so a caller that has a request must not be able to forget it by saying nothing.
 StatusOr<std::unordered_map<int64_t, MutableTabletMetadataPtr>> split_tablet(
         TabletManager* tablet_manager, const TabletMetadataPtr& old_tablet_metadata,
-        const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info);
+        const SplittingTabletInfoPB& splitting_tablet, int64_t new_version, const TxnInfoPB& txn_info,
+        std::optional<PublishPropertyPBRef> publish_property);
 
 // Build SegmentSplitInfo[] from a tablet's rowsets. Does NOT enforce "segments
 // non-empty" -- the data-driven and external-boundaries callers have different

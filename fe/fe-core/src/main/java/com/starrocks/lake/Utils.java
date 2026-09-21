@@ -25,6 +25,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
@@ -37,6 +38,7 @@ import com.starrocks.proto.ComputeNodePB;
 import com.starrocks.proto.ParentTabletPublishInfoPB;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
+import com.starrocks.proto.PublishPropertyPB;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
 import com.starrocks.proto.ReshardingTabletInfoPB;
@@ -121,7 +123,8 @@ public class Utils {
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish)
+                                      long newVersion, ComputeResource computeResource, boolean useAggregatePublish,
+                                      PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         // Collect async vector index build infos reported by BE and enqueue them into the
         // scheduler. Callers of this simplified overload (lake alter/rollup/schema-change
@@ -129,7 +132,7 @@ public class Utils {
         // stay unbuilt until the next normal publish or leader recoveryScan.
         List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
         publishVersion(tablets, txnInfo, baseVersion, newVersion, null, computeResource,
-                null, useAggregatePublish, vectorIndexBuildInfos);
+                null, useAggregatePublish, vectorIndexBuildInfos, publishProperty);
         VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
     }
 
@@ -156,7 +159,8 @@ public class Utils {
     public static boolean noOpPublishForForceSkip(long jobId, String reason, long watershedTxnId, long watershedGtid,
                                                   Map<Long, Long> commitVersionMap,
                                                   Map<Long, List<Tablet>> tabletsByPartition,
-                                                  ComputeResource computeResource, boolean useAggregatePublish) {
+                                                  ComputeResource computeResource, boolean useAggregatePublish,
+                                                  PublishProperty publishProperty) {
         LOG.info("force-cancel no-op publish: alter job {} watershedTxnId {} useAggregatePublish {} reason \"{}\"",
                 jobId, watershedTxnId, useAggregatePublish, reason);
         try {
@@ -177,7 +181,7 @@ public class Utils {
                 txnInfo.gtid = watershedGtid;
                 txnInfo.noOpPublish = true;
                 publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, computeResource,
-                        useAggregatePublish);
+                        useAggregatePublish, publishProperty);
             }
             return true;
         } catch (Exception e) {
@@ -192,10 +196,11 @@ public class Utils {
                                            Map<ComputeNode, List<Long>> nodeToTablets,
                                            ComputeResource computeResource,
                                            Map<Long, TabletStatPB> tabletStats,
-                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         publishVersionBatch(tablets, txnInfos, baseVersion, newVersion, compactionScores, null, nodeToTablets,
-                computeResource, tabletStats, vectorIndexBuildInfos);
+                computeResource, tabletStats, vectorIndexBuildInfos, publishProperty);
     }
 
     public static void publishVersionBatch(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
@@ -205,7 +210,8 @@ public class Utils {
                                            Map<ComputeNode, List<Long>> nodeToTablets,
                                            ComputeResource computeResource,
                                            Map<Long, TabletStatPB> tabletStats,
-                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                           List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                           PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         // The brpc send is asynchronous, but this method waits for every response before
         // returning, so the wait is what a lock would be held across.
@@ -224,6 +230,7 @@ public class Utils {
 
         // Pre-compute once per batch so per-node requests can slice cheaply.
         Map<Long, Long> batchBuiltVersions = buildTabletBuiltVersionsFromTablets(tablets);
+        Optional<PublishPropertyPB> publishPropertyPB = toPublishPropertyPB(publishProperty);
 
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
         List<ComputeNode> nodeList = Lists.newArrayListWithCapacity(nodeToPublishTabletsInfo.size());
@@ -245,6 +252,7 @@ public class Utils {
             request.reshardingTabletInfos = publishTabletInfo.getReshardingTablets();
             request.tabletBuiltVersions = sliceTabletBuiltVersions(batchBuiltVersions,
                     publishTabletInfo.getTabletIds());
+            publishPropertyPB.ifPresent(property -> request.publishProperty = property);
 
             LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
             // @ProtobufRPC can only carry a compile-time constant, so the configured timeout is applied
@@ -295,10 +303,11 @@ public class Utils {
                                       long newVersion, Map<Long, Double> compactionScores,
                                       ComputeResource computeResource,
                                       Map<Long, TabletStatPB> tabletStats, boolean useAggregatePublish,
-                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                      PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores,
-                null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
+                null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos, publishProperty);
     }
 
     public static void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
@@ -306,10 +315,11 @@ public class Utils {
                                       Map<Long, TabletRange> tabletRanges, ComputeResource computeResource,
                                       Map<Long, TabletStatPB> tabletStats,
                                       boolean useAggregatePublish,
-                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                      List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                      PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         publishVersion(tablets, txnInfo, baseVersion, newVersion, compactionScores, tabletRanges, computeResource,
-                tabletStats, useAggregatePublish, vectorIndexBuildInfos, false);
+                tabletStats, useAggregatePublish, vectorIndexBuildInfos, false, publishProperty);
     }
 
     /**
@@ -324,17 +334,18 @@ public class Utils {
                                       Map<Long, TabletStatPB> tabletStats,
                                       boolean useAggregatePublish,
                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                      boolean preferSharedInitialMetadata)
+                                      boolean preferSharedInitialMetadata,
+                                      PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         List<TxnInfoPB> txnInfos = Lists.newArrayList(txnInfo);
         if (!useAggregatePublish) {
             publishVersionBatch(tablets, txnInfos, baseVersion, newVersion,
                     compactionScores, tabletRanges, null, computeResource, tabletStats,
-                    vectorIndexBuildInfos);
+                    vectorIndexBuildInfos, publishProperty);
         } else {
             aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
                     tabletRanges, null, computeResource, tabletStats, vectorIndexBuildInfos,
-                    preferSharedInitialMetadata);
+                    preferSharedInitialMetadata, publishProperty);
         }
     }
 
@@ -447,10 +458,11 @@ public class Utils {
                                                            long baseVersion, long newVersion,
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
                                                            ComputeResource computeResource,
-                                                           AggregatePublishVersionRequest request)
+                                                           AggregatePublishVersionRequest request,
+                                                           PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion, nodeToTablets, computeResource,
-                request, false);
+                request, false, publishProperty);
     }
 
     /**
@@ -466,7 +478,8 @@ public class Utils {
                                                            Map<ComputeNode, List<Long>> nodeToTablets,
                                                            ComputeResource computeResource,
                                                            AggregatePublishVersionRequest request,
-                                                           boolean preferSharedInitialMetadata)
+                                                           boolean preferSharedInitialMetadata,
+                                                           PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         if (!warehouseManager.isResourceAvailable(computeResource)) {
@@ -483,6 +496,7 @@ public class Utils {
 
         // Pre-compute once per batch so per-node requests can slice cheaply.
         Map<Long, Long> batchBuiltVersions = buildTabletBuiltVersionsFromTablets(tablets);
+        Optional<PublishPropertyPB> publishPropertyPB = toPublishPropertyPB(publishProperty);
 
         List<ComputeNodePB> computeNodes = new ArrayList<>();
         List<PublishVersionRequest> publishReqs = new ArrayList<>();
@@ -506,6 +520,7 @@ public class Utils {
             singleReq.setReshardingTabletInfos(publishTabletInfo.getReshardingTablets());
             singleReq.setTabletBuiltVersions(sliceTabletBuiltVersions(batchBuiltVersions,
                     publishTabletInfo.getTabletIds()));
+            publishPropertyPB.ifPresent(singleReq::setPublishProperty);
 
             ComputeNodePB computeNodePB = new ComputeNodePB();
             // Send the resolved IP, not the hostname: the aggregator turns each entry into a brpc
@@ -691,10 +706,11 @@ public class Utils {
                                                Map<ComputeNode, List<Long>> nodeToTablets,
                                                ComputeResource computeResource,
                                                Map<Long, TabletStatPB> tabletStats,
-                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                               PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores,
-                null, nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos);
+                null, nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, publishProperty);
     }
 
     public static void aggregatePublishVersion(@NotNull List<Tablet> tablets, List<TxnInfoPB> txnInfos,
@@ -704,10 +720,11 @@ public class Utils {
                                                Map<ComputeNode, List<Long>> nodeToTablets,
                                                ComputeResource computeResource,
                                                Map<Long, TabletStatPB> tabletStats,
-                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                               List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                               PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         aggregatePublishVersion(tablets, txnInfos, baseVersion, newVersion, compactionScores, tabletRanges,
-                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, false);
+                nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos, false, publishProperty);
     }
 
     /**
@@ -723,13 +740,14 @@ public class Utils {
                                                ComputeResource computeResource,
                                                Map<Long, TabletStatPB> tabletStats,
                                                List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                               boolean preferSharedInitialMetadata)
+                                               boolean preferSharedInitialMetadata,
+                                               PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         try {
             createSubRequestForAggregatePublish(tablets, txnInfos, baseVersion, newVersion,
                                                 nodeToTablets, computeResource, request,
-                                                preferSharedInitialMetadata);
+                                                preferSharedInitialMetadata, publishProperty);
             sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores,
                                                tabletRanges, tabletStats, vectorIndexBuildInfos);
         } catch (Exception e) {
@@ -811,6 +829,26 @@ public class Utils {
         }
 
         return Optional.of(node.getWarehouseId());
+    }
+
+    // What the table set, in the form a publish request carries. Empty when the table has never set a
+    // publish property: a CN that receives nothing keeps whatever it has, which for such a table is
+    // nothing. Once it has set one, removing every property still leaves a higher revision with an
+    // empty set, which does go out -- otherwise a CN would keep serving the values the user deleted.
+    //
+    // Callers are expected to pass PublishProperty.NEVER_SET rather than null for a table they could
+    // not read. Null is treated the same way anyway, because this is the one place the value is read:
+    // a caller that got it wrong should send no property, not fail the publish. Several callers report
+    // failure by catching every exception, so an NPE here would surface as an unexplained publish
+    // failure rather than as the mistake it is.
+    private static Optional<PublishPropertyPB> toPublishPropertyPB(PublishProperty publishProperty) {
+        if (publishProperty == null || publishProperty.isNeverSet()) {
+            return Optional.empty();
+        }
+        PublishPropertyPB result = new PublishPropertyPB();
+        result.revision = publishProperty.getRevision();
+        result.properties = publishProperty.getProperties();
+        return Optional.of(result);
     }
 
     // Build a per-batch map of tabletId -> vectorIndexBuiltVersion from the Tablet objects

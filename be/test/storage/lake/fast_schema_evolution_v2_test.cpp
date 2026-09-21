@@ -128,7 +128,7 @@ protected:
     static std::unique_ptr<TxnLogApplier> new_applier(int64_t tablet_id, const MutableTabletMetadataPtr& meta) {
         Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), tablet_id);
         return new_txn_log_applier(tablet, meta, /*new_version=*/2, /*rebuild_pindex=*/false,
-                                   /*skip_write_tablet_metadata=*/true);
+                                   /*skip_write_tablet_metadata=*/true, std::nullopt);
     }
 
     static void mock_schema_rpc(TKeysType::type keys_type, int64_t schema_id, int32_t schema_version, int num_columns) {

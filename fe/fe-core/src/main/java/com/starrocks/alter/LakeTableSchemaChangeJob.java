@@ -35,6 +35,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.Tablet;
@@ -981,6 +982,9 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             originTxnInfo.txnType = TxnTypePB.TXN_EMPTY;
             originTxnInfo.gtid = watershedGtid;
 
+            OlapTable publishTable = getTable();
+            PublishProperty publishProperty =
+                    (publishTable != null) ? publishTable.getPublishProperty() : PublishProperty.NEVER_SET;
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
@@ -988,10 +992,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 for (MaterializedIndex shadowIndex : shadowIndexMap.values()) {
                     if (!isFileBundling) {
                         Utils.publishVersion(shadowIndex.getTablets(), txnInfo, 1, commitVersion, computeResource,
-                                isFileBundling);
+                                isFileBundling, publishProperty);
                     } else {
                         Utils.createSubRequestForAggregatePublish(shadowIndex.getTablets(),
-                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request);
+                                Lists.newArrayList(txnInfo), 1, commitVersion, null, computeResource, request,
+                                publishProperty);
                     }
                 }
 
@@ -1009,11 +1014,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 }
 
                 if (!isFileBundling) {
-                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion, 
-                            computeResource, isFileBundling);
+                    Utils.publishVersion(allOtherPartitionTablets, originTxnInfo, commitVersion - 1, commitVersion,
+                            computeResource, isFileBundling, publishProperty);
                 } else {
                     Utils.createSubRequestForAggregatePublish(allOtherPartitionTablets, Lists.newArrayList(originTxnInfo),
-                            commitVersion - 1, commitVersion, null, computeResource, request);
+                            commitVersion - 1, commitVersion, null, computeResource, request, publishProperty);
                 }
 
                 if (isFileBundling) {
@@ -1064,6 +1069,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // wrongly route a file_bundling table to per-tablet publish. This
         // mirrors the alter-meta force path and lakePublishVersion().
         boolean useAggregatePublish = false;
+        PublishProperty publishProperty = PublishProperty.NEVER_SET;
         Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             List<Tablet> regularTablets = new ArrayList<>();
@@ -1077,6 +1083,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                     continue;
                 }
                 useAggregatePublish = table.isFileBundling();
+                publishProperty = table.getPublishProperty();
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 if (physicalPartition == null) {
                     // partition gone (concurrent drop); nothing to advance, skip.
@@ -1089,7 +1096,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             tabletsByPartition.put(physicalPartitionId, regularTablets);
         }
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
-                tabletsByPartition, computeResource, useAggregatePublish);
+                tabletsByPartition, computeResource, useAggregatePublish, publishProperty);
     }
 
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull OlapTable tbl) {

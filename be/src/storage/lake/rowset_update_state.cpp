@@ -268,7 +268,8 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
     SegmentPKIteratorPtr result = std::make_unique<SegmentPKIterator>();
     // Before init(), which eagerly loads the first chunk: the selection is built inside _load().
     result->set_row_selector(_row_selector.get());
-    RETURN_IF_ERROR(result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type));
+    RETURN_IF_ERROR(
+            result->init(iter, _pkey_schema, should_enable_lazy_load(params), pk_encoding_type, params.publish_config));
     _upserts[segment_id] = std::move(result);
     _memory_usage += _upserts[segment_id]->memory_usage();
 

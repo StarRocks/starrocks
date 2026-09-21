@@ -67,6 +67,7 @@
 #include "http/action/pprof_actions.h"
 #include "http/action/proc_profile_action.h"
 #include "http/action/proc_profile_file_action.h"
+#include "http/action/publish_property_action.h"
 #include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
@@ -333,6 +334,10 @@ Status HttpServiceBE::start() {
     auto* greplog_action = new GrepLogAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
     _http_handlers.emplace_back(greplog_action);
+
+    auto* publish_property_action = new PublishPropertyAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/publish_property", publish_property_action);
+    _http_handlers.emplace_back(publish_property_action);
 
     // Register proc profile list action (for JSON API)
     auto* proc_profile_action = new ProcProfileAction(_env);

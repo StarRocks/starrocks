@@ -86,6 +86,7 @@ import com.starrocks.catalog.PartitionInfoBuilder;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangeDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
@@ -4639,6 +4640,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         });
     }
 
+    // Checks the scope and range of every publish property written here and takes the names out of
+    // `properties`, so the leftover check at the end of alterTableProperties sees only names nobody
+    // recognized. What the user wrote -- the unset literal included -- stays in the copy the edit log
+    // carries, and a follower splits it through the same method this applier uses.
+    private void alterPublishProperties(Database db, OlapTable table, Map<String, String> properties,
+                                        List<Runnable> appliers) {
+        PublishProperty.Changes changes = PublishProperty.validateAndExtract(properties, table);
+        appliers.add(() -> {
+            TableProperty tableProperty = table.getTableProperty();
+            long before = tableProperty.getPublishProperty().getRevision();
+            tableProperty.applyPublishProperties(changes);
+            PublishProperty after = tableProperty.getPublishProperty();
+            // The revision is what a CN compares to decide whether to re-read, so it belongs in the
+            // record next to the values: a revision that did not move says the statement wrote what
+            // the table already had, and the publish it reaches will look like any other.
+            LOG.info("Altered publish properties of table {}.{}: set {}, unset {}, revision {} -> {}",
+                    db.getOriginName(), table.getName(), changes.upserts(), changes.removals(),
+                    before, after.getRevision());
+        });
+    }
+
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
@@ -4687,6 +4709,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE)) {
             alterDataCacheEnable(db, table, properties, appliers);
+        }
+        if (PublishProperty.declaresAny(propertiesToPersist)) {
+            alterPublishProperties(db, table, properties, appliers);
         }
         if (!properties.isEmpty()) {
             throw new DdlException("Modify failed because unknown properties: " + properties);
@@ -5184,6 +5209,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 TableProperty tableProperty = olapTable.getTableProperty();
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+                if (PublishProperty.declaresAny(properties)) {
+                    // The putAll above stored the unset literal as a value; reading the entry the way
+                    // the leader read the statement turns it back into a removal, and advances the
+                    // revision by the same rule.
+                    PublishProperty.Changes changes = PublishProperty.parseChanges(properties);
+                    tableProperty.applyPublishProperties(changes);
+                }
                 if (opCode == OperationType.OP_ALTER_TABLE_PROPERTIES &&
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_STATISTIC_COLLECT_ON_FIRST_LOAD)) {
                     tableProperty.setEnableStatisticCollectOnFirstLoad(

@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include <optional>
 #include <vector>
 
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/pk_publish_config.h"
 
 namespace starrocks::lake {
 
@@ -29,9 +31,15 @@ class TabletManager;
 //
 // The read-only parent alias an ORDER BY != PK split keeps alive is NOT built here -- see
 // virtual_merge_for_read in tablet_virtual_merge.h.
+//
+// |publish_property| belongs to the publish request this merge runs under and reaches each source
+// tablet's primary key index through the per-source flush. Deliberately without a default: that flush
+// can rebuild a cold index, so a caller that has a request must not be able to forget it by saying
+// nothing.
 StatusOr<MutableTabletMetadataPtr> merge_tablet(TabletManager* tablet_manager,
                                                 const std::vector<TabletMetadataPtr>& old_tablet_metadatas,
                                                 const MergingTabletInfoPB& merging_tablet, int64_t new_version,
-                                                const TxnInfoPB& txn_info);
+                                                const TxnInfoPB& txn_info,
+                                                std::optional<PublishPropertyPBRef> publish_property);
 
 } // namespace starrocks::lake

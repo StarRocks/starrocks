@@ -316,7 +316,8 @@ public:
         MetaFileBuilder builder(tablet, metadata);
         _update_mgr->lock_shard_pk_index_shard(metadata->id());
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
-        ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard));
+        ASSIGN_OR_ABORT(auto* entry,
+                        _update_mgr->prepare_primary_index(metadata, &builder, 2, 2, write_guard, std::nullopt));
         CHECK_EQ(2, entry->get_ref());
         CHECK_OK(entry->value().sync_flush_all_memtables(10'000'000));
         CHECK_OK(entry->value().commit(&builder));
@@ -393,8 +394,8 @@ public:
         MetaFileBuilder builder(tablet, mutable_metadata);
         _update_mgr->lock_shard_pk_index_shard(metadata->id());
         std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
-        ASSIGN_OR_ABORT(auto* entry,
-                        _update_mgr->prepare_primary_index(metadata, &builder, version, version, write_guard));
+        ASSIGN_OR_ABORT(auto* entry, _update_mgr->prepare_primary_index(metadata, &builder, version, version,
+                                                                        write_guard, std::nullopt));
         EXPECT_EQ(2, entry->get_ref());
         auto keys = Int32Column::create();
         keys->append(key);

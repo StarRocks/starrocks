@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -23,6 +24,7 @@
 #include "storage/lake/options.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
+#include "storage/pk_publish_config.h"
 
 namespace starrocks::lake {
 class TabletManager;
@@ -110,11 +112,19 @@ StatusOr<TxnLogPtr> convert_txn_log(const TxnLogPtr& txn_log, const TabletMetada
 // pre-split ahead of its first load -- and then the old tablets' version-1 metadata exists only in the
 // partition-shared object. A preference only: either order resolves the metadata. See
 // InitialMetadataOrder.
+//
+// |publish_property| is this request's publish-property snapshot, carried down to every primary key
+// index this reshard prepares, so a table's values reach a split/merge exactly as they reach a normal
+// publish. std::nullopt means the request carried none -- an FE too old to send the field, or a table
+// that has never set one. It is defaulted only because this is the RPC entry point, whose sole
+// production caller already holds the request; every hop below it takes the snapshot with no default,
+// so a new path that prepares an index has to state where its values come from.
 Status publish_resharding_tablet(TabletManager* tablet_manager, const ReshardingTabletInfoPB& resharding_tablet,
                                  int64_t base_version, int64_t new_version, const TxnInfoPB& txn_info,
                                  bool skip_write_tablet_metadata,
                                  std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
                                  std::unordered_map<int64_t, TabletRangePB>& tablet_ranges,
-                                 InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
+                                 InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst,
+                                 std::optional<PublishPropertyPBRef> publish_property = std::nullopt);
 
 } // namespace starrocks::lake

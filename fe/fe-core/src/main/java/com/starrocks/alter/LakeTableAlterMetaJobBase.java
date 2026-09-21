@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -356,6 +357,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
             //    to false.
             boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
+            OlapTable publishTable = getOlapTable(dbId, tableId);
+            PublishProperty publishProperty =
+                    (publishTable != null) ? publishTable.getPublishProperty() : PublishProperty.NEVER_SET;
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
@@ -363,7 +367,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     if (!useAggregatePublish) {
                         Utils.publishVersion(index.getTablets(), txnInfo, commitVersion - 1, commitVersion,
-                                computeResource, false);
+                                computeResource, false, publishProperty);
                     } else {
                         tablets.addAll(index.getTablets());
                     }
@@ -371,7 +375,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 if (useAggregatePublish) {
                     List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
                     Utils.aggregatePublishVersion(tablets, Lists.newArrayList(txnInfo), commitVersion - 1, commitVersion,
-                                null, null, computeResource, null, vectorIndexBuildInfos);
+                                null, null, computeResource, null, vectorIndexBuildInfos, publishProperty);
                     VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
             }
@@ -637,6 +641,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     protected boolean lakePublishVersionWithSkip(String reason) {
         OlapTable currentTable = getOlapTable(dbId, tableId);
         boolean useAggregatePublish = (currentTable != null) ? currentTable.isFileBundling() : isFileBundling;
+        PublishProperty publishProperty =
+                (currentTable != null) ? currentTable.getPublishProperty() : PublishProperty.NEVER_SET;
         Map<Long, List<Tablet>> tabletsByPartition = new HashMap<>();
         for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
             List<Tablet> tablets = new ArrayList<>();
@@ -646,7 +652,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             tabletsByPartition.put(physicalPartitionId, tablets);
         }
         return Utils.noOpPublishForForceSkip(jobId, reason, watershedTxnId, watershedGtid, commitVersionMap,
-                tabletsByPartition, computeResource, useAggregatePublish);
+                tabletsByPartition, computeResource, useAggregatePublish, publishProperty);
     }
 
     private void updateErrorInfo(String errMsg) {

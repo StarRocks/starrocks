@@ -95,7 +95,7 @@ TEST_F(SegmentPKIteratorTest, NonSharedSegment_PhysicalBaseIsZero) {
     auto chunk_iter = make_iter({{/*chunk_size*/ 4, /*first_rowid*/ 0}});
     SegmentPKIterator iter;
     ASSERT_TRUE(iter.init(chunk_iter, make_pkey_schema(), /*lazy_load=*/false,
-                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, std::make_shared<const PkPublishConfig>(),
                           /*defer_data_load=*/false)
                         .ok());
     ASSERT_FALSE(iter.done());
@@ -112,7 +112,7 @@ TEST_F(SegmentPKIteratorTest, SharedSegmentRangeFilter_BaseEqualsRangeStart) {
     auto chunk_iter = make_iter({{/*chunk_size*/ 4, /*first_rowid*/ 100}});
     SegmentPKIterator iter;
     ASSERT_TRUE(iter.init(chunk_iter, make_pkey_schema(), /*lazy_load=*/false,
-                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, std::make_shared<const PkPublishConfig>(),
                           /*defer_data_load=*/false)
                         .ok());
     ASSERT_FALSE(iter.done());
@@ -133,7 +133,7 @@ TEST_F(SegmentPKIteratorTest, MultipleInnerGetNextCalls_BaseSetOnce) {
     });
     SegmentPKIterator iter;
     ASSERT_TRUE(iter.init(chunk_iter, make_pkey_schema(), /*lazy_load=*/false,
-                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, std::make_shared<const PkPublishConfig>(),
                           /*defer_data_load=*/false)
                         .ok());
     ASSERT_FALSE(iter.done());
@@ -152,7 +152,7 @@ TEST_F(SegmentPKIteratorTest, EmptyInnerEmit_PreservesBaseState) {
     auto chunk_iter = make_iter({step1, step2, step3});
     SegmentPKIterator iter;
     ASSERT_TRUE(iter.init(chunk_iter, make_pkey_schema(), /*lazy_load=*/false,
-                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, std::make_shared<const PkPublishConfig>(),
                           /*defer_data_load=*/false)
                         .ok());
     ASSERT_FALSE(iter.done());
@@ -183,7 +183,7 @@ TEST_F(SegmentPKIteratorTest, LazyLoadAcrossNextCalls_BaseUnchangedAndChunkBaseA
     });
     SegmentPKIterator iter;
     ASSERT_TRUE(iter.init(chunk_iter, make_pkey_schema(), /*lazy_load=*/true,
-                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1, std::make_shared<const PkPublishConfig>(),
                           /*defer_data_load=*/false)
                         .ok());
 

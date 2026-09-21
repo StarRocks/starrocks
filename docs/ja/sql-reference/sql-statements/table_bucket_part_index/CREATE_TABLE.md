@@ -833,6 +833,63 @@ PROPERTIES (
       FE動的構成`lake_autovacuum_grace_period_minutes`の値を低く設定することで、この間隔を短縮できます。ただし、`file_bundling`プロパティを変更した後、構成を元の値にリセットすることを忘れないでください。
 :::
 
+### 共有データクラスターの主キーテーブルにおける Publish のチューニング
+
+以下のプロパティは、テーブルがバージョンを Publish する際の処理を調整します。これらのプロパティは v26.2 以降でサポートされています。共有データクラスターのクラウドネイティブ主キーテーブルにのみ適用され、CREATE TABLE で設定するほか、後から [ALTER TABLE](ALTER_TABLE.md) で変更できます。他のテーブルプロパティと同じく、1 つの ALTER TABLE 文で設定できるのは 1 つだけです。
+
+いずれも、このテーブルに限って BE 設定項目を上書きします。
+
+- 設定しなかったプロパティは対応する BE 設定項目に従うため、その設定項目を後から変更してもテーブルに反映されます。
+- プロパティに空文字列（`""`）を設定すると、そのプロパティは削除され、テーブルは再び BE 設定項目に従います。これは設定項目の現在値を明示的に書き込むこととは異なります。明示的に書き込んだ値は、その後に設定項目が変わってもテーブルに残り続けます。
+
+```SQL
+PROPERTIES (
+    "pk_index_memtable_max_count" = "<int_value>",
+    "pk_index_memtable_max_bytes" = "<int_value>"
+)
+```
+
+| プロパティ | 説明 | 範囲 | 未設定時に従う BE 設定項目 |
+| ---------- | ---- | ---- | -------------------------- |
+| `pk_index_memtable_max_count` | 1 つの tablet が保持できる主キーインデックス memtable の数。これを超えると、バックグラウンドではなく同期的にフラッシュされます。 | 1 〜 64 | `pk_index_memtable_max_count` |
+| `pk_index_memtable_max_bytes` | 1 つの主キーインデックス memtable がフラッシュされるまでに増加するサイズ（バイト）。 | 1 〜 4294967296 | `l0_max_mem_usage` |
+| `pk_index_rebuild_files_threshold` | 後続の主キーインデックス再構築が再適用しうるファイル数。これを超えると、Publish が追加のフラッシュを行って再構築を短縮します。`0` はこのトリガーを無効にします。 | 0 〜 100000 | `cloud_native_pk_index_rebuild_files_threshold` |
+| `pk_index_rebuild_rows_threshold` | 同じ内容を行数で数えたもの。`0` はこのトリガーを無効にします。 | 0 〜 10000000000 | `cloud_native_pk_index_rebuild_rows_threshold` |
+| `pk_index_parallel_execution_min_rows` | この行数を下回る場合、Publish は主キーの処理をスレッドに分割しません。主キーを 1 バッチに区切る行数でもあります。 | 1 〜 100000000 | `pk_index_parallel_execution_min_rows` |
+| `pk_column_read_batch_bytes` | 1 バッチの主キー列データが次の処理に渡されるまでに蓄積するバイト数。`pk_index_parallel_execution_min_rows` と合わせて、先に達した方がバッチの区切りになります。 | 1 〜 4294967296 | `pk_column_lazy_load_threshold_bytes` |
+| `pk_rows_mapper_read_parallelism` | Compaction の Publish 中に、行マッピングファイルに対して同時に実行し続ける読み取りの数。 | 1 〜 256 | `lake_rows_mapper_read_parallelism` |
+| `pk_rows_mapper_read_batch_bytes` | 上記の各読み取りのサイズ（バイト）。`pk_rows_mapper_read_parallelism` との積が、その読み取りが保持するメモリの上限になります。 | 1 〜 67108864 | `lake_rows_mapper_sub_chunk_bytes` |
+| `pk_compaction_replace_batch_rows` | Compaction の Publish 中に、主キーインデックスへ 1 回更新するまでに蓄積する行数。`1` は蓄積しないことを意味します。 | 1 〜 10000000 | `primary_key_compaction_replace_batch_rows` |
+
+:::note
+
+- `pk_rows_mapper_read_parallelism`、`pk_rows_mapper_read_batch_bytes`、`pk_compaction_replace_batch_rows` は Compaction の Publish 中にのみ有効で、ロードしたデータの Publish には影響しません。
+- 変更は ALTER TABLE が返った時点ではなく、各 tablet の次の Publish から有効になります。そのため同じテーブルの tablet でも新しい値を使い始める時点が異なることがあり、Publish が発生していない tablet は次の Publish まで受け取りません。
+
+:::
+
+tablet が実際に使用している値は、それを Publish するノードに問い合わせて確認できます。
+
+```bash
+curl -s -u root: "http://<be_host>:<be_http_port>/api/publish_property?type=pk&tablet_id=<tablet_id>"
+```
+
+```json
+{
+    "status": "OK",
+    "message": "",
+    "revision": 7,
+    "properties": {
+        "pk_index_memtable_max_count": 32
+    }
+}
+```
+
+応答にはテーブルが設定したプロパティのみが含まれます。つまり、文に書いた内容ではなく、ノードが実際に
+受け取って受け入れた内容です。設定していないプロパティは現れず、ノードが不正と判断して拒否した値も
+現れません。`revision` はこのテーブルが変更された回数です。tablet の主キーインデックスがメモリ上に
+ない場合、`status` は `NOT_FOUND` になります。この情報はメモリ上にのみ保持され、永続化されないためです。
+
 ### 高速スキーマ進化
 
 - `fast_schema_evolution`: テーブルの高速スキーマ進化を有効にするかどうか。有効な値は`TRUE`または`FALSE`（デフォルト）です。高速スキーマ進化を有効にすると、スキーマ変更の速度が向上し、列の追加または削除時のリソース使用量が削減されます。現在、このプロパティはテーブル作成時にのみ有効にでき、テーブル作成後にALTER TABLEを使用して変更することはできません。

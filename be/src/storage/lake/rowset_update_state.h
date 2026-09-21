@@ -24,6 +24,7 @@
 #include "storage/lake/segment_pk_iterator.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/pk_publish_config.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/tablet_schema.h"
 #include "storage_primitive/primary_key_encoding_types.h"
@@ -91,6 +92,9 @@ struct RowsetUpdateStateParams {
     const TabletMetadataPtr& metadata;
     const Tablet* tablet;
     const RssidFileInfoContainer& container;
+    // What the table set for this publish. Carried here because the objects that read it are built
+    // deep in this path and never see the primary key index that holds it.
+    PkPublishConfigPtr publish_config = std::make_shared<const PkPublishConfig>();
 };
 
 // The table-level flat JSON config any segment written during this publish must carry. It is read from

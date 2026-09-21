@@ -41,6 +41,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -644,6 +645,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // Resolved under the lock below, where the physical partition is in scope.
         boolean preferSharedInitialMetadata = false;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
+        // Read under the lock below and carried out of it: what is read is immutable and replaced
+        // whole, so an ALTER running alongside can only leave this batch on the older set or the
+        // newer one, never a mix.
+        PublishProperty publishProperty = null;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -667,6 +672,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             }
 
             useAggregatePublish = table.isFileBundling();
+            publishProperty = table.getPublishProperty();
             preferSharedInitialMetadata = Utils.preferSharedInitialMetadata(table, partition, versions.get(0) - 1);
             Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (int i = 0; i < transactionStates.size(); i++) {
@@ -757,15 +763,18 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 if (!useAggregatePublish) {
                     Utils.publishVersionBatch(publishTablets, txnInfos,
                             startVersion - 1, endVersion, compactionScores, nodeToTablets,
-                            computeResource, tabletStats, vectorIndexBuildInfos);
+                            computeResource, tabletStats, vectorIndexBuildInfos,
+                            publishProperty);
                 } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
                             startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
-                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata,
+                            publishProperty);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
                             compactionScores, null, nodeToTablets, computeResource, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata,
+                            publishProperty);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -1242,6 +1251,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
         boolean useAggregatePublish = Config.enable_file_bundling;
         // Resolved under the lock below, where the physical partition is in scope.
         boolean preferSharedInitialMetadata = false;
+        // Read under the lock below and carried out of it: the publish itself must not run under a
+        // metadata lock, and what is read is immutable and replaced whole, so this batch carries either
+        // the set an ALTER running alongside started from or the one it produced, never a mix.
+        PublishProperty publishProperty = null;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -1251,6 +1264,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return true;
             }
             useAggregatePublish = table.isFileBundling();
+            publishProperty = table.getPublishProperty();
             long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
@@ -1323,11 +1337,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
-                            vectorIndexBuildInfos, preferSharedInitialMetadata);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata, publishProperty);
                 } else {
                     Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
                             null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos,
-                            preferSharedInitialMetadata);
+                            preferSharedInitialMetadata, publishProperty);
                 }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
@@ -1396,11 +1410,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                  Map<Long, Double> compactionScores,
                                                  Map<Long, TabletStatPB> tabletStats,
                                                  List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
-                                                 boolean preferSharedInitialMetadata)
+                                                 boolean preferSharedInitialMetadata,
+                                                 PublishProperty publishProperty)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
-                nodeToTablets, computeResource, request, preferSharedInitialMetadata);
+                nodeToTablets, computeResource, request, preferSharedInitialMetadata, publishProperty);
 
         List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
         for (TxnInfoPB txnInfo : txnInfos) {
@@ -1417,7 +1432,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // They belong to the same physical partition as |touchedTablets|, so the version-1 layout hint applies
         // to them identically.
         Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
-                null, computeResource, request, preferSharedInitialMetadata);
+                null, computeResource, request, preferSharedInitialMetadata, publishProperty);
         Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
                 tabletStats, vectorIndexBuildInfos);
     }

@@ -173,9 +173,9 @@ TEST_F(ShadowRewritePublishDupTest, PresentSourceNoVlogs) {
     write_row(tablet_id, rewrite_txn_id, /*c0=*/0, /*c1=*/100);
 
     auto txn_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, W, time(nullptr));
-    ASSIGN_OR_ABORT(auto new_metadata,
-                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
-                                    /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
+                                                       /*base_version=*/1, new_version,
+                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
     ASSERT_EQ(new_version, new_metadata->version());
 
     auto rows = read_rows(tablet_id, new_version);
@@ -203,7 +203,8 @@ TEST_F(ShadowRewritePublishDupTest, AbsentSourceAtWGreaterThanOneFails) {
     const int64_t new_version = W + 2; // commitVersion (unpublished)
     auto txn_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, W, time(nullptr));
     auto res = publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
-                               /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false);
+                               /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false,
+                               std::nullopt);
     ASSERT_FALSE(res.ok()) << "W>1 with a missing source op_write must fail, not synthesize empty";
     EXPECT_TRUE(res.status().is_not_found()) << res.status();
 }
@@ -218,9 +219,9 @@ TEST_F(ShadowRewritePublishDupTest, AbsentSourceNoVlogsEmptyAdvance) {
     const int64_t new_version = W + 1; // commitVersion: empty advance
 
     auto txn_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, W, time(nullptr));
-    ASSIGN_OR_ABORT(auto new_metadata,
-                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
-                                    /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
+                                                       /*base_version=*/1, new_version,
+                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
     ASSERT_EQ(new_version, new_metadata->version());
     EXPECT_EQ(0, new_metadata->rowsets_size());
 
@@ -246,9 +247,9 @@ TEST_F(ShadowRewritePublishDupTest, EmptyAtW1SkipsLoad) {
     });
 
     auto txn_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, W, time(nullptr));
-    ASSIGN_OR_ABORT(auto new_metadata,
-                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
-                                    /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
+                                                       /*base_version=*/1, new_version,
+                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
     ASSERT_EQ(new_version, new_metadata->version());
     EXPECT_EQ(0, new_metadata->rowsets_size());
 }
@@ -354,9 +355,9 @@ TEST_F(ShadowRewritePublishPkTest, NewerWinsUnderVlog) {
     // 3) Flip publish under the rewrite txn id; commitVersion = W + 2.
     const int64_t new_version = W + 2;
     auto txn_info = TEST_shadow_rewrite_txn_info(rewrite_txn_id, W, time(nullptr));
-    ASSIGN_OR_ABORT(auto new_metadata,
-                    publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
-                                    /*base_version=*/1, new_version, std::span<const TxnInfoPB>(&txn_info, 1), false));
+    ASSIGN_OR_ABORT(auto new_metadata, publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id),
+                                                       /*base_version=*/1, new_version,
+                                                       std::span<const TxnInfoPB>(&txn_info, 1), false, std::nullopt));
     ASSERT_EQ(new_version, new_metadata->version());
 
     auto rows = read_rows(tablet_id, new_version);

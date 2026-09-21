@@ -14,6 +14,8 @@
 
 #include "storage/lake/update_manager.h"
 
+#include <shared_mutex>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -40,7 +42,6 @@
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/parallel_task_runner.h"
-#include "storage/lake/pk_index_utils.h"
 #include "storage/lake/rowset.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -184,7 +185,8 @@ void RssidFileInfoContainer::add_rssid_to_file(const RowsetMetadataPB& meta, uin
 
 StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
+        std::optional<PublishPropertyPBRef> publish_property) {
     auto index_entry = _index_cache.get_or_create(metadata->id());
     index_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     auto& index = index_entry->value();
@@ -195,6 +197,17 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_lock_wait_us");
         guard = index.fetch_guard();
+    }
+    // Before lake_load, not after: an index that is new or was evicted rebuilds inside it, and that
+    // rebuild inserts every key through the memtable -- which is the work the table's memtable count
+    // and size are there to bound, and the point at which this publish holds the most memory.
+    //
+    // Under the guard taken above, so the values this publish reads cannot change under it. A request
+    // that carried nothing leaves the index on what it already holds: an FE too old to send the field
+    // and a table that has never set one are indistinguishable here, and clearing on either would drop
+    // a table's settings for the length of a rolling upgrade.
+    if (publish_property.has_value()) {
+        index.update_publish_config(publish_property.value().get());
     }
     Status st = index.lake_load(_tablet_mgr, metadata, base_version, builder);
     _index_cache.update_object_size(index_entry, index.memory_usage());
@@ -230,6 +243,24 @@ void UpdateManager::remove_primary_index_cache(IndexEntry* index_entry) {
     }
 }
 
+PkPublishConfigPtr UpdateManager::get_publish_config(int64_t tablet_id) {
+    auto* index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return nullptr;
+    }
+    auto& index = index_entry->value();
+    PkPublishConfigPtr config;
+    {
+        // Shared mode, because a publish replaces this pointer under the exclusive guard and an
+        // unsynchronised read would race that assignment. Copying the pointer is all this waits for,
+        // so a reader never holds up a publish for the length of one.
+        std::shared_lock<std::shared_timed_mutex> lock(*index.get_index_lock());
+        config = index.publish_config();
+    }
+    _index_cache.release(index_entry);
+    return config;
+}
+
 void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry != nullptr) {
@@ -245,7 +276,8 @@ DEFINE_FAIL_POINT(skip_lake_pk_index_flush);
 DEFINE_FAIL_POINT(fail_lake_pk_index_flush);
 
 StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadataPtr& metadata,
-                                                             int64_t generation_version) {
+                                                             int64_t generation_version,
+                                                             std::optional<PublishPropertyPBRef> publish_property) {
     // Test-only escape hatch: reshard unit tests build hand-crafted metadata with no real
     // in-memory PK memtable, so there is nothing to flush; skip the (index-loading) flush so
     // they exercise the metadata merge/split logic without materializing a real index.
@@ -272,8 +304,13 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
     MetaFileBuilder builder(tablet, mutable_metadata);
 
     std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> write_guard;
-    ASSIGN_OR_RETURN(auto* index_entry, prepare_primary_index(metadata, &builder, base_version,
-                                                              /*new_version=*/base_version, write_guard));
+    // A reshard flush runs inside a publish request like any other index preparation, so it installs
+    // that request's values rather than leaving the index on what it happens to hold: the preparation
+    // below rebuilds a cold or evicted index, and that rebuild is the heaviest memory the flush ever
+    // holds -- exactly what the table's memtable bounds are for.
+    ASSIGN_OR_RETURN(auto* index_entry,
+                     prepare_primary_index(metadata, &builder, base_version, /*new_version=*/base_version, write_guard,
+                                           publish_property));
 
     // Default = failure cleanup: match PrimaryKeyTxnLogApplier::handle_failure
     // ordering exactly — unload the index first (while the write_guard is
@@ -312,10 +349,11 @@ StatusOr<TabletMetadataPtr> UpdateManager::flush_pk_memtable(const TabletMetadat
 
 StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
         const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
-        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard,
+        std::optional<PublishPropertyPBRef> publish_property) {
     LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
     unload_and_remove_primary_index(metadata->id());
-    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard, publish_property);
 }
 
 // Plan for interleaving del files with segments during a primary-key publish. Per del file:
@@ -414,6 +452,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             .metadata = metadata,
             .tablet = tablet,
             .container = rssid_fileinfo_container,
+            .publish_config = index.publish_config(),
     };
     state.init(params);
     FAIL_POINT_TRIGGER_RETURN(lake_pk_apply_load_rowset_update_state_failed,
@@ -1154,6 +1193,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
             .metadata = metadata,
             .tablet = tablet,
             .container = rssid_fileinfo_container,
+            .publish_config = index_entry->value().publish_config(),
     };
 
     {
@@ -1555,7 +1595,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
     // is a safe lower bound for the per-segment count: if the whole rowset is under the
     // threshold, every segment is too.
     std::unique_ptr<ThreadPoolToken> token;
-    const size_t min_rows_per_task = get_pk_index_parallel_execution_min_rows();
+    const size_t min_rows_per_task = index.publish_config()->parallel_execution_min_rows();
     if (params.op_write.rowset().num_rows() >= min_rows_per_task) {
         token = RuntimeEnv::GetInstance()->pk_index_execution_thread_pool()->new_token(
                 ThreadPool::ExecutionMode::CONCURRENT);
@@ -2142,6 +2182,7 @@ Status UpdateManager::light_publish_primary_compaction(const TxnLogPB_OpCompacti
     auto resolver = std::make_unique<LakePrimaryKeyCompactionConflictResolver>(
             metadata.get(), &output_rowset, _tablet_mgr, builder, &index, base_version, op_compaction.lcrm_file(),
             &segment_id_to_add_dels, &delvecs);
+    resolver->set_publish_config(index.publish_config());
     {
         TRACE_COUNTER_SCOPE_LATENCY_US("compaction_conflict_resolve_us");
         if (op_compaction.ssts_size() > 0 && use_cloud_native_pk_index(*metadata)) {

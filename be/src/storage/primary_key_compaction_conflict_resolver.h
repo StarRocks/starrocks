@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "storage/del_vector.h"
+#include "storage/pk_publish_config.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 
@@ -83,6 +84,15 @@ public:
 
     Status execute_without_update_index();
 
+    // What the table set for the publish driving this resolve. Only a shared-data caller has one to
+    // give; on shared-nothing nobody calls this, the empty set stays, and every read below answers
+    // with this node's config exactly as it did before a table could set anything.
+    void set_publish_config(PkPublishConfigPtr publish_config) {
+        if (publish_config != nullptr) {
+            _publish_config = std::move(publish_config);
+        }
+    }
+
     // Output segment positions that were skipped because their segment file was lost
     // (experimental_lake_ignore_lost_segment). Populated by execute_without_update_index(); the caller
     // must skip the SST ingest and delvec for these positions so the PK index does not reference a
@@ -99,6 +109,10 @@ protected:
 
     // Output segment positions skipped due to a lost segment; see lost_segment_positions().
     std::set<uint32_t> _lost_segment_positions;
+
+    // What the table set for this resolve. Never null: left alone, it is an empty set whose accessors
+    // all answer with this node's config.
+    PkPublishConfigPtr _publish_config = std::make_shared<const PkPublishConfig>();
 };
 
 } // namespace starrocks

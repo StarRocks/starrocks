@@ -22,6 +22,7 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "storage/olap_common.h"
+#include "storage/pk_publish_config.h"
 #include "storage_primitive/chunk_iterator.h"
 #include "storage_primitive/primary_key_encoding_types.h"
 
@@ -62,7 +63,7 @@ public:
     // The first chunk will be loaded lazily on the first done()/next() call.
     // This avoids memory spikes when many iterators are created upfront.
     Status init(const ChunkIteratorPtr& iter, const Schema& pkey_schema, bool lazy_load,
-                PrimaryKeyEncodingType encoding_type, bool defer_data_load = false);
+                PrimaryKeyEncodingType encoding_type, PkPublishConfigPtr publish_config, bool defer_data_load = false);
 
     // Marks every emitted chunk with the rows this tablet owns (SegmentPKChunkRef::owned). Only a
     // SPLIT child's cross publish passes one; without it every row is owned and nothing is paid.
@@ -148,6 +149,9 @@ private:
     size_t _current_rows = 0;
     // If true, we will load segment peice by piece when needed.
     bool _lazy_load = false;
+    // What the table set for the publish that built this iterator. Never null: an iterator built
+    // outside a publish holds an empty set, and every accessor then answers with this node's config.
+    PkPublishConfigPtr _publish_config = std::make_shared<const PkPublishConfig>();
     // If true, first _load() is deferred until done() is first called.
     bool _defer_data_load = false;
     // If enable lazy load, `_memory_usage` will record first piece of pk column memory usage.

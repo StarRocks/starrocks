@@ -164,6 +164,10 @@ public class LakeTable extends OlapTable {
         // the table-level flat_json config for cloud-native tables too.
         appendFlatJsonProperties(properties, tableProperty.getProperties());
 
+        // Only what this table actually set: a property it leaves alone follows the CN's own config,
+        // and printing that value here would read as if the table had pinned it.
+        properties.putAll(tableProperty.getPublishProperty().getProperties());
+
         return properties;
     }
 

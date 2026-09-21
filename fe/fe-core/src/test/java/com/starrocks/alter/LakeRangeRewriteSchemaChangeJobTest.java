@@ -28,6 +28,7 @@ import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.PublishProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -1590,7 +1591,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
-                                                   boolean useAggregatePublish) {
+                                                   boolean useAggregatePublish, PublishProperty publishProperty) {
                 publishedCommitVersion.set(commitVersionMap.get(physicalPartitionId));
                 return true;
             }
@@ -1636,7 +1637,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                                                    java.util.Map<Long, Long> commitVersionMap,
                                                    java.util.Map<Long, List<Tablet>> tabletsByPartition,
                                                    com.starrocks.warehouse.cngroup.ComputeResource cr,
-                                                   boolean useAggregatePublish) {
+                                                   boolean useAggregatePublish, PublishProperty publishProperty) {
                 return true;
             }
         };
@@ -1687,7 +1688,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
             @Mock
             public void publishVersion(List<Tablet> tablets, com.starrocks.proto.TxnInfoPB txnInfo,
                     long baseVersion, long newVersion, ComputeResource cr,
-                    boolean useAggregatePublish) {
+                    boolean useAggregatePublish, PublishProperty publishProperty) {
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
                     capturedRewriteTxnId.set(txnInfo.txnId);
@@ -1702,7 +1703,7 @@ public class LakeRangeRewriteSchemaChangeJobTest {
                     List<com.starrocks.proto.TxnInfoPB> txnInfos, long baseVersion, long newVersion,
                     java.util.Map<com.starrocks.system.ComputeNode, List<Long>> nodeToTablets,
                     ComputeResource cr,
-                    com.starrocks.proto.AggregatePublishVersionRequest req) {
+                    com.starrocks.proto.AggregatePublishVersionRequest req, PublishProperty publishProperty) {
                 com.starrocks.proto.TxnInfoPB txnInfo = txnInfos.get(0);
                 if (txnInfo.txnType == com.starrocks.proto.TxnTypePB.TXN_SHADOW_REWRITE) {
                     tablets.forEach(t -> publishedShadowTabletIds.add(t.getId()));
