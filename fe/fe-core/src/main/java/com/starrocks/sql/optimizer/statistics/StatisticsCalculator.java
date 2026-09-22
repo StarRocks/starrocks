@@ -827,19 +827,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeLanceScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
+            Statistics stats = null;
             try {
-                Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                         optimizerContext, table.getCatalogName(), table, columnRefOperatorColumnMap, null,
                         node.getPredicate(), -1, TvrTableSnapshot.empty());
-                if (hasValidOutputRowCount(stats)) {
-                    context.setStatistics(stats);
-                    return visitOperator(node, context);
-                }
             } catch (Exception e) {
                 LOG.warn("Failed to get Lance table statistics for {}: {}", table.getName(), e.getMessage());
             }
-            return computeNormalExternalTableScanNode(node, context, table, columnRefOperatorColumnMap,
-                    Config.default_statistics_output_row_count);
+            if (!hasValidOutputRowCount(stats)) {
+                return computeNormalExternalTableScanNode(node, context, table, columnRefOperatorColumnMap,
+                        Config.default_statistics_output_row_count);
+            }
+            context.setStatistics(stats);
         }
 
         return visitOperator(node, context);
