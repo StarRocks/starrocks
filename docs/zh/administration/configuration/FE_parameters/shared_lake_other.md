@@ -175,6 +175,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的租户 ID。
 - 引入版本: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建内置 ADLS2 存储卷时，为 Workload Identity 认证指定的联合令牌文件路径。需同时配置 `azure_adls2_oauth2_tenant_id` 和 `azure_adls2_oauth2_client_id`，并将 `azure_adls2_oauth2_use_managed_identity` 保持为 `false`。请在所有 FE 和 CN 上将文件挂载到相同的可读路径。空字符串表示不使用令牌文件认证。修改后需重启 FE。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - 默认值: false
