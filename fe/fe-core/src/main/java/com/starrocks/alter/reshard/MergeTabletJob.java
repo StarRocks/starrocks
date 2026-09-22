@@ -246,6 +246,12 @@ public class MergeTabletJob extends TabletReshardJob {
                     // sibling partition that is still retrying.
                     if (publishResult.publishState() == PublishState.FAILED) {
                         reshardingPhysicalPartition.setPublishFailureReason(publishResult.failureReason());
+                        // A failed publish is retried until it succeeds, but only once its backoff has
+                        // elapsed: resubmitting the same doomed publish on every tick of the reshard
+                        // daemon is what turned one stuck publish into a hot loop.
+                        if (!reshardingPhysicalPartition.isPublishRetryDue()) {
+                            continue;
+                        }
                     }
                     // Start publish asynchronously
                     List<Tablet> tablets = new ArrayList<>();
