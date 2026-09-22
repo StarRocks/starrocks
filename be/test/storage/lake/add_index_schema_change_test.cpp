@@ -682,8 +682,7 @@ TEST_F(AddIndexSchemaChangeTest, run_empty_pk_segment_still_validates_index_defi
     }
 }
 
-// GIN -> NotSupported. Triggers cleanup_written_idx_files via the run()
-// failure path.
+// GIN -> NotSupported in run() preflight, before any segment task is submitted.
 TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
@@ -702,8 +701,8 @@ TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {
     // a non-OK status is the contract.
 }
 
-// Unknown column unique_id -> InternalError ("column with unique_id ... not
-// found in schema"). Cleanup runs.
+// Unknown column unique_id -> InternalError in run() preflight, before the
+// output operation is modified or any segment task is submitted.
 TEST_F(AddIndexSchemaChangeTest, run_unknown_column_unique_id) {
     auto base_metadata = create_base_tablet_metadata();
     auto base_tablet_id = base_metadata->id();
