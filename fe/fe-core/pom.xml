@@ -1210,11 +1210,7 @@ under the License.
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
-<<<<<<< HEAD
-=======
-                        -Dstarrocks.lock.invariant.strict.in.test=true
                         ${security.manager.arg}
->>>>>>> 8a6acb7dc82 ([BugFix] Allow the security manager on JDK 18-23 (#63388))
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
                     <useSystemClassLoader>false</useSystemClassLoader>
