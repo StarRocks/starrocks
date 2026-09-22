@@ -1151,4 +1151,15 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
                 "Plan contains empty analytic functions — PruneEmptyWindowRule was not called after "
                         + "PRUNE_COLUMNS_RULES in pushDownAggregation:\n" + plan);
     }
+
+    @Test
+    public void testWindowSkewMergeSortWithHistogramJoinNulls() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/window_skew_merge_sort");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+
+        PlanTestBase.assertContains(plan, "ANALYTIC", "MERGING-EXCHANGE");
+    }
 }
