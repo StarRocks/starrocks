@@ -3993,6 +3993,18 @@ public class Config extends ConfigBase {
     public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
 
     @ConfField(mutable = true, comment =
+            "Whether StarMgr journals a replica-only shard change as a replica delta instead of a full " +
+                    "shard snapshot. Enable only once every FE in the cluster runs a build that carries " +
+                    "this item, otherwise an older FE silently skips all replica updates. Default: false")
+    public static boolean lake_enable_incremental_shard_replica_journal = false;
+
+    @ConfField(mutable = false, comment =
+            "Whether StarMgr maintains a compute node -> shards reverse index, so that per-node shard " +
+                    "lookups cost the node's own fan-out instead of a full shard-map scan. Read once at " +
+                    "FE startup. Default: false")
+    public static boolean lake_enable_worker_shard_reverse_index = false;
+
+    @ConfField(mutable = true, comment =
             "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +
                     "it fails, before cancelling the whole job. An online rewrite - a range sort-key " +
                     "schema change, a range rollup, or a materialized view sort-key rewrite - rebuilds " +

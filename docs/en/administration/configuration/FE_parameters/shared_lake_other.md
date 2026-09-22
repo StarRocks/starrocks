@@ -658,6 +658,24 @@ This topic introduces the following types of FE configurations:
 - Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
 - Introduced in: v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether StarMgr journals a replica-only tablet change as a replica delta instead of a full tablet snapshot. Adding, removing, or transitioning a single replica otherwise re-serializes the entire tablet metadata entry, including its file path, storage credentials, properties, and every replica, of which roughly 95% describes state that no replica operation can change. On a cluster that schedules tablets heavily, those snapshots dominate the metadata journal. Every FE that offers this item understands the delta entry on replay, and only the writer is gated by it, so a cluster becomes able to replay the entry by first deploying a version that offers this item with the item left as `false`, and only then setting it to `true`. Do not enable it while any FE in the cluster still runs an earlier version: such an FE skips every replica update rather than one, and writes the resulting divergence into its own checkpoint without reporting a failure. To roll back, set this item to `false`, force a metadata checkpoint so that the image absorbs the entries already written, and only then downgrade, because setting it to `false` does not retract what is already in the journal. Only the Leader FE's value has any effect, and changing it at runtime is safe, because a journal that carries both entry kinds replays correctly.
+- Introduced in: v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether StarMgr maintains a Compute Node to tablets reverse index. Rescheduling the tablets of a restarted Compute Node and validating the replicas that a Compute Node reports on each heartbeat otherwise both scan the whole tablet map and test each tablet for a replica on that Compute Node, which costs time proportional to the number of tablets in the cluster for each Compute Node. With the index, they cost only the Compute Node's own tablet count. The index is derived state: it is rebuilt from the tablet map when the metadata image loads and is maintained under the same lock from then on, and when this item is `false` it is neither built nor held, so leaving it disabled costs nothing. StarMgr reads this item once while the metadata image loads, so a change takes effect only after the FE restarts.
+- Introduced in: v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - Default: 600
