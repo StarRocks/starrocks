@@ -127,6 +127,14 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                     LambdaFunctionOperator lambda = (LambdaFunctionOperator) op;
                     return new LambdaFunctionOperator(lambda.getRefColumns(), childOps.get(0), lambda.getType()); })
                 .put(CloneOperator.class, (op, childOps) -> new CloneOperator(childOps.get(0)))
+                .put(DictQueryOperator.class, (op, childOps) -> {
+                    DictQueryOperator dictQuery = (DictQueryOperator) op;
+                    return new DictQueryOperator(childOps, dictQuery.getDictQueryExpr(), dictQuery.getFn(),
+                            dictQuery.getType()); })
+                .put(DictMappingOperator.class, (op, childOps) -> {
+                    DictMappingOperator dictMapping = (DictMappingOperator) op;
+                    return new DictMappingOperator(dictMapping.getType(), dictMapping.getDictColumn(),
+                            dictMapping.getOriginScalaOperator(), childOps.get(0)); })
                 .put(DictionaryGetOperator.class, (op, childOps) -> {
                     DictionaryGetOperator dictGet = (DictionaryGetOperator) op;
                     return new DictionaryGetOperator(childOps, dictGet.getType(), dictGet.getDictionaryId(),

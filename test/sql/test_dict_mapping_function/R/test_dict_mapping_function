@@ -178,6 +178,7 @@ SELECT count(*) FROM t;
 DROP DATABASE test_dictmapping_nested_null_key;
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_dictmapping_DictQueryOperator_bug @native
 CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
 -- result:
@@ -245,6 +246,13 @@ CREATE DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 -- result:
 -- !result
 USE test_dictmapping_add_generated_column_with_dict_mapping;
+=======
+-- name: test_dictmapping_nested_rewritten_key @native
+CREATE DATABASE test_dictmapping_nested_rewritten_key;
+-- result:
+-- !result
+use test_dictmapping_nested_rewritten_key;
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
 -- result:
 -- !result
 create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
@@ -258,7 +266,11 @@ PROPERTIES (
 INSERT INTO dict VALUES (1, "abc", default, 0);
 -- result:
 -- !result
+<<<<<<< HEAD
 create table t_dictmapping_add_generated_column_with_dict_mapping(col_1 int, col_2 string)
+=======
+create table t(col_1 int, col_2 string)
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
 primary key(col_1)
 distributed by hash(col_1)
 PROPERTIES (
@@ -266,6 +278,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
+<<<<<<< HEAD
 INSERT INTO t_dictmapping_add_generated_column_with_dict_mapping VALUES (1, "abc");
 -- result:
 -- !result
@@ -382,5 +395,19 @@ select dict_mapping("t_dictmapping_multiple_open_crash", k) from t_dictmapping_m
 1
 -- !result
 DROP TABLE t_dictmapping_multiple_open_crash;
+=======
+INSERT INTO t VALUES (1, "abc");
+-- result:
+-- !result
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+-- result:
+1
+-- !result
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_2, col_2)) FROM t;
+-- result:
+[REGEX].*invalid parameter : get NULL paramenter.*
+-- !result
+DROP DATABASE test_dictmapping_nested_rewritten_key;
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
 -- result:
 -- !result
