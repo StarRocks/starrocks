@@ -27,6 +27,7 @@ public class PhysicalLanceScanOperator extends PhysicalScanOperator {
 
     public PhysicalLanceScanOperator(LogicalLanceScanOperator scan) {
         super(OperatorType.PHYSICAL_LANCE_SCAN, scan);
+        // Keep mutable predicate collections independent from the logical plan and other alternatives.
         this.predicates = scan.getScanOperatorPredicates().clone();
     }
 
