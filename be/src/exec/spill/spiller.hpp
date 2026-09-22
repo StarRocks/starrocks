@@ -307,19 +307,30 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
     // the last column was hash column
     auto hash_column = chunk->columns().back();
 
+    Status append_st;
     {
         SCOPED_TIMER(_spiller->metrics().shuffle_timer);
         std::vector<uint32_t> shuffle_result;
         shuffle(shuffle_result, down_cast<SpillHashColumn*>(hash_column->as_mutable_raw_ptr()));
         process_partition_data(chunk, shuffle_result,
-                               [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
-                                        int32_t from, int32_t size) {
+                               [&chunk, &append_st](SpilledPartition* partition, const std::vector<uint32_t>& selection,
+                                                    int32_t from, int32_t size) {
+                                   if (!append_st.ok()) {
+                                       return;
+                                   }
                                    auto mem_table = partition->spill_writer->mem_table();
-                                   (void)mem_table->append_selective(*chunk, selection.data(), from, size);
+                                   // Do not drop this status: a partition whose append failed holds
+                                   // fewer rows than num_rows claims, and the restore side trusts
+                                   // num_rows.
+                                   append_st = mem_table->append_selective(*chunk, selection.data(), from, size);
+                                   if (!append_st.ok()) {
+                                       return;
+                                   }
                                    partition->mem_size = mem_table->mem_usage();
                                    partition->num_rows += size;
                                });
     }
+    RETURN_IF_ERROR(append_st);
 
     DCHECK_EQ(_spiller->spilled_append_rows(), _partition_rows());
 
