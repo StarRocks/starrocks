@@ -958,7 +958,13 @@ public class SplitTabletJob extends TabletReshardJob {
             // a job that may never be queued (admission-time table-dropped race). The errorMessage
             // assignment is paired with setJobState here so it only fires when it is actually
             // preserved in the journaled ABORTING state; in the PENDING path abort() overwrites it.
-            if (!canAbort()) {
+            //
+            // Leader-only, because setJobState journals: replay reaches this method too, on a
+            // follower, on the leader's activation catch-up (which runs before feType becomes
+            // LEADER), and on the checkpoint worker (a separate GlobalStateMgr whose EditLog has no
+            // journal queue). Writing from any of those either throws at the closed WAL gate or
+            // NPEs, and replay() swallows it, leaving the record half-applied and silent.
+            if (GlobalStateMgr.getCurrentState().isLeader() && !canAbort()) {
                 errorMessage = "Table not found";
                 setJobState(JobState.ABORTING);
             }
