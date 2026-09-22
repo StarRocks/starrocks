@@ -321,6 +321,15 @@ This topic introduces the following types of BE configurations:
 - Description: The expire time of bRPC stub cache. The default value is 60 minutes.
 - Introduced in: -
 
+### brpc_unhealthy_stub_expire_s
+
+- Default: 300
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The expire time of unhealthy bRPC stub cache. The default is 5 minutes. An endpoint is considered as unhealthy if all of its channels are in the bRPC failed state. It is shorter than `brpc_stub_expire_s` so that an address a peer no longer answers on stops being probed soon after the peer changes its IP address. Setting this item to `brpc_stub_expire_s` or a greater value disables this rule and leaves only the unconditional idle expiration.
+- Introduced in: -
+
 ### compress_rowbatches
 
 - Default: true

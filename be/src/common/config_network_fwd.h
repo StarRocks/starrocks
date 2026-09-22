@@ -48,6 +48,11 @@ CONF_Int32(brpc_max_connections_per_server, "1");
 // The expire time of BRPC stub cache, default 60 minutes.
 CONF_mInt32(brpc_stub_expire_s, "3600"); // 60 minutes
 
+// The expire time of unhealthy BRPC stub cache, default 5 minutes. Set it to
+// brpc_stub_expire_s or larger to disable the rule and fall back to the single
+// unconditional idle TTL.
+CONF_mInt32(brpc_unhealthy_stub_expire_s, "300"); // 5 minutes
+
 // Whether to resolve backend hostnames to IP addresses in generated error URLs.
 // - true: StarRocks will attempt to resolve hostnames to IPs.
 //  Useful in debugging scenarios where internal hostnames (e.g., K8s pod names)

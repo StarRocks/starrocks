@@ -38,6 +38,15 @@ public:
 
     int64_t connection_group() const { return _connection_group.load(); }
 
+    bool channel_failed() const {
+        std::shared_lock l(_mutex);
+        if (_stub == nullptr) {
+            return false;
+        }
+        auto* channel = dynamic_cast<brpc::ChannelBase*>(_stub->channel());
+        return channel != nullptr && channel->CheckHealth() != 0;
+    }
+
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
     const butil::EndPoint _endpoint;

@@ -574,6 +574,7 @@
         "brpc_port",
         "brpc_max_connections_per_server",
         "brpc_stub_expire_s",
+        "brpc_unhealthy_stub_expire_s",
         "enable_resolve_hostname_to_ip_in_load_error_url",
         "priority_networks",
         "net_use_ipv6_when_priority_networks_empty",
