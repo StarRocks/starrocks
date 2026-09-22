@@ -312,8 +312,16 @@ public class TabletReshardJobMgr extends FrontendDaemon implements GsonPostProce
     }
 
     public void replayUpdateTabletReshardJob(TabletReshardJob tabletReshardJob) {
+        // replay() has to come first: the split job's cleaning replay reads reshardingTabletInfos as
+        // it still stands to work out which new tablets the leader's identical fallback dropped, so
+        // the refresh below must not have run yet.
         tabletReshardJob.replay();
         tabletReshardJobs.put(tabletReshardJob.getJobId(), tabletReshardJob);
+        // Every journal entry deserializes a whole new job, but only the PREPARING entry registers
+        // its ReshardingTablet objects, so the registry would keep pointing at the ones that entry
+        // left behind. Refresh from the record just installed, so a post-PREPARING leader decision
+        // -- the identical fallback shrinking a split family -- reaches the registry too.
+        tabletReshardJob.registerReshardingTabletsOnRestart();
     }
 
     public void replayRemoveTabletReshardJob(long tabletReshardJobId) {
