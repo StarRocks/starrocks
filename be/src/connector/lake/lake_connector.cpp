@@ -74,6 +74,22 @@ lake::TabletManager* lake_tablet_manager() {
     return StorageEnv::GetInstance()->lake_tablet_manager();
 }
 
+// The version in a lake scan range is the partition's visible version as captured by FE planning.
+// A missing tablet metadata object for that version therefore means the plan is stale -- the version
+// was never materialized -- rather than that the tablet is gone. Starlet maps the object-storage 404
+// to a generic NOT_FOUND, which no FE retry classifier recognizes, so the query fails outright even
+// though re-planning would pick a version that does exist. Report it under a dedicated status instead
+// and leave every other failure untouched.
+Status as_lake_meta_version_status(const TInternalScanRange& scan_range, int64_t version, const Status& status) {
+    if (!status.is_not_found()) {
+        return status;
+    }
+    return Status::LakeMetaVersionNotFound(
+            fmt::format("lake tablet metadata version not found, tablet_id={}, partition_id={}, version={}: {}",
+                        scan_range.tablet_id, scan_range.__isset.partition_id ? scan_range.partition_id : -1, version,
+                        status.message()));
+}
+
 RowidRangeOptionPtr trim_coarse_split_by_pruned_range(const pipeline::LakeSplitContext& split_context) {
     if (split_context.rowid_range == nullptr || split_context.prepared_tablet_read_state == nullptr ||
         split_context.prepared_segment_read_state == nullptr ||
@@ -344,7 +360,11 @@ Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
     int64_t tablet_id = scan_range.tablet_id;
     int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
     auto* tablet_manager = _provider->tablet_manager();
-    ASSIGN_OR_RETURN(_tablet, tablet_manager->get_tablet(tablet_id, version));
+    auto tablet_or = tablet_manager->get_tablet(tablet_id, version);
+    if (!tablet_or.ok()) {
+        return as_lake_meta_version_status(scan_range, version, tablet_or.status());
+    }
+    _tablet = std::move(tablet_or).value();
     auto& lake_scan_node = _provider->_t_lake_scan_node;
     if (lake_scan_node.__isset.schema_key) {
         const auto& t_schema_key = lake_scan_node.schema_key;
@@ -504,7 +524,17 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
         for (const std::string& str : vector_options.query_vector) {
-            _params.vector_search_option->query_vector.push_back(std::stof(str));
+            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
+            // float or is not a number, and the throw is uncaught here, so a query vector element the
+            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
+            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
+            StringParser::ParseResult parse_result;
+            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
+            if (parse_result != StringParser::PARSE_SUCCESS) {
+                return Status::InvalidArgument(
+                        fmt::format("invalid query vector element for vector search: '{}'", str));
+            }
+            _params.vector_search_option->query_vector.push_back(value);
         }
         if (_runtime_state->query_options().__isset.ann_params) {
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
@@ -1895,10 +1925,13 @@ StatusOr<bool> LakeDataSourceProvider::_could_tablet_internal_parallel(
     int64_t num_table_rows = 0;
     int64_t max_tablet_rows = 0;
     for (const auto& tablet_scan_range : scan_ranges) {
-        int64_t version = std::stoll(tablet_scan_range.scan_range.internal_scan_range.version);
-        ASSIGN_OR_RETURN(auto tablet_num_rows,
-                         _tablet_manager->get_tablet_num_rows(
-                                 tablet_scan_range.scan_range.internal_scan_range.tablet_id, version));
+        const auto& internal_scan_range = tablet_scan_range.scan_range.internal_scan_range;
+        int64_t version = std::stoll(internal_scan_range.version);
+        auto tablet_num_rows_or = _tablet_manager->get_tablet_num_rows(internal_scan_range.tablet_id, version);
+        if (!tablet_num_rows_or.ok()) {
+            return as_lake_meta_version_status(internal_scan_range, version, tablet_num_rows_or.status());
+        }
+        auto tablet_num_rows = tablet_num_rows_or.value();
         num_table_rows += static_cast<int64_t>(tablet_num_rows);
         max_tablet_rows = std::max(max_tablet_rows, static_cast<int64_t>(tablet_num_rows));
     }

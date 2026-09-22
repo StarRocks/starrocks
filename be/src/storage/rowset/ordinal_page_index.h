@@ -51,6 +51,7 @@
 
 namespace starrocks {
 
+class ColumnMetaPB;
 class FileSystem;
 class WritableFile;
 
@@ -73,6 +74,21 @@ public:
 private:
     std::unique_ptr<IndexPageBuilder> _page_builder;
     PagePointer _last_pp;
+};
+
+// An ordinal index whose write was deferred to the segment's tail region: the builder that owns it,
+// and the ColumnMetaPB it must record its page pointer into. The file is not carried here -- the
+// segment writer passes its own.
+//
+// `meta` points into the writer's SegmentFooterPB, handed out by add_columns() when the column
+// writer was created and used later by finish() to append this index's PagePointer. Holding it
+// across the rest of the segment is safe for the reason the column writers already rely on:
+// RepeatedPtrField grows its array of pointers, never moving the messages they point at. What
+// would break it is replacing the footer wholesale rather than appending to it -- the only path
+// that does, a partial-update rewrite, never produces a deferred index at all.
+struct DeferredOrdinalIndex {
+    std::unique_ptr<OrdinalIndexWriter> builder;
+    ColumnMetaPB* meta = nullptr;
 };
 
 class OrdinalPageIndexIterator;

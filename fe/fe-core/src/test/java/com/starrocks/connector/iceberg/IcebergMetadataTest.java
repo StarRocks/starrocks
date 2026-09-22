@@ -127,6 +127,7 @@ import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
+import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergColumnStats;
@@ -198,7 +199,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -838,10 +838,23 @@ public class IcebergMetadataTest extends TableTestBase {
             public long getNextId() {
                 return 1;
             }
+        };
+
+        // Keep the statistics cleanup off the real DML path. The DELETE would begin a transaction, and
+        // TransactionIdGenerator#getNextTransactionId writes the edit log while holding its own monitor,
+        // so a stalled journal wedges every thread that needs a transaction id - this test included.
+        // Do NOT "fix" that by handing out a private EditLog from a GlobalStateMgr mock: a class mock-up
+        // answers every thread in the JVM, and a queue no JournalWriter drains strands the leader daemons
+        // that write the journal concurrently with this test.
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName,
+                                                    String dbName, String tableName) {
+            }
 
             @Mock
-            public EditLog getEditLog() {
-                return new EditLog(new ArrayBlockingQueue<>(100));
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName,
+                                              String tableName, List<String> columnNames) {
             }
         };
 
@@ -995,10 +1008,23 @@ public class IcebergMetadataTest extends TableTestBase {
             public long getNextId() {
                 return 1;
             }
+        };
+
+        // Keep the statistics cleanup off the real DML path. The DELETE would begin a transaction, and
+        // TransactionIdGenerator#getNextTransactionId writes the edit log while holding its own monitor,
+        // so a stalled journal wedges every thread that needs a transaction id - this test included.
+        // Do NOT "fix" that by handing out a private EditLog from a GlobalStateMgr mock: a class mock-up
+        // answers every thread in the JVM, and a queue no JournalWriter drains strands the leader daemons
+        // that write the journal concurrently with this test.
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName,
+                                                    String dbName, String tableName) {
+            }
 
             @Mock
-            public EditLog getEditLog() {
-                return new EditLog(new ArrayBlockingQueue<>(100));
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName,
+                                              String tableName, List<String> columnNames) {
             }
         };
 

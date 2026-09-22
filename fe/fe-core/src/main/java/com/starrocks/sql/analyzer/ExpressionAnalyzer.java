@@ -1156,6 +1156,7 @@ public class ExpressionAnalyzer {
                 node.setType(fn.getReturnType());
                 FunctionAnalyzer.analyze(node);
                 verifyNoAiInConditionalFunction(node);
+                checkGetQueryProfileAccess(node);
                 return null;
             }
 
@@ -1181,6 +1182,7 @@ public class ExpressionAnalyzer {
                     node.setType(fn.getReturnType());
                     FunctionAnalyzer.analyze(node);
                     verifyNoAiInConditionalFunction(node);
+                    checkGetQueryProfileAccess(node);
                     return null;
                 }
                 // Try to provide a more user-friendly error message for positional calls
@@ -1196,7 +1198,17 @@ public class ExpressionAnalyzer {
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
             verifyNoAiInConditionalFunction(node);
+            checkGetQueryProfileAccess(node);
             return null;
+        }
+
+        // get_query_profile() serves the same payload as ANALYZE PROFILE through a BE-side RPC that carries no
+        // caller identity, so the access rule is applied here, once the call has resolved to the builtin; a UDF
+        // that happens to share the name never touches the profile RPC and is left alone.
+        private void checkGetQueryProfileAccess(FunctionCallExpr node) {
+            if (Authorizer.isGetQueryProfileBuiltin(node.getFn()) && node.getChildren().size() == 1) {
+                Authorizer.checkGetQueryProfileAccess(session, node.getChild(0));
+            }
         }
 
         private void verifyNoAiInConditionalFunction(FunctionCallExpr node) {

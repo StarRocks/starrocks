@@ -51,7 +51,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 // Accumulate multiple chunks' PKs into a single replace() call to reduce per-chunk
-                // overhead: each `params.index->replace()` ends with a memtable flush check + lock
+                // overhead: each `params.replace_rows()` ends with a memtable flush check + lock
                 // round-trip in LakePersistentIndex::replace(). For a 1 M-row segment with the default
                 // 4 K chunk, that is ~250 such calls per segment. Batching N chunks amortises the
                 // per-call setup, vector allocations, and memtable bookkeeping by ~N×. Values <= 1
@@ -81,8 +81,8 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                         }
                         if (!batch_replace_indexes.empty()) {
                             TRACE_COUNTER_SCOPE_LATENCY_US("compaction_replace_index_latency_us");
-                            RETURN_IF_ERROR(params.index->replace(params.rowset_id + segment_id, batch_start_rowid,
-                                                                  batch_replace_indexes, *batch_col));
+                            RETURN_IF_ERROR(params.replace_rows(params.rowset_id + segment_id, batch_start_rowid,
+                                                                batch_replace_indexes, *batch_col));
                         }
                         batch_start_rowid += batch_acc_rows;
                         batch_acc_rows = 0;

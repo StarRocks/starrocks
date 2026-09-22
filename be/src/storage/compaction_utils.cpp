@@ -14,6 +14,9 @@
 
 #include "storage/compaction_utils.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "common/config_compaction_fwd.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
@@ -85,7 +88,24 @@ uint32_t CompactionUtils::get_segment_max_rows(int64_t max_segment_file_size, in
                                                int64_t input_rowsets_size) {
     // The range of config::max_segment_file_size is between [1, INT64_MAX]
     // If the configuration is wrong, the config::max_segment_file_size will be a negtive value.
-    // Using division instead multiplication can avoid the overflow
+    // Using division instead multiplication can avoid the overflow.
+    //
+    // Both statistics come from rowset metas and are summed as size_t by the callers, so a
+    // corrupted or negative value (e.g. a data_disk_size that went below zero) reaches here as
+    // a negative int64. A negative input_rowsets_size can make the divisor below zero, a
+    // negative input_row_num can make it undefined (input_row_num == -1), and input_row_num + 1
+    // can overflow; the first two raise SIGFPE and kill the process from a compaction thread.
+    // The two statistics are derived from the same rowset metas, so if either is out of range
+    // neither is trustworthy: drop both to zero, which makes the estimate degrade to
+    // max_segment_file_size (divisor 1) instead of crashing or deriving a number from a
+    // partially-corrupt pair.
+    if (input_row_num < 0 || input_rowsets_size < 0 || input_row_num >= std::numeric_limits<int64_t>::max()) {
+        LOG(WARNING) << "invalid compaction input statistics, fall back to max_segment_file_size as the segment row "
+                        "estimate. input_row_num="
+                     << input_row_num << ", input_rowsets_size=" << input_rowsets_size;
+        input_row_num = 0;
+        input_rowsets_size = 0;
+    }
     int64_t max_segment_rows = max_segment_file_size / (input_rowsets_size / (input_row_num + 1) + 1);
     if (max_segment_rows > INT32_MAX || max_segment_rows <= 0) {
         max_segment_rows = INT32_MAX;

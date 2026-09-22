@@ -2634,7 +2634,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // Step 2: Validate transaction state
         TransactionState txnState = state.getGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
-        TCreatePartitionResult errorResult = validateTransactionState(txnState, txnId, tableId, olapTable.getName());
+        TCreatePartitionResult errorResult =
+                validateTransactionState(txnState, txnId, tableId, olapTable.getName(), creatingPartitionNames);
         metrics.recordValidateTxnState();
         if (errorResult != null) {
             return errorResult;
@@ -2740,13 +2741,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new ValidatedTableInfo(db, olapTable);
     }
 
+    /**
+     * Validate the transaction and the per-load partition budget.
+     *
+     * <p>The budget is counted over the partitions this transaction would have touched once the request is
+     * served, i.e. the union of the partitions already cached on the transaction and {@code creatingPartitionNames}.
+     */
     private static TCreatePartitionResult validateTransactionState(TransactionState txnState, long txnId,
-                                                                   long tableId, String tableName) {
+                                                                   long tableId, String tableName,
+                                                                   Set<String> creatingPartitionNames) {
         if (txnState == null) {
             return buildErrorResult(String.format("automatic create partition failed. error: txn %d not exist", txnId));
         }
 
-        if (txnState.getPartitionNameToTPartition(tableId).size() > Config.max_partitions_in_one_batch) {
+        ConcurrentMap<String, TOlapTablePartition> cachedPartitions = txnState.getPartitionNameToTPartition(tableId);
+        long partitionNumAfterRequest = cachedPartitions.size()
+                + creatingPartitionNames.stream().filter(name -> !cachedPartitions.containsKey(name)).count();
+        if (partitionNumAfterRequest > Config.max_partitions_in_one_batch) {
             return buildErrorResult(String.format(
                     "Table %s automatic create partition failed. error: partitions in one batch exceed limit %d," +
                             "You can modify this restriction on by setting max_partitions_in_one_batch larger.",

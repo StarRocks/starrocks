@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.TabletReshardUtils;
 import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnBuilder;
@@ -239,6 +240,8 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
             // do nothing, these 2 properties will be analyzed when creating alter job
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            // do nothing, this property will be analyzed when creating alter job (compression dict)
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
             if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -1474,6 +1477,13 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
     public Void visitMergeTabletClause(MergeTabletClause clause, ConnectContext context) {
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new SemanticException("Merge tablet only support cloud native tables");
+        }
+
+        // A merge of this shape cannot attribute the rows of a segment its sources share, and fails at
+        // publish for good rather than at submission. Say so here, where the user is looking.
+        if (TabletReshardUtils.tabletMergeUnsupported((OlapTable) table)) {
+            throw new SemanticException("Merge tablet is not supported on a range-distributed primary key table "
+                    + "whose ORDER BY differs from the primary key");
         }
 
         if (clause.getPartitionNames() != null && clause.getTabletGroupList() != null) {

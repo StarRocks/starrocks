@@ -155,6 +155,9 @@ public class SelectAnalyzer {
             if (!orderByElements.isEmpty()) {
                 new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, sourceAndOutputScope)
                         .verify(orderByExpressions);
+                if (selectList.isDistinct()) {
+                    verifyDistinctOrderBy(orderByExpressions, outputExpressions, analyzeState, sourceAndOutputScope);
+                }
             }
         }
 
@@ -372,6 +375,74 @@ public class SelectAnalyzer {
         analyzeState.setOutputExprInOrderByScope(outputExprInOrderByScope);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
         return outputExpressions;
+    }
+
+    /**
+     * SELECT DISTINCT is evaluated on top of the aggregation, and it only emits the select-list
+     * expressions. An ORDER BY may therefore only reference those; a GROUP BY key that is not
+     * selected is no longer available once DISTINCT has been applied, and picking one of the rows
+     * that DISTINCT collapsed would be arbitrary anyway. MySQL and PostgreSQL both reject such
+     * queries. Without this check the transformer still builds a plan whose projection above the
+     * DISTINCT aggregation reads a column that aggregation does not output, which fails much later
+     * with an opaque "missing statistic of col" planner error.
+     * <p>
+     * The equivalent check for {@code SELECT DISTINCT} without GROUP BY is already covered by
+     * {@link AggregationAnalyzer}, but only when the ONLY_FULL_GROUP_BY sql mode is set, so this
+     * check is deliberately independent of the sql mode.
+     */
+    private void verifyDistinctOrderBy(List<Expr> orderByExpressions, List<Expr> outputExpressions,
+                                       AnalyzeState analyzeState, Scope orderByScope) {
+        // The fields the select list reads. An ORDER BY slot bound to one of them refers to the same
+        // column even when the two SlotRefs disagree on qualification, as in
+        // "select distinct t.a as b from t order by a".
+        Set<FieldId> outputFields = outputExpressions.stream()
+                .map(analyzeState.getColumnReferences()::get)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        for (Expr orderByExpression : orderByExpressions) {
+            Expr uncovered = findExprNotEmittedByDistinct(orderByExpression, outputExpressions, outputFields,
+                    analyzeState, orderByScope);
+            if (uncovered != null) {
+                throw new SemanticException("for SELECT DISTINCT, ORDER BY expressions must appear in select list",
+                        uncovered.getPos());
+            }
+        }
+    }
+
+    /**
+     * Returns the first sub-expression of {@code expr} that the DISTINCT output cannot provide, or
+     * null when the whole expression can be computed from it.
+     */
+    private Expr findExprNotEmittedByDistinct(Expr expr, List<Expr> outputExpressions, Set<FieldId> outputFields,
+                                              AnalyzeState analyzeState, Scope orderByScope) {
+        if (outputExpressions.stream().anyMatch(expr::equals)) {
+            return null;
+        }
+        if (expr instanceof SlotRef) {
+            SlotRef slotRef = (SlotRef) expr;
+            if (slotRef.isFromLambda()) {
+                return null;
+            }
+            FieldId fieldId = analyzeState.getColumnReferences().get(expr);
+            if (fieldId == null) {
+                return null;
+            }
+            // Slots bound to the order-by scope itself resolve to a select-list item, e.g. an alias.
+            if (Objects.equals(fieldId.getRelationId(), orderByScope.getRelationId())) {
+                return null;
+            }
+            return outputFields.contains(fieldId) ? null : expr;
+        }
+        // Only a column reference can make an expression un-computable from the DISTINCT output;
+        // everything else (literals, functions, casts, ...) is fine as long as its children are.
+        for (Expr child : expr.getChildren()) {
+            Expr uncovered = findExprNotEmittedByDistinct(child, outputExpressions, outputFields, analyzeState,
+                    orderByScope);
+            if (uncovered != null) {
+                return uncovered;
+            }
+        }
+        return null;
     }
 
     private List<OrderByElement> expandOrderByAll(OrderByElement orderByElement,

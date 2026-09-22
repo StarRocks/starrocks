@@ -131,6 +131,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: endpoint、credential、capability ごとに分けられた chat/text bucket に対する、BE 単位のリクエスト admission rate です。Provider のクォータに合わせる、または送信負荷を抑える場合は値を小さくし、Provider と BE の両方に十分な容量がある場合にのみ増やします。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。
 - 導入バージョン: -
 
+### ai_function_rate_limit_qps_embedding
+
+- デフォルト: 128
+- タイプ: Int（32 ビット）
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。SYSTEM と AI provider 指定の埋め込み呼び出しに適用され、リトライも含みます。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
 ### ai_function_max_inflight
 
 - デフォルト: 512
@@ -198,6 +208,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ビットマップインデックスのメモリキャッシュを有効にするかどうか。ポイントクエリを高速化するためにビットマップインデックスを使用したい場合は、メモリキャッシュを推奨します。
 - 導入バージョン: v3.1
+
+### enable_default_value_column_zonemap_filter
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 有効な値: `true`、`false`
+- 変更可能: はい
+- 説明: セグメントに物理的に存在しない列の値を定数畳み込みしてデータをプルーニングするかどうか。fast schema evolution (`ALTER TABLE ... ADD COLUMN`) で追加された列は既存のセグメントには書き込まれないため、その列の各行は列のデフォルト値 (または `NULL`) になります。`true` の場合、その列に対する述語はこの定数に対して評価され、一致する可能性がなければセグメント全体がスキップされます。`false` の場合、それらのセグメントは全体が読み取られ、各バッチが削除条件に対して再チェックされます。これはこのオプションが導入される前の動作です。列を追加したテーブルでクエリ結果が想定と異なる場合は、`false` に設定してロールバックできます。このオプションは `enable_index_page_level_zonemap_filter` とは独立しています。後者はランタイムフィルターの経路をカバーしないためです。
+- 導入バージョン: -
 
 ### フラットJSON圧縮有効化
 

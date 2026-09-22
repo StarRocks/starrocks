@@ -142,14 +142,21 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
+// A cross-published rowset's segments are handed to every child by the split, so UNSHARE has to
+// rewrite them privately. A rowset that a partial-update rewrite already produced needs nothing:
+// SegmentRewriter's owned-only rewrites drop the rows this tablet does not own, so that output is
+// private and foreign-row-free the moment it is published. `shared` is therefore the whole signal,
+// and it terminates because the UNSHARE clears it -- unlike a rowset's range, which a tablet merge
+// stamps on every rowset it emits and nothing ever clears.
+static bool carries_shared_segment(const RowsetMetadataPB& rowset) {
+    return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                       [](const SegmentMetadataPB& segment) { return segment.shared(); });
+}
+
 StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
     std::vector<RowsetPtr> input_rowsets;
     for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
-        const auto& rowset = _tablet_metadata->rowsets(i);
-        const bool contains_shared_segment =
-                std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
-                            [](const SegmentMetadataPB& segment) { return segment.shared(); });
-        if (contains_shared_segment) {
+        if (carries_shared_segment(_tablet_metadata->rowsets(i))) {
             input_rowsets.emplace_back(
                     std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
         }
@@ -507,31 +514,18 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
-    // Everyday compaction has to stay off the files a split left shared, for a tablet whose rows are
-    // not in sort-key order.
+    // Ordinary compaction cannot range-filter a separate-sort-key segment and would make sibling
+    // rows permanently private. Wait for the scheduled UNSHARE to remove them first.
     //
-    // Such a child reads a shared segment whole: Rowset::set_segment_tablet_range withholds the
-    // tablet range because it has no rowid interval in sort-key space, and the row-level
-    // PrimaryKeyRangeFilter is only built for the UNSHARE compaction. So an ordinary compaction here
-    // would merge the siblings' rows into its output and mark that output private -- and
-    // UnshareCompactionPolicy only picks rowsets that still carry a shared segment, so the
-    // contaminated rowset is never rewritten and those rows go on to be served by the wrong child
-    // after cutover.
-    //
-    // The window is bounded: the UNSHARE transaction is scheduled with the split and, once it
-    // commits, no rowset carries a shared segment and this guard stops matching. Waiting is what the
-    // design trades for the split being metadata-only.
-    // Tested cheapest-first: only a ranged tablet whose sort key is not the primary key can ever be
-    // in this state, and both of those are schema properties. The segment walk below is
-    // O(rowsets x segments), so it must not run for every ordinary ranged tablet.
+    // Wait on shared segments, never on a rowset's range: a tablet merge stamps its range onto every
+    // rowset it emits and nothing ever clears one, so waiting on that would stall this tablet's
+    // ordinary compaction for good -- ahead of the _force_base_compaction branch below, so an
+    // ALTER TABLE ... COMPACT could not break it either -- while FE schedules an UNSHARE only from a
+    // split. Nothing is left behind: a rewrite's output no longer holds foreign rows at all.
     if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
-        const bool carries_shared_segment =
-                std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
-                            [](const RowsetMetadataPB& rowset) {
-                                return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
-                                                   [](const SegmentMetadataPB& segment) { return segment.shared(); });
-                            });
-        if (carries_shared_segment) {
+        const bool awaiting_unshare = std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
+                                                  carries_shared_segment);
+        if (awaiting_unshare) {
             VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
                     << tablet_metadata->id() << " version=" << tablet_metadata->version();
             return std::vector<RowsetPtr>{};

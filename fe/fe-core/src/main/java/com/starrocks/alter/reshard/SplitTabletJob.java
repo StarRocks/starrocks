@@ -346,8 +346,13 @@ public class SplitTabletJob extends TabletReshardJob {
                     for (MaterializedIndex index : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)) {
                         tablets.addAll(index.getTablets());
                     }
+                    // The old tablets are read at commitVersion - 1, which for a partition resharded before its
+                    // first load is version 1. A file_bundling partition keeps that metadata only in the
+                    // partition-shared object, so tell the BE where to look, exactly as a normal load does.
+                    boolean preferSharedInitialMetadata =
+                            Utils.preferSharedInitialMetadata(olapTable, physicalPartition, commitVersion - 1);
                     Future<Map<Long, TabletRange>> future = publishThreadPool.submit(() -> publishVersion(
-                            tablets, commitVersion, useAggregatePublish, computeResource));
+                            tablets, commitVersion, useAggregatePublish, computeResource, preferSharedInitialMetadata));
                     reshardingPhysicalPartition.setPublishFuture(future);
                 } else if (publishResult.publishState() == PublishState.IN_PROGRESS) {
                     // Publish is in progress
@@ -439,7 +444,7 @@ public class SplitTabletJob extends TabletReshardJob {
         ignoredTransactionIds.addAll(GlobalStateMgr.getCurrentState().getCompactionMgr()
                 .cancelPreviousCompactions(endTransactionId, dbId, tableId, reshardingPhysicalPartitions.keySet()));
         try {
-            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinished(
+            if (!GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().isPreviousTransactionsFinishedForReshard(
                     endTransactionId, dbId, List.of(tableId), ignoredTransactionIds)) {
                 return;
             }
@@ -702,13 +707,22 @@ public class SplitTabletJob extends TabletReshardJob {
                     reshardingPhysicalPartition.setCommitVersion(commitVersion);
                 }
 
-                physicalPartition.setNextVersion(commitVersion + 1);
+                // Never move nextVersion backwards. The commit version is reserved here, in
+                // runPendingJob, but the job does not journal anything until it reaches PREPARING a
+                // few steps later -- so a load transaction that commits in between journals its own
+                // entry first, and a replaying FE applies that entry before this one. By then the
+                // transaction has already carried nextVersion past the version reserved here, and
+                // assigning commitVersion + 1 unconditionally would drag it back, handing the same
+                // version out twice.
+                if (physicalPartition.getNextVersion() < commitVersion + 1) {
+                    physicalPartition.setNextVersion(commitVersion + 1);
+                }
             }
         }
     }
 
     private Map<Long, TabletRange> publishVersion(List<Tablet> tablets, long commitVersion,
-            boolean useAggregatePublish, ComputeResource computeResource) {
+            boolean useAggregatePublish, ComputeResource computeResource, boolean preferSharedInitialMetadata) {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = transactionId;
@@ -730,7 +744,7 @@ public class SplitTabletJob extends TabletReshardJob {
             // not from this pre-visibility publish callback.
             List<VectorIndexBuildInfoPB> vectorIndexBuildInfos = new ArrayList<>();
             Utils.publishVersion(tablets, txnInfo, commitVersion - 1, commitVersion, null, tabletRange,
-                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos);
+                    computeResource, null, useAggregatePublish, vectorIndexBuildInfos, preferSharedInitialMetadata);
 
             return tabletRange;
         } catch (Exception e) {

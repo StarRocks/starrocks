@@ -57,6 +57,7 @@ AIRuntimeConfig ai_runtime_config_from_globals() {
     config.max_retries_on_throttle = config::ai_function_max_retries_on_throttle;
     config.on_error = config::ai_function_on_error.value();
     config.rate_limit_qps_chat = config::ai_function_rate_limit_qps_chat;
+    config.rate_limit_qps_embedding = config::ai_function_rate_limit_qps_embedding;
     config.max_inflight = config::ai_function_max_inflight;
     return config;
 }
