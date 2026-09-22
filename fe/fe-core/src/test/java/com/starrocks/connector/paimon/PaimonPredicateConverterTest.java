@@ -67,6 +67,7 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -207,27 +208,23 @@ public class PaimonPredicateConverterTest {
         Assertions.assertTrue(result instanceof CompoundPredicate);
         CompoundPredicate compoundPredicate = (CompoundPredicate) result;
         Assertions.assertTrue(compoundPredicate.function() instanceof Or);
-        Assertions.assertEquals(2, compoundPredicate.children().size());
+        List<LeafPredicate> leaves = flattenOrLeaves(compoundPredicate);
+        Assertions.assertEquals(3, leaves.size());
+        Assertions.assertTrue(leaves.stream().allMatch(leaf -> leaf.function() instanceof Equal));
+        Assertions.assertEquals(List.of(11, 22, 333),
+                leaves.stream().map(leaf -> leaf.literals().get(0)).toList());
+    }
 
-        Assertions.assertTrue(compoundPredicate.children().get(0) instanceof CompoundPredicate);
-        CompoundPredicate child1 = (CompoundPredicate) compoundPredicate.children().get(0);
+    private static List<LeafPredicate> flattenOrLeaves(Predicate predicate) {
+        if (predicate instanceof LeafPredicate) {
+            return List.of((LeafPredicate) predicate);
+        }
 
-        Assertions.assertEquals(2, child1.children().size());
-        LeafPredicate child11 = (LeafPredicate) child1.children().get(0);
-        Assertions.assertTrue(child11.function() instanceof  Equal);
-        Assertions.assertEquals(1, child11.literals().size());
-        Assertions.assertEquals(11, child11.literals().get(0));
-
-        LeafPredicate child12 = (LeafPredicate) child1.children().get(1);
-        Assertions.assertTrue(child12.function() instanceof  Equal);
-        Assertions.assertEquals(1, child12.literals().size());
-        Assertions.assertEquals(22, child12.literals().get(0));
-
-        Assertions.assertTrue(compoundPredicate.children().get(1) instanceof LeafPredicate);
-        LeafPredicate child2 = (LeafPredicate) compoundPredicate.children().get(1);
-        Assertions.assertTrue(child2.function() instanceof Equal);
-        Assertions.assertEquals(1, child2.literals().size());
-        Assertions.assertEquals(333, child2.literals().get(0));
+        CompoundPredicate compoundPredicate = (CompoundPredicate) predicate;
+        Assertions.assertTrue(compoundPredicate.function() instanceof Or);
+        List<LeafPredicate> leaves = new ArrayList<>();
+        compoundPredicate.children().forEach(child -> leaves.addAll(flattenOrLeaves(child)));
+        return leaves;
     }
 
     @Test

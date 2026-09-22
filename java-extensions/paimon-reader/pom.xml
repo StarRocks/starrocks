@@ -13,7 +13,7 @@
 
     <properties>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>1.3.1</paimon.version>
+        <paimon.version>2.0.0</paimon.version>
     </properties>
 
     <dependencies>
@@ -130,6 +130,48 @@
                             <outputDirectory>${project.build.directory}/paimon-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
                             <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+              paimon-s3 2.0.0 packages dnsjava as a nested plugin. Its nested service descriptor is
+              visible to JDK 18+, but Paimon's plugin class loader cannot resolve the provider from
+              the nested multi-release layout. Remove the invalid descriptor
+              from the distribution copy so JDK service loading can continue to a valid DNS resolver.
+              See https://github.com/dnsjava/dnsjava/issues/338.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.1.0</version>
+                <executions>
+                    <execution>
+                        <id>sanitize-paimon-s3-plugin</id>
+                        <phase>package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <property name="paimon.s3.jar"
+                                          location="${project.build.directory}/paimon-reader-lib/paimon-s3-${paimon.version}.jar"/>
+                                <property name="paimon.s3.sanitized.dir"
+                                          location="${project.build.directory}/paimon-s3-sanitized"/>
+                                <property name="paimon.s3.sanitized.jar"
+                                          location="${project.build.directory}/paimon-s3-sanitized.jar"/>
+                                <delete dir="${paimon.s3.sanitized.dir}"/>
+                                <delete file="${paimon.s3.sanitized.jar}"/>
+                                <unzip src="${paimon.s3.jar}" dest="${paimon.s3.sanitized.dir}">
+                                    <patternset>
+                                        <exclude name="paimon-plugin-s3/META-INF/services/java.net.spi.InetAddressResolverProvider"/>
+                                    </patternset>
+                                </unzip>
+                                <zip destfile="${paimon.s3.sanitized.jar}" basedir="${paimon.s3.sanitized.dir}"/>
+                                <move file="${paimon.s3.sanitized.jar}" tofile="${paimon.s3.jar}" overwrite="true"/>
+                                <delete dir="${paimon.s3.sanitized.dir}"/>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
