@@ -602,6 +602,86 @@ TEST_F(AddIndexSchemaChangeTest, run_mixed_empty_and_nonempty_pk_segments_uses_p
     }
 }
 
+TEST_F(AddIndexSchemaChangeTest, run_empty_pk_segment_still_validates_index_definition) {
+    auto metadata = create_pk_tablet_metadata();
+    auto segment = append_pk_rowset(metadata.get(), /*key_only=*/true, /*nrows=*/0, /*bundled=*/false);
+    ASSERT_EQ(0, segment->num_rows());
+    VersionedTablet vt(_tablet_manager.get(), metadata);
+    auto expect_op_untouched = [](const TxnLogPB_OpAddIndex& op) {
+        EXPECT_FALSE(op.has_alter_version());
+        EXPECT_EQ(0, op.segment_entries_size());
+        EXPECT_EQ(0, op.new_indexes_size());
+    };
+
+    for (auto type : {IndexType::GIN, IndexType::VECTOR}) {
+        SCOPED_TRACE(::testing::Message() << "index_type=" << type);
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {make_index(type, _c1_uid)}, vt.version(),
+                                vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_not_supported()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+
+    {
+        auto valid = make_index(IndexType::BITMAP, _c1_uid);
+        auto unsupported = make_index(IndexType::GIN, _c1_uid);
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {valid, unsupported}, vt.version(),
+                                vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_not_supported()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+
+    {
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt,
+                                {make_index(IndexType::BITMAP, /*col_uid=*/999999)}, vt.version(), vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_internal_error()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+    {
+        TabletIndexPB no_columns;
+        no_columns.set_index_id(next_id());
+        no_columns.set_index_name("ix_no_columns");
+        no_columns.set_index_type(IndexType::BITMAP);
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {no_columns}, vt.version(), vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_internal_error()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+    {
+        TabletIndexPB no_type;
+        no_type.set_index_id(next_id());
+        no_type.set_index_name("ix_no_type");
+        no_type.add_col_unique_id(_c1_uid);
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {no_type}, vt.version(), vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_internal_error()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+    {
+        auto multi_column = make_index(IndexType::BITMAP, _c0_uid);
+        multi_column.add_col_unique_id(_c1_uid);
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {multi_column}, vt.version(),
+                                vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        auto st = sc.run(&op);
+        EXPECT_TRUE(st.is_not_supported()) << st;
+        expect_op_untouched(op);
+        EXPECT_EQ(0, count_idx_files());
+    }
+}
+
 // GIN -> NotSupported. Triggers cleanup_written_idx_files via the run()
 // failure path.
 TEST_F(AddIndexSchemaChangeTest, run_gin_returns_not_supported) {

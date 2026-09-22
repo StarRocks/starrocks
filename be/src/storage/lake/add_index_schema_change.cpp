@@ -162,6 +162,48 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
     return Status::OK();
 }
 
+// Validate everything that does not depend on a physical segment. This must run
+// even for tablets with no segments and for segments with zero rows: apply_add_index
+// persists new_indexes without requiring a segment entry, so accepting an invalid
+// definition here would publish it without ever reaching the per-segment builder.
+Status validate_index_definition(const TabletSchema& schema, const TabletIndexPB& ix, const TabletColumn** out_column) {
+    if (out_column != nullptr) {
+        *out_column = nullptr;
+    }
+    if (ix.col_unique_id_size() == 0) {
+        return Status::InternalError("TabletIndex has no columns");
+    }
+    if (!ix.has_index_type()) {
+        return Status::InternalError("TabletIndex has no index type");
+    }
+    // Multi-column indexes (GIN, VECTOR) aren't supported in this initial
+    // slice. BITMAP / NGRAMBF / bloom are single-column only.
+    if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
+        return Status::NotSupported("multi-column non-GIN index unsupported");
+    }
+    switch (ix.index_type()) {
+    case IndexType::BITMAP:
+    case IndexType::NGRAMBF:
+    case IndexType::BLOOM_FILTER:
+        break;
+    case IndexType::GIN:
+    case IndexType::VECTOR:
+    default:
+        return Status::NotSupported(strings::Substitute("lake ADD INDEX fast path: index type $0 not yet supported",
+                                                        static_cast<int>(ix.index_type())));
+    }
+
+    const int col_uid = ix.col_unique_id(0);
+    const int32_t col_ordinal = schema.field_index(col_uid);
+    if (col_ordinal < 0) {
+        return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
+    }
+    if (out_column != nullptr) {
+        *out_column = &schema.column(static_cast<size_t>(col_ordinal));
+    }
+    return Status::OK();
+}
+
 } // namespace
 
 AddIndexSchemaChange::AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
@@ -186,6 +228,12 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         // schema, and silently substituting the tablet metadata schema is exactly
         // the bug this parameter exists to prevent.
         return Status::InternalError("AddIndexSchemaChange: authoritative schema is null");
+    }
+    // Validate before mutating the output operation. Empty tablets and empty
+    // physical segments have no builder invocation that could reject a malformed
+    // or unsupported definition later.
+    for (const auto& ix : _indexes_to_build) {
+        RETURN_IF_ERROR(validate_index_definition(*_authoritative_schema, ix, /*out_column=*/nullptr));
     }
     op_add_index->set_alter_version(_alter_version);
     for (const auto& ix : _indexes_to_build) {
@@ -297,25 +345,9 @@ StatusOr<AddIndexSchemaChange::IndexDisposition> AddIndexSchemaChange::classify_
     DCHECK(segment != nullptr);
     DCHECK(out_column != nullptr);
     *out_column = nullptr;
-
-    if (ix.col_unique_id_size() == 0) {
-        return Status::InternalError("TabletIndex has no columns");
-    }
-    // Multi-column indexes (GIN, VECTOR) aren't supported in this initial
-    // slice. BITMAP / NGRAMBF / bloom are single-column only.
-    if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
-        return Status::NotSupported("multi-column non-GIN index unsupported");
-    }
+    RETURN_IF_ERROR(validate_index_definition(*_authoritative_schema, ix, out_column));
     const int col_uid = ix.col_unique_id(0);
-    const int32_t col_ordinal = _authoritative_schema->field_index(col_uid);
-    if (col_ordinal < 0) {
-        // FE asked us to index a column that is missing from the schema FE itself
-        // attached to the request. FE and BE disagree about the column set; that
-        // is not a legitimate absence, so fail instead of skipping.
-        return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
-    }
-    const auto& column = _authoritative_schema->column(static_cast<size_t>(col_ordinal));
-    *out_column = &column;
+    const auto& column = **out_column;
 
     if (segment->column_with_uid(column.unique_id()) != nullptr) {
         return IndexDisposition::kBuild;
@@ -502,9 +534,8 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
 
     // 3. For each index to build, locate the column, dispatch to the
     //    per-type builder, and register the resulting meta with the
-    //    IndexFileWriter. Unsupported types are a soft failure at this
-    //    phase (NotSupported); the caller will abort the txn log and the
-    //    .idx file will be garbage-collected as an orphan.
+    //    IndexFileWriter. run() preflights index types, while the default
+    //    branch remains defensive against future enum additions.
     for (const auto& [ix_ptr, column_ptr] : to_build) {
         const auto& ix = *ix_ptr;
         const auto& column = *column_ptr;
