@@ -21,12 +21,40 @@
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
+#include "geo/wkb.h"
 
 namespace starrocks {
 
 class geographyFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {}
+
+    static TypeDescriptor geography_type() {
+        return TypeDescriptor::create_geo_type(TYPE_GEOGRAPHY,
+                                               {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                                GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
+    }
+
+    static ColumnPtr geography(std::initializer_list<const char*> values) {
+        auto input = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        bool has_null = false;
+        for (const char* value : values) {
+            if (value == nullptr) {
+                input->append_default();
+                nulls->append(1);
+                has_null = true;
+            } else {
+                input->append(value);
+                nulls->append(0);
+            }
+        }
+        ColumnPtr source = input;
+        if (has_null) source = NullableColumn::create(input, nulls);
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography_type()));
+        return GeoFunctions::st_geog_from_text(context.get(), {source}).value();
+    }
 };
 
 TEST_F(geographyFunctionsTest, st_pointTest) {
@@ -531,6 +559,92 @@ TEST_F(geographyFunctionsTest, nativeGeographySerializerChecksBoundaryDescriptor
     auto result = GeoFunctions::st_geography_as_text(nullptr, {column});
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_supported());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyPointAccessors) {
+    auto point = geography({"POINT (12.5 -8.25)"});
+    ColumnViewer<TYPE_DOUBLE> x(GeoFunctions::st_geography_x(nullptr, {point}).value());
+    ColumnViewer<TYPE_DOUBLE> y(GeoFunctions::st_geography_y(nullptr, {point}).value());
+    EXPECT_DOUBLE_EQ(12.5, x.value(0));
+    EXPECT_DOUBLE_EQ(-8.25, y.value(0));
+
+    auto constant = ConstColumn::create(point, 3);
+    auto constant_x = GeoFunctions::st_geography_x(nullptr, {constant}).value();
+    EXPECT_TRUE(constant_x->is_constant());
+    EXPECT_EQ(3, constant_x->size());
+    EXPECT_DOUBLE_EQ(12.5, ColumnHelper::get_const_value<TYPE_DOUBLE>(constant_x));
+
+    auto null = GeoFunctions::st_geography_x(nullptr, {geography({nullptr})}).value();
+    EXPECT_TRUE(null->only_null());
+
+    auto line = geography({"LINESTRING (0 0, 1 1)"});
+    auto line_x = GeoFunctions::st_geography_x(nullptr, {line});
+    ASSERT_FALSE(line_x.ok());
+    EXPECT_TRUE(line_x.status().is_invalid_argument());
+
+    auto empty = geography({"POINT EMPTY"});
+    auto empty_y = GeoFunctions::st_geography_y(nullptr, {empty});
+    ASSERT_FALSE(empty_y.ok());
+    EXPECT_TRUE(empty_y.status().is_invalid_argument());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyTypeReportsEveryFamily) {
+    auto input = geography({"POINT EMPTY", "LINESTRING (0 0, 1 1)", "POLYGON ((0 0, 0 1, 1 1, 0 0))",
+                            "MULTIPOINT ((0 0), (1 1))", "MULTILINESTRING ((0 0, 1 1))",
+                            "MULTIPOLYGON (((0 0, 0 1, 1 1, 0 0)))", "GEOMETRYCOLLECTION (POINT (0 0))"});
+    ColumnViewer<TYPE_VARCHAR> result(GeoFunctions::st_geography_type(nullptr, {input}).value());
+    const char* expected[] = {"ST_Point",           "ST_LineString",   "ST_Polygon",           "ST_MultiPoint",
+                              "ST_MultiLineString", "ST_MultiPolygon", "ST_GeometryCollection"};
+    for (size_t row = 0; row < std::size(expected); ++row) {
+        EXPECT_EQ(expected[row], result.value(row).to_string());
+    }
+
+    auto null = GeoFunctions::st_geography_type(nullptr, {geography({nullptr})}).value();
+    EXPECT_TRUE(null->only_null());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyPointDistance) {
+    auto lhs = geography({"POINT (0 0)", "POINT (179 0)", "POINT (0 89)"});
+    auto rhs = geography({"POINT (0 0)", "POINT (-179 0)", "POINT (90 89)"});
+    ColumnViewer<TYPE_DOUBLE> result(GeoFunctions::st_geography_distance(nullptr, {lhs, rhs}).value());
+    EXPECT_DOUBLE_EQ(0, result.value(0));
+    EXPECT_NEAR(222390.202354968, result.value(1), 0.001);
+    EXPECT_NEAR(157249.628092489, result.value(2), 0.001);
+
+    auto empty = GeoFunctions::st_geography_distance(nullptr, {geography({"POINT EMPTY"}), geography({"POINT (0 0)"})})
+                         .value();
+    EXPECT_TRUE(empty->is_null(0));
+    auto null =
+            GeoFunctions::st_geography_distance(nullptr, {geography({nullptr}), geography({"POINT (0 0)"})}).value();
+    EXPECT_TRUE(null->only_null());
+
+    auto unsupported = GeoFunctions::st_geography_distance(
+            nullptr, {geography({"LINESTRING (0 0, 1 1)"}), geography({"POINT (0 0)"})});
+    ASSERT_FALSE(unsupported.ok());
+    EXPECT_TRUE(unsupported.status().is_invalid_argument());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityAndDimension) {
+    WkbGeometry point;
+    ASSERT_TRUE(WkbCodec::parse_wkt("POINT (1 2)", &point).ok());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
+
+    for (auto descriptor : {
+                 GeoColumnDescriptor{
+                         {GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL, GEO_EDGE_ALGORITHM_SPHERICAL,
+                          "OGC:CRS84", 4326},
+                         {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}},
+                 GeoColumnDescriptor{{GEO_LOGICAL_TYPE_GEOGRAPHY, GEO_COORDINATE_SYSTEM_SPHERICAL,
+                                      GEO_EDGE_ALGORITHM_VINCENTY, "OGC:CRS84", 4326},
+                                     {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}},
+         }) {
+        auto input = GeoColumn::create(std::move(descriptor));
+        input->append_wkb(Slice(wkb));
+        auto result = GeoFunctions::st_geography_x(nullptr, {input});
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_not_supported());
+    }
 }
 
 } // namespace starrocks
