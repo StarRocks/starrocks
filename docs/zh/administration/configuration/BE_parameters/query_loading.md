@@ -527,6 +527,27 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
 
+<<<<<<< HEAD
+=======
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）或 VARIANT 时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
+- 引入版本：-
+
+### enable_lock_free_scan_task_queue
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：控制 `ScanExecutor` 是否使用 `LockFreeWorkGroupScanTaskQueue` 来调度 OLAP scan 和 connector scan 任务。开启后，扫描任务会通过“每个 workgroup 的无锁队列 + workgroup 级协调器”进行调度，相比原先基于互斥锁的 `WorkGroupScanTaskQueue` 可以降低竞争开销。排障或回滚时，可将该参数设置为 `false` 以切回旧的 scan task queue 实现。
+- 引入版本：v4.1.0
+
+>>>>>>> f75d404 ([Enhancement] Evaluate each searched CASE WHEN branch only on the rows it owns (#79484))
 ### pk_index_parallel_get_threadpool_size
 
 - 默认值：1048576

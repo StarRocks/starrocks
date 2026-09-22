@@ -530,6 +530,27 @@ This topic introduces the following types of BE configurations:
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
 - Introduced in: -
 
+<<<<<<< HEAD
+=======
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) or VARIANT type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
+- Introduced in: -
+
+### enable_lock_free_scan_task_queue
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether `ScanExecutor` uses `LockFreeWorkGroupScanTaskQueue` for OLAP scan and connector scan task scheduling. When enabled, scan tasks are scheduled through a lock-free per-workgroup queue plus a workgroup-level coordinator, which reduces contention compared with the legacy mutex-based `WorkGroupScanTaskQueue`. Set this item to `false` to fall back to the legacy scan task queue implementation during troubleshooting or rollback.
+- Introduced in: v4.1.0
+
+>>>>>>> f75d404 ([Enhancement] Evaluate each searched CASE WHEN branch only on the rows it owns (#79484))
 ### pk_index_parallel_get_threadpool_size
 
 - Default: 1048576
