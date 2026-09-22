@@ -574,6 +574,14 @@ FROM test;
 * 默认值：true
 * 引入版本：v2.5
 
+### enable_delta_lake_scan_prefetch
+
+* **描述**：让 Delta Lake 文件任务枚举与扫描范围消费并行进行。默认关闭。开启后，每个增量文件源最多保留一个当前批次和一个预取批次。每批最多包含 256 个文件任务，估算的任务数据量达到 1 MiB 后停止读取；单个大任务可能超过此估算值。该限制不包含 Delta Kernel 的 checkpoint 和日志重放内存。此开关不会跳过优化器的统计收集。
+* **默认值**：false
+* **类型**：Boolean
+
+每个 Catalog 使用两个预取线程，最多排队 128 个批次任务。线程生成一个批次后即返回，不等待消费者。如果提交被拒绝，则由消费线程同步读取该批次。扫描达到 LIMIT 或关闭文件源时，会取消待执行任务并中断正在进行的读取；资源释放可能仍需等待底层 I/O 返回。查询重试会创建新的文件源。查询 trace 包含 `DELTA_LAKE.prefetchRead`、`DELTA_LAKE.prefetchWait` 和 `DELTA_LAKE.prefetchFallback`。
+
 ### enable_datacache_async_populate_mode
 
 * 描述：是否使用异步方式进行 Data Cache 填充。系统默认使用同步方式进行填充，即在查询数据时同步填充进行缓存填充。
