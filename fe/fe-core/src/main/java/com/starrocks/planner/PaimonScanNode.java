@@ -27,6 +27,7 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -162,28 +163,37 @@ public class PaimonScanNode extends ScanNode {
         paimonReaderMode = resolveAutoReaderModeForFileColumns(tupleDescriptor, paimonReaderMode);
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
-            if (split instanceof DataSplit dataSplit) {
-                Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-                if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
-                    List<RawFile> rawFiles = optionalRawFiles.get();
-                    boolean supportedDataFileFormat =
-                            rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
-                    if (supportedDataFileFormat) {
-                        Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
-                        for (int i = 0; i < rawFiles.size(); i++) {
-                            if (deletionFiles.isPresent()) {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
-                            } else {
-                                splitRawFileScanRangeLocations(rawFiles.get(i), null);
+            Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+            if (optionalDataSplit.isPresent()) {
+                DataSplit dataSplit = optionalDataSplit.get();
+                if (PaimonSplitUtils.isGlobalIndexSplit(split)) {
+                    // IndexedSplit row ranges must stay attached to the SDK split. The Java reader
+                    // can consume them directly; raw-file conversion would lose the row selection.
+                    long totalFileLength = getTotalFileLength(dataSplit);
+                    addSDKSplitScanRangeLocations(paimonReaderMode, split, predicateInfo, totalFileLength);
+                } else {
+                    Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
+                    if (paimonReaderMode == PaimonReaderMode.AUTO && optionalRawFiles.isPresent()) {
+                        List<RawFile> rawFiles = optionalRawFiles.get();
+                        boolean supportedDataFileFormat =
+                                rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
+                        if (supportedDataFileFormat) {
+                            Optional<List<DeletionFile>> deletionFiles = dataSplit.deletionFiles();
+                            for (int i = 0; i < rawFiles.size(); i++) {
+                                if (deletionFiles.isPresent()) {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), deletionFiles.get().get(i));
+                                } else {
+                                    splitRawFileScanRangeLocations(rawFiles.get(i), null);
+                                }
                             }
+                        } else {
+                            long totalFileLength = getTotalFileLength(dataSplit);
+                            addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                         }
                     } else {
                         long totalFileLength = getTotalFileLength(dataSplit);
                         addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                     }
-                } else {
-                    long totalFileLength = getTotalFileLength(dataSplit);
-                    addSDKSplitScanRangeLocations(paimonReaderMode, dataSplit, predicateInfo, totalFileLength);
                 }
                 selectedPartitions.computeIfAbsent(dataSplit.partition(), k -> nextPartitionId());
             } else {
@@ -362,10 +372,11 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setLength(totalFileLength);
         hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
         // Only uses for hasher in HDFSBackendSelector to select BE
-        if (split instanceof DataSplit dataSplit) {
-            hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode()));
-        } else {
-            // For splits that are not DataSplit, we have to fall back to JNI
+        Optional<DataSplit> optionalDataSplit = PaimonSplitUtils.getDataSplit(split);
+        optionalDataSplit.ifPresent(dataSplit -> hdfsScanRange.setRelative_path(String.valueOf(dataSplit.hashCode())));
+        if (!optionalDataSplit.isPresent() || PaimonSplitUtils.isGlobalIndexSplit(split)) {
+            // paimon-cpp currently accepts DataSplit bytes only. Keep system-table and indexed
+            // splits on Paimon Java until the native IndexedSplit format is introduced.
             paimonReaderMode = PaimonReaderMode.JNI;
         }
 
