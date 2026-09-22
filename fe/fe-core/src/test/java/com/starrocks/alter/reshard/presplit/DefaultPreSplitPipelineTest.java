@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -138,6 +139,57 @@ public class DefaultPreSplitPipelineTest {
                     pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
             Assertions.assertTrue(prepared.isPresent());
+        }
+    }
+
+    @Test
+    public void testMetaTierFooterIoFailureFallsBackToDataTierAndRecordsReason() throws Exception {
+        IOException footerIoFailure = new IOException(
+                "ApiCallTimeoutException: Client execution did not complete within 60000 millis");
+        MetaTierSampler metaTier = (request, requestedTabletCount) -> {
+            throw new MetaTierUnavailableException(
+                    "failed to read ORC footer for s3://bucket/source.orc: " + footerIoFailure.getMessage(),
+                    footerIoFailure);
+        };
+        AtomicReference<SampleRequest> dataTierCallCapture = new AtomicReference<>();
+        Sampler dataTier = request -> {
+            dataTierCallCapture.set(request);
+            return new SampleSet(
+                    List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
+                    new Estimates(FILE_TOTAL_BYTES, 4L));
+        };
+        PreSplitProfile profile = new PreSplitProfile();
+
+        TabletReshardJob fakeJob = mock(TabletReshardJob.class);
+        try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
+            mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
+                    .thenReturn(fakeJob);
+
+            DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
+            try (PreSplitProfile.Scope ignored =
+                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
+            }
+
+            Assertions.assertTrue(prepared.isPresent(),
+                    "a footer I/O failure must use data-tier boundaries instead of skipping pre-split");
+            SampleRequest fallbackRequest = dataTierCallCapture.get();
+            Assertions.assertNotNull(fallbackRequest, "the fallback must invoke the data tier");
+            Assertions.assertSame(sampleRequest.getScanContext(), fallbackRequest.getScanContext());
+            Assertions.assertEquals(sampleRequest.getSortKey(), fallbackRequest.getSortKey());
+            Assertions.assertEquals(
+                    sampleRequest.getPartitionSourceColumns(), fallbackRequest.getPartitionSourceColumns());
+            Assertions.assertEquals(sampleRequest.getSampleByteLimit(), fallbackRequest.getSampleByteLimit());
+            Assertions.assertEquals(sampleRequest.getSeed(), fallbackRequest.getSeed());
+            Assertions.assertTrue(fallbackRequest.getQueryTimeoutSeconds() > 0,
+                    "the fallback request must carry the remaining pre-submit budget");
+            Assertions.assertEquals("meta_tier, data_tier",
+                    profile.toRuntimeProfile().getInfoString("SourceTiers"));
+            Assertions.assertEquals(
+                    "MetaTierUnavailableException: failed to read ORC footer for "
+                            + "s3://bucket/source.orc: " + footerIoFailure.getMessage(),
+                    profile.toRuntimeProfile().getInfoString(PreSplitProfile.META_TIER_FALLBACK_REASONS));
         }
     }
 

@@ -115,7 +115,8 @@ import java.util.Optional;
  * BSON, UUID, FLOAT, DOUBLE, byte-array DECIMAL without a footer-declared TypeDefinedOrder,
  * raw BINARY for VARBINARY) makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier — not a
- * load failure. Pure I/O failures surface as {@link StarRocksException}.
+ * load failure. Footer I/O failures use the same signal because the data tier can retry the source
+ * through the BE/CN storage stack instead of abandoning pre-split entirely.
  */
 public final class ParquetRowGroupStatisticsReader {
 
@@ -157,7 +158,7 @@ public final class ParquetRowGroupStatisticsReader {
                 return rowGroupStatistics;
             }
         } catch (IOException ioException) {
-            throw new StarRocksException(
+            throw new MetaTierUnavailableException(
                     "failed to read Parquet footer for " + fileStatus.getPath() + ": " + ioException.getMessage(),
                     ioException);
         }
