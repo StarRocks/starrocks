@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.AnyGeographyType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -55,6 +56,19 @@ public class AnalyzeFunctionTest {
         analyzeFail("select now(*) from t0");
 
         analyzeSuccess("SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'");
+    }
+
+    @Test
+    public void testNativeGeographySqlBoundary() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeogFromText('POINT (1 2)')")).getQueryRelation();
+        Assertions.assertEquals(AnyGeographyType.GEOGRAPHY,
+                ((SelectRelation) relation).getOutputExpression().get(0).getType());
+
+        analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
+        analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
+        analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
+
     }
 
     @Test

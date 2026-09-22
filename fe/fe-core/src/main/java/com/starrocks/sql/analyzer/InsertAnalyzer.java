@@ -344,7 +344,6 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
                     query.getRelationFields().size());
         }
-
         // check default value expr
         if (query instanceof ValuesRelation) {
             ValuesRelation valuesRelation = (ValuesRelation) query;
