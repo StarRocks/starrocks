@@ -176,6 +176,14 @@ This topic introduces the following types of FE configurations:
 - Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the federated token file used for Workload Identity authentication when creating the built-in ADLS2 storage volume. Set it together with `azure_adls2_oauth2_tenant_id` and `azure_adls2_oauth2_client_id`, and keep `azure_adls2_oauth2_use_managed_identity` as `false`. Mount the file at the same readable path on every FE and CN. An empty string disables token-file authentication. Restart the FE after changing this configuration.
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - Default: false
