@@ -505,7 +505,8 @@ public class OlapTableSink extends DataSink {
         this.estimatedWriteBytes = estimatedWriteBytes;
     }
 
-    private static boolean hasMultiNodeTablet(TOlapTableLocationParam location) {
+    @VisibleForTesting
+    static boolean hasMultiNodeTablet(TOlapTableLocationParam location) {
         if (location.getTablets() == null) {
             return false;
         }
@@ -700,19 +701,23 @@ public class OlapTableSink extends DataSink {
             TOlapTableLocationParam location = createLocation(dstTable, partitionParam, enableReplicatedStorage,
                     computeResource, txnState, writerNodeCount(tSink, txnState));
             tSink.setLocation(location);
-            // In shared-data mode a tablet normally carries exactly one node, so more than one can only
-            // come from the multi-node write path above. Deriving the flag from the location keeps it true to
-            // what BE actually received: if no partition turned out eligible, BE stays on the old path.
+            // Tells BE that a tablet's node list is a SHARD set -- one node per row -- rather than a
+            // replica set. It has to be true of every location this load will ever receive, and the
+            // location just built is not all of them: a partition that automatic partitioning creates
+            // DURING the load gets its tablets from FrontendServiceImpl.buildCreatePartitionResponse,
+            // long after this flag is serialised.
             //
-            // A partition that automatic partitioning creates DURING the load is therefore never spread:
-            // FrontendServiceImpl.buildCreatePartitionResponse hands its tablets back one node each, long
-            // after this location was serialised. That costs the optimisation and nothing else -- BE
-            // resolves a one-node list to that node on both routing paths (key-hash takes be_ids[h % 1],
-            // local-first round-robins over a list of one) -- so such a partition simply keeps the
-            // behaviour that existed before this feature. Spreading it too would mean carrying the
-            // resolved width into that RPC and setting this flag from the width rather than from the
-            // location, which is a wider change than it looks: see the linked follow-up.
-            if (dstTable.isCloudNativeTableOrMaterializedView() && hasMultiNodeTablet(location)) {
+            // So the flag is the OR of what the plan produced and what that later path may produce.
+            // createLocation recorded the width on the transaction exactly when this load can reach
+            // that path, and buildRuntimePartitionNodeIds spreads only on that recorded width -- which
+            // makes the flag true whenever a spread list can appear, and keeps it false for a load
+            // that will only ever see one node per tablet. The order matters in one direction only:
+            // a multi-node list reaching BE without this flag would be read as a replica set and every
+            // row written to every node in it.
+            int runtimeWriterWidth = txnState == null
+                    ? NO_MULTI_NODE_WRITE : txnState.getMultiNodeWriteWidth(dstTable.getId());
+            if (dstTable.isCloudNativeTableOrMaterializedView()
+                    && (hasMultiNodeTablet(location) || runtimeWriterWidth > 1)) {
                 tSink.setEnable_multi_node_write(true);
             }
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
@@ -1352,6 +1357,39 @@ public class OlapTableSink extends DataSink {
         return nodeIds;
     }
 
+    // The compute nodes a tablet's rows may be spread over, in a stable order. Empty when the warehouse
+    // cannot supply two, which reads as "do not spread" everywhere it is used.
+    //
+    // Resolved once per statement by createLocation and again, against the nodes alive at that moment, by
+    // the create-partition path -- a load long enough to create a partition can outlive the node list it
+    // was planned against.
+    public static List<Long> resolveWriterCandidates(WarehouseManager warehouseManager, ComputeResource computeResource) {
+        List<Long> candidates = warehouseManager.getAliveComputeNodes(computeResource).stream()
+                .map(ComputeNode::getId).sorted().collect(Collectors.toList());
+        return candidates.size() < 2 ? Collections.emptyList() : candidates;
+    }
+
+    /**
+     * The node list one tablet of a partition created DURING the load gets.
+     *
+     * <p>createLocation makes this decision for the partitions the plan could see; automatic
+     * partitioning creates others afterwards, and FrontendServiceImpl.buildCreatePartitionResponse
+     * hands those back over the create-partition RPC. Same rule, same two helpers, so a runtime-created
+     * partition spreads exactly when a planned one of the same shape would.
+     *
+     * <p>|writerWidth| must be the width the plan recorded on the transaction, not one re-derived here.
+     * TOlapTableSink.enable_multi_node_write was serialised from that number, and without the flag BE
+     * reads a tablet's node list as a REPLICA set: a spread list handed to a load whose flag is off
+     * would write every row to every node in the list.
+     */
+    public static List<Long> buildRuntimePartitionNodeIds(long ownerNodeId, List<Long> writerCandidates,
+                                                          int writerWidth, int tabletCount, long tabletId) {
+        if (!spreadsIndex(tabletCount, Math.min(writerWidth, writerCandidates.size()))) {
+            return Collections.singletonList(ownerNodeId);
+        }
+        return buildWriterNodeIds(ownerNodeId, writerCandidates, writerWidth, tabletId);
+    }
+
     // Pick the first alive node id from a pre-fetched candidate list.
     // Returns -1 when the list is null/empty or no candidate is alive; callers fall back to a per-tablet lookup.
     private static long pickAliveComputeNodeId(List<Long> candidates, SystemInfoService infoService) {
@@ -1427,16 +1465,25 @@ public class OlapTableSink extends DataSink {
         // single node, in which case every tablet keeps exactly one node in its location.
         List<Long> writerCandidates = Collections.emptyList();
         if (writerNodeCount > 1 && table.isCloudNativeTableOrMaterializedView()) {
-            writerCandidates = warehouseManager.getAliveComputeNodes(computeResource).stream()
-                    .map(ComputeNode::getId).sorted().collect(Collectors.toList());
-            if (writerCandidates.size() < 2) {
-                writerCandidates = Collections.emptyList();
-            }
+            writerCandidates = resolveWriterCandidates(warehouseManager, computeResource);
         }
         // How many nodes one tablet actually ends up on: what the load asked for, clamped to what the
         // warehouse has. buildWriterNodeIds applies the same clamp, so this is the real width and not an
         // upper bound on it.
         int writerWidth = Math.min(writerNodeCount, writerCandidates.size());
+        // Hand the resolved width to the create-partition path, which has to make this same decision for
+        // a partition that does not exist yet. Only for a load that partitions automatically -- no other
+        // load can reach that path, and recording it for one that cannot would turn on
+        // enable_multi_node_write (complete() reads this back) for a load that never spreads anything.
+        //
+        // Recorded against THIS table. One transaction can carry several: a multi-table Broker Load
+        // plans a sink per table on one txn id before any of them runs, and every input to the width
+        // -- file bundling, colocate MV, and the estimated size -- belongs to one table. A shared
+        // value would let this table's width answer another table's create-partition RPC, and set
+        // that table's flag, with nothing having established its eligibility.
+        if (writerWidth > 1 && txnState != null && partitionParam.isEnable_automatic_partition()) {
+            txnState.setMultiNodeWriteWidth(table.getId(), writerWidth);
+        }
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());

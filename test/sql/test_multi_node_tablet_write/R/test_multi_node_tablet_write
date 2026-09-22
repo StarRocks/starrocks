@@ -108,6 +108,73 @@ select count(*), sum(k1) from t_many_buckets;
 -- result:
 20000	200010000
 -- !result
+create table t_auto (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), count(distinct dt), sum(k1) from t_auto;
+-- result:
+20000	5	200010000
+-- !result
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), sum(k1) from t_auto;
+-- result:
+40000	400020000
+-- !result
+select dt, k1, v1 from t_auto where k1 = 12345 order by v1;
+-- result:
+2026-01-01	12345	v12345
+2026-01-01	12345	w12345
+-- !result
+create table t_auto_pk (dt date, k1 bigint, v1 string)
+    primary key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+-- result:
+-- !result
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), count(distinct dt), sum(k1) from t_auto_pk;
+-- result:
+20000	5	200010000
+-- !result
+select dt, k1, v1 from t_auto_pk where k1 = 12345;
+-- result:
+2026-01-01	12345	w12345
+-- !result
+set lake_multi_node_tablet_write_mode = 'off';
+-- result:
+-- !result
+create table t_auto_off (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+-- result:
+-- !result
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+-- result:
+-- !result
+select count(*), count(distinct dt), sum(k1) from t_auto_off;
+-- result:
+40000	5	400020000
+-- !result
 drop database db_${uuid0} force;
 -- result:
 -- !result

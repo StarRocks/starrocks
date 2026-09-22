@@ -764,6 +764,148 @@ public class OlapTableSinkTest {
     }
 
     /**
+     * TOlapTableSink.enable_multi_node_write has to be true of every location this load will ever
+     * receive, and the one the planner builds is not all of them: automatic partitioning creates
+     * partitions DURING the load and FrontendServiceImpl.buildCreatePartitionResponse hands those
+     * back long afterwards. createLocation records the width it resolved on the transaction exactly
+     * when that can happen, and the flag is derived from that width rather than only from the
+     * location built here -- which in this test carries no multi-node tablet at all, so the flag can
+     * come from nowhere else.
+     *
+     * <p>The order is the point. A spread node list reaching BE without this flag is read as a
+     * REPLICA set, and every row is written to every node in it.
+     */
+    @Test
+    public void testMultiNodeWriteFlagFollowsTheRecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState spreadingTxn = new TransactionState();
+        // dstTable is the @Injectable OlapTable whose getId() the Expectations below pin to 1.
+        spreadingTxn.setMultiNodeWriteWidth(1L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = spreadingTxn;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertFalse(OlapTableSink.hasMultiNodeTablet(tSink.getLocation()),
+                "this location is built one node per tablet; the flag must not be coming from it");
+        Assertions.assertTrue(tSink.isEnable_multi_node_write(),
+                "a load that will spread a runtime-created partition must tell BE so before the "
+                        + "create-partition path can hand one back");
+    }
+
+    /**
+     * The width is per TABLE, not per transaction. A multi-table Broker Load plans one sink per
+     * table on a single txn id -- {@code BrokerLoadJob.buildLoadingTasksUnderReadLock} calls
+     * {@code task.prepare()} inside the per-table loop -- and only some of those tables may be
+     * eligible. An eligible table's width must not turn on this table's flag: every input to the
+     * decision (file bundling, colocate MV, and the estimated size the width is derived from) is
+     * that other table's, and nothing here established this one's eligibility.
+     */
+    @Test
+    public void testMultiNodeWriteFlagIgnoresAnotherTablesWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState otherTableSpread = new TransactionState();
+        // dstTable's id is pinned to 1 below; some other table in this transaction resolved 3.
+        otherTableSpread.setMultiNodeWriteWidth(2L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = otherTableSpread;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write(),
+                "another table's width must not enable the shard-set reading for this one");
+    }
+
+    /**
+     * The other half of the same rule: a load the planner did not record a width for spreads
+     * nothing, now or later, so the flag stays off and BE keeps the behaviour that existed before
+     * multi-node write.
+     */
+    @Test
+    public void testMultiNodeWriteFlagStaysOffWithoutARecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                    @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write());
+    }
+
+    /**
      * A cross-cluster INSERT whose destination is an ExternalOlapTable backed by a cloud-native
      * source table is a lake write too -- init() derives is_lake_table from exactly that composite
      * condition. The replica count has to follow the same predicate: judged only by
