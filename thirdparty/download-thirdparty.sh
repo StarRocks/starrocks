@@ -599,6 +599,10 @@ if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
         patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
         touch "$PATCHED_MARK"
     fi
+    if [ ! -f "$PATCHED_MARK.blocking_timeout" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
+        patch -p1 < "$TP_PATCH_DIR/poco-1.12.5-blocking-timeout.patch"
+        touch "$PATCHED_MARK.blocking_timeout"
+    fi
     cd -
     echo "Finished patching $POCO_SOURCE"
 fi
