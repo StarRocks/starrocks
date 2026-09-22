@@ -1104,6 +1104,49 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testLowCardinalityJoinPredicateTypeConsistency() throws Exception {
+        FeConstants.USE_MOCK_DICT_MANAGER = true;
+
+        String dumpString = getDumpInfoFromFile("query_dump/test_low_cardinality_join_predicate_type_consistency");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+        PlanTestBase.assertContains(plan,
+                "equal join conjunct: [66: s_nation, VARCHAR, false] = [47: s_nation, VARCHAR, false]");
+        PlanTestBase.assertNotContains(plan, "dict_col=s_nation");
+
+        FeConstants.USE_MOCK_DICT_MANAGER = false;
+    }
+
+    @Test
+    public void testJoinReorderKeepPredicateColumn() throws Exception {
+        // Regression for join-reorder dropping a predicate-referenced column. During reorder,
+        // OutputColumnsPrune pruned the pass-through column brand_name out of an iceberg scan
+        // projection (only the upper()/cast() expression outputs were required upstream), while the
+        // scan still carried the derived predicate "upper(brand_name) IS NOT NULL". The rebuilt scan
+        // statistics then lacked brand_name, and PredicateStatisticsCalculator.visitIsNullPredicate ->
+        // Statistics.getColumnStatistic threw "missing statistic of col: ... brand_name".
+        // The fix keeps predicate-referenced columns required during pruning; this dump must now plan.
+        String dumpString = getDumpInfoFromFile("query_dump/iceberg_isnull_missing_stats");
+        Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(dumpString, null);
+        Assertions.assertNotNull(replayPair.second);
+    }
+
+    @Test
+    public void testWindowSkewMergeSortWithHistogramJoinNulls() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/window_skew_merge_sort");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+
+        PlanTestBase.assertContains(plan, "ANALYTIC", "MERGING-EXCHANGE");
+    }
+
+    @Test
+>>>>>>> 5e88257 ([Enhancement] Consider NULL values in equality cardinality estimation using histograms (#78865))
     public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
         String dumpString = getDumpInfoFromFile(
                 "query_dump/push_down_distinct_below_window_empty_analytic");
