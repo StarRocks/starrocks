@@ -1011,6 +1011,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_IVM_REFRESH = "enable_ivm_refresh";
     public static final String TVR_TARGET_MVID = "tvr_target_mvid";
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_IVM_MV_PARTITION_PRUNING = "enable_ivm_mv_partition_pruning";
+    public static final String ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS = "enable_ivm_mv_scan_sort_key_join_keys";
+>>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -3213,6 +3218,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_IVM_REFRESH, flag = VariableMgr.INVISIBLE)
     private boolean enableIVMRefresh = false;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_IVM_MV_PARTITION_PRUNING)
+    private boolean enableIvmMvPartitionPruning = true;
+
+    @VarAttr(name = ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS)
+    private boolean enableIvmMvScanSortKeyJoinKeys = true;
+
+>>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
 
@@ -5958,6 +5972,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableIVMRefresh;
     }
 
+<<<<<<< HEAD
+=======
+    public void setEnableIvmMvPartitionPruning(boolean enableIvmMvPartitionPruning) {
+        this.enableIvmMvPartitionPruning = enableIvmMvPartitionPruning;
+    }
+
+    public boolean isEnableIvmMvPartitionPruning() {
+        return enableIvmMvPartitionPruning;
+    }
+
+    public void setEnableIvmMvScanSortKeyJoinKeys(boolean enableIvmMvScanSortKeyJoinKeys) {
+        this.enableIvmMvScanSortKeyJoinKeys = enableIvmMvScanSortKeyJoinKeys;
+    }
+
+    public boolean isEnableIvmMvScanSortKeyJoinKeys() {
+        return enableIvmMvScanSortKeyJoinKeys;
+    }
+
+>>>>>>> fcf3f5f7ae9... [Enhancement] Join the mv's sort-key prefix on the IVM state-merge scan (#63299)
     public void setTvrTargetMvid(String tvrTargetMvid) {
         this.tvrTargetMvId = tvrTargetMvid;
     }
