@@ -206,6 +206,13 @@ public:
         return *this;
     }
 
+    // SDCG flexible partial update: the explicit PTabletWriterOpenRequest.flexible_partial_update flag,
+    // forwarded to DeltaWriterBuilder::set_flexible_partial_update.
+    AsyncDeltaWriterBuilder& set_flexible_partial_update(bool flexible_partial_update) {
+        _flexible_partial_update = flexible_partial_update;
+        return *this;
+    }
+
     AsyncDeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
         _column_to_expr_value = column_to_expr_value;
         return *this;
@@ -252,6 +259,7 @@ private:
     std::string _merge_condition{};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    bool _flexible_partial_update{false};
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};

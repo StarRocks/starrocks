@@ -1002,6 +1002,123 @@ This topic introduces the following types of BE configurations:
 - Description: Maximum memory per worker thread for partial update operations. Controls the memory footprint of individual worker threads when processing partial updates.
 - Introduced in: -
 
+### enable_sparse_dcg
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Master switch for the Sparse Delta Column Group (SDCG) write path used by column-mode partial updates (including `partial_update_mode` values `column`, `auto`, and `flexible`). Shared-data (lake) tables only. When `false` (the default), column-mode partial updates always write dense column files and behavior is unchanged from before SDCG was introduced. When `true`, eligible partial updates may write sparse delta column files instead. The FE configuration item of the same name (`enable_sparse_dcg`) must also be set to `true`: the FE-side parts of the feature (the `flexible` and `flexible_row` modes, the upgrade of `auto` to per-row column sets, and forcing row mode for GIN-indexed columns) are enabled only when both are on. Unknown `partial_update_mode` values are rejected by the BE when this item is on and by the FE when the FE item of the same name is on; with both off they are ignored, as before.
+- Introduced in: -
+
+### sdcg_dense_threshold
+
+- Default: 0.3
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Density threshold for the SDCG write path. When the ratio of updated rows to rows in the source segment is at least this value, the update writes a dense column file instead of a sparse one. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_sparse_max_rows
+
+- Default: 50000
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: [Experimental] Upper bound on the number of updated rows in one source segment for the sparse path. At or above this many rows the update falls back to a dense column file even if the density ratio is below `sdcg_dense_threshold`. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_sparse_min_segment_rows
+
+- Default: 65536
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: [Experimental] Lower bound on the row count of the source segment for the sparse path. A segment with fewer rows than this always takes the dense path, because the per-row overhead of a sparse file only pays off when rewriting the whole column is expensive. `0` disables this gate. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_promotion_hard_count
+
+- Default: 256
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Safety cap on the depth of the sparse overlay chain on one segment. Chains are normally folded by background Primary Key compaction; only if a chain reaches this depth first does the writer fall back to a synchronous dense rewrite. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_compaction_trigger_depth_wide
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Overlay chain depth at which background compaction folds a wide sparse chain (a chain whose layers carry wide value columns). It is lower than the depth used for narrow chains (10) because each wide layer adds noticeable read cost. Set it to `10` or higher to treat wide chains like narrow ones. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_read_amp_budget
+
+- Default: -1
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Maximum number of sparse overlay layers a read may have to merge for one column. `-1` (the default) uses the per-column-width defaults (`sdcg_compaction_trigger_depth_wide` for wide columns, the default depth for narrow columns). `0` forces the dense path and never writes a sparse overlay. `N > 0` allows sparse overlays and folds the chain when it would exceed `N` layers. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_auto_row_width_frac
+
+- Default: 0.5
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] For `partial_update_mode` = `auto`: when a load updates at least this fraction of the table's value columns, the load is routed to row mode instead of column mode. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_auto_row_width_min_cols
+
+- Default: 8
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] For `partial_update_mode` = `auto`: when a load updates at least this many value columns, the load is routed to row mode instead of column mode. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_auto_sparse_depth_penalty
+
+- Default: 0
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] For `partial_update_mode` = `auto`: scales the estimated sparse write cost by `(1 + sdcg_auto_sparse_depth_penalty * chain_depth)` so that the cost model prefers the dense path as the overlay chain deepens. `0` (the default) disables the penalty. Takes effect only when `enable_sparse_dcg` is `true`.
+- Introduced in: -
+
+### sdcg_promotion_threshold
+
+- Default: 0.3
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: [Deprecated] Former in-place promotion threshold, expressed as a fraction of the source segment row count. It no longer drives the write path and is kept only for configuration compatibility; sparse chains are folded by background compaction.
+- Introduced in: -
+
+### sdcg_enable_per_column_zone_map
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Refines segment-level zone map pruning for segments that have a delta column group. When `false` (the default), any delta column group on a segment disables segment-level zone map pruning for all of its non-key columns (the historical behavior). When `true`, pruning stays enabled for columns that are not present in any delta column group of the segment. This item is independent of `enable_sparse_dcg`: it also applies to tables whose column-mode partial updates only ever wrote dense column files, so it stays `false` by default to keep the historical pruning behavior.
+- Introduced in: -
+
+### enable_sdcg_compaction_conflict_replay
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Allows lake Primary Key compaction to replay sparse column-group overlays that race with an in-progress compaction onto the compaction output, instead of discarding them. Requires `enable_sparse_dcg` to be `true`; has no effect otherwise.
+- Introduced in: -
+
 ### enable_load_spill_parallel_merge
 
 - Default: true

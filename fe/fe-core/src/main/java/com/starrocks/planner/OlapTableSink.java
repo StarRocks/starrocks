@@ -157,6 +157,11 @@ public class OlapTableSink extends DataSink {
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
+    // SDCG flexible partial update: per-row heterogeneous column sets. Set explicitly by the
+    // planner that injected the hidden "__cset__" SMALLINT slot before "__op"; createSchema
+    // then adds "__cset__" to the index column list right before "__op". This flag, not the
+    // slot names in the tuple, is the single source of truth for the flexible shape.
+    private boolean flexiblePartialUpdate = false;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
     private long automaticBucketSize = 0;
     private boolean enableDynamicOverwrite = false;
@@ -243,6 +248,9 @@ public class OlapTableSink extends DataSink {
         tSink.setEnable_data_file_bundling(dstTable.isFileBundling());
         tSink.setEnable_lake_per_partition_coordinator_txn_log(
                 Config.lake_enable_per_partition_coordinator_txn_log);
+        // SDCG flexible partial update: re-apply the flag that may have been set on this
+        // sink before init() created the thrift struct.
+        tSink.setFlexible_partial_update(flexiblePartialUpdate);
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db != null) {
             tSink.setDb_name(db.getFullName());
@@ -273,6 +281,15 @@ public class OlapTableSink extends DataSink {
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
+    }
+
+    public void setFlexiblePartialUpdate(boolean flexiblePartialUpdate) {
+        this.flexiblePartialUpdate = flexiblePartialUpdate;
+        // tDataSink is created lazily in init(); the thrift flag is also (re)applied there
+        // so callers may set the flag either before or after init().
+        if (tDataSink != null && tDataSink.getOlap_table_sink() != null) {
+            tDataSink.getOlap_table_sink().setFlexible_partial_update(flexiblePartialUpdate);
+        }
     }
 
     public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
@@ -437,7 +454,8 @@ public class OlapTableSink extends DataSink {
             }
             tSink.setNum_replicas(numReplicas);
             tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true));
+            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true,
+                    flexiblePartialUpdate));
 
             TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
@@ -539,6 +557,14 @@ public class OlapTableSink extends DataSink {
     // passes true.
     public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
                                                      @Nullable Long targetWriteIndexId, boolean emitDistributedExprs) {
+        return createSchema(dbId, table, tupleDescriptor, targetWriteIndexId, emitDistributedExprs, false);
+    }
+
+    // flexiblePartialUpdate: SDCG flexible partial update. Only the write sink (OlapTableSink.complete())
+    // passes the planner's decision; every other caller passes false and gets the pre-SDCG column list.
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
+                                                     @Nullable Long targetWriteIndexId, boolean emitDistributedExprs,
+                                                     boolean flexiblePartialUpdate) {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
@@ -581,6 +607,13 @@ public class OlapTableSink extends DataSink {
             }
 
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                // SDCG flexible partial update: the planner injected a hidden "__cset__" slot
+                // immediately before "__op" and told the sink so via setFlexiblePartialUpdate.
+                // Mirror that ordering here so the BE schema's column list keeps "__op" last
+                // (read positionally as the last column) with "__cset__" right before it.
+                if (flexiblePartialUpdate) {
+                    columns.add(Load.LOAD_CSET_COLUMN);
+                }
                 columns.add(Load.LOAD_OP_COLUMN);
             }
 

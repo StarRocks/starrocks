@@ -18,6 +18,8 @@
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 
+#include <atomic>
+
 #include "base/brpc/reusable_closure.h"
 #include "base/concurrency/bthread_shared_mutex.h"
 #include "base/concurrency/countdown_latch.h"
@@ -238,6 +240,9 @@ private:
     int64_t _index_id = -1;
     int64_t _node_id = -1;
     std::shared_ptr<OlapTableSchemaParam> _schema;
+    // SDCG flexible partial update: set once this channel received the per-load column-set dictionary
+    // on an eos request and took its registry reference (released in the destructor).
+    std::atomic<bool> _cset_dict_retained{false};
     TupleDescriptor* _tuple_desc = nullptr;
 
     std::vector<Sender> _senders;

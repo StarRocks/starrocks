@@ -1100,6 +1100,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否收集 Routine Load Kafka 分区偏移量滞后指标。请注意，将此项设置为 `true` 将调用 Kafka API 以获取分区的最新偏移量。
 - 引入版本: -
 
+### `enable_sparse_dcg`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: [实验性特性] 是否在 FE 侧启用存算分离主键表的稀疏 Delta Column Group（SDCG）部分更新。设置为 `true` 时，Stream Load 接受 `partial_update_mode` 取值 `flexible` 和 `flexible_row`（JSON 格式部分更新中按行的异构列集合），`auto` 会在可行时将 JSON 格式的部分更新升级为按行列集合，涉及 GIN 索引列的部分更新会被强制以行模式执行，未知的 `partial_update_mode` 取值会被拒绝。设置为 `false`（默认）时，上述行为全部关闭，部分更新的行为与引入 SDCG 之前完全一致。同名的 BE 配置项也必须设置为 `true`，稀疏写入路径才会生效。
+- 引入版本: -
+
 ### `enable_sync_publish`
 
 - 默认值: true

@@ -1101,6 +1101,15 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Description: Whether to collect Routine Load Kafka partition offset lag metrics. Please note that set this item to `true` will call the Kafka API to get the partition's latest offset.
 - Introduced in: -
 
+### `enable_sparse_dcg`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Whether to enable the FE side of Sparse Delta Column Group (SDCG) partial updates on shared-data Primary Key tables. When set to `true`, Stream Load accepts the `partial_update_mode` values `flexible` and `flexible_row` (per-row heterogeneous column sets for JSON-formatted partial updates), `auto` upgrades JSON-formatted partial updates to per-row column sets where possible, a partial update that touches a GIN-indexed column is forced to row mode, and an unknown `partial_update_mode` value is rejected. When set to `false` (default), all of these are off and partial updates behave exactly as they did before SDCG was introduced. The BE configuration item of the same name must also be set to `true` for the sparse write path to be used.
+- Introduced in: -
+
 ### `enable_sync_publish`
 
 - Default: true

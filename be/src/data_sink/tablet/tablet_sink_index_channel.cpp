@@ -27,6 +27,7 @@
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
@@ -93,6 +94,26 @@ PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<s
             if (it != _spec.index_id_to_partition_ids->end()) {
                 for (auto pid : it->second) {
                     sub->add_partition_ids(pid);
+                }
+            }
+        }
+        // SDCG flexible partial update: on the eos request, attach the per-load set-id dictionary
+        // (column-NAME sets in set-id order) read from the process-global registry by this index's
+        // txn_id. The dictionary is interned by the JSON scanner in THIS coordinator process, so it
+        // is complete at eos time (eos is the only request sent after the scan ends). It is absent /
+        // empty for non-flexible loads -> no payload, zero overhead. Sending NAMES (not uids) keeps
+        // the remote delta-writer's name->uid translation unchanged. Every NodeChannel's eos carries
+        // this, so every remote tablet-writer CN receives the dict before its writers finish.
+        if (opts.eos) {
+            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(s.txn_id);
+                dict != nullptr && dict->size() > 0) {
+                auto snapshot = dict->snapshot();
+                auto* dict_pb = sub->mutable_column_set_dict();
+                for (const auto& names : snapshot) {
+                    auto* set_pb = dict_pb->add_sets();
+                    for (const auto& name : names) {
+                        set_pb->add_column_names(name);
+                    }
                 }
             }
         }
@@ -242,6 +263,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+    }
+    // SDCG flexible partial update: forward TOlapTableSink.flexible_partial_update to the tablet writer as
+    // the explicit PTabletWriterOpenRequest.flexible_partial_update flag; the writer never infers it from the
+    // slot names. Left unset for non-flexible loads so the request is byte-identical to before.
+    if (_parent->_flexible_partial_update) {
+        request.set_flexible_partial_update(true);
     }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);

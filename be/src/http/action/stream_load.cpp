@@ -57,6 +57,7 @@
 #include "base/url_coding.h"
 #include "base/utility/defer_op.h"
 #include "common/config_ingest_fwd.h"
+#include "common/config_primary_key_fwd.h"
 #include "common/logging.h"
 #include "common/process_exit.h"
 #include "common/system/master_info.h"
@@ -618,13 +619,62 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
     }
     if (!http_req->header(HTTP_PARTIAL_UPDATE_MODE).empty()) {
-        if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "row") {
+        // Exact (case-sensitive) matching for row/auto/column, as before SDCG. Everything SDCG adds
+        // here (the flexible bit on auto, the flexible/flexible_row tokens, rejecting an unknown
+        // token) is gated on config::enable_sparse_dcg. With the gate off this block behaves exactly
+        // as it did before SDCG: the three known tokens map to their modes and any other value
+        // leaves partial_update_mode unset.
+        const std::string& partial_update_mode = http_req->header(HTTP_PARTIAL_UPDATE_MODE);
+        if (partial_update_mode == "row") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "auto") {
+        } else if (partial_update_mode == "auto") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
+            // With SDCG enabled, auto is flexible-aware for a JSON PARTIAL update: set the flexible bit
+            // so FE builds the flexible plan (hidden __cset__ slot + distinct_column_sets), letting BE
+            // derive per-row column sets and cost-select the write mode for heterogeneous inputs too
+            // (homogeneous == a single set). Gate on partial_update: auto is ALSO the default mode for
+            // full upserts, which must NOT get __cset__. Gate on JSON format: flexible partial update is
+            // only supported for json loads (FE rejects it for CSV), so CSV auto+partial stays on the
+            // homogeneous path. With SDCG disabled, auto is passed through unchanged.
+            if (config::enable_sparse_dcg && request.__isset.partial_update && request.partial_update &&
+                request.formatType == TFileFormatType::FORMAT_JSON) {
+                request.__set_flexible_partial_update(true);
+            }
+        } else if (partial_update_mode == "column") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
+        } else if (partial_update_mode == "flexible" || partial_update_mode == "flexible_row") {
+            if (!config::enable_sparse_dcg) {
+                // Neither token existed before SDCG, so rejecting them while the feature is off does
+                // not change the behavior of any pre-existing input.
+                return Status::NotSupported(
+                        fmt::format("partial_update_mode={} requires enable_sparse_dcg (experimental) on FE and BE",
+                                    partial_update_mode));
+            }
+            if (partial_update_mode == "flexible") {
+                // SDCG flexible partial update: per-row heterogeneous column sets. The write path is
+                // column mode; the flexible bit is carried separately so FE builds the flexible plan
+                // (hidden __cset__ slot + distinct_column_sets) instead of a homogeneous union update.
+                request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPDATE_MODE);
+            } else {
+                // FLEXIBLE-on-ROW partial update: per-row heterogeneous column sets applied via ROW
+                // mode (full-row rewrite) instead of COLUMN/SDCG. The flexible bit is DECOUPLED from
+                // the storage mode: it stays true (so FE still injects the hidden __cset__ slot and BE
+                // folds the per-row column-set dictionary into distinct_column_sets), while the storage
+                // mode is ROW_MODE so the lake apply takes the masked full-row rewrite path.
+                request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
+            }
+            request.__set_flexible_partial_update(true);
+        } else if (config::enable_sparse_dcg) {
+            // With SDCG enabled, reject an unknown mode instead of silently falling through. Falling
+            // through would leave partial_update_mode unset AND flexible_partial_update unset, so a
+            // heterogeneous (per-row column set) flexible load sent with a typo would be applied as a
+            // HOMOGENEOUS union partial update and NULL-clobber every column a row did not declare.
+            return Status::InvalidArgument(fmt::format(
+                    "Unknown partial_update_mode: {} (expected one of: row, column, auto, flexible, flexible_row)",
+                    partial_update_mode));
         }
+        // With SDCG disabled an unrecognised value is ignored and partial_update_mode stays unset, as
+        // before SDCG.
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));

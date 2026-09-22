@@ -997,6 +997,124 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：Bytes
 - 是否动态：是
 - 描述：部分更新（partial update）每个工作线程的内存上限，用于限制单个 worker 在处理 partial update 时的内存占用。
+
+### enable_sparse_dcg
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 列模式部分更新（包括 `partial_update_mode` 取值为 `column`、`auto`、`flexible` 时）所使用的稀疏 Delta Column Group（Sparse Delta Column Group，SDCG）写入路径的总开关。仅适用于存算分离（lake）表。默认值为 `false`，此时列模式部分更新始终写入稠密（dense）列文件，行为与引入 SDCG 之前保持一致。设置为 `true` 后，符合条件的部分更新可能改为写入稀疏列文件。同名的 FE 配置项 `enable_sparse_dcg` 也必须设置为 `true`：该特性的 FE 侧部分（`flexible` 和 `flexible_row` 模式、`auto` 升级为按行列集合、对 GIN 索引列强制行模式）只有在两者都开启时才会生效。未知的 `partial_update_mode` 取值：本配置项开启时由 BE 拒绝，同名 FE 配置项开启时由 FE 拒绝；两者都关闭时与之前一样被忽略。
+- 引入版本：-
+
+### sdcg_dense_threshold
+
+- 默认值：0.3
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] SDCG 写入路径的密度阈值。当更新行数与源 Segment 行数之比达到该值时，写入稠密列文件而不是稀疏列文件。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_sparse_max_rows
+
+- 默认值：50000
+- 类型：Int
+- 单位：Rows
+- 是否动态：是
+- 描述：[实验性特性] 单个源 Segment 内走稀疏路径的更新行数上限。达到或超过该值时，即使密度比低于 `sdcg_dense_threshold`，也回退为写入稠密列文件。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_sparse_min_segment_rows
+
+- 默认值：65536
+- 类型：Int
+- 单位：Rows
+- 是否动态：是
+- 描述：[实验性特性] 走稀疏路径所要求的源 Segment 最小行数。行数低于该值的 Segment 始终走稠密路径，因为只有在重写整列代价较高时，稀疏文件的按行开销才划算。`0` 表示关闭该限制。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_promotion_hard_count
+
+- 默认值：256
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 单个 Segment 上稀疏 overlay 链深度的安全上限。链的折叠通常由后台主键表 Compaction 完成；只有当链在此之前先达到该深度时，写入端才会回退为同步的稠密重写。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_compaction_trigger_depth_wide
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 后台 Compaction 折叠宽稀疏链（各层携带宽值列的链）时所用的链深度。该值低于窄链使用的深度（10），因为每一个宽层都会带来明显的读取开销。设置为 `10` 或更大时，宽链按窄链处理。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_read_amp_budget
+
+- 默认值：-1
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 读取单列时最多需要合并的稀疏 overlay 层数。`-1`（默认）按列宽使用各自的默认值（宽列使用 `sdcg_compaction_trigger_depth_wide`，窄列使用默认深度）。`0` 强制走稠密路径，不再写入稀疏 overlay。`N > 0` 允许稀疏 overlay，并在链即将超过 `N` 层时折叠。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_auto_row_width_frac
+
+- 默认值：0.5
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 用于 `partial_update_mode` = `auto`：当一次导入更新的值列占表中值列的比例达到该值时，该导入被路由到行模式而不是列模式。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_auto_row_width_min_cols
+
+- 默认值：8
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 用于 `partial_update_mode` = `auto`：当一次导入更新的值列数达到该值时，该导入被路由到行模式而不是列模式。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_auto_sparse_depth_penalty
+
+- 默认值：0
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 用于 `partial_update_mode` = `auto`：将稀疏写入的估算代价乘以 `(1 + sdcg_auto_sparse_depth_penalty * chain_depth)`，使代价模型随着 overlay 链加深而倾向于稠密路径。`0`（默认）表示关闭该惩罚。仅在 `enable_sparse_dcg` 为 `true` 时生效。
+- 引入版本：-
+
+### sdcg_promotion_threshold
+
+- 默认值：0.3
+- 类型：Double
+- 单位：-
+- 是否动态：是
+- 描述：[已弃用] 旧的原地提升阈值，以源 Segment 行数的比例表示。它不再影响写入路径，仅为配置兼容而保留；稀疏链由后台 Compaction 折叠。
+- 引入版本：-
+
+### sdcg_enable_per_column_zone_map
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 细化带有 Delta Column Group 的 Segment 的 Segment 级 Zone Map 剪枝。默认值为 `false`，此时 Segment 上只要存在任意 Delta Column Group，就会对其所有非主键列关闭 Segment 级 Zone Map 剪枝（历史行为）。设置为 `true` 时，未出现在该 Segment 任何 Delta Column Group 中的列仍保留 Segment 级剪枝。该配置项独立于 `enable_sparse_dcg`：它同样作用于列模式部分更新只写过稠密列文件的表，因此默认保持 `false` 以保留历史剪枝行为。
+- 引入版本：-
+
+### enable_sdcg_compaction_conflict_replay
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：[实验性特性] 允许 Lake 主键表 Compaction 在执行过程中，将与之竞争的稀疏列组（sparse column group）重放（replay）到 Compaction 输出中，而不是直接丢弃这些变更。依赖 `enable_sparse_dcg` 为 `true`，否则不生效。
+- 引入版本：-
+
 ### enable_load_spill_parallel_merge
 
 - 默认值：true

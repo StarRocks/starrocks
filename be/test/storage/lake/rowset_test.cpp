@@ -2002,10 +2002,28 @@ TEST_F(LakeRowsetTest, test_zero_row_segment_positional_iterator_contracts) {
     ASSERT_NE(delvec_iters[1], nullptr);
     EXPECT_EQ(count_rows_from_iters({delvec_iters[1]}), keys.size());
 
+    // The schema-bound overload (SDCG reads the reserved-uid __cset__ column through it) follows the
+    // plain-read contract: the zero-row segment's slot is a non-null EMPTY iterator, not the EndOfFile
+    // hole callers take to mean "this tablet owns no rows of the segment". The sibling segment still
+    // yields its rows through the shared tablet range.
+    ASSIGN_OR_ABORT(auto schema_iters,
+                    rowset->get_each_segment_iterator_with_schema(input_schema, _tablet_schema, false, &stats));
+    ASSERT_EQ(schema_iters.size(), 2);
+    ASSERT_NE(schema_iters[0], nullptr);
+    ASSERT_NE(schema_iters[1], nullptr);
+    ASSERT_OK(schema_iters[0]->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS));
+    ASSERT_OK(schema_iters[0]->init_output_schema(std::unordered_set<uint32_t>()));
+    auto schema_empty_result = ChunkFactory::new_chunk(schema_iters[0]->schema(), 1024);
+    EXPECT_TRUE(schema_iters[0]->get_next(schema_empty_result.get()).is_end_of_file());
+    EXPECT_EQ(count_rows_from_iters({schema_iters[1]}), keys.size());
+
     for (auto& iter : plain_iters) {
         iter->close();
     }
     delvec_iters[1]->close();
+    for (auto& iter : schema_iters) {
+        iter->close();
+    }
 }
 
 // Test class for segment metadata filter and parallel load with skip_segment_idxs

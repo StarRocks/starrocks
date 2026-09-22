@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -61,6 +62,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -375,5 +377,129 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
 
         assertNotEquals(params1.hashCode(), params3.hashCode());
         assertNotEquals(params1, params3);
+    }
+    // SDCG (Config.enable_sparse_dcg = true): partial_update_mode "flexible" -> COLUMN mode + flexible bit;
+    // "flexible_row" -> ROW mode + flexible bit; "auto" (partial + json) is flexible-aware; an unknown mode
+    // is rejected.
+    @Test
+    public void testFlexiblePartialUpdateMode() {
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            Map<String, String> m = new HashMap<>();
+            m.put(HTTP_PARTIAL_UPDATE, "true");
+            m.put(HTTP_FORMAT, "json");
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible");
+            StreamLoadKvParams flex = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.COLUMN_UPDATE_MODE, flex.getPartialUpdateMode().orElse(null));
+            assertTrue(flex.isFlexiblePartialUpdate().orElse(false));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible_row");
+            StreamLoadKvParams flexRow = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.ROW_MODE, flexRow.getPartialUpdateMode().orElse(null));
+            assertTrue(flexRow.isFlexiblePartialUpdate().orElse(false));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "auto");
+            StreamLoadKvParams auto = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.AUTO_MODE, auto.getPartialUpdateMode().orElse(null));
+            assertTrue(auto.isFlexiblePartialUpdate().orElse(false));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "bogus");
+            StreamLoadKvParams bad = new StreamLoadKvParams(m);
+            assertThrows(RuntimeException.class, bad::getPartialUpdateMode);
+            assertFalse(bad.isFlexiblePartialUpdate().orElse(true));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
+    }
+
+    // Default (Config.enable_sparse_dcg = false): every pre-existing input behaves exactly as before SDCG.
+    // "auto" + json + partial_update is NOT upgraded to flexible, matching is EXACT (case-sensitive) so a
+    // miscased token is ignored like any unknown token (Optional.empty(), no exception), and the new
+    // "flexible" / "flexible_row" tokens are rejected with a message naming the config.
+    @Test
+    public void testPartialUpdateModeWithSparseDcgDisabled() {
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = false;
+        try {
+            Map<String, String> m = new HashMap<>();
+            m.put(HTTP_PARTIAL_UPDATE, "true");
+            m.put(HTTP_FORMAT, "json");
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "auto");
+            StreamLoadKvParams auto = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.AUTO_MODE, auto.getPartialUpdateMode().orElse(null));
+            assertFalse(auto.isFlexiblePartialUpdate().orElse(true));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "column");
+            StreamLoadKvParams column = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE, column.getPartialUpdateMode().orElse(null));
+            assertFalse(column.isFlexiblePartialUpdate().orElse(true));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "row");
+            StreamLoadKvParams row = new StreamLoadKvParams(m);
+            assertEquals(TPartialUpdateMode.ROW_MODE, row.getPartialUpdateMode().orElse(null));
+            assertFalse(row.isFlexiblePartialUpdate().orElse(true));
+
+            // Exact matching: a miscased token is an unknown token.
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "Column");
+            assertFalse(new StreamLoadKvParams(m).getPartialUpdateMode().isPresent());
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "COLUMN");
+            assertFalse(new StreamLoadKvParams(m).getPartialUpdateMode().isPresent());
+
+            // Unknown token: silently ignored (the load falls back to the default mode), no exception.
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "bogus");
+            StreamLoadKvParams bad = new StreamLoadKvParams(m);
+            assertFalse(bad.getPartialUpdateMode().isPresent());
+            assertFalse(bad.isFlexiblePartialUpdate().orElse(true));
+
+            // The SDCG tokens never existed before the feature: rejected with a clear message.
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible");
+            RuntimeException e = assertThrows(RuntimeException.class,
+                    () -> new StreamLoadKvParams(m).getPartialUpdateMode());
+            assertTrue(e.getMessage().contains("enable_sparse_dcg"), e.getMessage());
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "flexible_row");
+            e = assertThrows(RuntimeException.class, () -> new StreamLoadKvParams(m).getPartialUpdateMode());
+            assertTrue(e.getMessage().contains("enable_sparse_dcg"), e.getMessage());
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
+    }
+
+    // Matching stays EXACT with the feature on as well: a miscased SDCG token is an unknown token, and
+    // with the feature on unknown tokens are rejected rather than ignored. The mode and the flexible bit
+    // agree on every input.
+    @Test
+    public void testPartialUpdateModeIsCaseSensitiveWithSparseDcgEnabled() {
+        boolean saved = Config.enable_sparse_dcg;
+        Config.enable_sparse_dcg = true;
+        try {
+            Map<String, String> m = new HashMap<>();
+            m.put(HTTP_PARTIAL_UPDATE, "true");
+            m.put(HTTP_FORMAT, "json");
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "Flexible");
+            StreamLoadKvParams flex = new StreamLoadKvParams(m);
+            assertThrows(RuntimeException.class, flex::getPartialUpdateMode);
+            assertFalse(flex.isFlexiblePartialUpdate().orElse(true));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "AUTO");
+            StreamLoadKvParams auto = new StreamLoadKvParams(m);
+            assertThrows(RuntimeException.class, auto::getPartialUpdateMode);
+            assertFalse(auto.isFlexiblePartialUpdate().orElse(true));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "Column");
+            StreamLoadKvParams column = new StreamLoadKvParams(m);
+            assertThrows(RuntimeException.class, column::getPartialUpdateMode);
+            assertFalse(column.isFlexiblePartialUpdate().orElse(true));
+
+            m.put(HTTP_PARTIAL_UPDATE_MODE, "FlexibleX");
+            StreamLoadKvParams bad = new StreamLoadKvParams(m);
+            assertThrows(RuntimeException.class, bad::getPartialUpdateMode);
+            assertFalse(bad.isFlexiblePartialUpdate().orElse(true));
+        } finally {
+            Config.enable_sparse_dcg = saved;
+        }
     }
 }

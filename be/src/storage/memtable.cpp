@@ -62,6 +62,14 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
             column_idxes.push_back(i);
         }
         Schema schema = Schema(tablet_schema->schema(), column_idxes, tablet_schema->schema()->sort_key_idxes());
+        // SDCG flexible partial update: the delta writer appends a synthetic "__cset__"
+        // SMALLINT column (carrying the per-row set-id) to the PARTIAL tablet schema so it
+        // survives into the .upt. Because that column is already part of `tablet_schema`
+        // here, it is ALREADY in `schema` above (as the column just before "__op" would be
+        // appended) -- so it must NOT be appended again here. (Unlike "__cset__", "__op" is
+        // never a tablet column, so it is always appended below.) The resulting field order
+        // [keys..., values..., __cset__, __op] matches the chunk arriving from the sink, and
+        // "__op" stays last so _split_upserts_deletes still strips exactly the op column.
         if (slot_descs != nullptr && slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
             // load slots have __op field, so add to _vectorized_schema
             auto op_column =
