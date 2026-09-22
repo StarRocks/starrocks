@@ -97,7 +97,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _txn_id = table_sink.txn_id;
     _sink_id = t_sink.__isset.sink_id ? t_sink.sink_id : 0;
     _txn_trace_parent = table_sink.txn_trace_parent;
-    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
@@ -185,6 +184,8 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         }
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
     }
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
+    _is_initialized = true;
     return Status::OK();
 }
 
@@ -400,6 +401,10 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
 }
 
 Status OlapTableSink::open(RuntimeState* state) {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
+
     auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_ts_profile->open_timer);
@@ -410,18 +415,30 @@ Status OlapTableSink::open(RuntimeState* state) {
 }
 
 Status OlapTableSink::try_open(RuntimeState* state) {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
     return _tablet_sink_sender->try_open(state);
 }
 
 bool OlapTableSink::is_open_done() {
+    if (!_is_initialized) {
+        return true;
+    }
     return _tablet_sink_sender->is_open_done();
 }
 
 Status OlapTableSink::open_wait() {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
     return _tablet_sink_sender->open_wait();
 }
 
 bool OlapTableSink::is_full() {
+    if (!_is_initialized) {
+        return false;
+    }
     return _is_automatic_partition_running.load(std::memory_order_acquire) || _tablet_sink_sender->is_full();
 }
 
@@ -853,14 +870,18 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 }
 
 bool OlapTableSink::is_close_done() {
-    if (_tablet_sink_sender == nullptr) {
+    if (!_is_initialized || _tablet_sink_sender == nullptr) {
         return true;
     }
     return _tablet_sink_sender->is_close_done();
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {
-    if (close_status.ok()) {
+    if (!_is_initialized) {
+        return close_wait(state, close_status);
+    }
+
+    if (close_status.ok() && _profile != nullptr && _ts_profile != nullptr && _tablet_sink_sender != nullptr) {
         SCOPED_TIMER(_profile->total_time_counter());
         SCOPED_TIMER(_ts_profile->close_timer);
         do {
@@ -879,18 +900,28 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     }
     _close_wait_done = true;
 
+    if (!_is_initialized) {
+        _close_wait_status = close_status;
+        return close_status;
+    }
+
     DeferOp end_span([&] { _span->End(); });
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);
     _span->SetAttribute("output_rows", _number_output_rows);
 
-    COUNTER_SET(_ts_profile->input_rows_counter, _number_input_rows);
-    COUNTER_SET(_ts_profile->output_rows_counter, _number_output_rows);
-    COUNTER_SET(_ts_profile->filtered_rows_counter, _number_filtered_rows);
-    COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
-    COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
+    if (_ts_profile != nullptr) {
+        COUNTER_SET(_ts_profile->input_rows_counter, _number_input_rows);
+        COUNTER_SET(_ts_profile->output_rows_counter, _number_output_rows);
+        COUNTER_SET(_ts_profile->filtered_rows_counter, _number_filtered_rows);
+        COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
+        COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
+    }
 
-    if (_tablet_sink_sender == nullptr) {
+    if (_tablet_sink_sender == nullptr || _ts_profile == nullptr) {
+        if (!close_status.ok()) {
+            _span->SetStatus(trace::StatusCode::kError, std::string(close_status.message()));
+        }
         _close_wait_status = close_status;
         return close_status;
     }

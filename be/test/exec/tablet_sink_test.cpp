@@ -306,6 +306,74 @@ TEST_F(TabletSinkTest, test_close_wait_twice_after_cancel) {
 #endif
 }
 
+TEST_F(TabletSinkTest, test_close_skipped_after_init_failure) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    auto& indexes = _data_sink.olap_table_sink.schema.indexes;
+    indexes.push_back(indexes.front());
+    indexes.back().id = 1;
+
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    Status init_status = sink->init(_data_sink, runtime_state.get());
+    ASSERT_ERROR(init_status);
+    ASSERT_FALSE(sink->_is_initialized);
+    ASSERT_EQ(nullptr, sink->_span);
+    ASSERT_EQ(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+    ASSERT_OK(sink->open(runtime_state.get()));
+    ASSERT_OK(sink->try_open(runtime_state.get()));
+    ASSERT_TRUE(sink->is_open_done());
+    ASSERT_OK(sink->open_wait());
+    ASSERT_FALSE(sink->is_full());
+    ASSERT_OK(sink->try_close(runtime_state.get()));
+    ASSERT_TRUE(sink->is_close_done());
+    EXPECT_STATUS(init_status, sink->close_wait(runtime_state.get(), init_status));
+    EXPECT_STATUS(init_status, sink->close_wait(runtime_state.get(), Status::OK()));
+    EXPECT_STATUS(init_status, sink->close(runtime_state.get(), init_status));
+}
+
+TEST_F(TabletSinkTest, test_close_before_prepare) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_TRUE(sink->_is_initialized);
+    ASSERT_NE(nullptr, sink->_span);
+    ASSERT_EQ(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+
+    Status close_status = Status::InternalError("prepare failed");
+    ASSERT_OK(sink->try_close(runtime_state.get()));
+    ASSERT_TRUE(sink->is_close_done());
+    EXPECT_STATUS(close_status, sink->close_wait(runtime_state.get(), close_status));
+    EXPECT_STATUS(close_status, sink->close_wait(runtime_state.get(), Status::OK()));
+    EXPECT_STATUS(close_status, sink->close(runtime_state.get(), close_status));
+}
+
+TEST_F(TabletSinkTest, test_close_after_prepare_failure) {
+    std::unique_ptr<RuntimeState> runtime_state = _build_runtime_state();
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    _data_sink.olap_table_sink.tuple_id = 999;
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    Status prepare_status = sink->prepare(runtime_state.get());
+    ASSERT_ERROR(prepare_status);
+    ASSERT_NE(nullptr, sink->_span);
+    ASSERT_NE(nullptr, sink->profile());
+    ASSERT_NE(nullptr, sink->ts_profile());
+    ASSERT_EQ(nullptr, sink->_tablet_sink_sender);
+
+    EXPECT_STATUS(prepare_status, sink->close_wait(runtime_state.get(), prepare_status));
+    EXPECT_STATUS(prepare_status, sink->close_wait(runtime_state.get(), Status::OK()));
+}
+
 TEST_F(TabletSinkTest, test_decimalv3_error_log) {
     _test_error_log(
             TYPE_DECIMAL64, 2, 2, 1,
