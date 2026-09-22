@@ -68,6 +68,9 @@
         <httpcore5.version>5.4.3</httpcore5.version>
         <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
+
+        <!-- Empty unless the jdk-allow-security-manager profile below activates it. -->
+        <security.manager.arg></security.manager.arg>
     </properties>
 
     <profiles>
@@ -138,6 +141,23 @@
                     <url>https://repository.cloudera.com/repository/public/</url>
                 </pluginRepository>
             </pluginRepositories>
+        </profile>
+
+        <!-- UDFClassLoader installs a UDFSecurityManager when java.security.policy is set,
+             and SecurityTest installs one directly. JDK 18+ (JEP 411) rejects
+             System.setSecurityManager unless the JVM is started with
+             -Djava.security.manager=allow, so the test JVM needs the flag to exercise that
+             path. The range is bounded on both ends on purpose: the flag is a no-op on
+             JDK 17, and JDK 24+ (JEP 486) makes the launcher reject any value other than
+             'disallow', which would stop the test JVM from starting at all. -->
+        <profile>
+            <id>jdk-allow-security-manager</id>
+            <activation>
+                <jdk>[18,24)</jdk>
+            </activation>
+            <properties>
+                <security.manager.arg>-Djava.security.manager=allow</security.manager.arg>
+            </properties>
         </profile>
     </profiles>
 
