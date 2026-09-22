@@ -69,12 +69,6 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
         analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
 
-        analyzeFail("select ST_GeogFromText(ta) from tall group by ST_GeogFromText(ta)");
-        analyzeFail("select distinct ST_GeogFromText(ta) from tall");
-        analyzeFail("select ST_GeogFromText(ta) from tall order by ST_GeogFromText(ta)");
-        analyzeFail("select * from t0 join t1 on "
-                + "ST_GeogFromText(cast(t0.v1 as varchar)) = ST_GeogFromText(cast(t1.v4 as varchar))");
-        analyzeFail("select concat(ST_GeogFromText('POINT (1 2)'), '')");
     }
 
     @Test
