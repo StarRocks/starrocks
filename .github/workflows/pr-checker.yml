@@ -319,3 +319,45 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true) && source lib/init.sh
           ./bin/check-pr-changelist.sh
 
+
+  # Both jobs only wire env and call a script: every rule, exemption and message lives in
+  # ci-tool (docs/workflow/jira-pr-linkage-design.md), so tuning them needs no PR here.
+  #
+  # PR_TITLE is attacker-controlled under pull_request_target and is passed through env,
+  # never interpolated into the shell -- same shape as `check backport pr's title` above.
+  #
+  # Each script exits 0 when its own switch is off, rather than being gated by a job-level
+  # `if:`. A job skipped by `if:` produces no check-run, so if this is ever made a required
+  # check, GitHub would read it as permanently pending and block every PR.
+  jira-check:
+    runs-on: [self-hosted, light]
+    env:
+      JIRA_CHECK_MODE: ${{ vars.JIRA_CHECK_MODE }}
+      JIRA_SERVER: ${{ vars.JIRA_SERVER }}
+      JIRA_USERNAME: ${{ vars.JIRA_USERNAME }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+    steps:
+      - name: Check Jira Issue
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/check-pr-jira.py
+
+  jira-link:
+    runs-on: [self-hosted, light]
+    env:
+      JIRA_LINK_ENABLED: ${{ vars.JIRA_LINK_ENABLED }}
+      JIRA_SERVER: ${{ vars.JIRA_SERVER }}
+      JIRA_USERNAME: ${{ vars.JIRA_USERNAME }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      REPO: ${{ github.repository }}
+      PR_NUMBER: ${{ github.event.number }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+    steps:
+      - name: Link PR to Jira
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/link-pr-to-jira.py
