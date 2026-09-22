@@ -3721,6 +3721,9 @@ public class Config extends ConfigBase {
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
 
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
+
     // gcp gs
     @ConfField
     public static String gcp_gcs_endpoint = "";
@@ -3988,6 +3991,18 @@ public class Config extends ConfigBase {
                     "placed for the sample to be representative, so the scheduler discards it and " +
                     "falls back to a full scan. Lower is more conservative. Default: 40")
     public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
+    @ConfField(mutable = true, comment =
+            "Whether StarMgr journals a replica-only shard change as a replica delta instead of a full " +
+                    "shard snapshot. Enable only once every FE in the cluster runs a build that carries " +
+                    "this item, otherwise an older FE silently skips all replica updates. Default: false")
+    public static boolean lake_enable_incremental_shard_replica_journal = false;
+
+    @ConfField(mutable = false, comment =
+            "Whether StarMgr maintains a compute node -> shards reverse index, so that per-node shard " +
+                    "lookups cost the node's own fan-out instead of a full shard-map scan. Read once at " +
+                    "FE startup. Default: false")
+    public static boolean lake_enable_worker_shard_reverse_index = false;
 
     @ConfField(mutable = true, comment =
             "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +

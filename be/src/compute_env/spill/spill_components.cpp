@@ -23,6 +23,7 @@
 #include <random>
 
 #include "base/bit/bit_util.h"
+#include "base/failpoint/fail_point.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
@@ -42,6 +43,9 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
+
+DEFINE_FAIL_POINT(spill_split_partition_error);
+DEFINE_FAIL_POINT(spill_split_yield_after_error);
 // implements for SpillerWriter
 Status SpillerWriter::_decrease_running_flush_tasks() {
     if (_running_flush_tasks.fetch_sub(1) == 1) {
@@ -574,8 +578,19 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
 
         auto st = _split_partition(yield_ctx, context, flush_ctx.reader.get(), partition, flush_ctx.left.get(),
                                    flush_ctx.right.get());
-        RETURN_IF_YIELD(yield_ctx.need_yield);
+        FAIL_POINT_TRIGGER_EXECUTE(spill_split_yield_after_error, {
+            // Stand in for the IO task's time slice expiring right here (5ms preemptive, 100ms
+            // hard), which a large partition being split under load hits routinely.
+            if (!st.is_ok_or_eof()) {
+                yield_ctx.need_yield = true;
+            }
+        });
+        // Surface a failed split before the yield check. _split_partition flushes whatever the
+        // two halves already hold on its way out, so on the next resumption their mem tables are
+        // `done()` and it reports success -- returning OK here just because the task happens to
+        // yield loses the error for good and lets the query read back a half-written partition.
         RETURN_IF(!st.is_ok_or_eof(), st);
+        RETURN_IF_YIELD(yield_ctx.need_yield);
         DCHECK_EQ(flush_ctx.reader.get()->read_rows(), partition->num_rows);
         TRACE_SPILL_LOG << "reader:" << flush_ctx.reader.get() << " read rows:" << flush_ctx.reader->read_rows();
         DCHECK_EQ(flush_ctx.left->num_rows + flush_ctx.right->num_rows, partition->num_rows);
@@ -846,14 +861,20 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
 #endif
 
                 if (left_channel_size > 0) {
-                    left_partition->num_rows += left_channel_size;
                     RETURN_IF_ERROR(left_mem_table->append_selective(*chunk, selection.data(), 0, left_channel_size));
+                    left_partition->num_rows += left_channel_size;
                 }
                 if (hash_data.size() != left_channel_size) {
-                    right_partition->num_rows += hash_data.size() - left_channel_size;
                     RETURN_IF_ERROR(right_mem_table->append_selective(*chunk, selection.data(), left_channel_size,
                                                                       hash_data.size() - left_channel_size));
+                    right_partition->num_rows += hash_data.size() - left_channel_size;
                 }
+
+                // Fail a split that has already moved part of the partition into the two halves, so
+                // the DeferOp below flushes them and marks their mem tables done().
+                FAIL_POINT_TRIGGER_EXECUTE(spill_split_partition_error, {
+                    return Status::MemoryLimitExceeded("inject spill_split_partition_error");
+                });
             }
             BREAK_IF_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         }

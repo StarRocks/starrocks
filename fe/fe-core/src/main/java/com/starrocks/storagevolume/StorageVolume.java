@@ -20,6 +20,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.staros.proto.ADLS2CredentialInfo;
+import com.staros.proto.ADLS2CredentialType;
 import com.staros.proto.ADLS2FileStoreInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
@@ -451,12 +452,22 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 if (!Strings.isNullOrEmpty(clientId)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_ID, clientId);
                 }
-                if (!Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId)) {
-                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
-                }
                 String clientSecret = adls2credentialInfo.getClientSecret();
                 if (!Strings.isNullOrEmpty(clientSecret)) {
                     params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, clientSecret);
+                }
+                String tokenFile = adls2credentialInfo.getOauth2TokenFile();
+                if (!Strings.isNullOrEmpty(tokenFile)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_TOKEN_FILE, tokenFile);
+                }
+                ADLS2CredentialType credentialType = adls2credentialInfo.getCredentialType();
+                // Older file stores do not record the credential type. Infer MSI only when no other credential exists.
+                boolean legacyManagedIdentity = credentialType == ADLS2CredentialType.ADLS2_CREDENTIAL_UNSPECIFIED &&
+                        !Strings.isNullOrEmpty(tenantId) && !Strings.isNullOrEmpty(clientId) &&
+                        Strings.isNullOrEmpty(sharedKey) && Strings.isNullOrEmpty(sasToken) &&
+                        Strings.isNullOrEmpty(clientSecret) && Strings.isNullOrEmpty(tokenFile);
+                if (credentialType == ADLS2CredentialType.ADLS2_CREDENTIAL_MANAGED_IDENTITY || legacyManagedIdentity) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_USE_MANAGED_IDENTITY, "true");
                 }
                 String clientEndpoint = adls2credentialInfo.getAuthorityHost();
                 if (!Strings.isNullOrEmpty(clientEndpoint)) {
