@@ -15,79 +15,143 @@
 package com.starrocks.paimon.reader;
 
 import com.starrocks.jni.connector.OffHeapTable;
-import org.junit.jupiter.api.Disabled;
+import com.starrocks.utils.Platform;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.CatalogContext;
+import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.catalog.Identifier;
+import org.apache.paimon.data.BinaryString;
+import org.apache.paimon.data.GenericRow;
+import org.apache.paimon.globalindex.IndexedSplit;
+import org.apache.paimon.options.Options;
+import org.apache.paimon.schema.Schema;
+import org.apache.paimon.table.Table;
+import org.apache.paimon.table.sink.BatchTableCommit;
+import org.apache.paimon.table.sink.BatchTableWrite;
+import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.Split;
+import org.apache.paimon.types.DataTypes;
+import org.apache.paimon.utils.InstantiationUtil;
+import org.apache.paimon.utils.Range;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
-import java.net.URL;
+import java.nio.file.Path;
+import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class TestPaimonSplitScanner {
 
-    @Disabled("Unusable ut, because of lack native_table parameter")
+    @TempDir
+    Path tempDir;
+
+    @BeforeEach
+    public void setUp() {
+        System.setProperty(Platform.UT_KEY, Boolean.TRUE.toString());
+    }
+
+    @AfterEach
+    public void tearDown() {
+        System.setProperty(Platform.UT_KEY, Boolean.FALSE.toString());
+    }
+
     @Test
-    public void runScan() throws IOException {
-        String catalogType = "filesystem";
-        String metastoreUri = "";
-        URL resource = TestPaimonSplitScanner.class.getResource("/test_paimon_reader");
-        String warehousePath = resource.getPath().toString();
-        String databaseName = "paimon_test";
-        String tableName = "spark_sql_created_hive_catalog_paimon_partitioned";
-        String splitInfo = "rO0ABXNyAChvcmcuYXBhY2hlLnBhaW1vbi50YWJsZS5zb3VyY2UuRGF0YVNwbGl0AAAAAAAAAAIDAAZJAAZi" +
-                "dWNrZXRaAA1pc0luY3JlbWVudGFsWgAOcmV2ZXJzZVJvd0tpbmRKAApzbmFwc2hvdElkTAAFZmlsZXN0ABBMamF2YS91" +
-                "dGlsL0xpc3Q7TAAJcGFydGl0aW9udAAiTG9yZy9hcGFjaGUvcGFpbW9uL2RhdGEvQmluYXJ5Um93O3hwegAAAfYA" +
-                "AAAAAAAAAQAAABQAAAABAAAAAAAAAABiYW5hbmEAhgAAAAAAAAABAAAByAAAAAAAAAAALwAAAHAAAACtAgAAAAAA" +
-                "AAEAAAAAAAAAFAAAAKAAAAAUAAAAuAAAAGAAAADQAAAAkAAAADABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" +
-                "AAAAAAAAAgAAADAAQAAMz37eogBAABkYXRhLTA3ZWE4ZDQ4LTYwMTItNGE3Ni1hNTY0LWM0MjI5OTUxODlmMi0wLm9yY" +
-                "wAAAAABAAAAAAAAAAACAAAAAAAAAAAAAAAAAAABAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAABQAAAAgAAAAFAAAA" +
-                "DgAAAAQAAAAUAAAAAAAAAEAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAIAAAAAAAAAAAAAAAEAAAAAAAAAA" +
-                "AAAAAAAAAAAAAAAAAAAACQAAAAgAAAAJAAAAEgAAAAgAAAAcAAAAAAAAAMAAAAAAAAAAAIAAAAAAAAAYmFuYW5hAIYAA" +
-                "AAAAAAQQAAAAAAAAAADAAAAAAAAAAACAAAAAAAAAGJhbmFuYQCGAAAAAAAAEEAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAA" +
-                "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAeA";
-        String requiredFields = "uuid,name,price";
-        String predicateInfo = "rO0ABXNyABNqYXZhLnV0aWwuQXJyYXlMaXN0eIHSHZnHYZ0DAAFJAARzaXpleHAAAAABdwQAAA" +
-                "ABc3IALW9yZy5hcGFjaGUucGFpbW9uLnByZWRpY2F0ZS5Db21wb3VuZFByZWRpY2F0ZdA0yrPnfJptAgACTAAIY2hp" +
-                "bGRyZW50ABBMamF2YS91dGlsL0xpc3Q7TAAIZnVuY3Rpb250ADhMb3JnL2FwYWNoZS9wYWltb24vcHJlZGljYXRlL0" +
-                "NvbXBvdW5kUHJlZGljYXRlJEZ1bmN0aW9uO3hwc3IAGmphdmEudXRpbC5BcnJheXMkQXJyYXlMaXN02aQ8vs2IBtIC" +
-                "AAFbAAFhdAATW0xqYXZhL2xhbmcvT2JqZWN0O3hwdXIAKFtMb3JnLmFwYWNoZS5wYWltb24ucHJlZGljYXRlLlByZW" +
-                "RpY2F0ZTtOH6coIOoYtAIAAHhwAAAAAnNyAClvcmcuYXBhY2hlLnBhaW1vbi5wcmVkaWNhdGUuTGVhZlByZWRpY2F0" +
-                "ZQAAAAAAAAABAwAESQAKZmllbGRJbmRleEwACWZpZWxkTmFtZXQAEkxqYXZhL2xhbmcvU3RyaW5nO0wACGZ1bmN0aW" +
-                "9udAAqTG9yZy9hcGFjaGUvcGFpbW9uL3ByZWRpY2F0ZS9MZWFmRnVuY3Rpb247TAAEdHlwZXQAIkxvcmcvYXBhY2hl" +
-                "L3BhaW1vbi90eXBlcy9EYXRhVHlwZTt4cAAAAAB0AAR1dWlkc3IAIW9yZy5hcGFjaGUucGFpbW9uLnByZWRpY2F0ZS" +
-                "5FcXVhbD4tGe7tAZAFAgAAeHIAN29yZy5hcGFjaGUucGFpbW9uLnByZWRpY2F0ZS5OdWxsRmFsc2VMZWFmQmluYXJ5" +
-                "RnVuY3Rpb24AAAAAAAAAAQIAAHhyAChvcmcuYXBhY2hlLnBhaW1vbi5wcmVkaWNhdGUuTGVhZkZ1bmN0aW9ur57J5Q" +
-                "A5OS4CAAB4cHNyAB9vcmcuYXBhY2hlLnBhaW1vbi50eXBlcy5JbnRUeXBlAAAAAAAAAAECAAB4cgAgb3JnLmFwYWNo" +
-                "ZS5wYWltb24udHlwZXMuRGF0YVR5cGUAAAAAAAAAAQIAAloACmlzTnVsbGFibGVMAAh0eXBlUm9vdHQAJkxvcmcvYX" +
-                "BhY2hlL3BhaW1vbi90eXBlcy9EYXRhVHlwZVJvb3Q7eHAAfnIAJG9yZy5hcGFjaGUucGFpbW9uLnR5cGVzLkRhdGFU" +
-                "eXBlUm9vdAAAAAAAAAAAEgAAeHIADmphdmEubGFuZy5FbnVtAAAAAAAAAAASAAB4cHQAB0lOVEVHRVJ3CQAAAAEAAA" +
-                "AAAXhzcQB-AAsAAAAAcQB-ABBxAH4AFHEAfgAYdwkAAAABAAAAAAJ4c3IAHm9yZy5hcGFjaGUucGFpbW9uLnByZWRp" +
-                "Y2F0ZS5PcgAAAAAAAAABAgAAeHIANm9yZy5hcGFjaGUucGFpbW9uLnByZWRpY2F0ZS5Db21wb3VuZFByZWRpY2F0ZS" +
-                "RGdW5jdGlvbsmt9tbpUzseAgAAeHB4";
+    public void testScanSerializedPaimonTableAndSplit() throws Exception {
+        Options options = new Options();
+        options.set("warehouse", tempDir.toUri().toString());
 
-        int fetchSize = 4096;
+        Identifier tableId = Identifier.create("paimon_test", "scanner_test");
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options))) {
+            catalog.createDatabase(tableId.getDatabaseName(), true);
+            Schema schema = Schema.newBuilder()
+                    .column("id", DataTypes.INT())
+                    .column("payload", DataTypes.STRING())
+                    .primaryKey("id")
+                    .option("bucket", "1")
+                    .build();
+            catalog.createTable(tableId, schema, false);
 
-        HashMap<String, String> params = new HashMap<>(10);
-        params.put("catalog_type", catalogType);
-        params.put("metastore_uri", metastoreUri);
-        params.put("warehouse_path", warehousePath);
-        params.put("database_name", databaseName);
-        params.put("table_name", tableName);
-        params.put("required_fields", requiredFields);
-        params.put("split_info", splitInfo);
-        params.put("predicate_info", predicateInfo);
-
-        PaimonSplitScanner scanner = new PaimonSplitScanner(fetchSize, params);
-        scanner.open();
-        while (true) {
-            scanner.getNextOffHeapChunk();
-            OffHeapTable table = scanner.getOffHeapTable();
-            if (table.getNumRows() == 0) {
-                break;
+            Table table = catalog.getTable(tableId);
+            BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder();
+            try (BatchTableWrite write = writeBuilder.newWrite()) {
+                write.write(GenericRow.of(1, BinaryString.fromString("paimon-2.0-reader")));
+                write.write(GenericRow.of(2, BinaryString.fromString("off-heap-round-trip")));
+                try (BatchTableCommit commit = writeBuilder.newCommit()) {
+                    commit.commit(write.prepareCommit());
+                }
             }
-            table.show(10);
-            table.checkTableMeta(true);
-            table.close();
+
+            List<Split> splits = table.newReadBuilder().newScan().plan().splits();
+            Assertions.assertEquals(1, splits.size());
+
+            ScanResult fullScan = scan(table, splits.get(0));
+            Assertions.assertEquals(2, fullScan.totalRows);
+            Assertions.assertTrue(fullScan.rows.contains("id:1,payload:paimon-2.0-reader"));
+            Assertions.assertTrue(fullScan.rows.contains("id:2,payload:off-heap-round-trip"));
+
+            DataSplit dataSplit = (DataSplit) splits.get(0);
+            Assertions.assertEquals(1, dataSplit.dataFiles().size());
+            IndexedSplit indexedSplit = new IndexedSplit(dataSplit, List.of(new Range(0L, 0L)), null);
+            ScanResult indexedScan = scan(table, indexedSplit);
+            Assertions.assertEquals(1, indexedScan.totalRows);
+            Assertions.assertTrue(indexedScan.rows.contains("id:1,payload:paimon-2.0-reader"));
+            Assertions.assertFalse(indexedScan.rows.contains("id:2,payload:off-heap-round-trip"));
         }
-        scanner.close();
+    }
+
+    private static ScanResult scan(Table table, Split split) throws Exception {
+        Map<String, String> params = new HashMap<>();
+        params.put("native_table", encode(table));
+        params.put("split_info", encode(split));
+        params.put("predicate_info", encode(Collections.emptyList()));
+        params.put("required_fields", "id,payload");
+        params.put("nested_fields", "");
+        params.put("time_zone", "UTC");
+
+        PaimonSplitScanner scanner = new PaimonSplitScanner(1, params);
+        int totalRows = 0;
+        StringBuilder rows = new StringBuilder();
+        try {
+            scanner.open();
+            while (true) {
+                scanner.getNextOffHeapChunk();
+                OffHeapTable chunk = scanner.getOffHeapTable();
+                try {
+                    chunk.checkTableMeta(false);
+                    if (chunk.getNumRows() == 0) {
+                        break;
+                    }
+                    totalRows += chunk.getNumRows();
+                    rows.append(chunk.dump(chunk.getNumRows()));
+                } finally {
+                    chunk.close();
+                }
+            }
+        } finally {
+            scanner.close();
+        }
+        return new ScanResult(totalRows, rows.toString());
+    }
+
+    private static class ScanResult {
+        private final int totalRows;
+        private final String rows;
+
+        private ScanResult(int totalRows, String rows) {
+            this.totalRows = totalRows;
+            this.rows = rows;
+        }
+    }
+
+    private static String encode(Object value) throws IOException {
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(InstantiationUtil.serializeObject(value));
     }
 }
