@@ -42,13 +42,13 @@ public class LanceTypeUtils {
             ArrowType.Int intType = (ArrowType.Int) arrowType;
             switch (intType.getBitWidth()) {
                 case 8:
-                    return "tinyint";
+                    return intType.getIsSigned() ? "tinyint" : "short";
                 case 16:
-                    return "short";
+                    return intType.getIsSigned() ? "short" : "int";
                 case 32:
-                    return "int";
+                    return intType.getIsSigned() ? "int" : "bigint";
                 case 64:
-                    return "bigint";
+                    return intType.getIsSigned() ? "bigint" : "decimal(20,0)";
                 default:
                     return "string";
             }
@@ -59,9 +59,9 @@ public class LanceTypeUtils {
             } else {
                 return "double";
             }
-        } else if (arrowType instanceof ArrowType.Utf8) {
+        } else if (arrowType instanceof ArrowType.Utf8 || arrowType instanceof ArrowType.LargeUtf8) {
             return "string";
-        } else if (arrowType instanceof ArrowType.Binary) {
+        } else if (arrowType instanceof ArrowType.Binary || arrowType instanceof ArrowType.LargeBinary) {
             return "binary";
         } else if (arrowType instanceof ArrowType.Date) {
             return "date";
