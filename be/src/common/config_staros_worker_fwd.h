@@ -148,8 +148,6 @@ CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 
-<<<<<<< HEAD
-=======
 // Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
 // tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
 // "zstd" compresses the payload on the heartbeat thread, inside the same
@@ -162,9 +160,6 @@ CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
 // keeping the node from starting.
 CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
-CONF_mInt32(tablet_warmup_max_threads, "4");
-
->>>>>>> 5ae228ef538 ([Enhancement] Expose the v4.2-rc5 StarOS knobs as FE and BE configs (#63360))
 #endif
 
 } // namespace starrocks::config
