@@ -74,4 +74,49 @@ create table t_many_buckets (k1 bigint, k2 int, v1 string)
 insert into t_many_buckets select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
 select count(*), sum(k1) from t_many_buckets;
 
+-- Every partition here is created by the LOAD, not by the DDL: the table starts empty and automatic
+-- partitioning adds one per day as rows arrive. Those partitions are not in the plan, so their
+-- tablets come back over the create-partition RPC instead of from the sink's location -- the path
+-- this case exists for. Each of them starts with one tablet, because the data boundaries that would
+-- have split it have not been seen yet, so without the spread a whole load funnels through one node.
+create table t_auto (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto;
+
+-- A second load into the partitions the first one created. They are in the plan this time, so this
+-- also checks that rowsets folded from several nodes accumulate across the two paths rather than
+-- replace each other.
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_auto;
+select dt, k1, v1 from t_auto where k1 = 12345 order by v1;
+
+-- A primary-key table partitioned the same way. Rows sharing a key are routed by a hash of the key
+-- columns, and every sink instance must resolve that hash against the SAME node list for a
+-- runtime-created partition -- they each ask FE for it separately, and a per-instance answer would
+-- send one key's rows to two writers.
+create table t_auto_pk (dt date, k1 bigint, v1 string)
+    primary key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto_pk;
+select dt, k1, v1 from t_auto_pk where k1 = 12345;
+
+-- The same loads with the feature off must give exactly the same answers.
+set lake_multi_node_tablet_write_mode = 'off';
+create table t_auto_off (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto_off;
+
 drop database db_${uuid0} force;
