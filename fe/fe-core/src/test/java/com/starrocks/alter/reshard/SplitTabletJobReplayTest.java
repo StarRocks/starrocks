@@ -23,6 +23,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
@@ -44,6 +45,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,6 +53,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * What a follower knows about a split job lives in two independent places: the job object, which
@@ -290,6 +294,122 @@ public class SplitTabletJobReplayTest {
         tabletReshardJobMgr.replayUpdateTabletReshardJob(journalCopy(leaderView));
 
         return replay;
+    }
+
+    /**
+     * A replay must never write to the edit log. {@code setJobState} always journals, and
+     * {@code getOlapTable()} calls it when the table is gone -- so a replay whose table has been
+     * dropped journals from whatever thread is replaying. In production that thread is a follower's
+     * replayer, the leader's activation catch-up, or the checkpoint worker, and the write there
+     * either throws at the closed WAL gate or dereferences a null journal queue; both were observed
+     * on 2026-09-20 and both were swallowed by {@code replay()}'s catch.
+     *
+     * <p>Mixed red/green by construction, and deliberately so: of the seven states, PREPARING,
+     * CLEANING, FINISHED and ABORTED reach {@code getOlapTable()} with {@code canAbort()} false and
+     * journal on the unfixed tree; PENDING does not, because the journaling is already guarded by
+     * {@code !canAbort()} and PENDING is abortable; RUNNING and ABORTING touch no table at all. The
+     * passing rows are kept as coverage rather than removed, so the matrix states the whole contract.
+     */
+    @Test
+    public void testReplayNeverJournalsWhenTableIsDropped() throws Exception {
+        // Collected rather than asserted per iteration, so one run reports the whole matrix instead
+        // of stopping at the first offending state.
+        List<TabletReshardJob.JobState> journaled = new ArrayList<>();
+
+        // Everything this test sets up needs a leader -- creating the table, creating the shards and
+        // dropping the table are all DDL. The replay itself is the one step that never runs on one,
+        // so the flag is flipped around that call and only that call: a follower, an activation
+        // catch-up and the checkpoint worker are all non-leader by construction. Without it the test
+        // would drive the replay path on a process that is itself the leader, which cannot happen in
+        // production and where the guard under test is correctly inert.
+        AtomicBoolean leader = new AtomicBoolean(true);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return leader.get();
+            }
+        };
+
+        for (TabletReshardJob.JobState state : TabletReshardJob.JobState.values()) {
+            String tableName = "replay_no_journal_" + state.name().toLowerCase();
+            SplitTabletJob origin = createSplitJob(createTable(tableName));
+            origin.createShardsOnStarOS();
+
+            TabletReshardJob record = journalCopy(origin);
+            record.jobState = state;
+
+            starRocksAssert.dropTable(tableName);
+
+            AtomicInteger journalWrites = countJournalWrites();
+            leader.set(false);
+            try {
+                GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().replayUpdateTabletReshardJob(record);
+            } finally {
+                leader.set(true);
+            }
+
+            if (journalWrites.get() != 0) {
+                journaled.add(state);
+            }
+        }
+
+        Assertions.assertEquals(List.of(), journaled,
+                "these replayed states wrote to the edit log with the table dropped");
+    }
+
+    /**
+     * The table-independent work a replay does must still happen when the table is gone.
+     *
+     * <p>This test passes on the unfixed tree. It exists to rule out a fix that was drafted and
+     * rejected: returning from {@code replay()} before dispatch when the table lookup comes back
+     * empty. That would have been quieter, but {@code replayCleaningJob} prunes discarded child
+     * tablet ids from the inverted index before it ever touches the table, and those ids never enter
+     * a materialized index -- so dropping the table does not reclaim them either, because force
+     * deletion only walks tablets reachable from the table's materialized indexes. Skipping the
+     * prune would leak them and undo the fix in #63300.
+     */
+    @Test
+    public void testReplayStillPrunesDiscardedTabletsWhenTableIsDropped() throws Exception {
+        FollowerReplay replay = replayIdenticalFallbackAsFollower("replay_prune_dropped_table");
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+
+        Assertions.assertNull(invertedIndex.getTabletMeta(replay.discardedTabletId()),
+                "the discarded child tablet must be pruned from the inverted index");
+        Assertions.assertNotNull(invertedIndex.getTabletMeta(replay.keptTabletId()),
+                "the surviving child tablet must stay in the inverted index");
+    }
+
+    /**
+     * Characterization, not a regression test: this passes on the unfixed tree, and its job is to
+     * hold the leader's behaviour still while the replay path changes underneath it. A job past the
+     * abortable window whose table has been dropped must still reach ABORTING, because
+     * {@code abort()} refuses anything but PENDING and nothing else would move it.
+     *
+     * <p>It does kill the mutant that matters: invert the {@code isLeader()} guard and this fails,
+     * because the leader stops recording the transition.
+     */
+    @Test
+    public void testLeaderStillAbortsWhenTableIsDropped() throws Exception {
+        String tableName = "leader_abort_dropped_table";
+        SplitTabletJob job = createSplitJob(createTable(tableName));
+        job.createShardsOnStarOS();
+        job.jobState = TabletReshardJob.JobState.PREPARING;
+
+        starRocksAssert.dropTable(tableName);
+
+        Assertions.assertThrows(TabletReshardException.class, job::runPreparingJob);
+        Assertions.assertEquals(TabletReshardJob.JobState.ABORTING, job.getJobState());
+    }
+
+    private static AtomicInteger countJournalWrites() {
+        AtomicInteger writes = new AtomicInteger();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logUpdateTabletReshardJob(TabletReshardJob job) {
+                writes.incrementAndGet();
+            }
+        };
+        return writes;
     }
 
     private OlapTable createTable(String tableName) throws Exception {

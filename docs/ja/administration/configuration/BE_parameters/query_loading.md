@@ -651,6 +651,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: パイプライン実行エンジンのSCANスレッドプールの最大タスクキュー長。
 - 導入バージョン: -
 
+### case_when_selective_eval_ratio
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 検索 `CASE WHEN` の各 `THEN` 分岐を、チャンク全体で評価してから行を選び出すのではなく、その分岐が実際に所有する行だけで評価するかどうかを制御します。`CASE` がコレクション型 (ARRAY/MAP/STRUCT) または VARIANT 型を返す場合にのみ適用されます。これらの型は 1 行の実体化コストが高く、分岐の入力行をサブチャンクに圧縮するコストを回収できるためです。分岐が圧縮されるのは `owned_rows * case_when_selective_eval_ratio < chunk_rows` の場合、つまり分岐が所有する行がチャンクの `1 / case_when_selective_eval_ratio` 未満の場合のみです。しきい値を超える分岐はチャンク全体で評価されます。入力の圧縮コストが省略できる評価コストを上回るためです。`1` に設定すると、チャンク全体を占有しないすべての分岐が圧縮されます。`0` または負の値に設定すると最適化が完全に無効になり、以前の動作に戻ります。これには、どの行も選択しない `THEN` や `ELSE` がエラーを発生させるものであっても評価されなくなるという動作の変更も含まれます。
+- 導入バージョン: -
+
 ### enable_lock_free_scan_task_queue
 
 - デフォルト: true
