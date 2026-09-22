@@ -264,15 +264,16 @@ CONF_mInt64(lake_replication_slow_log_ms, "30000");
 CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
+// Maximum number of files copied concurrently for one tablet during lake-to-lake replication.
+CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
-// Number of threads in the dedicated thread pool for per-file copy in lake-to-lake replication.
-// 0 means cpu_cores * 4 (matches replication_threads default semantics); negative means -value * cpu_cores.
-// This pool is intentionally separate from the agent-task replicate_snapshot pool so that per-file
-// copy sub-tasks can be awaited from the outer task without tripping the thread-pool self-deadlock
-// guard. The pool is built once at startup; CN restart is required to change its size.
-CONF_Int32(lake_replication_file_copy_threads, "0");
+// Number of threads in the dedicated thread pool used by lake replication for per-file copy.
+// The fixed default bounds per-copy read buffers independently of CPU count. 0 means
+// cpu_cores * 4. Negative means -value * cpu_cores. The pool is built once at startup;
+// CN restart is required to change its size.
+CONF_Int32(lake_replication_file_copy_threads, "16");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -2577,4 +2578,15 @@ CONF_mInt32(table_schema_service_max_retries, "3");
 // to potentially find a better predicate order. When selectivity is already good (low), sampling
 // is unlikely to help and will be skipped.
 CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
+
+// Evaluate each THEN branch of a searched CASE WHEN only on the rows that branch actually owns,
+// instead of evaluating it over the whole chunk and picking rows afterwards. Only applies when the
+// CASE result is a collection/variant type, where building a row is expensive enough to pay for
+// compacting the branch's input rows into a sub-chunk.
+// A branch is compacted when `owned_rows * ratio < chunk_rows`, i.e. when its selectivity is below
+// 1/ratio; above that threshold copying the branch's input costs more than the skipped evaluation
+// saves. 1 means "always compact", and 0 or less turns the whole thing off and restores the previous
+// behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
+// an error is no longer evaluated when no row selects it.
+CONF_mInt32(case_when_selective_eval_ratio, "2");
 } // namespace starrocks::config
