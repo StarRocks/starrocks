@@ -566,6 +566,16 @@ struct AggHashMapVariant {
 
     size_t allocated_memory_usage(const MemPool* pool) const;
 
+    // Name of the currently selected variant, for the query profile.  The choice is
+    // otherwise invisible: it leaves no trace in the plan and has no counter of its own,
+    // so which key representation a query actually ran with can only be inferred from
+    // hash table bytes per group.
+    const char* type_name() const;
+
+    // convert_to_two_level() swaps the variant under the caller's feet, so anything that cached
+    // the choice -- the HashVariant profile line -- has to be able to notice.
+    Type type() const { return _type; }
+
 private:
     Type _type = Type::phase1_slice;
     AggStatistics* _agg_stat = nullptr;
@@ -690,6 +700,16 @@ struct AggHashSetVariant {
     size_t reserved_memory_usage(const MemPool* pool) const;
 
     size_t allocated_memory_usage(const MemPool* pool) const;
+
+    // Name of the currently selected variant, for the query profile.  The choice is
+    // otherwise invisible: it leaves no trace in the plan and has no counter of its own,
+    // so which key representation a query actually ran with can only be inferred from
+    // hash table bytes per group.
+    const char* type_name() const;
+
+    // convert_to_two_level() swaps the variant under the caller's feet, so anything that cached
+    // the choice -- the HashVariant profile line -- has to be able to notice.
+    Type type() const { return _type; }
 
 private:
     Type _type = Type::phase1_slice;

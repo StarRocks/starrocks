@@ -611,6 +611,10 @@ TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyUsesPerRowPathWhenBatchEstimateE
     EXPECT_EQ(0, not_founds[0]);
 }
 
+// get_max_serialize_size() sizes the staging buffer for serialize_batch(), which writes the
+// compact key encoding: a one-byte length prefix for a string that fits in one, not the four-byte
+// prefix of the persisted encoding. So the bound comes from max_one_element_serialize_size_compact(),
+// and -- the part that actually matters -- it has to cover what serialize_batch() lays down.
 TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
     PartitionHashMapWithSerializedKey<SlicePartitionHashMap<PhmapSeed1>> partition_map(4);
 
@@ -622,8 +626,19 @@ TEST(PartitionHashMapSerializedKeyTest, SumsOrdinaryColumnSerializeSizes) {
 
     auto size_or = partition_map.get_max_serialize_size(key_columns);
     ASSERT_TRUE(size_or.ok()) << size_or.status();
-    EXPECT_EQ(string_column->max_one_element_serialize_size() + int_column->max_one_element_serialize_size(),
+    EXPECT_EQ(string_column->max_one_element_serialize_size_compact() +
+                      int_column->max_one_element_serialize_size_compact(),
               size_or.value());
+    // Spelled out: one length byte plus "abc", then a bare int32.
+    EXPECT_EQ(static_cast<uint32_t>(1 + 3 + sizeof(int32_t)), size_or.value());
+
+    const uint32_t max_one_row_size = size_or.value();
+    Buffer<uint32_t> slice_sizes(1, 0);
+    std::vector<uint8_t> buffer(max_one_row_size + 32, 0);
+    for (const auto& key_column : key_columns) {
+        key_column->serialize_batch(buffer.data(), slice_sizes, 1, max_one_row_size);
+    }
+    EXPECT_LE(slice_sizes[0], max_one_row_size) << "serialize_batch() overran the bound it was given";
 }
 
 TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_FixedSize16SliceAggHashMap) {

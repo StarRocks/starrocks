@@ -743,7 +743,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         for (size_t i = 0; i < chunk_size; ++i) {
             auto serialize_cursor = buffer;
             for (const auto& key_column : key_columns) {
-                serialize_cursor += key_column->serialize(i, serialize_cursor);
+                serialize_cursor += key_column->serialize_compact(i, serialize_cursor);
             }
             DCHECK(serialize_cursor <= buffer + max_serialize_each_row);
             size_t serialize_size = serialize_cursor - buffer;
@@ -885,7 +885,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     size_t get_max_serialize_size(const Columns& key_columns) {
         size_t max_size = 0;
         for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size();
+            max_size += key_column->max_one_element_serialize_size_compact();
         }
         return max_size;
     }
@@ -899,8 +899,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             // deserialize by row
             for (size_t i = 0; i < chunk_size; i++) {
                 for (auto& key_column : key_columns) {
-                    keys[i].data =
-                            (char*)(key_column->deserialize_and_append(reinterpret_cast<const uint8_t*>(keys[i].data)));
+                    keys[i].data = (char*)(key_column->deserialize_compact_and_append(
+                            reinterpret_cast<const uint8_t*>(keys[i].data)));
                 }
             }
         } else {

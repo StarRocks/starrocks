@@ -1240,14 +1240,25 @@ Status Aggregator::output_chunk_by_streaming_with_selection(Chunk* input_chunk, 
 void Aggregator::try_convert_to_two_level_map() {
     auto current_size = _hash_map_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
+        auto prev_type = _hash_map_variant.type();
         _hash_map_variant.convert_to_two_level(_state);
+        // The sink keeps calling this on every chunk once the table is over the threshold, but
+        // only the first call can migrate. Without this the profile would keep naming the
+        // one-level table the query has stopped using.
+        if (_hash_map_variant.type() != prev_type) {
+            _report_hash_variant(_hash_map_variant.type_name());
+        }
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
     auto current_size = _hash_set_variant.reserved_memory_usage(mem_pool());
     if (current_size > get_two_level_threahold()) {
+        auto prev_type = _hash_set_variant.type();
         _hash_set_variant.convert_to_two_level(_state);
+        if (_hash_set_variant.type() != prev_type) {
+            _report_hash_variant(_hash_set_variant.type_name());
+        }
     }
 }
 
@@ -1640,6 +1651,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
         // build with compressed key
         VLOG_ROW << "apply compressed key";
         _build_hash_variant<HashVariantType>(hash_variant, type, std::move(compress_key_ctx));
+        _report_hash_variant(hash_variant.type_name());
         return;
     }
 
@@ -1660,6 +1672,23 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
             variant->fixed_byte_size = fixed_byte_size;
         }
     });
+
+    _report_hash_variant(hash_variant.type_name());
+}
+
+// Which rung of the key ladder a query actually landed on leaves no trace in the plan and has no
+// counter of its own, so today it can only be inferred from hash table bytes per group -- which
+// is how the cost of the serialized fallback has had to be diagnosed so far.  Report it the way
+// Velox reports `hashtable.hashMode`.
+//
+// An aggregate with no grouping keys accumulates into a single state and never touches the
+// hash table, so its variant field holds nothing but the enum's default.  Reporting that would
+// read as a missed optimization on exactly the nodes where none was possible.
+void Aggregator::_report_hash_variant(const char* name) {
+    if (_group_by_expr_ctxs.empty()) {
+        return;
+    }
+    _runtime_profile->add_info_string("HashVariant", name);
 }
 
 void Aggregator::build_hash_map(size_t chunk_size, bool agg_group_by_with_limit) {
@@ -1948,5 +1977,11 @@ void Aggregator::_release_agg_memory() {
         }
     });
 }
+
+// Only prepare() instantiates these, and at -O3 it inlines them, so the out-of-line copies can be
+// dropped before they reach the archive. Requesting them explicitly keeps the key-ladder decision
+// callable from a unit test, which is otherwise reachable only by running a whole plan fragment.
+template void Aggregator::_init_agg_hash_variant<AggHashMapVariant>(AggHashMapVariant&);
+template void Aggregator::_init_agg_hash_variant<AggHashSetVariant>(AggHashSetVariant&);
 
 } // namespace starrocks

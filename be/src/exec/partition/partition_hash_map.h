@@ -546,7 +546,7 @@ struct PartitionHashMapWithSerializedKey : public PartitionHashMapBase<false, fa
     StatusOr<uint32_t> get_max_serialize_size(const Columns& key_columns) {
         uint64_t max_size = 0;
         for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size();
+            max_size += key_column->max_one_element_serialize_size_compact();
         }
         if (max_size > std::numeric_limits<uint32_t>::max()) {
             return Status::NotSupported(

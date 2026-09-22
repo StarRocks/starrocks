@@ -307,6 +307,12 @@ public:
     // The bad thing is we couldn't get the string defined len from FE when query
     virtual uint32_t max_one_element_serialize_size() const = 0;
 
+    // Upper bound for the compact key encoding written by serialize_batch*(). Only
+    // BinaryColumnBase differs from the persisted encoding, because only it writes a length
+    // prefix; for every other column the two encodings are byte-identical. Note it is NOT
+    // always <= max_one_element_serialize_size(): a string of 255+ bytes costs one byte more.
+    virtual uint32_t max_one_element_serialize_size_compact() const { return max_one_element_serialize_size(); }
+
     // serialize one data,The memory must allocate firstly from mempool
     virtual uint32_t serialize(size_t idx, uint8_t* pos) const = 0;
 
@@ -340,8 +346,17 @@ public:
     virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                        Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
 
+    // Per-element counterpart of the compact key encoding written by serialize_batch*(). The
+    // row-wise fallbacks in the hash-table key builders use this, so it MUST stay byte-identical
+    // to serialize_batch*(): mixing the two encodings in one hash table splits logical keys.
+    virtual uint32_t serialize_compact(size_t idx, uint8_t* pos) const { return serialize(idx, pos); }
+
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
+
+    // Counterpart of the compact key encoding written by serialize_batch*(). Defaults to the
+    // persisted encoding, which is correct for every column that does not write a length prefix.
+    virtual const uint8_t* deserialize_compact_and_append(const uint8_t* pos) { return deserialize_and_append(pos); }
 
     virtual void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) = 0;
 
@@ -559,7 +574,8 @@ public:
             is_nulls.emplace_back(null);
 
             if (null == 0) {
-                srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+                // The bytes came from serialize_batch*(), i.e. the compact key encoding.
+                srcs[i].data = (char*)derived()->deserialize_compact_and_append((uint8_t*)srcs[i].data);
             } else {
                 has_null = true;
                 derived()->append_default();

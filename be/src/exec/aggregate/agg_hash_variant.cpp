@@ -332,6 +332,22 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase2_null_string_two_level, phase2_null_string);
 }
 
+#define AGG_VARIANT_TYPE_NAME_CASE(NAME) \
+    case Type::NAME:                     \
+        return #NAME;
+
+const char* AggHashMapVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+const char* AggHashSetVariant::type_name() const {
+    switch (_type) { APPLY_FOR_AGG_VARIANT_ALL(AGG_VARIANT_TYPE_NAME_CASE) }
+    return "unknown";
+}
+
+#undef AGG_VARIANT_TYPE_NAME_CASE
+
 void AggHashMapVariant::reset() {
     detail::AggHashMapWithKeyPtr ptr;
     hash_map_with_key = std::move(ptr);
