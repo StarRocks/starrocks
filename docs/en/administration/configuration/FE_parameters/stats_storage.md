@@ -742,7 +742,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Number of Parquet/ORC footers the Sample-Based Tablet Pre-Split meta tier reads concurrently from a `FILES()` source. Footer reads are independent per file and the sampler sorts the aggregated statistics, so concurrency only cuts the wall time of the pre-split hook (each footer is a remote round-trip; a many-file source otherwise serializes hundreds of round-trips). Set to `1` to disable concurrency.
+- Description: Number of Parquet/ORC footers the Sample-Based Tablet Pre-Split meta tier reads concurrently from a file-backed load source (`FILES()` or Broker Load). Footer reads are independent per file and the sampler sorts the aggregated statistics, so concurrency only cuts the wall time of the pre-split hook (each footer is a remote round-trip; a many-file source otherwise serializes hundreds of round-trips). Set to `1` to disable concurrency.
 - Introduced in: v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`

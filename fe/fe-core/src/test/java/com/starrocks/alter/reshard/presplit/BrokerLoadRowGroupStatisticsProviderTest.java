@@ -15,6 +15,8 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
@@ -259,6 +261,53 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                 /*seed=*/ 0L);
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void serialAndParallelFooterReadsProduceIdenticalStatistics() throws Exception {
+        // Broker Load shares the INSERT-from-FILES concurrent footer reader, so reading footers
+        // concurrently must not change the result: same aggregated row count and same row-group
+        // count whether parallelism is 1 (serial) or > 1 (concurrent), across file groups.
+        List<BrokerFileGroup> fileGroups = List.of(parquetFileGroup(), parquetFileGroup());
+        List<List<TBrokerFileStatus>> fileStatuses = List.of(
+                List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                        brokerFileStatus(writeBigintParquet(24, 1000L))),
+                List.of(brokerFileStatus(writeBigintParquet(40, 2000L))));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<RowGroupStatistics> serial = provider.fetch(bigintSampleRequest(fileGroups, fileStatuses));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<RowGroupStatistics> parallel = provider.fetch(bigintSampleRequest(fileGroups, fileStatuses));
+
+            Assertions.assertEquals(80L, totalRowCount(parallel));
+            Assertions.assertEquals(totalRowCount(serial), totalRowCount(parallel));
+            Assertions.assertEquals(serial.size(), parallel.size(),
+                    "same row-group count regardless of parallelism");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void unreadableFileInParallelReadFallsBackToDataTier() throws Exception {
+        // A corrupt file among valid ones: the concurrent footer read must surface the per-file
+        // failure rather than swallow it in a worker thread, so the pipeline still falls back.
+        Path good = writeBigintParquet(16, 0L);
+        java.nio.file.Path corrupt = tempDirectory.resolve("broker-corrupt.parquet");
+        Files.write(corrupt, "not a parquet file".getBytes());
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(parquetFileGroup()),
+                    List.of(List.of(brokerFileStatus(good), brokerFileStatus(new Path(corrupt.toUri())))));
+            Assertions.assertThrows(StarRocksException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
     }
 
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
