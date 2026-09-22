@@ -86,8 +86,16 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggregate = (LogicalAggregationOperator) input.getOp();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) input.inputAt(0).getOp();
-        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 3
-                || repeatOperator.hasPushDown()) {
+        if (aggregate.getType() != AggType.GLOBAL || repeatOperator.getRepeatColumnRef().size() <= 3) {
+            return false;
+        }
+
+        // Each application peels the finest grouping set off the repeat and re-aggregates the rest from
+        // it, and the plan it produces matches this rule's own pattern again - so applying the rule
+        // repeatedly builds a cascade g_n -> g_n-1 -> ... instead of expanding every level from g_n.
+        // The depth is capped here: the level counter on the repeat grows by one per application, and
+        // `size() <= 3` above floors it independently, so the cascade always terminates.
+        if (repeatOperator.getPushDownLevel() >= cascadeLevelLimit(context)) {
             return false;
         }
 
@@ -123,8 +131,32 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
             refs.forEach(checkRefs::remove);
         }
 
+        // What is left in checkRefs is exactly buildSubRepeatConsume's `nullRefs`: the keys that the
+        // finest set has and no coarser set does, i.e. the keys this application would peel off.
+        //
+        // The first application is worth doing even when it peels nothing, because its real work is to
+        // put a full-key aggregate under the repeat so the remaining sets expand from aggregated rows
+        // instead of raw input. A *cascade* level that peels nothing is not: it would re-group by every
+        // key again for one more CTE, one more fragment and one more blocking stage. That is the normal
+        // shape for CUBE, where dropping the complete set still leaves sets whose union is every key -
+        // so this is what confines the cascade to prefix-nested (ROLLUP-shaped) sets, with no
+        // cardinality estimate involved.
+        if (repeatOperator.getPushDownLevel() > 0 && checkRefs.isEmpty()) {
+            return false;
+        }
+
         checkRefs.addAll(repeatOperator.getOutputGrouping());
         return !checkRefs.containsAll(aggregate.getGroupingKeys());
+    }
+
+    /**
+     * Upper bound on how many times this rule may fire on one grouping-sets aggregate, i.e. how many
+     * levels of the cascade are built. 1 reproduces the historical single-split plan exactly, which
+     * makes it the rollback switch.
+     */
+    private static int cascadeLevelLimit(OptimizerContext context) {
+        int limit = context.getSessionVariable().getCboPushDownGroupingSetCascadeLevel();
+        return limit <= 0 ? 1 : limit;
     }
 
     @Override
@@ -332,8 +364,20 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
         // cte produce
         LogicalCTEProduceOperator produce = new LogicalCTEProduceOperator(cteId);
 
-        return OptExpression.create(produce,
+        OptExpression cteProduce = OptExpression.create(produce,
                 OptExpression.create(allColumnRefsAggregate, input.inputAt(0).getInputs()));
+
+        // Register this producer's statistics before returning, so the *next* cascade level can
+        // estimate through the LogicalCTEConsume this level just created. Without it,
+        // StatisticsCalculator.computeCTEConsume hits its `cannot obtain cte statistics`
+        // Preconditions check, Utils.calculateStatistics swallows the exception into a WARN with a
+        // stack trace (once per node), and this method then falls back to partitioning on every
+        // grouping key. That fallback is not merely noisy: partitioning the finest level on a single
+        // high-NDV column is what lets the coarser levels that still contain it aggregate node-local,
+        // which is most of the point of the cascade.
+        Utils.calculateStatistics(cteProduce, context);
+
+        return cteProduce;
     }
 
     /*
@@ -493,7 +537,7 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 .setOutputGrouping(outputGrouping)
                 .setRepeatColumnRefList(repeatRefs)
                 .setGroupingIds(groupingIds)
-                .setHasPushDown(true)
+                .setPushDownLevel(repeat.getPushDownLevel() + 1)
                 .setPredicate(repeatPredicate)
                 .build();
 
@@ -524,7 +568,11 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                         sumFn = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) sumFn,
                                 ref.getType(), ref.getType());
                     }
-                    ColumnRefOperator out = factory.create(ref, ref.getType(), ref.isNullable());
+                    // Nullable regardless of the input: this column holds a sum(), and sum() is
+                    // nullable even over a non-nullable input. Inheriting ref's flag declares a
+                    // non-nullable column that a nullable sum() writes, which the BE reads as a null
+                    // data pointer (see the matching note in the non-avg branch below).
+                    ColumnRefOperator out = factory.create(ref, ref.getType(), true);
                     aggregations.put(out, new CallOperator(FunctionSet.SUM, ref.getType(),
                             Lists.newArrayList(ref), sumFn));
                     return out;
@@ -534,7 +582,10 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                     Function countFn = ExprUtils.getBuiltinFunction(FunctionSet.SUM,
                             new Type[] {ref.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                     Preconditions.checkState(countFn instanceof AggregateFunction);
-                    ColumnRefOperator out = factory.create(ref, ref.getType(), ref.isNullable());
+                    // Nullable for the same reason, and this is the one that actually bites: `ref` is
+                    // avg's count part, which is non-nullable, so the flag would say non-nullable while
+                    // the sum() writing it is nullable.
+                    ColumnRefOperator out = factory.create(ref, ref.getType(), true);
                     aggregations.put(out, new CallOperator(FunctionSet.SUM, ref.getType(),
                             Lists.newArrayList(ref), countFn));
                     return out;
@@ -558,7 +609,21 @@ public class PushDownAggregateGroupingSetsRule extends TransformationRule {
                 String fnName = rollupFnName != null ? rollupFnName : v.getFnName();
 
                 ColumnRefOperator x = rolledUp.computeIfAbsent(outputs.get(k), ref -> {
-                    ColumnRefOperator out = factory.create(k, k.getType(), k.isNullable());
+                    // Always nullable - do NOT inherit k's flag. Nullability belongs to the rollup
+                    // aggregation that writes this column, and it is not preserved by the rollup
+                    // mapping: count(*) is non-nullable while the sum() that rolls it up is nullable.
+                    // Inheriting k therefore declares a non-nullable column that a nullable
+                    // aggregation feeds. With a single push down that stays hidden, because the
+                    // level's input really is the non-nullable count(*) - but every further cascade
+                    // level reads the *previous* level's sum() output, and the BE then gets a nullable
+                    // column where the plan promised a non-nullable one and segfaults in
+                    // SumAggregateFunction::update_batch.
+                    //
+                    // Declaring nullable unconditionally is the safe direction and costs only an
+                    // unused null bitmap when the values happen never to be NULL; the reverse is a
+                    // crash. It is also plan-neutral in practice: every aggregate in
+                    // SUPPORT_AGGREGATE_FUNCTIONS except count already produces a nullable output.
+                    ColumnRefOperator out = factory.create(k, k.getType(), true);
                     Function aggFunc = ExprUtils.getBuiltinFunction(fnName, new Type[] {k.getType()},
                             Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 

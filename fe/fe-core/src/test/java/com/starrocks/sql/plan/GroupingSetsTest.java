@@ -743,7 +743,7 @@ public class GroupingSetsTest extends PlanTestBase {
                         .setOutputGrouping(outputGrouping)
                         .setRepeatColumnRefList(repeatRefs)
                         .setGroupingIds(groupingIds)
-                        .setHasPushDown(true)
+                        .setPushDownLevel(1)
                         .setPredicate(predicate)
                         .build();
 
@@ -818,6 +818,112 @@ public class GroupingSetsTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
             connectContext.getSessionVariable().setEnableOptimizerRuleDebug(false);
+        }
+    }
+
+    private static int countOf(String plan, String needle) {
+        int count = 0;
+        for (int i = plan.indexOf(needle); i >= 0; i = plan.indexOf(needle, i + needle.length())) {
+            count++;
+        }
+        return count;
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascade() throws Exception {
+        // rollup over 5 keys = 6 grouping sets. Each application of the rule peels the finest set off
+        // the repeat and re-aggregates the rest from it, replacing the repeat it consumed - so exactly
+        // one REPEAT_NODE survives, holding whatever sets the cascade stopped at, and the number of
+        // cascade levels shows up as the number of UNION nodes.
+        String sql = "select t1a, t1b, t1c, t1d, t1e, sum(t1g) " +
+                "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)";
+
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            // cascade_level = 1 is the historical single-split behaviour and doubles as the rollback
+            // switch: one push down, and the repeat still expands the remaining 5 grouping sets.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(1);
+            String single = getFragmentPlan(sql);
+            Assertions.assertEquals(1, countOf(single, ":UNION"), single);
+            assertContains(single, "repeat: repeat 4 lines");
+
+            // The rule stops once the repeat is down to 3 grouping sets, so 6 sets cascade exactly
+            // three times: 6 -> 5 -> 4 -> 3. Each level re-aggregates from the previous one, which is
+            // the whole point: the group-by list loses one key per level instead of every level being
+            // expanded out of the finest aggregate.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+            String cascade = getFragmentPlan(sql);
+            Assertions.assertEquals(3, countOf(cascade, ":UNION"), cascade);
+            Assertions.assertEquals(1, countOf(cascade, "REPEAT_NODE"), cascade);
+            assertContains(cascade, "repeat: repeat 2 lines");
+            assertContains(cascade, "group by: 1: t1a, 2: t1b, 3: t1c, 4: t1d, 5: t1e");
+            assertContains(cascade, "group by: 14: t1a, 15: t1b, 16: t1c, 17: t1d");
+            assertContains(cascade, "group by: 29: t1a, 30: t1b, 31: t1c");
+
+            // The level cap bounds the cascade independently of that floor.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(2);
+            String capped = getFragmentPlan(sql);
+            Assertions.assertEquals(2, countOf(capped, ":UNION"), capped);
+            assertContains(capped, "repeat: repeat 3 lines");
+
+            // <= 0 is the off sentinel and must be identical to level 1.
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(0);
+            Assertions.assertEquals(single, getFragmentPlan(sql));
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascadeCountNullability() throws Exception {
+        // Regression: count -> sum does not preserve nullability (count(*) is non-nullable, sum() is
+        // nullable), and avg's count part has the same problem. Inheriting the original aggregation's
+        // flag declared a non-nullable column that a nullable sum() writes. With a single push down
+        // that level's input really is the non-nullable count(*) so nothing shows, but every further
+        // cascade level reads the previous level's sum() output - and the BE then segfaults in
+        // SumAggregateFunction::update_batch on a null data pointer. Assert every rolled-up count
+        // column is declared nullable.
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+
+            // Exactly one rollup sum() may read a non-nullable column: the first level, whose input
+            // really is the non-nullable count(*). Every level above it reads the previous level's
+            // sum() output and must therefore see a nullable column. Before the fix all of them
+            // claimed non-nullable.
+            String plan = getVerboseExplain("select t1a, t1b, t1c, t1d, t1e, count(*) " +
+                    "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)");
+            Assertions.assertEquals(1, countOf(plan, "args nullable: false; result nullable: true"),
+                    "only the sum() reading count(*) itself may take a non-nullable input\n" + plan);
+
+            plan = getVerboseExplain("select t1a, t1b, t1c, t1d, t1e, avg(t1g) " +
+                    "   from test_all_type group by rollup(t1a, t1b, t1c, t1d, t1e)");
+            Assertions.assertEquals(1, countOf(plan, "args nullable: false; result nullable: true"),
+                    "avg's rolled-up count part must be nullable above the first level\n" + plan);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
+        }
+    }
+
+    @Test
+    public void testPushDownGroupingSetCascadeSkipsCube() throws Exception {
+        // CUBE is not prefix-nested: removing the complete grouping set still leaves sets whose union
+        // is every key, so a cascade level would peel no key and buy nothing while costing one more
+        // CTE and blocking stage. The first push down is still worth it - it puts a full-key aggregate
+        // under the repeat - so the rule must fire exactly once here regardless of the cascade level.
+        String sql = "select t1a, t1b, t1c, t1d, sum(t1g) " +
+                "   from test_all_type group by cube(t1a, t1b, t1c, t1d)";
+
+        connectContext.getSessionVariable().setCboPushDownGroupingSet(true);
+        try {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(8);
+            String cube = getFragmentPlan(sql);
+            Assertions.assertEquals(1, countOf(cube, ":UNION"), cube);
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownGroupingSetCascadeLevel(5);
+            connectContext.getSessionVariable().setCboPushDownGroupingSet(false);
         }
     }
 }

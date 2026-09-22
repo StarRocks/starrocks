@@ -35,7 +35,10 @@ public class LogicalRepeatOperator extends LogicalOperator {
     private List<List<ColumnRefOperator>> repeatColumnRefList;
     private List<List<Long>> groupingIds;
     private Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs; // SPM use
-    private boolean hasPushDown;
+    // How many times PushDownAggregateGroupingSetsRule has already peeled a grouping set off this
+    // repeat's ancestor chain. 0 means untouched. The rule refuses to fire beyond a configured depth,
+    // which is what bounds the cascade it builds (each application drops exactly one grouping set).
+    private int pushDownLevel;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
                                  List<List<ColumnRefOperator>> repeatColumnRefList, List<List<Long>> groupingIds,
@@ -44,7 +47,7 @@ public class LogicalRepeatOperator extends LogicalOperator {
         this.outputGrouping = outputGrouping;
         this.repeatColumnRefList = repeatColumnRefList;
         this.groupingIds = groupingIds;
-        this.hasPushDown = false;
+        this.pushDownLevel = 0;
         this.groupingsFnArgs = groupingsFnArgs;
     }
 
@@ -64,8 +67,8 @@ public class LogicalRepeatOperator extends LogicalOperator {
         return groupingIds;
     }
 
-    public boolean hasPushDown() {
-        return hasPushDown;
+    public int getPushDownLevel() {
+        return pushDownLevel;
     }
 
     public Map<ColumnRefOperator, List<ColumnRefOperator>> getGroupingsFnArgs() {
@@ -116,12 +119,12 @@ public class LogicalRepeatOperator extends LogicalOperator {
         return Objects.equals(outputGrouping, that.outputGrouping) &&
                 Objects.equals(repeatColumnRefList, that.repeatColumnRefList) &&
                 Objects.equals(groupingIds, that.groupingIds) &&
-                Objects.equals(hasPushDown, that.hasPushDown);
+                pushDownLevel == that.pushDownLevel;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList, hasPushDown);
+        return Objects.hash(super.hashCode(), outputGrouping, repeatColumnRefList, pushDownLevel);
     }
 
     public static Builder builder() {
@@ -135,8 +138,8 @@ public class LogicalRepeatOperator extends LogicalOperator {
             return new LogicalRepeatOperator();
         }
 
-        public LogicalRepeatOperator.Builder setHasPushDown(boolean hasPushDown) {
-            builder.hasPushDown = hasPushDown;
+        public LogicalRepeatOperator.Builder setPushDownLevel(int pushDownLevel) {
+            builder.pushDownLevel = pushDownLevel;
             return this;
         }
 
@@ -161,6 +164,10 @@ public class LogicalRepeatOperator extends LogicalOperator {
             builder.outputGrouping = operator.outputGrouping;
             builder.repeatColumnRefList = operator.repeatColumnRefList;
             builder.groupingIds = operator.groupingIds;
+            // Must be carried over: PushDownAggregateGroupingSetsRule reads it to bound its cascade, and
+            // rules such as PushDownPredicateRepeatRule rebuild a repeat through this path. Dropping it
+            // here would silently reset the cascade depth and let the rule keep peeling grouping sets.
+            builder.pushDownLevel = operator.pushDownLevel;
             return this;
         }
     }

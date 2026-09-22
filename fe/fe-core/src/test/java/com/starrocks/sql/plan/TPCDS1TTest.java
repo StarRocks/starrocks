@@ -20,6 +20,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Set;
+import java.util.TreeSet;
+
 public class TPCDS1TTest extends TPCDS1TTestBase {
 
     @BeforeAll
@@ -626,17 +629,44 @@ public class TPCDS1TTest extends TPCDS1TTestBase {
                 "    HASH_PARTITIONED: 102: i_product_name\n" +
                 "\n" +
                 "  14:AGGREGATE (update serialize)");
-        assertContains(plan, "  20:REPEAT_NODE\n" +
-                "  |  repeat: repeat 7 lines [[], [108], [108, 109], [108, 109, 110], " +
-                "[108, 109, 110, 111], [112, 108, 109, 110, 111], [112, 113, 108, 109, 110, 111], " +
-                "[112, 113, 114, 108, 109, 110, 111]]\n");
+        // The rollup is computed as a cascade: each level re-aggregates from the previous one, so the
+        // REPEAT at the bottom only expands the few coarsest grouping sets rather than all eight of
+        // them out of the finest aggregate.
+        assertContains(plan, "  44:REPEAT_NODE\n" +
+                "  |  repeat: repeat 3 lines [[], [180], [180, 181], [180, 181, 182]]\n");
         assertContains(plan, "  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 18\n" +
+                "    EXCHANGE ID: 42\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 26\n" +
+                "    EXCHANGE ID: 50\n" +
                 "    RANDOM");
+
+        // Every cascade level must keep its CTE producer partitioned on the single highest-NDV column
+        // (i_product_name), which is what lets the levels that still contain that column aggregate
+        // node-local. Regression guard: buildCTEProduce picks that column from statistics, and if the
+        // previous level's producer statistics are not registered it silently falls back to
+        // partitioning on every grouping key - i_category, i_class, i_brand, i_product_name, d_year,
+        // d_qoy, d_moy - re-shuffling each level for nothing.
+        // Checking only that the date columns are absent would not catch the coarsest levels, whose
+        // full key set has no date column left in it - so require the key list to be exactly one column.
+        Set<String> productNamePartitions = new TreeSet<>();
+        for (String line : plan.split("\n")) {
+            int idx = line.indexOf("HASH_PARTITIONED:");
+            if (idx < 0) {
+                continue;
+            }
+            String keys = line.substring(idx + "HASH_PARTITIONED:".length()).trim();
+            if (!keys.contains("i_product_name")) {
+                continue;
+            }
+            Assertions.assertFalse(keys.contains(","),
+                    "a cascade level fell back to all-key partitioning: " + keys + "\n" + plan);
+            productNamePartitions.add(keys);
+        }
+        // One producer per cascade level, and cbo_push_down_groupingset_cascade_level defaults to 5.
+        Assertions.assertEquals(5, productNamePartitions.size(),
+                "expected one single-column producer per cascade level, got " + productNamePartitions + "\n" + plan);
     }
 
     @Test
