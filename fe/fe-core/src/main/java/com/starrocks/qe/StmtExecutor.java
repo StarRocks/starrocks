@@ -960,6 +960,8 @@ public class StmtExecutor {
         context.setIsForward(false);
         context.setCurrentThreadId(Thread.currentThread().getId());
 
+        context.getSessionVariable().refreshPercentileCompactIntermediate(
+                GlobalStateMgr.getCurrentState().getVariableMgr());
         // A statement replaces the previous statement's diagnostics, following the MySQL
         // diagnostics area. Three statement classes are exempt while they succeed: SET,
         // transaction control, and SHOW (which covers SHOW WARNINGS / SHOW ERRORS reading the

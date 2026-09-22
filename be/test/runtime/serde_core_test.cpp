@@ -32,6 +32,7 @@
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
+#include "column/object_column.h"
 #include "column/schema.h"
 #include "column/serde/column_array_serde.h"
 #include "column/variant_column.h"
@@ -41,6 +42,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
+#include "types/percentile_value.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
@@ -51,6 +53,27 @@ DECLARE_FAIL_POINT(mem_chunk_allocator_allocate_fail);
 #endif
 
 namespace starrocks::serde {
+
+TEST(ColumnArraySerdeTest, RejectCorruptPercentile) {
+    auto source = PercentileColumn::create();
+    PercentileValue value;
+    value.add(42);
+    source->append(&value);
+    std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*source));
+    ASSERT_TRUE(ColumnArraySerde::serialize(*source, buffer.data()).ok());
+    auto decoded = PercentileColumn::create();
+    ASSERT_TRUE(ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), decoded.get()).ok());
+    EXPECT_EQ(42, decoded->get_object(0)->quantile(0.5));
+    for (size_t length : {size_t(4), size_t(12), buffer.size() - 1}) {
+        decoded->reset_column();
+        EXPECT_FALSE(ColumnArraySerde::deserialize(buffer.data(), buffer.data() + length, decoded.get()).ok());
+    }
+    // The object column header is a count followed by the first object's length.
+    buffer[sizeof(uint32_t) + sizeof(uint64_t)] = 0xff;
+    decoded->reset_column();
+    EXPECT_FALSE(ColumnArraySerde::deserialize(buffer.data(), buffer.data() + buffer.size(), decoded.get()).ok());
+    EXPECT_EQ(0, decoded->size());
+}
 
 static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
     const bool old_zero_copy = config::enable_zero_copy_from_page_cache;

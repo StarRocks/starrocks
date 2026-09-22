@@ -220,4 +220,21 @@ TEST(ObjectColumnTest, HLL_test_swap_column) {
     ASSERT_EQ(3, c1->immutable_data().size());
 }
 
+TEST(ObjectColumnTest, RejectInvalidPercentileWithoutAppendingEmptyValue) {
+    auto column = PercentileColumn::create();
+    PercentileValue value;
+    value.add(42);
+    std::string bytes(value.serialize_size(), '\0');
+    value.serialize(reinterpret_cast<uint8_t*>(bytes.data()));
+    ASSERT_TRUE(column->deserialize_and_append(Slice(bytes)));
+    EXPECT_EQ(42, column->get_object(0)->quantile(0.5));
+    for (size_t length : {size_t(0), size_t(1), bytes.size() - 1}) {
+        Slice invalid(bytes.data(), length);
+        EXPECT_FALSE(column->deserialize_and_append(invalid));
+        EXPECT_EQ(1, column->size());
+        EXPECT_FALSE(column->append_strings(&invalid, 1));
+        EXPECT_EQ(1, column->size());
+    }
+}
+
 } // namespace starrocks
