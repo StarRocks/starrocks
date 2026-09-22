@@ -60,6 +60,7 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 - Register multiple datasets with additional `table.<name>.uri` and `table.<name>.schema` properties. They can participate in joins, aggregations, filters, and projections.
 - Each table scan uses one range covering every dataset fragment. Fragment-level parallel scans and predicate pushdown into Lance are not implemented. StarRocks evaluates SQL predicates on the decoded rows.
 - Column pruning reads the projected columns and columns required by predicates. `COUNT(*)` retains a scalar column when available.
+- Arrow large strings and large binary values are supported. Declare them as `large_string` (or `large_utf8`) and `large_binary`. Unsigned integers widen without overflow: `uint8` → `SMALLINT`, `uint16` → `INT`, `uint32` → `BIGINT`, and `uint64` → `DECIMAL(20,0)`.
 - Scalar values, dates, timestamps, and lists are supported by the reader. Arrow date64 values are interpreted as UTC dates. Map and struct materialization is not supported.
 - The catalog is read-only. Local file URIs must be accessible on the BE selected for the scan.
 - Reader dependencies are packaged in `be/lib/lance-reader-lib`, with the scanner factory JAR also in `be/lib/jni-packages`.
