@@ -264,14 +264,14 @@ TEST(HashUtilTest, CrcHashUnalignedInput) {
     EXPECT_EQ(HashUtil::crc_hash64(unaligned, len, seed64), HashUtil::crc_hash64(aligned.data(), len, seed64));
 }
 
-#if (defined(__x86_64__) && defined(__SSE4_2__)) || defined(__aarch64__)
+#if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
 TEST(HashUtilTest, CrcHash64UnmixedDoesNotDoubleHashTail) {
     const uint64_t seed = 0x12345678abcdef90ULL;
     const uint64_t data = 0x1122334455667788ULL;
     uint64_t expected = seed;
 #if defined(__x86_64__) && defined(__SSE4_2__)
     expected = _mm_crc32_u64(expected, data);
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     expected = __crc32cd(expected, data);
 #endif
     const uint64_t actual = crc_hash_64_unmixed(&data, sizeof(data), seed);
