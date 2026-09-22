@@ -70,7 +70,8 @@ public class LanceMetadata implements ConnectorMetadata {
                         }
                     }
                 }
-                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, columns, uri);
+                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
+                        tblName, columns, uri, catalogName);
                 addTable(dbName, table);
             }
         }
