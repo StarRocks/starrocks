@@ -1,0 +1,86 @@
+-- name: test_minmax_after_replace_partition
+
+-- Regression for min()/max() constant folding returning the values of a partition that
+-- REPLACE PARTITION has already swapped OUT.
+--
+-- RewriteSimpleAggToMetaScanRule folds a bare min()/max() into a constant taken from
+-- ColumnMinMaxMgr's cache. The cache entry used to be stamped with the table-level
+-- max(visibleVersionTime) and served whenever "cached >= requested" -- i.e. on the
+-- assumption that that stamp only ever grows.
+--
+-- It does not. OlapTable.replaceTempPartitionsWithoutCheck() moves the temporary
+-- Partition OBJECT into the formal list as it stands, carrying its own visible-version
+-- time. Load the temporary partition BEFORE the partition it replaces and the table-level
+-- maximum goes backwards across the swap, so the smaller request keeps satisfying the
+-- larger cached stamp and the fold keeps answering with the swapped-out partition's
+-- values -- until the entry is evicted by size or the FE restarts. There is no TTL and no
+-- DDL path invalidates it.
+--
+-- The fix drops the table's entries explicitly, from the low-level OlapTable mutators every
+-- partition-set change funnels through (addPartition / removePartitionFromInnerState /
+-- replacePartition). Those run on the leader and on edit-log replay alike, so a follower --
+-- which folds min/max out of its own cache -- invalidates too.
+--
+-- NOTE: the expected results in R/ are the CORRECT values, not today's behaviour. Before
+-- the fix the folded MAX(v) after the swap returns 999 instead of 10 and the case FAILS.
+-- Do not regenerate R/ with `run.py -r` to make it pass -- that would freeze the bug in.
+
+DROP DATABASE IF EXISTS test_minmax_replace_partition;
+CREATE DATABASE test_minmax_replace_partition;
+USE test_minmax_replace_partition;
+
+-- Exactly ONE formal partition: with a second one around, its visible-version time would
+-- hold the table-level maximum up and the swap could not move it backwards.
+CREATE TABLE t (
+  ds DATE NOT NULL,
+  v  INT  NOT NULL
+) DUPLICATE KEY(ds)
+PARTITION BY RANGE(ds) (PARTITION p1 VALUES [('2024-01-01'), ('2024-02-01')))
+DISTRIBUTED BY HASH(ds) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+ALTER TABLE t ADD TEMPORARY PARTITION tp VALUES [('2024-01-01'), ('2024-02-01'));
+
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+
+-- Order matters: the TEMPORARY partition is loaded first, so it ends up with the OLDER
+-- visible-version time, and swapping it in later drags the table-level maximum down.
+INSERT INTO t TEMPORARY PARTITION (tp) VALUES ('2024-01-05', 10);
+shell: sleep 2
+INSERT INTO t VALUES ('2024-01-20', 999);
+
+-- inspect_minmax() goes through getStatsSync(), so this warms the cache synchronously --
+-- no polling for the async loader. v is a non-partition column on purpose: min/max of a
+-- PARTITION column is folded by PartitionColumnMinMaxRewriteRule, which is not affected.
+SELECT inspect_minmax('test_minmax_replace_partition.t', 'v');
+
+-- The fold is live, and agrees with a real scan. Only the formal partition is visible
+-- here, so both must say 999.
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_replace_partition.t" | grep -c "EXECUTE IN FE"
+SELECT MAX(v) FROM t;
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+SELECT MAX(v) FROM t;
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+
+ALTER TABLE t REPLACE PARTITION (p1) WITH TEMPORARY PARTITION (tp);
+
+-- The 999 row is gone with the partition that held it. The folded answer must follow the
+-- data, not the stale cache entry.
+SELECT MAX(v) FROM t;
+SET enable_rewrite_simple_agg_to_meta_scan = false;
+SELECT MAX(v) FROM t;
+SET enable_rewrite_simple_agg_to_meta_scan = true;
+
+-- ... and the fold must come BACK once the entry is reloaded, rather than the swap
+-- disabling it for good.
+SELECT inspect_minmax('test_minmax_replace_partition.t', 'v');
+shell: ${mysql_cmd} -e "EXPLAIN SELECT MAX(v) FROM test_minmax_replace_partition.t" | grep -c "EXECUTE IN FE"
+SELECT MAX(v) FROM t;
+
+-- The ordinary path is unchanged: a plain load bumps a partition's visible version, so the
+-- entry that has just been reloaded is not served to the query that follows the load.
+INSERT INTO t VALUES ('2024-01-25', 500);
+SELECT MAX(v) FROM t;
+SELECT MIN(v) FROM t;
+
+DROP DATABASE test_minmax_replace_partition;
