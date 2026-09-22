@@ -29,7 +29,7 @@ Flink CDC pipeline 是一个 YAML 文件，包含 **source**（PostgreSQL）、*
 
 :::note
 
-Pipeline 不会同步 PostgreSQL 的表结构变更。参见[变更表结构](#change-a-tables-schema)。
+Pipeline 不会同步 PostgreSQL 的表结构变更。参见[变更表结构](#变更表结构)。
 
 :::
 
@@ -40,10 +40,10 @@ Pipeline 不会同步 PostgreSQL 的表结构变更。参见[变更表结构](#c
 - PostgreSQL 10 或更高版本。本文使用 PostgreSQL 内置的 `pgoutput` 逻辑解码插件，无需安装服务端扩展。
 - 一个 StarRocks 集群。
 - 一个 Flink 1.20 集群，以及运行它所需的 Java 11 或 17。
-- 每个 Flink TaskManager 都能通过网络访问 PostgreSQL 的端口（默认 `5432`），并按照[连接 StarRocks](#connect-to-starrocks) 中的说明访问 StarRocks。
+- 每个 Flink TaskManager 都能通过网络访问 PostgreSQL 的端口（默认 `5432`），并按照[连接 StarRocks](#连接-starrocks) 中的说明访问 StarRocks。
 - 要同步的每张 PostgreSQL 表都有主键。StarRocks 会使用相同的主键创建目标表。
 
-## 第一步：准备 PostgreSQL {#step-1-prepare-postgresql}
+## 第一步：准备 PostgreSQL
 
 请以 PostgreSQL 超级用户或表的所有者身份执行以下步骤。示例同步的是 `shop` 数据库中 `public` schema 下的表。
 
@@ -87,7 +87,7 @@ Pipeline 不会同步 PostgreSQL 的表结构变更。参见[变更表结构](#c
    host    replication  flink_cdc  10.0.0.0/24      scram-sha-256
    ```
 
-3. 为要同步的表创建 publication：
+3. 为要同步的表创建 publication。Publication 必须包含 pipeline 读取的所有表（即[第四步](#第四步定义-pipeline)中的 `tables` 配置项）：
 
    ```sql
    CREATE PUBLICATION flink_pub FOR TABLE public.orders, public.customers;
@@ -148,7 +148,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE, ALTER ON ALL TABLES IN DATABASE shop TO US
    cd ..
    ```
 
-## 第四步：定义 pipeline {#step-4-define-the-pipeline}
+## 第四步：定义 pipeline
 
 创建名为 `postgres-to-starrocks.yaml` 的文件：
 
@@ -160,8 +160,9 @@ source:
   port: 5432
   username: flink_cdc
   password: <password>
-  # <database>.<schema>.<table>。表名部分是正则表达式。
-  tables: shop.public.\.*
+  # 以逗号分隔的 <database>.<schema>.<table>，表名部分可以是正则表达式。
+  # 请列出与 publication 相同的表。
+  tables: shop.public.orders, shop.public.customers
   # 要创建并使用的复制槽。只能包含小写字母、数字和下划线。
   slot.name: flink_starrocks
   decoding.plugin.name: pgoutput
@@ -191,6 +192,7 @@ pipeline:
 
 请注意以下配置：
 
+- `tables` 必须与 publication 一致。快照会复制 `tables` 选中的所有表，但 PostgreSQL 只会为 publication 中的表推送变更。不在 publication 中的表只会被复制一次，之后不再更新，作业也不会报告任何错误。
 - `tables` 使用 `<database>.<schema>.<table>` 的格式指定表。但在 pipeline 内部，PostgreSQL 表只用 `<schema>.<table>` 标识，因此 `route` 和 `transform` 规则应匹配 `public.orders`，而不是 `shop.public.orders`。
 - 如果没有 `route` 配置，sink 会将每张表写入以 PostgreSQL **schema** 命名的 StarRocks 数据库，因此 `public` 下的表会写入名为 `public` 的数据库。
 - `sink.buffer-flush.interval-ms` 的默认值为 5 分钟。使用默认值时，新启动的 pipeline 在几分钟内看起来没有任何动作。
@@ -198,11 +200,11 @@ pipeline:
 
 有关 source 和 sink 的所有配置项，请参见 Flink CDC 的 [Postgres connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/pipeline-connectors/postgres/) 和 [StarRocks connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/pipeline-connectors/starrocks/) 参考文档。
 
-### 连接 StarRocks {#connect-to-starrocks}
+### 连接 StarRocks
 
 <FlinkStarRocksConnection />
 
-### 默认值为函数的列 {#columns-with-a-function-as-the-default-value}
+### 默认值为函数的列
 
 Sink 会将 PostgreSQL 中每一列的默认值复制到 StarRocks 的 CREATE TABLE 语句中。函数调用形式的默认值（例如 `DEFAULT now()`）在 StarRocks 中无效，作业会失败并报类似以下的错误：
 
@@ -235,7 +237,7 @@ Job ID: cda97bac3b504442d8106a2d70c6074c
 Job Description: PostgreSQL to StarRocks
 ```
 
-该作业会显示在 Flink Web UI 中（默认地址为 `http://<jobmanager_host>:8081`），其状态应保持为 `RUNNING`。如果状态变为 `RESTARTING`，请打开作业的 **Exceptions** 页签，并参见[常见问题排查](#troubleshooting)。
+该作业会显示在 Flink Web UI 中（默认地址为 `http://<jobmanager_host>:8081`），其状态应保持为 `RUNNING`。如果状态变为 `RESTARTING`，请打开作业的 **Exceptions** 页签，并参见[常见问题排查](#常见问题排查)。
 
 ## 第六步：验证同步结果
 
@@ -257,7 +259,7 @@ Job Description: PostgreSQL to StarRocks
 
 ## 管理 pipeline
 
-### 监控复制槽 {#monitor-the-replication-slot}
+### 监控复制槽
 
 在 pipeline 确认已读取 WAL 之前，复制槽会让 PostgreSQL 服务器一直保留这些 WAL。当 pipeline 停止或落后时，WAL 会不断累积。查看复制槽保留的 WAL 大小：
 
@@ -274,29 +276,44 @@ FROM pg_replication_slots;
 SELECT pg_drop_replication_slot('flink_starrocks');
 ```
 
-### 变更表结构 {#change-a-tables-schema}
+### 变更表结构
 
 Pipeline 不会获取 PostgreSQL 的表结构变更。如果在 PostgreSQL 中新增一列，作业会继续运行，但不会写入新列，即使您在 StarRocks 表中也添加了该列。
 
 表结构变更后，按以下步骤同步该表：
 
 1. 对 StarRocks 表执行相同的变更，例如使用 [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md)。
-2. 取消 Flink 作业。
-3. 删除复制槽，参见[监控复制槽](#monitor-the-replication-slot)。
-4. 重新提交 pipeline。Pipeline 会为每张表重新创建快照，然后继续同步变更。由于这些表都是主键表，快照会覆盖已有的行，而不会产生重复数据。
+2. [重新创建快照](#重新创建快照)。
 
-## 常见问题排查 {#troubleshooting}
+### 重新创建快照
+
+按以下步骤根据 PostgreSQL 的当前数据重新复制各表，然后恢复同步：
+
+1. 取消 Flink 作业。
+2. 删除复制槽，参见[监控复制槽](#监控复制槽)。
+3. 清空 pipeline 写入的每一张 StarRocks 表：
+
+   ```sql
+   TRUNCATE TABLE shop.orders;
+   TRUNCATE TABLE shop.customers;
+   ```
+
+4. 重新提交 pipeline。Pipeline 会为每张表重新创建快照，然后继续同步变更。
+
+请不要跳过清空表的步骤。从取消作业到新快照开始之间在 PostgreSQL 中发生的变更不会被重放。快照会覆盖仍然存在的行，但在这段时间内于 PostgreSQL 中删除的行会一直保留在 StarRocks 中。在快照完成之前，被清空的表为空或只有部分数据。
+
+## 常见问题排查
 
 当作业状态为 `RESTARTING` 时，Flink Web UI 的 **Exceptions** 页签会显示原因。请查看最内层的 `Caused by` 行。
 
 | 错误 | 原因及解决方法 |
 | --- | --- |
-| `number of requested standby connections exceeds max_wal_senders` | 通常是之前某个失败的表现，因为每次重试都会打开一个复制连接。请在 PostgreSQL 服务器日志中查找最早的错误。常见的是 `CREATE PUBLICATION` 报 `permission denied for database`，这说明 publication 不存在。参见[第一步](#step-1-prepare-postgresql)。 |
-| `DebeziumSchemaDataTypeInference` 或 `extractBeforeDataRecord` 中出现 `NullPointerException` | 某张表未设置 `REPLICA IDENTITY FULL`。设置后，取消作业、删除复制槽，然后重新提交 pipeline。 |
-| `Invalid default value for '<column>'` | 某列在 PostgreSQL 中的默认值是函数。参见[默认值为函数的列](#columns-with-a-function-as-the-default-value)。 |
+| `number of requested standby connections exceeds max_wal_senders` | 通常是之前某个失败的表现，因为每次重试都会打开一个复制连接。请在 PostgreSQL 服务器日志中查找最早的错误。常见的是 `CREATE PUBLICATION` 报 `permission denied for database`，这说明 publication 不存在。参见[第一步](#第一步准备-postgresql)。 |
+| `DebeziumSchemaDataTypeInference` 或 `extractBeforeDataRecord` 中出现 `NullPointerException` | 某张表未设置 `REPLICA IDENTITY FULL`。设置后，[重新创建快照](#重新创建快照)。 |
+| `Invalid default value for '<column>'` | 某列在 PostgreSQL 中的默认值是函数。参见[默认值为函数的列](#默认值为函数的列)。 |
 | `Connect to <host>:8040 ... Connection refused` | TaskManager 无法访问 FE 重定向导入请求的目标 BE 或 CN。请确保 TaskManager 能够通过 BE 和 CN 注册时使用的地址访问它们的 HTTP 端口。 |
 | 作业状态为 `RUNNING`，但 StarRocks 中没有数据 | 请等待一个刷新间隔。`sink.buffer-flush.interval-ms` 的默认值为 5 分钟。 |
-| 数据写入了名为 `public` 的数据库 | Pipeline 中没有 `route` 规则。参见[第四步](#step-4-define-the-pipeline)。 |
+| 数据写入了名为 `public` 的数据库 | Pipeline 中没有 `route` 规则。参见[第四步](#第四步定义-pipeline)。 |
 
 ## 相关文档
 

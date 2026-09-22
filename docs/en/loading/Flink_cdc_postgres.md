@@ -87,7 +87,7 @@ Run these steps as a PostgreSQL superuser, or as the owner of the tables. The ex
    host    replication  flink_cdc  10.0.0.0/24      scram-sha-256
    ```
 
-3. Create a publication for the tables to synchronize:
+3. Create a publication for the tables to synchronize. It must list every table that the pipeline reads (the `tables` option in [Step 4](#step-4-define-the-pipeline)):
 
    ```sql
    CREATE PUBLICATION flink_pub FOR TABLE public.orders, public.customers;
@@ -160,8 +160,9 @@ source:
   port: 5432
   username: flink_cdc
   password: <password>
-  # <database>.<schema>.<table>. The table part is a regular expression.
-  tables: shop.public.\.*
+  # Comma-separated <database>.<schema>.<table> entries; the table part can be a
+  # regular expression. List the same tables as the publication.
+  tables: shop.public.orders, shop.public.customers
   # Replication slot to create and use. Lowercase letters, digits, and underscores only.
   slot.name: flink_starrocks
   decoding.plugin.name: pgoutput
@@ -191,6 +192,7 @@ pipeline:
 
 Pay attention to these settings:
 
+- `tables` must match the publication. The snapshot copies every table that `tables` selects, but PostgreSQL streams changes only for the tables in the publication. A table outside the publication is copied once and then never updated, and the job reports no error.
 - `tables` names tables as `<database>.<schema>.<table>`. Inside the pipeline, however, a PostgreSQL table is identified only by `<schema>.<table>`, so `route` and `transform` rules match `public.orders`, not `shop.public.orders`.
 - Without the `route` block, the sink writes each table to a StarRocks database named after the PostgreSQL **schema**, so the tables in `public` land in a database called `public`.
 - `sink.buffer-flush.interval-ms` defaults to 5 minutes. With the default, a new pipeline looks idle for several minutes after it starts.
@@ -281,9 +283,24 @@ The pipeline does not pick up schema changes from PostgreSQL. If you add a colum
 To synchronize a table after a schema change:
 
 1. Make the same change to the StarRocks table, for example with [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md).
-2. Cancel the Flink job.
-3. Drop the replication slot, as shown in [Monitor the replication slot](#monitor-the-replication-slot).
-4. Submit the pipeline again. The pipeline takes a new snapshot of every table and then continues streaming changes. Because the tables are Primary Key tables, the snapshot overwrites the existing rows instead of duplicating them.
+2. [Take a new snapshot](#take-a-new-snapshot).
+
+### Take a new snapshot
+
+To copy the tables again from the current state of PostgreSQL and then resume streaming:
+
+1. Cancel the Flink job.
+2. Drop the replication slot, as shown in [Monitor the replication slot](#monitor-the-replication-slot).
+3. Truncate every StarRocks table that the pipeline writes to:
+
+   ```sql
+   TRUNCATE TABLE shop.orders;
+   TRUNCATE TABLE shop.customers;
+   ```
+
+4. Submit the pipeline again. The pipeline takes a new snapshot of every table and then continues streaming changes.
+
+Do not skip the truncate. Changes made in PostgreSQL between cancelling the job and the new snapshot are not replayed. The snapshot overwrites the rows that still exist, but a row deleted in PostgreSQL during that time would stay in StarRocks. The truncated tables are empty, or only partly loaded, until the snapshot finishes.
 
 ## Troubleshooting
 
@@ -292,7 +309,7 @@ When the job is `RESTARTING`, the **Exceptions** tab of the Flink web UI shows t
 | Error | Cause and solution |
 | --- | --- |
 | `number of requested standby connections exceeds max_wal_senders` | Often a symptom of an earlier failure, because every retry opens a replication connection. Check the PostgreSQL server log for the first error. A common one is `permission denied for database` on `CREATE PUBLICATION`, which means the publication does not exist. See [Step 1](#step-1-prepare-postgresql). |
-| `NullPointerException` in `DebeziumSchemaDataTypeInference` or `extractBeforeDataRecord` | A table does not have `REPLICA IDENTITY FULL`. Set it, cancel the job, drop the replication slot, and submit the pipeline again. |
+| `NullPointerException` in `DebeziumSchemaDataTypeInference` or `extractBeforeDataRecord` | A table does not have `REPLICA IDENTITY FULL`. Set it, and then [take a new snapshot](#take-a-new-snapshot). |
 | `Invalid default value for '<column>'` | A column's PostgreSQL default is a function. See [Columns with a function as the default value](#columns-with-a-function-as-the-default-value). |
 | `Connect to <host>:8040 ... Connection refused` | The TaskManager cannot reach the BE or CN that the FE redirected the load to. Make sure every BE and CN HTTP port is reachable from the TaskManagers at the address the BE or CN is registered with. |
 | Nothing arrives in StarRocks, but the job is `RUNNING` | Wait for the flush interval. The default `sink.buffer-flush.interval-ms` is 5 minutes. |

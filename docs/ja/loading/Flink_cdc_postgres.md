@@ -29,7 +29,7 @@ Flink CDC パイプラインは、**source**（PostgreSQL）、**sink**（StarRo
 
 :::note
 
-パイプラインは PostgreSQL のスキーマ変更を同期しません。[テーブルのスキーマを変更する](#change-a-tables-schema)を参照してください。
+パイプラインは PostgreSQL のスキーマ変更を同期しません。[テーブルのスキーマを変更する](#テーブルのスキーマを変更する)を参照してください。
 
 :::
 
@@ -40,10 +40,10 @@ Flink CDC パイプラインは、**source**（PostgreSQL）、**sink**（StarRo
 - PostgreSQL 10 以降。このトピックでは組み込みの論理デコーディングプラグイン `pgoutput` を使用するため、サーバー拡張機能は不要です。
 - StarRocks クラスター。
 - Flink 1.20 クラスターと、それを実行するための Java 11 または 17。
-- すべての Flink TaskManager から PostgreSQL のポート（デフォルトは `5432`）へのネットワークアクセスと、[StarRocks に接続する](#connect-to-starrocks)で説明する StarRocks へのネットワークアクセス。
+- すべての Flink TaskManager から PostgreSQL のポート（デフォルトは `5432`）へのネットワークアクセスと、[StarRocks に接続する](#starrocks-に接続する)で説明する StarRocks へのネットワークアクセス。
 - 同期するすべての PostgreSQL テーブルの主キー。StarRocks は同じ主キーで宛先テーブルを作成します。
 
-## ステップ 1: PostgreSQL を準備する {#step-1-prepare-postgresql}
+## ステップ 1: PostgreSQL を準備する
 
 以下の手順は、PostgreSQL のスーパーユーザーまたはテーブルの所有者として実行します。例では、`shop` データベースの `public` スキーマにあるテーブルを同期します。
 
@@ -87,7 +87,7 @@ Flink CDC パイプラインは、**source**（PostgreSQL）、**sink**（StarRo
    host    replication  flink_cdc  10.0.0.0/24      scram-sha-256
    ```
 
-3. 同期するテーブルのパブリケーションを作成します。
+3. 同期するテーブルのパブリケーションを作成します。パブリケーションには、パイプラインが読み取るすべてのテーブル（[ステップ 4](#ステップ-4-パイプラインを定義する) の `tables` オプション）を含める必要があります。
 
    ```sql
    CREATE PUBLICATION flink_pub FOR TABLE public.orders, public.customers;
@@ -148,7 +148,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE, ALTER ON ALL TABLES IN DATABASE shop TO US
    cd ..
    ```
 
-## ステップ 4: パイプラインを定義する {#step-4-define-the-pipeline}
+## ステップ 4: パイプラインを定義する
 
 `postgres-to-starrocks.yaml` という名前のファイルを作成します。
 
@@ -160,8 +160,9 @@ source:
   port: 5432
   username: flink_cdc
   password: <password>
-  # <database>.<schema>.<table>。テーブル名の部分は正規表現です。
-  tables: shop.public.\.*
+  # カンマ区切りの <database>.<schema>.<table>。テーブル名の部分には正規表現を使用できます。
+  # パブリケーションと同じテーブルを指定してください。
+  tables: shop.public.orders, shop.public.customers
   # 作成して使用するレプリケーションスロット。小文字、数字、アンダースコアのみ使用できます。
   slot.name: flink_starrocks
   decoding.plugin.name: pgoutput
@@ -191,6 +192,7 @@ pipeline:
 
 次の設定に注意してください。
 
+- `tables` はパブリケーションと一致させる必要があります。スナップショットは `tables` で選択されたすべてのテーブルをコピーしますが、PostgreSQL が変更を送信するのはパブリケーションに含まれるテーブルだけです。パブリケーションに含まれないテーブルは一度コピーされた後は更新されず、ジョブはエラーを報告しません。
 - `tables` はテーブルを `<database>.<schema>.<table>` の形式で指定します。ただし、パイプライン内では PostgreSQL のテーブルは `<schema>.<table>` だけで識別されるため、`route` と `transform` のルールは `shop.public.orders` ではなく `public.orders` に一致させます。
 - `route` ブロックがない場合、sink は各テーブルを PostgreSQL の**スキーマ**名と同じ名前の StarRocks データベースに書き込みます。そのため、`public` のテーブルは `public` という名前のデータベースに入ります。
 - `sink.buffer-flush.interval-ms` のデフォルトは 5 分です。デフォルトのままだと、新しいパイプラインは開始後数分間何もしていないように見えます。
@@ -198,11 +200,11 @@ pipeline:
 
 source と sink のすべてのオプションについては、Flink CDC の [Postgres connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/pipeline-connectors/postgres/) および [StarRocks connector](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/pipeline-connectors/starrocks/) のリファレンスを参照してください。
 
-### StarRocks に接続する {#connect-to-starrocks}
+### StarRocks に接続する
 
 <FlinkStarRocksConnection />
 
-### デフォルト値が関数である列 {#columns-with-a-function-as-the-default-value}
+### デフォルト値が関数である列
 
 sink は、PostgreSQL の各列のデフォルト値を StarRocks の CREATE TABLE ステートメントにコピーします。`DEFAULT now()` のような関数呼び出しのデフォルト値は StarRocks では無効なため、ジョブは次のようなエラーで失敗します。
 
@@ -235,7 +237,7 @@ Job ID: cda97bac3b504442d8106a2d70c6074c
 Job Description: PostgreSQL to StarRocks
 ```
 
-ジョブは Flink Web UI（デフォルトは `http://<jobmanager_host>:8081`）に表示され、ステータスは `RUNNING` のままになるはずです。`RESTARTING` に変わった場合は、ジョブの **Exceptions** タブを開き、[トラブルシューティング](#troubleshooting)を参照してください。
+ジョブは Flink Web UI（デフォルトは `http://<jobmanager_host>:8081`）に表示され、ステータスは `RUNNING` のままになるはずです。`RESTARTING` に変わった場合は、ジョブの **Exceptions** タブを開き、[トラブルシューティング](#トラブルシューティング)を参照してください。
 
 ## ステップ 6: 同期を確認する
 
@@ -257,7 +259,7 @@ Job Description: PostgreSQL to StarRocks
 
 ## パイプラインを管理する
 
-### レプリケーションスロットを監視する {#monitor-the-replication-slot}
+### レプリケーションスロットを監視する
 
 レプリケーションスロットは、パイプラインが読み取りを確認するまで PostgreSQL サーバーに WAL を保持させます。パイプラインが停止している間や遅れている場合、WAL は蓄積されます。スロットが保持している WAL の量を確認します。
 
@@ -274,29 +276,44 @@ FROM pg_replication_slots;
 SELECT pg_drop_replication_slot('flink_starrocks');
 ```
 
-### テーブルのスキーマを変更する {#change-a-tables-schema}
+### テーブルのスキーマを変更する
 
 パイプラインは PostgreSQL のスキーマ変更を取り込みません。PostgreSQL で列を追加すると、ジョブは実行を続けますが、StarRocks のテーブルにその列を追加しても新しい列は書き込まれません。
 
 スキーマ変更後にテーブルを同期するには、次の手順を実行します。
 
 1. StarRocks のテーブルに同じ変更を加えます。たとえば [ALTER TABLE](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md) を使用します。
-2. Flink ジョブをキャンセルします。
-3. [レプリケーションスロットを監視する](#monitor-the-replication-slot)に示す方法で、レプリケーションスロットを削除します。
-4. パイプラインを再送信します。パイプラインはすべてのテーブルのスナップショットを取り直した後、変更のストリーミングを続けます。テーブルは主キーテーブルなので、スナップショットは既存の行を重複させずに上書きします。
+2. [スナップショットを取り直します](#スナップショットを取り直す)。
 
-## トラブルシューティング {#troubleshooting}
+### スナップショットを取り直す
+
+PostgreSQL の現在の状態からテーブルをコピーし直し、ストリーミングを再開するには、次の手順を実行します。
+
+1. Flink ジョブをキャンセルします。
+2. [レプリケーションスロットを監視する](#レプリケーションスロットを監視する)に示す方法で、レプリケーションスロットを削除します。
+3. パイプラインが書き込むすべての StarRocks テーブルを TRUNCATE します。
+
+   ```sql
+   TRUNCATE TABLE shop.orders;
+   TRUNCATE TABLE shop.customers;
+   ```
+
+4. パイプラインを再送信します。パイプラインはすべてのテーブルのスナップショットを取り直した後、変更のストリーミングを続けます。
+
+TRUNCATE の手順は省略しないでください。ジョブをキャンセルしてから新しいスナップショットが始まるまでの間に PostgreSQL で行われた変更は再生されません。スナップショットは残っている行を上書きしますが、その間に PostgreSQL で削除された行は StarRocks に残ったままになります。スナップショットが完了するまで、TRUNCATE したテーブルは空か、一部のデータだけが入った状態になります。
+
+## トラブルシューティング
 
 ジョブが `RESTARTING` の場合、Flink Web UI の **Exceptions** タブに原因が表示されます。最も内側の `Caused by` 行を確認してください。
 
 | エラー | 原因と解決方法 |
 | --- | --- |
-| `number of requested standby connections exceeds max_wal_senders` | 多くの場合、それ以前の失敗の症状です。再試行のたびにレプリケーション接続が開かれるためです。PostgreSQL サーバーのログで最初のエラーを確認してください。よくあるのは `CREATE PUBLICATION` での `permission denied for database` で、これはパブリケーションが存在しないことを意味します。[ステップ 1](#step-1-prepare-postgresql) を参照してください。 |
-| `DebeziumSchemaDataTypeInference` または `extractBeforeDataRecord` での `NullPointerException` | テーブルに `REPLICA IDENTITY FULL` が設定されていません。設定してからジョブをキャンセルし、レプリケーションスロットを削除して、パイプラインを再送信します。 |
-| `Invalid default value for '<column>'` | 列の PostgreSQL のデフォルト値が関数です。[デフォルト値が関数である列](#columns-with-a-function-as-the-default-value)を参照してください。 |
+| `number of requested standby connections exceeds max_wal_senders` | 多くの場合、それ以前の失敗の症状です。再試行のたびにレプリケーション接続が開かれるためです。PostgreSQL サーバーのログで最初のエラーを確認してください。よくあるのは `CREATE PUBLICATION` での `permission denied for database` で、これはパブリケーションが存在しないことを意味します。[ステップ 1](#ステップ-1-postgresql-を準備する) を参照してください。 |
+| `DebeziumSchemaDataTypeInference` または `extractBeforeDataRecord` での `NullPointerException` | テーブルに `REPLICA IDENTITY FULL` が設定されていません。設定してから、[スナップショットを取り直します](#スナップショットを取り直す)。 |
+| `Invalid default value for '<column>'` | 列の PostgreSQL のデフォルト値が関数です。[デフォルト値が関数である列](#デフォルト値が関数である列)を参照してください。 |
 | `Connect to <host>:8040 ... Connection refused` | FE がロードをリダイレクトした先の BE または CN に TaskManager が接続できません。BE と CN が登録されているアドレスで、すべての BE と CN の HTTP ポートに TaskManager から接続できることを確認してください。 |
 | ジョブは `RUNNING` だが、StarRocks にデータが届かない | フラッシュ間隔が経過するまで待ちます。`sink.buffer-flush.interval-ms` のデフォルトは 5 分です。 |
-| 行が `public` という名前のデータベースに入る | パイプラインに `route` ルールがありません。[ステップ 4](#step-4-define-the-pipeline) を参照してください。 |
+| 行が `public` という名前のデータベースに入る | パイプラインに `route` ルールがありません。[ステップ 4](#ステップ-4-パイプラインを定義する) を参照してください。 |
 
 ## 関連項目
 
