@@ -176,7 +176,7 @@ public class IVMAnalyzerTest extends MVIVMIcebergTestBase {
     /**
      * A bare union-aggregate select item collapses to a single column: the state IS the visible
      * output, so no hidden __AGG_STATE_ copy is stored. Creating the MV runs the CREATE-time
-     * trial, so this also exercises IvmRewriter.bindStateColumnsForAggregate end to end.
+     * trial, so this also exercises IvmRewriter.bindMvColumnsForAggregate end to end.
      */
     @Test
     public void testUnionAggregateCollapsesStateColumn() throws Exception {

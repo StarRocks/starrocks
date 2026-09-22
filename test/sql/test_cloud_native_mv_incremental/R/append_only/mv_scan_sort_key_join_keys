@@ -1,0 +1,400 @@
+-- name: test_ivm_mv_scan_joins_on_the_sort_key_prefix @cloud
+CREATE TABLE sk (dt DATETIME, a INT, b INT, v BIGINT) DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO sk VALUES
+  ('2026-01-10 00:00:00',1,10,100),('2026-01-10 00:00:00',2,20,200),
+  ('2026-01-11 00:00:00',1,10,110),('2026-01-11 00:00:00',3,30,330);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_sk
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+ORDER BY (b, a)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a, b, SUM(v) AS v FROM sk GROUP BY dt, a, b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT dt, a, b, v FROM mv_sk ORDER BY dt, a;
+-- result:
+2026-01-10 00:00:00	1	10	100
+2026-01-10 00:00:00	2	20	200
+2026-01-11 00:00:00	1	10	110
+2026-01-11 00:00:00	3	30	330
+-- !result
+INSERT INTO sk VALUES ('2026-01-11 00:00:00',1,10,5);
+-- result:
+-- !result
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_sk', 'b <=> ', 'a <=> ', 'MaterializedView: true')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_sk WITH SYNC MODE;
+SELECT dt, a, b, v FROM mv_sk ORDER BY dt, a;
+-- result:
+2026-01-10 00:00:00	1	10	100
+2026-01-10 00:00:00	2	20	200
+2026-01-11 00:00:00	1	10	115
+2026-01-11 00:00:00	3	30	330
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, b, v FROM mv_sk EXCEPT SELECT dt, a, b, SUM(v) FROM sk GROUP BY dt, a, b) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, b, SUM(v) FROM sk GROUP BY dt, a, b EXCEPT SELECT dt, a, b, v FROM mv_sk) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_join_keeps_the_null_group @cloud
+CREATE TABLE skn (dt DATETIME, k INT, v BIGINT) DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(dt) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO skn VALUES ('2026-02-10 00:00:00',NULL,10),('2026-02-10 00:00:00',7,70);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_skn
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2
+ORDER BY (k)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, k, SUM(v) AS v FROM skn GROUP BY dt, k;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_skn WITH SYNC MODE;
+SELECT dt, ifnull(CAST(k AS VARCHAR), 'NULL') AS k, v FROM mv_skn ORDER BY 2;
+-- result:
+2026-02-10 00:00:00	7	70
+2026-02-10 00:00:00	NULL	10
+-- !result
+INSERT INTO skn VALUES ('2026-02-10 00:00:00',NULL,7),('2026-02-10 00:00:00',7,3);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_skn WITH SYNC MODE;
+SELECT dt, ifnull(CAST(k AS VARCHAR), 'NULL') AS k, v FROM mv_skn ORDER BY 2;
+-- result:
+2026-02-10 00:00:00	7	73
+2026-02-10 00:00:00	NULL	17
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, k, v FROM mv_skn EXCEPT SELECT dt, k, SUM(v) FROM skn GROUP BY dt, k) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, k, SUM(v) FROM skn GROUP BY dt, k EXCEPT SELECT dt, k, v FROM mv_skn) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_without_order_by_keeps_only_the_row_id @cloud
+CREATE TABLE skp (dt DATETIME, a INT, v BIGINT) DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO skp VALUES ('2026-03-10 00:00:00',1,10),('2026-03-11 00:00:00',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_skp
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a, SUM(v) AS v FROM skp GROUP BY dt, a;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_skp WITH SYNC MODE;
+INSERT INTO skp VALUES ('2026-03-11 00:00:00',2,5);
+-- result:
+-- !result
+function: assert_explain_not_contains('REFRESH MATERIALIZED VIEW mv_skp', '<=>')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_skp WITH SYNC MODE;
+SELECT dt, a, v FROM mv_skp ORDER BY dt, a;
+-- result:
+2026-03-10 00:00:00	1	10
+2026-03-11 00:00:00	2	25
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, v FROM mv_skp EXCEPT SELECT dt, a, SUM(v) FROM skp GROUP BY dt, a) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, SUM(v) FROM skp GROUP BY dt, a EXCEPT SELECT dt, a, v FROM mv_skp) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_join_on_a_fingerprint_row_id @cloud
+CREATE TABLE fp (dt DATETIME, g1 INT, g2 INT, p1 BIGINT, p2 BIGINT, p3 BIGINT, v BIGINT)
+DUPLICATE KEY(dt, g1)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(g1) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO fp VALUES
+  ('2026-04-10 00:00:00',1,10,0,0,0,100),('2026-04-10 00:00:00',2,20,0,0,0,200),
+  ('2026-04-11 00:00:00',1,10,0,0,0,110);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_fp
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(g1) BUCKETS 2
+ORDER BY (g1, g2)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, g1, g2, p1, p2, p3, SUM(v) AS v FROM fp GROUP BY dt, g1, g2, p1, p2, p3;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_fp WITH SYNC MODE;
+SELECT dt, g1, g2, v FROM mv_fp ORDER BY dt, g1;
+-- result:
+2026-04-10 00:00:00	1	10	100
+2026-04-10 00:00:00	2	20	200
+2026-04-11 00:00:00	1	10	110
+-- !result
+INSERT INTO fp VALUES ('2026-04-11 00:00:00',1,10,0,0,0,7);
+-- result:
+-- !result
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_fp', 'g1 <=> ', 'g2 <=> ')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_fp WITH SYNC MODE;
+SELECT dt, g1, g2, v FROM mv_fp ORDER BY dt, g1;
+-- result:
+2026-04-10 00:00:00	1	10	100
+2026-04-10 00:00:00	2	20	200
+2026-04-11 00:00:00	1	10	117
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, g1, g2, v FROM mv_fp EXCEPT SELECT dt, g1, g2, SUM(v) FROM fp GROUP BY dt, g1, g2) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, g1, g2, SUM(v) FROM fp GROUP BY dt, g1, g2 EXCEPT SELECT dt, g1, g2, v FROM mv_fp) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_on_an_aggregate_output_is_not_joined @cloud
+CREATE TABLE agsk (dt DATETIME, a INT, v BIGINT) DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO agsk VALUES ('2026-05-10 00:00:00',1,10),('2026-05-11 00:00:00',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_agsk
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+ORDER BY (total, a)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a, SUM(v) AS total FROM agsk GROUP BY dt, a;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_agsk WITH SYNC MODE;
+INSERT INTO agsk VALUES ('2026-05-11 00:00:00',2,5);
+-- result:
+-- !result
+function: assert_explain_not_contains('REFRESH MATERIALIZED VIEW mv_agsk', '<=>')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_agsk WITH SYNC MODE;
+SELECT dt, a, total FROM mv_agsk ORDER BY dt, a;
+-- result:
+2026-05-10 00:00:00	1	10
+2026-05-11 00:00:00	2	25
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, total FROM mv_agsk EXCEPT SELECT dt, a, SUM(v) FROM agsk GROUP BY dt, a) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, SUM(v) FROM agsk GROUP BY dt, a EXCEPT SELECT dt, a, total FROM mv_agsk) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_join_uses_the_partition_column @cloud
+CREATE TABLE psk (dt DATETIME NOT NULL, a INT NOT NULL, b INT NOT NULL, v BIGINT)
+DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO psk SELECT date_add('2026-06-10 00:00:00', INTERVAL CAST(i AS INT) MINUTE),
+       CAST(i % 7 AS INT), CAST(i % 5 AS INT), 1
+FROM TABLE(generate_series(0, 599)) t(i);
+-- result:
+-- !result
+SELECT count(distinct dt) AS distinct_dt_in_one_partition FROM psk;
+-- result:
+600
+-- !result
+CREATE MATERIALIZED VIEW mv_psk
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+ORDER BY (dt, a, b)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a, b, SUM(v) AS v FROM psk GROUP BY dt, a, b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_psk WITH SYNC MODE;
+INSERT INTO psk VALUES ('2026-06-10 00:05:00',5,0,9);
+-- result:
+-- !result
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_psk', 'dt <=> ', 'a <=> ')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('REFRESH MATERIALIZED VIEW mv_psk', 'b <=> ')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_psk WITH SYNC MODE;
+SELECT dt, a, b, v FROM mv_psk WHERE dt = '2026-06-10 00:05:00' ORDER BY a;
+-- result:
+2026-06-10 00:05:00	5	0	10
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, b, v FROM mv_psk EXCEPT SELECT dt, a, b, SUM(v) FROM psk GROUP BY dt, a, b) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, b, SUM(v) FROM psk GROUP BY dt, a, b EXCEPT SELECT dt, a, b, v FROM mv_psk) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_join_on_an_aliased_group_key @cloud
+CREATE TABLE alk (dt DATETIME NOT NULL, a INT NOT NULL, v BIGINT) DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO alk VALUES ('2026-09-10 00:00:00',1,10),('2026-09-11 00:00:00',2,20);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_alk
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(x) BUCKETS 2
+ORDER BY (y)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a AS x, a AS y, SUM(v) AS s FROM alk GROUP BY dt, a;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_alk WITH SYNC MODE;
+INSERT INTO alk VALUES ('2026-09-11 00:00:00',2,6);
+-- result:
+-- !result
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_alk', ' <=> ')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_alk WITH SYNC MODE;
+SELECT dt, x, y, s FROM mv_alk ORDER BY dt, x;
+-- result:
+2026-09-10 00:00:00	1	1	10
+2026-09-11 00:00:00	2	2	26
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, x, s FROM mv_alk EXCEPT SELECT dt, a, SUM(v) FROM alk GROUP BY dt, a) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, SUM(v) FROM alk GROUP BY dt, a EXCEPT SELECT dt, x, s FROM mv_alk) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+-- name: test_ivm_mv_scan_sort_key_join_switched_off @cloud
+CREATE TABLE osk (dt DATETIME, a INT, b INT, v BIGINT) DUPLICATE KEY(dt, a)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO osk VALUES ('2026-07-10 00:00:00',1,10,1),('2026-07-11 00:00:00',2,20,2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_osk
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+ORDER BY (b, a)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL",
+            "session.enable_ivm_mv_scan_sort_key_join_keys" = "false")
+AS SELECT dt, a, b, SUM(v) AS v FROM osk GROUP BY dt, a, b;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_osk WITH SYNC MODE;
+INSERT INTO osk VALUES ('2026-07-11 00:00:00',2,20,8);
+-- result:
+-- !result
+function: assert_explain_not_contains('REFRESH MATERIALIZED VIEW mv_osk', '<=>')
+-- result:
+None
+-- !result
+REFRESH MATERIALIZED VIEW mv_osk WITH SYNC MODE;
+SELECT dt, a, b, v FROM mv_osk ORDER BY dt, a;
+-- result:
+2026-07-10 00:00:00	1	10	1
+2026-07-11 00:00:00	2	20	10
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, b, v FROM mv_osk EXCEPT SELECT dt, a, b, SUM(v) FROM osk GROUP BY dt, a, b) t;
+-- result:
+0
+-- !result
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, b, SUM(v) FROM osk GROUP BY dt, a, b EXCEPT SELECT dt, a, b, v FROM mv_osk) t;
+-- result:
+0
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result

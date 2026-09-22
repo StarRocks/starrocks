@@ -1015,6 +1015,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_IVM_REFRESH = "enable_ivm_refresh";
     public static final String TVR_TARGET_MVID = "tvr_target_mvid";
     public static final String ENABLE_IVM_MV_PARTITION_PRUNING = "enable_ivm_mv_partition_pruning";
+    public static final String ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS = "enable_ivm_mv_scan_sort_key_join_keys";
 
     public static final String ENABLE_SPM_REWRITE = "enable_spm_rewrite";
     public static final String SPM_REWRITE_TIMEOUT_MS = "spm_rewrite_timeout_ms";
@@ -3220,6 +3221,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_IVM_MV_PARTITION_PRUNING)
     private boolean enableIvmMvPartitionPruning = true;
+
+    @VarAttr(name = ENABLE_IVM_MV_SCAN_SORT_KEY_JOIN_KEYS)
+    private boolean enableIvmMvScanSortKeyJoinKeys = true;
 
     @VarAttr(name = ENABLE_SPM_REWRITE)
     private boolean enableSPMRewrite = false;
@@ -6089,6 +6093,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableIvmMvPartitionPruning() {
         return enableIvmMvPartitionPruning;
+    }
+
+    public void setEnableIvmMvScanSortKeyJoinKeys(boolean enableIvmMvScanSortKeyJoinKeys) {
+        this.enableIvmMvScanSortKeyJoinKeys = enableIvmMvScanSortKeyJoinKeys;
+    }
+
+    public boolean isEnableIvmMvScanSortKeyJoinKeys() {
+        return enableIvmMvScanSortKeyJoinKeys;
     }
 
     public void setTvrTargetMvid(String tvrTargetMvid) {

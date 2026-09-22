@@ -107,7 +107,7 @@ public final class IvmTrialRewriter {
             optimizerContext.setStatement(buildSyntheticInsertStmt(mockMv, rewrittenQuery));
             optimizerContext.getQueryMaterializationContext().setOverrideTargetMv(mockMv);
             // The trial bypasses InsertPlanner, so stash the ordered outputs here as it would
-            // (position i writes mock schema[i]) for IvmRewriter.bindStateColumnsForAggregate.
+            // (position i writes mock schema[i]) for IvmRewriter.bindMvColumnsForAggregate.
             optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(
                     alignInsertOutputColumns(stmt, logicalPlan.getOutputColumn(), columnRefFactory));
             // RULE_BASED skips Memo / cost-based; the mock MV has no statistics or partitions.

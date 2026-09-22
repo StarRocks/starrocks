@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.ivm;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -49,6 +50,7 @@ import com.starrocks.type.IntegerType;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Entry point for the unified IVM (Incremental View Maintenance) plan rewriting.
@@ -110,7 +112,7 @@ public class IvmRewriter {
             tree.setChild(0, OptExpression.create(
                     new LogicalDeltaOperator(true, actionColumn), trialPlan));
             deriveLogicalProperty(tree);
-            bindStateColumnsForAggregate(optimizerContext, trialPlan);
+            bindMvColumnsForAggregate(optimizerContext, trialPlan);
             scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.IVM_DELTA_REWRITE_RULES);
 
             // Phase 2: Convergence check — every Delta/Version marker must have been
@@ -225,8 +227,10 @@ public class IvmRewriter {
      * excludes finalized outputs like CASE(sum_state_merge(...)), group keys and __ROW_ID__.
      * Keying by ref id instead of zipping prefix-filtered schema positions against id-sorted
      * aggregates keeps the pairing correct for any column layout.</p>
+     *
+     * <p>The grouping keys bind the same way, which is how a sort key is traced back to its group key.</p>
      */
-    private static void bindStateColumnsForAggregate(OptimizerContext optimizerContext, OptExpression plan) {
+    private static void bindMvColumnsForAggregate(OptimizerContext optimizerContext, OptExpression plan) {
         List<ColumnRefOperator> outputColumns =
                 optimizerContext.getTvrOptContext().getIvmInsertOutputColumns();
         if (outputColumns == null) {
@@ -268,6 +272,8 @@ public class IvmRewriter {
                 "IVM insert output count %s must match MV '%s' schema size %s",
                 outputColumns.size(), mv.getName(), schema.size());
         Map<Integer, String> stateColumnByAggRefId = Maps.newHashMap();
+        Map<String, Integer> groupKeyRefIdByMvColumn = Maps.newHashMap();
+        Set<ColumnRefOperator> groupingKeys = Sets.newHashSet(aggOperator.getGroupingKeys());
         for (int i = 0; i < outputColumns.size(); i++) {
             ScalarOperator resolved = outputColumns.get(i);
             for (int hop = 0; hop < 8 && resolved instanceof ColumnRefOperator
@@ -278,15 +284,21 @@ public class IvmRewriter {
                 }
                 resolved = next;
             }
-            if (resolved instanceof ColumnRefOperator
-                    && aggOperator.getAggregations().containsKey((ColumnRefOperator) resolved)) {
-                stateColumnByAggRefId.put(((ColumnRefOperator) resolved).getId(), schema.get(i).getName());
+            if (!(resolved instanceof ColumnRefOperator resolvedRef)) {
+                continue;
+            }
+            if (aggOperator.getAggregations().containsKey(resolvedRef)) {
+                stateColumnByAggRefId.put(resolvedRef.getId(), schema.get(i).getName());
+            } else if (groupingKeys.contains(resolvedRef)) {
+                // Keyed by column, not by key: a AS x, a AS y owns both, and a sort key may name either.
+                groupKeyRefIdByMvColumn.put(schema.get(i).getName(), resolvedRef.getId());
             }
         }
         Preconditions.checkState(stateColumnByAggRefId.size() == aggOperator.getAggregations().size(),
                 "every aggregate of MV '%s' must bind to exactly one state column, bound %s of %s",
                 mv.getName(), stateColumnByAggRefId.size(), aggOperator.getAggregations().size());
         optimizerContext.getTvrOptContext().setIvmStateColumnNameByAggRefId(stateColumnByAggRefId);
+        optimizerContext.getTvrOptContext().setIvmGroupKeyRefIdByMvColumn(groupKeyRefIdByMvColumn);
     }
 
     static MaterializedView loadTargetMv(OptimizerContext optimizerContext) {

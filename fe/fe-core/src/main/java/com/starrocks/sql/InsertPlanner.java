@@ -703,7 +703,7 @@ public class InsertPlanner {
             optimizerContext.setSourceTablesCount(sourceTablesCount);
             if (session.getSessionVariable().isEnableIVMRefresh()) {
                 // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
-                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                // this pairing to bind aggregates to MV state columns (bindMvColumnsForAggregate).
                 optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
                 optimizerContext.getTvrOptContext().setIvmExcludedMvPartitions(ivmExcludedMvPartitions);
             }

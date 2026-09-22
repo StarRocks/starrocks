@@ -451,7 +451,7 @@ public class IVMAnalyzer {
 
             // A metric-state union's finalize is the identity (the merged state IS the result), so
             // the select item itself becomes the state column — no separate hidden copy. The refresh
-            // side finds it via IvmRewriter.bindStateColumnsForAggregate.
+            // side finds it via IvmRewriter.bindMvColumnsForAggregate.
             if (isCollapsibleUnionAggregate(aggFuncExpr, bareAggregateItems)) {
                 collapsedInfos.add(aggFunctionInfo);
                 substitutionMap.put(aggFuncExpr, intermediateAggFuncExpr);
