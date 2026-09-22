@@ -23,6 +23,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -66,6 +67,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
     protected ImmutableList<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimizeOption scanOptimizeOption;
     protected TvrVersionRange tvrVersionRange;
+    protected IndexCondition indexCondition;
 
     public LogicalScanOperator(
             OperatorType type,
@@ -155,6 +157,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.tvrVersionRange = tvrVersionRange;
     }
 
+    public IndexCondition getIndexCondition() {
+        return indexCondition;
+    }
+
     // for mark empty partitions/empty tablet
     public boolean isEmptyOutputRows() {
         return false;
@@ -213,6 +219,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         return "LogicalScanOperator" + " {" +
                 "table='" + table.getId() + '\'' +
                 ", outputColumns='" + new ArrayList<>(colRefToColumnMetaMap.keySet()) + '\'' +
+                ", indexCondition='" + indexCondition + '\'' +
                 '}';
     }
 
@@ -241,12 +248,13 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         LogicalScanOperator that = (LogicalScanOperator) o;
         return Objects.equals(table.getId(), that.table.getId()) &&
-                Objects.equals(colRefToColumnMetaMap.keySet(), that.getColRefToColumnMetaMap().keySet());
+                Objects.equals(colRefToColumnMetaMap.keySet(), that.getColRefToColumnMetaMap().keySet()) &&
+                Objects.equals(indexCondition, that.indexCondition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet());
+        return Objects.hash(super.hashCode(), table.getId(), colRefToColumnMetaMap.keySet(), indexCondition);
     }
 
     public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
@@ -262,6 +270,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             builder.scanOptimizeOption = scanOperator.scanOptimizeOption;
             builder.partitionColumns = scanOperator.partitionColumns;
             builder.tvrVersionRange = scanOperator.tvrVersionRange;
+            builder.indexCondition = scanOperator.indexCondition;
             return (B) this;
         }
 
@@ -303,6 +312,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
         public B setTableVersionRange(TvrVersionRange tableVersionRange) {
             builder.tvrVersionRange = tableVersionRange;
+            return (B) this;
+        }
+
+        public B setIndexCondition(IndexCondition indexCondition) {
+            builder.indexCondition = indexCondition;
             return (B) this;
         }
     }

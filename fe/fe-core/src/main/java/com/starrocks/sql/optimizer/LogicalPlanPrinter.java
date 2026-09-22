@@ -232,13 +232,17 @@ public class LogicalPlanPrinter {
 
         @Override
         public OperatorStr visitLogicalTableScan(OptExpression optExpression, Integer step) {
-            if (!isPrintColumnRef) {
-                return new OperatorStr("logical scan", step, Collections.emptyList());
-            }
             LogicalScanOperator scanOperator = optExpression.getOp().cast();
+            if (!isPrintColumnRef) {
+                String suffix = scanOperator.getIndexCondition() == null ? ""
+                        : " index[" + scanOperator.getIndexCondition() + "]";
+                return new OperatorStr("logical scan" + suffix, step, Collections.emptyList());
+            }
+            String suffix = scanOperator.getIndexCondition() == null ? ""
+                    : " index[" + scanOperator.getIndexCondition() + "]";
             return new OperatorStr("logical scan(" +
                     scanOperator.getColRefToColumnMetaMap().keySet().stream().map(col -> "" + col).collect(
-                            Collectors.joining(", ")) + ")", step, Collections.emptyList());
+                            Collectors.joining(", ")) + ")" + suffix, step, Collections.emptyList());
         }
 
         @Override
@@ -462,7 +466,8 @@ public class LogicalPlanPrinter {
             PhysicalScanOperator scan = (PhysicalScanOperator) optExpression.getOp();
             StringBuilder sb = new StringBuilder(scanName + " (");
             sb.append("columns").append(scan.getUsedColumns());
-            sb.append(" predicate[").append(scan.getPredicate()).append("]");
+            sb.append(" predicate[").append(scan.getPredicate()).append("]")
+                    .append(scan.getIndexCondition() == null ? "" : " index[" + scan.getIndexCondition() + "]");
             sb.append(")");
             if (scan.getLimit() >= 0) {
                 sb.append(" Limit ").append(scan.getLimit());
