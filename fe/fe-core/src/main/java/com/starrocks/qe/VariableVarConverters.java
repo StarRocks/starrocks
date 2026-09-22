@@ -22,6 +22,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 
+import java.util.Locale;
 import java.util.Map;
 
 // Helper class to drives the convert of session variables according to the converters.
@@ -39,6 +40,7 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.PARTIAL_UPDATE_MODE, partialUpdateModeConverter);
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
         CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
+        CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -66,6 +68,18 @@ public class VariableVarConverters {
                 return value;
             } else {
                 throw new DdlException("partial_update_mode only support auto|row|column");
+            }
+        }
+    }
+
+    public static class PaimonReaderModeConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            String mode = value.toUpperCase(Locale.ROOT);
+            try {
+                return SessionVariable.PaimonReaderMode.valueOf(mode).name();
+            } catch (IllegalArgumentException e) {
+                throw new DdlException("paimon_reader_mode only supports AUTO, JNI, or NATIVE");
             }
         }
     }

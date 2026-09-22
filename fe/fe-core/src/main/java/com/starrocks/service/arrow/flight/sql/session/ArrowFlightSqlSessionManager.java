@@ -82,7 +82,6 @@ public class ArrowFlightSqlSessionManager {
         }
 
         ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token);
-        tokenCache.put(token, tokenInfo);
 
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setQueryId(UUIDUtil.genUUID());
@@ -90,18 +89,28 @@ public class ArrowFlightSqlSessionManager {
 
         // Assign connection ID
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        try {
+            ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+            ctx.kill(true, "failed to allocate connection ID");
+            throw CallStatus.RESOURCE_EXHAUSTED
+                    .withDescription("failed to allocate connection ID: " + e.getMessage())
+                    .withCause(e)
+                    .toRuntimeException();
+        }
         ctx.resetConnectionStartTime();
 
         Pair<Boolean, String> isSuccessAndErrorMsg = connectScheduler.registerConnection(ctx);
         if (!isSuccessAndErrorMsg.first) {
             String errorMsg = isSuccessAndErrorMsg.second;
             ctx.getState().setError(errorMsg);
+            ctx.kill(true, "failed to register connection: " + errorMsg);
             throw CallStatus.RESOURCE_EXHAUSTED
                     .withDescription("failed to register connection: " + errorMsg)
                     .toRuntimeException();
         }
 
+        tokenCache.put(token, tokenInfo);
         return token;
     }
 

@@ -284,6 +284,10 @@ public class FunctionAnalyzer {
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
+
+        if (fn != null && fn.isAi()) {
+            AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -298,6 +302,24 @@ public class FunctionAnalyzer {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
+        }
+
+        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
+        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
+        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
+        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
+        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
+        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
+        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        if (fnParams.isDistinct()) {
+            for (Expr child : functionCallExpr.getChildren()) {
+                if (child.getType().isPercentile()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
+            }
         }
 
         if (fnName.equals(FunctionSet.COUNT)) {
@@ -722,7 +744,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be constant");
+                throw new SemanticException(fnName + " function 's args must not be constant");
             }
         }
 
@@ -943,6 +965,8 @@ public class FunctionAnalyzer {
         } catch (Exception e) {
             throw new SemanticException("Failed to parse view definition: " + fn.getSql());
         }
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expr, AIFunctionUsageAnalyzer.PlacementContext.SQL_UDF_BODY);
         SqlFunction v = (SqlFunction) fn.copy();
         v.setAnalyzeExpr(expr);
         v.setRetType(expr.getType());

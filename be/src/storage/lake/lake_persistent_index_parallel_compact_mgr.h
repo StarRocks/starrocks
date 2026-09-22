@@ -92,6 +92,10 @@ private:
 
     size_t input_sstable_file_cnt() const;
 
+    // Drop the local cache copy of every input sstable; called when do_run() fails
+    // with Corruption so the next compaction round re-reads from remote storage.
+    void drop_input_sstable_cache();
+
 private:
     // Input sstables to be compacted
     // Each fileset is a vector of sstable metadata.

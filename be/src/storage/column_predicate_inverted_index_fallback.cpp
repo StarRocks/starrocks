@@ -14,9 +14,22 @@
 
 #include "storage/column_predicate_inverted_index_fallback.h"
 
+#include <algorithm>
+
 #include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
+
+bool remaining_predicates_require_column(const PredicateTree& tree, ColumnId cid) {
+    const auto& predicates = tree.get_all_column_predicate_map();
+    const auto it = predicates.find(cid);
+    if (it == predicates.end()) {
+        return false;
+    }
+    return std::any_of(it->second.begin(), it->second.end(),
+                       [](const ColumnPredicate* pred) { return pred->type() != PredicateType::kGinFallback; });
+}
 
 InvertedIndexFallbackPredicate::InvertedIndexFallbackPredicate(const ColumnExprPredicate* wrapped_predicate,
                                                                roaring::Roaring bitmap,

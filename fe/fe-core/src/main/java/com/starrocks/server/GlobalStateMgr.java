@@ -68,6 +68,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.GlobalFunctionMgr;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
+import com.starrocks.catalog.PartitionAccessTimePersister;
 import com.starrocks.catalog.RefreshDictionaryCacheTaskDaemon;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.catalog.ResourceMgr;
@@ -91,6 +93,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.LogCleaner;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
@@ -298,6 +301,9 @@ public class GlobalStateMgr {
     // will break the loop and refresh in-memory data after at most 10w logs or at most 1 seconds
     private static final long REPLAYER_MAX_MS_PER_LOOP = 1000L;
     private static final long REPLAYER_MAX_LOGS_PER_LOOP = 100000L;
+    // Comfortably above the clamped upper bound of meta_freshness_check_interval_ms, so a checker that is
+    // asleep when leader activation starts is still joined rather than left running.
+    private static final long META_FRESHNESS_CHECKER_JOIN_TIMEOUT_MS = 10000L;
 
     // Lock to perform atomic modification on map like 'idToDb' and 'fullNameToDb'.
     // These maps are all thread safe, we only use lock to perform atomic operations.
@@ -338,9 +344,16 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
     private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private LeaderDaemon backupSnapshotCleaner;   // To delete backup snapshots whose ttl elapsed
     private FrontendDaemon tableKeeper;   // Maintain internal history tables
     private JournalWriter journalWriter; // leader only: write journal log
-    private Daemon replayer;
+    // volatile: read by the meta freshness checker thread to dump a stuck replayer's stack
+    private volatile Daemon replayer;
+    // Owns the canRead/isReady verdict while this node is a non-leader, see MetaFreshnessChecker.
+    private MetaFreshnessChecker metaFreshnessChecker;
+    // Replay progress published by the replayer thread and consumed by the checker thread. Never null,
+    // because replayJournalInner() also runs on the leader catch-up and checkpoint paths.
+    private final MetaReplayProgress metaReplayProgress = new MetaReplayProgress();
     private LeaderDaemon timePrinter;
     private final EsRepository esRepository;  // it is a daemon, so add it here
     private final MetastoreEventsProcessor metastoreEventsProcessor;
@@ -378,7 +391,8 @@ public class GlobalStateMgr {
     private long dominationStartTimeMs;
 
     // replica and observer use this value to decide provide read service or not
-    private long synchronizedTimeMs;
+    // volatile: written by the replayer thread, read by the meta freshness checker thread
+    private volatile long synchronizedTimeMs;
 
     private final CatalogIdGenerator idGenerator = new CatalogIdGenerator(NEXT_ID_INIT_VALUE);
 
@@ -411,6 +425,9 @@ public class GlobalStateMgr {
     private final GlobalTransactionMgr globalTransactionMgr;
 
     private final TabletStatMgr tabletStatMgr;
+
+    private final PartitionAccessTimeMgr partitionAccessTimeMgr;
+    private final PartitionAccessTimePersister partitionAccessTimePersister;
 
     private AuthenticationMgr authenticationMgr;
     private AuthorizationMgr authorizationMgr;
@@ -504,6 +521,8 @@ public class GlobalStateMgr {
     private final ConfigRefreshDaemon configRefreshDaemon;
 
     private final StorageVolumeMgr storageVolumeMgr;
+
+    private final AIProviderMgr aiProviderMgr;
 
     private AutovacuumDaemon autovacuumDaemon;
     private FullVacuumDaemon fullVacuumDaemon;
@@ -718,6 +737,7 @@ public class GlobalStateMgr {
                 new SystemHandler());
         this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                 Config.publish_version_max_threads, "alter-publish", false);
+        this.lakeAlterPublishExecutor.setRejectedExecutionHandler(new ThreadPoolExecutor.AbortPolicy());
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -758,6 +778,8 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+        this.partitionAccessTimeMgr = new PartitionAccessTimeMgr();
+        this.partitionAccessTimePersister = new PartitionAccessTimePersister();
         this.authenticationMgr = new AuthenticationMgr();
         this.domainResolver = new DomainResolver(authenticationMgr);
         this.authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
@@ -898,6 +920,8 @@ public class GlobalStateMgr {
         this.showExecutor = new ShowExecutor(ShowExecutor.ShowExecutorVisitor.getInstance());
         this.sqlBlackList = new SqlBlackList();
         this.sqlDigestBlackList = new SqlDigestBlackList();
+
+        this.aiProviderMgr = new AIProviderMgr();
         this.temporaryTableCleaner = new TemporaryTableCleaner();
         this.queryDeployExecutor =
                 ThreadPoolManager.newDaemonFixedThreadPool(Config.query_deploy_threadpool_size, Integer.MAX_VALUE,
@@ -1060,6 +1084,10 @@ public class GlobalStateMgr {
         return tabletStatMgr;
     }
 
+    public PartitionAccessTimeMgr getPartitionAccessTimeMgr() {
+        return partitionAccessTimeMgr;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;
@@ -1129,6 +1157,10 @@ public class GlobalStateMgr {
 
     public StorageVolumeMgr getStorageVolumeMgr() {
         return storageVolumeMgr;
+    }
+
+    public AIProviderMgr getAIProviderMgr() {
+        return aiProviderMgr;
     }
 
     public PipeManager getPipeManager() {
@@ -1292,6 +1324,7 @@ public class GlobalStateMgr {
 
             // 6. start task cleaner thread
             createTaskCleaner();
+            createBackupSnapshotCleaner();
             createTableKeeper();
         } catch (Exception e) {
             try {
@@ -1358,6 +1391,25 @@ public class GlobalStateMgr {
     }
 
     private void transferToLeader() {
+        // Stop the meta freshness checker before the replayer: while this node is a non-leader it is the
+        // writer of canRead/isReady, and leader activation below publishes those itself. Its evaluate()
+        // is already a no-op at this point (isInTransferringToLeader is set), so a checker that outlives
+        // this join cannot corrupt the verdict; it just has not woken up yet.
+        if (metaFreshnessChecker != null) {
+            metaFreshnessChecker.setStop();
+            try {
+                metaFreshnessChecker.join(META_FRESHNESS_CHECKER_JOIN_TIMEOUT_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                LOG.warn("interrupted while stopping the meta freshness checker thread", e);
+            }
+            if (metaFreshnessChecker.isAlive()) {
+                LOG.warn("meta freshness checker did not stop within {}ms during transfer to leader; "
+                        + "it will exit on its own", META_FRESHNESS_CHECKER_JOIN_TIMEOUT_MS);
+            }
+            metaFreshnessChecker = null;
+        }
+
         // stop replayer. Bound the join so a stuck replay applier (e.g. one pinned on a lock it cannot
         // acquire) cannot hang leader activation on the single state-change thread forever; if it does
         // not stop in time, terminate for a clean restart rather than wedge with a bdbje master that
@@ -1395,10 +1447,11 @@ public class GlobalStateMgr {
             if (!haProtocol.fencing()) {
                 throw new Exception("fencing failed. will exit");
             }
-            long maxJournalId = journal.getMaxJournalId();
+            Pair<Long, Long> journalIdRange = journal.getJournalIdRange();
+            long maxJournalId = journalIdRange.second;
             replayJournal(maxJournalId);
             nodeMgr.checkCurrentNodeExist();
-            journalWriter.init(maxJournalId);
+            journalWriter.init(journalIdRange.first, maxJournalId);
         } catch (Exception e) {
             // A failed activation is not rolled back: a half-done activation (lease published, WAL gate
             // open, daemons started, journal writer initialized) cannot be un-done reliably, so fail fast
@@ -1724,6 +1777,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        backupSnapshotCleaner.start();
         pipeListener.start();
         pipeScheduler.start();
         mvActiveChecker.start();
@@ -1809,6 +1863,9 @@ public class GlobalStateMgr {
         stopOne("mvActiveChecker", () -> mvActiveChecker.stopBestEffort());
         stopOne("pipeScheduler", () -> pipeScheduler.stopBestEffort());
         stopOne("pipeListener", () -> pipeListener.stopBestEffort());
+        if (backupSnapshotCleaner != null) {
+            stopOne("backupSnapshotCleaner", () -> backupSnapshotCleaner.stopBestEffort());
+        }
         if (taskCleaner != null) {
             stopOne("taskCleaner", () -> taskCleaner.stopBestEffort());
         }
@@ -1930,6 +1987,9 @@ public class GlobalStateMgr {
 
         portConnectivityChecker.start();
         tabletStatMgr.start();
+        // Runs on every FE: each flushes its own recorded partition access times; the leader additionally
+        // loads the read-path baseline and GCs the internal table.
+        partitionAccessTimePersister.start();
         // load and export job label cleaner thread
         labelCleaner.start();
         // ES state store
@@ -2003,6 +2063,9 @@ public class GlobalStateMgr {
         if (replayer == null) {
             createReplayer();
             replayer.start();
+            // Started together with the replayer: from here on it is the writer of canRead/isReady.
+            createMetaFreshnessChecker();
+            metaFreshnessChecker.start();
         }
 
         startAllNodeTypeDaemonThreads();
@@ -2152,6 +2215,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
                 .put(SRMetaBlockID.DIGEST_BLACKLIST_MGR, sqlDigestBlackList::load)
+                .put(SRMetaBlockID.AI_PROVIDER_MGR, aiProviderMgr::load)
                 .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.TABLET_RESHARD_JOB_MGR, tabletReshardJobMgr::load)
                 .build();
@@ -2390,6 +2454,7 @@ public class GlobalStateMgr {
                 historicalNodeMgr.save(imageWriter);
                 tabletReshardJobMgr.save(imageWriter);
                 sqlDigestBlackList.save(imageWriter);
+                aiProviderMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2419,6 +2484,7 @@ public class GlobalStateMgr {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
+                setInterval(Config.label_clean_interval_second * 1000L);
             }
         };
     }
@@ -2429,6 +2495,20 @@ public class GlobalStateMgr {
             protected void runAfterLeaseValid() {
                 doTaskBackgroundJob();
                 setInterval(Config.task_check_interval_second * 1000L);
+            }
+        };
+    }
+
+    public void createBackupSnapshotCleaner() {
+        backupSnapshotCleaner = new LeaderDaemon("BackupSnapshotCleaner",
+                Config.backup_clean_check_interval_seconds * 1000L) {
+            @Override
+            protected void runAfterLeaseValid() {
+                if (Config.enable_backup_snapshot_auto_clean) {
+                    backupHandler.cleanExpiredSnapshots();
+                }
+                // Re-read each round so changing the interval takes effect without a restart.
+                setInterval(Config.backup_clean_check_interval_seconds * 1000L);
             }
         };
     }
@@ -2456,14 +2536,10 @@ public class GlobalStateMgr {
     public void createReplayer() {
         replayer = new Daemon("replayer", REPLAY_INTERVAL_MS) {
             private JournalCursor cursor = null;
-            // avoid numerous 'meta out of date' log
-            private long lastMetaOutOfDateLogTime = 0;
 
             @Override
             @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
             protected void runOneCycle() {
-                boolean err = false;
-                boolean hasLog = false;
                 try {
                     if (cursor == null) {
                         // 1. set replay to the end
@@ -2473,8 +2549,8 @@ public class GlobalStateMgr {
                         cursor.refresh();
                     }
                     // 2. replay with flow control
-                    hasLog = replayJournalInner(cursor, true);
-                    metaReplayState.setOk();
+                    replayJournalInner(cursor, true);
+                    metaReplayProgress.clearFailure();
                 } catch (JournalInconsistentException | InterruptedException e) {
                     LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
                             replayedJournalId.get() + 1, e);
@@ -2484,55 +2560,19 @@ public class GlobalStateMgr {
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal {}.",
                             replayedJournalId.get() + 1, e);
-                    metaReplayState.setException(e);
+                    publishReplayFailure(e);
                     try {
                         Thread.sleep(5000);
                     } catch (InterruptedException e1) {
                         LOG.error("sleep got exception. ", e);
                     }
-                    err = true;
                 }
-
-                setCanRead(hasLog, err);
-            }
-
-            private void setCanRead(boolean hasLog, boolean err) {
-                if (err) {
-                    canRead.set(false);
-                    isReady.set(false);
-                    return;
-                }
-
-                if (Config.ignore_meta_check) {
-                    // can still offer read, but is not ready
-                    canRead.set(true);
-                    isReady.set(false);
-                    return;
-                }
-
-                long currentTimeMs = System.currentTimeMillis();
-                if (currentTimeMs - synchronizedTimeMs > Config.meta_delay_toleration_second * 1000L) {
-                    if (currentTimeMs - lastMetaOutOfDateLogTime > 5 * 1000L) {
-                        // we still need this log to observe this situation
-                        // but service may be continued when there is no log being replayed.
-                        LOG.warn("meta out of date. current time: {}, synchronized time: {}, has log: {}, fe type: {}",
-                                currentTimeMs, synchronizedTimeMs, hasLog, feType);
-                        lastMetaOutOfDateLogTime = currentTimeMs;
-                    }
-                    if (hasLog || feType == FrontendNodeType.UNKNOWN) {
-                        // 1. if we read log from BDB, which means leader is still alive.
-                        // So we need to set meta out of date.
-                        // 2. if we didn't read any log from BDB and feType is UNKNOWN,
-                        // which means this non-leader node is disconnected with leader.
-                        // So we need to set meta out of date either.
-                        metaReplayState.setOutOfDate(currentTimeMs, synchronizedTimeMs);
-                        canRead.set(false);
-                        isReady.set(false);
-                    }
-                } else {
-                    canRead.set(true);
-                    isReady.set(true);
-                }
+                // No verdict is published on the success path. Staleness belongs to
+                // MetaFreshnessChecker, which runs on its own clock and therefore still reports it
+                // while this thread is blocked inside a single journal entry. A poll that replays
+                // nothing must not overwrite the checker's verdict, which is what it would do from
+                // here: this loop turns once per millisecond, the checker once per second. A failure
+                // is an event rather than a poll, so it is the one thing this thread does publish.
             }
 
             // close current db after replayer finished
@@ -2545,6 +2585,325 @@ public class GlobalStateMgr {
                 }
             }
         };
+    }
+
+    /**
+     * Take this node out of read service because a replay cycle threw.
+     * <p>
+     * Published from the replayer thread rather than left to {@link MetaFreshnessChecker}: the journal
+     * entry may be half applied, so the node has to stop serving at the moment it happens rather than up
+     * to one check interval later. Recording the failure in the same critical section is what lets the
+     * checker see it: the checker decides and publishes under the same lock, so it cannot restore reads
+     * on the strength of a replay state sampled just before this ran.
+     */
+    @VisibleForTesting
+    void publishReplayFailure(Throwable e) {
+        metaReplayProgress.recordFailure(e);
+        metaReplayState.setException(e);
+        canRead.set(false);
+        isReady.set(false);
+    }
+
+    @VisibleForTesting
+    void createMetaFreshnessChecker() {
+        metaFreshnessChecker = new MetaFreshnessChecker(this, metaReplayProgress);
+    }
+
+    @VisibleForTesting
+    MetaFreshnessChecker getMetaFreshnessChecker() {
+        return metaFreshnessChecker;
+    }
+
+    @VisibleForTesting
+    MetaReplayProgress getMetaReplayProgress() {
+        return metaReplayProgress;
+    }
+
+    /**
+     * Replay progress published by the replayer thread and consumed by {@link MetaFreshnessChecker}.
+     * <p>
+     * It lives in one object rather than as loose fields on GlobalStateMgr so that the whole hand-off
+     * between the two threads is visible in a single place: everything here is written by the replayer
+     * and read by the checker, and nothing else may write it.
+     */
+    @VisibleForTesting
+    static class MetaReplayProgress {
+        // Start time of the journal entry currently being applied, 0 when no entry is in flight.
+        // Written last in beginEntry(), so a reader that sees a non-zero value also sees the id/opCode.
+        private volatile long inflightStartMs = 0;
+        private volatile long inflightJournalId = 0;
+        private volatile short inflightOpCode = OperationType.OP_INVALID;
+        // Bumped once per entry applied. The checker compares it against the value it saw last time,
+        // so no applied entry can fall between two checks unobserved - see appliedSequence().
+        private final AtomicLong appliedSequence = new AtomicLong(0);
+        // Outcome of the most recent replay cycle. Recorded by publishReplayFailure under the verdict
+        // lock, together with the canRead/isReady it publishes, and cleared by the next cycle that
+        // replays cleanly. A failure needs no sequence of its own: it is acted on where it happens, not
+        // discovered later by the checker.
+        private volatile boolean replayFailed = false;
+        private volatile Throwable lastFailure = null;
+
+        void beginEntry(long journalId, short opCode) {
+            inflightJournalId = journalId;
+            inflightOpCode = opCode;
+            inflightStartMs = System.currentTimeMillis();
+        }
+
+        void endEntry() {
+            if (inflightStartMs == 0) {
+                return;
+            }
+            // Bump before clearing the in-flight marker, so a reader that sees no entry in flight and
+            // then reads the sequence always sees the entry that just finished.
+            appliedSequence.incrementAndGet();
+            inflightStartMs = 0;
+        }
+
+        void recordFailure(Throwable failure) {
+            lastFailure = failure;
+            replayFailed = true;
+        }
+
+        void clearFailure() {
+            replayFailed = false;
+        }
+
+        boolean isFailed() {
+            return replayFailed;
+        }
+
+        /**
+         * The throwable behind the most recent failure. Only meaningful together with
+         * {@link #isFailed()}; it is deliberately not cleared on recovery, so the cause stays readable
+         * for as long as the state it explains.
+         */
+        Throwable lastFailure() {
+            return lastFailure;
+        }
+
+        /**
+         * Elapsed time of the entry currently being applied, or 0 when the replayer is not inside an
+         * applier. A value that keeps growing is the stall this whole mechanism exists for.
+         */
+        long inflightElapsedMs(long nowMs) {
+            long startMs = inflightStartMs;
+            return startMs == 0 ? 0 : Math.max(0, nowMs - startMs);
+        }
+
+        long getInflightJournalId() {
+            return inflightJournalId;
+        }
+
+        short getInflightOpCode() {
+            return inflightOpCode;
+        }
+
+        boolean isApplying() {
+            return inflightStartMs != 0;
+        }
+
+        /**
+         * Number of journal entries applied so far. Together with {@link #isApplying()} this is the
+         * thread-independent replacement for the replayer's per-cycle `hasLog`: a checker that compares
+         * this against the value it read last time learns whether the replayer made progress in between,
+         * which means the leader is alive and writing, so lagging behind its clock really is staleness
+         * rather than an idle cluster.
+         * <p>
+         * It is a sequence rather than a timestamp compared against a window on purpose. The checker
+         * sleeps for its interval *plus* the time its own cycle takes, so a window equal to that interval
+         * is always a little shorter than the gap between two checks, and an entry applied inside that
+         * sliver would be seen by neither check. A sequence is consumed exactly once and cannot be
+         * missed, however the two threads are scheduled.
+         */
+        long appliedSequence() {
+            return appliedSequence.get();
+        }
+    }
+
+    /**
+     * Decides whether this non-leader node's metadata is fresh enough to serve reads, and is the only
+     * thing that puts {@link GlobalStateMgr#canRead} and {@link GlobalStateMgr#isReady} back to true
+     * while the node is a non-leader. The replayer thread is the one other writer, and only ever to
+     * false, when a replay cycle throws. The two are not serialized against each other: see evaluate()
+     * for the interleaving that leaves, why it is bounded by one check interval, and why the metadata
+     * replay path is not worth a lock to remove it.
+     * <p>
+     * The verdict used to be computed at the end of every replayer cycle, which made it a by-product of
+     * replay progress. A single journal entry can block the replayer for an unbounded time (an applier
+     * waiting on a database lock, a create/drop covering a very large number of tablets), and the
+     * replayer's flow control cannot break out of one entry because it is only checked between entries.
+     * So for the whole duration of such a stall nothing re-evaluated staleness: canRead stayed at
+     * whatever it was, and the node kept answering queries from a metadata snapshot frozen at the stuck
+     * journal instead of forwarding them to the leader. Driving the verdict from the clock on a separate
+     * thread is what closes that window.
+     * <p>
+     * Two independent reasons stop reads here, and only one of them is negotiable. Metadata that is
+     * merely old is governed by meta_delay_toleration_second and can be waived with ignore_meta_check.
+     * Metadata that failed to replay is not: the image is incomplete rather than old, so canRead and
+     * isReady go false no matter how the node is configured, until a replay cycle succeeds again.
+     */
+    @VisibleForTesting
+    static class MetaFreshnessChecker extends Daemon {
+        private static final long MIN_CHECK_INTERVAL_MS = 10L;
+        private static final long MAX_CHECK_INTERVAL_MS = 5000L;
+        private static final long OUT_OF_DATE_LOG_INTERVAL_MS = 5000L;
+        private static final long STUCK_REPLAY_LOG_INTERVAL_MS = 30000L;
+        private static final int STUCK_REPLAY_STACK_RESERVE_LEVELS = 30;
+
+        private final GlobalStateMgr globalStateMgr;
+        private final MetaReplayProgress progress;
+        // Replay progress already accounted for by a previous evaluation. Owned by this thread alone.
+        private long consumedAppliedSequence;
+        // avoid numerous 'meta out of date' log
+        private long lastMetaOutOfDateLogTimeMs = 0;
+        private long lastStuckReplayLogTimeMs = 0;
+
+        MetaFreshnessChecker(GlobalStateMgr globalStateMgr, MetaReplayProgress progress) {
+            super("meta-freshness-checker", checkIntervalMs());
+            this.globalStateMgr = globalStateMgr;
+            this.progress = progress;
+            this.consumedAppliedSequence = progress.appliedSequence();
+        }
+
+        static long checkIntervalMs() {
+            return Math.min(MAX_CHECK_INTERVAL_MS,
+                    Math.max(MIN_CHECK_INTERVAL_MS, Config.meta_freshness_check_interval_ms));
+        }
+
+        @Override
+        protected void runOneCycle() {
+            // picked up before the verdict, so a runtime change of the knob paces the sleep that follows
+            setInterval(checkIntervalMs());
+            evaluate();
+        }
+
+        @VisibleForTesting
+        void evaluate() {
+            FrontendNodeType currentType = globalStateMgr.feType;
+            if (currentType == FrontendNodeType.LEADER || globalStateMgr.isInTransferringToLeader) {
+                // Leader activation publishes canRead/isReady on its own path; never race with it.
+                return;
+            }
+
+            long currentTimeMs = System.currentTimeMillis();
+            reportStuckReplay(currentTimeMs);
+
+            // Not serialized against publishReplayFailure, deliberately. The two can interleave so
+            // that a failure landing just after the read of isFailed() below is overwritten by the
+            // restore decided from it, leaving reads on for the rest of this interval. That is a
+            // bounded, self-healing window: replayFailed stays set until a cycle replays cleanly, so
+            // the next evaluation turns reads off. A lock here would close it, at the cost of putting
+            // a monitor on the metadata replay path to save at most one check interval of exposure -
+            // not a trade this path is worth making.
+            // Consume the replay progress made since the previous evaluation, exactly once, before
+            // any branch can return early. Read isApplying() first: an entry that finishes between
+            // the two reads is then caught by the sequence, and one that finishes just before them
+            // by isApplying.
+            boolean applying = progress.isApplying();
+            long appliedSequence = progress.appliedSequence();
+            boolean replaying = applying || appliedSequence != consumedAppliedSequence;
+            consumedAppliedSequence = appliedSequence;
+
+            // Checked before ignore_meta_check on purpose, as the replayer's own check used to: a
+            // failed replay leaves an incomplete, possibly inconsistent image rather than a merely
+            // old one, so the node must stop serving whatever the operator asked for.
+            // ignore_meta_check cannot override this, and the node stays out of service until a
+            // later cycle replays cleanly. Sampling the current state is enough, with no
+            // consume-once bookkeeping: a failure that came and went between two checks already
+            // took the node out of service the moment it happened, so the first check that sees a
+            // recovered replayer is right to put it back.
+            if (progress.isFailed()) {
+                globalStateMgr.metaReplayState.setException(progress.lastFailure());
+                globalStateMgr.canRead.set(false);
+                globalStateMgr.isReady.set(false);
+                return;
+            }
+
+            // The operator accepts metadata of any age, so the delay verdict below is skipped
+            // entirely. This covers staleness only; a replay failure already returned above.
+            if (Config.ignore_meta_check) {
+                // can still offer read, but is not ready
+                globalStateMgr.metaReplayState.setOk();
+                globalStateMgr.canRead.set(true);
+                globalStateMgr.isReady.set(false);
+                return;
+            }
+
+            // Snapshot the mutable knob once: the verdict below has to be computed against a single
+            // value, otherwise a runtime change could read as fresh in one branch and stale in the
+            // next.
+            long tolerationMs = Config.meta_delay_toleration_second * 1000L;
+            long syncTimeMs = globalStateMgr.synchronizedTimeMs;
+            if (currentTimeMs - syncTimeMs <= tolerationMs) {
+                globalStateMgr.metaReplayState.setOk();
+                globalStateMgr.canRead.set(true);
+                globalStateMgr.isReady.set(true);
+                return;
+            }
+
+            logMetaOutOfDate(currentTimeMs, syncTimeMs, currentType, replaying);
+
+            // 1. the replayer is applying journals, which means the leader is still alive and this
+            //    node is simply behind it. An entry that has been in flight for minutes lands here
+            //    too, which is exactly what the replayer could never report on its own.
+            // 2. we replayed nothing and feType is UNKNOWN, which means this non-leader node is
+            //    disconnected from the leader. Its meta is out of date either way.
+            if (replaying || currentType == FrontendNodeType.UNKNOWN) {
+                globalStateMgr.metaReplayState.setOutOfDate(currentTimeMs, syncTimeMs);
+                globalStateMgr.canRead.set(false);
+                globalStateMgr.isReady.set(false);
+            } else {
+                // Stale, but the leader is writing nothing, so being behind its clock says nothing
+                // about this node: it keeps whatever read availability it already had, and reports
+                // OK, as the replayer's own check used to. This branch never restores reads.
+                globalStateMgr.metaReplayState.setOk();
+            }
+        }
+
+        private void logMetaOutOfDate(long currentTimeMs, long syncTimeMs, FrontendNodeType currentType,
+                                      boolean replaying) {
+            if (currentTimeMs - lastMetaOutOfDateLogTimeMs <= OUT_OF_DATE_LOG_INTERVAL_MS) {
+                return;
+            }
+            lastMetaOutOfDateLogTimeMs = currentTimeMs;
+            // we still need this log to observe this situation
+            // but service may be continued when there is no log being replayed.
+            LOG.warn("meta out of date. current time: {}, synchronized time: {}, delay: {}ms, replaying: {}, " +
+                            "replayed journal id: {}, journal being applied: {} for {}ms, fe type: {}",
+                    currentTimeMs, syncTimeMs, currentTimeMs - syncTimeMs, replaying,
+                    globalStateMgr.replayedJournalId.get(), progress.getInflightJournalId(),
+                    progress.inflightElapsedMs(currentTimeMs), currentType);
+        }
+
+        /**
+         * Report a journal entry that has been applying for too long, with the replayer's stack, so the
+         * applier that is blocking metadata replay can be identified from the log alone. Reported
+         * independently of staleness: a stall well inside meta_delay_toleration_second is already worth
+         * knowing about, and once the node stops serving it is too late to ask what held it up.
+         *
+         * @return true if a report was written, false if there is nothing stuck, reporting is disabled,
+         *         or the previous report is still inside STUCK_REPLAY_LOG_INTERVAL_MS
+         */
+        @VisibleForTesting
+        boolean reportStuckReplay(long currentTimeMs) {
+            long thresholdMs = Config.metadata_replay_stuck_warn_threshold_second * 1000L;
+            long inflightMs = progress.inflightElapsedMs(currentTimeMs);
+            if (thresholdMs <= 0 || inflightMs < thresholdMs) {
+                return false;
+            }
+            if (currentTimeMs - lastStuckReplayLogTimeMs <= STUCK_REPLAY_LOG_INTERVAL_MS) {
+                return false;
+            }
+            lastStuckReplayLogTimeMs = currentTimeMs;
+            Daemon replayerThread = globalStateMgr.replayer;
+            LOG.warn("journal {} (opCode {}) has been replaying for {}ms, metadata of this node is frozen at {}. "
+                            + "replayer stack: {}",
+                    progress.getInflightJournalId(), progress.getInflightOpCode(), inflightMs,
+                    globalStateMgr.replayedJournalId.get(),
+                    replayerThread == null ? "unknown"
+                            : LogUtil.dumpThread(replayerThread, STUCK_REPLAY_STACK_RESERVE_LEVELS));
+            return true;
+        }
     }
 
     /**
@@ -2615,7 +2974,10 @@ public class GlobalStateMgr {
 
                 readSucc = true;
 
-                // apply
+                // Apply. Publish which entry is in flight before entering the applier: loadJournal can
+                // block for an unbounded time, and the meta freshness checker has no other way to tell a
+                // stalled replayer from an idle one.
+                metaReplayProgress.beginEntry(replayedJournalId.get() + 1, entity.opCode());
                 editLog.loadJournal(this, entity);
             } catch (Throwable e) {
                 if (canSkipBadReplayedJournal(e)) {
@@ -2630,6 +2992,8 @@ public class GlobalStateMgr {
                 LOG.warn("catch exception when replaying journal, id: {}, data: {},",
                         replayedJournalId.get() + 1, journalEntityToReadableString(entity), e);
                 throw e;
+            } finally {
+                metaReplayProgress.endEntry();
             }
 
             replayedJournalId.incrementAndGet();
@@ -2887,6 +3251,22 @@ public class GlobalStateMgr {
 
     public boolean canRead() {
         return this.canRead.get();
+    }
+
+    /**
+     * How far the metadata replayed by this node lags behind the leader's clock, in seconds.
+     * <p>
+     * Meaningful only on a non-leader: the leader writes the timestamp journals rather than replaying
+     * them, so its own synchronizedTimeMs never advances and the lag is reported as 0 there. Unlike the
+     * leader-side max_journal_replay_lag this is visible on the lagging node itself, and it keeps
+     * growing while a single journal entry is stuck in the applier.
+     */
+    public long getMetaReplayLagSecond() {
+        long syncTimeMs = synchronizedTimeMs;
+        if (feType == FrontendNodeType.LEADER || syncTimeMs == 0) {
+            return 0;
+        }
+        return Math.max(0, (System.currentTimeMillis() - syncTimeMs) / 1000);
     }
 
     public boolean isElectable() {

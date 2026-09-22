@@ -1,4 +1,5 @@
 ---
+sidebar_position: 130
 displayed_sidebar: docs
 toc_max_heading_level: 4
 description: "StarRocks supports Alibaba Cloud MaxCompute (previously known as ODPS) catalogs from v3.3 onwards."

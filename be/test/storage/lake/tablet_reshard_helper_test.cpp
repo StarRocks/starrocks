@@ -466,6 +466,46 @@ TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_clamps_num_dels_to
     EXPECT_EQ(1, child.num_dels());
 }
 
+// An interior sibling retains the legacy singleton virtual-share allocation. The appliers key a
+// rowset's presence off its segments, so a sibling that may own rows is not harmed by drawing a zero
+// share of a counter. This used to round up to 1 to keep the rowset alive, which over-counted by up
+// to split_count - 1 rows.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_interior_rowset_apportions_plainly) {
+    // 1 row split 4 ways: index 0 gets the row, indexes 1..3 get zero, and the sum stays exact.
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(1);
+    rowset.set_data_size(512);
+
+    std::vector<int64_t> rows;
+    int64_t total_rows = 0;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i);
+        rows.push_back(child.num_rows());
+        total_rows += child.num_rows();
+    }
+    EXPECT_THAT(rows, ::testing::ElementsAre(1, 0, 0, 0));
+    EXPECT_EQ(1, total_rows) << "the siblings' shares must still sum to the source";
+}
+
+// Interior apportionment conserves exactly: the siblings' shares sum to the source.
+TEST_F(TabletReshardHelperTest, test_update_rowset_data_stats_conserves_when_rows_exceed_split_count) {
+    RowsetMetadataPB rowset;
+    rowset.set_num_rows(10);
+    rowset.set_data_size(1000);
+
+    int64_t total_rows = 0;
+    int64_t total_size = 0;
+    for (int i = 0; i < 4; ++i) {
+        RowsetMetadataPB child = rowset;
+        update_rowset_data_stats(&child, /*split_count=*/4, /*split_index=*/i);
+        total_rows += child.num_rows();
+        total_size += child.data_size();
+    }
+    EXPECT_EQ(10, total_rows);
+    EXPECT_EQ(1000, total_size);
+}
+
 // Verify update_txn_log_data_stats scales num_dels across every op_* branch that already
 // scales num_rows / data_size (op_write / op_compaction / op_schema_change / op_replication /
 // op_parallel_compaction). Parallel tests pin down the set of branches that produce output
@@ -969,6 +1009,98 @@ TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
     set_all_data_files_shared(&txn_log);
     ASSERT_EQ(1, txn_log.op_add_index().segment_entries_size());
     EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_all_private) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("seg0.dat");
+    segment->set_shared(false);
+    auto* del = rowset->add_del_files();
+    del->set_name("del0.del");
+    del->set_shared(false);
+    auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
+    sstable->set_filename("index0.sst");
+    sstable->set_shared(false);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_segment) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_segment_metas()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_del_file) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_del_files()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_sstable) {
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.mutable_sstable_meta()->add_sstables()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_shared_delvec) {
+    // A merge rewrites delvec pages into a new file, so a shared source delvec never blocks it.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& version_to_file = *metadata.mutable_delvec_meta()->mutable_version_to_file();
+    version_to_file[3].set_name("v3.delvec");
+    version_to_file[3].set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_dcg) {
+    // A shared .cols is checked directly, independent of its segment's own shared flag.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& dcgs = *metadata.mutable_dcg_meta()->mutable_dcgs();
+    auto* dcg = &dcgs[0];
+    dcg->add_column_files("c0.cols");
+    dcg->add_shared_files(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_idg) {
+    // A cross-published OpAddIndex can mark an IDG entry shared without touching its segment's own
+    // shared flag, so the segment here stays private while the IDG entry alone must block the merge.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& idgs = *metadata.mutable_idg_meta()->mutable_idgs();
+    idgs[0].add_entries()->set_shared_file(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_garbage_records) {
+    // compaction_inputs is itself a repeated RowsetMetadataPB, so an implementation that walked every
+    // RowsetMetadataPB in the message instead of the live rowsets would wrongly block here.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.add_compaction_inputs()->add_segment_metas()->set_shared(true);
+    metadata.add_orphan_files()->set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_empty_metadata) {
+    TabletMetadataPB metadata;
+    EXPECT_FALSE(has_shared_files(metadata));
 }
 
 } // namespace starrocks::lake

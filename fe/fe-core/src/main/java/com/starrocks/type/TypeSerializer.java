@@ -103,6 +103,10 @@ public class TypeSerializer {
                 return TPrimitiveType.VARBINARY;
             case UNKNOWN_TYPE:
                 return TPrimitiveType.INVALID_TYPE;
+            case GEOGRAPHY:
+                return TPrimitiveType.GEOGRAPHY;
+            case GEOMETRY:
+                return TPrimitiveType.GEOMETRY;
             default:
                 throw new IllegalArgumentException("Unknown primitive type: " + primitiveType);
         }
@@ -205,6 +209,9 @@ public class TypeSerializer {
                 if (type.isDatetimeNtz()) {
                     scalarType.setDatetime_is_ntz(true);
                 }
+                if (type.isGeoType()) {
+                    scalarType.setGeo(GeoTypeSerde.toThrift(Preconditions.checkNotNull(type.getGeoDescriptor())));
+                }
                 node.setScalar_type(scalarType);
                 break;
             }
@@ -238,6 +245,9 @@ public class TypeSerializer {
                 break;
         }
         node.scalarType = scalarType;
+        if (type.isGeoType()) {
+            scalarType.geo = GeoTypeSerde.toProtobuf(Preconditions.checkNotNull(type.getGeoDescriptor()));
+        }
     }
 
     private static void arrayTypeToThrift(ArrayType type, TTypeDesc container) {

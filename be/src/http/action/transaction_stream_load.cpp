@@ -14,8 +14,10 @@
 
 #include "http/action/transaction_stream_load.h"
 
+#include <cstdint>
 #include <deque>
 #include <future>
+#include <limits>
 #include <sstream>
 #include <utility>
 
@@ -39,6 +41,7 @@
 #include "common/system/master_info.h"
 #include "common/util/debug_util.h"
 #include "common/util/thrift_client_cache.h"
+#include "common/util/thrift_util.h"
 #include "compute_env/load/http_load_params.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_context_mgr.h"
@@ -51,6 +54,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/HeartbeatService_types.h"
+#include "http/utils.h"
 #include "orchestration/stream_load_orchestrator.h"
 #include "platform/http/http_channel.h"
 #include "platform/http/http_headers.h"
@@ -253,8 +257,15 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
 
     StreamLoadContext* ctx = nullptr;
     if (!req->header(HTTP_CHANNEL_ID).empty()) {
-        int channel_id = std::stoi(req->header(HTTP_CHANNEL_ID));
-        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, channel_id);
+        int64_t channel_id = 0;
+        // channel_id is narrowed to int for the channel lookup below.
+        Status st = parse_int64_param(HTTP_CHANNEL_ID, req->header(HTTP_CHANNEL_ID), &channel_id, 0,
+                                      std::numeric_limits<int>::max());
+        if (!st.ok()) {
+            _send_error_reply(req, st);
+            return -1;
+        }
+        ctx = _exec_env->stream_context_mgr()->get_channel_context(label, table_name, static_cast<int>(channel_id));
     } else {
         ctx = _exec_env->stream_context_mgr()->get(label);
         if (ctx == nullptr) {
@@ -319,7 +330,10 @@ Status TransactionStreamLoadAction::_on_header(HttpRequest* http_req, StreamLoad
     // check content length
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
     if (!http_req->header(HttpHeaders::CONTENT_LENGTH).empty()) {
-        ctx->body_bytes += std::stol(http_req->header(HttpHeaders::CONTENT_LENGTH));
+        int64_t body_bytes = 0;
+        RETURN_IF_ERROR(parse_int64_param(HttpHeaders::CONTENT_LENGTH, http_req->header(HttpHeaders::CONTENT_LENGTH),
+                                          &body_bytes, 0));
+        ctx->body_bytes += body_bytes;
         if (ctx->body_bytes > max_body_bytes) {
             std::stringstream ss;
             ss << "body size " << ctx->body_bytes << " exceed limit: " << max_body_bytes << ", " << ctx->brief()
@@ -433,15 +447,12 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_timezone(http_req->header(HTTP_TIMEZONE));
     }
     if (!http_req->header(HTTP_LOAD_MEM_LIMIT).empty()) {
-        try {
-            auto load_mem_limit = std::stoll(http_req->header(HTTP_LOAD_MEM_LIMIT));
-            if (load_mem_limit < 0) {
-                return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
-            }
-            request.__set_loadMemLimit(load_mem_limit);
-        } catch (const std::invalid_argument& e) {
-            return Status::InvalidArgument("Invalid load mem limit format");
+        int64_t load_mem_limit = 0;
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOAD_MEM_LIMIT, http_req->header(HTTP_LOAD_MEM_LIMIT), &load_mem_limit));
+        if (load_mem_limit < 0) {
+            return Status::InvalidArgument("load_mem_limit must be equal or greater than 0");
         }
+        request.__set_loadMemLimit(load_mem_limit);
     }
     if (!http_req->header(HTTP_JSONPATHS).empty()) {
         request.__set_jsonpaths(http_req->header(HTTP_JSONPATHS));
@@ -487,12 +498,11 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
     if (!http_req->header(HTTP_LOAD_DOP).empty()) {
-        try {
-            auto parallel_request_num = std::stoll(http_req->header(HTTP_LOAD_DOP));
-            request.__set_load_dop(parallel_request_num);
-        } catch (const std::invalid_argument& e) {
-            return Status::InvalidArgument("Invalid load_dop format");
-        }
+        int64_t parallel_request_num = 0;
+        // load_dop is an i32 on the wire, so a wider value used to be truncated.
+        RETURN_IF_ERROR(parse_int64_param(HTTP_LOAD_DOP, http_req->header(HTTP_LOAD_DOP), &parallel_request_num,
+                                          std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::max()));
+        request.__set_load_dop(static_cast<int32_t>(parallel_request_num));
     }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
@@ -568,10 +578,11 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << " " << ctx->brief();
         return plan_status;
     }
-    VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);
+    VLOG(3) << "params is " << thrift_plan_debug_string(ctx->put_result.params);
 
     if (!http_req->header(HTTP_EXEC_MEM_LIMIT).empty()) {
-        auto exec_mem_limit = std::stoll(http_req->header(HTTP_EXEC_MEM_LIMIT));
+        int64_t exec_mem_limit = 0;
+        RETURN_IF_ERROR(parse_int64_param(HTTP_EXEC_MEM_LIMIT, http_req->header(HTTP_EXEC_MEM_LIMIT), &exec_mem_limit));
         if (exec_mem_limit <= 0) {
             return Status::InvalidArgument("exec_mem_limit must be greater than 0");
         }

@@ -260,6 +260,24 @@ It's similar to OLAP_SCAN operator but used for scan external tables like Iceber
 | SubmitTaskTime | Time taken to submit tasks. | 
 | PeakIOTasks | Peak number of IO tasks. | 
 | PeakScanTaskQueueSize | Peak size of the IO task queue. | 
+| RuntimeFilterEvalTime | Time spent evaluating join runtime filters against decoded rows inside the Parquet reader. | 
+| RuntimeFilterInputRows | Number of rows fed into the Parquet reader's join runtime filter evaluation. | 
+| RuntimeFilterOutputRows | Number of rows surviving the Parquet reader's join runtime filter evaluation. A large gap from `RuntimeFilterInputRows` means the filter dropped rows before lazy columns were materialized. | 
+| PaimonFSAppIOCount | Number of valid read attempts received by the Paimon file-system adapter. It is the sum of sequential, positional, and asynchronous reads. |
+| PaimonFSAppIOBytes | Bytes returned successfully by reads at the Paimon file-system adapter boundary. |
+| PaimonFSAppIOTime | End-to-end time of reads at the Paimon file-system adapter boundary. |
+| PaimonFSIOCount | Number of backing file-system reads below Data Cache and Shared Buffered Input Stream. This is a StarRocks file-system call count, not necessarily the number of remote object-store RPCs. |
+| PaimonFSIOBytes | Bytes returned successfully by backing file-system reads for a Paimon native scan. |
+| PaimonFSIOTime | Time spent in backing file-system reads for a Paimon native scan. |
+| PaimonFSSequentialReadCount | Number of sequential Paimon file-system adapter read attempts. |
+| PaimonFSSequentialReadBytes | Bytes returned successfully by sequential Paimon file-system adapter reads. |
+| PaimonFSSequentialReadTime | Time spent in sequential Paimon file-system adapter reads. |
+| PaimonFSPositionalReadCount | Number of positional Paimon file-system adapter read attempts. |
+| PaimonFSPositionalReadBytes | Bytes returned successfully by positional Paimon file-system adapter reads. |
+| PaimonFSPositionalReadTime | Time spent in positional Paimon file-system adapter reads. |
+| PaimonFSAsyncReadCount | Number of asynchronous Paimon file-system adapter read attempts. |
+| PaimonFSAsyncReadBytes | Bytes returned successfully by asynchronous Paimon file-system adapter reads. |
+| PaimonFSAsyncReadTime | Time spent in asynchronous Paimon file-system adapter reads. |
 
 ### Exchange Operator
 
@@ -433,6 +451,31 @@ Project Operator is responsible for performing `SELECT <expr>`. If there're some
 | `ExprComputeTime` | Computation time for expressions. |
 | `CommonSubExprComputeTime` | Computation time for common sub-expressions. |
 
+### AI Project Operator
+
+AI Project executes asynchronous model calls. Its source operator exposes the following fixed counters in `UniqueMetrics`. Each driver reports only its own completed tasks; profile refreshes replace cumulative values rather than adding them again.
+
+| Metric | Unit | Description |
+|--------|------|-------------|
+| `AITaskCount` | Tasks | Terminal dispatcher tasks, including success, row failure, and cancellation. SQL NULL rows and rejections before task submission are not counted. |
+| `AIRequestCount` | Requests | HTTP submissions accepted for these tasks, including retries. Rejected submissions are not counted. |
+| `AIRetryCount` | Requests | Accepted HTTP retry submissions. |
+| `AITimeoutCount` | Events | Timeout events recorded by the dispatcher for accepted attempts. |
+| `AIErrorCount` | Tasks | Tasks ending in a sanitized row failure. Lifecycle cancellation is not a row failure. |
+| `AIHttpTime` | Time | Sum of accepted HTTP attempt durations, from submission to the transport callback. Excludes retry backoff, response parsing, and completion-queue wait time. |
+| `AIPromptTokens` | Tokens | Sum of valid provider-reported prompt token counts. |
+| `AICompletionTokens` | Tokens | Sum of valid provider-reported completion token counts. |
+| `AITotalTokens` | Tokens | Sum of valid provider-reported total token counts; not derived from prompt and completion counts. |
+| `AIPromptUsageCount` | Responses | Parsed responses containing a valid prompt token count, including an explicit zero. |
+| `AICompletionUsageCount` | Responses | Parsed responses containing a valid completion token count, including an explicit zero. |
+| `AITotalUsageCount` | Responses | Parsed responses containing a valid total token count, including an explicit zero. |
+
+All counters, including `AIHttpTime`, aggregate by sum across drivers. Concurrent requests can make this cumulative time exceed query wall-clock time. A task publishes its statistics at terminal completion, so ongoing tasks are not included yet.
+
+AI counters opt into saturating Profile summation: totals stop at the signed 64-bit maximum instead of overflowing. This requires all participating BE and FE Profile mergers to support the optional counter strategy. Older nodes ignore the strategy and retain their existing merge behavior during rolling upgrades. Other counters keep their existing aggregation policies.
+
+A token counter of zero with its corresponding usage count of zero means **unreported**, not zero consumption. A positive usage count does not imply complete provider coverage: missing, invalid, or unparsed response usage is excluded independently for each field. These are observed execution statistics, not token estimates or an exactly-once billing ledger. Query statistics and audit reporting reuse their existing delivery and failure semantics, independently of whether Profile collection is enabled. No prompts, responses, credentials, or model identifiers are added to these counters.
+
 ### LocalExchange Operator
 
 | Metric | Description |
@@ -470,5 +513,3 @@ OlapTableSink Operator is responsible for performing the `INSERT INTO <table>` o
 | `RpcServerSideTime` | Total RPC time consumption for loading recorded by the server side. |
 | `PrepareDataTime` | Total time consumption for the data preparation phase, including data format conversion and data quality check. |
 | `SendDataTime` | Local time consumption for sending the data, including time for serializing and compressing data, and for submitting tasks to the sender queue. |
-
-

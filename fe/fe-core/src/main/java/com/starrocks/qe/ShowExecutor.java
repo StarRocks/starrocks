@@ -37,6 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.base.Suppliers;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -85,6 +86,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -238,6 +240,7 @@ import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
+import com.starrocks.sql.ast.ShowWarningStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
@@ -314,6 +317,7 @@ import java.util.UUID;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -422,6 +426,25 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowStatement(ShowStmt statement, ConnectContext context) {
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), EMPTY_SET);
+        }
+
+        @Override
+        public ShowResultSet visitShowWarningStatement(ShowWarningStmt statement, ConnectContext context) {
+            // `SHOW WARNINGS` returns all diagnostics of the previous statement; `SHOW ERRORS`
+            // returns only the Error-level ones. Both keywords parse to ShowWarningStmt. The
+            // optional WHERE / LIMIT are applied by the ShowExecutor.execute() pipeline (ORDER BY
+            // parses but takes effect only together with WHERE, a pre-existing limitation of
+            // ShowStmtAnalyzer.analyzeShowPredicateClause, which returns before building the
+            // order-by pairs when there is no predicate).
+            boolean onlyErrors = statement.isShowErrors();
+            List<List<String>> rows = Lists.newArrayList();
+            for (QueryWarning warning : context.getWarnings()) {
+                if (onlyErrors && !warning.isError()) {
+                    continue;
+                }
+                rows.add(Lists.newArrayList(warning.getLevel(), warning.getCode(), warning.getMessage()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
         }
 
         @Override
@@ -1107,18 +1130,22 @@ public class ShowExecutor {
         public ShowResultSet visitShowProfilelistStatement(ShowProfilelistStmt statement, ConnectContext context) {
             List<List<String>> rowSet = Lists.newArrayList();
 
+            // A user lists the profiles of the queries they ran; listing other users' needs SYSTEM OPERATE,
+            // evaluated at most once for the whole listing (see Authorizer#canReadQueryProfile). The knob is
+            // read once up front so a flip mid-listing cannot produce a half-filtered result.
+            boolean checkAccess = Config.authorization_enable_query_profile_access_check;
+            Supplier<Boolean> hasOperate =
+                    Suppliers.memoize(() -> Authorizer.hasSystemAction(context, PrivilegeType.OPERATE));
             List<ProfileManager.ProfileElement> profileElements = ProfileManager.getInstance().getAllProfileElements();
             Collections.reverse(profileElements);
-            Iterator<ProfileManager.ProfileElement> iterator = profileElements.iterator();
-            int count = 0;
-            while (iterator.hasNext()) {
-                ProfileManager.ProfileElement element = iterator.next();
-                List<String> row = element.toRow(context);
-                rowSet.add(row);
-                count++;
-                if (statement.getLimit() >= 0 && count >= statement.getLimit()) {
+            for (ProfileManager.ProfileElement element : profileElements) {
+                if (statement.getLimit() >= 0 && rowSet.size() >= statement.getLimit()) {
                     break;
                 }
+                if (checkAccess && !Authorizer.canReadQueryProfile(context, element, hasOperate)) {
+                    continue;
+                }
+                rowSet.add(element.toRow(context));
             }
 
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rowSet);
@@ -1891,7 +1918,7 @@ public class ShowExecutor {
                         long indexReplicaCount = 0;
                         long indexRowCount = 0;
                         for (PhysicalPartition partition : olapTable.getAllPhysicalPartitions()) {
-                            MaterializedIndex mIndex = partition.getLatestIndex(indexMetaId);
+                            MaterializedIndex mIndex = partition.getQueryableIndex(indexMetaId);
                             indexSize += mIndex.getDataSize();
                             indexReplicaCount += mIndex.getReplicaCount();
                             indexRowCount += mIndex.getRowCount();
@@ -2395,8 +2422,9 @@ public class ShowExecutor {
                 throw new SemanticException("Repository " + statement.getRepoName() + " does not exist");
             }
 
-            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(), statement.getTimestamp(),
-                    statement.getSnapshotNames());
+            List<List<String>> snapshotInfos = repo.getSnapshotInfos(statement.getSnapshotName(),
+                    statement.getTimestamp(), statement.getSnapshotNames(),
+                    GlobalStateMgr.getCurrentState().getBackupHandler().getRetentionCache());
             return new ShowResultSet(showResultMetaFactory.getMetadata(statement), snapshotInfos);
         }
 
@@ -3119,6 +3147,65 @@ public class ShowExecutor {
         }
 
         @Override
+        public ShowResultSet visitShowAIProvidersStatement(
+                com.starrocks.sql.ast.aiprovider.ShowAIProvidersStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProviderType typeFilter = statement.getTypeFilter().isEmpty()
+                    ? null : com.starrocks.context.ai.AIProviderType.fromString(statement.getTypeFilter());
+            PatternMatcher matcher = null;
+            if (!statement.getPattern().isEmpty()) {
+                matcher = PatternMatcher.createMysqlPattern(statement.getPattern(),
+                        CaseSensibility.STORAGEVOLUME.getCaseSensibility());
+            }
+            List<com.starrocks.context.ai.AIProvider> providers =
+                    typeFilter == null ? mgr.listProviders() : mgr.listProviders(typeFilter);
+            List<List<String>> rows = Lists.newArrayList();
+            for (com.starrocks.context.ai.AIProvider provider : providers) {
+                if (matcher != null && !matcher.match(provider.getName())) {
+                    continue;
+                }
+                java.util.Map<String, String> masked = provider.getMaskedParams();
+                String defaultId = mgr.getDefaultProviderId(provider.getType());
+                rows.add(Lists.newArrayList(
+                        provider.getName(),
+                        provider.getType().lower(),
+                        provider.getProtocol().lower(),
+                        provider.getId().equals(defaultId) ? "true" : "false",
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_ENDPOINT, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MODEL, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_DIMENSIONS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_MAX_DOCUMENTS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_TIMEOUT_MS, ""),
+                        masked.getOrDefault(com.starrocks.context.ai.AIProvider.PROPERTY_API_KEY, ""),
+                        provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
+        public ShowResultSet visitDescAIProviderStatement(
+                com.starrocks.sql.ast.aiprovider.DescAIProviderStmt statement, ConnectContext context) {
+            com.starrocks.server.AIProviderMgr mgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+            com.starrocks.context.ai.AIProvider provider = mgr.getProvider(statement.getName());
+            if (provider == null) {
+                throw new SemanticException("Unknown AI provider: " + statement.getName());
+            }
+            String defaultId = mgr.getDefaultProviderId(provider.getType());
+            List<List<String>> rows = Lists.newArrayList();
+            rows.add(Lists.newArrayList("Name", provider.getName()));
+            rows.add(Lists.newArrayList("Type", provider.getType().lower()));
+            rows.add(Lists.newArrayList("IsDefault", provider.getId().equals(defaultId) ? "true" : "false"));
+            java.util.Map<String, String> masked = provider.getMaskedParams();
+            for (java.util.Map.Entry<String, String> entry : masked.entrySet()) {
+                rows.add(Lists.newArrayList(entry.getKey(), entry.getValue()));
+            }
+            if (!provider.getComment().isEmpty()) {
+                rows.add(Lists.newArrayList("Comment", provider.getComment()));
+            }
+            return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
+        }
+
+        @Override
         public ShowResultSet visitShowPipeStatement(ShowPipeStmt statement, ConnectContext context) {
             List<List<Comparable>> rows = Lists.newArrayList();
             String dbName = statement.getDbName();
@@ -3250,10 +3337,17 @@ public class ShowExecutor {
                         if (matcher != null && !matcher.match(name)) {
                             continue;
                         }
+                        // pause and both counters are optional on the wire: a BE built before them
+                        // sends null, so never dereference a boxed value here.
+                        boolean paused = Boolean.TRUE.equals(triggerMode.pause);
                         List<String> row = Lists.newArrayList();
                         row.add(failPointInfo.name);
-                        row.add(triggerMode.mode.toString());
-                        if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
+                        // A pause is sent as DISABLE + pause=true so old backends degrade safely;
+                        // report what it actually means.
+                        row.add(paused ? "PAUSE" : triggerMode.mode.toString());
+                        if (paused) {
+                            row.add("");
+                        } else if (triggerMode.mode == FailPointTriggerModeType.ENABLE_N_TIMES) {
                             row.add(Integer.toString(triggerMode.nTimes));
                         } else if (triggerMode.mode == FailPointTriggerModeType.PROBABILITY_ENABLE) {
                             row.add(Double.toString(triggerMode.probability));
@@ -3261,6 +3355,10 @@ public class ShowExecutor {
                             row.add("");
                         }
                         row.add(String.format("%s:%d", node.getHost(), node.getBePort()));
+                        row.add(Long.toString(failPointInfo.triggerCount == null
+                                ? 0L : failPointInfo.triggerCount));
+                        row.add(Long.toString(failPointInfo.pausedThreadCount == null
+                                ? 0L : failPointInfo.pausedThreadCount));
                         rows.add(row);
                     }
                 } catch (InterruptedException e) {

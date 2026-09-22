@@ -137,13 +137,76 @@ column statistics:
   },
   "column_statistics": {
     "test.lineitem": {
-      "L_TAX": "[0.0, 0.08, 0.0, 8.0, 9.0] ESTIMATE",
-      "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
-      "L_EXTENDEDPRICE": "[901.0, 104949.5, 0.0, 8.0, 932377.0] ESTIMATE",
-      "L_DISCOUNT": "[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE",
-      "L_RETURNFLAG": "[-Infinity, Infinity, 0.0, 1.0, 3.0] ESTIMATE",
-      "L_LINESTATUS": "[-Infinity, Infinity, 0.0, 1.0, 2.0] ESTIMATE",
-      "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE"
+      "L_TAX": {
+        "version": 1,
+        "min": "0.0",
+        "max": "0.08",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "9.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_SHIPDATE": {
+        "version": 1,
+        "min": "6.942816E8",
+        "max": "9.124416E8",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "2526.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_EXTENDEDPRICE": {
+        "version": 1,
+        "min": "901.0",
+        "max": "104949.5",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "932377.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_DISCOUNT": {
+        "version": 1,
+        "min": "0.0",
+        "max": "0.1",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "11.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_RETURNFLAG": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "1.0",
+        "distinctValuesCount": "3.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_LINESTATUS": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "1.0",
+        "distinctValuesCount": "2.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_QUANTITY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "50.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "50.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     }
   },
   "be_number": 3,

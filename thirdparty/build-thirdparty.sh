@@ -54,6 +54,13 @@ if [ ! -f ${TP_DIR}/vars.sh ]; then
 fi
 . ${TP_DIR}/vars.sh
 
+if [[ ! -f "${TP_DIR}/package-manifest.sh" ]]; then
+    echo "package-manifest.sh is missing".
+    exit 1
+fi
+. "${TP_DIR}/package-manifest.sh"
+starrocks_set_default_packages "${MACHINE_TYPE}"
+
 # Check args
 usage() {
     echo "
@@ -68,6 +75,11 @@ Usage: $0 [options...] [packages...]
     --clean                Clean extracted source before building
     --continue <package>   Continue building from specified package
     -h, --help             Show this help message
+
+  Notes:
+    When packages are given (also with --continue), only the archives those
+    packages are built from are downloaded, unpacked and patched. A full build
+    still processes every archive.
 
   Examples:
     # Build all packages with default parallelism
@@ -221,7 +233,13 @@ if [[ "${CLEAN}" -eq 1 ]]; then
     clean_sources
 fi
 
-# Download thirdparties.
+# Download thirdparties. A partial build only needs its own archives, so limit
+# the download/unpack/patch pass accordingly.
+if [[ "${#packages[@]}" -ne 0 ]]; then
+    starrocks_restrict_archives "${packages[@]}"
+elif [[ "${CONTINUE}" -eq 1 ]]; then
+    starrocks_restrict_archives_from "${start_package}"
+fi
 ${TP_DIR}/download-thirdparty.sh
 
 # set COMPILER
@@ -313,6 +331,36 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
+# Helper function to append compiler/linker flags cleanly
+append_flags() {
+    local base="$1"
+    local extra="$2"
+
+    if [[ -z "${base}" ]]; then
+        echo "${extra}"
+    elif [[ -z "${extra}" ]]; then
+        echo "${base}"
+    else
+        echo "${base} ${extra}"
+    fi
+}
+
+# Detect ARMv8 CRC32 support for AArch64
+if [[ "${MACHINE_TYPE}" == "aarch64" && -z "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" ]]; then
+    THIRD_PARTY_BUILD_WITH_ARM_CRC=ON
+    if [[ -e /proc/cpuinfo ]]; then
+        if [[ -z $(grep -E '^Features' /proc/cpuinfo | grep -o '\<crc32\>') ]]; then
+            THIRD_PARTY_BUILD_WITH_ARM_CRC=OFF
+        fi
+    fi
+fi
+
+# Target architecture compiler flags for thirdparty libraries
+TP_TARGET_ARCH_FLAGS=""
+if [[ "${MACHINE_TYPE}" == "aarch64" && "${THIRD_PARTY_BUILD_WITH_ARM_CRC}" == "ON" ]]; then
+    TP_TARGET_ARCH_FLAGS="-march=armv8-a+crc"
+fi
+
 check_if_source_exist() {
     if [ -z $1 ]; then
         echo "dir should specified to check if exist."
@@ -364,7 +412,7 @@ build_openssl() {
     # use customized CFLAGS/CPPFLAGS/CXXFLAGS/LDFLAGS
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
@@ -402,8 +450,8 @@ build_thrift() {
 
 # llvm
 build_llvm() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L ${FILE_PREFIX_MAP_OPTION}"
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess ${FILE_PREFIX_MAP_OPTION}"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -Wno-class-memaccess ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
 
     LLVM_TARGET="X86"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
@@ -612,7 +660,12 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3 -fPIC" -DCMAKE_C_FLAGS="-O3 -fPIC" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_CXX_FLAGS="$(append_flags "${CXXFLAGS}" "-O3 -fPIC")" \
+        -DCMAKE_C_FLAGS="$(append_flags "${CFLAGS}" "-O3 -fPIC")" \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=True \
+        -DSIMDJSON_AVX512_ALLOWED=OFF \
+        -DSIMDJSON_SKIPUTF8VALIDATION=ON ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -648,7 +701,9 @@ build_snappy() {
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
-    -DSNAPPY_BUILD_TESTS=0 ../
+    -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
+    -DSNAPPY_BUILD_TESTS=OFF \
+    -DSNAPPY_BUILD_BENCHMARKS=OFF ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
@@ -674,7 +729,7 @@ build_gperftools() {
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
@@ -766,8 +821,9 @@ build_boost() {
 
     # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
+    local boost_cxxflags="$(append_flags "-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
     LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
-    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR ${FILE_PREFIX_MAP_OPTION}" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="${boost_cxxflags}" install
 }
 
 #leveldb
@@ -804,8 +860,8 @@ build_rocksdb() {
     make clean
 
     CFLAGS= \
-    EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" \
-    EXTRA_CXXFLAGS="-fPIC -Wno-redundant-move -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" \
+    EXTRA_CFLAGS="$(append_flags "-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR} ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
+    EXTRA_CXXFLAGS="$(append_flags "-fPIC -Wno-redundant-move -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
@@ -817,7 +873,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="$(append_flags "-std=gnu17 -fcommon -fPIC ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -827,7 +883,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
+    CFLAGS="$(append_flags "-fPIC" "${TP_TARGET_ARCH_FLAGS}")" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit --with-dblib=none
     make -j$PARALLEL
     make install
 }
@@ -895,8 +951,8 @@ build_brotli() {
 
 # arrow
 build_arrow() {
-    export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}"
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}"
+    export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g -fno-sized-deallocation ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
     export CPPFLAGS=$CXXFLAGS
 
     check_if_source_exist $ARROW_SOURCE
@@ -913,13 +969,18 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export ARROW_THRIFT_URL=${TP_SOURCE_DIR}/${THRIFT_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
-    if [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        # ARROW_RUNTIME_SIMD_LEVEL only accepts MAX|NONE|SSE4_2|AVX2|AVX512, and arrow
+        # consumes it exclusively in its x86 branch, so NEON is rejected by the option
+        # validator. Disable runtime dispatch here; NEON is selected at compile time.
+        arrow_simd_level=NEON
+        arrow_runtime_simd_level=NONE
+    elif [[ "$THIRD_PARTY_BUILD_WITH_AVX2" == "OFF" ]] ; then
         # https://github.com/apache/arrow/blob/main/cpp/cmake_modules/DefineOptions.cmake#L179
         # default to SSE4_2 on x86 and NEON on Arm
         arrow_simd_level=DEFAULT
         arrow_runtime_simd_level=SSE4_2
     else
-        # TODO: what's the correct level setting for ARM arch?
         arrow_simd_level=AVX2
         arrow_runtime_simd_level=AVX2
     fi
@@ -1208,9 +1269,21 @@ build_hyperscan() {
     check_if_source_exist $HYPERSCAN_SOURCE
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
+
+    # FAT_RUNTIME bundles multiple ISA-specific code paths (SSE4.2, AVX2, AVX-512)
+    # with IFUNC-based runtime dispatch.  It defaults to ON for x86_64 Linux and
+    # must stay enabled there so that a single artifact runs correctly across
+    # different x86_64 micro-architectures.  Vectorscan on AArch64 does not
+    # benefit from this (ARM NEON is the baseline), and the option can cause
+    # build issues, so disable it only for aarch64.
+    local FAT_RUNTIME_FLAG=""
+    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        FAT_RUNTIME_FLAG="-DFAT_RUNTIME=OFF"
+    fi
+
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
           -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
-          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF
+          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF -DBUILD_BENCHMARKS=OFF ${FAT_RUNTIME_FLAG}
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -1222,7 +1295,7 @@ build_mariadb() {
 
     unset CXXFLAGS
     unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")"
 
     # force use make build system, since ninja doesn't support install only headers
     CMAKE_GENERATOR="Unix Makefiles"
@@ -1332,13 +1405,17 @@ build_jemalloc() {
     # time one, but aborts on a larger one. If not defined, it falls back to the
     # the build system's _SC_PAGESIZE, which in many architectures can vary. Set
     # this to 64K (2^16) for arm architecture, and default 4K on x86 for performance.
-    local addition_opts=" --with-lg-page=12"
+    local addition_opts
     if [[ $MACHINE_TYPE == "aarch64" ]] ; then
-        # change to 64K for arm architecture
+        # 64K for arm architecture
         addition_opts=" --with-lg-page=16"
+    else
+        addition_opts=" --with-lg-page=12"
     fi
+    local jemalloc_cflags="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
+
     # build jemalloc with release
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    CFLAGS="${jemalloc_cflags}" \
     ./configure --prefix=${TP_INSTALL_DIR}/jemalloc --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
@@ -1346,11 +1423,39 @@ build_jemalloc() {
     mkdir -p ${TP_INSTALL_DIR}/jemalloc/lib-static/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.so* ${TP_INSTALL_DIR}/jemalloc/lib-shared/
     mv ${TP_INSTALL_DIR}/jemalloc/lib/*.a ${TP_INSTALL_DIR}/jemalloc/lib-static/
-    # build jemalloc with debug options
-    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    # build jemalloc with debug options. Each subsequent ./configure below
+    # reuses this same source tree with different flags (page size,
+    # --disable-static, --enable-debug); autotools' generated Makefile
+    # doesn't reliably detect a configure-option change and rebuild the
+    # affected objects, so force a clean rebuild before every configure
+    # pass after the first.
+    make distclean
+    CFLAGS="${jemalloc_cflags}" \
     ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --enable-prof --disable-cxx --disable-libdl $addition_opts
     make -j$PARALLEL
     make install
+
+    if [[ $MACHINE_TYPE == "aarch64" ]] ; then
+        # arm64 kernels vary between 4K and 64K pages depending on distro/kernel
+        # config. The 64K release/debug builds above are the safe default
+        # (work on any runtime page size <= 64K), but waste memory via larger
+        # chunk granularity on the common 4K-page case. Build matching 4K
+        # release and debug variants so downstream consumers can pick the
+        # pair matching the host via getconf PAGESIZE.
+        local page4k_opts=" --with-lg-page=12"
+
+        make distclean
+        CFLAGS="${jemalloc_cflags}" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+
+        make distclean
+        CFLAGS="${jemalloc_cflags}" \
+        ./configure --prefix=${TP_INSTALL_DIR}/jemalloc-debug-pg4k --with-jemalloc-prefix=je --enable-prof --disable-static --enable-debug --enable-fill --disable-cxx --disable-libdl $page4k_opts
+        make -j$PARALLEL
+        make install
+    fi
 }
 
 # google benchmark
@@ -1451,14 +1556,14 @@ build_avro_cpp() {
 
 # serders
 build_serdes() {
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC -g" "${TP_TARGET_ARCH_FLAGS}")"
     check_if_source_exist $SERDES_SOURCE
     cd $TP_SOURCE_DIR/$SERDES_SOURCE
     export LIBS="-lrt -lpthread -lcurl -ljansson -lrdkafka -lrdkafka++ -lavro -lssl -lcrypto -ldl"
     ./configure --prefix=${TP_INSTALL_DIR} \
                 --libdir=${TP_INSTALL_DIR}/lib \
-                --CFLAGS="-I ${TP_INSTALL_DIR}/include"  \
-                --CXXFLAGS="-I ${TP_INSTALL_DIR}/include" \
+                --CFLAGS="$(append_flags "-I ${TP_INSTALL_DIR}/include" "${TP_TARGET_ARCH_FLAGS}")" \
+                --CXXFLAGS="$(append_flags "-I ${TP_INSTALL_DIR}/include" "${TP_TARGET_ARCH_FLAGS}")" \
                 --LDFLAGS="-L ${TP_INSTALL_DIR}/lib -L ${TP_INSTALL_DIR}/lib64" \
                 --enable-static \
                 --disable-shared
@@ -1529,7 +1634,7 @@ build_clucene() {
         -DBUILD_SHARED_LIBRARIES=OFF \
         -DBOOST_ROOT="$TP_INSTALL_DIR" \
         -DZLIB_ROOT="$TP_INSTALL_DIR" \
-        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" \
+        -DCMAKE_CXX_FLAGS="$(append_flags "-g -fno-omit-frame-pointer -Wno-narrowing ${FILE_PREFIX_MAP_OPTION}" "${TP_TARGET_ARCH_FLAGS}")" \
         -DUSE_STAT64=0 \
         -DCMAKE_BUILD_TYPE=Release \
         -DUSE_AVX2=$THIRD_PARTY_BUILD_WITH_AVX2 \
@@ -1637,8 +1742,8 @@ build_icu() {
     # Use a subshell to prevent LD_LIBRARY_PATH from affecting the external environment
     (
         export LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH:-}
-        export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
-        export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+        export CFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
+        export CXXFLAGS="$(append_flags "-O3 -fno-omit-frame-pointer -fPIC" "${TP_TARGET_ARCH_FLAGS}")"
         ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
         make -j$PARALLEL
         make install
@@ -1740,6 +1845,59 @@ build_benchgen() {
     ${CMAKE_CMD} --install build
 }
 
+# paimon-cpp
+# Third-party deps are BUNDLED: paimon-cpp's cmake downloads them at build
+# time from the URLs pinned in its third_party/versions.txt (network required).
+# Protobuf is the one exception and reuses the thirdparty-built one: protoc is
+# a build-time executable, and the protoc built by the bundled protobuf may
+# require a newer runtime libstdc++ than the host provides (e.g. rocky9),
+# while the thirdparty protoc is linked with -static-libstdc++ and runs
+# anywhere. Same pattern as build_arrow. paimon's bundled ORC inherits the
+# resolved protobuf automatically.
+build_paimon_cpp() {
+    check_if_source_exist $PAIMON_CPP_SOURCE
+
+    # build_arrow exports ARROW_*_URL to feed StarRocks' own Arrow build
+    # offline; paimon-cpp's bundled Arrow honors the same env vars, so they
+    # must not leak into this build (those tarballs do not match the
+    # versions pinned by paimon's bundled Arrow and fail its SHA256 check).
+    local arrow_url_var
+    for arrow_url_var in $(compgen -v | grep -E '^ARROW_[A-Z0-9_]+_URL$'); do
+        unset "${arrow_url_var}"
+    done
+
+    cd $TP_SOURCE_DIR/$PAIMON_CPP_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    # protobuf required for rocky9
+    ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR/paimon-cpp \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DPAIMON_BUILD_STATIC=OFF \
+        -DPAIMON_ENABLE_ORC=ON \
+        -DPAIMON_ENABLE_AVRO=ON \
+        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUCENE=OFF \
+        -DPAIMON_ENABLE_TANTIVY=OFF \
+        -DPAIMON_ENABLE_JINDO=OFF \
+        -DPAIMON_DEPENDENCY_SOURCE=BUNDLED \
+        -DProtobuf_SOURCE=SYSTEM \
+        -DProtobuf_ROOT=$TP_INSTALL_DIR \
+        -DCMAKE_PREFIX_PATH=$TP_INSTALL_DIR
+
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+    # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
+    if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
+        echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2
+        exit 1
+    fi
+    restore_compile_flags
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1766,17 +1924,15 @@ export GLOBAL_CPPFLAGS="-I${TP_INCLUDE_DIR} "
 export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=gnu17 -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -gz=zlib ${FILE_PREFIX_MAP_OPTION}"
 
+if [[ -n "${TP_TARGET_ARCH_FLAGS}" ]]; then
+    export GLOBAL_CFLAGS="$(append_flags "${GLOBAL_CFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+    export GLOBAL_CXXFLAGS="$(append_flags "${GLOBAL_CXXFLAGS}" "${TP_TARGET_ARCH_FLAGS}")"
+fi
+
 # set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
 export CPPFLAGS=$GLOBAL_CPPFLAGS
 export CXXFLAGS=$GLOBAL_CXXFLAGS
 export CFLAGS=$GLOBAL_CFLAGS
-
-if [[ ! -f "${TP_DIR}/package-manifest.sh" ]]; then
-    echo "package-manifest.sh is missing".
-    exit 1
-fi
-. "${TP_DIR}/package-manifest.sh"
-starrocks_set_default_packages "${MACHINE_TYPE}"
 
 # Initialize packages array - if none specified, build all
 if [[ "${#packages[@]}" -eq 0 ]]; then

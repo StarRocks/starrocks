@@ -649,12 +649,30 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _gin_predicate_dict_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "GinPredicateFilteredDictNum", TUnit::UNIT, gin_filter_name);
 
-    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, "GetVectorRowRangesTime", "SegmentInit");
-    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorSearchTime", "SegmentInit");
+    const std::string vector_index_name = "VectorIndex";
+    const std::string vector_index_load_name = "VectorIndexLoad";
+    const std::string vector_index_cache_lookup_name = "VectorIndexCacheLookup";
+    const std::string vector_index_search_name = "VectorIndexSearch";
+    _vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_name, "SegmentInit");
+    _vector_index_load_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_load_name, vector_index_name);
+    _get_row_ranges_by_vector_index_timer = ADD_CHILD_TIMER(_scan_profile, vector_index_search_name, vector_index_name);
+    _vector_index_cache_lookup_timer =
+            ADD_CHILD_TIMER(_scan_profile, vector_index_cache_lookup_name, vector_index_load_name);
+    _vector_index_file_open_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileOpenAndGetSize", vector_index_load_name);
+    _vector_index_read_file_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexFileRead", vector_index_load_name);
+    _vector_index_init_index_timer = ADD_CHILD_TIMER(_scan_profile, "VectorIndexDeserialize", vector_index_load_name);
+    _vector_index_searcher_init_timer =
+            ADD_CHILD_TIMER(_scan_profile, "VectorIndexSearcherCreate", vector_index_load_name);
+    _vector_index_cache_hit_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheHit", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_index_cache_miss_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexCacheMiss", TUnit::UNIT, vector_index_cache_lookup_name);
+    _vector_search_timer = ADD_CHILD_TIMER(_scan_profile, "VectorANNSearch", vector_index_search_name);
     _vector_index_filtered_counter =
-            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, "SegmentInit");
+            ADD_CHILD_COUNTER(_scan_profile, "VectorIndexFilterRows", TUnit::UNIT, vector_index_search_name);
     _process_vector_distance_and_id_timer =
-            ADD_CHILD_TIMER(_scan_profile, "ProcessVectorDistanceAndIdTime", "SegmentInit");
+            ADD_CHILD_TIMER(_scan_profile, "VectorResultProcess", vector_index_search_name);
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");

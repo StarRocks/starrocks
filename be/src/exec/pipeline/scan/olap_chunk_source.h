@@ -197,7 +197,16 @@ private:
     RuntimeProfile::Counter* _block_fetch_timer = nullptr;
     RuntimeProfile::Counter* _read_pages_num_counter = nullptr;
     RuntimeProfile::Counter* _cached_pages_num_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;

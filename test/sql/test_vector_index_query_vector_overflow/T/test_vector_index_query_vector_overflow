@@ -1,0 +1,29 @@
+-- name: test_vector_index_query_vector_overflow @sequential @native
+-- A query-vector element that overflows float range (1e308 > FLT_MAX) used to
+-- reach an unguarded std::stof in OlapChunkSource::_init_reader_params and abort
+-- the BE. It must now be rejected with a clean error instead of crashing.
+CREATE TABLE `t_ivfpq_overflow` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v` ARRAY<FLOAT> NOT NULL COMMENT "",
+  INDEX idx_v (`v`) USING VECTOR ("index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance", "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2", "index_build_threshold" = "16")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+INSERT INTO t_ivfpq_overflow SELECT number, [CAST(number AS FLOAT), 0, 0, 0] FROM TABLE(generate_series(1, 64)) t(number);
+
+-- A well-formed query vector still works and uses the index (nearest is id 1).
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<FLOAT>[1.0, 0.0, 0.0, 0.0], v) limit 1;
+
+-- Overflowing element must be a clean error, not a BE crash.
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<FLOAT>[1e308, 0.0, 0.0, 0.0], v) limit 1;
+
+-- The exact form the fuzzer found: a wrong-typed query vector (ARRAY<TINYINT>
+-- against an ARRAY<FLOAT> vector column). It is widened to FLOAT and reaches the
+-- same scan path; it must run cleanly, never crash.
+select id from t_ivfpq_overflow order by approx_l2_distance(ARRAY<TINYINT>[100, 100, 100, 100], v) limit 1;

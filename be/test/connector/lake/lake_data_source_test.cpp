@@ -16,6 +16,7 @@
 
 #include <array>
 #include <atomic>
+#include <sstream>
 #include <vector>
 
 #include "base/testutil/assert.h"
@@ -28,12 +29,16 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_scan_io_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/logging.h"
 #include "common/object_pool.h"
 #include "common/runtime_profile.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/query/fragment_runtime_state.h"
+#include "compute_env/query/global_late_materialization_context.h"
+#include "compute_env/query/query_runtime_state.h"
 #include "connector/lake/lake_connector.h"
+#include "connector/lake/lake_global_late_materialization_context.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "fs/fs_factory.h"
@@ -282,6 +287,128 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
 // scan-range count already reaches pipeline_dop -- which the plain count gate treats as "enough parallelism,
 // no split". The override is gated on enable_lake_prepared_physical_split_scan; with it off the original
 // count gate is kept verbatim.
+// A scan range naming a tablet metadata version that does not exist must not surface as a generic
+// NOT_FOUND: FE's retry classifier ignores that code, so the query fails where a re-plan against the
+// partition's current visible version would have succeeded.
+TEST_F(LakeDataSourceTest, missing_metadata_version_reports_dedicated_status) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    const int64_t missing_version = _tablet_metadata->version() + 100;
+    const int64_t partition_id = 10002;
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(missing_version));
+    internal_scan_range.__set_partition_id(partition_id);
+
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto runtime_state = create_runtime_state_for_test();
+
+    // Build the descriptor table the scan open path dereferences before it reaches the metadata read.
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
+
+    auto st = ds.open(runtime_state.get());
+    ASSERT_TRUE(st.is_lake_meta_version_not_found()) << st.to_string();
+    // FE parses these out of the message to log which version it captured and which one it re-planned to.
+    auto message = std::string(st.message());
+    EXPECT_NE(std::string::npos, message.find("tablet_id=" + std::to_string(_tablet_metadata->id())));
+    EXPECT_NE(std::string::npos, message.find("partition_id=" + std::to_string(partition_id)));
+    EXPECT_NE(std::string::npos, message.find("version=" + std::to_string(missing_version)));
+}
+
+// The same translation on the provider-side row-count probe, which reads metadata at the scan
+// range's version too and has no directory-listing fallback to fall back on.
+TEST_F(LakeDataSourceTest, missing_metadata_version_reports_dedicated_status_from_morsel_builder) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    auto runtime_state = create_runtime_state_for_test();
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    auto scan_ranges = create_scan_ranges({_tablet_metadata.get()});
+    const int64_t missing_version = _tablet_metadata->version() + 100;
+    scan_ranges[0].scan_range.internal_scan_range.__set_version(std::to_string(missing_version));
+
+    auto builder = provider.convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, plan_node.node_id, /*pipeline_dop=*/2, /*enable_tablet_internal_parallel=*/true,
+            TTabletInternalParallelMode::type::FORCE_SPLIT, scan_ranges.size());
+    ASSERT_TRUE(builder.status().is_lake_meta_version_not_found()) << builder.status().to_string();
+    EXPECT_NE(std::string::npos, builder.status().to_string().find("version=" + std::to_string(missing_version)));
+}
+
+// Only a missing version is relabelled. A failure of any other kind must reach FE unchanged --
+// relabelling it would make FE re-plan and retry a query that is failing for a genuine reason
+// (corruption, IO), burning a retry and hiding the real error behind a version-visibility story.
+TEST_F(LakeDataSourceTest, non_not_found_metadata_failure_keeps_its_status) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // The error point sits ahead of the metacache lookup, so this is what the metadata read returns.
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_tablet_metadata", [](void* arg) {
+        *static_cast<Status*>(arg) = Status::Corruption("bad tablet metadata");
+    });
+
+    auto runtime_state = create_runtime_state_for_test();
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    auto scan_ranges = create_scan_ranges({_tablet_metadata.get()});
+    auto builder = provider.convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, plan_node.node_id, /*pipeline_dop=*/2, /*enable_tablet_internal_parallel=*/true,
+            TTabletInternalParallelMode::type::FORCE_SPLIT, scan_ranges.size());
+    ASSERT_TRUE(builder.status().is_corruption()) << builder.status().to_string();
+    ASSERT_FALSE(builder.status().is_lake_meta_version_not_found());
+}
+
 TEST_F(LakeDataSourceTest, could_tablet_internal_parallel_skew_gate) {
     // get_tablet_num_rows sums rowset num_rows from metadata, so a rowset carrying only set_num_rows()
     // (no real segments) is enough to drive this row-count-based decision.
@@ -671,7 +798,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     vec_opts.__set_vector_slot_id(999);
     vec_opts.__set_vector_limit_k(10);
     vec_opts.__set_query_vector(std::vector<std::string>{"0.1", "0.2", "0.3"});
-    vec_opts.__set_vector_range(0.5);
+    vec_opts.__set_vector_range(-1.5);
+    vec_opts.__set_has_vector_range(true);
     vec_opts.__set_result_order(0);
     vec_opts.__set_pq_refine_factor(1.0);
     vec_opts.__set_k_factor(1.0);
@@ -787,6 +915,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
     ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
     EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+    EXPECT_TRUE(params.vector_search_option->has_vector_range);
+    EXPECT_DOUBLE_EQ(params.vector_search_option->vector_range, -1.5);
 }
 
 TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
@@ -1449,6 +1579,55 @@ TEST_F(LakeDataSourceTest, init_counter_registers_prepared_split_counters) {
             EXPECT_EQ(c->value(), 0) << name;
         }
     }
+    for (const auto* name : {"VectorIndex",
+                             "VectorIndexLoad",
+                             "VectorIndexSearch",
+                             "VectorIndexCacheLookup",
+                             "VectorIndexFileOpenAndGetSize",
+                             "VectorIndexFileRead",
+                             "VectorIndexDeserialize",
+                             "VectorIndexSearcherCreate",
+                             "VectorIndexCacheHit",
+                             "VectorIndexCacheMiss",
+                             "VectorANNSearch",
+                             "VectorResultProcess",
+                             "VectorIndexFilterRows",
+                             "SeedVectorIndex",
+                             "SeedVectorIndexLoad",
+                             "SeedVectorIndexSearch",
+                             "SeedVectorIndexCacheLookup",
+                             "SeedVectorIndexFileOpenAndGetSize",
+                             "SeedVectorIndexFileRead",
+                             "SeedVectorIndexDeserialize",
+                             "SeedVectorIndexSearcherCreate",
+                             "SeedVectorIndexCacheHit",
+                             "SeedVectorIndexCacheMiss",
+                             "SeedVectorANNSearch",
+                             "SeedVectorResultProcess",
+                             "SeedVectorIndexFilterRows"}) {
+        auto* c = profile->get_counter(name);
+        EXPECT_NE(c, nullptr) << name;
+        if (c != nullptr) {
+            EXPECT_EQ(c->value(), 0) << name;
+        }
+    }
+
+    std::stringstream rendered;
+    profile->pretty_print(&rendered);
+    const auto text = rendered.str();
+    EXPECT_NE(text.find("     - VectorIndex: 0.000ns\n"
+                        "       - VectorIndexLoad: 0.000ns\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("         - VectorIndexCacheLookup: 0.000ns\n"
+                        "           - VectorIndexCacheHit: 0\n"
+                        "           - VectorIndexCacheMiss: 0\n"),
+              std::string::npos)
+            << text;
+    EXPECT_NE(text.find("       - VectorIndexSearch: 0.000ns\n"
+                        "         - VectorANNSearch: 0.000ns\n"),
+              std::string::npos)
+            << text;
 }
 
 TEST_F(LakeDataSourceTest, reopen_reader_requires_initialized_reader) {
@@ -1583,6 +1762,244 @@ TEST_F(LakeDataSourceTest, disable_runtime_filter_dependent_cache_is_flag_only) 
     EXPECT_EQ(borrowed_range->span_size(), 50u);
     EXPECT_FALSE(state.seek_ranges_rowid_bounds.empty());
     EXPECT_EQ(borrowed_bounds->size(), 1u);
+}
+
+// A Lake scan resolves its cache policy from BOTH the query options and each TInternalScanRange
+// (fill_data_cache / skip_page_cache / skip_disk_cache), and the GLM lookup that later re-reads the
+// late-materialized columns of the very same tablet must reuse that resolved policy. So the capture
+// has to run AFTER init_reader_params() folded the scan range into _params: capturing earlier (as the
+// pre-fix code did, right where the context is created) records nothing but default-constructed flags
+// and lets the lookup populate caches the scan range explicitly disabled.
+TEST_F(LakeDataSourceTest, glm_capture_carries_resolved_scan_range_cache_policy) {
+    const bool saved_disable_page_cache = config::disable_storage_page_cache;
+    config::disable_storage_page_cache = false;
+    DeferOp restore_config([&]() { config::disable_storage_page_cache = saved_disable_page_cache; });
+
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    // A second tablet (same schema and rowsets, different id) so two scan ranges of ONE scan node can
+    // carry different cache policies through the single GLM context they share.
+    TabletMetadata second_metadata = *_tablet_metadata;
+    second_metadata.set_id(next_id());
+    CHECK_OK(_tablet_mgr->put_tablet_metadata(second_metadata));
+
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    lake_scan_node.__set_enable_global_late_materialization(true);
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    auto runtime_state = create_runtime_state_for_test();
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    // GLM needs the query-scoped context manager + object pool off the QueryRuntimeState.
+    GlobalLateMaterilizationContextMgr glm_mgr;
+    pipeline::QueryRuntimeState query_runtime_state;
+    query_runtime_state.set_object_pool(runtime_state->obj_pool());
+    query_runtime_state.set_global_late_materialization_ctx_mgr(&glm_mgr);
+    runtime_state->set_query_runtime_state(&query_runtime_state);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+
+    auto glm_ctx = [&]() {
+        return static_cast<LakeScanLazyMaterializationContext*>(glm_mgr.get_ctx(plan_node.node_id));
+    };
+
+    struct Resolved {
+        LakeScanCacheOptions from_params; // what the scan itself resolved for this tablet
+        LakeScanCacheOptions captured;    // what the GLM context handed to the lookup
+    };
+
+    // Open one scan range with the given per-range cache flags and report both views of the policy.
+    auto scan_tablet = [&](const TabletMetadata& metadata, bool fill_data_cache, bool skip_page_cache,
+                           bool skip_disk_cache) -> Resolved {
+        TInternalScanRange internal_scan_range;
+        internal_scan_range.__set_tablet_id(metadata.id());
+        internal_scan_range.__set_version(std::to_string(metadata.version()));
+        internal_scan_range.__set_fill_data_cache(fill_data_cache);
+        internal_scan_range.__set_skip_page_cache(skip_page_cache);
+        internal_scan_range.__set_skip_disk_cache(skip_disk_cache);
+        TScanRange scan_range;
+        scan_range.__set_internal_scan_range(internal_scan_range);
+
+        auto tablet = _tablet_mgr->get_tablet(metadata.id(), metadata.version());
+        CHECK(tablet.ok()) << tablet.status();
+        std::vector<BaseRowsetSharedPtr> base_rowsets;
+        for (auto& rs : tablet->get_rowsets()) {
+            base_rowsets.emplace_back(rs);
+        }
+        pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+        morsel.set_rowsets(base_rowsets);
+
+        connector::LakeDataSource ds(&provider, scan_range);
+        ds.set_runtime_profile(&parent_profile);
+        ds.set_morsel(&morsel);
+        DeferOp close_guard([&]() { ds.close(runtime_state.get()); });
+        CHECK_OK(ds.open(runtime_state.get()));
+
+        const auto& params = ds.TEST_params();
+        auto* ctx = glm_ctx();
+        CHECK(ctx != nullptr);
+        return Resolved{.from_params = {.use_page_cache = params.use_page_cache,
+                                        .fill_data_cache = params.lake_io_opts.fill_data_cache,
+                                        .fill_metadata_cache = params.lake_io_opts.fill_metadata_cache,
+                                        .skip_disk_cache = params.lake_io_opts.skip_disk_cache},
+                        .captured = ctx->get_cache_options(static_cast<int32_t>(metadata.id()))};
+    };
+
+    // The lookup must see exactly what the scan resolved -- no field silently dropped or defaulted.
+    auto expect_matches_scan = [](const Resolved& r) {
+        EXPECT_EQ(r.from_params.use_page_cache, r.captured.use_page_cache);
+        EXPECT_EQ(r.from_params.fill_data_cache, r.captured.fill_data_cache);
+        EXPECT_EQ(r.from_params.fill_metadata_cache, r.captured.fill_metadata_cache);
+        EXPECT_EQ(r.from_params.skip_disk_cache, r.captured.skip_disk_cache);
+    };
+
+    // (1) Permissive range: caches stay enabled end to end.
+    {
+        auto r = scan_tablet(*_tablet_metadata, /*fill_data_cache=*/true, /*skip_page_cache=*/false,
+                             /*skip_disk_cache=*/false);
+        EXPECT_TRUE(r.captured.use_page_cache);
+        EXPECT_TRUE(r.captured.fill_data_cache);
+        EXPECT_FALSE(r.captured.skip_disk_cache);
+        // fill_metadata_cache is NOT derived from the scan range; it keeps TabletReaderParams' default
+        // (true), which is what the pre-fix `segments(true)` already gave the lookup. Pinned here so
+        // narrowing the captured policy never silently stops filling the segment metacache.
+        EXPECT_TRUE(r.captured.fill_metadata_cache);
+        expect_matches_scan(r);
+    }
+
+    // (2) skip_page_cache on the range: the lookup must not touch the page cache even though the
+    //     query-level setting still allows it. This is precisely the flag the pre-fix code dropped.
+    {
+        auto r = scan_tablet(*_tablet_metadata, /*fill_data_cache=*/true, /*skip_page_cache=*/true,
+                             /*skip_disk_cache=*/false);
+        EXPECT_TRUE(runtime_state->use_page_cache()); // query level still says "yes"
+        EXPECT_FALSE(r.captured.use_page_cache);
+        EXPECT_TRUE(r.captured.fill_data_cache);
+        expect_matches_scan(r);
+    }
+
+    // (3) Data cache off + disk cache skipped: both must reach the lookup, and fill_data_cache=false
+    //     also turns the page cache off (that is how the scan derives _params.use_page_cache).
+    {
+        auto r = scan_tablet(*_tablet_metadata, /*fill_data_cache=*/false, /*skip_page_cache=*/false,
+                             /*skip_disk_cache=*/true);
+        EXPECT_FALSE(r.captured.use_page_cache);
+        EXPECT_FALSE(r.captured.fill_data_cache);
+        EXPECT_TRUE(r.captured.skip_disk_cache);
+        expect_matches_scan(r);
+    }
+
+    // (4) Two tablets of the same scan node with opposite policies: the shared context must keep them
+    //     apart, so the second (restrictive) range cannot relax the first one's policy.
+    {
+        (void)scan_tablet(*_tablet_metadata, /*fill_data_cache=*/true, /*skip_page_cache=*/false,
+                          /*skip_disk_cache=*/false);
+        (void)scan_tablet(second_metadata, /*fill_data_cache=*/false, /*skip_page_cache=*/true,
+                          /*skip_disk_cache=*/true);
+
+        auto* ctx = glm_ctx();
+        ASSERT_NE(nullptr, ctx);
+        auto permissive = ctx->get_cache_options(static_cast<int32_t>(_tablet_metadata->id()));
+        auto restrictive = ctx->get_cache_options(static_cast<int32_t>(second_metadata.id()));
+
+        EXPECT_TRUE(permissive.use_page_cache);
+        EXPECT_TRUE(permissive.fill_data_cache);
+        EXPECT_FALSE(permissive.skip_disk_cache);
+
+        EXPECT_FALSE(restrictive.use_page_cache);
+        EXPECT_FALSE(restrictive.fill_data_cache);
+        EXPECT_TRUE(restrictive.skip_disk_cache);
+    }
+}
+
+// Without enable_global_late_materialization the scan must not create a GLM context at all -- the
+// per-tablet cache policy is only recorded for the lookup path that actually consumes it.
+TEST_F(LakeDataSourceTest, no_glm_context_when_late_materialization_disabled) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    TPlanNode plan_node = create_lake_plan_node();
+    plan_node.__set_node_id(0);
+
+    auto runtime_state = create_runtime_state_for_test();
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    GlobalLateMaterilizationContextMgr glm_mgr;
+    pipeline::QueryRuntimeState query_runtime_state;
+    query_runtime_state.set_object_pool(runtime_state->obj_pool());
+    query_runtime_state.set_global_late_materialization_ctx_mgr(&glm_mgr);
+    runtime_state->set_query_runtime_state(&query_runtime_state);
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(_tablet_metadata->version()));
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), _tablet_metadata->version()));
+    std::vector<BaseRowsetSharedPtr> base_rowsets;
+    for (auto& rs : tablet.get_rowsets()) {
+        base_rowsets.emplace_back(rs);
+    }
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    morsel.set_rowsets(base_rowsets);
+
+    connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&]() { ds.close(runtime_state.get()); });
+    ASSERT_OK(ds.open(runtime_state.get()));
+
+    // get_ctx() DCHECKs on an unknown scan node id, so assert on the map itself.
+    EXPECT_TRUE(glm_mgr._ctx_map.empty());
 }
 
 } // namespace starrocks::lake

@@ -1,0 +1,7 @@
+position: 70
+label: 'Table Design'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: table_design

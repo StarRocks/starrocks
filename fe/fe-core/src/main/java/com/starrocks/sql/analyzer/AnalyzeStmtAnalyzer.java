@@ -51,6 +51,7 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.ExternalColumnUsage;
 import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
@@ -210,20 +211,34 @@ public class AnalyzeStmtAnalyzer {
             // ANALYZE TABLE xxx PREDICATE COLUMNS
             if (statement.isUsePredicateColumns()) {
                 // check if the table type is supported
-                if (!analyzeTable.isNativeTableOrMaterializedView()) {
-                    throw new SemanticException("Only OLAP table can support ANALYZE PREDICATE COLUMNS");
+                if (!analyzeTable.isNativeTableOrMaterializedView() && !analyzeTable.isAnalyzableExternalTable()) {
+                    throw new SemanticException("Only analyzable table can support ANALYZE PREDICATE COLUMNS");
                 }
 
                 List<String> targetColumns = Lists.newArrayList();
 
-                TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
-                        tableRef.getTableName(), tableRef.getPos());
-                List<ColumnUsage> predicateColumns =
-                        PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
-                for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
-                    Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
-                    if (realColumn != null) {
-                        targetColumns.add(realColumn.getName());
+                if (analyzeTable.isNativeTableOrMaterializedView()) {
+                    TableName tableNameForPredicate = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                            tableRef.getTableName(), tableRef.getPos());
+                    List<ColumnUsage> predicateColumns =
+                            PredicateColumnsMgr.getInstance().queryPredicateColumns(tableNameForPredicate);
+                    for (ColumnUsage col : ListUtils.emptyIfNull(predicateColumns)) {
+                        Column realColumn = analyzeTable.getColumnByUniqueId(col.getColumnFullId().getColumnUniqueId());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                } else {
+                    for (ExternalColumnUsage col : ListUtils.emptyIfNull(
+                            PredicateColumnsMgr.getInstance().queryExternalPredicateColumns(analyzeTable))) {
+                        Column realColumn = analyzeTable.getColumn(col.getColumnName());
+                        if (realColumn != null) {
+                            targetColumns.add(realColumn.getName());
+                        }
+                    }
+                    if (targetColumns.isEmpty()) {
+                        throw new SemanticException("No predicate columns found for external table '%s'",
+                                analyzeTable.getName());
                     }
                 }
 

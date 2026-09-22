@@ -151,30 +151,6 @@ public:
 
     size_t num_short_keys() const { return _tablet_schema->num_short_key_columns(); }
 
-    // Presence: the segment footer carries a full sort key index page (field 11). Resolved at
-    // open() from the footer without reading the page, so it needs neither load_index() nor a
-    // usability check. Presence does NOT imply the page is loaded or valid; a query must gate on
-    // use_full_sort_key_index() (which validates and lazily loads) before seeking off the page.
-    bool has_full_sort_key_index_page() const { return _has_full_sort_key_index_page; }
-
-    // Query read gate. True only when the read config is on AND the full sort key index page is
-    // present, loads, and passes validation (encoding/geometry/arity/order). Triggers the lazy
-    // load+validate on first call; a true return guarantees a non-null validated full decoder.
-    bool use_full_sort_key_index();
-
-    // Lazily read+parse+validate the full sort key index page (footer field 11) exactly once in a
-    // thread-safe way. On success publishes the full decoder and charges its memory; on any failure
-    // records permanent unusability (no retained allocation) and falls back to the legacy page.
-    // Returns whether the full page is usable.
-    bool ensure_full_sort_key_index_usable();
-
-    // Number of sort key columns encoded by the full sort key index page. Only valid after
-    // ensure_full_sort_key_index_usable() has published the full decoder.
-    size_t num_sort_key_columns() const {
-        DCHECK(_full_sk_index_decoder != nullptr);
-        return _full_sk_index_decoder->num_sort_key_columns();
-    }
-
     uint32_t num_rows_per_block() const {
         DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->num_rows_per_block();
@@ -188,18 +164,6 @@ public:
     ShortKeyIndexIterator upper_bound(const Slice& key) const {
         DCHECK(invoked(_load_index_once));
         return _sk_index_decoder->upper_bound(key);
-    }
-
-    // Full-page counterparts of lower_bound()/upper_bound(). Only valid after
-    // ensure_full_sort_key_index_usable() has published the full decoder.
-    ShortKeyIndexIterator lower_bound_full(const Slice& key) const {
-        DCHECK(_full_sk_index_decoder != nullptr);
-        return _full_sk_index_decoder->lower_bound(key);
-    }
-
-    ShortKeyIndexIterator upper_bound_full(const Slice& key) const {
-        DCHECK(_full_sk_index_decoder != nullptr);
-        return _full_sk_index_decoder->upper_bound(key);
     }
 
     // This will return the last row block in this segment.
@@ -224,6 +188,11 @@ public:
 
     FileSystem* file_system() const { return _fs.get(); }
 
+    // Use this instead of file_system() whenever the FileSystem must outlive this Segment.
+    // The .vi reader is stored inside the tenann index cache entry, which is not bound to
+    // the Segment/SegmentIterator that loaded it, so a raw FileSystem* would dangle there.
+    const std::shared_ptr<FileSystem>& shared_file_system() const { return _fs; }
+
     const TabletSchema& tablet_schema() const { return *_tablet_schema; }
 
     const TabletSchemaCSPtr tablet_schema_share_ptr() { return _tablet_schema.schema(); }
@@ -231,6 +200,11 @@ public:
     const std::string& file_name() const { return _segment_file_info.path; }
 
     const FileInfo& file_info() const { return _segment_file_info; }
+
+    // Open a file handle over this segment's data file with encryption + bundling applied. Anything
+    // that reads segment data directly must use this; a raw new_random_access_file misreads bundled
+    // or encrypted segments.
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_segment_read_file(const LakeIOOptions& lake_io_opts = {});
 
     uint32_t num_rows() const { return _num_rows; }
 
@@ -250,9 +224,6 @@ public:
 
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
-    // Full sort key index decoder; non-null only after ensure_full_sort_key_index_usable() succeeds.
-    const ShortKeyIndexDecoder* full_sort_key_index_decoder() const { return _full_sk_index_decoder.get(); }
-
     size_t mem_usage() const;
 
     StatusOr<int64_t> get_data_size() const;
@@ -262,9 +233,8 @@ public:
     // read short_key_index, for data check, just used in unit test now
     Status get_short_key_index(std::vector<std::string>* sk_index_values);
 
-    // for cloud native tablet metadata cache.
-    // after the segment is inserted into metadata cache, various indexes will be loaded later when used,
-    // so the segment size in the cache needs to be updated when indexes are loading.
+    // Update the cloud-native segment cache charge. For share-nothing rowsets,
+    // mark the segment dirty when its memory usage may have changed.
     void update_cache_size();
 
     bool is_default_column(const TabletColumn& column) { return !_column_readers.contains(column.unique_id()); }
@@ -284,6 +254,8 @@ public:
 
     // for ut test
     void set_num_rows(uint32_t num_rows) { _num_rows = num_rows; }
+
+    bool consume_lazy_mem_update() { return _lazy_mem_update.exchange(false, std::memory_order_acq_rel); }
 
 #ifdef BE_TEST
     static void toggle_batch_update_cache_mode(bool enabled) { _s_allow_batch_update_mode = enabled; }
@@ -321,10 +293,6 @@ private:
 
     Status _load_index(const LakeIOOptions& lake_io_opts);
 
-    // Read+parse+validate the full sort key index page into _full_sk_index_handle/_decoder and
-    // charge its incremental memory. Called at most once via ensure_full_sort_key_index_usable().
-    Status _load_full_sort_key_index();
-
     void _reset();
 
     size_t _basic_info_mem_usage() const { return sizeof(Segment) + _segment_file_info.path.size(); }
@@ -333,10 +301,6 @@ private:
         size_t size = _sk_index_handle.mem_usage();
         if (_sk_index_decoder != nullptr) {
             size += _sk_index_decoder->mem_usage();
-        }
-        size += _full_sk_index_handle.mem_usage();
-        if (_full_sk_index_decoder != nullptr) {
-            size += _full_sk_index_decoder->mem_usage();
         }
         return size;
     }
@@ -368,10 +332,6 @@ private:
     uint32_t _segment_id = 0;
     uint32_t _num_rows = 0;
     PagePointer _short_key_index_page;
-    // Presence + page pointer for the optional full sort key index page (footer field 11). Set at
-    // open(); the page itself is loaded lazily by ensure_full_sort_key_index_usable().
-    bool _has_full_sort_key_index_page = false;
-    PagePointer _full_sort_key_index_page;
     bool _skip_vector_index = false;
 
     // ColumnReader for each column in TabletSchema. If ColumnReader is nullptr,
@@ -386,13 +346,9 @@ private:
     // short key index decoder
     std::unique_ptr<ShortKeyIndexDecoder> _sk_index_decoder;
 
-    // Full sort key index (footer field 11). Loaded, validated, and published together on the first
-    // full-key request; usability is a permanent, once-resolved tri-state.
-    enum class FullSortKeyIndexUsability : uint8_t { UNKNOWN, USABLE, UNUSABLE };
-    OnceFlag _load_full_sk_index_once;
-    std::atomic<FullSortKeyIndexUsability> _full_sort_key_index_usable{FullSortKeyIndexUsability::UNKNOWN};
-    PageHandle _full_sk_index_handle;
-    std::unique_ptr<ShortKeyIndexDecoder> _full_sk_index_decoder;
+    // Published size of the loaded short key index. Memory samplers must not inspect
+    // its handle or decoder while another reader is still loading it.
+    std::atomic<size_t> _loaded_key_index_mem_usage{0};
 
     std::unique_ptr<FileEncryptionInfo> _encryption_info;
 
@@ -403,6 +359,9 @@ private:
     lake::TabletManager* _tablet_manager = nullptr;
     // used to guarantee that segment will be opened at most once in a thread-safe way
     OnceFlag _open_once;
+
+    // for share nothing, set to true after update_cache_size() is called
+    std::atomic<bool> _lazy_mem_update{false};
 #ifdef BE_TEST
     static bool _s_allow_batch_update_mode;
 #endif

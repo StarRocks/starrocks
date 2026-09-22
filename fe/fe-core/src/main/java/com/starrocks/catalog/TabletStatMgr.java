@@ -93,15 +93,14 @@ public class TabletStatMgr extends FrontendDaemon {
         super("tablet-stat-mgr", Config.tablet_stat_update_interval_second * 1000L);
     }
 
+    // Note this stamp says only that a cycle ENDED, not that it collected anything: it is advanced
+    // unconditionally below, including for a cycle whose stat RPCs all failed. Its one remaining
+    // consumer, StatisticsCalcUtils, uses it for a cardinality estimate, where being wrong costs a
+    // worse plan. The exact-COUNT(*) fold used to consult it too, through workTimeIsMustAfter(), and
+    // served stale rows as an exact answer; it now asks the tablets to prove which version their
+    // counts cover (see Tablet#getRowCountAtVersion), and that method is gone with its last caller.
     public LocalDateTime getLastWorkTimestamp() {
         return lastWorkTimestamp;
-    }
-
-    public boolean workTimeIsMustAfter(LocalDateTime time) {
-        if (lastWorkTimestamp.isEqual(LocalDateTime.MIN)) {
-            return false;
-        }
-        return lastWorkTimestamp.minusSeconds(Config.tablet_stat_update_interval_second * 2).isAfter(time);
     }
 
     @Override
@@ -112,6 +111,12 @@ public class TabletStatMgr extends FrontendDaemon {
         }
 
         // for testing statistic behavior
+        // Also suppresses the periodic shared-file observations, not just size/row stats. The publish
+        // path (LakeTableTxnLogApplier) still applies an observation on every qualifying publish
+        // regardless of this switch, so a range table that keeps taking writes can still have its
+        // tablets proven clean. Only a tablet that receives no qualifying publish observation after an
+        // FE restart (the state is not persisted) stays unproven and blocks the merge groups it would
+        // belong to.
         if (!Config.enable_sync_tablet_stats) {
             return;
         }
@@ -136,6 +141,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 long totalRowCount = 0L;
                 long maxTabletSize = 0L;
                 long minAdjacentTabletPairSize = Long.MAX_VALUE;
+                long maxAdaptiveSplitTabletSize = 0L;
                 Map<Pair<Long, Long>, Long> indexRowCountMap = Maps.newHashMap();
                 // NOTE: calculate the row first with read lock, then update the stats with write lock
                 OlapTable olapTable = (OlapTable) table;
@@ -145,8 +151,17 @@ public class TabletStatMgr extends FrontendDaemon {
                 boolean reshardEligible = GlobalStateMgr.getCurrentState().isLeader()
                         && olapTable.isCloudNativeTableOrMaterializedView()
                         && olapTable.isRangeDistribution();
-                int parallelismFloor = reshardEligible
-                        ? TabletReshardUtils.safeComputeParallelismFloor(table.getId()) : 0;
+                // One resolution per eligible table, feeding both the merge floor and the early bound.
+                int computeNodeCount = reshardEligible
+                        ? TabletReshardUtils.safeComputeNodeCountForTable(table.getId()) : 0;
+                // One sample of the split cap as well as of the node count: both the merge floor and
+                // the adaptive bound derive from it, and a change landing between two reads would put
+                // the floor above the bound -- the overlap that lets this scan emit a merge signal and
+                // an adaptive-split signal for the same index.
+                int maxSplitCount = Config.tablet_reshard_max_split_count;
+                int parallelismFloor = computeNodeCount == 0 ? 0
+                        : TabletReshardUtils.parallelismFloor(computeNodeCount, maxSplitCount);
+                int adaptiveBound = TabletReshardUtils.adaptiveSplitBound(computeNodeCount, maxSplitCount);
                 locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
                 try {
                     for (Partition partition : olapTable.getAllPartitions()) {
@@ -164,12 +179,33 @@ public class TabletStatMgr extends FrontendDaemon {
                                 // MergeTabletJobFactory's per-index merge budget re-enforces the same floor
                                 // inside an admitted job, so the floor holds even for manual size-based merges.
                                 boolean eligibleForMerge = tablets.size() > parallelismFloor;
+                                // Under-provisioned means what the planner means by it: fewer tablets than
+                                // the bound, which is also the headroom the planner spends. Testing it here
+                                // is what keeps the adaptive rule and auto-merge disjoint -- the bound sits
+                                // at or below the merge floor, so an index is one rule's business or the
+                                // other's, never both -- and it is what stops an index parked at its bound
+                                // from signalling on every scan for a plan that can only come out empty.
+                                // It also keeps the index walk below off every table that cannot reshard at
+                                // all: a follower FE, or a shared-nothing table whose tablets take a lock
+                                // per size read.
+                                boolean underProvisioned = adaptiveBound > 0 && tablets.size() < adaptiveBound;
+                                // The index's own target: narrowed while it has less parallelism
+                                // than the warehouse can drive, the steady-state target once it does.
+                                long indexTarget = underProvisioned
+                                        ? TabletReshardUtils.adaptiveTargetSize(index.getDataSize(true),
+                                                Config.tablet_reshard_target_size, adaptiveBound)
+                                        : 0;
                                 long prevFreshTabletSize = -1L;
                                 // NOTE: can take a rather long time to iterate lots of tablets
                                 for (Tablet tablet : tablets) {
                                     indexRowCount += tablet.getRowCount(version);
                                     long dataSize = tablet.getDataSize(true);
                                     maxTabletSize = Math.max(maxTabletSize, dataSize);
+                                    if (underProvisioned
+                                            && TabletReshardUtils.adaptiveSplitCount(dataSize, indexTarget) > 1) {
+                                        maxAdaptiveSplitTabletSize =
+                                                Math.max(maxAdaptiveSplitTabletSize, dataSize);
+                                    }
                                     if (!(tablet instanceof LakeTablet)
                                             || ((LakeTablet) tablet).getDataSizeUpdateTime() < visibleVersionTime) {
                                         prevFreshTabletSize = -1L;
@@ -221,7 +257,8 @@ public class TabletStatMgr extends FrontendDaemon {
                 // carries the merge signal too.
                 if (reshardEligible) {
                     GlobalStateMgr.getCurrentState().getTabletReshardJobMgr().addReshardCandidate(
-                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize);
+                            db.getId(), olapTable.getId(), maxTabletSize, minAdjacentTabletPairSize,
+                            maxAdaptiveSplitTabletSize, adaptiveBound);
                 }
             }
         }
@@ -270,10 +307,16 @@ public class TabletStatMgr extends FrontendDaemon {
                 continue;
             }
             // TODO(cmy) no db lock protected. I think it is ok even we get wrong row num
+            // The BE serves get_tablet_stat from a snapshot it rebuilds only every
+            // tablet_stat_cache_update_interval_second (300s by default), so a successful RPC does
+            // NOT mean the numbers are current. The reported version says which tablet version they
+            // describe; a BE too old to report it leaves 0, which keeps exact-count callers on the
+            // safe (meta scan) path.
             replica.updateStat(
                     entry.getValue().getData_size(),
                     entry.getValue().getRow_num(),
-                    entry.getValue().getVersion_count()
+                    entry.getValue().getVersion_count(),
+                    entry.getValue().isSetVersion() ? entry.getValue().getVersion() : 0L
             );
         }
     }
@@ -329,10 +372,31 @@ public class TabletStatMgr extends FrontendDaemon {
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
+            // A table being resharded is the window in which an EXISTING tablet can acquire shared
+            // files: split cross-publish keeps applying shared-marked txn logs to the already-created
+            // children until CLEANING unregisters the mapping. A shared-file observation taken here
+            // goes stale the moment the next cross-publish lands, and the merge candidate filter would
+            // then admit an unmergeable group -- which wedges the partition, because there is no
+            // fallback. Size and row-count collection carry no such risk, so only the shared-file
+            // observation is gated on this flag (applied in CollectTabletStatJob.waitResponse);
+            // collection itself must proceed in every table state. Captured under this lock so the
+            // state cannot flip underneath us.
+            boolean isNormal = table.getState() == OlapTable.OlapTableState.NORMAL;
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
-            List<Tablet> tablets = new ArrayList<>(partition.getLatestBaseIndex().getTablets());
-            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
+            List<Tablet> tablets = new ArrayList<>();
+            if (table.isRangeDistribution()) {
+                // Merge candidate selection considers every visible materialized index, so every one
+                // of them needs a shared-file observation. A base-index reading says nothing about a
+                // rollup's tablets: their shared state is independent.
+                for (MaterializedIndex index : partition.getLatestMaterializedIndices(IndexExtState.VISIBLE)) {
+                    tablets.addAll(index.getTablets());
+                }
+            } else {
+                tablets.addAll(partition.getLatestBaseIndex().getTablets());
+            }
+            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets,
+                    isNormal);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         }
@@ -341,9 +405,33 @@ public class TabletStatMgr extends FrontendDaemon {
     @Nullable
     private CollectTabletStatJob createCollectTabletStatJob(@NotNull Database db, @NotNull OlapTable table,
                                                             @NotNull PhysicalPartition partition) {
+        // NOTE: the table-state read lives INSIDE createPartitionSnapshot's read lock (see above).
+        // OlapTable.state is not volatile (OlapTable.java:204), so reading it here -- before that lock
+        // -- would be a TOCTOU: a reshard can take the write lock, flip the state, install the children
+        // and release it between the read and the snapshot.
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
-        snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
+        boolean needsSharedFileState = table.isRangeDistribution();
+        // Skip a tablet only when BOTH its size statistics and (for a range table) its shared-file
+        // state are current. dataSizeUpdateTime alone is not enough: it is persisted in the image and
+        // is refreshed by the publish path, so an idle tablet whose shared-file state is unknown
+        // would otherwise never be collected again and could never become a merge candidate.
+        // Non-range tables keep the original condition: they can never be merge candidates, and
+        // making them wait for a shared-file observation would cost one redundant collection round
+        // for every tablet in the cluster after each restart or leader change.
+        snapshot.tablets.removeIf(t -> {
+            LakeTablet lakeTablet = (LakeTablet) t;
+            if (lakeTablet.getDataSizeUpdateTime() < visibleVersionTime) {
+                return false;
+            }
+            // For a range table, stop collecting only once the tablet is PROVEN clean. A tablet
+            // observed to hold shared files, paired with a fresh dataSizeUpdateTime, would otherwise
+            // skip forever -- and holding shared files is exactly the state we are waiting for
+            // compaction to clear. (Concretely: a new BE reports shared files present, then an OLD BE
+            // publishes the compaction that clears them without the field -- size becomes current, the
+            // tablet stays marked dirty, and it is never re-collected even after that BE is upgraded.)
+            return !needsSharedFileState || !lakeTablet.hasSharedFiles();
+        });
         if (snapshot.tablets.isEmpty()) {
             LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
@@ -369,15 +457,19 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long visibleVersion;
         private final long visibleVersionTime;
         private final List<Tablet> tablets;
+        // Whether the table was NORMAL when this snapshot was taken. Gates only the shared-file
+        // observation applied in CollectTabletStatJob.waitResponse, not the collection itself.
+        private final boolean isNormal;
 
         PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets) {
+                          long visibleVersionTime, List<Tablet> tablets, boolean isNormal) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
             this.visibleVersion = visibleVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
+            this.isNormal = isNormal;
         }
 
         private String debugName() {
@@ -394,6 +486,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
         private final ComputeResource computeResource;
+        private final boolean isNormal;
 
         CollectTabletStatJob(PartitionSnapshot snapshot, ComputeResource computeResource) {
             this.dbName = Objects.requireNonNull(snapshot.dbName, "dbName is null");
@@ -405,6 +498,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 this.tablets.put(tablet.getId(), tablet);
             }
             this.computeResource = computeResource;
+            this.isNormal = snapshot.isNormal;
         }
 
         void execute() {
@@ -473,8 +567,21 @@ public class TabletStatMgr extends FrontendDaemon {
                         for (TabletStat stat : response.tabletStats) {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
-                            tablet.setRowCount(stat.numRows);
+                            // The CN computes these strictly from the version we asked for
+                            // (LakeServiceImpl::get_tablet_stats -> get_tablet_metadata(id, version)),
+                            // so the requested version is exactly what the numbers describe.
+                            tablet.setRowCount(stat.numRows, version);
                             tablet.setDataSizeUpdateTime(collectStatTime);
+                            // Only apply the observation while the table was NORMAL when this job's
+                            // snapshot was taken (see PartitionSnapshot.isNormal): a split's children
+                            // become catalog-visible while the table is still TABLET_RESHARD, and an
+                            // observation taken in that window goes stale the moment the next
+                            // cross-publish lands, which could admit an unmergeable merge group.
+                            // See LakeTablet#observeSharedFiles(Boolean): an absent field cannot
+                            // sustain a previous proof, so it clears it the same as a dirty report.
+                            if (isNormal) {
+                                tablet.observeSharedFiles(stat.hasSharedFiles);
+                            }
                         }
                     }
                 } catch (InterruptedException e) {

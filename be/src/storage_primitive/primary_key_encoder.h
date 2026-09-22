@@ -88,8 +88,28 @@ inline void decode_integral(Slice* src, T* v) {
     src->remove_prefix(sizeof(T));
 }
 
-// Slice encoding with SSE optimizations for middle fields
+// Slice encoding with SIMD (SSE4.2 / ARM NEON) optimizations for middle fields
 void encode_slice(const Slice& s, std::string* dst, bool is_last);
+
+// Symmetrical counterpart to encode_slice: decodes an order-preserving encoded
+// slice back to its original representation.
+//
+// On return, src is always advanced past the consumed bytes — including when
+// is_last is true. Callers that chain multiple column decodes can rely on src
+// being fully consumed regardless of column position.
+//
+// Arguments:
+//   src        - Input slice. Advanced by the number of encoded bytes consumed.
+//   dest       - Output string buffer. Used when fast_decode is false.
+//   dest_fast  - Zero-copy output Slice pointing into src's memory. Used when
+//                fast_decode is true. Only valid while src's backing storage lives.
+//   is_last    - True for the terminal column of a composite key. When true, no
+//                null escaping or '\0\0' delimiter was applied during encoding.
+//   fast_decode- Skips allocation and references src memory directly via dest_fast.
+//
+// Returns Status::OK() on success, or Status::InvalidArgument if the '\0\0'
+// delimiter is missing on a middle field.
+Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode);
 
 } // namespace encoding_utils
 

@@ -46,6 +46,14 @@ public:
     METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_hit_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_dynamic_hit_ratio, MetricUnit::PERCENT);
 
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_rejected, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_failure, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_success, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_async_load_ns, MetricUnit::NANOSECONDS);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_async_load_inflight, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_async_load_queued, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_COUNTER(vector_index_cache_loading_wait_timeout, MetricUnit::NOUNIT);
+
 private:
     static uint64_t _delta_since_last_refresh(uint64_t current, uint64_t previous);
 

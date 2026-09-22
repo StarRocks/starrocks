@@ -126,6 +126,12 @@ CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 
 CONF_mBool(parquet_cache_aware_dict_decoder_enable, "true");
 
+// Evaluate join runtime filters against decoded rows inside the parquet reader, so
+// non-matching rows are dropped before lazy columns are materialized. When disabled,
+// runtime filters are only used for row group / page statistics pruning and the
+// row-level probe happens in the downstream scan operator instead.
+CONF_mBool(parquet_runtime_filter_push_down_enable, "true");
+
 CONF_mBool(parquet_reader_enable_adpative_bloom_filter, "true");
 
 CONF_Double(parquet_page_cache_decompress_threshold, "1.5");

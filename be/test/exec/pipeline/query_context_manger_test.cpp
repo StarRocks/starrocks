@@ -369,6 +369,33 @@ TEST(QueryContextManagerTest, testReadStats) {
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
+TEST(QueryContextManagerTest, testIntermediateQueryStatisticCarriesReadStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    ctx.incr_read_stats(100, 200);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    EXPECT_EQ(100, intermediate_pb.read_local_cnt());
+    EXPECT_EQ(200, intermediate_pb.read_remote_cnt());
+
+    // The delta has been drained, so a second report carries nothing.
+    auto second_intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, second_intermediate_stats);
+    PQueryStatistics second_intermediate_pb;
+    second_intermediate_stats->to_pb(&second_intermediate_pb);
+    EXPECT_EQ(0, second_intermediate_pb.read_local_cnt());
+    EXPECT_EQ(0, second_intermediate_pb.read_remote_cnt());
+
+    // Totals used by the final-sink path are unaffected by delta consumption.
+    EXPECT_EQ(100, ctx.get_read_local_cnt());
+    EXPECT_EQ(200, ctx.get_read_remote_cnt());
+}
+
 class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
 public:
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
@@ -612,6 +639,56 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScan
     EXPECT_EQ(11, snapshot_pb.stats_items(0).scan_bytes());
 }
 
+TEST(QueryContextManagerTest, testAIStatisticsFollowExistingDeltaAndSnapshotSemantics) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    task.request_count = 2;
+    task.total_tokens = 7;
+    task.total_usage_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    upstream.mutable_ai_statistics()->set_total_tokens(11);
+    upstream.mutable_ai_statistics()->set_total_usage_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+
+    PQueryStatistics first;
+    ctx.intermediate_query_statistic(0)->to_pb(&first);
+    EXPECT_EQ(4, first.ai_statistics().task_count());
+    EXPECT_EQ(18, first.ai_statistics().total_tokens());
+    PQueryStatistics second;
+    ctx.intermediate_query_statistic(0)->to_pb(&second);
+    EXPECT_FALSE(second.has_ai_statistics());
+
+    // Like CPU and scan statistics, a failure snapshot retains the local total,
+    // not just the delta remaining after the intermediate report.
+    PQueryStatistics snapshot;
+    ctx.snapshot_query_statistic()->to_pb(&snapshot);
+    EXPECT_EQ(1, snapshot.ai_statistics().task_count());
+    EXPECT_EQ(7, snapshot.ai_statistics().total_tokens());
+}
+
+TEST(QueryContextManagerTest, testFinalAIStatisticsMergeLocalAndUpstream) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    ctx.set_final_sink();
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+    EXPECT_EQ(nullptr, ctx.intermediate_query_statistic(0));
+    PQueryStatistics result;
+    ctx.final_query_statistic()->to_pb(&result);
+    EXPECT_EQ(4, result.ai_statistics().task_count());
+}
+
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {
     auto query_ctx = std::make_shared<QueryContext>();
     TUniqueId query_id;
@@ -648,6 +725,97 @@ TEST(QueryContextManagerTest, testInitMemTrackerWiresQueryRuntimeStateMemTracker
 
     ASSERT_NE(nullptr, query_ctx.mem_tracker());
     EXPECT_EQ(query_ctx.mem_tracker().get(), query_ctx.query_runtime_state().query_mem_tracker());
+}
+
+// The reserve limit is the early-warning line the AUTO spill trigger probes through
+// try_mem_reserve, so it must always stay below the hard limit the query is checked against.
+class QueryContextReserveLimitTest : public ::testing::Test {
+protected:
+    static constexpr int64_t kParentMemLimit = 100L * 1024 * 1024 * 1024; // 100GB
+    static constexpr int64_t kQueryMemLimit = 64L * 1024 * 1024;          // 64MB
+    static constexpr int64_t kBigQueryMemLimit = 128L * 1024 * 1024;      // 128MB
+    static constexpr double kSpillMemReserveRatio = 0.8;
+
+    // The production code truncates the double product, so the expectations must do the same.
+    static int64_t expected_reserve_limit(int64_t limit) { return limit * kSpillMemReserveRatio; }
+
+    void SetUp() override {
+        _parent_mem_tracker =
+                std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, kParentMemLimit, "parent", nullptr);
+        // init_mem_tracker runs under std::call_once, so every case needs a fresh QueryContext.
+        _query_ctx = std::make_unique<QueryContext>();
+        TUniqueId query_id;
+        query_id.hi = 7;
+        query_id.lo = 8;
+        _query_ctx->set_query_id(query_id);
+    }
+
+    std::shared_ptr<MemTracker> _parent_mem_tracker;
+    std::unique_ptr<QueryContext> _query_ctx;
+};
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsSmallQueryMemLimit) {
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), -1, kSpillMemReserveRatio);
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kQueryMemLimit), tracker->reserve_limit());
+    // The early-warning line must sit below the hard limit, otherwise the reservation probe never
+    // fails and an AUTO mode query OOMs instead of spilling.
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitFallsBackToParentWhenNoQueryLimit) {
+    _query_ctx->init_mem_tracker(-1, _parent_mem_tracker.get(), -1, kSpillMemReserveRatio);
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(expected_reserve_limit(kParentMemLimit), tracker->reserve_limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitUnsetWhenRatioAbsent) {
+    // Spill is disabled, so no reserve limit is set and the reservation path falls back to limit().
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(-1, tracker->reserve_limit());
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitHonorsBigQueryMemLimit) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(-1, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio, wg.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, tracker->type());
+    EXPECT_EQ(kBigQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kBigQueryMemLimit), tracker->reserve_limit());
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, ReserveLimitTakesMinOfAllLimits) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
+                                 wg.get());
+
+    auto tracker = _query_ctx->mem_tracker();
+    ASSERT_NE(nullptr, tracker);
+    EXPECT_EQ(kQueryMemLimit, tracker->limit());
+    EXPECT_EQ(expected_reserve_limit(kQueryMemLimit), tracker->reserve_limit());
+    EXPECT_LT(tracker->reserve_limit(), tracker->limit());
+}
+
+TEST_F(QueryContextReserveLimitTest, StaticQueryMemLimitTakesMinOfAllLimits) {
+    auto wg = std::make_shared<workgroup::WorkGroup>("wg", 1, 0, 1, -1, 0, 1.0, TWorkGroupType::WG_NORMAL, "");
+    _query_ctx->init_mem_tracker(kQueryMemLimit, _parent_mem_tracker.get(), kBigQueryMemLimit, kSpillMemReserveRatio,
+                                 wg.get());
+
+    // Computing the effective limit earlier must not change its value.
+    EXPECT_EQ(kQueryMemLimit, _query_ctx->get_static_query_mem_limit());
+    EXPECT_EQ(kQueryMemLimit, _query_ctx->query_runtime_state().static_query_mem_limit());
 }
 
 } // namespace starrocks::pipeline

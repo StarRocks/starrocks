@@ -77,6 +77,8 @@ import com.starrocks.thrift.TGetDictQueryParamRequest;
 import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
+import com.starrocks.thrift.TGetPartitionAccessTimesRequest;
+import com.starrocks.thrift.TGetPartitionAccessTimesResponse;
 import com.starrocks.thrift.TGetProfileRequest;
 import com.starrocks.thrift.TGetProfileResponse;
 import com.starrocks.thrift.TGetTableSchemaRequest;
@@ -106,6 +108,7 @@ import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TMergeCommitRequest;
 import com.starrocks.thrift.TMergeCommitResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TPartitionAccessTimeTableRef;
 import com.starrocks.thrift.TPartitionMeta;
 import com.starrocks.thrift.TPartitionMetaRequest;
 import com.starrocks.thrift.TPartitionMetaResponse;
@@ -1113,6 +1116,79 @@ public class FrontendServiceImplTest {
         Assertions.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
 
         Config.max_partitions_in_one_batch = 4096;
+    }
+
+    @Test
+    public void testAutomaticPartitionFirstBatchOverLimitIsRejected() throws TException {
+        // A brand-new transaction has not cached any partition yet, so the per-batch limit must be
+        // evaluated against the partitions this request wants to create, not against the empty cache.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2035-07-01"));
+        partitionValues.add(Lists.newArrayList("2035-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        int partitionNumBefore = ((OlapTable) table).getNumberOfPartitions();
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 1;
+            TCreatePartitionResult result = impl.createPartition(request);
+            Assertions.assertEquals(TStatusCode.RUNTIME_ERROR, result.getStatus().getStatus_code());
+            Assertions.assertTrue(result.getStatus().getError_msgs().get(0).contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+        // nothing must have been created before the limit kicked in
+        Assertions.assertEquals(partitionNumBefore, ((OlapTable) table).getNumberOfPartitions());
+    }
+
+    @Test
+    public void testAutomaticPartitionReRequestOfCachedPartitionsIsNotDoubleCounted() throws TException {
+        // Re-asking for partitions the same transaction already created must not be counted twice,
+        // otherwise a retrying sink would be rejected once the cache alone reaches the limit.
+        TransactionState state = new TransactionState();
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return state;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "site_access_month");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        partitionValues.add(Lists.newArrayList("2036-07-01"));
+        partitionValues.add(Lists.newArrayList("2036-08-01"));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+            // second call asks for exactly the two partitions already cached by this transaction
+            Assertions.assertEquals(TStatusCode.OK, impl.createPartition(request).getStatus().getStatus_code());
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
     }
 
     private TGetTablesParams buildListTableStatusParam() {
@@ -2459,4 +2535,52 @@ public class FrontendServiceImplTest {
         // partitions should be empty since the created partition was "dropped" by TTL
         Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
     }
+
+    @Test
+    public void testGetPartitionAccessTimes() throws Exception {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "site_access_auto");
+
+            // Record a query access on every (logical) partition of the table on this (local) FE.
+            List<Long> partitionIds = table.getPartitions().stream()
+                    .map(Partition::getId).collect(Collectors.toList());
+            GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr()
+                    .recordAccess(db.getId(), table.getId(), partitionIds);
+
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+            // Batch request carrying this table; the handler is lock-free and returns logicalPartitionId -> ms.
+            TGetPartitionAccessTimesRequest request = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef ref = new TPartitionAccessTimeTableRef();
+            ref.setDb_id(db.getId());
+            ref.setTable_id(table.getId());
+            request.setTables(Lists.newArrayList(ref));
+
+            TGetPartitionAccessTimesResponse response = impl.getPartitionAccessTimes(request);
+            Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+            Map<Long, Long> accessTimes = response.getPartition_id_to_access_time_ms();
+            Assertions.assertNotNull(accessTimes);
+            Assertions.assertEquals(partitionIds.size(), accessTimes.size());
+            for (Long pid : partitionIds) {
+                Assertions.assertTrue(accessTimes.getOrDefault(pid, 0L) > 0);
+            }
+
+            // A table absent on this FE (bogus id) must not fail: the lock-free snapshot returns empty.
+            TGetPartitionAccessTimesRequest missingReq = new TGetPartitionAccessTimesRequest();
+            TPartitionAccessTimeTableRef missingRef = new TPartitionAccessTimeTableRef();
+            missingRef.setDb_id(db.getId());
+            missingRef.setTable_id(-1L);
+            missingReq.setTables(Lists.newArrayList(missingRef));
+            TGetPartitionAccessTimesResponse missingResp = impl.getPartitionAccessTimes(missingReq);
+            Assertions.assertEquals(TStatusCode.OK, missingResp.getStatus().getStatus_code());
+            Assertions.assertTrue(missingResp.getPartition_id_to_access_time_ms().isEmpty());
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
 }

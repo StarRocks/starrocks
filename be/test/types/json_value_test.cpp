@@ -49,6 +49,39 @@ TEST(JsonValueTest, Parse) {
     ASSERT_FALSE(oversized_json.ok());
 }
 
+TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
+    // Invalid JSON must come back as a status (never an exception escaping parse()) and keep the
+    // velocypack error message, whichever parser API is in use.
+    struct Case {
+        std::string input;
+        std::string expected_message;
+    };
+    std::vector<Case> cases = {
+            {R"({"a":1)", "Expecting ',' or '}'"},
+            {R"({"a":1,)", "Expecting '\"' or '}'"},
+            {R"([1,2)", "Expecting ',' or ']'"},
+            {R"({"a" 1})", "Expecting ':'"},
+            {R"("abc)", "Unfinished string"},
+            {R"({"a":tru})", "Expecting 'true'"},
+            {R"({"a":1} x)", "Expecting EOF"},
+            {R"([1e999])", "Number out of range"},
+            {std::string("[\"ctrl\x01char\"]"), "Unexpected control character"},
+    };
+    for (const auto& c : cases) {
+        auto res = JsonValue::parse(c.input);
+        ASSERT_FALSE(res.ok()) << c.input;
+        ASSERT_EQ(TStatusCode::DATA_QUALITY_ERROR, res.status().code()) << res.status();
+        ASSERT_NE(res.status().message().find(c.expected_message), std::string::npos)
+                << c.input << " -> " << res.status();
+    }
+    // A prefix of a document is not accepted either, and valid documents still parse.
+    std::string doc = R"({"id":42,"name":"x","tags":["a","b"],"nums":[1,2.5,-3e2],"obj":{"t":true,"n":null}})";
+    for (size_t len = 1; len < doc.size(); ++len) {
+        ASSERT_FALSE(JsonValue::parse(doc.substr(0, len)).ok()) << doc.substr(0, len);
+    }
+    ASSERT_TRUE(JsonValue::parse(doc).ok());
+}
+
 TEST(JsonValueTest, ToString) {
     auto maybe_json = JsonValue::parse(R"( {"a": "a"} )");
     ASSERT_TRUE(maybe_json.ok());
@@ -138,6 +171,43 @@ TEST(JsonValueTest, CompareLargeIntegerArrays) {
     auto neg_small = JsonValue::parse("[-1]").value();
     auto neg_large = JsonValue::parse("[-9223372036854775808]").value();
     EXPECT_GT(neg_small.compare(neg_large), 0);
+}
+
+TEST(JsonValueTest, CompareUnsignedIntegersAboveInt64Max) {
+    // Numbers above INT64_MAX are stored as UInt. Comparing them used to call Slice::getInt(), which throws
+    // NumberOutOfRange, so the comparison escaped as an exception instead of returning an order. Bare scalars
+    // parse as strings, hence the arrays and objects.
+    auto v = [](const char* json) { return JsonValue::parse(json).value(); };
+    auto max_int64 = v("[9223372036854775807]");
+    auto two_pow_63 = v("[9223372036854775808]");
+    auto max_uint64 = v("[18446744073709551615]");
+    auto max_uint64_minus_1 = v("[18446744073709551614]");
+
+    // same encoding (UInt vs UInt): exact
+    EXPECT_GT(two_pow_63.compare(max_int64), 0);
+    EXPECT_LT(max_int64.compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(max_uint64_minus_1), 0);
+    EXPECT_EQ(max_uint64.compare(v("[18446744073709551615]")), 0);
+    EXPECT_GT(v("[18446744073709551615]").compare(v("[1]")), 0);
+
+    // mixed encodings: negative Int vs large UInt, integer vs double
+    EXPECT_LT(v("[-1]").compare(max_uint64), 0);
+    EXPECT_LT(v("[-9223372036854775808]").compare(two_pow_63), 0);
+    EXPECT_GT(max_uint64.compare(v("[1.0e19]")), 0);
+    EXPECT_LT(two_pow_63.compare(v("[1.0e19]")), 0);
+    EXPECT_EQ(v("[10]").compare(v("[10.0]")), 0);
+
+    // nested inside objects, as produced by json_query on real documents
+    auto big_obj = v(R"({"a": 18446744073709551615})");
+    auto mid_obj = v(R"({"a": 9223372036854775808})");
+    EXPECT_GT(big_obj.compare(mid_obj), 0);
+    EXPECT_LT(mid_obj.compare(big_obj), 0);
+    EXPECT_EQ(big_obj.compare(v(R"({"a": 18446744073709551615})")), 0);
+
+    // the same values through the predicate operators
+    EXPECT_TRUE(big_obj > mid_obj);
+    EXPECT_FALSE(big_obj < mid_obj);
+    EXPECT_TRUE(big_obj == v(R"({"a": 18446744073709551615})"));
 }
 
 TEST(JsonValueTest, Hash) {

@@ -95,4 +95,43 @@ TEST_F(SchemaPartitionsMetaScannerTest, fill_data_size_column) {
     EXPECT_EQ(1536, chunk->get_column_by_slot_id(22)->get(0).get_int64());
 }
 
+// LAST_UPDATE_TIME (slot 34) / LAST_ACCESS_TIME (slot 35) are unix-seconds surfaced as DATETIME,
+// and NULL when the value is 0. Exercise both the non-null and the null branch of each case.
+TEST_F(SchemaPartitionsMetaScannerTest, fill_last_update_and_access_time_columns) {
+    SchemaPartitionsMetaScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    ASSERT_OK(scanner.init(&params, &pool));
+
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto* slot : scanner.get_slot_descs()) {
+        if (slot->id() == 34 || slot->id() == 35) {
+            chunk->append_column(ColumnHelper::create_column(slot->type(), slot->is_nullable()), slot->id());
+        }
+    }
+    ASSERT_EQ(2, chunk->num_columns());
+
+    // Row 0: both set (> 0) -> non-null datetime.
+    TPartitionMetaInfo withValues;
+    withValues.__set_last_update_time(1000);
+    withValues.__set_last_access_time(2000);
+    set_rows(scanner, {withValues});
+    ASSERT_OK(fill_chunk(scanner, &chunk));
+
+    // Row 1: both 0 -> null.
+    TPartitionMetaInfo zero;
+    zero.__set_last_update_time(0);
+    zero.__set_last_access_time(0);
+    set_rows(scanner, {zero});
+    ASSERT_OK(fill_chunk(scanner, &chunk));
+
+    EXPECT_FALSE(chunk->get_column_by_slot_id(34)->is_null(0));
+    EXPECT_FALSE(chunk->get_column_by_slot_id(35)->is_null(0));
+    EXPECT_TRUE(chunk->get_column_by_slot_id(34)->is_null(1));
+    EXPECT_TRUE(chunk->get_column_by_slot_id(35)->is_null(1));
+}
+
 } // namespace starrocks

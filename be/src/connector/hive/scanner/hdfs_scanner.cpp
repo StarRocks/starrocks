@@ -62,6 +62,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.extended_column_exprs.clear();
     ctx.format_scan_context.predicate_tree = nullptr;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
+    ctx.format_scan_context.runtime_filter_preds = nullptr;
+    ctx.predicates.runtime_filter_preds = RuntimeFilterPredicates();
 
     ctx.format_scan_context.scan_range_offset = ctx.scan_range->offset;
     ctx.format_scan_context.scan_range_length = ctx.scan_range->length;
@@ -146,6 +148,8 @@ Status HdfsScanner::_build_scanner_context() {
     // causing the same use-after-free pattern described in HdfsScanner::close().
     opts.obj_pool = _runtime_state->obj_pool();
     opts.runtime_filters = _scanner_ctx->runtime_filter_collector;
+    // Used when resolving runtime filters; see HdfsScannerContext::driver_sequence.
+    opts.driver_sequence = _scanner_ctx->driver_sequence;
     opts.runtime_state = _runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
@@ -162,6 +166,25 @@ Status HdfsScanner::_build_scanner_context() {
             ctx.predicates.predicate_parser.get(), ctx.predicates.conjuncts_manager->unarrived_runtime_filters());
     ctx.format_scan_context.predicate_tree = &ctx.predicates.predicate_tree;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = ctx.predicates.runtime_filter_scan_range_pruner.get();
+
+    // Storage-layer runtime filter predicates, so format readers can probe rows during
+    // decode instead of leaving the whole row-level filtering to the scan operator.
+    // get_runtime_filter_predicates() leaves has_push_down_to_storage() false here
+    // (opts.is_olap_scan == false), so the operator-level probe keeps running: this
+    // pushdown is best-effort -- a predicate is dropped when its slot is absent from
+    // the file or cannot be served by the reader -- and must not be treated as complete.
+    ctx.format_scan_context.driver_sequence = _scanner_ctx->driver_sequence;
+    if (config::parquet_runtime_filter_push_down_enable && _runtime_state->enable_join_runtime_filter_pushdown() &&
+        _scanner_ctx->runtime_filter_collector != nullptr) {
+        // Same fragment-scoped pool as opts.obj_pool above: the predicates are borrowed
+        // by ctx.predicates and must outlive it.
+        ASSIGN_OR_RETURN(ctx.predicates.runtime_filter_preds,
+                         ctx.predicates.conjuncts_manager->get_runtime_filter_predicates(
+                                 _runtime_state->obj_pool(), ctx.predicates.predicate_parser.get()));
+        if (!ctx.predicates.runtime_filter_preds.empty()) {
+            ctx.format_scan_context.runtime_filter_preds = &ctx.predicates.runtime_filter_preds;
+        }
+    }
 
     ctx.format_scan_context.update_return_count_columns();
     if (ctx.scan_range->__isset.record_count && ctx.scan_range->delete_files.empty()) {

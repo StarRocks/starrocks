@@ -11,6 +11,10 @@ permissions:
   pull-requests: write
   issues: write
   actions: write
+  # get_next_release_tag.sh (version-label steps) reads /tags and /branches with
+  # GITHUB_TOKEN; with an explicit permissions block, unlisted scopes default to
+  # none, so grant contents:read or those queries are denied.
+  contents: read
 env:
   PR_NUMBER: ${{ github.event.number }}
 
@@ -72,6 +76,8 @@ jobs:
     if: github.event.pull_request.merged == true
     outputs:
       thirdparty: ${{ steps.filter-info.outputs.thirdparty }}
+      centos7: ${{ steps.distro.outputs.centos7 }}
+      rocky9: ${{ steps.distro.outputs.rocky9 }}
     steps:
       - uses: dorny/paths-filter@v3
         id: linux-thirdparty-filter
@@ -94,6 +100,28 @@ jobs:
           fi
           echo "thirdparty=${thirdparty}" >> $GITHUB_OUTPUT
 
+      - name: Decide distros by version
+        id: distro
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # rocky9 replaces centos7 from 4.2 onward (CentOS 7 EOL):
+          #   < 4.2        -> ubuntu + centos7
+          #   >= 4.2, main -> ubuntu + rocky9
+          # Without this, a merge promotes a distro whose per-PR source image was
+          # never built (e.g. centos7 on main, or rocky9 on branch-4.1), and
+          # elastic-update-image.sh's `imagetools create` fails with "not found".
+          if [[ "${BASE_REF}" == "main" ]]; then
+            echo "centos7=false" >> $GITHUB_OUTPUT; echo "rocky9=true" >> $GITHUB_OUTPUT
+          else
+            ver=${BASE_REF#branch-}; major=${ver%%.*}; rest=${ver#*.}; minor=${rest%%.*}
+            if (( major > 4 || (major == 4 && minor >= 2) )); then
+              echo "centos7=false" >> $GITHUB_OUTPUT; echo "rocky9=true"  >> $GITHUB_OUTPUT
+            else
+              echo "centos7=true"  >> $GITHUB_OUTPUT; echo "rocky9=false" >> $GITHUB_OUTPUT
+            fi
+          fi
+
   thirdparty-update-image:
     needs: thirdparty-filter
     runs-on: [self-hosted, normal]
@@ -115,11 +143,13 @@ jobs:
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER ubuntu
 
       - name: update image - centos7
+        if: needs.thirdparty-filter.outputs.centos7 == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER centos7
 
       - name: update image - rocky9
+        if: needs.thirdparty-filter.outputs.rocky9 == 'true'
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER rocky9
@@ -197,7 +227,9 @@ jobs:
           !contains(github.event.pull_request.labels.*.name, 'sync') &&
           contains(github.event.pull_request.title, '(backport #')
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo `gh label create`, no cascade; the sibling "add merge label"
+          # step already uses GITHUB_TOKEN. Off the shared PAT.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           LABEL="${GITHUB_BASE_REF##*-}-merged"
           gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
@@ -218,7 +250,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -249,7 +284,10 @@ jobs:
         id: prepare_version_label
         if: always()
         env:
-          GH_TOKEN: ${{ secrets.PAT }}
+          # Same-repo tag/branch reads only. Use the per-run GITHUB_TOKEN (its own
+          # rate-limit budget) instead of the shared PAT: a PAT rate limit here made
+          # get_next_release_tag.sh fall back to <branch>.0 and post a wrong version.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           version=$(./scripts/get_next_release_tag.sh)
@@ -273,6 +311,10 @@ jobs:
     if: >
       always() && !contains(github.event.pull_request.labels.*.name, 'sync') && startsWith(github.event.pull_request.title, '[Feature]')
     env:
+      # get_pr_issue.py authenticates with the runner PAT (GITHUB_ACCESS_TOKEN) and falls back
+      # to GH_TOKEN when that PAT is missing or rejected. This job's permissions block already
+      # grants issues: write + pull-requests: write, which covers the issue body/label edits.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       BRANCH_VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}
       MAIN_VERSION_LABEL: ${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
 

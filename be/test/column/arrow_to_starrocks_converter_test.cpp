@@ -32,9 +32,11 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/column_helper.h"
+#include "column/variant_column.h"
 #include "column/vectorized_fwd.h"
 #include "types/datetime_value.h"
 #include "types/type_descriptor.h"
+#include "types/variant_value.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
     do {                          \
@@ -333,6 +335,123 @@ TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidNestedType) 
                                               false);
     ASSERT_FALSE(st.ok());
     ASSERT_NE(std::string::npos, st.message().find("does not match"));
+}
+
+// An unshredded variant arrives from lake formats (e.g. Paimon) as struct<value: binary, metadata: binary>.
+static std::shared_ptr<arrow::DataType> make_arrow_variant_type() {
+    return arrow::struct_({arrow::field("value", arrow::binary()), arrow::field("metadata", arrow::binary())});
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanVariantAndConvert) {
+    auto arrow_type = make_arrow_variant_type();
+    TypeDescriptor type_desc(TYPE_VARIANT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+    ASSERT_FALSE(need_cast);
+    ASSERT_EQ(TYPE_VARIANT, raw_type_desc.type);
+    ASSERT_NE(nullptr, conv_func.func);
+
+    // Real variant encoding: metadata is the minimal empty dictionary {version=1, dictSize=0,
+    // offset=0} and each value is a short string (header 0x09 = length 2 << 2 | SHORT_STRING).
+    // VariantMetadata/VariantValue DCHECK these invariants when the rows are read back.
+    constexpr std::string_view kMetadata("\x01\x00\x00", 3);
+    constexpr std::string_view kValue0("\x09v0", 3);
+    constexpr std::string_view kValue2("\x09v2", 3);
+    auto value_builder = std::make_shared<arrow::BinaryBuilder>();
+    auto metadata_builder = std::make_shared<arrow::BinaryBuilder>();
+    arrow::StructBuilder struct_builder(arrow_type, arrow::default_memory_pool(), {value_builder, metadata_builder});
+    ASSERT_OK(struct_builder.Append());
+    ASSERT_OK(value_builder->Append(kValue0));
+    ASSERT_OK(metadata_builder->Append(kMetadata));
+    // AppendNull() recursively appends nulls to the child builders as well.
+    ASSERT_OK(struct_builder.AppendNull());
+    ASSERT_OK(struct_builder.Append());
+    ASSERT_OK(value_builder->Append(kValue2));
+    ASSERT_OK(metadata_builder->Append(kMetadata));
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_OK(struct_builder.Finish(&array));
+    ASSERT_OK(array->ValidateFull());
+    ASSERT_EQ(3, array->length());
+    auto column = create_arrow_column_convert_dest(type_desc, raw_type_desc, need_cast, true);
+    ASSERT_TRUE(column->is_nullable());
+    Filter chunk_filter;
+    chunk_filter.resize(array->length(), 1);
+    ArrowConvertContext ctx;
+    ASSERT_STATUS_OK(convert_arrow_array_to_column(&conv_func, array->length(), array.get(), column.get(), 0, 0,
+                                                   &chunk_filter, &ctx));
+
+    ASSERT_EQ(3, column->size());
+    auto* nullable_column = down_cast<NullableColumn*>(column.get());
+    ASSERT_FALSE(nullable_column->is_null(0));
+    ASSERT_TRUE(nullable_column->is_null(1));
+    ASSERT_FALSE(nullable_column->is_null(2));
+    auto* variant_column = down_cast<VariantColumn*>(nullable_column->data_column_raw_ptr());
+    ASSERT_EQ(3, variant_column->size());
+    VariantRowRef row;
+    ASSERT_TRUE(variant_column->try_get_row_ref(0, &row));
+    ASSERT_EQ(kMetadata, row.get_metadata().raw());
+    ASSERT_EQ(kValue0, row.get_value().raw());
+    ASSERT_TRUE(variant_column->try_get_row_ref(2, &row));
+    ASSERT_EQ(kMetadata, row.get_metadata().raw());
+    ASSERT_EQ(kValue2, row.get_value().raw());
+}
+
+TEST_F(ArrowConverterTest, BuildArrowColumnConvertPlanRejectsInvalidVariantLayout) {
+    TypeDescriptor type_desc(TYPE_VARIANT);
+    TypeDescriptor raw_type_desc;
+    bool need_cast = false;
+
+    auto non_struct = arrow::binary();
+    ConvertFuncTree conv_func0;
+    auto st = build_arrow_column_convert_plan(non_struct.get(), &type_desc, true, &raw_type_desc, &conv_func0,
+                                              need_cast, false);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(std::string::npos, st.message().find("does not match"));
+
+    auto missing_metadata = arrow::struct_({arrow::field("value", arrow::binary())});
+    ConvertFuncTree conv_func1;
+    st = build_arrow_column_convert_plan(missing_metadata.get(), &type_desc, true, &raw_type_desc, &conv_func1,
+                                         need_cast, false);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
+
+    auto wrong_value_type =
+            arrow::struct_({arrow::field("value", arrow::utf8()), arrow::field("metadata", arrow::binary())});
+    ConvertFuncTree conv_func2;
+    st = build_arrow_column_convert_plan(wrong_value_type.get(), &type_desc, true, &raw_type_desc, &conv_func2,
+                                         need_cast, false);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
+}
+
+TEST_F(ArrowConverterTest, VariantConverterRejectsMismatchedStructArray) {
+    auto arrow_type = make_arrow_variant_type();
+    TypeDescriptor type_desc(TYPE_VARIANT);
+    TypeDescriptor raw_type_desc;
+    ConvertFuncTree conv_func;
+    bool need_cast = false;
+    ASSERT_STATUS_OK(build_arrow_column_convert_plan(arrow_type.get(), &type_desc, true, &raw_type_desc, &conv_func,
+                                                     need_cast, false));
+
+    // The plan was built for struct<value: binary, metadata: binary> but the actual batch carries
+    // a different layout (e.g. after an unexpected schema change), which must fail instead of
+    // reinterpreting the columns.
+    auto mismatched_type =
+            arrow::struct_({arrow::field("value", arrow::utf8()), arrow::field("metadata", arrow::binary())});
+    auto array = arrow::ArrayFromJSON(mismatched_type, R"([{"value": "v0", "metadata": "m0"}])");
+    auto variant_column = VariantColumn::create();
+    std::vector<uint8_t> null_data(array->length(), 0);
+    Filter chunk_filter;
+    chunk_filter.resize(array->length(), 1);
+    ArrowConvertContext ctx;
+    auto st = conv_func.func(array.get(), 0, array->length(), variant_column.get(), 0, null_data.data(), &chunk_filter,
+                             &ctx, &conv_func);
+    ASSERT_FALSE(st.ok());
+    ASSERT_NE(std::string::npos, st.message().find("struct<value: binary, metadata: binary>"));
 }
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,

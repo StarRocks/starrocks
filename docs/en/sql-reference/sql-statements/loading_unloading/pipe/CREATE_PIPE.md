@@ -74,7 +74,7 @@ SELECT * FROM FILES
 >
 > Substitute your credentials for `AAA` and `BBB` in the above command. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user.
 
-This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../../integrations/authenticate_to_aws_resources.md) and [FILES](../../../sql-functions/table-functions/files.md).
+This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../../integrations/csp_auth/authenticate_to_aws_resources.md) and [FILES](../../../sql-functions/table-functions/files.md).
 
 ## References
 

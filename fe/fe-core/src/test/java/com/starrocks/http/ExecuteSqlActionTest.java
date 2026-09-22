@@ -13,8 +13,10 @@
 // limitations under the License.
 package com.starrocks.http;
 
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import okhttp3.Request;
@@ -31,6 +33,9 @@ import org.junit.jupiter.api.TestMethodOrder;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 @TestMethodOrder(MethodName.class)
 public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
@@ -119,6 +124,7 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         Response response = networkClient.newCall(request).execute();
 
         String respStr = Objects.requireNonNull(response.body()).string();
+        Assertions.assertEquals(500, response.code());
         JSONObject jsonObject = new JSONObject(respStr);
         Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
         Assertions.assertEquals("\"query can not be empty\"", jsonObject.get("msg").toString());
@@ -206,5 +212,31 @@ public class ExecuteSqlActionTest extends StarRocksHttpTestCase {
         jsonObject = new JSONObject(respStr);
         Assertions.assertEquals("FAILED", jsonObject.get("status").toString());
         Assertions.assertTrue(jsonObject.get("msg").toString().contains("Unknown system variable"));
+    }
+
+    @Test
+    public void testConnectionIdExhaustionReturnsServiceUnavailable() throws Exception {
+        ExecuteEnv executeEnv = ExecuteEnv.getInstance();
+        ConnectScheduler originalScheduler = executeEnv.getScheduler();
+        ConnectScheduler exhaustedScheduler = mock(ConnectScheduler.class);
+        when(exhaustedScheduler.getNextConnectionId()).thenThrow(
+                new ConnectScheduler.ConnectionIdExhaustedException("No available connection ID"));
+        Deencapsulation.setField(executeEnv, "scheduler", exhaustedScheduler);
+        try {
+            RequestBody body = RequestBody.create(JSON, "{ \"query\" : \"select 1\" }");
+            Request request = new Request.Builder()
+                    .get()
+                    .addHeader("Authorization", rootAuth)
+                    .url(BASE_URL + QUERY_EXECUTE_API)
+                    .post(body)
+                    .build();
+
+            Response response = networkClient.newCall(request).execute();
+            String responseBody = Objects.requireNonNull(response.body()).string();
+            Assertions.assertEquals(503, response.code());
+            Assertions.assertTrue(responseBody.contains("No available connection ID"));
+        } finally {
+            Deencapsulation.setField(executeEnv, "scheduler", originalScheduler);
+        }
     }
 }

@@ -791,6 +791,13 @@ public class ReplicationJob implements GsonPostProcessable {
         List<Replica> replicas = tablet.getAllReplicas();
         List<TReplicaReplicationInfo> tReplicaInfos = tTabletInfo.replica_replication_infos;
 
+        // A tablet can report no replica at all: for a lake tablet a failed StarOS lookup makes
+        // WarehouseManager.getAllComputeNodeIdsAssignToTablet return null, and getAllReplicas() then
+        // yields an empty list. Report that instead of dividing by it.
+        if (replicas.isEmpty()) {
+            throw new MetaNotFoundException("Tablet " + tTabletInfo.tablet_id + " has no replica");
+        }
+
         final int splitSize = tReplicaInfos.size() / replicas.size();
         final int remainSize = tReplicaInfos.size() % replicas.size();
         int offset = 0;
@@ -902,6 +909,8 @@ public class ReplicationJob implements GsonPostProcessable {
         List<Replica> replicas = tablet.getAllReplicas();
         List<Replica> srcReplicas = srcTablet.getAllReplicas();
 
+        Preconditions.checkState(!replicas.isEmpty(), "Tablet %s has no replica", tablet.getId());
+
         final int splitSize = srcReplicas.size() / replicas.size();
         final int remainSize = srcReplicas.size() % replicas.size();
         int offset = 0;
@@ -935,7 +944,7 @@ public class ReplicationJob implements GsonPostProcessable {
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);
 
-        // Register loaded indexes so preCommit() validates the same indexes that were collected,
+        // Register loaded indexes so prePrepared() validates the same indexes that were collected,
         // not the latest (which may change due to tablet split).
         TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
                 .getTransactionState(databaseId, transactionId);

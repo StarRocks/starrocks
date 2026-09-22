@@ -269,6 +269,16 @@ public class ConfigBase {
                             "must be at least 30 seconds, current value: " + confVal);
                 }
                 break;
+            case "label_clean_interval_second":
+                // The value drives Daemon.run()'s Thread.sleep(): 0 spins the label cleaner and a
+                // negative value throws IllegalArgumentException, which escapes the daemon loop and
+                // kills the cleaner thread for good.
+                int labelCleanInterval = Integer.parseInt(confVal);
+                if (labelCleanInterval <= 0) {
+                    throw new InvalidConfException("'label_clean_interval_second' configuration " +
+                            "must be greater than 0, current value: " + confVal);
+                }
+                break;
             case "http_request_allow_private_in_allowlist":
                 if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
                     throw new InvalidConfException(
