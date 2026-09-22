@@ -287,6 +287,13 @@ public class ConfigBase {
                             (Integer.MAX_VALUE - 1023) + ", current value: " + confVal);
                 }
                 break;
+            case "label_clean_interval_second":
+                int labelCleanInterval = Integer.parseInt(confVal);
+                if (labelCleanInterval <= 0) {
+                    throw new InvalidConfException("'label_clean_interval_second' configuration " +
+                            "must be greater than 0, current value: " + confVal);
+                }
+                break;
             case "http_request_allow_private_in_allowlist":
                 if (!confVal.equalsIgnoreCase("true") && !confVal.equalsIgnoreCase("false")) {
                     throw new InvalidConfException(
