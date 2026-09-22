@@ -59,18 +59,22 @@ public class LanceScanNodeTest {
     @Test
     public void testWholeDatasetRangeIsIdempotent() {
         LanceScanNode scan = newScan(List.of(1L));
-        scan.setupScanRangeLocations(null, null);
-        scan.setupScanRangeLocations(null, null);
+        scan.setupScanRangeLocations();
+        scan.setupScanRangeLocations();
         Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
         THdfsScanRange range = scan.getScanRangeLocations(0).get(0).scan_range.hdfs_scan_range;
         Assertions.assertTrue(range.isUse_lance_jni_reader());
         Assertions.assertFalse(range.isSetLance_split_info());
+        Assertions.assertEquals("file:///tmp/vectors.lance", range.getFull_path());
+        Assertions.assertTrue(scan.isConnectorScanNode());
+        Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getLocations().get(0).isSetBackend_id());
+        Assertions.assertEquals("-1", scan.getScanRangeLocations(0).get(0).getLocations().get(0).getServer().getHostname());
     }
 
     @Test
     public void testNoBackendFailsInsteadOfReturningEmptyResults() {
         LanceScanNode scan = newScan(List.of());
-        Assertions.assertThrows(IllegalStateException.class, () -> scan.setupScanRangeLocations(null, null));
+        Assertions.assertThrows(IllegalStateException.class, () -> scan.setupScanRangeLocations());
         Assertions.assertTrue(scan.getScanRangeLocations(0).isEmpty());
     }
 
@@ -79,9 +83,14 @@ public class LanceScanNodeTest {
         LanceScanNode scan = newScan(List.of(1L));
         BoolLiteral predicate = new BoolLiteral(false);
         scan.getConjuncts().add(predicate);
+        scan.getScanNodePredicates().getNonPartitionConjuncts().add(predicate);
+        scan.getScanNodePredicates().getNoEvalPartitionConjuncts().add(predicate);
+        scan.getScanNodePredicates().getMinMaxConjuncts().add(predicate);
         scan.setScanOptimizeOption(new com.starrocks.sql.optimizer.ScanOptimizeOption());
         TPlanNode node = scan.treeToThrift().getNodes().get(0);
         Assertions.assertEquals(List.of(ExprToThrift.treeToThrift(predicate)), node.getConjuncts());
+        Assertions.assertFalse(node.getHdfs_scan_node().isSetPartition_conjuncts());
+        Assertions.assertFalse(node.getHdfs_scan_node().isSetMin_max_conjuncts());
     }
     private LanceScanNode newUnmockedScan() {
         TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor();
@@ -115,14 +124,15 @@ public class LanceScanNodeTest {
         when(service.getAvailableComputeNodeIds()).thenReturn(List.of(22L));
         LanceScanNode scan = newUnmockedScan();
         Assertions.assertEquals(List.of(11L, 22L), scan.getAllAvailableBackendOrComputeIds());
-        scan.setupScanRangeLocations(null, null);
-        Assertions.assertEquals(11L, scan.getScanRangeLocations(0).get(0).getLocations().get(0).getBackend_id());
+        scan.setupScanRangeLocations();
+        Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getLocations().get(0).isSetBackend_id());
+        Assertions.assertNotNull(scan.getScanRangeLocations(0).get(0).getLocations().get(0).getServer());
 
         when(service.getAvailableBackendIds()).thenReturn(null);
         Assertions.assertEquals(List.of(22L), scan.getAllAvailableBackendOrComputeIds());
         when(service.getAvailableComputeNodeIds()).thenReturn(null);
         Assertions.assertTrue(scan.getAllAvailableBackendOrComputeIds().isEmpty());
-        Assertions.assertThrows(IllegalStateException.class, () -> scan.setupScanRangeLocations(null, null));
+        Assertions.assertThrows(IllegalStateException.class, () -> scan.setupScanRangeLocations());
         Assertions.assertTrue(scan.getScanRangeLocations(0).isEmpty());
     }
 
@@ -192,12 +202,13 @@ public class LanceScanNodeTest {
     @Test
     public void testDatasetUriIsSerializedInTableDescriptor() {
         LanceTable table = new LanceTable(42, "vectors", List.of(new Column("id", IntegerType.INT)),
-                "s3://bucket/vectors.lance");
+                "s3://bucket/vectors.lance", "lance_catalog", "vectors_db");
         TTableDescriptor thrift = table.toThrift(List.of());
         Assertions.assertEquals(42, thrift.getId());
         Assertions.assertEquals(TTableType.LANCE_TABLE, thrift.getTableType());
         Assertions.assertEquals(1, thrift.getNumCols());
         Assertions.assertEquals("vectors", thrift.getTableName());
+        Assertions.assertEquals("vectors_db", thrift.getDbName());
         Assertions.assertEquals(table.getTableLocation(), thrift.getLanceTable().getLance_dataset_uri());
     }
 
