@@ -24,6 +24,8 @@ import org.apache.arrow.vector.DateMilliVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.LargeVarBinaryVector;
+import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeStampMicroVector;
 import org.apache.arrow.vector.TimeStampMilliVector;
@@ -31,6 +33,10 @@ import org.apache.arrow.vector.TimeStampNanoVector;
 import org.apache.arrow.vector.TimeStampSecVector;
 import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.TinyIntVector;
+import org.apache.arrow.vector.UInt1Vector;
+import org.apache.arrow.vector.UInt2Vector;
+import org.apache.arrow.vector.UInt4Vector;
+import org.apache.arrow.vector.UInt8Vector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.complex.FixedSizeListVector;
@@ -42,6 +48,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -250,6 +257,71 @@ public class LanceColumnValueTest {
             assertEquals(2, values.size());
             assertEquals(1.5f, values.get(0).getFloat());
             assertEquals(2.5f, values.get(1).getFloat());
+        }
+    }
+
+    @Test
+    public void testUnsigned8Boundaries() {
+        try (UInt1Vector vector = new UInt1Vector("uint8", allocator)) {
+            vector.allocateNew(2);
+            vector.setSafe(0, 0);
+            vector.setSafe(1, 255);
+            vector.setValueCount(2);
+            assertEquals((short) 0, new LanceColumnValue(vector, 0).getShort());
+            assertEquals((short) 255, new LanceColumnValue(vector, 1).getShort());
+        }
+    }
+
+    @Test
+    public void testUnsigned16Boundaries() {
+        try (UInt2Vector vector = new UInt2Vector("uint16", allocator)) {
+            vector.allocateNew(2);
+            vector.setSafe(0, 0);
+            vector.setSafe(1, 65535);
+            vector.setValueCount(2);
+            assertEquals(0, new LanceColumnValue(vector, 0).getInt());
+            assertEquals(65535, new LanceColumnValue(vector, 1).getInt());
+        }
+    }
+
+    @Test
+    public void testUnsigned32Boundaries() {
+        try (UInt4Vector vector = new UInt4Vector("uint32", allocator)) {
+            vector.allocateNew(2);
+            vector.setSafe(0, 0);
+            vector.setSafe(1, -1);
+            vector.setValueCount(2);
+            assertEquals(0L, new LanceColumnValue(vector, 0).getLong());
+            assertEquals(4294967295L, new LanceColumnValue(vector, 1).getLong());
+        }
+    }
+
+    @Test
+    public void testUnsigned64Boundaries() {
+        try (UInt8Vector vector = new UInt8Vector("uint64", allocator)) {
+            vector.allocateNew(2);
+            vector.setSafe(0, 0);
+            vector.setSafe(1, -1L);
+            vector.setValueCount(2);
+            assertEquals(BigDecimal.ZERO, new LanceColumnValue(vector, 0).getDecimal());
+            assertEquals(new BigDecimal("18446744073709551615"), new LanceColumnValue(vector, 1).getDecimal());
+        }
+    }
+
+    @Test
+    public void testLargeStringAndBinary() {
+        try (LargeVarCharVector text = new LargeVarCharVector("text", allocator);
+                LargeVarBinaryVector binary = new LargeVarBinaryVector("binary", allocator)) {
+            String unicode = "Lance 中文 🌍";
+            byte[] bytes = {0, (byte) 255, 42};
+            text.allocateNew();
+            binary.allocateNew();
+            text.setSafe(0, unicode.getBytes(StandardCharsets.UTF_8));
+            binary.setSafe(0, bytes);
+            text.setValueCount(1);
+            binary.setValueCount(1);
+            assertEquals(unicode, new LanceColumnValue(text, 0).getString(ColumnType.TypeValue.STRING));
+            assertArrayEquals(bytes, new LanceColumnValue(binary, 0).getBytes());
         }
     }
 
