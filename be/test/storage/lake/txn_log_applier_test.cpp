@@ -1317,6 +1317,83 @@ TEST(TxnLogApplierCompactionTest, PKLakeReplicationDropsDeletePredicate) {
     EXPECT_FALSE(meta->compaction_inputs(1).has_delete_predicate());
 }
 
+void verify_lake_replication_archives_only_unreferenced_files(bool primary_key, int64_t tablet_id) {
+    const std::string reused_segment = "reused_segment.dat";
+    const std::string garbage_segment = "garbage_segment.dat";
+    const std::string reused_del = "reused.del";
+    const std::string garbage_del = "garbage.del";
+
+    Tablet tablet(StorageEnv::GetInstance()->lake_tablet_manager(), tablet_id);
+    auto meta = primary_key ? build_pk_metadata(tablet_id) : build_non_pk_metadata(tablet_id);
+    meta->set_next_rowset_id(10);
+    auto* old_rowset = meta->add_rowsets();
+    old_rowset->set_id(1);
+    old_rowset->set_num_rows(30);
+    old_rowset->set_data_size(300);
+    old_rowset->set_next_compaction_offset(1);
+    old_rowset->mutable_delete_predicate()->set_version(1);
+    auto* reused_segment_meta = old_rowset->add_segment_metas();
+    reused_segment_meta->set_filename(reused_segment);
+    reused_segment_meta->set_size(100);
+    reused_segment_meta->set_encryption_meta("reused-segment-encryption");
+    auto* garbage_segment_meta = old_rowset->add_segment_metas();
+    garbage_segment_meta->set_filename(garbage_segment);
+    garbage_segment_meta->set_size(200);
+    garbage_segment_meta->set_encryption_meta("garbage-segment-encryption");
+    auto* reused_del_meta = old_rowset->add_del_files();
+    reused_del_meta->set_name(reused_del);
+    reused_del_meta->set_encryption_meta("reused-del-encryption");
+    auto* garbage_del_meta = old_rowset->add_del_files();
+    garbage_del_meta->set_name(garbage_del);
+    garbage_del_meta->set_encryption_meta("garbage-del-encryption");
+
+    auto applier = new_txn_log_applier(tablet, meta, 2, false, true);
+    auto log = std::make_shared<TxnLogPB>();
+    log->set_tablet_id(tablet_id);
+    log->set_txn_id(500);
+    auto* op_replication = log->mutable_op_replication();
+    auto* txn_meta = op_replication->mutable_txn_meta();
+    txn_meta->set_txn_id(500);
+    txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
+    txn_meta->set_snapshot_version(2);
+    txn_meta->set_data_version(0);
+    txn_meta->set_incremental_snapshot(false);
+    auto* tablet_metadata = op_replication->mutable_tablet_metadata();
+    tablet_metadata->set_id(tablet_id);
+    tablet_metadata->set_next_rowset_id(20);
+    auto* new_rowset = tablet_metadata->add_rowsets();
+    new_rowset->set_id(15);
+    new_rowset->set_num_rows(10);
+    new_rowset->set_data_size(100);
+    auto* new_segment = new_rowset->add_segment_metas();
+    new_segment->set_filename(reused_segment);
+    new_segment->set_size(100);
+    new_rowset->add_del_files()->set_name(reused_del);
+
+    auto status = applier->apply(*log);
+    ASSERT_TRUE(status.ok()) << status;
+    ASSERT_EQ(1, meta->compaction_inputs_size());
+    const auto& garbage_rowset = meta->compaction_inputs(0);
+    EXPECT_FALSE(garbage_rowset.has_delete_predicate());
+    EXPECT_FALSE(garbage_rowset.has_next_compaction_offset());
+    EXPECT_EQ(200, garbage_rowset.data_size());
+    ASSERT_EQ(1, garbage_rowset.segment_metas_size());
+    EXPECT_EQ(garbage_segment, garbage_rowset.segment_metas(0).filename());
+    EXPECT_EQ(200, garbage_rowset.segment_metas(0).size());
+    EXPECT_EQ("garbage-segment-encryption", garbage_rowset.segment_metas(0).encryption_meta());
+    ASSERT_EQ(1, garbage_rowset.del_files_size());
+    EXPECT_EQ(garbage_del, garbage_rowset.del_files(0).name());
+    EXPECT_EQ("garbage-del-encryption", garbage_rowset.del_files(0).encryption_meta());
+}
+
+TEST(TxnLogApplierCompactionTest, NonPKLakeReplicationArchivesOnlyUnreferencedFiles) {
+    verify_lake_replication_archives_only_unreferenced_files(false, 40080);
+}
+
+TEST(TxnLogApplierCompactionTest, PKLakeReplicationArchivesOnlyUnreferencedFiles) {
+    verify_lake_replication_archives_only_unreferenced_files(true, 40081);
+}
+
 // Regression: PK NON-LAKE replication (full snapshot, no tablet_metadata) swaps all superseded old
 // rowsets into compaction_inputs — delete_predicate must be dropped across the Swap too.
 TEST(TxnLogApplierCompactionTest, PKNonLakeReplicationDropsDeletePredicate) {

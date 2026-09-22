@@ -416,11 +416,10 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     }
     // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
     // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
-    ASSIGN_OR_RETURN(
-            auto copied_target_tablet_meta,
-            convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id, target_tablet_id,
-                                              txn_id, data_version, src_data_dir, segment_name_to_size_map,
-                                              file_locations, filename_map, source_encryption_metas));
+    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
+                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
+                                                       target_tablet_id, txn_id, src_data_dir, segment_name_to_size_map,
+                                                       file_locations, filename_map, source_encryption_metas));
     SourceEncryptionInfoMap source_encryption_infos;
     source_encryption_infos.reserve(source_encryption_metas.size());
     for (const auto& [filename, encryption_meta] : source_encryption_metas) {
@@ -872,26 +871,39 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_m
     return result;
 }
 
-Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
-        const TabletMetadataPtr& target_data_version_tablet_meta, ExistingFileMap& existed_filename_uuids,
-        ExistingBundleSliceEncryptionMetaMap& bundle_slice_encryption_metas) {
+Status LakeReplicationTxnManager::build_existed_filename_uuids_map(const TabletMetadataPtr& target_tablet_meta,
+                                                                   ExistingFileMap& existed_filename_uuids,
+                                                                   ExistingBundleSliceInfoMap& bundle_slice_infos) {
     // Collect UUIDs from rowsets (segments and del files)
-    for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
+    for (const auto& rowset : target_tablet_meta->rowsets()) {
         for (const auto& segment_meta : rowset.segment_metas()) {
             const auto& segment_name = segment_meta.filename();
             const auto uuid = extract_uuid_from(segment_name);
+            const std::optional<int64_t> segment_size =
+                    segment_meta.has_size() ? std::make_optional(segment_meta.size()) : std::nullopt;
             existed_filename_uuids.emplace(
                     uuid, ExistingFileInfo{segment_name,
                                            segment_meta.has_bundle_file_offset() ? "" : segment_meta.encryption_meta(),
-                                           segment_meta.shared()});
+                                           segment_meta.shared(),
+                                           segment_meta.has_bundle_file_offset() ? std::nullopt : segment_size});
             if (segment_meta.has_bundle_file_offset()) {
-                auto& slice_metas = bundle_slice_encryption_metas[uuid];
+                auto& slice_infos = bundle_slice_infos[uuid];
                 auto [it, inserted] =
-                        slice_metas.emplace(segment_meta.bundle_file_offset(), segment_meta.encryption_meta());
-                if (!inserted && it->second != segment_meta.encryption_meta()) {
+                        slice_infos.emplace(segment_meta.bundle_file_offset(),
+                                            ExistingBundleSliceInfo{segment_meta.encryption_meta(), segment_size});
+                if (!inserted && it->second.encryption_meta != segment_meta.encryption_meta()) {
                     return Status::Corruption(
                             fmt::format("Conflicting target bundle slice encryption metadata for UUID {} at offset {}",
                                         uuid, segment_meta.bundle_file_offset()));
+                }
+                if (!inserted && it->second.segment_size.has_value() && segment_size.has_value() &&
+                    it->second.segment_size != segment_size) {
+                    return Status::Corruption(
+                            fmt::format("Conflicting target bundle slice sizes for UUID {} at offset {}", uuid,
+                                        segment_meta.bundle_file_offset()));
+                }
+                if (!inserted && !it->second.segment_size.has_value()) {
+                    it->second.segment_size = segment_size;
                 }
             }
         }
@@ -903,8 +915,8 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
     }
 
     // Collect UUIDs from SST files
-    if (target_data_version_tablet_meta->has_sstable_meta()) {
-        const auto& dest_meta = target_data_version_tablet_meta->sstable_meta();
+    if (target_tablet_meta->has_sstable_meta()) {
+        const auto& dest_meta = target_tablet_meta->sstable_meta();
         for (const auto& sst : dest_meta.sstables()) {
             const auto& sst_filename = sst.filename();
             existed_filename_uuids.emplace(extract_uuid_from(sst_filename),
@@ -913,8 +925,8 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
     }
 
     // Collect UUIDs from delvec files
-    if (target_data_version_tablet_meta->has_delvec_meta()) {
-        const auto& dest_meta = target_data_version_tablet_meta->delvec_meta();
+    if (target_tablet_meta->has_delvec_meta()) {
+        const auto& dest_meta = target_tablet_meta->delvec_meta();
         for (const auto& [_, file_meta_pb] : dest_meta.version_to_file()) {
             const auto& delvec_filename = file_meta_pb.name();
             existed_filename_uuids.emplace(
@@ -924,8 +936,8 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
     }
 
     // Collect UUIDs from dcg files
-    if (target_data_version_tablet_meta->has_dcg_meta()) {
-        const auto& dcg_meta = target_data_version_tablet_meta->dcg_meta();
+    if (target_tablet_meta->has_dcg_meta()) {
+        const auto& dcg_meta = target_tablet_meta->dcg_meta();
         for (const auto& [_, dcg_ver_pb] : dcg_meta.dcgs()) {
             bool has_encryption_meta = dcg_ver_pb.column_files_size() == dcg_ver_pb.encryption_metas_size();
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
@@ -938,36 +950,43 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Collect UUIDs from idg (.idx) files so a repeated full-snapshot replication reuses the
+    // already-replicated .idx (and its encryption meta) instead of re-copying it.
+    if (target_tablet_meta->has_idg_meta()) {
+        const auto& idg_meta = target_tablet_meta->idg_meta();
+        for (const auto& [_, idg_ver_pb] : idg_meta.idgs()) {
+            for (const auto& entry : idg_ver_pb.entries()) {
+                if (!entry.has_index_file() || entry.index_file().empty()) {
+                    continue;
+                }
+                existed_filename_uuids.emplace(
+                        extract_uuid_from(entry.index_file()),
+                        ExistingFileInfo{entry.index_file(), entry.encryption_meta(), entry.shared_file()});
+            }
+        }
+    }
+
+>>>>>>> 70d6ead ([BugFix] Fix reused file handling in lake replication (#79359))
     return Status::OK();
 }
 
 StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_and_build_new_tablet_meta(
         const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta, int64_t src_tablet_id,
-        int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version, const std::string& src_data_dir,
+        int64_t target_tablet_id, TTransactionId txn_id, const std::string& src_data_dir,
         std::unordered_map<std::string, size_t>& segment_name_to_size_map,
         std::map<std::string, std::string>& file_locations,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
         SourceEncryptionMetaMap& source_encryption_metas) {
     VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
-            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
-    // find all files that already replicated to target storage in previous txns
-    auto target_data_version_tablet_meta_or =
-            _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr);
-    TabletMetadataPtr target_data_version_tablet_meta;
-    if (target_data_version_tablet_meta_or.ok()) {
-        target_data_version_tablet_meta = std::move(target_data_version_tablet_meta_or).value();
-    } else if (target_data_version_tablet_meta_or.status().is_not_found() && target_tablet_meta->has_range() &&
-               target_tablet_meta->version() > data_version) {
-        target_data_version_tablet_meta = target_tablet_meta;
-    } else {
-        return target_data_version_tablet_meta_or.status();
-    }
+            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id;
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
-    // <uuid, destination filename/encryption/shared ownership>
+    // <uuid, destination filename/encryption/shared ownership/segment size>. Use visible metadata so the map does not
+    // retain files that compaction and vacuum may already have removed from target storage.
     ExistingFileMap existed_filename_uuids;
-    ExistingBundleSliceEncryptionMetaMap bundle_slice_encryption_metas;
-    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids,
-                                                     bundle_slice_encryption_metas));
+    ExistingBundleSliceInfoMap bundle_slice_infos;
+    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_tablet_meta, existed_filename_uuids, bundle_slice_infos));
 
     const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
     struct SourceFileDeclaration {
@@ -1059,22 +1078,28 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                 // segment file already exists, use the existing encryption metadata from target tablet
                 auto uuid = extract_uuid_from(src_segment_filename);
                 if (src_seg_meta.has_bundle_file_offset()) {
-                    auto uuid_it = bundle_slice_encryption_metas.find(uuid);
-                    if (uuid_it == bundle_slice_encryption_metas.end()) {
-                        return Status::Corruption(fmt::format(
-                                "No existing target bundle slice encryption metadata found for UUID {}", uuid));
+                    auto uuid_it = bundle_slice_infos.find(uuid);
+                    if (uuid_it == bundle_slice_infos.end()) {
+                        return Status::Corruption(
+                                fmt::format("No existing target bundle slice metadata found for UUID {}", uuid));
                     }
                     auto offset_it = uuid_it->second.find(src_seg_meta.bundle_file_offset());
                     if (offset_it == uuid_it->second.end()) {
-                        return Status::Corruption(fmt::format(
-                                "No existing target bundle slice encryption metadata found for UUID {} at offset {}",
-                                uuid, src_seg_meta.bundle_file_offset()));
+                        return Status::Corruption(
+                                fmt::format("No existing target bundle slice metadata found for UUID {} at offset {}",
+                                            uuid, src_seg_meta.bundle_file_offset()));
                     }
-                    new_seg_meta->set_encryption_meta(offset_it->second);
+                    new_seg_meta->set_encryption_meta(offset_it->second.encryption_meta);
+                    if (offset_it->second.segment_size.has_value()) {
+                        new_seg_meta->set_size(offset_it->second.segment_size.value());
+                    }
                 } else {
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
                         new_seg_meta->set_encryption_meta(it->second.encryption_meta);
+                        if (it->second.segment_size.has_value()) {
+                            new_seg_meta->set_size(it->second.segment_size.value());
+                        }
                     } else {
                         // should never happend
                         return Status::Corruption(fmt::format("no existing encryption metadata found for file: {}",
