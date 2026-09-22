@@ -447,6 +447,15 @@ This topic introduces the following types of BE configurations:
 - Description: How long the process resident size must stay below a step before `enable_jemalloc_decay_under_rss_pressure` relaxes the jemalloc decay back to that step. The two directions are deliberately not symmetric: tightening is applied as soon as a threshold is crossed, because a load that allocates fast enough can be killed while a hold elapses, whereas relaxing waits, because it is the direction that can be wrong twice -- the step to a decay of `0` purges synchronously and takes seconds on a large heap, so relaxing into pressure that has not actually passed pays that cost again. This hold is in addition to, not instead of, the 5-percentage-point gap between the ratio that enters a step and the ratio that leaves it: the gap stops oscillation at a threshold, while this hold stops the system from relaxing into a load that is merely pausing. It is measured in wall-clock time, so it does not change with `jemalloc_decay_rss_scan_interval_ms`. Accepted values are `0` to `300000`; anything outside is clamped to the nearer bound. `0` relaxes as soon as the resident size is under the step, leaving only the ratio gap. This item has no effect unless `enable_jemalloc_decay_under_rss_pressure` is set to `true`.
 - Introduced in: v4.2.0
 
+### large_memory_alloc_report_threshold
+
+- Default: 1073741824
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: When a single allocation requests more than this many bytes, the BE logs a WARNING containing the query ID, the fragment instance ID, the requested size, and the allocating stack trace. A value of `0` or below disables the report. The threshold check runs on every allocation, but it is only a comparison and its cost is negligible. The report is not: it captures and symbolizes a stack trace and takes the logging lock, so a threshold low enough that ordinary allocations cross it floods the log and slows down the whole process. Lower it only temporarily, to find the source of an unexpected memory spike, and restore it afterwards. The default only applies once BE configuration has been loaded; allocations made earlier, during process startup, are never reported.
+- Introduced in: v4.2.0
+
 ### local_library_dir
 
 - Default: `${UDF_RUNTIME_DIR}`

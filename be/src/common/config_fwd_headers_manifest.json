@@ -329,6 +329,7 @@
         "jemalloc_decay_rss_scan_interval_ms",
         "jemalloc_decay_rss_step_down_hold_ms",
         "abort_on_large_memory_allocation",
+        "large_memory_alloc_report_threshold",
         "use_mmap_allocate_chunk",
         "disable_mem_pools",
         "memory_max_alignment"

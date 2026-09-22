@@ -468,6 +468,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：`enable_jemalloc_decay_under_rss_pressure` 在把 Jemalloc decay 放松回某一档之前，进程常驻内存（RSS）必须持续低于该档的时长。两个方向有意不对称：收紧在跨过阈值时立即执行，因为分配速度足够快的负载可能在等待期间就被 Kill；而放松需要等待，因为这个方向的误判代价要付两次 —— 切到 decay 为 `0` 的那一档是同步回收，在大堆上需要数秒，若在压力尚未真正消退时放松，这个代价还要再付一遍。该等待与"进入档位的比例"和"退出档位的比例"之间 5 个百分点的间隔是叠加关系而非替代关系：比例间隔防止在阈值附近来回抖动，而该等待防止在负载只是短暂停顿时就放松。它按墙上时钟计量，因此不随 `jemalloc_decay_rss_scan_interval_ms` 变化。取值范围为 `0` 到 `300000`，超出范围会被就近截断。`0` 表示 RSS 一低于档位就立即放松，仅保留比例间隔的保护。仅在 `enable_jemalloc_decay_under_rss_pressure` 设置为 `true` 时生效。
 - 引入版本：v4.2.0
 
+### large_memory_alloc_report_threshold
+
+- 默认值：1073741824
+- 类型：Int
+- 单位：Bytes
+- 是否动态：是
+- 描述：当单次内存分配请求的字节数超过该值时，BE 会打印一条 WARNING 日志，包含 Query ID、Fragment Instance ID、申请大小以及分配处的堆栈。设置为 `0` 或负数表示关闭该日志。阈值判断位于每次内存分配的路径上，但仅是一次比较，开销可忽略；真正昂贵的是日志本身，它需要抓取并解析堆栈并占用日志锁。因此，如果阈值低到普通分配也会触发，会产生海量日志并拖慢整个进程。仅在排查异常内存上涨时临时调低，排查完成后恢复。该默认值在 BE 配置加载完成后才生效，进程启动更早阶段的分配不会被记录。
+- 引入版本：v4.2.0
+
 ### local_library_dir
 
 - 默认值：`${UDF_RUNTIME_DIR}`
