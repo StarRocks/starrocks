@@ -14,8 +14,23 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.planner.expression.ExprToThrift;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.IntegerType;
+import com.starrocks.warehouse.cngroup.ComputeResource;
+import mockit.Mock;
+import mockit.MockUp;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TPlanNode;
@@ -23,6 +38,11 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 public class LanceScanNodeTest {
     private LanceScanNode newScan(List<Long> nodes) {
@@ -63,4 +83,122 @@ public class LanceScanNodeTest {
         TPlanNode node = scan.treeToThrift().getNodes().get(0);
         Assertions.assertEquals(List.of(ExprToThrift.treeToThrift(predicate)), node.getConjuncts());
     }
+    private LanceScanNode newUnmockedScan() {
+        TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor();
+        tuple.setTable(new LanceTable(1, "vectors", List.of(), "file:///tmp/vectors.lance"));
+        return new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode");
+    }
+
+    private GlobalStateMgr mockCluster(boolean sharedData) {
+        GlobalStateMgr state = mock(GlobalStateMgr.class, RETURNS_DEEP_STUBS);
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public GlobalStateMgr getCurrentState() {
+                return state;
+            }
+        };
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return sharedData;
+            }
+        };
+        return state;
+    }
+
+    @Test
+    public void testSharedNothingUsesAvailableBackendsAndComputeNodes() {
+        GlobalStateMgr state = mockCluster(false);
+        SystemInfoService service = state.getNodeMgr().getClusterInfo();
+        // Immutable lists ensure enumeration does not modify the cluster's lists.
+        when(service.getAvailableBackendIds()).thenReturn(List.of(11L));
+        when(service.getAvailableComputeNodeIds()).thenReturn(List.of(22L));
+        LanceScanNode scan = newUnmockedScan();
+        Assertions.assertEquals(List.of(11L, 22L), scan.getAllAvailableBackendOrComputeIds());
+        scan.setupScanRangeLocations(null, null);
+        Assertions.assertEquals(11L, scan.getScanRangeLocations(0).get(0).getLocations().get(0).getBackend_id());
+
+        when(service.getAvailableBackendIds()).thenReturn(null);
+        Assertions.assertEquals(List.of(22L), scan.getAllAvailableBackendOrComputeIds());
+        when(service.getAvailableComputeNodeIds()).thenReturn(null);
+        Assertions.assertTrue(scan.getAllAvailableBackendOrComputeIds().isEmpty());
+        Assertions.assertThrows(IllegalStateException.class, () -> scan.setupScanRangeLocations(null, null));
+        Assertions.assertTrue(scan.getScanRangeLocations(0).isEmpty());
+    }
+
+    @Test
+    public void testSharedDataUsesCurrentComputeResource() {
+        GlobalStateMgr state = mockCluster(true);
+        ConnectContext context = mock(ConnectContext.class);
+        ComputeResource resource = mock(ComputeResource.class);
+        when(context.getCurrentComputeResource()).thenReturn(resource);
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ConnectContext get() {
+                return context;
+            }
+        };
+        when(state.getWarehouseMgr().getAliveComputeNodes(resource))
+                .thenReturn(List.of(new ComputeNode(22L, "compute", 9050)));
+        Assertions.assertEquals(List.of(22L), newUnmockedScan().getAllAvailableBackendOrComputeIds());
+        verify(state.getWarehouseMgr()).getAliveComputeNodes(resource);
+    }
+
+    @Test
+    public void testSharedDataWithoutContextUsesDefaultResource() {
+        GlobalStateMgr state = mockCluster(true);
+        new MockUp<ConnectContext>() {
+            @Mock
+            public ConnectContext get() {
+                return null;
+            }
+        };
+        when(state.getWarehouseMgr().getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE))
+                .thenReturn(List.of(new ComputeNode(33L, "compute", 9050)));
+        Assertions.assertEquals(List.of(33L), newUnmockedScan().getAllAvailableBackendOrComputeIds());
+        verify(state.getWarehouseMgr()).getAliveComputeNodes(WarehouseManager.DEFAULT_RESOURCE);
+    }
+
+    @Test
+    public void testExplainIncludesPredicatesAndPrunedComplexType() {
+        LanceScanNode scan = newScan(List.of(1L));
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(1), scan.getDesc());
+        slot.setColumn(new Column("embedding", new ArrayType(IntegerType.INT)));
+        slot.setType(new ArrayType(IntegerType.INT));
+        scan.getDesc().addSlot(slot);
+        scan.sortColumn = "embedding";
+        scan.getConjuncts().add(new BoolLiteral(false));
+        scan.getScanNodePredicates().getPartitionConjuncts().add(new BoolLiteral(true));
+        scan.getScanNodePredicates().getNonPartitionConjuncts().add(new BoolLiteral(false));
+        scan.getScanNodePredicates().getNoEvalPartitionConjuncts().add(new BoolLiteral(true));
+        scan.getScanNodePredicates().getMinMaxConjuncts().add(new BoolLiteral(false));
+        String normal = scan.getNodeExplainString("  ", TExplainLevel.NORMAL);
+        Assertions.assertTrue(normal.contains("  TABLE: vectors"));
+        Assertions.assertTrue(normal.contains("SORT COLUMN: embedding"));
+        Assertions.assertTrue(normal.contains("PREDICATES: FALSE"));
+        Assertions.assertTrue(normal.contains("PARTITION PREDICATES: TRUE"));
+        Assertions.assertTrue(normal.contains("NON-PARTITION PREDICATES: FALSE"));
+        Assertions.assertTrue(normal.contains("NO EVAL-PARTITION PREDICATES: TRUE"));
+        Assertions.assertTrue(normal.contains("MIN/MAX PREDICATES: FALSE"));
+        Assertions.assertTrue(normal.contains("cardinality="));
+        Assertions.assertTrue(normal.contains("avgRowSize="));
+        String verbose = scan.getNodeExplainString("", TExplainLevel.VERBOSE);
+        Assertions.assertTrue(verbose.contains("Pruned type: 1 <-> [ARRAY<INT>]"));
+        Assertions.assertFalse(verbose.contains("cardinality="));
+        Assertions.assertTrue(scan.debugString().contains("lanceTable=vectors"));
+        Assertions.assertTrue(scan.canUseRuntimeAdaptiveDop());
+    }
+
+    @Test
+    public void testDatasetUriIsSerializedInTableDescriptor() {
+        LanceTable table = new LanceTable(42, "vectors", List.of(new Column("id", IntegerType.INT)),
+                "s3://bucket/vectors.lance");
+        TTableDescriptor thrift = table.toThrift(List.of());
+        Assertions.assertEquals(42, thrift.getId());
+        Assertions.assertEquals(TTableType.LANCE_TABLE, thrift.getTableType());
+        Assertions.assertEquals(1, thrift.getNumCols());
+        Assertions.assertEquals("vectors", thrift.getTableName());
+        Assertions.assertEquals(table.getTableLocation(), thrift.getLanceTable().getLance_dataset_uri());
+    }
+
 }
