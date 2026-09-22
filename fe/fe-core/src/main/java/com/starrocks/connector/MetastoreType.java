@@ -19,7 +19,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 public enum MetastoreType {
     HMS,
     GLUE,
-    DLF;
+    DLF,
+    UNITY;
 
     public static MetastoreType get(String type) {
         if (type.equalsIgnoreCase("hive")) {
