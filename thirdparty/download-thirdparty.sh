@@ -736,6 +736,15 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
         touch $PATCHED_MARK
     fi
+    # Added after PATCHED_MARK was introduced, so it carries its own mark: a source
+    # directory unpacked by an older revision already has PATCHED_MARK and the block
+    # above never runs there. Replaying that block is not an option either, apply_patch
+    # passes -N and stops on the patches which are already applied.
+    # cap parser nesting depth so deeply nested JSON fails instead of overflowing the stack
+    if [ ! -f $PATCHED_MARK.nesting_depth ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
+        touch $PATCHED_MARK.nesting_depth
+    fi
     cd -
     echo "Finished patching $VPACK_SOURCE"
 fi

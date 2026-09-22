@@ -1,0 +1,84 @@
+--- velocypack-XYZ1.0.orig/include/velocypack/Options.h	2022-10-27 18:22:53.000000000 +0000
++++ velocypack-XYZ1.0/include/velocypack/Options.h	2026-09-30 00:00:00.000000000 +0000
+@@ -149,6 +149,11 @@
+   // write tags to JSON output
+   bool debugTags = false;
+ 
++  // Maximum object/array nesting depth accepted by the Parser. The parser recurses once per level,
++  // so without a cap a deeply nested document overflows the thread stack and crashes the process.
++  // 0 means unlimited (the pre-cap behaviour). The host (StarRocks) overrides this via its own config.
++  unsigned int maxNestingDepth = 1024;
++
+   // default options with the above settings
+   static Options Defaults;
+ };
+--- velocypack-XYZ1.0.orig/include/velocypack/Parser.h	2022-10-27 18:22:53.000000000 +0000
++++ velocypack-XYZ1.0/include/velocypack/Parser.h	2026-09-30 00:00:00.000000000 +0000
+@@ -387,7 +387,17 @@
+     return i;
+   }
+ 
+-  inline void increaseNesting() { ++_nesting; }
++  // Reject documents nested past options->maxNestingDepth here, on the single path every array/object
++  // entry passes through. Without this the parser recurses until the thread stack overflows and the
++  // process dies from a signal it cannot even report. The error is reported through fail() like every
++  // other input error, so tryParse() returns false and parse() throws. 0 disables the check.
++  inline bool increaseNesting() {
++    if (options->maxNestingDepth != 0 &&
++        static_cast<unsigned int>(++_nesting) > options->maxNestingDepth) {
++      return fail(Exception::ParseError, "JSON nesting depth exceeds maximum");
++    }
++    return true;
++  }
+ 
+   inline void decreaseNesting() { --_nesting; }
+ 
+--- velocypack-XYZ1.0.orig/src/Parser.cpp	2022-10-27 18:22:53.000000000 +0000
++++ velocypack-XYZ1.0/src/Parser.cpp	2026-09-30 00:00:00.000000000 +0000
+@@ -456,15 +456,19 @@
+   if (i < 0) {
+     return false;
+   }
++  // count the array as a nesting level before looking at its contents, so an
++  // empty array is subject to the same depth limit as a non-empty one
++  if (!increaseNesting()) {
++    return false;
++  }
+   if (i == ']') {
+     // empty array
+     ++_pos;  // the closing ']'
+     _builderPtr->close();
++    decreaseNesting();
+     return true;
+   }
+ 
+-  increaseNesting();
+-
+   while (true) {
+     // parse array element itself
+     _builderPtr->reportAdd();
+@@ -501,9 +505,15 @@
+   if (i < 0) {
+     return false;
+   }
++  // count the object as a nesting level before looking at its contents, so an
++  // empty object is subject to the same depth limit as a non-empty one
++  if (!increaseNesting()) {
++    return false;
++  }
+   if (i == '}') {
+     // empty object
+     consume();  // the closing '}'. return value intentionally not checked
++    decreaseNesting();
+ 
+     if (_nesting != 0 || !options->keepTopLevelOpen) {
+       // only close if we've not been asked to keep top level open
+@@ -512,8 +522,6 @@
+     return true;
+   }
+ 
+-  increaseNesting();
+-
+   while (true) {
+     // always expecting a string attribute name here
+     if (VELOCYPACK_UNLIKELY(i != '"')) {
