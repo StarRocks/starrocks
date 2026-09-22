@@ -325,9 +325,30 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx(1,'c') from tall group by tb");
         analyzeFail("select percentile_approx(1,1,'c') from tall group by tb");
         analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
-        analyzeSuccess("select percentile_approx(1,1,tc) from tall group by tb");
+        // FunctionAnalyzer now canonicalizes compression at analyze phase:
+        // non-constant compression arguments are rejected up front rather than
+        // letting the query reach TypeChecker.
+        analyzeFail("select percentile_approx(1,1,tc) from tall group by tb",
+                "compression must be a constant integer value");
         analyzeSuccess("select percentile_approx(1,5) from tall group by tb");
+        // Out-of-range integer literal: silently clamped to DEFAULT_COMPRESSION_FACTOR.
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
+        // NULL literal: canonicalized to DEFAULT.
+        analyzeSuccess("select percentile_approx(1, 0.5, NULL) from tall group by tb");
+        // Zero and negative integer literals are out-of-range and silently clamped.
+        analyzeSuccess("select percentile_approx(1, 0.5, 0) from tall group by tb");
+        for (String compression : new String[] {"5000", "5000.0", "CAST(5000 AS DOUBLE)", "2500 + 2500",
+                "CAST(5000.000 AS DECIMAL(20, 3))"}) {
+            analyzeSuccess("select percentile_approx(1, 0.5, " + compression + ") from tall group by tb");
+            analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, " + compression + ") from tall group by tb");
+        }
+        for (String compression : new String[] {"5000.5", "CAST(5000.5 AS DOUBLE)", "5000 + 0.5",
+                "CAST(5000.000000000001 AS DECIMAL(20, 12))"}) {
+            analyzeFail("select percentile_approx(1, 0.5, " + compression + ") from tall group by tb",
+                    "compression must be an integer value");
+            analyzeFail("select percentile_approx_weighted(1, 2, 0.5, " + compression + ") from tall group by tb",
+                    "compression must be an integer value");
+        }
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
         analyzeSuccess("select percentile_cont(tj,0.5) from tall group by tb");
         analyzeSuccess("select percentile_cont(tj, cast(0.5 as double)) from tall group by tb");
@@ -348,6 +369,32 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature: percentile_disc");
         analyzeFail("select percentile_disc_lc(bitmap_from_string('1,2,3'), 0.5)",
                 "No matching function with signature: percentile_disc_lc");
+    }
+
+    @Test
+    public void testPercentileHashFunction() {
+        // percentile_hash is a scalar function; its compression validation must run
+        // on the scalar analyze path (not analyzeBuiltinAggFunction). Wrap in
+        // percentile_approx_raw so the PERCENTILE result has a query-able output type.
+        // 1-arg overload keeps the legacy storage compression and needs no validation.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf), 0.5) from tall");
+        // Valid in-range integer compression literal.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, 5000), 0.5) from tall");
+        // Out-of-range integer literal is silently clamped to DEFAULT.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, 1047), 0.5) from tall");
+        // NULL literal is canonicalized to DEFAULT.
+        analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, NULL), 0.5) from tall");
+        // Non-constant compression (column ref) must be rejected up front rather than
+        // reaching BE, where get_const_value would do an invalid ConstColumn downcast.
+        analyzeFail("select percentile_approx_raw(percentile_hash(tf, tc), 0.5) from tall",
+                "compression must be a constant integer value");
+        for (String compression : new String[] {"5000.0", "CAST(5000 AS DOUBLE)", "2500 + 2500"}) {
+            analyzeSuccess("select percentile_approx_raw(percentile_hash(tf, " + compression + "), 0.5) from tall");
+        }
+        for (String compression : new String[] {"5000.5", "CAST(5000.5 AS DOUBLE)", "5000 + 0.5"}) {
+            analyzeFail("select percentile_approx_raw(percentile_hash(tf, " + compression + "), 0.5) from tall",
+                    "compression must be an integer value");
+        }
     }
 
     @Test
@@ -386,7 +433,10 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx_weighted(1, 2, 0.5, 'c') from tall group by tb",
                 "requires the fourth parameter (compression) to be numeric type");
         analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, 100) from tall group by tb");
-        analyzeSuccess("select percentile_approx_weighted(1, 2, 0.5, tc) from tall group by tb");
+        // Non-constant compression is now rejected at analyze phase
+        // (FunctionAnalyzer canonicalizes the literal before plan generation).
+        analyzeFail("select percentile_approx_weighted(1, 2, 0.5, tc) from tall group by tb",
+                "compression must be a constant integer value");
 
         // Test with different numeric types
         analyzeSuccess("select percentile_approx_weighted(tc, tj, 0.5) from tall group by tb");
@@ -428,7 +478,10 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx(1, 0.5, 'c') from tall group by tb",
                 "requires the third parameter (compression) to be numeric type");
         analyzeSuccess("select percentile_approx(1, 0.5, 100) from tall group by tb");
-        analyzeSuccess("select percentile_approx(1, 0.5, tc) from tall group by tb");
+        // Non-constant compression is now rejected at analyze phase
+        // (FunctionAnalyzer canonicalizes the literal before plan generation).
+        analyzeFail("select percentile_approx(1, 0.5, tc) from tall group by tb",
+                "compression must be a constant integer value");
 
         // Test with different numeric types
         analyzeSuccess("select percentile_approx(tc, 0.5) from tall group by tb");

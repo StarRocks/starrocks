@@ -75,6 +75,7 @@ import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -207,6 +208,25 @@ public class FunctionAnalyzer {
                                 String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
             }
         }
+        // percentile_hash is a scalar function: validate here on the scalar path,
+        // because analyzeBuiltinAggFunction only runs for AggregateFunction.
+        // percentile_hash(value [, compression]). The 1-arg overload keeps the
+        // legacy storage compression (1000). The 2-arg overload requires a
+        // constant compression; out-of-range / NULL / non-finite values are
+        // canonicalized to DEFAULT_COMPRESSION_FACTOR so downstream code can
+        // trust the literal.
+        if (fnName.equals(FunctionSet.PERCENTILE_HASH)) {
+            List<Expr> percentileHashChildren = functionCallExpr.getChildren();
+            if (percentileHashChildren.size() == 2) {
+                Expr cArg = functionCallExpr.getChild(1);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "second", "compression",
+                            "percentile_hash", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 1);
+            }
+        }
+
         Function fn = functionCallExpr.getFn();
         final String funcName = fnName;
         if (fn instanceof StateFunctionCombinator) {
@@ -563,10 +583,17 @@ public class FunctionAnalyzer {
             // Validate second parameter (percentile) is numeric or array type
             validatePercentileParameter(functionCallExpr.getChild(1), "second", 
                     "percentile_approx", functionCallExpr.getPos());
-            // Validate optional third parameter (compression) is numeric type
+            // NULL is allowed past validate-numeric and routed through clamp,
+            // which canonicalizes it to DEFAULT just like out-of-range ints.
             if (children.size() == 3) {
-                validateNumericParameter(functionCallExpr.getChild(2), "third", "compression", 
-                        "percentile_approx", functionCallExpr.getPos());
+                Expr cArg = functionCallExpr.getChild(2);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "third", "compression",
+                            "percentile_approx", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 2);
+            } else {
+                injectDefaultCompression(functionCallExpr);
             }
         }
 
@@ -587,10 +614,17 @@ public class FunctionAnalyzer {
             // Validate third parameter (percentile) is numeric or array type
             validatePercentileParameter(functionCallExpr.getChild(2), "third", 
                     "percentile_approx_weighted", functionCallExpr.getPos());
-            // Validate optional fourth parameter (compression) is numeric type
+            // NULL is allowed past validate-numeric and routed through clamp,
+            // which canonicalizes it to DEFAULT just like out-of-range ints.
             if (children.size() == 4) {
-                validateNumericParameter(functionCallExpr.getChild(3), "fourth", "compression", 
-                        "percentile_approx_weighted", functionCallExpr.getPos());
+                Expr cArg = functionCallExpr.getChild(3);
+                if (!(cArg instanceof NullLiteral)) {
+                    validateNumericParameter(cArg, "fourth", "compression",
+                            "percentile_approx_weighted", functionCallExpr.getPos());
+                }
+                clampCompressionLiteral(functionCallExpr, 3);
+            } else {
+                injectDefaultCompression(functionCallExpr);
             }
         }
 
@@ -823,8 +857,8 @@ public class FunctionAnalyzer {
      * @param pos The position in the source code for error reporting
      * @throws SemanticException if the parameter is not numeric type
      */
-    private static void validateNumericParameter(Expr paramExpr, String paramPosition, 
-                                                  String paramName, String functionName, 
+    private static void validateNumericParameter(Expr paramExpr, String paramPosition,
+                                                  String paramName, String functionName,
                                                   NodePosition pos) {
         if (!paramExpr.getType().isNumericType()) {
             throw new SemanticException(
@@ -832,6 +866,70 @@ public class FunctionAnalyzer {
                             functionName, paramPosition, paramName, paramExpr.getType().toSql()),
                     pos);
         }
+    }
+
+    /**
+     * Append {@code IntLiteral(DEFAULT)} as the next child and re-bind the
+     * FunctionCallExpr to the compression-aware overload, so that downstream
+     * (planner / BE) always sees an explicit compression argument. The
+     * registered overloads of percentile_approx[_weighted] expose the
+     * compression slot as DOUBLE in their signature (see the note on
+     * {@link #clampCompressionLiteral}); the IntLiteral here matches the
+     * pattern used for user-written integer literals — SR's standard implicit
+     * cast handles the int→double conversion when the value is materialized.
+     */
+    private static void injectDefaultCompression(FunctionCallExpr fn) {
+        Function current = fn.getFn();
+        if (current == null) {
+            // The aggregate-combinator path (e.g. percentile_approx_if) re-runs this
+            // validation on a freshly-built, unresolved FunctionCallExpr whose fn is null;
+            // its mutations are discarded. Skip injection — the real call is canonicalized
+            // on its own resolved pass, and BE keeps its legacy default for the 2-arg arity.
+            return;
+        }
+        Type[] currentArgs = current.getArgs();
+        Type[] expandedArgs = new Type[currentArgs.length + 1];
+        System.arraycopy(currentArgs, 0, expandedArgs, 0, currentArgs.length);
+        expandedArgs[currentArgs.length] = FloatType.DOUBLE;
+        Function expanded = ExprUtils.getBuiltinFunction(
+                current.getFunctionName().getFunction(), expandedArgs,
+                Function.CompareMode.IS_IDENTICAL);
+        Preconditions.checkState(expanded != null,
+                "no compression-aware overload registered for "
+                        + current.getFunctionName().getFunction());
+        IntLiteral defaultC = new IntLiteral(PercentileCompression.DEFAULT, fn.getPos());
+        fn.addChild(defaultC);
+        fn.setFn(expanded);
+    }
+
+    // Compression is a constant integer value; its SQL type need not be integral.
+    private static void clampCompressionLiteral(FunctionCallExpr fn, int argIdx) {
+        Expr arg = fn.getChild(argIdx);
+        if (!arg.isConstant()) {
+            throw new SemanticException("compression must be a constant integer value", arg.getPos());
+        }
+        Expr folded = ExprUtils.analyzeAndCastFold(arg.clone());
+        long compression = PercentileCompression.DEFAULT;
+        if (!(folded instanceof NullLiteral)) {
+            if (!(folded instanceof LiteralExpr) || !folded.getType().isNumericType()) {
+                throw new SemanticException("compression must be a constant integer value", arg.getPos());
+            }
+            BigDecimal value;
+            try {
+                value = new BigDecimal(((LiteralExpr) folded).getStringValue());
+            } catch (NumberFormatException e) {
+                throw new SemanticException("compression must be a finite integer value", arg.getPos());
+            }
+            if (value.stripTrailingZeros().scale() > 0) {
+                throw new SemanticException("compression must be an integer value; fractional values are not supported",
+                        arg.getPos());
+            }
+            if (value.compareTo(BigDecimal.valueOf(PercentileCompression.MIN)) >= 0 &&
+                    value.compareTo(BigDecimal.valueOf(PercentileCompression.MAX)) <= 0) {
+                compression = value.longValueExact();
+            }
+        }
+        fn.setChild(argIdx, new IntLiteral(compression, arg.getPos()));
     }
 
     /**
