@@ -79,6 +79,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionT
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowAIProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowOuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownTopNBelowUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
@@ -753,6 +754,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.JDBC_PUSHDOWN_RULES);
         scheduler.rewriteOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
+        scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowAIProjectRule());
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
 
         // intersect rewrite depend on statistics

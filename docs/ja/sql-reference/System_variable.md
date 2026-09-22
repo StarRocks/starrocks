@@ -189,6 +189,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 セッションで割り当てられたロールをアクティブにしたい場合は、[SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) コマンドを使用してください。
 
+### ai_topn_pushdown_max_global_limit
+
+* **説明**: 適用条件を満たす AI projection の下でグローバル候補 TopN を使用する SQL `LIMIT` の最大値です。しきい値を超える場合は、フラグメントインスタンスごとにローカル候補 TopN でプルーニングします。`0` はローカルのみのプルーニングを選択し、最適化自体は無効にしません。
+* **デフォルト**: 1000
+* **データ型**: long
+* **範囲**: [0, 9223372036854775807]
+* **スコープ**: Session、Global
+
+`SET`、`SET GLOBAL`、ステートメント単位の `SET_VAR` ヒントで設定でき、再起動は不要です。戦略の説明と例については、[AI 入力行数の削減](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows) を参照してください。
+
 ### ann_params
 
 * **説明**: 近似最近傍（ANN）ベクターインデックス検索のクエリパラメータを指定します。値は、キーと値がともに文字列である JSON オブジェクト文字列です。HNSW は `efsearch`、IVFPQ は `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht`、`range_search_confidence` をサポートします。セッションまたは単一ステートメントに設定できます。例：`SET ann_params = '{"efsearch":"256"}'` または `SET_VAR (ann_params='{"efsearch":"256"}')`。

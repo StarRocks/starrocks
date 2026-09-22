@@ -190,6 +190,16 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ai_topn_pushdown_max_global_limit
+
+* **Description**: The largest SQL `LIMIT` that uses a global candidate TopN below an eligible AI projection. Larger limits use local candidate TopN pruning per fragment instance. `0` selects local-only pruning; it does not disable the optimization.
+* **Default**: 1000
+* **Data type**: long
+* **Range**: [0, 9223372036854775807]
+* **Scope**: Session, Global
+
+Supports `SET`, `SET GLOBAL`, and statement-level `SET_VAR` hints without restarting. For strategy details and examples, see [Reducing AI input rows](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows).
+
 ### ann_params
 
 * **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.

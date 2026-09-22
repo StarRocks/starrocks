@@ -48,6 +48,8 @@ ai_complete(<model>, <prompt>, <options>)
 
 此函数具有非确定性。即使参数相同，提供商状态、模型行为和运行时条件的变化也可能导致返回文本或失败方式不同。
 
+AI 查询优化建议参见 [减少 AI 输入行数](ai_functions.mdx#reducing-ai-input-rows)。
+
 ## 配置
 
 ### FE SYSTEM 模型配置
