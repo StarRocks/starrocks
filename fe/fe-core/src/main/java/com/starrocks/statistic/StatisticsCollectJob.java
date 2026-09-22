@@ -64,6 +64,17 @@ import java.util.stream.Collectors;
 public abstract class StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
+    // Backend conditions that say nothing about the statement that ran into them and stop being true on
+    // their own, so a statistics job waits them out instead of failing. Matched as text because that is
+    // all the backend sends back; both strings are stable and come from:
+    //   - "Too many versions": the storage engine rejecting writes until compaction catches up.
+    //   - "Memory of process exceed limit": MemTracker::err_msg in be/src/runtime/mem_tracker.cpp, naming
+    //     the tracker that was exceeded. "process" means the whole backend is out of memory because of
+    //     other work - as opposed to "query", which means this statement is too large for its own limit
+    //     and would fail the same way however often it is retried.
+    protected static final String TOO_MANY_VERSIONS_MARKER = "Too many versions";
+    protected static final String PROCESS_MEMORY_EXHAUSTED_MARKER = "Memory of process exceed limit";
+
     protected final Database db;
     protected final Table table;
     protected final List<String> columnNames;
@@ -276,7 +287,7 @@ public abstract class StatisticsCollectJob {
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Statistics collect fail | Error Message [{}] | {} | SQL [{}]",
                         context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
-                if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
+                if (StringUtils.contains(context.getState().getErrorMessage(), TOO_MANY_VERSIONS_MARKER)) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
                 } else {
