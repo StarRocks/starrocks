@@ -32,7 +32,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "output: any_value(1: v1)");
 
         sql = "select approx_percentile(v1, 0.99) from t0;";
-        assertPlanContains(sql, "output: percentile_approx(CAST(1: v1 AS DOUBLE), 0.99)");
+        assertPlanContains(sql, "output: percentile_approx(CAST(1: v1 AS DOUBLE), 0.99, 10000.0)");
 
         sql = "select stddev(v1) from t0;";
         assertPlanContains(sql, "output: stddev_samp(1: v1)");
