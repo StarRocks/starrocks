@@ -36,9 +36,10 @@ import java.util.Set;
  * and legacy {@code fs.*} load properties), then applies the same {@link CloudConfigurationFactory}
  * credential translation used by the rest of FE storage access. This makes canonical properties
  * such as {@code aws.s3.use_instance_profile} usable by FE-local footer reads without maintaining a
- * second provider-specific mapping here. Per-scheme filesystem caching is disabled last so
- * concurrent loads with different credentials cannot silently share an under-credentialed
- * {@code FileSystem} instance.
+ * second provider-specific credential mapping here. Legacy Broker properties keep their native
+ * {@code oss://} / {@code cosn://} Hadoop implementations when the cloud factory does not select a
+ * canonical provider. Per-scheme filesystem caching is disabled last so concurrent loads with
+ * different credentials cannot silently share an under-credentialed {@code FileSystem} instance.
  */
 final class PreSplitHadoopAccess {
 
@@ -59,6 +60,9 @@ final class PreSplitHadoopAccess {
             "oss", "gs", "cosn", "tos", "obs",
             "wasb", "wasbs", "abfs", "abfss", "adl",
             "alluxio", "jfs");
+    private static final Map<String, String> LEGACY_SCHEME_IMPLEMENTATIONS = Map.of(
+            "fs.oss.", "org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem",
+            "fs.cosn.", "org.apache.hadoop.fs.CosFileSystem");
 
     private PreSplitHadoopAccess() {
     }
@@ -69,10 +73,23 @@ final class PreSplitHadoopAccess {
         effectiveProperties.forEach(hadoopConfig::set);
         CloudConfigurationFactory.buildCloudConfigurationForStorage(effectiveProperties)
                 .applyToConfiguration(hadoopConfig);
+        registerLegacySchemeImplementations(effectiveProperties, hadoopConfig);
         for (String scheme : SCHEMES_TO_BUILD_FRESH_FILESYSTEM) {
             hadoopConfig.setBoolean("fs." + scheme + ".impl.disable.cache", true);
         }
         return hadoopConfig;
+    }
+
+    private static void registerLegacySchemeImplementations(
+            Map<String, String> properties, Configuration hadoopConfig) {
+        LEGACY_SCHEME_IMPLEMENTATIONS.forEach((propertyPrefix, implementation) -> {
+            String implementationKey = propertyPrefix + "impl";
+            boolean hasLegacyProperties = properties.keySet().stream()
+                    .anyMatch(property -> property.startsWith(propertyPrefix));
+            if (hasLegacyProperties && hadoopConfig.get(implementationKey) == null) {
+                hadoopConfig.set(implementationKey, implementation);
+            }
+        });
     }
 
     static FileStatus toHadoopFileStatus(TBrokerFileStatus brokerFileStatus) {
