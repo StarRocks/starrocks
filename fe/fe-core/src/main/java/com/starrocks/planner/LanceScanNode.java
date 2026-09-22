@@ -24,6 +24,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
@@ -46,8 +47,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 public class LanceScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(LanceScanNode.class);
@@ -149,46 +148,45 @@ public class LanceScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    explainExpr(conjuncts)).append("\n");
-        }
-        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
-            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
-
-        if (detailLevel != VERBOSE) {
-            output.append(prefix).append(String.format("cardinality=%s", cardinality));
-            output.append("\n");
-        }
-
-        output.append("\n");
-        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
-
+        appendExplainPredicates(output, prefix);
+        appendExplainStatistics(output, prefix, detailLevel);
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            appendExplainPrunedTypes(output, prefix);
         }
 
         return output.toString();
+    }
+
+    private void appendExplainPredicates(StringBuilder output, String prefix) {
+        appendExplainPredicate(output, prefix, "PREDICATES", conjuncts);
+        appendExplainPredicate(output, prefix, "PARTITION PREDICATES", scanNodePredicates.getPartitionConjuncts());
+        appendExplainPredicate(output, prefix, "NON-PARTITION PREDICATES", scanNodePredicates.getNonPartitionConjuncts());
+        appendExplainPredicate(output, prefix, "NO EVAL-PARTITION PREDICATES", scanNodePredicates.getNoEvalPartitionConjuncts());
+        appendExplainPredicate(output, prefix, "MIN/MAX PREDICATES", scanNodePredicates.getMinMaxConjuncts());
+    }
+
+    private void appendExplainPredicate(StringBuilder output, String prefix, String label, List<Expr> predicates) {
+        if (!predicates.isEmpty()) {
+            // Preserve session-controlled EXPLAIN desensitization.
+            output.append(prefix).append(label).append(": ").append(explainExpr(predicates)).append("\n");
+        }
+    }
+
+    private void appendExplainStatistics(StringBuilder output, String prefix, TExplainLevel detailLevel) {
+        if (detailLevel != TExplainLevel.VERBOSE) {
+            output.append(prefix).append(String.format("cardinality=%s\n", cardinality));
+        }
+        output.append("\n");
+        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+    }
+
+    private void appendExplainPrunedTypes(StringBuilder output, String prefix) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            Type type = slot.getOriginType();
+            if (type.isComplexType()) {
+                output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slot.getId().asInt(), type));
+            }
+        }
     }
 
     @Override
