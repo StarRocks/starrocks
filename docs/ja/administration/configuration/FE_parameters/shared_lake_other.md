@@ -384,6 +384,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
 - 導入時期：v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- デフォルト：5000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の接続タイムアウト。正の値でなければなりません。この時間内にサーバーが接続を受け付けない場合、CREATE または ALTER GROUP PROVIDER ステートメントは失敗し、Group Provider は以前の設定を保持します。上限がなければ、応答しないサーバーはステートメントだけでなく、すべての FE のジャーナル再生もブロックします。
+- 導入時期：v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の読み取りタイムアウト。正の値でなければなりません。接続済みのサーバーが応答しないまま待てる時間の上限で、超過すると取得は失敗します。失敗時の動作は `group_provider_http_connect_timeout_ms` を参照してください。
+- 導入時期：v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - デフォルト：300

@@ -403,24 +403,123 @@ public class AlterGroupProviderLifecycleTest {
     }
 
     /**
-     * Test case: replaying an ALTER on a follower
-     * Test point: replay cannot run prepareForActivation() (it blocks on network I/O), so the instance it
-     *             publishes starts with an empty cache. It inherits the outgoing instance's cache instead,
-     *             otherwise every lookup on that node resolves no groups until the first background refresh
-     *             completes - and forever if that node cannot reach the directory.
+     * Test case: a follower replaying an ALTER, before the replacement has refreshed once
+     * Test point: replay cannot warm the replacement inline (it must not block on the directory), so the
+     *             replacement is published cold and answers lookups through the instance it replaced until
+     *             its own first refresh lands. Both halves matter: the map holds the new instance at once -
+     *             SHOW CREATE on this follower shows the committed configuration, which FORWARD_WITH_SYNC
+     *             promises - while no login in between resolves an empty group set.
      */
     @Test
-    public void testReplayInheritsTheCacheOfTheProviderItReplaces() throws Exception {
-        mockDirectory(new AtomicBoolean(false), new ArrayList<>(), new ArrayList<>());
-        createLiveProviderWithOldGroups();
+    public void testReplayedProviderAnswersThroughTheOneItReplacesUntilWarm() throws Exception {
+        mockDirectoryFetchWithoutSchedule(new AtomicBoolean(false));
+        GroupProvider before = createLiveProviderWithOldGroups();
 
         Map<String, String> replayedProps = new HashMap<>(ldapProperties());
         replayedProps.put("ldap_group_dn", "cn=new_group,dc=example,dc=com");
         authenticationMgr.replayAlterGroupProvider(PROVIDER_NAME, replayedProps);
 
-        Assertions.assertNotNull(authenticationMgr.getGroupProvider(PROVIDER_NAME), "Replay must publish the new instance");
+        LDAPGroupProvider replaced = (LDAPGroupProvider) authenticationMgr.getGroupProvider(PROVIDER_NAME);
+        Assertions.assertNotSame(before, replaced, "The map must hold the replayed configuration immediately");
+        Assertions.assertEquals("cn=new_group,dc=example,dc=com", replaced.getProperties().get("ldap_group_dn"),
+                "What SHOW CREATE reads is the committed configuration, not the one still answering lookups");
         Assertions.assertEquals(OLD_GROUPS, lookupGroups(),
-                "Until its first refresh lands, the replayed provider must serve what the old one resolved");
+                "Until its first refresh, the replacement answers through the instance it replaced");
+
+        replaced.refreshGroups();
+
+        Assertions.assertEquals(NEW_GROUPS, lookupGroups(),
+                "After its first refresh the replacement answers from its own cache");
+    }
+
+    /**
+     * Test case: the replacement's first refresh fails
+     * Test point: the bridge ends with the first refresh whatever its outcome. The journal has committed
+     *             the new configuration, so keeping the retired one answering would grant groups the
+     *             cluster no longer defines; an empty cache - denied access - is the smaller wrong answer,
+     *             and the instance's own schedule fills it once the directory is back.
+     */
+    @Test
+    public void testReplayedProviderStandsAloneAfterAFailedFirstRefresh() throws Exception {
+        mockDirectoryFetchWithoutSchedule(new AtomicBoolean(true));
+        createLiveProviderWithOldGroups();
+
+        authenticationMgr.replayAlterGroupProvider(PROVIDER_NAME, new HashMap<>(ldapProperties()));
+        Assertions.assertEquals(OLD_GROUPS, lookupGroups(), "Sanity check: bridged before the first refresh");
+
+        ((LDAPGroupProvider) authenticationMgr.getGroupProvider(PROVIDER_NAME)).refreshGroups();
+
+        Assertions.assertEquals(Set.of(), lookupGroups(),
+                "A failed first refresh leaves the replacement empty rather than answering from the retired one");
+    }
+
+    /**
+     * Test case: the ALTER changes how cache keys are encoded
+     * Test point: the outgoing instance keys its cache by login name (`ldap_user_search_attr` is set); the
+     *             replacement drops that property and would key by member DN. Handing the *cache* over
+     *             would make every lookup miss - the replacement computes DN keys against a table of
+     *             names. Forwarding the *query* cannot: the outgoing instance resolves it under its own
+     *             configuration.
+     */
+    @Test
+    public void testBridgeResolvesUnderTheOutgoingConfigurationWhenTheKeyEncodingChanges() throws Exception {
+        mockDirectoryFetchWithoutSchedule(new AtomicBoolean(false));
+        createLiveProviderWithOldGroups();
+
+        Map<String, String> dnKeyedProps = new HashMap<>(ldapProperties());
+        dnKeyedProps.remove("ldap_user_search_attr");
+        authenticationMgr.replayAlterGroupProvider(PROVIDER_NAME, dnKeyedProps);
+
+        Assertions.assertEquals(OLD_GROUPS, lookupGroups(),
+                "A lookup by login name still resolves while the bridge stands, although the replacement "
+                        + "itself would key by DN");
+    }
+
+    /**
+     * Test case: two ALTERs replayed within one refresh interval
+     * Test point: the second replacement must bridge to the instance that is actually warm, not to the
+     *             first replacement - whose cache is still empty - and bridges must not form a chain.
+     */
+    @Test
+    public void testASecondReplayBridgesToTheWarmInstanceNotToTheColdOne() throws Exception {
+        mockDirectoryFetchWithoutSchedule(new AtomicBoolean(false));
+        createLiveProviderWithOldGroups();
+
+        authenticationMgr.replayAlterGroupProvider(PROVIDER_NAME, new HashMap<>(ldapProperties()));
+        Map<String, String> secondProps = new HashMap<>(ldapProperties());
+        secondProps.put("ldap_group_identifier_attr", "sn");
+        authenticationMgr.replayAlterGroupProvider(PROVIDER_NAME, secondProps);
+
+        LDAPGroupProvider second = (LDAPGroupProvider) authenticationMgr.getGroupProvider(PROVIDER_NAME);
+        Assertions.assertEquals("sn", second.getProperties().get("ldap_group_identifier_attr"),
+                "The later record is the one published");
+        Assertions.assertEquals(OLD_GROUPS, lookupGroups(),
+                "The second replacement answers through the warm original, not through the cold first replacement");
+
+        second.refreshGroups();
+        Assertions.assertEquals(NEW_GROUPS, lookupGroups());
+    }
+
+    /**
+     * Same fake as {@link #mockDirectoryFetch}, except that init() starts no schedule, so the first
+     * refresh happens exactly when the test calls refreshGroups() - which is what makes the bridge's
+     * lifetime observable rather than a race against the scheduler.
+     */
+    private void mockDirectoryFetchWithoutSchedule(AtomicBoolean fetchShouldFail) {
+        new MockUp<LDAPGroupProvider>() {
+            @Mock
+            public void init() {
+            }
+
+            @Mock
+            public boolean fetchGroupsInto(Map<String, Set<String>> groups) throws NamingException {
+                if (fetchShouldFail.get()) {
+                    throw new NamingException("simulated directory failure");
+                }
+                groups.put(USER, NEW_GROUPS);
+                return true;
+            }
+        };
     }
 
     /**

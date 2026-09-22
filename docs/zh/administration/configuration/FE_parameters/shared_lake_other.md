@@ -384,6 +384,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
 - 引入版本: v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的连接超时，必须为正数。服务端在该时间内未接受连接时，CREATE 或 ALTER GROUP PROVIDER 语句失败，Group Provider 保持原有配置。若没有上限，一个永不响应的服务端不仅会卡住该语句，还会卡住每台 FE 的日志回放。
+- 引入版本: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的读取超时，必须为正数。限制已建立连接的服务端最多可以静默多久，超时后读取失败；失败后的行为见 `group_provider_http_connect_timeout_ms`。
+- 引入版本: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - 默认值: 300

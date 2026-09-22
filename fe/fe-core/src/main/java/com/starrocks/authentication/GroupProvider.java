@@ -64,17 +64,20 @@ public abstract class GroupProvider {
     }
 
     /**
-     * Hand this provider whatever the instance it is about to replace had already resolved, so that a
-     * swap does not start from nothing. Used on the replay path, where {@link #prepareForActivation()}
-     * must not run (it blocks on network I/O) and the fresh instance would otherwise answer every lookup
-     * with an empty result until its first background refresh completes - and forever if the directory
-     * is unreachable from that node. Inherited state is only a starting point: the first successful
-     * refresh replaces it.
+     * Called on the replay path right before this instance replaces {@code previous} in the manager's
+     * map. Implementations with a cache that takes a directory round trip to fill may answer lookups
+     * through {@code previous} until their own first refresh has completed, so a follower applying an
+     * ALTER never resolves an empty group set in between. The leader does not need this: its ALTER warms
+     * the replacement synchronously in {@link #prepareForActivation()} before publishing it.
      *
-     * <p>Default is a no-op, which is right for providers that hold no cache (unix) or read their source
-     * on every lookup (file).
+     * <p>Queries are forwarded, not data: the outgoing instance computes lookup keys with its own
+     * configuration against the cache it built itself, so a change to the key encoding
+     * ({@code ldap_user_search_attr}) between the two configurations cannot mismatch.
+     *
+     * <p>Default is a no-op, which is right for providers that are already warm when {@link #init()}
+     * returns (file) or hold no cache at all (unix).
      */
-    public void inheritCacheFrom(GroupProvider previous) {
+    public void serveFromUntilWarm(GroupProvider previous) {
 
     }
 

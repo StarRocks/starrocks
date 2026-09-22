@@ -383,6 +383,24 @@ This topic introduces the following types of FE configurations:
 - Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
 - Introduced in: v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Connect timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. If the server does not accept the connection within this time, the CREATE or ALTER GROUP PROVIDER statement fails and the group provider keeps its previous configuration. Without a bound, a server that never answers would block not only the statement but also journal replay on every FE.
+- Introduced in: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Read timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see `group_provider_http_connect_timeout_ms` for the failure behavior.
+- Introduced in: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - Default: 300

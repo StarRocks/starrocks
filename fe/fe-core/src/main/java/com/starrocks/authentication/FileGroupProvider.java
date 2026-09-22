@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 
@@ -26,6 +27,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.net.URL;
+import java.net.URLConnection;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
@@ -96,7 +98,15 @@ public class FileGroupProvider extends GroupProvider {
     @VisibleForTesting
     public InputStream getPath(String groupFileUrl) throws IOException {
         if (groupFileUrl.startsWith("http://") || groupFileUrl.startsWith("https://")) {
-            return new URL(groupFileUrl).openStream();
+            // Bounded on purpose: openStream() on its own waits forever on a server that accepts the
+            // connection and then goes silent, and this read is reached from the journal replay thread
+            // (replayCreateGroupProvider / replayAlterGroupProvider) as well as from a DDL session that
+            // cannot be cancelled. A timeout turns "the FE stops applying metadata" into "the statement
+            // fails and the provider keeps its previous configuration".
+            URLConnection connection = new URL(groupFileUrl).openConnection();
+            connection.setConnectTimeout(Config.group_provider_http_connect_timeout_ms);
+            connection.setReadTimeout(Config.group_provider_http_read_timeout_ms);
+            return connection.getInputStream();
         } else {
             String starRocksHome = System.getenv("STARROCKS_HOME");
             String filePath;

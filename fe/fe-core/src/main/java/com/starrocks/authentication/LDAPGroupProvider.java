@@ -160,6 +160,14 @@ public class LDAPGroupProvider extends GroupProvider {
     private boolean cacheWarmedByActivation = false;
 
     /**
+     * The instance this one replaced on the replay path, answering lookups on its behalf until this
+     * instance's first refresh has completed (see {@link #serveFromUntilWarm}). Null once that refresh
+     * has ended, whether it succeeded or not. Written on the replay thread and on the refresh thread,
+     * read on every login, hence volatile.
+     */
+    private volatile LDAPGroupProvider servingUntilWarm;
+
+    /**
      * The current ldap group provider is registered to the scheduling task in the thread pool.
      * which is mainly used to cancel the periodic scheduling when the group provider is destroyed.
      */
@@ -181,21 +189,18 @@ public class LDAPGroupProvider extends GroupProvider {
     }
 
     /**
-     * Adopts the cache of the instance this one replaces. Only meaningful on the replay path: the leader
-     * warms its own cache in {@link #prepareForActivation()}, while a follower may not be able to reach
-     * the directory at all, and serving the groups resolved under the previous configuration beats
-     * serving none until the first refresh lands. The map is never mutated in place - both
-     * {@link #refreshGroups()} and {@link #prepareForActivation()} publish a new one - so sharing the
-     * reference with the outgoing provider is safe.
+     * Forwards lookups to the outgoing instance until this one has loaded its own cache. Only the replay
+     * path calls it: the leader's ALTER has already run {@link #prepareForActivation()} by the time it
+     * publishes. If the outgoing instance is itself still bridging - two ALTERs replayed within one
+     * refresh interval - point at what it is serving from, so the bridge never targets an instance whose
+     * cache is still empty and never grows into a chain.
      */
     @Override
-    public void inheritCacheFrom(GroupProvider previous) {
+    public void serveFromUntilWarm(GroupProvider previous) {
         if (previous instanceof LDAPGroupProvider) {
             LDAPGroupProvider outgoing = (LDAPGroupProvider) previous;
-            this.userToGroupCache = outgoing.userToGroupCache;
-            // Carry the age with the content: an inherited cache that counted as never refreshed would be
-            // stale beyond any ldap_cache_max_stale_time and dropped by the first failed refresh.
-            this.lastSuccessfulRefreshTimeMs = outgoing.lastSuccessfulRefreshTimeMs;
+            LDAPGroupProvider outgoingBridge = outgoing.servingUntilWarm;
+            this.servingUntilWarm = outgoingBridge != null ? outgoingBridge : outgoing;
         }
     }
 
@@ -233,6 +238,12 @@ public class LDAPGroupProvider extends GroupProvider {
 
     @Override
     public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
+        LDAPGroupProvider bridge = servingUntilWarm;
+        if (bridge != null) {
+            // Forward the query, not the cache: the outgoing instance resolves it under its own
+            // configuration, so its key encoding is the one its cache was built with.
+            return bridge.getGroup(userIdentity, distinguishedName);
+        }
         String ldapUserSearchAttr = getLdapUserSearchAttr();
         String lookupKey;
         if (ldapUserSearchAttr != null) {
@@ -250,6 +261,24 @@ public class LDAPGroupProvider extends GroupProvider {
 
     public void refreshGroups() {
         LOG.info("refresh ldap group cache for group provider: {}", name);
+        try {
+            doRefreshGroups();
+        } finally {
+            if (servingUntilWarm != null) {
+                // The first refresh has ended, so this instance now stands on its own. If the refresh
+                // failed the cache is empty and stays empty until one succeeds: the journal has already
+                // committed this configuration, and answering from the retired one would grant groups
+                // the cluster no longer defines - denying access is the smaller of the two wrong answers.
+                if (userToGroupCache.isEmpty()) {
+                    LOG.error("group provider '{}' could not load its cache on its first refresh; this node " +
+                            "resolves no groups through it until a refresh succeeds", name);
+                }
+                servingUntilWarm = null;
+            }
+        }
+    }
+
+    private void doRefreshGroups() {
         Map<String, Set<String>> groups = new ConcurrentHashMap<>();
         boolean refreshed = false;
         try {

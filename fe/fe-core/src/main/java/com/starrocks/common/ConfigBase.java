@@ -262,6 +262,17 @@ public class ConfigBase {
                             + confVal);
                 }
                 break;
+            case "group_provider_http_connect_timeout_ms":
+            case "group_provider_http_read_timeout_ms":
+                // URLConnection reads 0 as "no timeout" - the unbounded read these exist to prevent - and
+                // rejects a negative value with an unchecked exception that would surface on the journal
+                // replay thread. Neither may reach the setter.
+                int timeoutMs = Integer.parseInt(confVal);
+                if (timeoutMs <= 0) {
+                    throw new InvalidConfException("'" + f.getName() + "' must be a positive number of " +
+                            "milliseconds, current value: " + confVal);
+                }
+                break;
             case "db_used_data_quota_update_interval_secs":
                 int intVal = Integer.parseInt(confVal);
                 if (intVal < 30) {

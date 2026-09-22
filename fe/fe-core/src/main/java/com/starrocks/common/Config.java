@@ -5331,6 +5331,26 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
 
+    /**
+     * Connect timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s)
+     * URL. Must be positive.
+     * <p>
+     * Without a bound the fetch can hang forever on a server that accepts the connection and never
+     * answers - and it runs not only on the statement's own session but on the journal replay thread,
+     * where it would stop the FE from applying this and every later metadata operation, and from becoming
+     * ready at all during a restart.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_connect_timeout_ms = 5000;
+
+    /**
+     * Read timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s) URL.
+     * Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see
+     * `group_provider_http_connect_timeout_ms` for why the fetch must be bounded at all.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_read_timeout_ms = 30000;
+
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 

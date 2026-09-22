@@ -1070,10 +1070,9 @@ public class AuthenticationMgr {
         GroupProvider previous = nameToGroupProviderMap.get(name);
         if (previous != null) {
             // Replay must not block on network I/O, so unlike the leader this node cannot warm the new
-            // instance up before publishing it. Without this the follower would answer every lookup with
-            // an empty group set until its first background refresh completes - and indefinitely if it
-            // cannot reach the directory - which is exactly the outage ALTER exists to avoid.
-            newProvider.inheritCacheFrom(previous);
+            // instance up before publishing it. Until its own first refresh lands it answers lookups
+            // through the instance it replaces, so a follower never resolves an empty group set in between.
+            newProvider.serveFromUntilWarm(previous);
         }
         try {
             newProvider.init();
