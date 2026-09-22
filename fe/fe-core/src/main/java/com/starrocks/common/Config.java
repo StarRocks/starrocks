@@ -3239,6 +3239,17 @@ public class Config extends ConfigBase {
             "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
     public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
 
+    // A collection query reads one partition under the scan caps above into constant-size sketches and in
+    // practice returns in well under a second. Without a ceiling of its own each one inherits whatever is
+    // left of statistic_collect_query_timeout - the budget for the entire job - so a single stuck query can
+    // spend it all and leave every partition after it uncollected. The default is a tenth of the default job
+    // budget: far above anything the scan caps can produce, while still bounding one query's share of the
+    // job. Mutable so a cold or distant object store can be given more room without a restart.
+    @ConfField(mutable = true, comment = "Per-query timeout for external-table analyze collection queries; " +
+            "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
+            "additionally bounded by statistic_collect_query_timeout.")
+    public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
