@@ -14,12 +14,16 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseEventListener;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Set;
+import java.util.stream.Collectors;
 
 public class WarehouseEPEventListener implements WarehouseEventListener {
     private static final Logger LOG = LogManager.getLogger(WarehouseEPEventListener.class);
@@ -46,6 +50,12 @@ public class WarehouseEPEventListener implements WarehouseEventListener {
     public void onDropWarehouse(Warehouse wh) {
         if (GlobalStateMgr.isCheckpointThread() || wh == null) {
             return;
+        }
+        // drop the per-warehouse metrics so no stale series survive the warehouse
+        try {
+            WarehouseMetricMgr.onDropWarehouse(wh.getId());
+        } catch (Exception e) {
+            LOG.warn("remove metrics of warehouse {} failed", wh.getName(), e);
         }
         // unregister warehouse to slot manager
         try {
@@ -87,6 +97,16 @@ public class WarehouseEPEventListener implements WarehouseEventListener {
     public void onDropCNGroup(Warehouse wh, long workerGroupId) {
         if (GlobalStateMgr.isCheckpointThread() || wh == null) {
             return;
+        }
+        // the dropped CN group is already gone from the warehouse; evict the series of every CN group that no longer exists
+        try {
+            if (wh instanceof LocalWarehouse) {
+                Set<String> remaining = ((LocalWarehouse) wh).getClusters().values().stream()
+                        .map(Cluster::getName).collect(Collectors.toSet());
+                WarehouseMetricMgr.onDropCNGroup(wh.getId(), remaining);
+            }
+        } catch (Exception e) {
+            LOG.warn("remove cngroup metrics of warehouse {} failed", wh.getName(), e);
         }
         // unregister cngroup to slot manager
         try {

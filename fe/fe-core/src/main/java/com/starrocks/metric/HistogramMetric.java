@@ -23,6 +23,7 @@ import com.google.api.client.util.Lists;
 import com.google.common.base.Joiner;
 
 import java.util.List;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.stream.Collectors;
 
 /**
@@ -32,10 +33,29 @@ import java.util.stream.Collectors;
 public class HistogramMetric extends Histogram {
     protected final List<MetricLabel> labels = Lists.newArrayList();
     private final String name;
+    // Exact running sum of every recorded value. The reservoir only keeps a sample, so
+    // count * snapshot.mean() is not a valid cumulative sum once it starts evicting.
+    private final LongAdder sum = new LongAdder();
 
     public HistogramMetric(String name) {
         super(new ExponentiallyDecayingReservoir());
         this.name = name;
+    }
+
+    @Override
+    public void update(int value) {
+        update((long) value);
+    }
+
+    @Override
+    public void update(long value) {
+        super.update(value);
+        sum.add(value);
+    }
+
+    /** Exact sum of all recorded values, consistent with {@link #getCount()}. */
+    public long getSum() {
+        return sum.sum();
     }
 
     public void addLabel(MetricLabel label) {

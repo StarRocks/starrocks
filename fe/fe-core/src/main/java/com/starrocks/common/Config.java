@@ -2017,6 +2017,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "whether to collect metrics for warehouse")
     public static boolean enable_collect_warehouse_metrics = true;
 
+    @ConfField(mutable = true, comment = "whether to emit the FE query metrics (request/query/error/timeout counters, "
+            + "QPS/RPS, and query latency) broken down per warehouse with warehouse_id/warehouse_name labels")
+    public static boolean enable_per_warehouse_query_metrics = true;
+
     /**
      * Decide how often to track the memory usage of the FE process
      */

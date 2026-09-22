@@ -62,6 +62,15 @@ This topic introduces the following types of FE configurations:
 - Description: When this item is set to `true`, the system will collect and export per-warehouse metrics. Enabling it adds warehouse-level metrics (slot/usage/availability) to the metric output and increases metric cardinality and collection overhead. Disable it to omit warehouse-specific metrics and reduce CPU/network and monitoring storage cost.
 - Introduced in: v3.5.0
 
+### `enable_per_warehouse_query_metrics`
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to emit the FE query metrics broken down per warehouse. When set to `true`, each FE node exports `warehouse_request_total`, `warehouse_query_total`, `warehouse_query_err`, `warehouse_query_timeout`, `warehouse_query_analysis_err`, `warehouse_query_internal_err`, `warehouse_slow_query`, `warehouse_qps`, `warehouse_rps`, `warehouse_query_latency`, and `warehouse_query_latency_ms` with `warehouse_id` and `warehouse_name` labels (and `cngroup_name` on the query metrics), in addition to the cluster-wide metrics. One set of series is created per warehouse that handles queries, so disable it if the number of warehouses makes the metric cardinality a concern. When it is turned off at runtime, the existing per-warehouse series are removed within one metric calculation interval (15 seconds).
+- Introduced in: -
+
 ### `enable_http_detail_metrics`
 
 - Default: false

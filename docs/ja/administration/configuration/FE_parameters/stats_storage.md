@@ -62,6 +62,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：この項目が `true` に設定されている場合、システムはウェアハウスごとのメトリックを収集してエクスポートします。これを有効にすると、ウェアハウスレベルのメトリック (スロット/使用量/可用性) がメトリック出力に追加され、メトリックのカーディナリティと収集オーバーヘッドが増加します。ウェアハウス固有のメトリックを省略し、CPU/ネットワークと監視ストレージコストを削減するには無効にします。
 - 導入時期：v3.5.0
 
+### `enable_per_warehouse_query_metrics`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：FE のクエリメトリックをウェアハウスごとに分けて出力するかどうか。`true` に設定すると、各 FE ノードはクラスタ全体のメトリックに加えて、`warehouse_id` と `warehouse_name` のラベル（クエリメトリックには `cngroup_name` も）を持つ `warehouse_request_total`、`warehouse_query_total`、`warehouse_query_err`、`warehouse_query_timeout`、`warehouse_query_analysis_err`、`warehouse_query_internal_err`、`warehouse_slow_query`、`warehouse_qps`、`warehouse_rps`、`warehouse_query_latency`、`warehouse_query_latency_ms` をエクスポートします。クエリを処理したウェアハウスごとに 1 組の系列が作成されるため、ウェアハウス数によりメトリックのカーディナリティが問題になる場合は無効にしてください。実行時に無効にすると、既存のウェアハウスごとの系列は 1 回のメトリック計算間隔（15 秒）以内に削除されます。
+- 導入時期：-
+
 ### `enable_http_detail_metrics`
 
 - デフォルト：false

@@ -213,11 +213,11 @@ public class PrometheusMetricVisitor extends MetricVisitor {
         sb.append(fullName).append("{quantile=\"0.999\"").append(delimiter).append(tagName).append("} ")
                 .append(snapshot.get999thPercentile()).append("\n");
         if (isTagNameEmpty) {
-            sb.append(fullName).append("_sum ").append(histogram.getCount() * snapshot.getMean()).append("\n");
+            sb.append(fullName).append("_sum ").append((double) histogram.getSum()).append("\n");
             sb.append(fullName).append("_count ").append(histogram.getCount()).append("\n");
         } else {
             sb.append(fullName).append("_sum").append("{").append(tagName).append("} ")
-                    .append(histogram.getCount() * snapshot.getMean()).append("\n");
+                    .append((double) histogram.getSum()).append("\n");
             sb.append(fullName).append("_count").append("{").append(tagName).append("} ")
                     .append(histogram.getCount()).append("\n");
         }

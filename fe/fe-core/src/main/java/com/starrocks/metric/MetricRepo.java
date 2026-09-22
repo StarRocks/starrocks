@@ -2204,4 +2204,17 @@ public final class MetricRepo {
     public static void removeMetric(Metric<?> metric) {
         STARROCKS_METRIC_REGISTER.removeMetric(metric);
     }
+
+    /**
+     * Register a labelled histogram so that it is rendered (as a Prometheus summary) on every collection.
+     * {@code registryName} must be unique per histogram instance, e.g. built with {@link MetricRegistry#name}.
+     */
+    public static void addHistogram(String registryName, HistogramMetric histogram) {
+        init();
+        METRIC_REGISTER.register(registryName, histogram);
+    }
+
+    public static void removeHistogram(String registryName) {
+        METRIC_REGISTER.remove(registryName);
+    }
 }

@@ -426,9 +426,19 @@ public class AuditEvent {
             return this;
         }
 
+        /** The warehouse the current statement was executed in (a query-scope hint may differ from the session). */
+        public String getWarehouse() {
+            return auditEvent.warehouse;
+        }
+
         public AuditEventBuilder setCNGroup(String cnGroup) {
             auditEvent.cnGroup = cnGroup;
             return this;
+        }
+
+        /** The CN group the current statement was executed in ("" when there is none). */
+        public String getCNGroup() {
+            return auditEvent.cnGroup;
         }
 
         public AuditEventBuilder setStmtId(long stmtId) {

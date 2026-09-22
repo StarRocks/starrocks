@@ -62,6 +62,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTimeTravelQueryAnalyzer;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
+import com.starrocks.metric.WarehouseMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlCommand;
@@ -311,25 +312,32 @@ public class ConnectProcessor {
                                     .increase(1L));
                 }
                 ResourceGroupMetricMgr.increaseQuery(ctx, 1L);
+                WarehouseMetricMgr.increaseQuery(ctx, 1L);
                 if (ctx.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                     // err query
                     MetricRepo.COUNTER_QUERY_ERR.increase(1L);
                     ResourceGroupMetricMgr.increaseQueryErr(ctx, 1L);
+                    WarehouseMetricMgr.increaseQueryErr(ctx, 1L);
                     //represent analysis err
                     if (ctx.getState().getErrType() == QueryState.ErrType.ANALYSIS_ERR) {
                         MetricRepo.COUNTER_QUERY_ANALYSIS_ERR.increase(1L);
+                        WarehouseMetricMgr.increaseQueryAnalysisErr(ctx, 1L);
                     } else if (ctx.getState().getErrType() == QueryState.ErrType.EXEC_TIME_OUT) {
                         MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
+                        WarehouseMetricMgr.increaseQueryTimeout(ctx, 1L);
                     } else {
                         MetricRepo.COUNTER_QUERY_INTERNAL_ERR.increase(1L);
+                        WarehouseMetricMgr.increaseQueryInternalErr(ctx, 1L);
                     }
                 } else {
                     // ok query
                     MetricRepo.COUNTER_QUERY_SUCCESS.increase(1L);
                     MetricRepo.HISTO_QUERY_LATENCY.update(elapseMs);
                     ResourceGroupMetricMgr.updateQueryLatency(ctx, elapseMs);
+                    WarehouseMetricMgr.updateQueryLatency(ctx, elapseMs);
                     if (elapseMs > Config.qe_slow_log_ms) {
                         MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
+                        WarehouseMetricMgr.increaseSlowQuery(ctx, 1L);
                     }
                 }
 
@@ -729,6 +737,7 @@ public class ConnectProcessor {
     // process COM_QUERY statement,
     protected void handleQuery() {
         MetricRepo.COUNTER_REQUEST_ALL.increase(1L);
+        WarehouseMetricMgr.increaseRequest(ctx, 1L);
         long beginMemory = getThreadAllocatedBytes(Thread.currentThread().getId());
         ctx.setCurrentThreadAllocatedMemory(beginMemory);
 

@@ -168,7 +168,7 @@ public class JsonMetricVisitor extends MetricVisitor {
                 ListUtils.union(labels, Collections.singletonList(new MetricLabel(QUANTILE, "0.999"))));
 
         buildMetric(fullName + "_sum", MILLISECONDS,
-                String.valueOf(histogram.getCount() * snapshot.getMean()), labels);
+                String.valueOf((double) histogram.getSum()), labels);
         buildMetric(fullName + "_count", NOUNIT,
                 String.valueOf(histogram.getCount()), labels);
     }

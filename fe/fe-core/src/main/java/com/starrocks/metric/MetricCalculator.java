@@ -126,6 +126,9 @@ public class MetricCalculator extends TimerTask {
         // catalog-type rates
         updateCatalogRates(interval);
 
+        // per-warehouse QPS/RPS and query latency quantiles (also evicts the series when the flag is turned off)
+        WarehouseMetricMgr.updateCalculatedQueryMetrics(interval);
+
         lastTs = currentTs;
 
         // query latency

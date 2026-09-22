@@ -62,6 +62,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 当此项设置为 `true` 时，系统将收集并导出每个仓库的指标。启用它会将仓库级别的指标（槽位/使用率/可用性）添加到指标输出中，并增加指标基数和收集开销。禁用它可省略仓库特定指标，并减少 CPU/网络和监控存储成本。
 - 引入版本: v3.5.0
 
+### `enable_per_warehouse_query_metrics`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否按仓库输出 FE 查询指标。设置为 `true` 时，每个 FE 节点会在集群级指标之外额外导出带有 `warehouse_id` 和 `warehouse_name` 标签（查询指标还带有 `cngroup_name` 标签）的 `warehouse_request_total`、`warehouse_query_total`、`warehouse_query_err`、`warehouse_query_timeout`、`warehouse_query_analysis_err`、`warehouse_query_internal_err`、`warehouse_slow_query`、`warehouse_qps`、`warehouse_rps`、`warehouse_query_latency` 和 `warehouse_query_latency_ms`。每个处理过查询的仓库会产生一组序列，如果仓库数量导致指标基数过高，可以禁用此项。在运行时关闭后，已有的按仓库序列会在一个指标计算周期（15 秒）内被移除。
+- 引入版本: -
+
 ### `enable_http_detail_metrics`
 
 - 默认值: false
