@@ -219,10 +219,15 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     @Override
     public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
+        // The door sits inside the location branch and before the try: a property map with nothing but
+        // an unrecognized key waits on nothing and must not be reported, and in error mode the catch
+        // below would rewrite the refusal into "Invalid location URI". Everything else about this loop is
+        // as it was -- which value wins and which exception a mixed map raises must not change here.
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 try {
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -427,6 +432,9 @@ public class IcebergRESTCatalog implements IcebergCatalog {
             return;
         }
 
+        // Storage, not the REST service: deleting the files a failed commit left behind. Outside the try,
+        // whose catch only logs -- an error-mode refusal swallowed there would be invisible.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         URI uri = new Path(fileLocations.get(0)).toUri();
         try {
             FileSystem fileSystem = FileSystem.get(uri, conf);

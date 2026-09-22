@@ -24,6 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
@@ -116,6 +117,9 @@ public class FlussMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listDbNames(ConnectContext context) {
+        // Every Fluss request is an async send awaited with Future.get(), which is where the thread
+        // actually waits -- so the door is the call site, one per admin request below.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         try {
             return this.admin.listDatabases().get();
         } catch (Exception e) {
@@ -126,6 +130,7 @@ public class FlussMetadata implements ConnectorMetadata {
 
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         try {
             return admin.listTables(dbName).get();
         } catch (Exception e) {
@@ -135,6 +140,8 @@ public class FlussMetadata implements ConnectorMetadata {
     }
 
     private Map<String, org.apache.fluss.metadata.PartitionInfo> loadPartitionInfo(String databaseName, String tableName) {
+        // The loader behind flussPartitionInfos.computeIfAbsent, so a cached listing never reaches here.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         TablePath identifier = TablePath.of(databaseName, tableName);
         try {
             List<org.apache.fluss.metadata.PartitionInfo> flussPartitions =
@@ -182,6 +189,8 @@ public class FlussMetadata implements ConnectorMetadata {
         if (this.databases.containsKey(dbName)) {
             return this.databases.get(dbName);
         }
+        // After the cache check: a hit is not a wait and must not be reported as one.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         try {
             this.admin.getDatabaseInfo(dbName).get();
             Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName);
@@ -211,6 +220,8 @@ public class FlussMetadata implements ConnectorMetadata {
         String realTblName = normalizeTableName(tblName);
         TablePath flussIdentifier = TablePath.of(dbName, realTblName);
 
+        // As in getDb: past the tables cache check above, this really goes to the coordinator.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         try {
             TableInfo tableInfo = this.admin.getTableInfo(flussIdentifier).get();
             if (tableInfo.hasPrimaryKey() && hasReadModeSuffix(tblName)) {
@@ -246,6 +257,7 @@ public class FlussMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) {
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         try {
             TablePath identifier = TablePath.of(dbName, normalizeTableName(tableName));
             return admin.tableExists(identifier).get();
@@ -309,6 +321,10 @@ public class FlussMetadata implements ConnectorMetadata {
         OffsetsInitializer.BucketOffsetsRetriever bucketOffsetsRetriever =
                 new BucketOffsetsRetrieverImpl(admin, identifier);
 
+        // From here on split planning is remote on both sides: the lake source reads the Paimon
+        // snapshot, and LakeSplitGenerator asks the coordinator for bucket offsets. The early returns
+        // above (no selected partitions) reach neither.
+        BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
         List<Predicate> lakePredicates = Lists.newArrayList();
         LakeSource<LakeSplit> lakeSource =
                 createLakeSource(flussTable.getTableInfo().getTablePath(), flussTable.buildRuntimeConf().toMap());
@@ -414,6 +430,8 @@ public class FlussMetadata implements ConnectorMetadata {
         FlussTable flussTable = (FlussTable) table;
         long rowCount = Config.default_statistics_output_row_count;
         if (flussTable.getTableNameSuffix().isEmpty()) {
+            // Only this branch asks Fluss for a row count; a suffixed table falls back to the config default.
+            BlockingCallValidator.validateNotUnderLock("fluss", catalogName);
             try {
                 TablePath tablePath = TablePath.of(flussTable.getCatalogDBName(), flussTable.getCatalogTableName());
                 rowCount = admin.getTableStats(tablePath).get().getRowCount();

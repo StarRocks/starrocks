@@ -223,7 +223,9 @@ public class LockInvariantViolations {
      *                because whoever trips this in CI has usually never touched the lock layer.
      * @param mode    already-resolved mode; the caller has it because it short-circuits on
      *                {@link Mode#OFF} before doing any work.
-     * @throws IllegalStateException in {@link Mode#ERROR}, refusing the operation.
+     * @throws LockInvariantViolationException in {@link Mode#ERROR}, refusing the operation. It is an
+         {@code IllegalStateException}, and nameable so that a generic {@code catch} can let it
+         through instead of rewriting it.
      */
     public static void report(String kind, String detail, String remedy, Mode mode) {
         if (mode == Mode.OFF) {
@@ -247,7 +249,7 @@ public class LockInvariantViolations {
         String message = LOG_TAG + " kind=" + kind + " site=" + callSite + " detail=" + quoted(detail);
 
         if (mode == Mode.ERROR) {
-            throw new IllegalStateException(message + " remedy=" + quoted(remedy));
+            throw new LockInvariantViolationException(message + " remedy=" + quoted(remedy));
         }
 
         if (shouldLog(site, System.currentTimeMillis(), Config.lock_invariant_violation_log_interval_ms)) {

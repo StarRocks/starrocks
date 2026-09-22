@@ -23,6 +23,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+import com.starrocks.common.util.concurrent.lock.LockInvariantViolationException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -69,10 +71,12 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     private final Configuration conf;
     private final HiveCatalog delegate;
+    private final String catalogName;
 
     @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
+        this.catalogName = name;
         String hmsTimeout = properties.getOrDefault(HIVE_METASTORE_TIMEOUT, String.valueOf(Config.hive_meta_store_timeout_s));
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         if (conf.get(METASTOREWAREHOUSE.varname) == null) {
@@ -117,6 +121,25 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     public IcebergHiveCatalog(HiveCatalog hiveCatalog, Configuration conf) {
         this.delegate = hiveCatalog;
         this.conf = conf;
+        this.catalogName = hiveCatalog == null ? null : hiveCatalog.name();
+    }
+
+    /**
+     * One request to the Hive metastore is about to be made; report it if this thread holds an FE
+     * metadata lock.
+     *
+     * <p><b>Why this class needs its own door even though the FE has a guarded HMS client.</b> It does
+     * not use it: iceberg's {@code HiveCatalog} keeps its own {@code ClientPool<IMetaStoreClient, ...>},
+     * so nothing here passes {@code HiveMetaClient}. Assuming otherwise left every load, list, drop,
+     * register and view request in this class unreported while a lock was held.
+     *
+     * <p>Kept as a private one-liner per catalog for the reason spelled out in {@code
+     * IcebergGlueCatalog}: the report names the first frame outside the class that called the guard, so
+     * a shared helper would make it point at this class instead of the caller that decided to go remote.
+     * It carries the guard's own name so one grep finds every door.
+     */
+    private void validateNotUnderLock() {
+        BlockingCallValidator.validateNotUnderLock(getIcebergCatalogType().transportTag(), catalogName);
     }
 
     @Override
@@ -126,16 +149,19 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        validateNotUnderLock();
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tableName) throws StarRocksConnectorException {
+        validateNotUnderLock();
         return delegate.tableExists(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
     public List<String> listAllDatabases(ConnectContext context) {
+        validateNotUnderLock();
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))
                 .collect(Collectors.toList());
@@ -144,10 +170,15 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public void createDB(ConnectContext context, String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
+        // The door sits inside the location branch and before the try: a property map with nothing but
+        // an unrecognized key waits on nothing and must not be reported, and in error mode the catch
+        // below would rewrite the refusal into "Invalid location URI". Everything else about this loop is
+        // as it was -- which value wins and which exception a mixed map raises must not change here.
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
+                BlockingCallValidator.validateNotUnderLock("remote-storage");
                 try {
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -162,6 +193,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         }
 
         Namespace ns = Namespace.of(dbName);
+        validateNotUnderLock();
         delegate.createNamespace(ns, properties);
     }
 
@@ -171,6 +203,9 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         try {
             database = getDB(context, dbName);
         } catch (Exception e) {
+            // getDB has a door, and in error mode it refuses rather than returns; rewritten as a
+            // connector error the refusal would read as an unreachable catalog.
+            LockInvariantViolationException.rethrowIfRefusal(e);
             LOG.error("Failed to access database {}", dbName, e);
             throw new MetaNotFoundException("Failed to access database " + dbName);
         }
@@ -184,11 +219,13 @@ public class IcebergHiveCatalog implements IcebergCatalog {
             throw new MetaNotFoundException("Database location is empty");
         }
 
+        validateNotUnderLock();
         delegate.dropNamespace(Namespace.of(dbName));
     }
 
     @Override
     public Database getDB(ConnectContext context, String dbName) {
+        validateNotUnderLock();
         Map<String, String> dbMeta = delegate.loadNamespaceMetadata(Namespace.of(dbName));
         Preconditions.checkNotNull(dbMeta.get(LOCATION_PROPERTY), "Database " + dbName + " doesn't exist location");
         return new Database(CONNECTOR_ID_GENERATOR.getNextId().asLong(), dbName, dbMeta.get(LOCATION_PROPERTY));
@@ -196,6 +233,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     @Override
     public List<String> listTables(ConnectContext context, String dbName) {
+        validateNotUnderLock();
         List<TableIdentifier> tableIdentifiers = delegate.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }
@@ -210,6 +248,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
             String location,
             SortOrder sortOrder,
             Map<String, String> properties) {
+        validateNotUnderLock();
         Table nativeTable =  delegate.buildTable(TableIdentifier.of(dbName, tableName), schema)
                 .withLocation(location)
                 .withPartitionSpec(partitionSpec)
@@ -222,32 +261,38 @@ public class IcebergHiveCatalog implements IcebergCatalog {
 
     @Override
     public boolean dropTable(ConnectContext context, String dbName, String tableName, boolean purge) {
+        validateNotUnderLock();
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
     }
 
     @Override
     public void renameTable(ConnectContext context, String dbName, String tblName, String newTblName)
             throws StarRocksConnectorException {
+        validateNotUnderLock();
         delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 
     @Override
     public ViewBuilder getViewBuilder(ConnectContext context, TableIdentifier identifier) {
+        validateNotUnderLock();
         return delegate.buildView(identifier);
     }
 
     @Override
     public boolean dropView(ConnectContext context, String dbName, String viewName) {
+        validateNotUnderLock();
         return delegate.dropView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
     }
 
     @Override
     public View getView(ConnectContext context, String dbName, String viewName) {
+        validateNotUnderLock();
         return delegate.loadView(TableIdentifier.of(convertDbNameToNamespace(dbName), viewName));
     }
 
     @Override
     public Map<String, String> loadNamespaceMetadata(ConnectContext context, Namespace ns) {
+        validateNotUnderLock();
         return ImmutableMap.copyOf(delegate.loadNamespaceMetadata(ns));
     }
 
@@ -257,6 +302,8 @@ public class IcebergHiveCatalog implements IcebergCatalog {
             return;
         }
 
+        // Storage, not the catalog: deleting the files a failed commit left behind.
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         URI uri = new Path(fileLocations.get(0)).toUri();
         try {
             FileSystem fileSystem = FileSystem.get(uri, conf);
@@ -272,6 +319,9 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public boolean registerTable(ConnectContext context, String dbName, String tableName, 
                                  String metadataFileLocation) {
+        // Outside the try: its catch turns everything into "Failed to register table", which in error
+        // mode would hide the refusal.
+        validateNotUnderLock();
         try {
             TableIdentifier tableIdentifier = TableIdentifier.of(dbName, tableName);
             Table table = delegate.registerTable(tableIdentifier, metadataFileLocation);

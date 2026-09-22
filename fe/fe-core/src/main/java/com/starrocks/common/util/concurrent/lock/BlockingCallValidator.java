@@ -76,14 +76,62 @@ import com.starrocks.common.util.concurrent.lock.LockInvariantViolations.Mode;
  * <ul>
  *     <li>BRPC to the BEs outside the publish path -- vacuum, compaction, delete, tablet stats --
  *         is awaited at a dozen scattered {@code Future.get()} sites with no shared helper.</li>
- *     <li>ODPS holds a third-party {@code Odps} object and calls it directly; constructing it is
- *         local, so there is no door on the way out.</li>
- *     <li>Delta Lake goes through {@code io.delta.kernel}'s engine, which reaches storage on its
- *         own rather than through the FE's file-system layer.</li>
+ *     <li>Paimon's per-call requests. {@code CachingPaimonCatalog} is the FE's own class, but it
+ *         extends paimon's {@code CachingCatalog} and its {@code getTable} delegates to
+ *         {@code super}, so the cache lookup happens above anything the FE can hook: a guard there,
+ *         or in {@code PaimonMetadata}, would report the hits. The honest door is a delegating
+ *         {@code Catalog} placed between that cache and the unwrapped catalog, which only misses
+ *         reach -- thirty-odd methods of boilerplate against a third-party interface, deferred
+ *         rather than judged unnecessary. Only the catalog's construction has a door today.</li>
+ *     <li>Iceberg's write path through {@code IcebergCachingFileIO}. A door there would have to wrap
+ *         the {@code OutputFile}, and iceberg picks its writer by that object's type -- so the wrapper
+ *         would change how the file gets written. {@code deleteFile} is guarded; {@code create()} is
+ *         not.</li>
+ *     <li>Building the Glue client. Whether {@code CatalogUtil.loadCatalog} goes remote depends on the
+ *         credential provider -- an instance profile queries IMDS, static credentials with an explicit
+ *         region contact nothing -- and a guard that fires either way reports waits that did not happen.
+ *         The jdbc and REST catalogs do contact their systems on construction, and are guarded there.</li>
  *     <li>{@code HdfsFsManager} -- the file-system layer used by broker-less load and
  *         {@code TableFunctionTable} -- caches an {@code HdfsFs} per identity and creates the
  *         underlying file system inside its per-scheme helpers, so a guard has to go in each of
  *         those rather than at {@code getFileSystem}'s entry, where it would report cache hits.</li>
+ * </ul>
+ *
+ * <p>ODPS and Delta Lake were on this list and are not any more. ODPS calls a third-party client
+ * directly, so its doors are the {@code OdpsMetadata} methods that call it -- the uncached ones and
+ * the three cache loaders. Delta Lake reads its log through {@code io.delta.kernel}, which reaches
+ * storage by itself rather than through the FE's file-system layer, so the doors are the FE-owned
+ * json and parquet handlers the engine is built with. Hudi's listing, Fluss's admin requests, and
+ * the iceberg glue / hadoop / jdbc catalogs plus the caching {@code FileIO} every iceberg catalog
+ * installs are guarded the same way.
+ *
+ * <h3>Storage, which is a transport like any other</h3>
+ *
+ * The FE reaches storage on its own in more places than the listing paths: {@code HiveUtils} is where
+ * the hive sink's commit and the hive DDL paths stat, rename, mkdir and delete, and all five iceberg
+ * catalogs -- glue, hadoop, jdbc, hive and rest -- check a database location and clean up the files a
+ * failed commit left behind. Those waits happen inside the lock the DDL took, so they are guarded too,
+ * tagged {@code remote-storage} rather than as the catalog: a location check is not a catalog request,
+ * and tagging it as one would point a slow-lock report at the wrong system.
+ *
+ * <p>Four rules follow from all this, and every one of them has been got wrong at least once:
+ * <ul>
+ *     <li><b>A handle is not a request, and wrapping the handle is not free.</b> {@code
+ *         FileIO.newOutputFile} contacts nothing -- the wait is in {@code create()} on the object it
+ *         returns -- but that object is also what iceberg dispatches on: {@code Parquet.WriteBuilder}
+ *         and {@code ParquetIO} look for {@code HadoopOutputFile} and for {@code NativelyEncryptedFile}.
+ *         Wrapping it to add a guard would move the writer onto its generic path and drop the Hadoop
+ *         configuration, the block size and native encryption. So iceberg's write path has no door; see
+ *         the gap list above.</li>
+ *     <li><b>Guard below the local branches, not at the method's entry.</b> A method that validates its
+ *         arguments, answers from a constant, or delegates to a metastore that carries its own guard
+ *         must not report a wait for those paths -- see {@code KuduMetadata}, whose HMS-backed branches
+ *         would otherwise be reported as kudu and counted twice.</li>
+ *     <li><b>Guard outside a {@code try} whose {@code catch} rewrites or swallows.</b> In {@code error}
+ *         mode the guard throws, and a catch that turns everything into "Invalid location URI" -- or
+ *         that only logs and carries on, as the hive drop-database and create-table cleanups do --
+ *         would turn the refusal into a lie. Where that means hoisting local validation above the
+ *         remote part, hoist it.</li>
  * </ul>
  *
  * <h3>What it deliberately does not do</h3>

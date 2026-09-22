@@ -337,6 +337,14 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
      * TableType.STARROCKS (enterprise-only) only ever exists inside a `starrocks` external catalog, so it
      * abstains. Asserting on the predicate rather than on a query because StarRocksConnector.bindConfig calls
      * feClient.getCapabilities(), so creating such a catalog in a UT would try to reach a remote FE.
+     *
+     * <p>That is also why there is no end-to-end "statistics are not fetched under the lock" test for this
+     * connector, the one the lock report asked for: besides bindConfig, building the fragment calls
+     * {@code StarRocksFeClient.fromCatalog(...).prepareScan(...)}, so a UT cannot plan such a statement at
+     * all -- it needs a live remote FE, i.e. an integration test. The property itself does not depend on the
+     * connector: the verdict below is what releases the lock, and every {@code compute*ScanNode} runs after
+     * that release. {@code FlussScanTest#testFlussMetadataIsNotFetchedUnderTheLock} pins the same shape end
+     * to end for a connector a UT can create.
      */
     @Test
     public void testStarRocksExternalTableAbstains() {
