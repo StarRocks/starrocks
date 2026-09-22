@@ -30,19 +30,32 @@ public class LanceTable extends Table {
     @SerializedName(value = "catalogName")
     private final String catalogName;
 
+    @SerializedName(value = "dbName")
+    private final String dbName;
+
     public LanceTable(long id, String name, List<Column> schema, String uri) {
         this(id, name, schema, uri, null);
     }
 
     public LanceTable(long id, String name, List<Column> schema, String uri, String catalogName) {
+        this(id, name, schema, uri, catalogName, "");
+    }
+
+    public LanceTable(long id, String name, List<Column> schema, String uri, String catalogName, String dbName) {
         super(id, name, TableType.LANCE, schema);
         this.uri = uri;
         this.catalogName = catalogName;
+        this.dbName = dbName;
     }
 
     @Override
     public String getCatalogName() {
         return catalogName;
+    }
+
+    @Override
+    public String getCatalogDBName() {
+        return dbName == null ? "" : dbName;
     }
 
     public String getUri() {
@@ -66,7 +79,7 @@ public class LanceTable extends Table {
         tLanceTable.setLance_dataset_uri(uri);
 
         TTableDescriptor tTableDescriptor =
-                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, name, "");
+                new TTableDescriptor(id, TTableType.LANCE_TABLE, fullSchema.size(), 0, name, getCatalogDBName());
         tTableDescriptor.setLanceTable(tLanceTable);
         return tTableDescriptor;
     }
