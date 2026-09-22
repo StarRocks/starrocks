@@ -45,6 +45,16 @@ public class LanceTypeUtilsTest {
     }
 
     @Test
+    public void testUnsignedAndLargeTypes() {
+        assertEquals("short", LanceTypeUtils.fromArrowType(new ArrowType.Int(8, false)));
+        assertEquals("int", LanceTypeUtils.fromArrowType(new ArrowType.Int(16, false)));
+        assertEquals("bigint", LanceTypeUtils.fromArrowType(new ArrowType.Int(32, false)));
+        assertEquals("decimal(20,0)", LanceTypeUtils.fromArrowType(new ArrowType.Int(64, false)));
+        assertEquals("string", LanceTypeUtils.fromArrowType(ArrowType.LargeUtf8.INSTANCE));
+        assertEquals("binary", LanceTypeUtils.fromArrowType(ArrowType.LargeBinary.INSTANCE));
+    }
+
+    @Test
     public void testFromArrowTypeFloat() {
         assertEquals("float",
                 LanceTypeUtils.fromArrowType(

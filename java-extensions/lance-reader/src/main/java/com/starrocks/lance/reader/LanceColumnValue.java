@@ -25,9 +25,15 @@ import org.apache.arrow.vector.FieldVector;
 import org.apache.arrow.vector.Float4Vector;
 import org.apache.arrow.vector.Float8Vector;
 import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.LargeVarBinaryVector;
+import org.apache.arrow.vector.LargeVarCharVector;
 import org.apache.arrow.vector.SmallIntVector;
 import org.apache.arrow.vector.TimeStampVector;
 import org.apache.arrow.vector.TinyIntVector;
+import org.apache.arrow.vector.UInt1Vector;
+import org.apache.arrow.vector.UInt2Vector;
+import org.apache.arrow.vector.UInt4Vector;
+import org.apache.arrow.vector.UInt8Vector;
 import org.apache.arrow.vector.VarBinaryVector;
 import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.complex.BaseListVector;
@@ -65,16 +71,25 @@ public class LanceColumnValue implements ColumnValue {
 
     @Override
     public short getShort() {
+        if (vector instanceof UInt1Vector) {
+            return (short) Byte.toUnsignedInt(((UInt1Vector) vector).get(rowIndex));
+        }
         return ((SmallIntVector) vector).get(rowIndex);
     }
 
     @Override
     public int getInt() {
+        if (vector instanceof UInt2Vector) {
+            return ((UInt2Vector) vector).get(rowIndex);
+        }
         return ((IntVector) vector).get(rowIndex);
     }
 
     @Override
     public long getLong() {
+        if (vector instanceof UInt4Vector) {
+            return Integer.toUnsignedLong(((UInt4Vector) vector).get(rowIndex));
+        }
         return ((BigIntVector) vector).get(rowIndex);
     }
 
@@ -94,6 +109,9 @@ public class LanceColumnValue implements ColumnValue {
             byte[] bytes = ((VarCharVector) vector).get(rowIndex);
             return new String(bytes, StandardCharsets.UTF_8);
         }
+        if (vector instanceof LargeVarCharVector) {
+            return new String(((LargeVarCharVector) vector).get(rowIndex), StandardCharsets.UTF_8);
+        }
         return vector.getObject(rowIndex).toString();
     }
 
@@ -102,11 +120,17 @@ public class LanceColumnValue implements ColumnValue {
         if (vector instanceof VarBinaryVector) {
             return ((VarBinaryVector) vector).get(rowIndex);
         }
+        if (vector instanceof LargeVarBinaryVector) {
+            return ((LargeVarBinaryVector) vector).get(rowIndex);
+        }
         return new byte[0];
     }
 
     @Override
     public BigDecimal getDecimal() {
+        if (vector instanceof UInt8Vector) {
+            return new BigDecimal(Long.toUnsignedString(((UInt8Vector) vector).get(rowIndex)));
+        }
         if (vector instanceof DecimalVector) {
             return ((DecimalVector) vector).getObject(rowIndex);
         }
