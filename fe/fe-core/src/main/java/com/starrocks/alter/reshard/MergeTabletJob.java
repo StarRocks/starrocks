@@ -464,7 +464,7 @@ public class MergeTabletJob extends TabletReshardJob {
 
     @Override
     protected void registerReshardingTabletsOnRestart() {
-        if (jobState == JobState.PENDING || jobState.isFinalState()) {
+        if (!jobState.redirectsPublish()) {
             return;
         }
 

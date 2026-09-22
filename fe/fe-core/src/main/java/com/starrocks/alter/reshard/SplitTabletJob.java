@@ -296,6 +296,9 @@ public class SplitTabletJob extends TabletReshardJob {
                                         for (long toRemoveTabletId : toRemoveTabletIds) {
                                             newIndex.removeTablet(toRemoveTabletId);
                                         }
+                                        LOG.warn("Tablet {} was not split, inheriting it into tablet {} and "
+                                                + "dropping {}. {}", splittingTablet.getOldTabletId(),
+                                                newTabletIds.get(0), toRemoveTabletIds, this);
                                         splittingTablet.fallbackToIdenticalTablet();
                                         break;
                                     }
@@ -457,6 +460,7 @@ public class SplitTabletJob extends TabletReshardJob {
     // Correspond to runRunningJob()
     @Override
     protected void replayCleaningJob() {
+        removeDroppedNewTabletsFromInvertedIndex();
         addNewMaterializedIndexes();
         LOG.info("Split tablet job replayed cleaning job. {}", this);
     }
@@ -487,7 +491,7 @@ public class SplitTabletJob extends TabletReshardJob {
 
     @Override
     protected void registerReshardingTabletsOnRestart() {
-        if (jobState == JobState.PENDING || jobState.isFinalState()) {
+        if (!jobState.redirectsPublish()) {
             return;
         }
 
@@ -877,6 +881,49 @@ public class SplitTabletJob extends TabletReshardJob {
                 }
             }
         }
+    }
+
+    /**
+     * Take back the new tablets the leader's identical fallback dropped from a split family.
+     * replayPreparingJob put every preallocated id into the inverted index; the ones the fallback
+     * discarded never reach a materialized index, so they would otherwise stay there belonging to
+     * nothing and keep resolving by tablet id to an index that does not hold them.
+     *
+     * <p>What was dropped is read from the resharding-tablet registry, which still holds the family
+     * as of the previous journal entry, because TabletReshardJobMgr refreshes it only after
+     * replay() returns. Deriving it that way rather than from persisted state also covers a
+     * CLEANING record journaled by an FE that never recorded the fallback, and makes this a no-op
+     * on an FE that came up from an image already at CLEANING -- that one registered the shrunken
+     * family and never put the dropped ids into its inverted index in the first place. Likewise a
+     * no-op on the leader, which never replays and removed them from the inverted index itself.
+     */
+    private void removeDroppedNewTabletsFromInvertedIndex() {
+        TabletReshardJobMgr tabletReshardJobMgr = GlobalStateMgr.getCurrentState().getTabletReshardJobMgr();
+        List<Long> droppedTabletIds = new ArrayList<>();
+        for (ReshardingPhysicalPartition reshardingPhysicalPartition : reshardingPhysicalPartitions.values()) {
+            long commitVersion = reshardingPhysicalPartition.getCommitVersion();
+            for (ReshardingMaterializedIndex reshardingIndex : reshardingPhysicalPartition
+                    .getReshardingIndexes().values()) {
+                for (ReshardingTablet reshardingTablet : reshardingIndex.getReshardingTablets()) {
+                    ReshardingTablet registered = tabletReshardJobMgr
+                            .getReshardingTablet(reshardingTablet.getFirstOldTabletId(), commitVersion);
+                    if (registered == null) {
+                        continue;
+                    }
+                    // Hoisted: an identical tablet builds a fresh singleton on every call.
+                    List<Long> keptNewTabletIds = reshardingTablet.getNewTabletIds();
+                    for (long tabletId : registered.getNewTabletIds()) {
+                        if (!keptNewTabletIds.contains(tabletId)) {
+                            droppedTabletIds.add(tabletId);
+                        }
+                    }
+                }
+            }
+        }
+        // Batched: deleteTablet() takes the inverted index's global mutation lock on every call, and
+        // that lock is held in long batches by BE tablet reports. deleteTablets() no-ops on an empty
+        // list, so a job where nothing fell back still takes the lock zero times.
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(droppedTabletIds);
     }
 
     private void removeTabletsFromInvertedIndex() {
