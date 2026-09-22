@@ -405,11 +405,23 @@ public:
         ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &num_objects));
         column->reset_column();
         auto& pool = column->get_pool();
+        if (num_objects > static_cast<size_t>(end - buff) / sizeof(uint64_t)) {
+            return Status::Corruption("Truncated object column");
+        }
         pool.reserve(num_objects);
-        for (int i = 0; i < num_objects; i++) {
+        for (uint32_t i = 0; i < num_objects; i++) {
             uint64_t serialized_size = 0;
             ASSIGN_OR_RETURN(buff, read_little_endian_64(buff, end, &serialized_size));
-            pool.emplace_back(Slice(buff, serialized_size));
+            if (serialized_size > static_cast<uint64_t>(end - buff)) {
+                return Status::Corruption("Truncated serialized object");
+            }
+            if constexpr (std::is_same_v<T, PercentileValue>) {
+                if (!column->deserialize_and_append(Slice(buff, serialized_size))) {
+                    return Status::Corruption("Invalid serialized percentile");
+                }
+            } else {
+                pool.emplace_back(Slice(buff, serialized_size));
+            }
             buff += serialized_size;
         }
         return buff;
