@@ -38,7 +38,6 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,8 +45,6 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
-import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 public class LanceScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(LanceScanNode.class);
@@ -153,39 +150,10 @@ public class LanceScanNode extends ScanNode {
             output.append(prefix).append("PREDICATES: ").append(
                     explainExpr(conjuncts)).append("\n");
         }
-        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
-            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
-                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
-        }
-
-        if (detailLevel != VERBOSE) {
-            output.append(prefix).append(String.format("cardinality=%s", cardinality));
-            output.append("\n");
-        }
-
-        output.append("\n");
-        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
-
+        ScanNodeExplainHelper.appendPredicates(output, prefix, this, scanNodePredicates);
+        ScanNodeExplainHelper.appendStatistics(output, prefix, detailLevel, this);
         if (detailLevel == TExplainLevel.VERBOSE) {
-            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
-                Type type = slotDescriptor.getOriginType();
-                if (type.isComplexType()) {
-                    output.append(prefix)
-                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
-                }
-            }
+            ScanNodeExplainHelper.appendPrunedTypes(output, prefix, desc);
         }
 
         return output.toString();
