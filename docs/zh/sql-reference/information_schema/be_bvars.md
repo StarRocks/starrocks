@@ -13,4 +13,4 @@ description: "be_bvars 提供 bRPC 的统计信息，包括 RPC 延迟、QPS 等
 | -------- | --------------------------------- |
 | BE_ID    | bvar 所在的 BE 的 ID。             |
 | NAME     | bvar 名称。                       |
-| VALUE     | bvar 的值。                       |
+| VALUE    | bvar 导出的值。对于计数器或瞬时值类 bvar，该值为单个数字；对于延迟、QPS 等 recorder 类 bvar，该值为 bvar 为该指标渲染的统计摘要。 |

@@ -15,9 +15,9 @@ description: "views 提供所有用户定义视图的信息。"
 | TABLE_SCHEMA         | 视图所属的数据库名称。                                       |
 | TABLE_NAME           | 视图的名称。                                                 |
 | VIEW_DEFINITION      | 提供视图定义的SELECT语句。                                   |
-| CHECK_OPTION         | CHECK_OPTION 属性的值。该值是 NONE、CASCADE 或 LOCAL 中的一个。 |
-| IS_UPDATABLE         | 视图是否可更新。如果对视图的 UPDATE 和 DELETE（以及类似的操作）是合法的，则设置标志为 YES（true）。否则，标志设置为 NO（false）。如果视图不可更新，诸如 UPDATE、DELETE 和 INSERT 等语句是非法的，会被拒绝。 |
-| DEFINER              | 创建视图的用户。                                             |
-| SECURITY_TYPE        |                                                              |
-| CHARACTER_SET_CLIENT |                                                              |
-| COLLATION_CONNECTION |                                                              |
+| CHECK_OPTION         | CHECK_OPTION 属性的值。StarRocks 的视图不支持 WITH CHECK OPTION，因此该值始终为 NONE。 |
+| IS_UPDATABLE         | 视图是否可更新。该列不填充数据，因此该值始终为 NO。 |
+| DEFINER              | 创建视图的用户。该列不填充数据，因此该值始终为空字符串。 |
+| SECURITY_TYPE        | 视图的 SQL SECURITY 特性。该列不填充数据，因此该值始终为空字符串，不反映 [CREATE VIEW](../sql-statements/View/CREATE_VIEW.md) 的 SECURITY 子句。 |
+| CHARACTER_SET_CLIENT | 创建该视图的客户端连接所使用的字符集。该值始终为 utf8。 |
+| COLLATION_CONNECTION | 创建该视图的客户端连接所使用的排序规则。该值始终为 utf8_general_ci。 |
