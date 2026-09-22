@@ -118,6 +118,7 @@ SELECT count(*) FROM t;
 
 DROP DATABASE test_dictmapping_nested_null_key;
 
+<<<<<<< HEAD
 -- name: test_dictmapping_DictQueryOperator_bug @native
 CREATE DATABASE test_dictmapping_DictQueryOperator_bug;
 USE test_dictmapping_DictQueryOperator_bug;
@@ -152,6 +153,11 @@ DROP DATABASE test_dictmapping_DictQueryOperator_bug;
 CREATE DATABASE test_dictmapping_add_generated_column_with_dict_mapping;
 USE test_dictmapping_add_generated_column_with_dict_mapping;
 
+=======
+-- name: test_dictmapping_nested_rewritten_key @native
+CREATE DATABASE test_dictmapping_nested_rewritten_key;
+use test_dictmapping_nested_rewritten_key;
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
 create table dict(col_1 int, col_2 string, col_3 bigint not null auto_increment, col_4 int)
 primary key(col_1, col_2)
 distributed by hash(col_1, col_2)
@@ -161,13 +167,18 @@ PROPERTIES (
 
 INSERT INTO dict VALUES (1, "abc", default, 0);
 
+<<<<<<< HEAD
 create table t_dictmapping_add_generated_column_with_dict_mapping(col_1 int, col_2 string)
+=======
+create table t(col_1 int, col_2 string)
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
 primary key(col_1)
 distributed by hash(col_1)
 PROPERTIES (
 "replication_num" = "1"
 );
 
+<<<<<<< HEAD
 INSERT INTO t_dictmapping_add_generated_column_with_dict_mapping VALUES (1, "abc");
 ALTER TABLE t_dictmapping_add_generated_column_with_dict_mapping ADD COLUMN newcol BIGINT AS
 dict_mapping("dict", col_1, col_2);
@@ -240,3 +251,20 @@ PROPERTIES (
 INSERT INTO t_dictmapping_multiple_open_crash VALUES (1, DEFAULT);
 select dict_mapping("t_dictmapping_multiple_open_crash", k) from t where dict_mapping("t_dictmapping_multiple_open_crash", k) != 0;
 DROP TABLE t_dictmapping_multiple_open_crash;
+=======
+INSERT INTO t VALUES (1, "abc");
+
+-- The single-level call this is built from, as a reference for what the dictionary holds.
+SELECT dict_mapping("dict", col_1, col_2) FROM t;
+
+-- test_dictmapping_nested_null_key keys both calls off col_1, so nothing under the outer
+-- dict_mapping is ever rewritten and its shuttle hands the operator back untouched. Keying the
+-- inner call off a different column does rewrite a child, and BaseScalarOperatorShuttle then looks
+-- up a clone function that was never registered for DictQueryOperator: planning died on a
+-- NullPointerException and the client got a bare "Unknown error" with nothing to act on. The
+-- statement is still expected to fail -- the inner lookup does not produce a valid composite key --
+-- but it has to fail in the engine, with a message that says what went wrong.
+SELECT dict_mapping("dict", col_1, dict_mapping("dict", col_2, col_2)) FROM t;
+
+DROP DATABASE test_dictmapping_nested_rewritten_key;
+>>>>>>> f440b24 ([BugFix] Register the dict operators the scalar shuttle has to clone (#79310))
