@@ -75,7 +75,7 @@ import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
-import static com.starrocks.type.AnyGeographyType.ANY_GEOGRAPHY;
+import static com.starrocks.type.AnyGeographyType.GEOGRAPHY;
 import static com.starrocks.type.AnyMapType.ANY_MAP;
 import static com.starrocks.type.AnyStructType.ANY_STRUCT;
 import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
@@ -350,9 +350,6 @@ def generate_fe(path):
         'TAIModelSource.${model_source}, ${ret}${args_types});'
     )
 
-    def fe_type(type_name):
-        return "ANY_GEOGRAPHY" if type_name == "GEOGRAPHY" else type_name
-
     fn_named_template = Template('''{
             List<Type> argTypes${id} = Lists.newArrayList(${args_types_list});
             Function fn${id} = ScalarFunction.createVectorizedBuiltin(${id}L, "${name}", argTypes${id}, ${has_vargs}, ${ret});
@@ -366,14 +363,11 @@ ${default_values}
     def gen_fe_fn(fnm):
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
         fnm["args_types"] = fnm["args_types"] + ", ".join(
-            [fe_type(i) for i in fnm["args"] if i != "..."]
+            [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
-        fe_fnm = dict(fnm)
-        fe_fnm["ret"] = fe_type(fnm["ret"])
-
         if fnm.get("binary_type") == "AI":
-            return ai_fn_template.substitute(fe_fnm)
+            return ai_fn_template.substitute(fnm)
 
         # Check if function has named arguments
         if fnm.get("named_args"):
@@ -382,19 +376,19 @@ ${default_values}
             default_lines = [generate_default_value(p, fnm["id"]) for p in named_args]
             default_values = '\n'.join([d for d in default_lines if d])
             # List of argument types for List<Type> constructor
-            args_types_list = ", ".join([fe_type(i) for i in fnm["args"] if i != "..."])
+            args_types_list = ", ".join([i for i in fnm["args"] if i != "..."])
 
             return fn_named_template.substitute(
                 id=fnm["id"],
                 name=fnm["name"],
                 has_vargs=fnm["has_vargs"],
-                ret=fe_type(fnm["ret"]),
+                ret=fnm["ret"],
                 args_types_list=args_types_list,
                 arg_names=arg_names,
                 default_values=default_values
             )
         else:
-            return fn_template.substitute(fe_fnm)
+            return fn_template.substitute(fnm)
 
     value = dict()
     value["license"] = license_string

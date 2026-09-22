@@ -334,9 +334,9 @@ public class NativeGeoTypeTest {
                 assertTrue(type.matchesType(AnyElementType.ANY_ELEMENT));
                 assertTrue(AnyElementType.ANY_ELEMENT.matchesType(type));
                 assertEquals(primitive == PrimitiveType.GEOGRAPHY,
-                        type.matchesType(AnyGeographyType.ANY_GEOGRAPHY));
+                        type.matchesType(AnyGeographyType.GEOGRAPHY));
                 assertEquals(primitive == PrimitiveType.GEOGRAPHY,
-                        AnyGeographyType.ANY_GEOGRAPHY.matchesType(type));
+                        AnyGeographyType.GEOGRAPHY.matchesType(type));
                 assertFalse(type.matchesType(AnyArrayType.ANY_ARRAY));
                 assertFalse(type.matchesType(AnyMapType.ANY_MAP));
                 assertFalse(type.matchesType(AnyStructType.ANY_STRUCT));

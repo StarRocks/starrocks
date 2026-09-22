@@ -15,7 +15,7 @@
 package com.starrocks.type;
 
 public class AnyGeographyType extends PseudoType {
-    public static final AnyGeographyType ANY_GEOGRAPHY = new AnyGeographyType();
+    public static final AnyGeographyType GEOGRAPHY = new AnyGeographyType();
 
     @Override
     public boolean equals(Object obj) {
