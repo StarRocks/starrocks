@@ -15,68 +15,37 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.KuduTable;
 import com.starrocks.catalog.LanceTable;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.expression.BoolLiteral;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.IntegerType;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.EnumSource;
 
-import java.util.Arrays;
 import java.util.List;
-import java.util.stream.Stream;
 
-import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
-
-public class ScanNodeExplainTest {
-    private static Stream<Arguments> scanCases() {
-        return Stream.of(false, true).flatMap(kudu -> Arrays.stream(TExplainLevel.values())
-                .map(level -> Arguments.of(kudu, level)));
-    }
-
-    private ScanNode newScan(boolean kudu) {
+public class LanceScanNodeExplainTest {
+    private LanceScanNode newScan() {
         DescriptorTable descriptors = new DescriptorTable();
         TupleDescriptor tuple = descriptors.createTupleDescriptor();
-        if (kudu) {
-            GlobalStateMgr state = mock(GlobalStateMgr.class, RETURNS_DEEP_STUBS);
-            new MockUp<GlobalStateMgr>() {
-                @Mock
-                public GlobalStateMgr getCurrentState() {
-                    return state;
-                }
-            };
-            KuduTable table = mock(KuduTable.class);
-            when(table.getName()).thenReturn("vectors");
-            when(table.getCatalogName()).thenReturn("kudu_catalog");
-            tuple.setTable(table);
-        } else {
-            tuple.setTable(new LanceTable(1, "vectors", List.of(), "file:///tmp/vectors.lance"));
-        }
+        tuple.setTable(new LanceTable(1, "vectors", List.of(), "file:///tmp/vectors.lance"));
         SlotDescriptor scalar = descriptors.addSlotDescriptor(tuple);
         scalar.setColumn(new Column("id", IntegerType.INT));
         SlotDescriptor array = descriptors.addSlotDescriptor(tuple);
         array.setColumn(new Column("embedding", new ArrayType(IntegerType.INT)));
-        ScanNode scan = kudu ? new KuduScanNode(new PlanNodeId(0), tuple, "KuduScanNode")
-                : new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode");
+        LanceScanNode scan = new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode");
         scan.cardinality = 12;
         scan.avgRowSize = 8.5F;
         return scan;
     }
 
     @ParameterizedTest
-    @MethodSource("scanCases")
-    public void testEmptyPredicatesPreserveExplainLayout(boolean kudu, TExplainLevel level) {
-        ScanNode scan = newScan(kudu);
+    @EnumSource(TExplainLevel.class)
+    public void testEmptyPredicatesPreserveExplainLayout(TExplainLevel level) {
+        LanceScanNode scan = newScan();
         String expected = "  TABLE: vectors\n"
                 + (level == TExplainLevel.VERBOSE ? "" : "  cardinality=12\n")
                 + "\n  avgRowSize=8.5\n"
@@ -85,11 +54,10 @@ public class ScanNodeExplainTest {
     }
 
     @ParameterizedTest
-    @MethodSource("scanCases")
-    public void testAllPredicateGroupsPreserveExplainLayout(boolean kudu, TExplainLevel level) {
-        ScanNode scan = newScan(kudu);
-        HDFSScanNodePredicates predicates = kudu ? ((KuduScanNode) scan).getScanNodePredicates()
-                : ((LanceScanNode) scan).getScanNodePredicates();
+    @EnumSource(TExplainLevel.class)
+    public void testAllPredicateGroupsPreserveExplainLayout(TExplainLevel level) {
+        LanceScanNode scan = newScan();
+        HDFSScanNodePredicates predicates = scan.getScanNodePredicates();
         scan.sortColumn = "id";
         scan.getConjuncts().add(new BoolLiteral(false));
         predicates.getPartitionConjuncts().addAll(List.of(new BoolLiteral(true), new BoolLiteral(false)));
@@ -97,7 +65,7 @@ public class ScanNodeExplainTest {
         predicates.getNoEvalPartitionConjuncts().add(new BoolLiteral(true));
         predicates.getMinMaxConjuncts().add(new BoolLiteral(false));
         String expected = "  TABLE: vectors\n  SORT COLUMN: id\n"
-                + (kudu ? "" : "  PREDICATES: FALSE\n")
+                + "  PREDICATES: FALSE\n"
                 + "  PARTITION PREDICATES: TRUE, FALSE\n"
                 + "  NON-PARTITION PREDICATES: FALSE\n"
                 + "  NO EVAL-PARTITION PREDICATES: TRUE\n"

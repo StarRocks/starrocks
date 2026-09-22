@@ -39,6 +39,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
@@ -50,6 +51,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 import static java.nio.charset.StandardCharsets.UTF_8;
 
 public class KuduScanNode extends ScanNode {
@@ -172,10 +174,40 @@ public class KuduScanNode extends ScanNode {
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
-        ScanNodeExplainHelper.appendPredicates(output, prefix, this, scanNodePredicates);
-        ScanNodeExplainHelper.appendStatistics(output, prefix, detailLevel, this);
+        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("PARTITION PREDICATES: ").append(
+                    explainExpr(scanNodePredicates.getPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
+                    explainExpr(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getNoEvalPartitionConjuncts().isEmpty()) {
+            output.append(prefix).append("NO EVAL-PARTITION PREDICATES: ").append(
+                    explainExpr(scanNodePredicates.getNoEvalPartitionConjuncts())).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    explainExpr(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
+
+        // TODO: support it in verbose
+        if (detailLevel != VERBOSE) {
+            output.append(prefix).append(String.format("cardinality=%s", cardinality));
+            output.append("\n");
+        }
+
+        output.append("\n");
+        output.append(prefix).append(String.format("avgRowSize=%s\n", avgRowSize));
+
         if (detailLevel == TExplainLevel.VERBOSE) {
-            ScanNodeExplainHelper.appendPrunedTypes(output, prefix, desc);
+            for (SlotDescriptor slotDescriptor : desc.getSlots()) {
+                Type type = slotDescriptor.getOriginType();
+                if (type.isComplexType()) {
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
         }
 
         return output.toString();
