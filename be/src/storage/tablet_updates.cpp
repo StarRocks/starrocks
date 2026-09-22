@@ -3852,6 +3852,10 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 
 void TabletUpdates::_set_error(const string& msg) {
     StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    _mark_unusable(msg);
+}
+
+void TabletUpdates::_mark_unusable(const string& msg) {
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -5218,7 +5222,9 @@ Status TabletUpdates::clear_meta() {
     auto data_store = _tablet.data_dir();
     auto meta_store = data_store->get_meta();
 
-    _set_error("clear_meta inprogress"); // Mark this tablet unusable first.
+    // This is an expected part of dropping a tablet, not a storage error. Keep the tablet unusable while its
+    // metadata is being cleared without incrementing primary_key_table_error_state_total.
+    _mark_unusable("clear_meta inprogress");
 
     // Clear permanently stored meta.
     RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id()));
