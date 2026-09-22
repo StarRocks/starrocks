@@ -564,6 +564,11 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
 }
 
 Status SpillableHashJoinProbeOperator::_status() const {
+    // Probe flush/restore failures belong to the probe spiller, not the build
+    // spiller. Surface them before ordering another restore or accepting input.
+    if (_probe_spiller != nullptr) {
+        RETURN_IF_ERROR(_probe_spiller->task_status());
+    }
     RETURN_IF_ERROR(_join_builder->spiller()->task_status());
     std::lock_guard guard(_mutex);
     return _operator_status;

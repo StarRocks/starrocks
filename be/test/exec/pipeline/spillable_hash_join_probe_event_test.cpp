@@ -36,7 +36,10 @@
 #include <atomic>
 #include <vector>
 
+#include "compute_env/spill/spiller.h"
+#include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/hashjoin/spillable_hash_join_probe_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 
 namespace starrocks::pipeline {
 
@@ -425,6 +428,25 @@ TEST(SpillableProbeLatchTest, submit_failure_repairs_latch_publishes_failed_and_
     // pending_finish converges: the batch left kLoading (kFailed is not pinned by the batch term) and the
     // lifetime slot is released; only the spiller-IO term could hold it, and there is none here.
     ASSERT_FALSE(pending_finish(batch_state.load(), pending_latch_io.load(), &spiller));
+}
+
+// A probe-side IO failure must abort both public execution entry points before
+// either touches the build state or orders another restore. No prepared build
+// is needed to exercise that error path.
+TEST(SpillableProbeErrorTest, probe_io_failure_surfaces_before_more_work) {
+    NoopSinkOperatorFactory op_factory(0, 0);
+    SpillableHashJoinProbeOperator probe(&op_factory, 0, "spill_probe_error", 0, 0, HashJoinerPtr{}, HashJoinerPtr{});
+    auto factory = spill::make_spilled_factory();
+    auto spiller = factory->create(spill::SpilledOptions{});
+    probe.set_probe_spiller(spiller);
+    spiller->update_spilled_task_status(Status::InternalError("probe restore failed"));
+
+    auto output = probe.pull_chunk(nullptr);
+    ASSERT_FALSE(output.ok());
+    EXPECT_NE(std::string::npos, output.status().to_string().find("probe restore failed"));
+    auto input_status = probe.push_chunk(nullptr, nullptr);
+    ASSERT_FALSE(input_status.ok());
+    EXPECT_NE(std::string::npos, input_status.to_string().find("probe restore failed"));
 }
 
 } // namespace starrocks::pipeline

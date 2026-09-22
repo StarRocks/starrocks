@@ -202,7 +202,8 @@ private:
     std::vector<HashJoinBuilder*> _builders;
     std::unordered_map<int32_t, int32_t> _pid_to_process_id;
 
-    bool _is_finished = false;
+    // Pipeline cancellation/finish races with build-side load tasks reading this flag.
+    std::atomic<bool> _is_finished{false};
     bool _is_finishing = false;
 
     int32_t _degree_of_parallelism;

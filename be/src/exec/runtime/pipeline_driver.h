@@ -316,6 +316,15 @@ public:
             return false;
         }
 
+        // A notified interior operator may have output even while the source is
+        // empty (e.g. a completed probe restore). Do not discard that wakeup:
+        // another source notification is not guaranteed. Keep sink backpressure
+        // and preconditions above this check, and preserve the edges-only path
+        // for chains without wakeable interiors.
+        if (_has_wakeable_intermediates && !_has_intermediate_block()) {
+            return true;
+        }
+
         // INPUT_EMPTY
         if (!source_operator()->has_output() && !source_operator()->is_finished()) {
             set_driver_state(DriverState::INPUT_EMPTY);
@@ -335,6 +344,8 @@ public:
     // used in event scheduler
     // check driver is ready for schedule
     // similar to is_not_blocked but without check short_circuit.
+    bool has_wakeable_intermediates() const { return _has_wakeable_intermediates; }
+
     bool check_is_ready() {
         // If the sink operator is finished, the rest operators of this driver needn't be executed anymore.
         if (sink_operator()->is_finished()) {
@@ -357,6 +368,15 @@ public:
         if (!sink_operator()->need_input() && !sink_operator()->is_finished()) {
             set_driver_state(DriverState::OUTPUT_FULL);
             return false;
+        }
+
+        // A notified interior operator may have output even while the source is
+        // empty (e.g. a completed probe restore). Do not discard that wakeup:
+        // another source notification is not guaranteed. Keep sink backpressure
+        // and preconditions above this check, and preserve the edges-only path
+        // for chains without wakeable interiors.
+        if (_has_wakeable_intermediates && !_has_intermediate_block()) {
+            return true;
         }
 
         // INPUT_EMPTY

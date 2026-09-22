@@ -64,7 +64,9 @@ public:
             : SourceOperator(factory, id, "mock_open_source", plan_node_id, false, driver_sequence) {}
     ~MockOpenSourceOperator() override = default;
 
-    bool has_output() const override { return true; }
+    bool has_output() const override { return _output.load(); }
+    void set_output(bool output) { _output.store(output); }
+    std::atomic<bool> _output{true};
     bool is_finished() const override { return false; }
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override {
@@ -123,6 +125,7 @@ public:
 
     // Test-thread "notify": flip the parked predicate, the way a build-side load latch completion would.
     void open_input() { _need_input.store(true); }
+    void make_output_ready() { _has_output.store(true); }
 
 private:
     const bool _wakeable;
@@ -329,6 +332,33 @@ TEST_F(IntermediateBlockDriverTest, non_wakeable_interior_stays_ready) {
     ASSERT_NE(DriverState::INTERMEDIATE_BLOCK, state.value());
     ASSERT_EQ(DriverState::READY, state.value());
     ASSERT_EQ(DriverState::READY, fx->driver->driver_state());
+}
+
+// A probe restore notification must release the real driver even if the
+// upstream source has no data and emits no further notification.
+TEST_F(IntermediateBlockDriverTest, interior_output_wakes_driver_with_empty_source) {
+    auto fx = make_driver(/*wakeable_interior=*/true);
+    ASSERT_OK(fx->driver->prepare(_runtime_state));
+    ASSERT_OK(fx->driver->prepare_local_state(_runtime_state));
+    auto* source = down_cast<MockOpenSourceOperator*>(fx->driver->source_operator());
+    source->set_output(false);
+    fx->driver->set_driver_state(DriverState::INPUT_EMPTY);
+    ASSERT_FALSE(fx->driver->check_is_ready());
+    _fragment_ctx->event_scheduler()->add_blocked_driver(fx->driver.get());
+
+    fx->interior->make_output_ready();
+    fx->driver->observer()->source_trigger();
+    ASSERT_FALSE(fx->driver->is_in_blocked());
+    ASSERT_EQ(DriverState::READY, fx->driver->driver_state());
+    auto picked = fx->driver_queue->take(false);
+    ASSERT_TRUE(picked.ok());
+    ASSERT_EQ(fx->driver.get(), picked.value());
+
+    // The poller release path must make the same decision.
+    fx->driver->set_driver_state(DriverState::INPUT_EMPTY);
+    auto ready = fx->driver->is_not_blocked();
+    ASSERT_TRUE(ready.ok());
+    EXPECT_TRUE(ready.value());
 }
 
 } // namespace starrocks::pipeline
