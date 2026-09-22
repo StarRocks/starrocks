@@ -117,6 +117,75 @@ public class LakeFormationMetadataGatewayTest {
         assertEquals("tbl", request.name());
     }
 
+    /**
+     * An answer about another table would be published under the requested table's name: the converter
+     * takes the database name from the request and everything else from the response.
+     */
+    @Test
+    public void testAnAnswerAboutAnotherTableIsRefused(@Mocked GlueClient glueClient,
+                                                       @Mocked LakeFormationClient lfClient) {
+        new Expectations() {
+            {
+                glueClient.getUnfilteredTableMetadata((GetUnfilteredTableMetadataRequest) any);
+                result = GetUnfilteredTableMetadataResponse.builder()
+                        .table(Table.builder().name("payroll").build())
+                        .isRegisteredWithLakeFormation(true)
+                        .authorizedColumns("c1")
+                        .queryAuthorizationId("auth-1")
+                        .build();
+            }
+        };
+
+        LakeFormationTableAccessException failure = assertThrows(LakeFormationTableAccessException.class,
+                () -> new LakeFormationMetadataGateway(glueClient, lfClient, properties())
+                        .getTableMetadata(IDENTITY, SESSION));
+        assertTrue(failure.getMessage().contains("different table"), failure.getMessage());
+        // The other table's name stays out of the message: the caller may have no grant on it.
+        assertFalse(failure.getMessage().contains("payroll"), failure.getMessage());
+    }
+
+    /** A same-named table from another AWS Data Catalog is a different table. */
+    @Test
+    public void testAnAnswerFromAnotherCatalogIsRefused(@Mocked GlueClient glueClient,
+                                                        @Mocked LakeFormationClient lfClient) {
+        new Expectations() {
+            {
+                glueClient.getUnfilteredTableMetadata((GetUnfilteredTableMetadataRequest) any);
+                result = GetUnfilteredTableMetadataResponse.builder()
+                        .table(Table.builder().name("tbl").databaseName("db").catalogId("210987654321").build())
+                        .isRegisteredWithLakeFormation(true)
+                        .authorizedColumns("c1")
+                        .queryAuthorizationId("auth-1")
+                        .build();
+            }
+        };
+
+        LakeFormationTableAccessException failure = assertThrows(LakeFormationTableAccessException.class,
+                () -> new LakeFormationMetadataGateway(glueClient, lfClient, properties())
+                        .getTableMetadata(IDENTITY, SESSION));
+        assertTrue(failure.getMessage().contains("different table"), failure.getMessage());
+    }
+
+    /** Glue compares names case insensitively, so a differently cased answer is the same table. */
+    @Test
+    public void testACaseDifferentAnswerIsTheSameTable(@Mocked GlueClient glueClient,
+                                                       @Mocked LakeFormationClient lfClient) {
+        new Expectations() {
+            {
+                glueClient.getUnfilteredTableMetadata((GetUnfilteredTableMetadataRequest) any);
+                result = GetUnfilteredTableMetadataResponse.builder()
+                        .table(Table.builder().name("TBL").databaseName("DB").build())
+                        .isRegisteredWithLakeFormation(true)
+                        .authorizedColumns("c1")
+                        .queryAuthorizationId("auth-1")
+                        .build();
+            }
+        };
+
+        assertEquals(List.of("c1"), new LakeFormationMetadataGateway(glueClient, lfClient, properties())
+                .getTableMetadata(IDENTITY, SESSION).authorizedColumns());
+    }
+
     @Test
     public void testMissingRegisteredFlagIsAnError(@Mocked GlueClient glueClient,
                                                    @Mocked LakeFormationClient lfClient) {

@@ -13,6 +13,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.epack.authorization.AuthorizerEPack;
 import com.starrocks.epack.authorization.ObjectTypeEPack;
 import com.starrocks.epack.authorization.PrivilegeTypeEPack;
+import com.starrocks.epack.connector.lakeformation.LakeFormationWriteGuard;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupAddStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupPrimaryStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupRefreshStmt;
@@ -64,6 +65,7 @@ import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PolicyName;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.WithColumnMaskingPolicy;
 import com.starrocks.sql.ast.expression.SetVarHint;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
@@ -76,6 +78,20 @@ import java.util.Map;
 
 public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements AstVisitorEPack<Void, ConnectContext> {
     public AuthorizerStmtVisitorEPack() {
+    }
+
+    /**
+     * Ahead of the privilege check on purpose. "This version does not support it" is a capability statement,
+     * and reporting it as a permission problem would send an administrator looking for a grant that would
+     * not have helped. It also has to land before any metadata mutation runs.
+     *
+     * The guard only looks at a statement's mutation target, so statements against any other catalog pass
+     * straight through.
+     */
+    @Override
+    public void check(StatementBase statement, ConnectContext context) {
+        LakeFormationWriteGuard.check(statement, context);
+        super.check(statement, context);
     }
 
     private void checkWarehouseUsagePrivilege(String warehouseName, ConnectContext context) {

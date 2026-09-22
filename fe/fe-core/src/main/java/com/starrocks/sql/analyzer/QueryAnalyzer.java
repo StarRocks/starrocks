@@ -47,6 +47,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.extension.ExtensionManager;
 import com.starrocks.lake.bookmark.BookmarkRange;
 import com.starrocks.lake.changes.ChangesMetaDescriptor;
 import com.starrocks.qe.ConnectContext;
@@ -112,6 +113,7 @@ import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.optimizer.dump.DumpTableProjection;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.BooleanType;
@@ -1239,10 +1241,14 @@ public class QueryAnalyzer {
             node.setColumns(columns.build());
             String dbName = node.getName().getDb();
             if (session.getDumpInfo() != null) {
-                session.getDumpInfo().addTable(dbName, table);
+                // Narrowed on the way in rather than on the way out: a dump records both the table object
+                // and, below, its column names, and what never enters the dump cannot leak from a field
+                // added to the dump format later.
+                Table dumped = ExtensionManager.getComponent(DumpTableProjection.class).forDump(table);
+                session.getDumpInfo().addTable(dbName, dumped);
 
-                if (table.isHiveTable()) {
-                    HiveTable hiveTable = (HiveTable) table;
+                if (dumped.isHiveTable()) {
+                    HiveTable hiveTable = (HiveTable) dumped;
                     session.getDumpInfo().addHMSTable(hiveTable.getResourceName(), hiveTable.getCatalogDBName(),
                             hiveTable.getCatalogTableName());
                     HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = session.getDumpInfo().getHMSTable(

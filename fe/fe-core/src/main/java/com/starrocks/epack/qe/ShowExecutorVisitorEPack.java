@@ -22,10 +22,13 @@ import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.catalog.ConnectorView;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
@@ -39,6 +42,9 @@ import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.RoleMapping;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
+import com.starrocks.epack.connector.lakeformation.LakeFormationCatalogs;
+import com.starrocks.epack.connector.lakeformation.LakeFormationDdlProjection;
+import com.starrocks.epack.connector.lakeformation.LakeFormationHiveTable;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
@@ -55,14 +61,20 @@ import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PolicyName;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UserRef;
 import com.starrocks.sql.ast.expression.TypeDef;
 import com.starrocks.sql.ast.warehouse.ShowClustersStmt;
@@ -71,6 +83,7 @@ import com.starrocks.sql.ast.warehouse.ShowWarehousesStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
@@ -91,6 +104,70 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
 
     public static ShowExecutorVisitorEPack getInstance() {
         return INSTANCE;
+    }
+
+    /**
+     * SHOW CREATE TABLE prints the schema and then the property map verbatim, and that map carries the full
+     * physical column names and types - so a narrowed schema would leak them straight back. A governed table
+     * is rendered from a display-only projection instead.
+     *
+     * Two conditions, deliberately different. Catalogs Lake Formation does not govern go straight to super,
+     * because resolving here would charge them a second resolution they never needed. Among the rest the
+     * decision is made on the resolved table, since only an authorized view is evidence that skipping the
+     * projection is safe.
+     */
+    @Override
+    public ShowResultSet visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
+        TableRef tableRef = statement.getTableRef();
+        if (tableRef == null) {
+            return super.visitShowCreateTableStatement(statement, context);
+        }
+        String catalogName = tableRef.getCatalogName() != null ? tableRef.getCatalogName() : context.getCurrentCatalog();
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return super.visitShowCreateTableStatement(statement, context);
+        }
+        // Only a Lake Formation catalog can resolve to a governed table, so every other external catalog
+        // keeps the behaviour it had - including not being resolved twice.
+        if (!LakeFormationCatalogs.isLakeFormationCatalog(catalogName)) {
+            return super.visitShowCreateTableStatement(statement, context);
+        }
+
+        // Same order as upstream: a missing database is reported as such before anything asks Lake
+        // Formation about a table inside it, so the error stays ERR_BAD_DB_ERROR rather than an
+        // authorization failure for a table that was never there.
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        if (metadataMgr.getDb(context, catalogName, tableRef.getDbName()) == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableRef.getDbName());
+        }
+        Table table = metadataMgr.getTable(context, catalogName, tableRef.getDbName(), tableRef.getTableName());
+        if (table == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
+        }
+
+        Table display = table instanceof LakeFormationHiveTable lfTable
+                ? LakeFormationDdlProjection.projectForDisplay(lfTable)
+                : table;
+        return renderResolvedExternalTable(statement, tableRef.getTableName(), display);
+    }
+
+    /**
+     * The same two branches upstream's showCreateExternalCatalogTable uses, applied to a table that has
+     * already been resolved. Kept in step with upstream by the behaviour tests, which assert that this and
+     * the base implementation produce identical rows and metadata for a non Lake Formation table.
+     */
+    private ShowResultSet renderResolvedExternalTable(ShowCreateTableStmt statement, String tableName, Table table) {
+        List<List<String>> rows = Lists.newArrayList();
+        if (table.isConnectorView()) {
+            rows.add(Lists.newArrayList(tableName,
+                    AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table)));
+            ShowResultSetMetaData metaData = ShowResultSetMetaData.builder()
+                    .addColumn(new com.starrocks.catalog.Column("View", TypeFactory.createVarcharType(20)))
+                    .addColumn(new com.starrocks.catalog.Column("Create View", TypeFactory.createVarcharType(30)))
+                    .build();
+            return new ShowResultSet(metaData, rows);
+        }
+        rows.add(Lists.newArrayList(tableName, AstToStringBuilder.getExternalCatalogTableDdlStmt(table)));
+        return new ShowResultSet(showResultMetaFactory.getMetadata(statement), rows);
     }
 
     @Override

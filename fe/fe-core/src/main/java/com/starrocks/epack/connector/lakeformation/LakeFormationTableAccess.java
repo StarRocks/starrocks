@@ -58,8 +58,11 @@ public final class LakeFormationTableAccess {
                                                 GetTemporaryGlueTableCredentialsResponse response) {
         requireNonNull(identity, "identity is null");
         requireNonNull(response, "response is null");
-        if (response.accessKeyId() == null || response.secretAccessKey() == null
-                || response.sessionToken() == null) {
+        // Blank counts as missing, not as an odd but usable value: AwsCloudCredential reads an empty access
+        // key as "nothing configured" and falls back to DefaultCredentialsProvider, which is the node's own
+        // identity - the one fallback vending exists to prevent.
+        if (isBlank(response.accessKeyId()) || isBlank(response.secretAccessKey())
+                || isBlank(response.sessionToken())) {
             throw new LakeFormationTableAccessException(
                     "Lake Formation returned incomplete credentials for " + identity);
         }
@@ -72,6 +75,10 @@ public final class LakeFormationTableAccess {
         return new LakeFormationTableAccess(identity, queryAuthorizationId, response.accessKeyId(),
                 response.secretAccessKey(), response.sessionToken(), response.expiration(),
                 response.vendedS3Path());
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     public LakeFormationTableIdentity identity() {

@@ -14,6 +14,7 @@
 
 package com.starrocks.epack.warehouse;
 
+import com.starrocks.epack.connector.lakeformation.LakeFormationDumpTableProjection;
 import com.starrocks.epack.warehouse.cngroup.CNGroupResource;
 import com.starrocks.extension.ExtensionContext;
 import com.starrocks.extension.SRModule;
@@ -22,6 +23,7 @@ import com.starrocks.persist.gson.RuntimeTypeAdapterFactory;
 import com.starrocks.persist.gson.internal.RuntimeTypeAdapterTypes;
 import com.starrocks.qe.scheduler.slot.BaseSlotManager;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.optimizer.dump.DumpTableProjection;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
@@ -35,6 +37,9 @@ public class MultiWarehouseExtension implements StarRocksExtension {
 
         ctx.registerConstructor(WarehouseManager.class, WarehouseManagerEPack.class);
         ctx.registerConstructor(BaseSlotManager.class, WarehouseSlotManager.class);
+        // Not a warehouse concern; this is the one extension the build ships, so it is where
+        // enterprise-wide component substitutions are registered.
+        ctx.registerConstructor(DumpTableProjection.class, LakeFormationDumpTableProjection.class);
     }
 
     void registerPersist() {

@@ -99,6 +99,19 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
         this.lakeFormationProperties = lakeFormationProperties;
     }
 
+    /**
+     * Names the catalog's Lake Formation identity may see, not the ones its hmsOps identity can list.
+     *
+     * <p>Every enumeration entry point reads this - SHOW TABLES, information_schema.tables, the JDBC
+     * metadata calls - and the machine identity in aws.glue.* is not the identity Lake Formation authorizes,
+     * so a registered table granted to nobody used to be listed by name. Only the names change; what the
+     * user may then do with one is still the access controller's decision.
+     */
+    @Override
+    public List<String> listTableNames(ConnectContext context, String dbName) {
+        return gateway.listTableNames(dbName);
+    }
+
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
         LakeFormationTableIdentity identity = identityOf(dbName, tblName);

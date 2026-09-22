@@ -14,11 +14,15 @@
 
 package com.starrocks.epack.connector.lakeformation;
 
+import com.google.common.collect.ImmutableList;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import software.amazon.awssdk.services.glue.GlueClient;
+import software.amazon.awssdk.services.glue.model.GetTablesRequest;
+import software.amazon.awssdk.services.glue.model.GetTablesResponse;
 import software.amazon.awssdk.services.glue.model.GetUnfilteredTableMetadataRequest;
 import software.amazon.awssdk.services.glue.model.GetUnfilteredTableMetadataResponse;
+import software.amazon.awssdk.services.glue.model.Table;
 import software.amazon.awssdk.services.lakeformation.LakeFormationClient;
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsRequest;
 import software.amazon.awssdk.services.lakeformation.model.GetTemporaryGlueTableCredentialsResponse;
@@ -26,6 +30,7 @@ import software.amazon.awssdk.services.lakeformation.model.Permission;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -48,6 +53,10 @@ public class LakeFormationMetadataGateway {
      */
     private static final List<String> SUPPORTED_PERMISSION_TYPES =
             List.of(software.amazon.awssdk.services.glue.model.PermissionType.COLUMN_PERMISSION.toString());
+
+    /** Same shape as the partition reader's cap: a token that never terminates must not page forever. */
+    static final int MAX_LISTING_PAGES = 1000;
+    static final int MAX_LISTING_RESULTS_PER_PAGE = 1000;
 
     private final GlueClient glueClient;
     private final LakeFormationClient lakeFormationClient;
@@ -79,7 +88,77 @@ public class LakeFormationMetadataGateway {
         } catch (RuntimeException e) {
             throw LakeFormationErrors.metadataFailure(identity, e);
         }
+        refuseAnswerAboutAnotherTable(identity, response);
         return AuthorizedTableMetadata.from(response);
+    }
+
+    /**
+     * The tables this catalog's Lake Formation identity may see in a database.
+     *
+     * <p>Plain GetTables, not the unfiltered variant: Lake Formation filters the response for the caller, so
+     * one call answers for the whole database with no per-table fan out. ⚠️ That filtering comes from the
+     * account's Lake Formation settings, not from this code - a database left on IAM-only access control is
+     * not filtered at all.
+     *
+     * <p>A failed page fails the whole enumeration: a truncated list reads exactly like a database that
+     * really holds only those tables.
+     */
+    public List<String> listTableNames(String dbName) {
+        requireNonNull(dbName, "dbName is null");
+        List<String> names = new ArrayList<>();
+        String nextToken = null;
+        int pages = 0;
+        do {
+            if (++pages > MAX_LISTING_PAGES) {
+                throw new LakeFormationTableAccessException("Glue kept returning more table pages for "
+                        + describe(dbName) + " after " + MAX_LISTING_PAGES + " requests; refusing to keep paging");
+            }
+            GetTablesRequest request = GetTablesRequest.builder()
+                    .catalogId(properties.awsCatalogId())
+                    .databaseName(dbName)
+                    .maxResults(MAX_LISTING_RESULTS_PER_PAGE)
+                    .nextToken(nextToken)
+                    .build();
+            GetTablesResponse response;
+            try {
+                response = glueClient.getTables(request);
+            } catch (RuntimeException e) {
+                throw new LakeFormationTableAccessException("Cannot list the tables of " + describe(dbName)
+                        + " that Lake Formation authorizes for this catalog's role. Cause: " + e.getMessage(), e);
+            }
+            response.tableList().forEach(table -> names.add(table.name()));
+            nextToken = response.nextToken();
+        } while (nextToken != null && !nextToken.isEmpty());
+        return ImmutableList.copyOf(names);
+    }
+
+    /**
+     * The response has to be about the table that was asked for.
+     *
+     * Nothing downstream would notice if it were not: the converter takes the database name from the
+     * request and everything else - table name, schema, location - from the response, so a mismatched
+     * answer would be published under the requested table's name with another table's columns.
+     */
+    private static void refuseAnswerAboutAnotherTable(LakeFormationTableIdentity identity,
+                                                      GetUnfilteredTableMetadataResponse response) {
+        Table table = response.table();
+        if (table == null) {
+            throw new LakeFormationTableAccessException(
+                    "Lake Formation returned no table for " + identity);
+        }
+        // Database name and catalog id are compared only when both sides carry one: they are optional in
+        // the model, and an absent one is not a disagreement. A null catalog id on the identity means the
+        // request named no account, so there is nothing to compare the answer against.
+        boolean sameTable = identity.tableName().equalsIgnoreCase(table.name());
+        boolean sameDatabase = table.databaseName() == null
+                || identity.dbName().equalsIgnoreCase(table.databaseName());
+        boolean sameCatalog = table.catalogId() == null || identity.awsCatalogId() == null
+                || identity.awsCatalogId().equals(table.catalogId());
+        if (!sameTable || !sameDatabase || !sameCatalog) {
+            throw new LakeFormationTableAccessException(
+                    "Lake Formation answered about a different table than " + identity
+                            + " was asked for. Refusing to serve that answer.");
+        }
     }
 
     /**
@@ -116,16 +195,19 @@ public class LakeFormationMetadataGateway {
         return access;
     }
 
+    /** Names the database the way a refusal has to name it: with the account and region actually used. */
+    private String describe(String dbName) {
+        String catalogId = properties.awsCatalogId();
+        return dbName + " (catalogId=" + (catalogId == null ? "the caller's own AWS account" : catalogId)
+                + ", region=" + properties.region() + ")";
+    }
+
     /**
-     * The request is built from this gateway's catalog id and region, but errors are reported against
-     * the identity. If the two disagree, a refusal would name an account or region that was never
-     * consulted - so they have to agree before a single call goes out.
+     * The request is built from this gateway's catalog id and region while errors name the identity, so a
+     * disagreement would report an account or region that was never consulted.
      *
-     * Today the only producer of an identity builds it from these same properties, so neither branch can
-     * fire; both stay as a structural assertion for the day a second producer appears. That is also why
-     * the catalog id is compared with equals() in both directions rather than only when this gateway has
-     * one: a gateway using the caller's own account paired with an identity naming an explicit account is
-     * exactly the mismatch the paragraph above says must be impossible.
+     * Neither branch can fire today - the only producer of an identity builds it from these same properties
+     * - so both are a structural assertion for the day a second producer appears.
      */
     private void checkIdentityMatchesThisCatalog(LakeFormationTableIdentity identity) {
         String catalogId = properties.awsCatalogId();

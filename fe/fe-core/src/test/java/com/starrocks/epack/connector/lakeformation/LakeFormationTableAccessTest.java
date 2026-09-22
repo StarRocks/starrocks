@@ -64,12 +64,20 @@ public class LakeFormationTableAccessTest {
                 () -> access.vendedS3Paths().add("s3://bucket/elsewhere"));
     }
 
+    /**
+     * Blank is refused for the same reason null is, and it matters more: an empty access key reaches
+     * AwsCloudCredential as "nothing configured", which falls back to the node's own identity instead of
+     * failing.
+     */
     @Test
     public void testEveryMissingCredentialPartIsRefused() {
         for (GetTemporaryGlueTableCredentialsResponse incomplete : List.of(
                 response().accessKeyId(null).build(),
                 response().secretAccessKey(null).build(),
-                response().sessionToken(null).build())) {
+                response().sessionToken(null).build(),
+                response().accessKeyId("").build(),
+                response().secretAccessKey("   ").build(),
+                response().sessionToken("").build())) {
             LakeFormationTableAccessException failure = assertThrows(LakeFormationTableAccessException.class,
                     () -> LakeFormationTableAccess.from(IDENTITY, "auth-1", incomplete));
             assertTrue(failure.getMessage().contains("incomplete credentials"), failure.getMessage());

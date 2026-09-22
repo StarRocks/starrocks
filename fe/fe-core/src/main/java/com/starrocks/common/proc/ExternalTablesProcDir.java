@@ -47,19 +47,29 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         return false;
     }
 
+    /**
+     * The caller's own context when there is one. These three calls used to build a fresh empty
+     * ConnectContext, which reaches the connector without the caller's identity or session variables - a gap
+     * that becomes a real one once a connector authorizes per user.
+     */
+    private static ConnectContext contextOrNew() {
+        ConnectContext context = ConnectContext.get();
+        return context != null ? context : new ConnectContext();
+    }
+
     @Override
     public ProcNodeInterface lookup(String name) throws AnalysisException {
         if (Strings.isNullOrEmpty(name)) {
             throw new AnalysisException("name is null");
         }
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        Database db = metadataMgr.getDb(new ConnectContext(), catalogName, dbName);
+        Database db = metadataMgr.getDb(contextOrNew(), catalogName, dbName);
         if (db == null) {
             throw new AnalysisException("db: " + dbName + " not exists");
         }
         Table tbl = null;
         try {
-            tbl = metadataMgr.getTable(new ConnectContext(), catalogName, dbName, name);
+            tbl = metadataMgr.getTable(contextOrNew(), catalogName, dbName, name);
         } catch (Exception e) {
             throw new AnalysisException(e.getMessage());
         }
@@ -74,7 +84,7 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Preconditions.checkNotNull(metadataMgr);
         List<String> tables = null;
-        tables = metadataMgr.listTableNames(new ConnectContext(), catalogName, dbName);
+        tables = metadataMgr.listTableNames(contextOrNew(), catalogName, dbName);
 
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
