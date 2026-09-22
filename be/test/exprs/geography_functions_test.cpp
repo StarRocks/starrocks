@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "exprs/geo_functions.h"
