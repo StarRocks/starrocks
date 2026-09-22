@@ -14,11 +14,13 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 
+import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
@@ -30,19 +32,13 @@ import java.util.Set;
  * {@link FileStatus} instances suitable for parquet-mr's
  * {@code HadoopInputFile.fromStatus}.
  *
- * <p>The Hadoop {@link Configuration} is built by copying every entry in
- * the caller-supplied properties map and explicitly disabling Hadoop's
- * per-scheme filesystem cache so concurrent loads with different
- * credentials cannot silently share an under-credentialed
- * {@code FileSystem} instance. The raw property copy is sufficient for
- * HDFS deployments and for cloud-storage setups where the user has
- * already supplied the right Hadoop keys (e.g. {@code fs.s3a.access.key}).
- * For cloud providers that require key translation (Iceberg-style
- * {@code IcebergCachingFileIO}-class remapping), the Parquet open will
- * fail with {@code IOException}; the pipeline records
- * {@code SAMPLE_FAILED} and the load proceeds against the original single
- * tablet — never an outage. Cloud-aware key translation is a deliberate
- * follow-up.
+ * <p>The Hadoop {@link Configuration} retains every raw caller-supplied property (for direct HDFS
+ * and legacy {@code fs.*} load properties), then applies the same {@link CloudConfigurationFactory}
+ * credential translation used by the rest of FE storage access. This makes canonical properties
+ * such as {@code aws.s3.use_instance_profile} usable by FE-local footer reads without maintaining a
+ * second provider-specific mapping here. Per-scheme filesystem caching is disabled last so
+ * concurrent loads with different credentials cannot silently share an under-credentialed
+ * {@code FileSystem} instance.
  */
 final class PreSplitHadoopAccess {
 
@@ -69,9 +65,10 @@ final class PreSplitHadoopAccess {
 
     static Configuration buildHadoopConfiguration(Map<String, String> properties) {
         Configuration hadoopConfig = new Configuration();
-        if (properties != null) {
-            properties.forEach(hadoopConfig::set);
-        }
+        Map<String, String> effectiveProperties = properties == null ? Collections.emptyMap() : properties;
+        effectiveProperties.forEach(hadoopConfig::set);
+        CloudConfigurationFactory.buildCloudConfigurationForStorage(effectiveProperties)
+                .applyToConfiguration(hadoopConfig);
         for (String scheme : SCHEMES_TO_BUILD_FRESH_FILESYSTEM) {
             hadoopConfig.setBoolean("fs." + scheme + ".impl.disable.cache", true);
         }
