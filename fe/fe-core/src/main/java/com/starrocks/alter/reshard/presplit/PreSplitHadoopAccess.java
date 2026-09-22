@@ -14,23 +14,34 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.catalog.Column;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 /**
  * Shared Hadoop-side wiring for the meta-tier row-group statistics providers
  * (one per load kind). Builds a Hadoop {@link Configuration} that disables
  * the per-scheme filesystem cache for every credentialed scheme StarRocks
- * exposes, and translates {@link TBrokerFileStatus} entries into Hadoop
+ * exposes, translates {@link TBrokerFileStatus} entries into Hadoop
  * {@link FileStatus} instances suitable for parquet-mr's
- * {@code HadoopInputFile.fromStatus}.
+ * {@code HadoopInputFile.fromStatus}, and runs the resulting per-file footer
+ * reads.
  *
  * <p>The Hadoop {@link Configuration} retains every raw caller-supplied property (for direct HDFS
  * and legacy {@code fs.*} load properties), then applies the same {@link CloudConfigurationFactory}
@@ -104,5 +115,73 @@ final class PreSplitHadoopAccess {
                 /*blockSize=*/ 0,
                 /*modificationTime=*/ 0L,
                 new Path(brokerFileStatus.path));
+    }
+
+    /** One file's footer read: the file plus the reader its already-resolved format selects. */
+    record FooterRead(MetaTierFormat format, FileStatus file) {
+    }
+
+    /**
+     * Reads every file's footer and concatenates the per-row-group / per-stripe statistics in
+     * request order. Footer reads are independent per file and the samplers sort the aggregated
+     * statistics, so they run concurrently up to
+     * {@link Config#tablet_pre_split_meta_tier_footer_read_parallelism} — each footer is a remote
+     * round-trip, and a serial pass over a many-file source otherwise dominates the pre-split hook,
+     * which runs on the triggering load's critical path.
+     *
+     * <p>A per-file {@link StarRocksException} (e.g. a {@link MetaTierUnavailableException} for
+     * truncated / unmappable statistics) propagates unchanged so the pipeline falls back to the data
+     * tier exactly as a serial reader would.
+     */
+    static List<RowGroupStatistics> readFooters(
+            List<FooterRead> footerReads, Configuration hadoopConfig, List<Column> sortKeyColumns,
+            String loadTimeZone) throws StarRocksException {
+        int parallelism = Math.max(1,
+                Math.min(Config.tablet_pre_split_meta_tier_footer_read_parallelism, footerReads.size()));
+        if (parallelism == 1) {
+            List<RowGroupStatistics> aggregated = new ArrayList<>();
+            for (FooterRead footerRead : footerReads) {
+                aggregated.addAll(footerRead.format().read(
+                        footerRead.file(), hadoopConfig, sortKeyColumns, loadTimeZone));
+            }
+            return aggregated;
+        }
+        ExecutorService footerReadPool = Executors.newFixedThreadPool(parallelism,
+                new ThreadFactoryBuilder().setNameFormat("presplit-footer-reader-%d").setDaemon(true).build());
+        try {
+            List<Future<List<RowGroupStatistics>>> futures = new ArrayList<>(footerReads.size());
+            for (FooterRead footerRead : footerReads) {
+                futures.add(footerReadPool.submit(() -> footerRead.format().read(
+                        footerRead.file(), hadoopConfig, sortKeyColumns, loadTimeZone)));
+            }
+            List<RowGroupStatistics> aggregated = new ArrayList<>();
+            for (Future<List<RowGroupStatistics>> future : futures) {
+                aggregated.addAll(joinFooterRead(future));
+            }
+            return aggregated;
+        } finally {
+            footerReadPool.shutdownNow();
+        }
+    }
+
+    /**
+     * Awaits one footer-read task. A per-file {@link StarRocksException} is rethrown unchanged; any
+     * other failure is wrapped as a checked {@link StarRocksException}.
+     */
+    private static List<RowGroupStatistics> joinFooterRead(Future<List<RowGroupStatistics>> future)
+            throws StarRocksException {
+        try {
+            return future.get();
+        } catch (ExecutionException executionFailure) {
+            Throwable cause = executionFailure.getCause();
+            if (cause instanceof StarRocksException starRocksException) {
+                throw starRocksException;
+            }
+            throw new StarRocksException("Parquet/ORC footer read failed during pre-split sampling: "
+                    + (cause == null ? executionFailure.getMessage() : cause.getMessage()), cause);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new StarRocksException("Interrupted while reading footers for pre-split sampling", interrupted);
+        }
     }
 }
