@@ -23,6 +23,11 @@ public class AnyGeographyType extends PseudoType {
     }
 
     @Override
+    public int hashCode() {
+        return AnyGeographyType.class.hashCode();
+    }
+
+    @Override
     public boolean matchesType(Type type) {
         return type instanceof AnyGeographyType || type instanceof AnyElementType ||
                 type.isScalarType(PrimitiveType.GEOGRAPHY);
