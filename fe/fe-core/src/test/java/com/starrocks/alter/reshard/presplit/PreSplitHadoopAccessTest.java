@@ -18,6 +18,7 @@ import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.Constants;
 import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.junit.jupiter.api.Assertions;
@@ -81,6 +82,36 @@ class PreSplitHadoopAccessTest {
         Assertions.assertEquals("broker-secret-key", hadoopConfig.get("fs.s3a.secret.key"));
         Assertions.assertEquals("s3-compatible.example.com", hadoopConfig.get("fs.s3a.endpoint"));
         Assertions.assertTrue(hadoopConfig.getBoolean("fs.s3a.impl.disable.cache", false));
+    }
+
+    @Test
+    void hadoopConfigurationRegistersLegacyBrokerOssFileSystem() throws Exception {
+        Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(Map.of(
+                "fs.oss.accessKeyId", "broker-access-key",
+                "fs.oss.accessKeySecret", "broker-secret-key",
+                "fs.oss.endpoint", "oss-cn-zhangjiakou.aliyuncs.com"));
+
+        Assertions.assertEquals("org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem",
+                hadoopConfig.get("fs.oss.impl"));
+        Assertions.assertEquals("org.apache.hadoop.fs.aliyun.oss.AliyunOSSFileSystem",
+                FileSystem.getFileSystemClass("oss", hadoopConfig).getName());
+        Assertions.assertEquals("broker-access-key", hadoopConfig.get("fs.oss.accessKeyId"));
+        Assertions.assertEquals("broker-secret-key", hadoopConfig.get("fs.oss.accessKeySecret"));
+        Assertions.assertEquals("oss-cn-zhangjiakou.aliyuncs.com", hadoopConfig.get("fs.oss.endpoint"));
+        Assertions.assertTrue(hadoopConfig.getBoolean("fs.oss.impl.disable.cache", false));
+    }
+
+    @Test
+    void hadoopConfigurationRegistersLegacyBrokerCosFileSystem() throws Exception {
+        Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(Map.of(
+                "fs.cosn.userinfo.secretId", "broker-secret-id",
+                "fs.cosn.userinfo.secretKey", "broker-secret-key",
+                "fs.cosn.bucket.endpoint_suffix", "cos.ap-beijing.myqcloud.com"));
+
+        Assertions.assertEquals("org.apache.hadoop.fs.CosFileSystem", hadoopConfig.get("fs.cosn.impl"));
+        Assertions.assertEquals("org.apache.hadoop.fs.CosFileSystem",
+                FileSystem.getFileSystemClass("cosn", hadoopConfig).getName());
+        Assertions.assertTrue(hadoopConfig.getBoolean("fs.cosn.impl.disable.cache", false));
     }
 
     @Test
