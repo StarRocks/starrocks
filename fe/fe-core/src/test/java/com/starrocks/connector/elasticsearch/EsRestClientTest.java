@@ -20,6 +20,7 @@ import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Call;
 import okhttp3.Callback;
+import okhttp3.Credentials;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
@@ -27,12 +28,15 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 import okio.Timeout;
+import org.apache.logging.log4j.Level;
+import org.apache.logging.log4j.core.config.Configurator;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -110,7 +114,8 @@ public class EsRestClientTest {
     @Test
     public void testGetMappingSingleRequest() throws IOException {
         Map<String, String> mappings = loadIndexMappings();
-        mockMappingRequests(mappings);
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        mockMappingRequests(mappings, captured);
 
         EsRestClient client = new EsRestClient(new String[] {"http://127.0.0.1:9200"}, "", "");
         String mapping = client.getMapping("index_user");
@@ -120,12 +125,15 @@ public class EsRestClientTest {
         Assertions.assertTrue(mapping.contains("user_name"));
         Assertions.assertFalse(mapping.contains("order_id"));
         Assertions.assertFalse(mapping.contains("product_id"));
+        Assertions.assertEquals(1, captured.size());
+        Assertions.assertEquals("http://127.0.0.1:9200/index_user/_mapping", captured.get(0).url().toString());
     }
 
     @Test
     public void testGetMappingsConcurrently() throws Exception {
         Map<String, String> mappings = loadIndexMappings();
-        mockMappingRequests(mappings);
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        mockMappingRequests(mappings, captured);
 
         int roundsPerIndex = 10;
         int taskCount = MAPPING_INDICES.length * roundsPerIndex;
@@ -157,6 +165,83 @@ public class EsRestClientTest {
             }
         }
         pool.shutdown();
+        Assertions.assertEquals(taskCount, captured.size());
+    }
+
+    @Test
+    public void testGetMappingWithoutHttpScheme() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        mockMappingRequests(mappings, captured);
+
+        // node address without http(s) scheme and with surrounding spaces, as users may configure
+        EsRestClient client = new EsRestClient(new String[] {"  127.0.0.1:9200  "}, "", "");
+        String mapping = client.getMapping("index_product");
+
+        Assertions.assertEquals(mappings.get("index_product"), mapping);
+        Assertions.assertEquals(1, captured.size());
+        // spaces are trimmed and "http://" is prepended automatically
+        Assertions.assertEquals("http://127.0.0.1:9200/index_product/_mapping", captured.get(0).url().toString());
+    }
+
+    @Test
+    public void testGetMappingWithBasicAuth() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        mockMappingRequests(mappings, captured);
+
+        String authUser = "es_user";
+        String authPassword = "es_password";
+        EsRestClient client = new EsRestClient(new String[] {"127.0.0.1:9200"}, authUser, authPassword);
+        String mapping = client.getMapping("index_order");
+
+        // the fake server ignores credentials, but the client must attach the basic auth header
+        Assertions.assertEquals(mappings.get("index_order"), mapping);
+        Assertions.assertEquals(1, captured.size());
+        Assertions.assertEquals(Credentials.basic(authUser, authPassword),
+                captured.get(0).header("Authorization"));
+        Assertions.assertEquals("http://127.0.0.1:9200/index_order/_mapping", captured.get(0).url().toString());
+    }
+
+    @Test
+    public void testGetMappingFailsOverToNextNodeOnIOException() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        int deadPort = 19200;
+        mockOkHttpClient(request -> {
+            captured.add(request);
+            if (request.url().port() == deadPort) {
+                throw new IOException("connection refused");
+            }
+            String index = request.url().pathSegments().get(0);
+            String body = mappings.get(index);
+            Assertions.assertNotNull(body, "unexpected mapping request for index: " + index);
+            return body;
+        });
+
+        EsRestClient client = new EsRestClient(
+                new String[] {"http://127.0.0.1:" + deadPort, "http://127.0.0.1:9200"}, "", "");
+        String mapping = client.getMapping("index_user");
+
+        Assertions.assertEquals(mappings.get("index_user"), mapping);
+        Assertions.assertEquals(2, captured.size());
+        Assertions.assertEquals(deadPort, captured.get(0).url().port());
+        Assertions.assertEquals(9200, captured.get(1).url().port());
+    }
+
+    @Test
+    public void testGetMappingWithTraceLogEnabled() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        mockMappingRequests(mappings, Collections.synchronizedList(new ArrayList<>()));
+
+        String loggerName = EsRestClient.class.getName();
+        Configurator.setLevel(loggerName, Level.TRACE);
+        try {
+            EsRestClient client = new EsRestClient(new String[] {"127.0.0.1:9200"}, "", "");
+            Assertions.assertEquals(mappings.get("index_user"), client.getMapping("index_user"));
+        } finally {
+            Configurator.setLevel(loggerName, Level.INFO);
+        }
     }
 
     private static Map<String, String> loadIndexMappings() throws IOException {
@@ -169,30 +254,42 @@ public class EsRestClientTest {
         return mappings;
     }
 
-    private static void mockMappingRequests(Map<String, String> mappingsByIndex) {
+    private interface MappingResponder {
+        String respond(Request request) throws IOException;
+    }
+
+    private static void mockMappingRequests(Map<String, String> mappingsByIndex, List<Request> captured) {
+        mockOkHttpClient(request -> {
+            captured.add(request);
+            String index = request.url().pathSegments().get(0);
+            String body = mappingsByIndex.get(index);
+            Assertions.assertNotNull(body, "unexpected mapping request for index: " + index);
+            return body;
+        });
+    }
+
+    private static void mockOkHttpClient(MappingResponder responder) {
         new MockUp<OkHttpClient>() {
             @Mock
             Call newCall(Request request) {
-                String index = request.url().pathSegments().get(0);
-                String body = mappingsByIndex.get(index);
-                Assertions.assertNotNull(body, "unexpected mapping request for index: " + index);
-                return new FakeMappingCall(request, body);
+                return new FakeMappingCall(request, responder);
             }
         };
     }
 
     private static class FakeMappingCall implements Call {
         private final Request request;
-        private final String body;
+        private final MappingResponder responder;
 
-        FakeMappingCall(Request request, String body) {
+        FakeMappingCall(Request request, MappingResponder responder) {
             this.request = request;
-            this.body = body;
+            this.responder = responder;
         }
 
         @Override
         @SuppressWarnings("deprecation")
-        public Response execute() {
+        public Response execute() throws IOException {
+            String body = responder.respond(request);
             return new Response.Builder()
                     .request(request)
                     .protocol(Protocol.HTTP_1_1)
@@ -233,7 +330,7 @@ public class EsRestClientTest {
 
         @Override
         public Call clone() {
-            return new FakeMappingCall(request, body);
+            return new FakeMappingCall(request, responder);
         }
     }
 }
