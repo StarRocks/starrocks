@@ -218,7 +218,7 @@ size_t FileColumn::append_numbers(const void* buff, size_t length) {
     return -1;
 }
 
-void FileColumn::append_value_multiple_times(const void* value, size_t count) {
+void FileColumn::append_value_multiple_times(const void* value, const size_t count) {
     const auto* datum = static_cast<const Datum*>(value);
     const auto& fields = datum->get_struct();
     DCHECK_EQ(NUM_FIELDS, fields.size());
@@ -235,13 +235,13 @@ void FileColumn::append_default() {
     }
 }
 
-void FileColumn::append_default(size_t count) {
+void FileColumn::append_default(const size_t count) {
     for (auto& column : _fields) {
         column->append_default(count);
     }
 }
 
-uint32_t FileColumn::serialize(size_t idx, uint8_t* pos) const {
+uint32_t FileColumn::serialize(const size_t idx, uint8_t* pos) const {
     uint32_t ser_size = 0;
     for (const auto& column : _fields) {
         ser_size += column->serialize(idx, pos + ser_size);
@@ -300,16 +300,17 @@ MutableColumnPtr FileColumn::clone() const {
     return p;
 }
 
-size_t FileColumn::filter_range(const Filter& filter, size_t from, size_t to) {
+size_t FileColumn::filter_range(const Filter& filter, const size_t from, const size_t to) {
     const size_t result_offset = _fields[0]->filter_range(filter, from, to);
     for (size_t i = 1; i < NUM_FIELDS; ++i) {
-        size_t tmp_offset = _fields[i]->filter_range(filter, from, to);
+        const size_t tmp_offset = _fields[i]->filter_range(filter, from, to);
         DCHECK_EQ(result_offset, tmp_offset);
     }
     return result_offset;
 }
 
-int FileColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
+int FileColumn::compare_at(const size_t left, const size_t right, const Column& rhs,
+                           const int nan_direction_hint) const {
     const auto& rhs_file = down_cast<const FileColumn&>(rhs);
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
         int cmp = _fields[i]->compare_at(left, right, *rhs_file._fields[i], nan_direction_hint);
@@ -320,7 +321,7 @@ int FileColumn::compare_at(size_t left, size_t right, const Column& rhs, int nan
     return 0;
 }
 
-int FileColumn::equals(size_t left, const Column& rhs, const size_t right, const bool safe_eq) const {
+int FileColumn::equals(const size_t left, const Column& rhs, const size_t right, const bool safe_eq) const {
     const auto& rhs_file = down_cast<const FileColumn&>(rhs);
     int ret = EQUALS_TRUE;
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
@@ -329,13 +330,16 @@ int FileColumn::equals(size_t left, const Column& rhs, const size_t right, const
             return EQUALS_FALSE;
         }
         if (tmp == EQUALS_NULL) {
+            // Every field is a NullableColumn, which under safe_eq answers NULL vs NULL as TRUE and
+            // NULL vs value as FALSE; EQUALS_NULL can only surface in unsafe mode.
+            DCHECK(!safe_eq);
             ret = EQUALS_NULL;
         }
     }
-    return safe_eq ? EQUALS_TRUE : ret;
+    return ret;
 }
 
-int64_t FileColumn::xor_checksum(uint32_t from, uint32_t to) const {
+int64_t FileColumn::xor_checksum(const uint32_t from, const uint32_t to) const {
     int64_t checksum = 0;
     for (const auto& column : _fields) {
         checksum ^= column->xor_checksum(from, to);
@@ -343,7 +347,7 @@ int64_t FileColumn::xor_checksum(uint32_t from, uint32_t to) const {
     return checksum;
 }
 
-void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol) const {
+void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, const size_t idx, bool is_binary_protocol) const {
     DCHECK_LT(idx, size());
     buf->begin_push_bracket();
     for (size_t i = 0; i < NUM_FIELDS; ++i) {
@@ -362,7 +366,7 @@ void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_b
             case INLINE: {
                 // Payload bytes follow the regular VARBINARY rendering rules: inside the bracket they
                 // count as nested binary, so binary_encoding_format / binary_encoding_level apply.
-                Slice bytes = down_cast<const BinaryColumn*>(data)->get_slice(idx);
+                const Slice bytes = down_cast<const BinaryColumn*>(data)->get_slice(idx);
                 buf->push_binary(bytes.data, bytes.size);
                 break;
             }
@@ -378,7 +382,7 @@ void FileColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_b
     buf->finish_push_bracket();
 }
 
-std::string FileColumn::debug_item(size_t idx) const {
+std::string FileColumn::debug_item(const size_t idx) const {
     DCHECK_LT(idx, size());
     std::stringstream ss;
     ss << '{';
