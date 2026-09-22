@@ -208,6 +208,52 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneIsNullOnLeadingColumnKeepsItsPartition() throws Exception {
+        // A NULL sorts below every value of its own column, so (NULL, 100) lives in the partition
+        // whose lower endpoint is the -infinity sentinel. Looking the key up as (MIN, 100) asks for
+        // a partition above it instead -- here there is none, so the scan came back empty.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_lead` (\n" +
+                "  `id1` tinyint NULL,\n" +
+                "  `id2` tinyint NOT NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id1`)\n" +
+                "PARTITION BY RANGE(`id1`, `id2`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('-128', '10'),\n" +
+                "  PARTITION p1 VALUES LESS THAN ('-128', '20'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 = 100")
+                .explainContains("partitions=1/2");
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null and id2 > 50")
+                .explainContains("partitions=1/2");
+        // Without a predicate on the second column nothing narrows it, which is the case that
+        // already worked; it must keep working.
+        starRocksAssert.query("select * from t_null_range_lead where id1 is null")
+                .explainContains("partitions=1/2");
+        starRocksAssert.dropTable("t_null_range_lead");
+    }
+
+    @Test
+    public void testPruneIsNullOnTrailingColumnKeepsItsPartition() throws Exception {
+        // Same defect one column in: (5, NULL) sits just below the boundary (5, MIN), so it belongs
+        // to the partition that ends there, not to whatever starts there.
+        starRocksAssert.withTable("CREATE TABLE `t_null_range_trail` (\n" +
+                "  `a` tinyint NOT NULL,\n" +
+                "  `b` tinyint NULL,\n" +
+                "  `v` int NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`a`)\n" +
+                "PARTITION BY RANGE(`a`, `b`) (\n" +
+                "  PARTITION p0 VALUES LESS THAN ('5', '-128'))\n" +
+                "DISTRIBUTED BY HASH(`v`) BUCKETS 2\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.query("select * from t_null_range_trail where a = 5 and b is null")
+                .explainContains("partitions=1/1");
+        starRocksAssert.dropTable("t_null_range_trail");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
