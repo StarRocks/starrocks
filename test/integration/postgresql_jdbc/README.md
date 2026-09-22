@@ -1,7 +1,7 @@
 # PostgreSQL JDBC pushdown integration test
 
-This opt-in test executes 66 queries against PostgreSQL and an existing
-StarRocks PostgreSQL JDBC catalog. The 49 pushdown queries run with all four
+This opt-in test executes 86 queries against PostgreSQL and an existing
+StarRocks PostgreSQL JDBC catalog. The 69 pushdown queries run with all four
 combinations of `enable_jdbc_agg_push_down` and `enable_jdbc_topn_push_down`,
 plus whatever session variables the case pins for itself; the 17 runtime filter
 queries run with `enable_jdbc_runtime_filter_push_down` off and on instead.
@@ -122,6 +122,31 @@ identity passthrough is exempt from the dialect gate; gating it makes the whole
 projection fall back and silently takes the subscript push-down with it, without
 changing a single row.
 
+The `uid` column carries the `uuid` cases, and they are the one group where a
+pushed comparison is expected to reach PostgreSQL with no collation at all.
+PostgreSQL renders a `uuid` as 36 characters of canonical text, which is what
+the JDBC bridge hands StarRocks and what the catalog maps to `VARCHAR(36)`; the
+text's byte order and the type's own order coincide, because the hyphens sit at
+fixed positions and ASCII orders `0`-`9` below `a`-`f`. So equality, `!=`,
+`<=>`, a range comparison, `BETWEEN` and an `ORDER BY ... LIMIT` all push down,
+and every one of those cases sets `remote_sql_excludes: ["COLLATE"]`. That is
+not a stylistic preference: `COLLATE "C"` on a `uuid` makes PostgreSQL answer
+`collations are not supported by type uuid` and fail the whole statement, so the
+`pg_sql` guidance above -- that a string sort key needs an explicit
+`COLLATE "C"` -- is exactly wrong for this column, and none of these cases
+carries one.
+
+`MIN` and `MAX` are the exception, and have a fallback case rather than a
+push-down one: PostgreSQL has no `min`/`max` aggregate for `uuid` at all
+(`function min(uuid) does not exist`), however well its values order, so pushing
+one would send a statement it refuses. That case asserts the remote statement
+contains no aggregate, and its `pg_sql` casts to text under `COLLATE "C"` so
+PostgreSQL can compute a reference at all.
+
+The fixture spreads the values with `md5(n::text)`, adds the all-zero and
+all-`f` extremes and a mixed digit/letter value in the literal rows, and leaves
+two generated rows and one literal row NULL.
+
 One case belongs to no dialect in particular: a query selecting `id` while
 filtering on `name` must send a remote SELECT list of `"id"` alone, with `name`
 only in the WHERE. A scalar column says it better than an array does, because
@@ -169,7 +194,7 @@ never treated as an expected result.
 
 The output path must not already exist, so reruns retain prior evidence.
 
-Inspect `passed` and `summary` in the JSON. A successful run has 230 completed
+Inspect `passed` and `summary` in the JSON. A successful run has 310 completed
 and passed executions, no setup/reference errors, and no cleanup error.
 
 ## Runtime filter coverage

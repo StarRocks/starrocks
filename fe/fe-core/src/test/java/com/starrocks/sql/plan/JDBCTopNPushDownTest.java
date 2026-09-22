@@ -143,10 +143,11 @@ public class JDBCTopNPushDownTest extends ConnectorPlanTestBase {
         schema.add(new Column("label", TypeFactory.createVarcharType(65533), true));
         schema.add(new Column("active", BooleanType.BOOLEAN, true));
         schema.add(new Column("amount", TypeFactory.createDecimalV3Type(PrimitiveType.DECIMAL64, 12, 2), true));
+        schema.add(new Column("uid", TypeFactory.createVarcharType(36), true));
         try {
             table.setNewFullSchema(schema);
             table.setOriginalJdbcColumnTypeNames(Map.of(
-                    "name", "varchar", "label", "text", "active", "bool", "amount", "numeric"));
+                    "name", "varchar", "label", "text", "active", "bool", "amount", "numeric", "uid", "uuid"));
             // PostgreSQL compares text under the column's collation, so the remote sort has to ask
             // for COLLATE "C" to match the byte order the local TopN would apply.
             String namePlan = getFragmentPlan("select a from " + TABLE + " order by name desc nulls last limit 10");
@@ -162,6 +163,17 @@ public class JDBCTopNPushDownTest extends ConnectorPlanTestBase {
             assertContains(getFragmentPlan("select a from " + TABLE
                             + " order by name asc nulls last, amount desc nulls first limit 10"),
                     "ORDER BY \"name\" COLLATE \"C\" ASC NULLS LAST, \"amount\" DESC NULLS FIRST LIMIT 10");
+            // A uuid key is pushed like any other sort key, and bare: it maps to VARCHAR too, but
+            // PostgreSQL rejects a collation on the type outright, and its values already sort the
+            // way their canonical text does byte by byte.
+            String uuidPlan = getFragmentPlan("select a from " + TABLE + " order by uid asc nulls last limit 10");
+            assertContains(uuidPlan, "ORDER BY \"uid\" ASC NULLS LAST LIMIT 10");
+            Assertions.assertFalse(uuidPlan.contains("COLLATE"), uuidPlan);
+            Assertions.assertFalse(uuidPlan.contains("TOP-N"), uuidPlan);
+            // Mixed with a collatable key, only the collatable one carries the collation.
+            assertContains(getFragmentPlan("select a from " + TABLE
+                            + " order by uid asc nulls last, name desc nulls first limit 10"),
+                    "ORDER BY \"uid\" ASC NULLS LAST, \"name\" COLLATE \"C\" DESC NULLS FIRST LIMIT 10");
         } finally {
             table.setNewFullSchema(originalSchema);
             table.setOriginalJdbcColumnTypeNames(originalTypeNames);

@@ -48,6 +48,7 @@ import org.junit.jupiter.api.Test;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -172,13 +173,20 @@ public class PushDownTopNToJDBCScanRuleTest {
         accepted.put(TypeFactory.createVarcharType(65533), "text");
         accepted.put(BooleanType.BOOLEAN, "bool");
         accepted.put(decimal, "numeric");
+        // A uuid column maps to VARCHAR(36) and is admitted as a sort key, but must NOT be
+        // collated: PostgreSQL has no collation for the type and answers "collations are not
+        // supported by type uuid". Its canonical text orders exactly as the values do, so a bare
+        // ORDER BY is both valid and correct.
+        accepted.put(TypeFactory.createVarcharType(36), "uuid");
+        // Collating is decided by the remote type name, not by the StarRocks primitive type -- two
+        // of the accepted keys are VARCHAR and only one of them may carry a collation.
+        Set<String> collated = Set.of("varchar", "text", "character varying");
         for (Map.Entry<Type, String> entry : accepted.entrySet()) {
             ColumnRefOperator ref = new ColumnRefOperator(10, entry.getKey(), "sortKey", true);
             LogicalJDBCScanOperator scan = newScan(Map.of(ref, new Column("sortKey", entry.getKey(), true)));
             ((JDBCTable) scan.getTable()).setOriginalJdbcColumnTypeNames(Map.of("sortKey", entry.getValue()));
             String sql = sql(push(topN(scan, new Ordering(ref, false, false))));
-            // Only a string key carries the collation that aligns PostgreSQL with StarRocks bytes.
-            String expected = entry.getKey().getPrimitiveType() == PrimitiveType.VARCHAR
+            String expected = collated.contains(entry.getValue())
                     ? "ORDER BY \"sortKey\" COLLATE \"C\" DESC NULLS LAST LIMIT 10"
                     : "ORDER BY \"sortKey\" DESC NULLS LAST LIMIT 10";
             Assertions.assertTrue(sql.contains(expected), entry.getValue() + ": " + sql);

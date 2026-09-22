@@ -128,7 +128,8 @@ The default `lib/type_checker_config.xml` includes mappings for:
 - **Java Primitives**: Byte, Short, Integer, Long, Boolean, Float, Double
 - **Java Objects**: String, BigInteger, BigDecimal
 - **Temporal Types**: java.sql.Date, java.sql.Time, java.sql.Timestamp, java.time.LocalDate, java.time.LocalDateTime
-- **Binary Types**: byte[], [B, java.util.UUID
+- **Binary Types**: byte[], [B
+- **UUID**: java.util.UUID, whose rules accept a VARCHAR, CHAR, BINARY, or VARBINARY slot. Every rule returns `TYPE_VARBINARY`, the intermediate column the JDBC bridge writes the UUID's 36-character canonical text into; the scanner then casts that intermediate to the slot's own type.
 - **Database-Specific**: Oracle (TIMESTAMP, TIMESTAMPLTZ, TIMESTAMPTZ, OracleBlob), SQL Server (DateTimeOffset), ClickHouse (UnsignedByte, UnsignedShort, UnsignedInteger, UnsignedLong)
 
 See `lib/type_checker_config.xml` for the complete configuration.

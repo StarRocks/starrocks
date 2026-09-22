@@ -405,7 +405,7 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
             // renders, so predicate gating and SQL rendering stay in sync.
             boolean allPushable = group.ownedPredicates.stream()
                     .allMatch(p -> CanPushDownPredicateVisitor.canPushDown(
-                            p, group.dialect(), group.collatableColumns()));
+                            p, group.dialect(), group.orderSafeColumns()));
             // A merge needs at least one cross-table (join) predicate, else it degenerates into a
             // remote Cartesian product.
             group.shouldMerge = allPushable && !group.onPredicates.isEmpty();
@@ -631,17 +631,18 @@ public class PushDownJoinToJDBCRule extends TransformationRule {
         }
 
         /**
-         * The group's columns a pushed ordering comparison may name {@code COLLATE "C"} on, so a
-         * cross-table string comparison orders the same way StarRocks would. Empty for every
-         * dialect but PostgreSQL; see {@link PostgresCollation}.
+         * The group's columns a pushed ordering comparison returns the local answer for, so a
+         * cross-table string comparison orders the same way StarRocks would -- whether that takes
+         * {@code COLLATE "C"} or the remote type already orders like StarRocks' bytes. Empty for
+         * every dialect but PostgreSQL; see {@link PostgresCollation}.
          */
-        Set<ColumnRefOperator> collatableColumns() {
-            Set<ColumnRefOperator> collatable = new HashSet<>();
+        Set<ColumnRefOperator> orderSafeColumns() {
+            Set<ColumnRefOperator> orderSafe = new HashSet<>();
             for (AtomEntry entry : entries) {
-                collatable.addAll(PostgresCollation.collatableColumns(
+                orderSafe.addAll(PostgresCollation.orderSafeColumns(
                         entry.table, entry.scanOp.getColRefToColumnMetaMap()));
             }
-            return collatable;
+            return orderSafe;
         }
 
         /** True if {@code pred} touches columns of 2 or more scans in this group. */

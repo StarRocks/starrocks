@@ -28,6 +28,14 @@ JDBC catalog は v3.0 から MySQL と PostgreSQL を、v3.2.9 と v3.3.1 から
 
 このマッピングを使用する前に、FE、BE/CN、JDBC bridge を一緒にアップグレードしてください。範囲外の値には、業務に適した精度とスケールへ明示的に変換する PostgreSQL ビューを使用できます。テキスト表現の保持が必要な場合は、ビューからテキストを返してください。
 
+## PostgreSQL の uuid
+
+v4.2 以降、PostgreSQL の `uuid` 列は `VARBINARY` ではなく StarRocks の `VARCHAR(36)` にマッピングされます。値そのものは変わりません。JDBC ドライバーは `java.util.UUID` を返し、JDBC bridge は以前からそれを正規形（小文字）の 36 文字のテキストとして書き出しているため、同じバイト列のラベルがバイナリからテキストに変わるだけです。NULL は NULL のままで、`uuid[]` は引き続きサポートされません。StarRocks の他の UUID 経路はもともとすべてテキストです。`uuid()` と `uuid_v7()` 関数、Iceberg の `UUIDType`、`FILES()` で読む Parquet の UUID 列、SQL Server の `uniqueidentifier` がそれにあたります。
+
+この変更により、これらの列の比較、並べ替え、グループ化、関数解決には文字列のセマンティクスが使用されます。uuid 列に対する比較は、これまで失敗していましたが、PostgreSQL へプッシュダウンされるようになります。`=`、`!=`、`<=>`、範囲比較、`BETWEEN`、`ORDER BY ... LIMIT` はいずれもリモートのステートメントに渡され、どれも `COLLATE "C"` を伴いません。正規形テキストの順序は PostgreSQL が値を並べる順序と完全に一致するため collation は不要であり、そもそも PostgreSQL はこの型への collation 指定を拒否します。したがってプッシュダウンされた比較は、その列の PostgreSQL インデックスを引き続き利用できます。uuid 列に対する `MIN` と `MAX` だけは例外で、StarRocks 側で計算されます。値の順序は明確であるにもかかわらず、PostgreSQL はこの型に対する `min`、`max` 集約関数を定義していないためです。列がバイナリだったために 16 進数で表示されていた値（`binary_encoding_level` が `ALL` の場合や、ARRAY や STRUCT に入れ子になっている場合）は、UUID のテキストそのものが返るようになります。
+
+FE より先に BE と CN をアップグレードしてください。FE が uuid を `VARCHAR` にマッピングしているのに BE または CN が古い **type_checker_config.xml** のままだと、その列を読むクエリはすべて `Type mismatches on column[...] type:VARCHAR, JDBC result type is java.util.UUID` で失敗します。逆の順序は安全です。**$BE_HOME/lib/type_checker_config.xml** が独自のコピーへのシンボリックリンクになっている場合は、そのコピーも更新してください。uuid 列をそのまま射影する非同期マテリアライズドビューはその列を `VARBINARY` として実体化しているため、型の変更によって次回のリフレッシュで無効化されます。`ALTER MATERIALIZED VIEW ... ACTIVE` では復旧できず、削除して作り直す必要があります。列をキャストしているマテリアライズドビューと通常の論理ビューは影響を受けません。そうしたマテリアライズドビューをまだ作り直していない catalog では、catalog プロパティ `postgresql.uuid.mapping` を `varbinary` に設定すると従来のマッピングを維持できます。
+
 ## 前提条件
 
 - StarRocks クラスター内の FEs と BEs または CNs が、`driver_url` パラメーターで指定されたダウンロード URL から JDBC ドライバーをダウンロードできること。
@@ -79,6 +87,14 @@ JDBC catalog のプロパティ。`PROPERTIES` には以下のパラメーター
 | oracle.number.default-scale    | 6           | Oracle の `NUMBER` メタデータに明示的な精度とスケールが指定されていない場合に設定します。有効な範囲：`0`～`38`。             |
 | oracle.temporal.to-datetime    | false       | Oracle の `DATE`、`TIMESTAMP`、および `TIMESTAMP WITH LOCAL TIME ZONE` のマッピングを制御します。この設定が `true` に設定されている場合、これらのデータ型は StarRocks の `DATETIME` 型にマッピングされます。そうでない場合、`DATE` は `DATE` のままとなり、`TIMESTAMP` および `TIMESTAMP WITH LOCAL TIME ZONE` は `VARCHAR(64)` にマッピングされます。 |
 | oracle.timestamptz.to-datetime | false       | Oracle の `TIMESTAMP WITH TIME ZONE` のマッピングを制御します。`true` に設定されている場合、StarRocksの `DATETIME` 型にマッピングされます。それ以外の場合は、 `VARCHAR(64)` にマッピングされます。 |
+
+#### オプションの PostgreSQL プロパティ
+
+`driver_class` が PostgreSQL に設定されている場合、以下のオプションのプロパティを設定できます：
+
+| **パラメータ**            | **デフォルト** | **説明**                                                                                                      |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| postgresql.uuid.mapping | varchar     | PostgreSQL の `uuid` のマッピングを制御します。`varchar` は列を `VARCHAR(36)` にマッピングします。`varbinary` は v4.2 より前のマッピングに戻すもので、uuid 列を参照するマテリアライズドビューをまだ作り直していない catalog のための移行用です。認識できない値は無視され、`varchar` が使用されます。変更には `ALTER CATALOG` を使用してください（catalog のコネクタが再構築されます）。`REFRESH EXTERNAL TABLE` では JDBC テーブルのスキーマは再導出されません。 |
 
 #### オプションの統計情報キャッシュプロパティ
 

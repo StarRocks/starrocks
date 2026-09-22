@@ -81,10 +81,12 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     // jdbc_predicate_pushdown_max_in_list_size: -1 = no limit; 0 = never push an IN; N > 0 = cap at N.
     private int maxInListSize = -1;
 
-    // Scan columns a pushed ordering comparison may be rendered for under COLLATE "C"; see
-    // PostgresCollation. Only the PostgreSQL gate reads it, and only an ordering comparison
-    // (< <= > >=) over a string consults it -- equality compares equal exactly when the bytes do.
-    private Set<ColumnRefOperator> collatableColumns = Collections.emptySet();
+    // Scan columns a pushed ordering comparison returns the local answer for -- either because the
+    // renderer will name COLLATE "C" on them, or because the remote type's own order already
+    // matches StarRocks' byte order; see PostgresCollation.orderSafeColumns, which is what callers
+    // pass. Only the PostgreSQL gate reads it, and only an ordering comparison (< <= > >=) over a
+    // string consults it -- equality compares equal exactly when the bytes do.
+    private Set<ColumnRefOperator> orderSafeColumns = Collections.emptySet();
 
     // enable_jdbc_array_subscript_push_down, read once per verdict so that every path asking this
     // gate about one statement gets the same answer. Only the PostgreSQL gate consults it, in
@@ -92,14 +94,14 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     protected boolean arraySubscriptPushDown = true;
 
     public static boolean canPushDown(ScalarOperator op, JDBCTable.ProtocolType dialect,
-                                      Set<ColumnRefOperator> collatableColumns) {
-        return accept(op, dialect, false, sessionMaxInListSize(), collatableColumns);
+                                      Set<ColumnRefOperator> orderSafeColumns) {
+        return accept(op, dialect, false, sessionMaxInListSize(), orderSafeColumns);
     }
 
     /** Overload with an explicit IN-list cap (0 = unlimited), bypassing the session variable. */
     public static boolean canPushDown(ScalarOperator op, JDBCTable.ProtocolType dialect, int maxInListSize,
-                                      Set<ColumnRefOperator> collatableColumns) {
-        return accept(op, dialect, false, maxInListSize, collatableColumns);
+                                      Set<ColumnRefOperator> orderSafeColumns) {
+        return accept(op, dialect, false, maxInListSize, orderSafeColumns);
     }
 
     /**
@@ -109,29 +111,30 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
      * {@code HAVING MAX(c) > 5}).
      */
     public static boolean canPushDownHaving(ScalarOperator op, JDBCTable.ProtocolType dialect,
-                                            Set<ColumnRefOperator> collatableColumns) {
-        return accept(op, dialect, true, sessionMaxInListSize(), collatableColumns);
+                                            Set<ColumnRefOperator> orderSafeColumns) {
+        return accept(op, dialect, true, sessionMaxInListSize(), orderSafeColumns);
     }
 
     private static boolean accept(ScalarOperator op, JDBCTable.ProtocolType dialect,
                                   boolean allowAggregateCalls, int maxInListSize,
-                                  Set<ColumnRefOperator> collatableColumns) {
+                                  Set<ColumnRefOperator> orderSafeColumns) {
         CanPushDownPredicateVisitor gate = forDialect(dialect);
         gate.allowAggregateCalls = allowAggregateCalls;
         gate.maxInListSize = maxInListSize;
-        gate.collatableColumns = collatableColumns == null ? Collections.emptySet() : collatableColumns;
+        gate.orderSafeColumns = orderSafeColumns == null ? Collections.emptySet() : orderSafeColumns;
         gate.arraySubscriptPushDown = sessionArraySubscriptPushDown();
         return op.accept(gate, null);
     }
 
     /**
-     * Whether an ordering comparison ({@code < <= > >=}) over these operands can be rendered with a
-     * collation that makes PostgreSQL's answer match StarRocks'. Operands that are not strings do
-     * not collate at all, so they pass; every string operand has to be one the renderer can collate
-     * (see {@link #operandCollatesSafely}) or a literal, and at least one non-literal has to be
-     * present -- a comparison of two literals would be evaluated under the database's own collation.
+     * Whether an ordering comparison ({@code < <= > >=}) over these operands returns, remotely, the
+     * answer StarRocks would have produced locally. Operands that are not strings order the same
+     * way on both sides already, so they pass; every string operand has to be one the remote order
+     * is known for (see {@link #operandOrdersSafely}) or a literal, and at least one non-literal has
+     * to be present -- a comparison of two literals would be evaluated under the database's own
+     * collation.
      */
-    protected boolean orderingComparisonCollatesSafely(ScalarOperator op) {
+    protected boolean orderingComparisonIsOrderSafe(ScalarOperator op) {
         boolean comparesStrings = false;
         boolean collatesAnOperand = false;
         for (ScalarOperator child : op.getChildren()) {
@@ -142,7 +145,7 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
             if (child instanceof ConstantOperator) {
                 continue;
             }
-            if (!operandCollatesSafely(child)) {
+            if (!operandOrdersSafely(child)) {
                 return false;
             }
             collatesAnOperand = true;
@@ -151,25 +154,34 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
     }
 
     /**
-     * Whether the renderer can put {@code COLLATE "C"} where this operand's comparison order is
-     * decided. A column is collatable when {@link PostgresCollation} vouched for it. A MIN/MAX over
-     * such a column is too: the renderer collates the aggregate's argument, and PostgreSQL derives
-     * the aggregate's result collation from it, so the comparison inherits the explicit collation
-     * without needing one of its own. The argument still has to be collatable -- MIN/MAX over a
-     * bpchar or over a numeric that merely maps to VARCHAR is exactly the case this gate exists to
-     * keep local. Only {@code canPushDownHaving} can reach the aggregate branch, since
-     * {@link #visitCall} rejects aggregates everywhere else.
+     * Whether this operand's comparison order is one both sides agree on. A column qualifies when
+     * {@link PostgresCollation} vouched for it, by either of the two routes that set vouches for:
+     * the renderer will name {@code COLLATE "C"} on it, or the remote type orders like StarRocks'
+     * bytes on its own and must not be given a collation at all ({@code uuid}).
+     *
+     * <p>A MIN/MAX over such a column qualifies too: the renderer collates the aggregate's
+     * argument and PostgreSQL derives the aggregate's result collation from it, so the comparison
+     * inherits the explicit collation without needing one of its own. The argument still has to be
+     * vouched for -- MIN/MAX over a bpchar or over a numeric that merely maps to VARCHAR is exactly
+     * the case this gate exists to keep local. Only {@code canPushDownHaving} can reach the
+     * aggregate branch, since {@link #visitCall} rejects aggregates everywhere else.
+     *
+     * <p>The aggregate branch does not have to re-ask whether the argument is one PostgreSQL will
+     * aggregate at all: a uuid column is order-safe but has no remote {@code min}/{@code max}, and
+     * PushDownAggToJDBCScanRule refuses that aggregate outright (see its
+     * {@code PostgresCollation.minMaxPushableColumns} check), abandoning the whole aggregate
+     * push-down, so no HAVING over one ever reaches this gate.
      */
-    private boolean operandCollatesSafely(ScalarOperator operand) {
+    private boolean operandOrdersSafely(ScalarOperator operand) {
         if (operand instanceof ColumnRefOperator) {
-            return collatableColumns.contains(operand);
+            return orderSafeColumns.contains(operand);
         }
         if (allowAggregateCalls && operand instanceof CallOperator) {
             CallOperator call = (CallOperator) operand;
             String fnName = call.getFnName().toLowerCase(Locale.ROOT);
             if ((FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName))
                     && call.getChildren().size() == 1) {
-                return operandCollatesSafely(call.getChild(0));
+                return operandOrdersSafely(call.getChild(0));
             }
         }
         return false;
@@ -444,7 +456,7 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
 
         @Override
         public Boolean visitBinaryPredicate(BinaryPredicateOperator op, Void ctx) {
-            if (op.getBinaryType().isRange() && !orderingComparisonCollatesSafely(op)) {
+            if (op.getBinaryType().isRange() && !orderingComparisonIsOrderSafe(op)) {
                 return false;
             }
             return super.visitBinaryPredicate(op, ctx);
@@ -454,7 +466,7 @@ public abstract class CanPushDownPredicateVisitor extends ScalarOperatorVisitor<
         public Boolean visitBetweenPredicate(BetweenPredicateOperator op, Void ctx) {
             // The optimizer usually rewrites BETWEEN into two comparisons before a scan predicate
             // reaches here, but the operator survives on some paths and orders the same way.
-            if (!orderingComparisonCollatesSafely(op)) {
+            if (!orderingComparisonIsOrderSafe(op)) {
                 return false;
             }
             return super.visitBetweenPredicate(op, ctx);

@@ -68,9 +68,9 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
         ScalarOperator scanPredicate = operator.getPredicate();
         ScalarOperator filterPredicate = lfo.getPredicate();
         JDBCTable.ProtocolType dialect = dialectOf(operator);
-        Set<ColumnRefOperator> collatableColumns = collatableColumnsOf(operator);
+        Set<ColumnRefOperator> orderSafeColumns = orderSafeColumnsOf(operator);
         ExternalTablePredicateExtractor extractor = new ExternalTablePredicateExtractor(
-                p -> CanPushDownPredicateVisitor.canPushDown(p, dialect, collatableColumns));
+                p -> CanPushDownPredicateVisitor.canPushDown(p, dialect, orderSafeColumns));
         extractor.extract(predicate);
         ScalarOperator pushedPredicate = extractor.getPushPredicate();
         ScalarOperator reservedPredicate = extractor.getReservePredicate();
@@ -136,16 +136,17 @@ public class PushDownPredicateToExternalTableScanRule extends TransformationRule
     }
 
     /**
-     * The scan's columns a pushed ordering comparison may name {@code COLLATE "C"} on, so the
-     * remote order matches the byte order StarRocks applies. Empty for a non-JDBC scan and for
-     * every dialect but PostgreSQL; see {@link PostgresCollation}.
+     * The scan's columns a pushed ordering comparison returns the local answer for, whether that
+     * takes {@code COLLATE "C"} or the remote type's own order already matches StarRocks' bytes.
+     * Empty for a non-JDBC scan and for every dialect but PostgreSQL; see
+     * {@link PostgresCollation}.
      */
-    private Set<ColumnRefOperator> collatableColumnsOf(Operator operator) {
+    private Set<ColumnRefOperator> orderSafeColumnsOf(Operator operator) {
         if (operator.getOpType() != OperatorType.LOGICAL_JDBC_SCAN) {
             return Collections.emptySet();
         }
         LogicalJDBCScanOperator scan = (LogicalJDBCScanOperator) operator;
-        return PostgresCollation.collatableColumns((JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap());
+        return PostgresCollation.orderSafeColumns((JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap());
     }
 
     private JDBCTable.ProtocolType dialectOf(Operator operator) {

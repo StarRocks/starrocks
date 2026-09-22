@@ -28,6 +28,14 @@ PostgreSQL 中未声明精度和小数位数的 `numeric`、`decimal` 列映射�
 
 使用此映射前，应同步升级 FE、BE/CN 和 JDBC bridge。值超出范围时，可以在 PostgreSQL 视图中显式转换成符合业务范围的精度和小数位数；如果需要保留文本表示，可以让视图返回文本。
 
+## PostgreSQL uuid
+
+自 v4.2 起，PostgreSQL `uuid` 列映射为 StarRocks `VARCHAR(36)`，不再映射为 `VARBINARY`。值本身没有变化：JDBC 驱动返回 `java.util.UUID`，JDBC bridge 一直将其写为 36 个字符的规范小写文本，因此这些字节只是从标注为二进制改为标注为文本。NULL 仍为 NULL，`uuid[]` 仍不支持。StarRocks 中其余的 UUID 路径本来就是文本：`uuid()` 与 `uuid_v7()` 函数、Iceberg `UUIDType`、通过 `FILES()` 读取的 Parquet UUID 列，以及 SQL Server 的 `uniqueidentifier`。
+
+该变更使这些列采用字符串语义，包括比较、排序、分组及函数解析。uuid 列上的比较现在可以下推到 PostgreSQL，而此前会直接报错：`=`、`!=`、`<=>`、范围比较、`BETWEEN` 以及 `ORDER BY ... LIMIT` 都会进入远端语句，并且都不带 `COLLATE "C"`。规范文本的排序顺序与 PostgreSQL 对该类型值的排序顺序完全一致，因此不需要 collation；而且 PostgreSQL 本身也拒绝为该类型指定 collation。所以下推后的比较仍可以使用 PostgreSQL 在该列上的索引。uuid 列上的 `MIN` 和 `MAX` 是例外，仍在 StarRocks 本地计算：尽管该类型的值有良好的顺序，PostgreSQL 并未为它定义 `min`、`max` 聚合函数。此前因为列是二进制而以十六进制呈现的值——`binary_encoding_level` 设为 `ALL` 时，或嵌套在 ARRAY、STRUCT 中时——现在直接返回 UUID 文本。
+
+请先升级 BE 与 CN 节点，再升级 FE。如果 FE 已经把 uuid 映射为 `VARCHAR`，而某个 BE 或 CN 仍是旧的 **type_checker_config.xml**，则所有读取该列的查询都会失败，报 `Type mismatches on column[...] type:VARCHAR, JDBC result type is java.util.UUID`；反方向的升级顺序是安全的。如果 **$BE_HOME/lib/type_checker_config.xml** 是指向自有副本的软链接，也要更新那份副本。直接投影 uuid 列的异步物化视图把该列物化成了 `VARBINARY`，类型变更会在下一次刷新时使其失效；`ALTER MATERIALIZED VIEW ... ACTIVE` 无法恢复，只能删除重建。对该列做了类型转换的物化视图，以及普通逻辑视图，不受影响。对于尚未重建此类物化视图的 catalog，可以把 catalog 属性 `postgresql.uuid.mapping` 设为 `varbinary` 以保留原映射。
+
 ## 前提条件
 
 - 确保 FE 和 BE（或 CN）可以通过 `driver_url` 指定的下载路径，下载所需的 JDBC 驱动程序。
@@ -80,6 +88,14 @@ JDBC Catalog 的属性，包含如下必填配置项：
 | oracle.number.default-scale    | 6           | 当 Oracle `NUMBER` 元数据未明确指定精度和规模时，请设置此参数。有效范围：`0` 至 `38`。                                  |
 | oracle.temporal.to-datetime    | false       | 控制 Oracle `DATE`、`TIMESTAMP` 和 `TIMESTAMP WITH LOCAL TIME ZONE` 的映射。如果设置为 `true`，这些数据类型将映射到 StarRocks 的 `DATETIME` 类型；否则，`DATE` 保持为 `DATE`，而 `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` 将映射到 `VARCHAR(64)`。 |
 | oracle.timestamptz.to-datetime | false       | 控制 Oracle `TIMESTAMP WITH TIME ZONE` 的映射。如果设置为 `true`，则映射为 StarRocks 的 `DATETIME` 类型；否则，则映射为 `VARCHAR(64)`。 |
+
+#### 可选 PostgreSQL 属性
+
+当 `driver_class` 设置为 PostgreSQL 时，您可以配置以下可选属性：
+
+| **参数**                 | **默认**    | **描述**                                                                                                       |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| postgresql.uuid.mapping | varchar     | 控制 PostgreSQL `uuid` 的映射。`varchar` 将该列映射为 `VARCHAR(36)`。`varbinary` 恢复 v4.2 之前的映射，用于过渡：某个 catalog 上基于 uuid 列的物化视图尚未重建时可以先这样设置。无法识别的取值会被忽略，按 `varchar` 处理。使用 `ALTER CATALOG` 修改，它会重建该 catalog 的 connector；`REFRESH EXTERNAL TABLE` 不会重新推导 JDBC 表的 schema。 |
 
 #### 可选统计信息缓存属性
 

@@ -99,7 +99,7 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
         if (table.getProtocolType() != JDBCTable.ProtocolType.POSTGRES
                 || (scan.getPredicate() != null && !CanPushDownPredicateVisitor.canPushDown(
                         scan.getPredicate(), table.getProtocolType(),
-                        PostgresCollation.collatableColumns(table, scan.getColRefToColumnMetaMap())))) {
+                        PostgresCollation.orderSafeColumns(table, scan.getColRefToColumnMetaMap())))) {
             return false;
         }
         for (Ordering ordering : topN.getOrderByElements()) {
@@ -153,7 +153,7 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
                 return true;
             case BOOLEAN:
                 // PostgreSQL bool and StarRocks BOOLEAN both order false before true.
-                return isSourceType(typeName, "bool", "boolean");
+                return PostgresCollation.isSourceType(typeName, "bool", "boolean");
             case DECIMAL64:
             case DECIMAL128:
                 // A declared numeric(p,s) with p <= 38 maps to these without losing a digit, so the
@@ -162,40 +162,28 @@ public class PushDownTopNToJDBCScanRule extends TransformationRule {
                 // DECIMAL256 maximum, and neither preserves PostgreSQL's ordering. Requiring the
                 // source type name also keeps out pushed aggregate results, whose precision and
                 // overflow behaviour are the aggregate's rather than the column's.
-                return isSourceType(typeName, "numeric", "decimal");
+                return PostgresCollation.isSourceType(typeName, "numeric", "decimal");
             case VARCHAR:
-                // PostgreSQL compares text under the column's collation while StarRocks compares
-                // bytes, so buildTopNQuery sorts these keys under COLLATE "C", which is PostgreSQL's
-                // byte order. bpchar is deliberately absent: it maps to CHAR and ignores trailing
-                // spaces when comparing. The source type name is required because PostgreSQL only
-                // collates its string types: asking for one on any other column is an error, not a
-                // differently ordered result.
-                return isSourceType(typeName, "text", "varchar", "character varying");
+                // The same question a pushed range comparison asks, so it is the same answer:
+                // PostgresCollation decides which VARCHAR columns sort remotely the way StarRocks
+                // sorts them locally, and buildTopNQuery renders COLLATE "C" for exactly the subset
+                // that needs one. Sharing the decision is what keeps the two from drifting -- a key
+                // admitted here but not collated there, or collated on a uuid, is a remote error
+                // rather than a differently ordered result.
+                return PostgresCollation.isOrderSafe(table, column);
             case DATE:
-                return usesPostgresTemporalReader(table) && isSourceType(typeName, "date");
+                return usesPostgresTemporalReader(table) && PostgresCollation.isSourceType(typeName, "date");
             case DATETIME:
                 // Requires the JDBC bridge's lossless LocalDateTime path for plain PG timestamps.
                 // JDBC's TIMESTAMP code also covers timestamptz, whose wall-clock conversion can
                 // change ordering around DST. Missing/derived type metadata therefore fails closed.
                 return usesPostgresTemporalReader(table)
-                        && isSourceType(typeName, "timestamp", "timestamp without time zone");
+                        && PostgresCollation.isSourceType(typeName, "timestamp", "timestamp without time zone");
             default:
                 // Floating NaN/Infinity ordering and lossy timestamptz mapping need their own
                 // contracts; an enum's order is its declaration order, not its string order.
                 return false;
         }
-    }
-
-    private static boolean isSourceType(String typeName, String... accepted) {
-        if (typeName == null) {
-            return false;
-        }
-        for (String candidate : accepted) {
-            if (candidate.equalsIgnoreCase(typeName)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private boolean usesPostgresTemporalReader(JDBCTable table) {

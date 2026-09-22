@@ -423,7 +423,8 @@ StarRocks 从 v3.3.2 版本开始支持基于 REST 的 Iceberg 视图，并从 v
 | TEXT      | VARCHAR(columnsize) | v2.3+    |
 | DATE      | DATE                | v2.3+    |
 | TIMESTAMP | DATETIME            | v2.3+    |
-| UUID      | VARBINARY           | v3.5.3+  |
+| UUID      | VARBINARY           | v3.5.3 至 v4.1 |
+| UUID      | VARCHAR(36)         | v4.2+    |
 
 ### ClickHouse 
 

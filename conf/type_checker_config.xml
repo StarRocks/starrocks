@@ -183,8 +183,22 @@
     <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
   </type-mapping>
   
-  <!-- UUID is stored as byte array in StarRocks for efficient storage and comparison -->
+  <!-- A java.util.UUID is written out as the 36 characters of its canonical text, not as its 16
+       bytes: UDFHelper.getUUIDBoxedResult calls toString().getBytes(UTF_8). return_type is the
+       intermediate column the JDBC bridge fills, and it has to stay TYPE_VARBINARY for every slot
+       type, because case TYPE_VARBINARY is the only branch of UDFHelper.getResultFromBoxedArray
+       that recognises a UUID[]; asking for TYPE_VARCHAR there throws UnsupportedOperationException.
+       jdbc_scanner.cpp then casts that intermediate to the slot's own type, and
+       CAST(VARBINARY AS VARCHAR) passes the bytes through untouched (cast_expr_tpl.hpp returns the
+       same BinaryColumn), so the 36 characters arrive intact in a VARCHAR or CHAR slot.
+
+       TYPE_VARCHAR is what a PostgreSQL JDBC catalog now asks for. TYPE_CHAR covers a hand-written
+       CREATE EXTERNAL TABLE declaring char(36), the same slot shape java.lang.String above allows
+       for. TYPE_BINARY and TYPE_VARBINARY stay for the catalogs and hand-written tables that still
+       declare the column binary, including a BE upgraded ahead of its FE. -->
   <type-mapping java_class="java.util.UUID" display_name="UUID">
+    <type-rule allowed_type="TYPE_VARCHAR" return_type="TYPE_VARBINARY"/>
+    <type-rule allowed_type="TYPE_CHAR" return_type="TYPE_VARBINARY"/>
     <type-rule allowed_type="TYPE_BINARY" return_type="TYPE_VARBINARY"/>
     <type-rule allowed_type="TYPE_VARBINARY" return_type="TYPE_VARBINARY"/>
   </type-mapping>

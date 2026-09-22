@@ -27,7 +27,7 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.type.PrimitiveType;
+import com.starrocks.sql.optimizer.rewrite.PostgresCollation;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 
@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -403,11 +404,14 @@ public class JDBCPushDownSQLBuilder {
         Preconditions.checkArgument(!scan.hasLimit() && limit > 0 && offset >= 0 && !orderings.isEmpty());
         String quote = JDBCScanNode.getIdentifierSymbol(table.getJdbcUri());
         Map<ColumnRefOperator, String> columnNames = buildRawColumnNameMap(scan, quote);
+        Set<ColumnRefOperator> collatableColumns =
+                PostgresCollation.collatableColumns(table, scan.getColRefToColumnMetaMap());
         List<String> orderingSql = new ArrayList<>();
         for (Ordering ordering : orderings) {
             String columnName = columnNames.get(ordering.getColumnRef());
             Preconditions.checkArgument(columnName != null, "order column %s is not in scan", ordering.getColumnRef());
-            orderingSql.add(columnName + collateFor(ordering) + (ordering.isAscending() ? " ASC" : " DESC")
+            orderingSql.add(columnName + collateFor(ordering, collatableColumns)
+                    + (ordering.isAscending() ? " ASC" : " DESC")
                     + (ordering.isNullsFirst() ? " NULLS FIRST" : " NULLS LAST"));
         }
         VelocityContext context = new VelocityContext();
@@ -424,13 +428,18 @@ public class JDBCPushDownSQLBuilder {
      * StarRocks compares strings byte by byte, while PostgreSQL compares them under the column's
      * collation, so a database created with e.g. en_US.UTF-8 orders 'B' before 'a'. Sorting the
      * pushed key under COLLATE "C" selects PostgreSQL's byte order and makes the remote TopN keep
-     * the rows the local TopN would have kept. PushDownTopNToJDBCScanRule only admits a VARCHAR key
-     * whose source type is text or varchar. Note that this can stop PostgreSQL from using an index
-     * built under another collation; the remote ORDER BY remains correct, only its plan changes.
+     * the rows the local TopN would have kept. Note that this can stop PostgreSQL from using an
+     * index built under another collation; the remote ORDER BY remains correct, only its plan
+     * changes.
+     *
+     * <p>Which keys get one is {@link PostgresCollation}'s decision, not "every VARCHAR": a uuid
+     * column also maps to VARCHAR and is also admitted as a sort key -- its canonical text orders
+     * exactly as PostgreSQL orders the values -- but PostgreSQL has no collation for the type and
+     * answers {@code collations are not supported by type uuid} if one is named. Keying this on
+     * {@code PrimitiveType.VARCHAR} alone would emit that statement.
      */
-    private static String collateFor(Ordering ordering) {
-        return ordering.getColumnRef().getType().getPrimitiveType() == PrimitiveType.VARCHAR
-                ? " COLLATE \"C\"" : "";
+    private static String collateFor(Ordering ordering, Set<ColumnRefOperator> collatableColumns) {
+        return collatableColumns.contains(ordering.getColumnRef()) ? PostgresCollation.COLLATE_C : "";
     }
 
     private static Map<ColumnRefOperator, String> buildQualifiedNameMap(List<LogicalJDBCScanOperator> scans,

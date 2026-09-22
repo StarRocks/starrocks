@@ -21,6 +21,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaConstants;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
@@ -50,8 +51,42 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
 
     private static final Logger LOG = LogManager.getLogger(PostgresSchemaResolver.class);
 
+    /**
+     * Catalog property selecting how a PostgreSQL {@code uuid} column is mapped:
+     * {@code varchar} (the default) or {@code varbinary} (what every catalog produced before).
+     *
+     * <p>It exists for one migration: an asynchronous materialized view that projects a uuid column
+     * directly is deactivated by the type change and cannot be reactivated in place. A catalog that
+     * has such a view can pin the old mapping, rebuild the view, and then drop the property. It is
+     * read once, when the catalog's resolver is constructed; changing it requires ALTER CATALOG,
+     * because REFRESH EXTERNAL TABLE does not re-derive a JDBC table's schema.
+     */
+    public static final String POSTGRES_UUID_MAPPING = "postgresql.uuid.mapping";
+    private static final String UUID_MAPPING_VARCHAR = "varchar";
+    private static final String UUID_MAPPING_VARBINARY = "varbinary";
+
+    private final boolean uuidAsVarchar;
+
     public PostgresSchemaResolver() {
+        this(Map.of());
+    }
+
+    public PostgresSchemaResolver(Map<String, String> properties) {
         this.defaultTableTypes = new String[] {"TABLE", "VIEW", "MATERIALIZED VIEW", "FOREIGN TABLE"};
+        String configured = properties == null ? null : properties.get(POSTGRES_UUID_MAPPING);
+        String mapping = configured == null ? UUID_MAPPING_VARCHAR : configured.trim();
+        if (UUID_MAPPING_VARBINARY.equalsIgnoreCase(mapping)) {
+            this.uuidAsVarchar = false;
+        } else {
+            // An unrecognised value takes the default rather than failing here: a resolver
+            // constructor's exception does not fail CREATE EXTERNAL CATALOG (JDBCConnector logs it
+            // and leaves the metadata null), so throwing would turn a typo into a catalog that
+            // appears to exist and fails on first use.
+            if (!UUID_MAPPING_VARCHAR.equalsIgnoreCase(mapping)) {
+                LOG.warn("Unrecognised {} value {}, using {}", POSTGRES_UUID_MAPPING, mapping, UUID_MAPPING_VARCHAR);
+            }
+            this.uuidAsVarchar = true;
+        }
     }
 
     @Override
@@ -207,8 +242,6 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 if ("json".equalsIgnoreCase(typeName) || "jsonb".equalsIgnoreCase(typeName)) {
                     primitiveType = PrimitiveType.JSON;
                     break;
-                } else if ("uuid".equalsIgnoreCase(typeName)) {
-                    return TypeFactory.createVarbinary(columnSize);
                 } else if ("time".equalsIgnoreCase(typeName)
                         || "time without time zone".equalsIgnoreCase(typeName)) {
                     primitiveType = PrimitiveType.TIME;
@@ -227,8 +260,19 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
                 break;
         }
 
+        // One check rather than two. A uuid reaches here through `case Types.OTHER` falling
+        // through to UNKNOWN_TYPE, and also from any driver or metadata path that reports it as
+        // some other java.sql type -- a duplicate inside the switch caught only the first.
+        //
+        // VARCHAR(36), not VARCHAR(columnSize): pgJDBC reports Integer.MAX_VALUE as the column size
+        // of a uuid, so carrying columnSize over would declare an absurdly wide column. 36 is the
+        // canonical form's length, and it is the same constant every other UUID path in StarRocks
+        // already uses -- ColumnTypeConverter.UUID_VARCHAR_LENGTH, shared with Iceberg's UUIDType
+        // and with Parquet schema inference.
         if ("uuid".equalsIgnoreCase(typeName)) {
-            return TypeFactory.createVarbinary(columnSize);
+            return uuidAsVarchar
+                    ? TypeFactory.createVarcharType(ColumnTypeConverter.UUID_VARCHAR_LENGTH)
+                    : TypeFactory.createVarbinary(columnSize);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
@@ -263,8 +307,15 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
      *   <li>{@code timestamptz[]}: the driver hands back exactly the class {@code _timestamp}
      *       does, so only this name tells them apart, and reading one into DATETIME collapses the
      *       two instants of a daylight-saving fall-back onto one wall clock;
-     *   <li>{@code uuid[]}, {@code time[]}, {@code bytea[]}: {@code UDFHelper.clazzs} has no entry
-     *       for VARBINARY or TIME, so the backend array writer has no class to build;
+     *   <li>{@code time[]}, {@code bytea[]}: {@code UDFHelper.clazzs} has no entry for VARBINARY
+     *       or TIME, so the backend array writer has no class to build;
+     *   <li>{@code uuid[]}: a scalar {@code uuid} does map to VARCHAR, but that does not carry
+     *       over. The scalar mapping works because the JDBC bridge stages the driver's
+     *       {@code java.util.UUID} through a VARBINARY intermediate column, which is where
+     *       {@code UDFHelper} writes its canonical text, and {@code jdbc_scanner.cpp} then casts
+     *       that to VARCHAR. An array element gets no intermediate, so the writer would allocate
+     *       {@code clazzs.get(TYPE_VARCHAR)}, a {@code String[]}, and storing the driver's
+     *       {@code UUID} objects into it throws {@code ArrayStoreException};
      *   <li>{@code json[]}: the backend array writer has no JSON element branch.
      * </ul>
      *

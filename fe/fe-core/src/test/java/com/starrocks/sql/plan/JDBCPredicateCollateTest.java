@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.type.CharType;
+import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -36,7 +37,14 @@ import java.util.function.Consumer;
  *
  * <p>Only the types PostgreSQL actually collates may carry it: asking for a collation on anything
  * else is an error rather than a differently ordered result, so a column whose remote type is not
- * text/varchar keeps its comparison local.
+ * text/varchar keeps its comparison local -- unless its remote order already agrees with
+ * StarRocks' bytes without a collation, which so far is {@code uuid} alone. Those push down with
+ * no COLLATE at all, and the tests below pin both halves of that: the predicate reaches the remote
+ * SQL, and it reaches it bare.
+ *
+ * <p>Ordering safety is not the only thing a push-down needs, which is why one uuid shape still
+ * stays local: PostgreSQL has no {@code min}/{@code max} aggregate for the type, however well its
+ * values order. See {@link #testUuidMinMaxStaysLocal}.
  */
 public class JDBCPredicateCollateTest extends ConnectorPlanTestBase {
     private static final String TABLE = "jdbc_postgres.partitioned_db0.tbl0";
@@ -197,6 +205,129 @@ public class JDBCPredicateCollateTest extends ConnectorPlanTestBase {
                 assertContains(plan, "max(\"label\" COLLATE \"C\")");
                 assertContains(plan, "HAVING (max(\"label\" COLLATE \"C\") > 'Z')");
                 Assertions.assertFalse(plan.contains("AGGREGATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    /**
+     * A uuid column, as PostgreSQL stores it and as StarRocks now maps it: VARCHAR(36) holding the
+     * canonical text. Its remote order and StarRocks' byte order agree without a collation, and
+     * PostgreSQL rejects one outright ({@code collations are not supported by type uuid}), so every
+     * one of these has to push down with no COLLATE in the rendered SQL.
+     */
+    private static void withUuidColumn(Consumer<String> body) {
+        withColumn("uid", TypeFactory.createVarcharType(36), "uuid", body);
+    }
+
+    private static final String UUID_LITERAL = "4c1f8b8e-1a2b-4c3d-8e9f-0a1b2c3d4e5f";
+
+    @Test
+    public void testUuidEqualityPushesWithoutCollate() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c from " + TABLE + " where " + column + " = '" + UUID_LITERAL + "'");
+                assertContains(plan, "\"uid\" = '" + UUID_LITERAL + "'");
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    public void testUuidInequalityPushesWithoutCollate() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c from " + TABLE + " where " + column + " != '" + UUID_LITERAL + "'");
+                assertContains(plan, "\"uid\" != '" + UUID_LITERAL + "'");
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    public void testUuidNullSafeEqualityPushesWithoutCollate() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c from " + TABLE + " where " + column + " <=> '" + UUID_LITERAL + "'");
+                assertContains(plan, "\"uid\" IS NOT DISTINCT FROM '" + UUID_LITERAL + "'");
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    public void testUuidRangePushesWithoutCollate() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c from " + TABLE + " where " + column + " < '" + UUID_LITERAL + "'");
+                // The pair of assertions is the point. "no COLLATE" alone would also hold if the
+                // predicate had silently stayed local, which is what an ordinary VARCHAR whose
+                // remote type is unknown does.
+                assertContains(plan, "\"uid\" < '" + UUID_LITERAL + "'");
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    public void testUuidBetweenPushesWithoutCollate() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c from " + TABLE + " where " + column
+                        + " between '00000000-0000-0000-0000-000000000000' and '" + UUID_LITERAL + "'");
+                assertContains(plan, "\"uid\" >= '00000000-0000-0000-0000-000000000000'");
+                assertContains(plan, "\"uid\" <= '" + UUID_LITERAL + "'");
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    /**
+     * The one uuid shape that stays local, and not for an ordering reason. PostgreSQL catalogues
+     * {@code min}/{@code max} per type instead of deriving them from the type's btree ordering,
+     * and it never got them for {@code uuid}: measured on PostgreSQL 16.15, {@code SELECT
+     * min(uuid_col)} fails with {@code function min(uuid) does not exist} while {@code ORDER BY
+     * uuid_col} and {@code uuid_col < '...'} both work and both use the column's index. Pushing
+     * the aggregate would render a statement the database rejects, so the whole aggregate
+     * push-down is abandoned and the GROUP BY stays local.
+     */
+    @Test
+    public void testUuidMinMaxStaysLocal() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select min(" + column + "), max(" + column + ") from " + TABLE);
+                Assertions.assertFalse(plan.contains("min(\"uid\")"), plan);
+                Assertions.assertFalse(plan.contains("max(\"uid\")"), plan);
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+                assertContains(plan, "AGGREGATE");
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+    }
+
+    @Test
+    public void testUuidHavingAggregateStaysLocal() {
+        withUuidColumn(column -> {
+            try {
+                String plan = planOf("select c, max(" + column + ") m from " + TABLE
+                        + " group by c having max(" + column + ") > '" + UUID_LITERAL + "'");
+                // The HAVING gate would admit this -- a uuid comparison is order-safe -- but the
+                // aggregate it is written over is refused first, which abandons the push-down.
+                Assertions.assertFalse(plan.contains("HAVING"), plan);
+                Assertions.assertFalse(plan.contains("COLLATE"), plan);
+                assertContains(plan, "AGGREGATE");
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

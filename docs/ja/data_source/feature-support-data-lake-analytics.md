@@ -430,7 +430,8 @@ StarRocks は、v3.3.2 以降で REST 上の Iceberg ビューを、v3.4.1 以�
 | TEXT      | VARCHAR(columnsize) | v2.3+                |
 | DATE      | DATE                | v2.3+                |
 | TIMESTAMP | DATETIME            | v2.3+                |
-| UUID      | VARBINARY           | v3.5.3+              |
+| UUID      | VARBINARY           | v3.5.3 - v4.1        |
+| UUID      | VARCHAR(36)         | v4.2+                |
 
 ### ClickHouse 
 

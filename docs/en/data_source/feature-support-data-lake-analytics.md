@@ -425,7 +425,8 @@ Currently, only Iceberg views created through StarRocks are supported. Starting 
 | TEXT      | VARCHAR(columnsize) | v2.3+                |
 | DATE      | DATE                | v2.3+                |
 | TIMESTAMP | DATETIME            | v2.3+                |
-| UUID      | VARBINARY           | v3.5.3+              |
+| UUID      | VARBINARY           | v3.5.3 to v4.1       |
+| UUID      | VARCHAR(36)         | v4.2+                |
 
 ### ClickHouse 
 

@@ -155,7 +155,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         if (driverClass.contains("mysql")) {
             return new MysqlSchemaResolver();
         } else if (driverClass.contains("postgresql")) {
-            return new PostgresSchemaResolver();
+            return new PostgresSchemaResolver(properties);
         } else if (driverClass.contains("mariadb")) {
             return new MysqlSchemaResolver();
         } else if (driverClass.contains("clickhouse")) {
@@ -178,7 +178,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCSchemaResolver createSchemaResolverFromProperty(String resolverType) {
         switch (resolverType.toLowerCase()) {
             case "postgresql":
-                return new PostgresSchemaResolver();
+                return new PostgresSchemaResolver(properties);
             case "mysql":
                 return new MysqlSchemaResolver();
             case "oracle":

@@ -226,6 +226,27 @@ TEST_F(TypeCheckerTest, NotSupportStringType) {
     ASSERT_FALSE(status_or_type.ok());
 }
 
+// java.util.UUID. A PostgreSQL JDBC catalog maps a uuid column to VARCHAR(36), a hand-written
+// external table may declare it char(36), and the binary declarations that predate both still
+// exist -- all four have to be accepted. Every one of them returns TYPE_VARBINARY, because the
+// intermediate column the bridge fills is the only shape UDFHelper writes a UUID[] into; the
+// scanner casts that to the slot's own type afterwards. Returning TYPE_VARCHAR here instead would
+// compile and configure fine and then throw UnsupportedOperationException at read time.
+TEST_F(TypeCheckerTest, SupportUUIDType) {
+    for (auto slot_type : {TYPE_VARCHAR, TYPE_CHAR, TYPE_BINARY, TYPE_VARBINARY}) {
+        SlotDescriptor slot(0, "uuid_slot", TypeDescriptor(slot_type));
+        auto result = type_checker_manager_.checkType("java.util.UUID", &slot);
+        ASSERT_TRUE(result.ok()) << logical_type_to_string(slot_type) << ": " << result.status();
+        EXPECT_EQ(LogicalType::TYPE_VARBINARY, result.value()) << logical_type_to_string(slot_type);
+    }
+}
+
+TEST_F(TypeCheckerTest, NotSupportUUIDType) {
+    SlotDescriptor unknown_type_slot(0, "unknown_type_slot", TypeDescriptor(TYPE_BIGINT));
+    auto status_or_type = type_checker_manager_.checkType("java.util.UUID", &unknown_type_slot);
+    ASSERT_FALSE(status_or_type.ok());
+}
+
 // Define unit test for com.clickhouse.data.value.UnsignedInteger
 TEST_F(TypeCheckerTest, SupportClickHouseUnsignedIntegerType) {
     SlotDescriptor bigint_type_slot(0, "bigint_type_slot", TypeDescriptor(TYPE_BIGINT));

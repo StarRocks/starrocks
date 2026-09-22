@@ -692,5 +692,79 @@
       "values": 0,
       "skipped": "created_at:column_not_authorized_by_fe"
     }
+  },
+  {
+    "name": "uuid_value_read_back",
+    "sql": "SELECT id, uid FROM {table} WHERE id <= 8 OR id >= 81 ORDER BY id ASC"
+  },
+  {
+    "name": "uuid_equality_predicate_pushed",
+    "sql": "SELECT id FROM {table} WHERE uid = 'c4ca4238-a0b9-2382-0dcc-509a6f75849b' ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"uid\" = 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'"
+    ],
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_inequality_predicate_pushed",
+    "sql": "SELECT id FROM {table} WHERE uid != 'c4ca4238-a0b9-2382-0dcc-509a6f75849b' AND id <= 40 ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"uid\" != 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'"
+    ],
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_null_safe_equality_predicate_pushed",
+    "sql": "SELECT id FROM {table} WHERE uid <=> 'c4ca4238-a0b9-2382-0dcc-509a6f75849b' ORDER BY id ASC",
+    "pg_sql": "SELECT id FROM {table} WHERE uid IS NOT DISTINCT FROM 'c4ca4238-a0b9-2382-0dcc-509a6f75849b' ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"uid\" IS NOT DISTINCT FROM 'c4ca4238-a0b9-2382-0dcc-509a6f75849b'"
+    ],
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_range_predicate_pushed_without_collate",
+    "sql": "SELECT id, uid FROM {table} WHERE uid > '98f13708-2101-94c4-7568-7be6106a3b84' ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"uid\" > '98f13708-2101-94c4-7568-7be6106a3b84'"
+    ],
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_between_predicate_pushed_without_collate",
+    "sql": "SELECT id, uid FROM {table} WHERE uid BETWEEN '0f9b7c21-4d3e-4a5b-8c6d-7e8f90a1b2c3' AND '98f13708-2101-94c4-7568-7be6106a3b84' ORDER BY id ASC",
+    "remote_sql_contains": [
+      "\"uid\" >= '0f9b7c21-4d3e-4a5b-8c6d-7e8f90a1b2c3'",
+      "\"uid\" <= '98f13708-2101-94c4-7568-7be6106a3b84'"
+    ],
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_order_key_topn_without_collate",
+    "sql": "SELECT id, uid FROM {table} ORDER BY uid ASC NULLS LAST, id ASC LIMIT 12",
+    "topn_limit": 12,
+    "remote_sql_excludes": [
+      "COLLATE"
+    ]
+  },
+  {
+    "name": "uuid_min_max_stays_local",
+    "sql": "SELECT min(uid) AS lo, max(uid) AS hi FROM {table}",
+    "pg_sql": "SELECT min(uid::text COLLATE \"C\") AS lo, max(uid::text COLLATE \"C\") AS hi FROM {table}",
+    "remote_sql_excludes": [
+      "min(",
+      "max(",
+      "COLLATE"
+    ]
   }
 ]

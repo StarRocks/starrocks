@@ -133,7 +133,7 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
             return null;
         }
         JDBCTable.ProtocolType dialect = ((JDBCTable) scan.getTable()).getProtocolType();
-        Set<ColumnRefOperator> collatableColumns = PostgresCollation.collatableColumns(
+        Set<ColumnRefOperator> orderSafeColumns = PostgresCollation.orderSafeColumns(
                 (JDBCTable) scan.getTable(), scan.getColRefToColumnMetaMap());
         Map<ColumnRefOperator, ScalarOperator> outputColumnRefToExpr = Maps.newLinkedHashMap();
         boolean hasProjectExpression = false;
@@ -156,7 +156,7 @@ public class PushDownProjectToJDBCScanRule extends TransformationRule {
                 outputColumnRefToExpr.put(outputRef, outputExpr);
                 continue;
             }
-            if (!CanPushDownPredicateVisitor.canPushDown(outputExpr, dialect, collatableColumns)) {
+            if (!CanPushDownPredicateVisitor.canPushDown(outputExpr, dialect, orderSafeColumns)) {
                 return null;
             }
             // Never push a boolean comparison as a SELECT item, even when nested under another pushable

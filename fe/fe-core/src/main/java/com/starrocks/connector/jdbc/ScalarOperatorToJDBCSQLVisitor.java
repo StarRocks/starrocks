@@ -458,9 +458,13 @@ public abstract class ScalarOperatorToJDBCSQLVisitor extends ScalarOperatorVisit
      * {@code IS NOT DISTINCT FROM}; Postgres has no MySQL-style operator.
      */
     public static class PostgresSQLRenderer extends ScalarOperatorToJDBCSQLVisitor {
-        // Columns whose remote comparison order is made to match StarRocks' by COLLATE "C";
-        // CanPushDownPredicateVisitor kept every other string comparison local, so anything
-        // reaching this renderer that is not in here compares under an order both sides agree on.
+        // Columns whose remote comparison order is made to match StarRocks' by COLLATE "C" --
+        // PostgresCollation.collatableColumns, the narrow set, never the gate's wider one.
+        // CanPushDownPredicateVisitor kept every other string comparison local except the ones
+        // PostgresCollation.orderSafeColumns admits without a collation, so anything reaching this
+        // renderer that is not in here compares under an order both sides agree on already. A uuid
+        // column is the second kind, and naming a collation for it is an error on PostgreSQL's
+        // side, not a redundant one -- which is why the gate's set must not be passed here.
         private final Set<ColumnRefOperator> collatableColumns;
         // enable_jdbc_array_lower_bound_correction; see visitCollectionElement.
         private final boolean correctArrayLowerBound;

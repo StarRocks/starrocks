@@ -166,7 +166,7 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
             // A HAVING predicate may reference the aggregates folded into the remote SELECT
             // (e.g. HAVING MAX(c) > 5), so it is vetted with aggregate calls allowed.
             if (!CanPushDownPredicateVisitor.canPushDownHaving(havingPredicate, dialect,
-                    PostgresCollation.collatableColumns((JDBCTable) scanOperator.getTable(),
+                    PostgresCollation.orderSafeColumns((JDBCTable) scanOperator.getTable(),
                             scanOperator.getColRefToColumnMetaMap()))) {
                 return null;
             }
@@ -234,23 +234,27 @@ public class PushDownAggToJDBCScanRule extends TransformationRule {
         }
         JDBCTable table = (JDBCTable) scanOperator.getTable();
         return isSupportedJDBCAggregateArgument(fnName, aggregation.getChild(0), table.getProtocolType(),
-                PostgresCollation.collatableColumns(table, scanOperator.getColRefToColumnMetaMap()));
+                PostgresCollation.minMaxPushableColumns(table, scanOperator.getColRefToColumnMetaMap()));
     }
 
     private boolean isSupportedJDBCAggregateArgument(String fnName, ScalarOperator argument,
                                                      JDBCTable.ProtocolType dialect,
-                                                     Set<ColumnRefOperator> collatableColumns) {
+                                                     Set<ColumnRefOperator> minMaxPushableColumns) {
         if (dialect == JDBCTable.ProtocolType.POSTGRES && argument.getType().isBoolean() &&
                 (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName) ||
                         FunctionSet.SUM.equals(fnName) || FunctionSet.AVG.equals(fnName))) {
             return false;
         }
         // MIN/MAX return the extreme under the remote comparison order, which for a string is the
-        // column's collation rather than StarRocks' byte order. The renderer can only reconcile the
-        // two by naming COLLATE "C", so a string argument it cannot name one on stays local.
+        // column's collation rather than StarRocks' byte order; the renderer reconciles the two by
+        // naming COLLATE "C" on the argument (renderAggregateArgument), so a string argument it
+        // cannot name one on stays local. Note this is PostgresCollation.minMaxPushableColumns and
+        // deliberately not the wider set the predicate gates use: a uuid column compares and sorts
+        // remotely exactly as StarRocks would, but PostgreSQL has no min/max for the type at all
+        // ("function min(uuid) does not exist"), so pushing one renders a statement it rejects.
         if (dialect == JDBCTable.ProtocolType.POSTGRES && argument.getType().isStringType()
                 && (FunctionSet.MIN.equals(fnName) || FunctionSet.MAX.equals(fnName))
-                && !collatableColumns.contains(argument)) {
+                && !minMaxPushableColumns.contains(argument)) {
             return false;
         }
         return true;

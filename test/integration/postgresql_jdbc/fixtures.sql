@@ -64,7 +64,14 @@ CREATE TABLE {table} (
     -- prove the escaping: the single quote has to come back doubled, the rest untouched. The
     -- backslash is the one that cannot be escaped safely and refuses the whole filter instead,
     -- which is what rf_backslash_value_veto asserts.
-    join_key text COLLATE "C"
+    join_key text COLLATE "C",
+    -- PostgreSQL stores a uuid as 16 bytes and renders it as the 36-character canonical text,
+    -- which is also what the JDBC bridge hands StarRocks -- UDFHelper writes UUID.toString(). The
+    -- two orders coincide: the text is fixed width with the hyphens in fixed positions, and its
+    -- lowercase hex digits sort in ASCII the way the bytes they spell sort, so comparing the text
+    -- byte by byte is comparing the values. A pushed comparison therefore needs no collation, and
+    -- must not be given one: PostgreSQL answers "collations are not supported by type uuid".
+    uid uuid
 );
 
 -- Include ties, NULL group keys, an all-NULL group (grp = 2), and large
@@ -124,7 +131,11 @@ SELECT n,
        -- Every sixth row is NULL so a null-safe string join has probe-side NULLs too.
        CASE WHEN n % 6 = 0 THEN NULL
             ELSE (ARRAY[$$back\slash$$, $$quote'single$$, $$double"quote$$,
-                        $$percent%underscore_$$, $$中文字符串$$])[1 + n % 5] END
+                        $$percent%underscore_$$, $$中文字符串$$])[1 + n % 5] END,
+       -- md5 spreads the values over the whole range and keeps them deterministic, which the
+       -- ordered row diff needs; 32 hex digits cast to uuid render canonically hyphenated.
+       -- NULL at 37 and 74.
+       CASE WHEN n % 37 = 0 THEN NULL ELSE md5(n::text)::uuid END
 FROM generate_series(1, 80) AS n;
 
 -- Valid proleptic Gregorian and AD boundaries, including the old JDBC
@@ -141,7 +152,9 @@ INSERT INTO {table} VALUES
      ARRAY['0001-01-01', '1582-10-10', '9999-12-31']::date[],
      ARRAY['0001-01-01 00:00:00.000001', '1582-10-10 12:34:56.123456',
            '9999-12-31 23:59:59.999999']::timestamp[],
-     ARRAY[timestamptz '2026-01-01 00:00:00+00'], $$back\slash$$),
+     ARRAY[timestamptz '2026-01-01 00:00:00+00'], $$back\slash$$,
+     -- The smallest uuid there is, so a range comparison has something below every generated one.
+     '00000000-0000-0000-0000-000000000000'),
     (82, 0, 2, 2, 'name_2', '1582-10-10 12:34:56.123456', '1582-10-10',
      '2026-01-01 00:00:00+00', 8.2, '1.1754944e-38'::real, 102.50, 9223372036854775807,
      'aardvark', false, -99999999999999999999.999999999999999999,
@@ -150,17 +163,22 @@ INSERT INTO {table} VALUES
      ARRAY[0]::double precision[], ARRAY[0]::real[], ARRAY['']::char(4)[],
      -- A daylight-saving gap in America/New_York: 02:30 does not exist there that day.
      ARRAY['2026-03-08']::date[], ARRAY['2026-03-08 02:30:00.123456']::timestamp[],
-     ARRAY[timestamptz '2026-01-01 00:00:00+00'], $$plain$$),
+     ARRAY[timestamptz '2026-01-01 00:00:00+00'], $$plain$$,
+     -- The largest, and all-letters: it sorts above every digit-leading value in both orders only
+     -- because ASCII puts 'a'-'f' after '0'-'9', which is the whole reason the two agree.
+     'ffffffff-ffff-ffff-ffff-ffffffffffff'),
     (83, 1, 3, 3, 'name_3', '9999-12-31 23:59:59.999999', '9999-12-31',
      '2026-01-01 00:00:00+00', 8.3, 'NaN'::real, 103.75, 0, '', NULL, 0,
      ARRAY[]::text[], ARRAY['p1', 'p2', 'p3'], ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
      ARRAY[]::integer[], ARRAY[]::bigint[], ARRAY[]::smallint[], ARRAY[]::boolean[],
      ARRAY[]::double precision[], ARRAY[]::real[], ARRAY[]::char(4)[], ARRAY[]::date[],
-     ARRAY[]::timestamp[], ARRAY[]::timestamptz[], NULL),
+     ARRAY[]::timestamp[], ARRAY[]::timestamptz[], NULL,
+     -- Digits and letters mixed in every group, below the median of the generated values.
+     '0f9b7c21-4d3e-4a5b-8c6d-7e8f90a1b2c3'),
     (84, 1, 4, 4, 'name_4', '2026-03-08 02:30:00.123456', '2026-03-08',
      '2026-01-01 00:00:00+00', 8.4, '-0.0'::real, 105.00, 1, NULL, true, NULL,
      ARRAY['omega', 'psi', 'tail'], NULL, ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $$plain$$),
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, $$plain$$, NULL),
     -- The two instants that fall into the same wall clock when the session time zone observes the
     -- end of daylight saving: 2026-11-01 05:30+00 and 06:30+00 are both 01:30 in America/New_York.
     -- StarRocks reads a timestamptz as that wall clock, so binding it back could only match one of
@@ -168,11 +186,11 @@ INSERT INTO {table} VALUES
     (85, 0, 5, NULL, 'name_5', '2026-03-08 03:00:00', '2026-04-01',
      '2026-11-01 05:30:00+00', 0.85, 0.85, 106.25, 5, NULL, true, 3,
      NULL, NULL, ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     (86, 1, 6, NULL, 'name_6', '2026-03-08 03:01:00', '2026-04-02',
      '2026-11-01 06:30:00+00', 0.86, 0.86, 107.50, 6, NULL, false, 4,
      NULL, NULL, ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
     -- Two join keys outside the Basic Multilingual Plane, which UTF-8 encodes in four bytes and
     -- modified UTF-8 -- what the bridge's NewStringUTF handoff decodes -- encodes as a six-byte
     -- surrogate pair. A filter carrying one of these has to be dropped rather than rendered,
@@ -181,8 +199,8 @@ INSERT INTO {table} VALUES
     (87, 0, 7, NULL, 'name_7', '2026-03-09 03:00:00', '2026-04-03',
      '2026-01-01 00:00:00+00', 0.87, 0.87, 108.75, 7, NULL, true, 5,
      NULL, NULL, ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, U&'\+01F600'),
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, U&'\+01F600', NULL),
     (88, 1, 8, NULL, 'name_8', '2026-03-09 03:01:00', '2026-04-04',
      '2026-01-01 00:00:00+00', 0.88, 0.88, 110.00, 8, NULL, false, 6,
      NULL, NULL, ARRAY[ARRAY['a0', 'b'], ARRAY['c', 'd']],
-     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, U&'\+020001');
+     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, U&'\+020001', NULL);

@@ -67,13 +67,19 @@ public class PostgresSchemaResolverTest {
         tableResult = new MockResultSet("tables");
         tableResult.addColumn("TABLE_NAME", Arrays.asList("tbl1", "tbl2", "tbl3"));
         columnResult = new MockResultSet("columns");
+        // Column "l" is the uuid one, and its shape here is the shape pgJDBC 42.7.12 actually
+        // reports: DATA_TYPE = OTHER and COLUMN_SIZE = Integer.MAX_VALUE. It used to read
+        // VARBINARY/36, which took the generic BINARY arm of convertColumnType and returned before
+        // any uuid branch ran -- so the uuid assertion below passed without the uuid code being
+        // reached, and an implementation that carried COLUMN_SIZE into the declared length would
+        // have looked right here and produced VARCHAR(2147483647) in production.
         columnResult.addColumn("DATA_TYPE", Arrays.asList(Types.BIT, Types.INTEGER, Types.INTEGER, Types.REAL, Types.DOUBLE,
-                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.VARBINARY,
+                Types.NUMERIC, Types.CHAR, Types.VARCHAR, Types.VARCHAR, Types.DATE, Types.TIMESTAMP, Types.OTHER,
                 Types.TIME, Types.TIME_WITH_TIMEZONE, Types.OTHER, Types.OTHER));
         columnResult.addColumn("TYPE_NAME", Arrays.asList("BOOL", "INTEGER", "SERIAL", "FLOAT4", "FLOAT8",
                 "NUMERIC", "CHAR", "VARCHAR", "TEXT", "DATE", "TIMESTAMP", "UUID",
                 "TIME", "TIMETZ", "JSON", "JSONB"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 36,
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(1, 10, 10, 8, 17, 10, 10, 10, 2147483647, 13, 29, 2147483647,
                 15, 21, 2147483647, 2147483647));
         columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 0, 0, 8, 17, 2, 0, 0, 0, 0, 6, 0,
                 0, 0, 0, 0));
@@ -230,7 +236,10 @@ public class PostgresSchemaResolverTest {
             Assertions.assertNull(properties.get(JDBCTable.JDBC_TABLENAME));
             Assertions.assertEquals(16, table.getColumns().size());
             Assertions.assertTrue(table.getColumn("h").getType().isStringType());
-            Assertions.assertTrue(table.getColumn("l").getType().isBinaryType());
+            // Exactly VARCHAR(36), not merely "a string": the length has to be the canonical form's
+            // and not the COLUMN_SIZE the driver reports for a uuid, which is Integer.MAX_VALUE.
+            Assertions.assertEquals(TypeFactory.createVarcharType(36), table.getColumn("l").getType());
+            Assertions.assertEquals("UUID", ((JDBCTable) table).getOriginalJdbcColumnTypeNames().get("l"));
             Assertions.assertEquals("comment-a", table.getColumn("a").getComment());
             Assertions.assertEquals("", table.getColumn("b").getComment());
             Assertions.assertTrue(table.getColumn("m").getType().isTime());
@@ -413,6 +422,62 @@ public class PostgresSchemaResolverTest {
         for (String typeName : List.of("_timestamptz", "_TIMESTAMPTZ")) {
             Assertions.assertEquals(com.starrocks.type.PrimitiveType.UNKNOWN_TYPE,
                     resolver.convertColumnType(Types.ARRAY, typeName, 29, 6).getPrimitiveType(), typeName);
+        }
+    }
+
+    @Test
+    public void testUuidMapsToVarchar36WhateverTheDriverReports() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        // The width is the canonical form's 36, never COLUMN_SIZE: pgJDBC reports Integer.MAX_VALUE
+        // for a uuid column, and a driver or metadata path that reports something else must not
+        // change the declared type either.
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                resolver.convertColumnType(Types.OTHER, "uuid", Integer.MAX_VALUE, 0));
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                resolver.convertColumnType(Types.OTHER, "UUID", 36, 0));
+        // The post-switch check is what catches a uuid reported under a JDBC type the switch has no
+        // arm for, so it is asserted separately from the Types.OTHER path.
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                resolver.convertColumnType(Types.DISTINCT, "uuid", 0, 0));
+    }
+
+    @Test
+    public void testUuidMappingProperty() {
+        Map<String, String> pinnedToVarbinary = new HashMap<>(properties);
+        pinnedToVarbinary.put(PostgresSchemaResolver.POSTGRES_UUID_MAPPING, "varbinary");
+        Assertions.assertEquals(TypeFactory.createVarbinary(Integer.MAX_VALUE),
+                new PostgresSchemaResolver(pinnedToVarbinary)
+                        .convertColumnType(Types.OTHER, "uuid", Integer.MAX_VALUE, 0));
+
+        Map<String, String> explicitVarchar = new HashMap<>(properties);
+        explicitVarchar.put(PostgresSchemaResolver.POSTGRES_UUID_MAPPING, " VarChar ");
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                new PostgresSchemaResolver(explicitVarchar)
+                        .convertColumnType(Types.OTHER, "uuid", Integer.MAX_VALUE, 0));
+
+        // An unrecognised value takes the default rather than failing. A resolver constructor's
+        // exception would not fail CREATE EXTERNAL CATALOG -- JDBCConnector catches it and leaves
+        // the metadata null -- so throwing would turn a typo into a catalog that appears to exist
+        // and fails on first use.
+        Map<String, String> typo = new HashMap<>(properties);
+        typo.put(PostgresSchemaResolver.POSTGRES_UUID_MAPPING, "varchr");
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                new PostgresSchemaResolver(typo).convertColumnType(Types.OTHER, "uuid", Integer.MAX_VALUE, 0));
+
+        // A catalog that never mentions the property gets the new mapping.
+        Assertions.assertEquals(TypeFactory.createVarcharType(36),
+                new PostgresSchemaResolver(properties).convertColumnType(Types.OTHER, "uuid", Integer.MAX_VALUE, 0));
+    }
+
+    @Test
+    public void testByteaStillMapsToVarbinary() {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        // The generic binary arm is a different branch from the uuid one and is untouched by the
+        // uuid change; it also still shadows the uuid branches for any driver that reports a uuid
+        // column as BINARY/VARBINARY.
+        for (int jdbcType : new int[] {Types.BINARY, Types.VARBINARY}) {
+            Assertions.assertTrue(resolver.convertColumnType(jdbcType, "bytea", 10, 0).isBinaryType());
+            Assertions.assertTrue(resolver.convertColumnType(jdbcType, "uuid", 36, 0).isBinaryType());
         }
     }
 

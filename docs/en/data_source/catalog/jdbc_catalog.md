@@ -28,6 +28,14 @@ This changes these columns from string semantics to numeric semantics, including
 
 Upgrade the FE, BE/CN, and JDBC bridge together before using this mapping. If a value does not fit, expose an explicitly typed PostgreSQL view with a business-appropriate precision and scale, or expose the value as text when preserving its textual representation is required.
 
+## PostgreSQL uuid
+
+From v4.2 onwards, PostgreSQL `uuid` columns are mapped to StarRocks `VARCHAR(36)`, instead of `VARBINARY`. The value itself does not change: the JDBC driver hands StarRocks a `java.util.UUID`, and the JDBC bridge has always written it out as the 36 characters of its canonical lowercase text, so the same bytes are now labeled as text rather than as binary. NULL remains NULL, and `uuid[]` remains unsupported. Every other UUID path in StarRocks already produces text: the `uuid()` and `uuid_v7()` functions, Iceberg `UUIDType`, Parquet UUID columns read through `FILES()`, and SQL Server `uniqueidentifier`.
+
+This gives these columns string semantics, including comparisons, sorting, grouping, and function resolution. Comparisons on a uuid column are now pushed down to PostgreSQL, which previously failed outright: `=`, `!=`, `<=>`, range comparisons, `BETWEEN`, and `ORDER BY ... LIMIT` all reach the remote statement, and none of them carries `COLLATE "C"`. The canonical text sorts in exactly the order PostgreSQL sorts the values, so no collation is needed, and PostgreSQL rejects one on the type in any case. A pushed comparison can therefore still use a PostgreSQL index on the column. `MIN` and `MAX` over a uuid column are the exception and stay in StarRocks: PostgreSQL defines no `min` or `max` aggregate for the type, however well its values order. Values previously rendered as hexadecimal because the column was binary -- with `binary_encoding_level` set to `ALL`, or when nested inside an ARRAY or STRUCT -- are now returned as the UUID text itself.
+
+Upgrade the BE and CN nodes before the FEs. An FE that maps uuid to `VARCHAR` while a BE or CN still carries the previous **type_checker_config.xml** fails every query reading such a column with `Type mismatches on column[...] type:VARCHAR, JDBC result type is java.util.UUID`; the reverse upgrade order is safe. If **$BE_HOME/lib/type_checker_config.xml** is a symbolic link to a copy of your own, update that copy too. An asynchronous materialized view that projects a uuid column directly materialized it as `VARBINARY`, so the type change deactivates it on its next refresh; `ALTER MATERIALIZED VIEW ... ACTIVE` cannot revive it and it has to be dropped and recreated. A materialized view that casts the column, and an ordinary logical view, are unaffected. Set the catalog property `postgresql.uuid.mapping` to `varbinary` to keep the previous mapping on a catalog whose materialized views have not been rebuilt yet.
+
 ## Prerequisites
 
 - The FEs and BEs or CNs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
@@ -79,6 +87,14 @@ When `driver_class` is set to Oracle, you can configure the following optional p
 | oracle.number.default-scale    | 6           | Set it when Oracle `NUMBER` metadata does not provide explicit precision and scale. Valid range: `0` to `38`. |
 | oracle.temporal.to-datetime    | false       | Controls Oracle `DATE`, `TIMESTAMP`, and `TIMESTAMP WITH LOCAL TIME ZONE` mapping. If it is set to `true`, these data types are mapped to StarRocks' `DATETIME` type; otherwise, `DATE` remains `DATE`, and `TIMESTAMP` / `TIMESTAMP WITH LOCAL TIME ZONE` are mapped to `VARCHAR(64)`. |
 | oracle.timestamptz.to-datetime | false       | Controls Oracle `TIMESTAMP WITH TIME ZONE` mapping. If it is set to `true`, it is mapped to StarRocks' `DATETIME` type; otherwise, it is mapped to `VARCHAR(64)`. |
+
+#### Optional PostgreSQL properties
+
+When `driver_class` is set to PostgreSQL, you can configure the following optional property:
+
+| **Parameter**           | **Default** | **Description**                                                                                               |
+| ----------------------- | ----------- | ------------------------------------------------------------------------------------------------------------- |
+| postgresql.uuid.mapping | varchar     | Controls PostgreSQL `uuid` mapping. `varchar` maps the column to `VARCHAR(36)`. `varbinary` restores the mapping used before v4.2, as a transition for a catalog whose materialized views over uuid columns have not been rebuilt yet. An unrecognized value is ignored and `varchar` is used. Change it with `ALTER CATALOG`, which rebuilds the catalog's connector; `REFRESH EXTERNAL TABLE` does not re-derive a JDBC table's schema. |
 
 #### Optional statistics cache properties
 
