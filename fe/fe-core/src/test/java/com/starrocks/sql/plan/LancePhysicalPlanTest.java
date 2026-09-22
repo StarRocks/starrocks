@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.LanceTable;
 import com.starrocks.planner.LanceScanNode;
+import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -30,6 +31,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.TPlanNode;
+import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.type.IntegerType;
 import mockit.Mock;
@@ -56,6 +58,10 @@ public class LancePhysicalPlanTest extends PlanTestBase {
                 ConstantOperator.createInt(10));
         LogicalLanceScanOperator logical = new LogicalLanceScanOperator(table, Map.of(id, column),
                 Map.of(column, id), 3, predicate);
+        // Populated side channels must not duplicate the complete predicate in the scan's Thrift.
+        logical.getScanOperatorPredicates().getNonPartitionConjuncts().add(predicate);
+        logical.getScanOperatorPredicates().getNoEvalPartitionConjuncts().add(predicate);
+        logical.getScanOperatorPredicates().getMinMaxConjuncts().add(predicate);
         OptExpression physical = OptExpression.create(new PhysicalLanceScanOperator(logical));
         physical.setStatistics(Statistics.builder().setOutputRowCount(3)
                 .addColumnStatistic(id, ColumnStatistic.unknown()).build());
@@ -77,6 +83,8 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         TPlanNode thrift = scan.treeToThrift().getNodes().get(0);
         Assertions.assertEquals(3, thrift.getLimit());
         Assertions.assertEquals(1, thrift.getConjunctsSize());
+        Assertions.assertFalse(thrift.getHdfs_scan_node().isSetPartition_conjuncts());
+        Assertions.assertFalse(thrift.getHdfs_scan_node().isSetMin_max_conjuncts());
         Assertions.assertEquals("lance", thrift.getConnector_scan_node().getConnector_name());
         Assertions.assertEquals("vectors", thrift.getHdfs_scan_node().getTable_name());
         Assertions.assertTrue(thrift.getHdfs_scan_node().getSql_predicates().contains("id > 10"));
@@ -100,4 +108,18 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         StarRocksPlannerException error = Assertions.assertThrows(StarRocksPlannerException.class, this::createPlan);
         Assertions.assertTrue(error.getMessage().contains("No alive backend or compute node for Lance scan"));
     }
+    @Test
+    public void testConnectorScanDisablesSingleNodeParallelSchedule() {
+        boolean original = connectContext.getSessionVariable().enableSingleNodeSchedule();
+        try {
+            connectContext.getSessionVariable().setEnableSingleNodeSchedule(true);
+            ExecPlan plan = createPlan();
+            JobSpec job = JobSpec.Factory.fromQuerySpec(connectContext, plan.getFragments(), plan.getScanNodes(),
+                    plan.getDescTbl().toThrift(), TQueryType.SELECT, plan);
+            Assertions.assertFalse(job.supportSingleNodeParallelSchedule());
+        } finally {
+            connectContext.getSessionVariable().setEnableSingleNodeSchedule(original);
+        }
+    }
+
 }

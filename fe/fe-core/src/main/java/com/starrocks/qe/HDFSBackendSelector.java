@@ -37,6 +37,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergMetadataScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.LanceScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
@@ -64,6 +65,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Hybrid backend selector for hive table.
@@ -105,6 +107,8 @@ public class HDFSBackendSelector implements BackendSelector {
     private final double kMaxImbalanceRatio = 1.1;
     public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
 
+    private static final AtomicInteger NEXT_LANCE_WORKER_INDEX = new AtomicInteger();
+
     class HdfsScanRangeHasher {
         String basePath;
         HDFSScanNodePredicates predicates;
@@ -133,6 +137,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof LanceScanNode) {
+                LanceScanNode node = (LanceScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getLanceTable().getTableLocation();
             } else if (scanNode instanceof FlussScanNode) {
                 FlussScanNode node = (FlussScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
@@ -344,6 +352,22 @@ public class HDFSBackendSelector implements BackendSelector {
             assignedBytesPerComputeNode.put(computeNode, 0L);
             assignedScanRangesPerComputeNode.put(computeNode, 0L);
             reBalancedBytesPerComputeNode.put(computeNode, 0L);
+        }
+
+        if (scanNode instanceof LanceScanNode) {
+            // Whole-dataset Lance scans have no replica locality or native file-cache affinity.
+            // Rotate across the provider's connector workers, including its compute-node preference.
+            List<ComputeNode> workers = new ArrayList<>(workerProvider.getAllWorkers());
+            if (workers.isEmpty()) {
+                throw new StarRocksException("Failed to find backend to execute");
+            }
+            for (TScanRangeLocations scanRangeLocations : locations) {
+                int index = Math.floorMod(NEXT_LANCE_WORKER_INDEX.getAndIncrement(), workers.size());
+                ComputeNode worker = workers.get(index);
+                recordScanRangeAssignment(worker, null, List.of(worker), scanRangeLocations);
+            }
+            recordScanRangeStatistic();
+            return;
         }
 
         // schedule scan ranges to co-located backends.

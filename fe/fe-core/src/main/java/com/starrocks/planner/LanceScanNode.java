@@ -18,14 +18,12 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.LanceTable;
-import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -34,6 +32,7 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
@@ -61,6 +60,10 @@ public class LanceScanNode extends ScanNode {
         setupCloudCredential();
     }
 
+    public LanceTable getLanceTable() {
+        return lanceTable;
+    }
+
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
     }
@@ -83,7 +86,7 @@ public class LanceScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
+    public void setupScanRangeLocations() {
         scanRangeLocationsList.clear();
         List<Long> nodeIds = getAllAvailableBackendOrComputeIds();
         Preconditions.checkState(!nodeIds.isEmpty(), "No alive backend or compute node for Lance scan");
@@ -92,8 +95,8 @@ public class LanceScanNode extends ScanNode {
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
         hdfsScanRange.setUse_lance_jni_reader(true);
-        // lance_dataset_uri now lives on TLanceTable in TTableDescriptor (see LanceTable.toThrift);
-        // the per-split payload only carries fragment metadata.
+        hdfsScanRange.setFull_path(lanceTable.getUri());
+        // The reader takes its dataset URI from TLanceTable; full_path identifies the range to the scheduler.
         // A single range scans the entire dataset, including every fragment.
         // Leave split_info unset until fragment enumeration and reader splitting are implemented.
         hdfsScanRange.setFile_length(0);
@@ -104,8 +107,8 @@ public class LanceScanNode extends ScanNode {
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
 
-        TScanRangeLocation scanRangeLocation = new TScanRangeLocation();
-        scanRangeLocation.setBackend_id(nodeIds.get(0));
+        // Remote datasets have no local replica. The connector scheduler chooses an available worker.
+        TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
         scanRangeLocations.addToLocations(scanRangeLocation);
         scanRangeLocationsList.add(scanRangeLocations);
     }
@@ -209,11 +212,8 @@ public class LanceScanNode extends ScanNode {
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
-        HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        HdfsScanNode.setNonEvalPartitionConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
-        // PlanNode.treeToThrift already serialized the scan predicates. Lance has no
-        // partition-pruning pass to populate nonPartitionConjuncts; replacing them
-        // with that empty list would silently drop the WHERE clause.
+        // PlanNode.treeToThrift is the single source of scan predicates. Lance evaluates them
+        // on decoded chunks and does not use Hive partition or min/max predicate channels.
 
         setConnectorCatalogType(msg);
     }
