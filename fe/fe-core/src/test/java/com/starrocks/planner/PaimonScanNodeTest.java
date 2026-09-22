@@ -42,6 +42,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.globalindex.IndexedSplit;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.io.DataInputViewStreamWrapper;
 import org.apache.paimon.io.DataOutputView;
@@ -50,6 +51,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.DeletionFile;
 import org.apache.paimon.table.source.RawFile;
 import org.apache.paimon.table.source.Split;
+import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -352,6 +354,46 @@ public class PaimonScanNodeTest {
             Assertions.assertTrue(nonDataSplitRange.isUse_paimon_jni_reader());
             Assertions.assertFalse(nonDataSplitRange.isUse_paimon_native_reader());
             Assertions.assertFalse(nonDataSplitRange.isSetPaimon_split_info_binary());
+        } finally {
+            ConnectContext.remove();
+        }
+    }
+
+    @Test
+    public void testSetupIndexedSplitUsesJniAndTracksPartition(
+            @Mocked GlobalStateMgr globalStateMgr, @Mocked MetadataMgr metadataMgr, @Mocked PaimonTable table) {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setSessionVariable(new SessionVariable());
+        ctx.getSessionVariable().setPaimonReaderMode("NATIVE");
+        ctx.setThreadLocalInfo();
+        try {
+            DataSplit dataSplit = createDataSplit();
+            IndexedSplit indexedSplit = new IndexedSplit(dataSplit, List.of(new Range(0L, 0L)), null);
+            List<RemoteFileInfo> remoteFiles = createRemoteFiles(indexedSplit);
+            new Expectations() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    result = globalStateMgr;
+                    globalStateMgr.getMetadataMgr();
+                    result = metadataMgr;
+                    metadataMgr.getRemoteFiles((Table) any, (GetRemoteFilesParams) any);
+                    result = remoteFiles;
+                }
+            };
+
+            TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+            desc.setTable(table);
+            PaimonScanNode scanNode = new PaimonScanNode(new PlanNodeId(0), desc, "XXX");
+            scanNode.setupScanRangeLocations(desc, null, -1);
+
+            Assertions.assertEquals(1, scanNode.getScanRangeLocations(10).size());
+            THdfsScanRange indexedRange = scanNode.getScanRangeLocations(10).get(0)
+                    .getScan_range().getHdfs_scan_range();
+            Assertions.assertTrue(indexedRange.isUse_paimon_jni_reader());
+            Assertions.assertFalse(indexedRange.isUse_paimon_native_reader());
+            Assertions.assertFalse(indexedRange.isSetPaimon_split_info_binary());
+            Assertions.assertEquals(100L, indexedRange.getFile_length());
+            Assertions.assertEquals(1, scanNode.getScanNodePredicates().getSelectedPartitionIds().size());
         } finally {
             ConnectContext.remove();
         }
