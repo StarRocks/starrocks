@@ -761,6 +761,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: Boolean
 * **導入バージョン**: v3.3.0
 
+### enable_global_late_materialization
+
+* **説明**: Global Late Materialization（GLM）を制御します。GLM は、一般的なクエリオプティマイザの書き換えです。行数を制限するオペレータ（`LIMIT` を指定した TopN（たとえば、`ORDER BY ... LIMIT`）、または JOIN の上に配置された `LIMIT`）を含むプランの場合、GLM は述語、ソート、または結合キーに必要でない列のマテリアライズを遅延させ、`LIMIT` を通過した実際の行に対してのみ、行 ID ルックアップによって後から遅延させた列を取得します。これにより、`LIMIT` によって破棄される行の完全な列データを読み取ったり転送したりすることを回避できます。非集約キー（Duplicate、Unique、または Primary Key）テーブルのネイティブ OLAP テーブルおよび Iceberg テーブルに適用されます。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **導入バージョン**: v26.2
+
 ### enable_load_profile
 
 * **スコープ**: Session

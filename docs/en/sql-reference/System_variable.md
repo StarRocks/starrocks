@@ -490,7 +490,7 @@ Used for MySQL client compatibility. No practical usage.
   * `multi_count_distinct`: Changes the `COUNT(DISTINCT expr)` implementation to `multi_distinct_count` for precise counting. For counting on low- and medium-cardinality columns, this implementation can reduce a shuffle and deduplication phase, and thereby increase the speed. However, it will reserve the distinct values in HashSet, causing excessive memory consumption and even OOM when deduplicating high-cardinality columns. Do not set this value globally without first verifying it using representative loads.
   * `ndv`:Changes the `COUNT(DISTINCT expr)` implementation to `ndv(expr)`. This function uses HyperLogLog, which returns approximate results with lower memory overhead.
 * **Default**: `default`
-* **Introduced in**: v3.3.6、v3.4.0
+* **Introduced in**: v3.3.6, v3.4.0
 
 :::note[Usage Notes for `multi_distinct_count`]
 `multi_distinct_count()` returns precise results.
@@ -836,21 +836,21 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Description**: Whether to enable the Prepared Physical Split scan for Cloud-native (lake) tables in a shared-data cluster. When enabled, each segment is pruned once and the resulting prepared read state is shared across the tablet's split children, which can speed up scans of large or skewed tablets. The optimization is decided per scan node and additionally requires a Cloud-native table with Query Cache disabled. Takes effect only in a shared-data cluster.
 * **Default**: false
 * **Data type**: Boolean
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### lake_tablet_internal_parallel_skew_split_ratio
 
 * **Description**: The skew threshold that lets a single oversized lake tablet be split under the Prepared Physical Split scan even when the scan-range count already reaches the pipeline DOP. A tablet is treated as a skewed straggler and split when its row count exceeds this ratio times the per-driver ideal share (total rows divided by the effective DOP). A larger value requires more extreme skew before splitting; a smaller value splits more eagerly. Must be a positive, finite number. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
 * **Default**: 1.5
 * **Data type**: Double
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### enable_lake_prepared_split_on_dup_table_scan
 
 * **Description**: Whether to allow the prepared-physical-split scan on a Cloud-native (lake) table that is scanned by two or more scan operators in the same query (for example, a self-join, or a table referenced multiple times). When `false` (default), such duplicated scans fall back to the regular scan, because the prepared read state that the optimization reuses per scan is unsafe to share across sibling scans of the same table. Set it to `true` to opt those scans back into the optimization. Only affects scans with `enable_lake_prepared_physical_split_scan` enabled, and takes effect only in a shared-data cluster.
 * **Default**: false
 * **Data type**: Boolean
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### enable_lake_tablet_internal_parallel
 
@@ -874,6 +874,13 @@ Default value: `true`, which means global RF is enabled. If this feature is disa
 * **Default**: `true`
 * **Data Type**: boolean
 * **Introduced in**: -
+
+### enable_global_late_materialization
+
+* **Description**: Controls Global Late Materialization (GLM), a general query-optimizer rewrite. For a plan that has a row-limiting operator — a TopN with `LIMIT` (for example, `ORDER BY ... LIMIT`), or a `LIMIT` above a JOIN — GLM defers materializing columns that are not needed for predicates, sort, or join keys, and only fetches those deferred columns afterward via row ID lookups for the rows that actually survive the limit. This avoids reading and transferring full column data for rows that get discarded by the limit. It applies to native OLAP tables with non-aggregate key (Duplicate, Unique, or Primary Key) tables and Iceberg tables.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v26.2
 
 ### max_unknown_string_meta_length (global)
 
@@ -1538,7 +1545,7 @@ Specifies the query rewrite mode of asynchronous materialized views. Valid value
 * **Description**: The maximum number of elements in an array produced by an array function. If a function produces a larger array, the query fails instead of returning an oversized array. `0` or a negative value means no limit. This limit is intended for all functions that build arrays, but only [array_agg](sql-functions/array-functions/array_agg.md) enforces it so far.
 * **Default**: 0
 * **Data type**: Long
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### max_parallel_scan_instance_num
 
@@ -1622,7 +1629,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Controls the single-tablet optimization by tablet size. When a query is pruned to a single tablet, StarRocks can run the aggregation in a single phase and gather the result on a single node, skipping the shuffle. This is efficient for a small tablet, but will serialize the whole query on one node when the tablet is large. If the row count of the selected single tablet exceeds this threshold, the optimization is disabled and a normal distributed (shuffled) plan is used instead. Set it to `-1` to disable this gate and always apply the single-tablet optimization regardless of tablet size.
 * **Default**: 10000000
 * **Data type**: Long
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### optimizer_materialized_view_timelimit
 
@@ -1642,7 +1649,7 @@ Used for MySQL client compatibility. No practical usage.
 * **Description**: Controls the reader used for Paimon tables. Valid values are `AUTO`, `JNI`, and `NATIVE` (case-insensitive). `AUTO` lets StarRocks automatically choose the appropriate reader. `JNI` always uses the JNI reader. `NATIVE` uses the paimon-cpp native reader. Note that `paimon_force_jni_reader` takes precedence over this variable: if it is set to `true`, the JNI reader is always used.
 * **Default**: AUTO
 * **Data type**: String
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### parallel_exchange_instance_num
 
@@ -2026,7 +2033,7 @@ Used to display the time zone of the current system. Cannot be changed.
 * **Default**: auto
 * **Type**: String
 * **Scope**: Session
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### lake_multi_node_write_max_nodes
 
@@ -2034,7 +2041,7 @@ Used to display the time zone of the current system. Cannot be changed.
 * **Default**: 6
 * **Type**: Int
 * **Scope**: Session
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### lake_multi_node_write_bytes_per_node
 
@@ -2043,7 +2050,7 @@ Used to display the time zone of the current system. Cannot be changed.
 * **Unit**: Bytes
 * **Type**: Long
 * **Scope**: Session
-* **Introduced in**: v4.2
+* **Introduced in**: v26.2
 
 ### time_zone
 

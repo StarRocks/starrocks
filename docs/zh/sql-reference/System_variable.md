@@ -767,24 +767,31 @@ FROM test;
 * 类型：Boolean
 * 引入版本：v3.3.0
 
+### enable_global_late_materialization
+
+* 描述：控制 Global Late Materialization（GLM），这是一种通用的查询优化器重写规则。对于包含行数限制算子的执行计划，例如带有 `LIMIT` 的 TopN（如 `ORDER BY ... LIMIT`），或 JOIN 上方的 `LIMIT`，GLM 会延迟物化谓词、排序或连接键不需要的列，并仅针对实际通过 `LIMIT` 的行，通过行 ID 查找在之后获取这些延迟列。这样可以避免读取和传输最终会被 `LIMIT` 丢弃的行的完整列数据。该功能适用于使用非聚合键（明细、更新 或主键）的原生 OLAP 表以及 Iceberg 表。
+* 默认值：true
+* 数据类型：Boolean
+* 引入版本：v26.2
+
 ### enable_load_profile
 
-* **作用域**: Session
-* **描述**: 启用后，FE 会请求收集 load 作业的运行时 profile，load 协调器将在 load 完成后收集/导出该 profile。对于 stream load，FE 会设置 `TQueryOptions.enable_profile = true` 并将 `load_profile_collect_second`（来自 `stream_load_profile_collect_threshold_second`）传递给 backends；协调器随后有条件地调用 profile 收集（参见 StreamLoadTask.collectProfile()）。实际行为是此会话变量与目标表上的表级属性 `enable_load_profile` 的逻辑 OR；采集还受 `load_profile_collect_interval_second`（FE 端采样间隔）的限制以避免频繁采集。会话标志通过 `SessionVariable.isEnableLoadProfile()` 读取，并且可以通过 `setEnableLoadProfile(...)` 按连接设置。
-* **默认值**: `false`
-* **数据类型**: boolean
-* **引入版本**: v3.2.0
+* 作用域: Session
+* 描述: 启用后，FE 会请求收集 load 作业的运行时 profile，load 协调器将在 load 完成后收集/导出该 profile。对于 stream load，FE 会设置 `TQueryOptions.enable_profile = true` 并将 `load_profile_collect_second`（来自 `stream_load_profile_collect_threshold_second`）传递给 backends；协调器随后有条件地调用 profile 收集（参见 StreamLoadTask.collectProfile()）。实际行为是此会话变量与目标表上的表级属性 `enable_load_profile` 的逻辑 OR；采集还受 `load_profile_collect_interval_second`（FE 端采样间隔）的限制以避免频繁采集。会话标志通过 `SessionVariable.isEnableLoadProfile()` 读取，并且可以通过 `setEnableLoadProfile(...)` 按连接设置。
+* 默认值: `false`
+* 数据类型: boolean
+* 引入版本: v3.2.0
 
 ### enable_local_shuffle_agg
 
-* **描述**: 控制 planner 和 cost model 是否可以生成使用本地 shuffle 的单阶段局部聚合计划（Scan -> LocalShuffle -> OnePhaseAgg），而不是两阶段/全局 shuffle 聚合。启用时（默认），优化器和成本模型会：
+* 描述: 控制 planner 和 cost model 是否可以生成使用本地 shuffle 的单阶段局部聚合计划（Scan -> LocalShuffle -> OnePhaseAgg），而不是两阶段/全局 shuffle 聚合。启用时（默认），优化器和成本模型会：
   - 允许在单 backend+compute-node 集群中将 Scan 与 Global Agg 之间的 SHUFFLE exchange 替换为本地 shuffle + 单阶段聚合（参见 `PruneShuffleDistributionNodeRule` 和 `EnforceAndCostTask`），
   - 在该单节点场景下让成本模型忽略 SHUFFLE 的网络成本以偏好单阶段计划（`CostModel`）。
   仅在 `enable_pipeline_engine` 启用且集群为单个 backend+compute 节点时考虑替换。规划器在不安全的情况下仍会拒绝本地 shuffle 转换（例如 DISTINCT 聚合、检测到的数据倾斜、缺失/未知的列统计、多输入算子如 joins 或其他语义限制）。某些代码路径（INSERT/UPDATE/DELETE 的 planner 和 MaterializedViewOptimizer）会临时禁用该会话标志，因为非查询的 sink 或某些重写需要按 driver 分配扫描，而本地 shuffle 无法使用这种分配。
-* **范围**: Session
-* **默认值**: `true`
-* **数据类型**: boolean
-* **引入版本**: v3.2.0
+* 范围: Session
+* 默认值: `true`
+* 数据类型: boolean
+* 引入版本: v3.2.0
 
 ### enable_materialized_view_agg_pushdown_rewrite
 

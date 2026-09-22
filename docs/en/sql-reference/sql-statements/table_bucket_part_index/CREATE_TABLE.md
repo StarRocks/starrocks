@@ -984,6 +984,20 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (Optional): The proportion threshold of columns with the same name. A column will not be extracted by Flat JSON if the proportion of columns with the same name is lower than this value. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `0.3`.
 - `flat_json.column.max` (Optional): The maximum number of sub-fields that can be extracted by Flat JSON. This parameter takes effect only when `flat_json.enable` is set to `true`. Default value: `100`.
 
+### Enable Light-weight Tablet Creation for cloud-native tables
+
+*Available only on cloud-native (shared-data) tables*
+
+You can enable Light-weight Tablet Creation for cloud-native tables to allow the table to skip the normal `CreateReplicaTask` dispatch to BE/CN nodes.
+
+After `light_weight_tablet_creation` is set to `true`:
+
+- DDL operations (for example, CREATE TABLE and ADD PARTITION) skip issuing `CreateReplicaTask`, and no v1 tablet metadata or schema file is written to object storage at creation time.
+
+- The initial tablet metadata is instead fetched from FE on demand (lazily), rather than being pre-populated in object storage.
+
+This property follows the FE config `lake_enable_light_weight_tablet_creation` (Default: `false`) unless explicitly set at CREATE TABLE time.
+
 ## Examples
 
 ### Aggregate table with Hash bucketing and columnar storage

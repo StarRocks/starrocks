@@ -1008,6 +1008,20 @@ PROPERTIES (
 - `flat_json.sparsity.factor`（可选）：同名列的比例阈值。如果同名列的比例低于此值，则 Flat JSON 不会提取该列。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`0.3`。
 - `flat_json.column.max`（可选）：Flat JSON 可提取的最大子字段数。此参数仅在 `flat_json.enable` 设置为 `true` 时生效。默认值：`100`。
 
+### 为云原生表启用轻量级 Tablet 创建
+
+*仅适用于云原生（存算分离）表*
+
+为云原生表启用 Light-weight Tablet Creation 后，表可以跳过通常向 BE/CN 节点分发的 `CreateReplicaTask`。
+
+将 `light_weight_tablet_creation` 设置为 `true` 后：
+
+- DDL 操作（例如 CREATE TABLE 和 ADD PARTITION）会跳过 `CreateReplicaTask` 的下发，并且在创建时不会将 v1 Tablet 元数据或 Schema 文件写入对象存储。
+
+- 初始 Tablet 元数据不会预先写入对象存储，而是在需要时从 FE 延迟获取。
+
+如果未在 CREATE TABLE 时显式设置此属性，则该属性遵循 FE 配置 `lake_enable_light_weight_tablet_creation`（默认值：`false`）。
+
 ## 示例
 
 ### 带有Hash分桶和列式存储的聚合表

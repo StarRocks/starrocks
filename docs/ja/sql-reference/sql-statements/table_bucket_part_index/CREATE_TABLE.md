@@ -1008,6 +1008,20 @@ PROPERTIES (
 - `flat_json.sparsity.factor` (オプション): 同名の列の割合のしきい値。同名の列の割合がこの値よりも低い場合、その列はFlat JSONによって抽出されません。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `0.3`。
 - `flat_json.column.max` (オプション): Flat JSONによって抽出できるサブフィールドの最大数。このパラメータは、`flat_json.enable`が`true`に設定されている場合にのみ有効です。デフォルト値: `100`。
 
+### クラウドネイティブテーブルで Light-weight Tablet Creation を有効にする
+
+*クラウドネイティブ（共有データ）テーブルでのみ利用できます*
+
+クラウドネイティブテーブルで Light-weight Tablet Creation を有効にすると、通常の `CreateReplicaTask` の BE/CN ノードへのディスパッチをスキップできます。
+
+`light_weight_tablet_creation` を `true` に設定すると、次のようになります。
+
+- DDL 操作（CREATE TABLE や ADD PARTITION など）では `CreateReplicaTask` の発行がスキップされ、作成時に v1 タブレットメタデータやスキーマファイルがオブジェクトストレージに書き込まれません。
+
+- 初期タブレットメタデータは、オブジェクトストレージに事前に格納されるのではなく、必要に応じて FE から遅延取得されます。
+
+このプロパティを CREATE TABLE 実行時に明示的に設定しない場合、FE 設定 `lake_enable_light_weight_tablet_creation`（デフォルト: `false`）に従います。
+
 ## 例
 
 ### ハッシュバケットとカラム型ストレージを持つ集計テーブル
