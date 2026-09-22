@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalLanceScanOperator extends LogicalScanOperator {
+    // Lance scans whole datasets; empty partition selections do not imply empty output.
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
 
     public LogicalLanceScanOperator(Table table,
@@ -50,11 +51,6 @@ public class LogicalLanceScanOperator extends LogicalScanOperator {
     @Override
     public ScanOperatorPredicates getScanOperatorPredicates() {
         return this.predicates;
-    }
-
-    @Override
-    public boolean isEmptyOutputRows() {
-        return !table.isUnPartitioned() && predicates.getSelectedPartitionIds().isEmpty();
     }
 
     @Override
