@@ -44,6 +44,7 @@ import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -105,7 +106,10 @@ public class LanceScanNode extends ScanNode {
         hdfsScanRange.setFull_path(lanceTable.getUri());
         // The reader takes its dataset URI from TLanceTable; full_path identifies the range to the scheduler.
         // A single range scans the entire dataset, including every fragment.
-        // Leave split_info unset until fragment enumeration and reader splitting are implemented.
+        // REST metadata carries identifiers and a token-file reference, never credential values.
+        if (lanceTable.getRestCatalogInfo() != null) {
+            hdfsScanRange.setLance_split_info(lanceTable.getRestCatalogInfo().getBytes(StandardCharsets.UTF_8));
+        }
         hdfsScanRange.setFile_length(0);
         hdfsScanRange.setLength(0);
         hdfsScanRange.setFile_format(THdfsFileFormat.LANCE);

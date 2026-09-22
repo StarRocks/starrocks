@@ -14,6 +14,8 @@
 
 package com.starrocks.lance.reader;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ConnectorScanner;
 import com.starrocks.jni.connector.ScannerHelper;
@@ -30,7 +32,10 @@ import org.lance.ipc.ScanOptions;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class LanceSplitScanner extends ConnectorScanner {
 
@@ -41,6 +46,8 @@ public class LanceSplitScanner extends ConnectorScanner {
     private final int fetchSize;
     private final Map<String, String> storageOptions;
 
+    private final String restInfo;
+    private LanceRestCatalog restCatalog;
     private Dataset dataset;
     private LanceScanner scanner;
     private ArrowReader arrowReader;
@@ -54,7 +61,8 @@ public class LanceSplitScanner extends ConnectorScanner {
         this.requiredFields = ScannerHelper.splitAndOmitEmptyStrings(
                 params.get("required_fields"), ",");
         this.datasetUri = params.get("lance_dataset_uri");
-        this.storageOptions = LanceStorageOptions.from(datasetUri, params);
+        this.restInfo = params.get("lance_split_info");
+        this.storageOptions = restInfo == null || restInfo.isEmpty() ? LanceStorageOptions.from(datasetUri, params) : Map.of();
     }
 
     @Override
@@ -62,7 +70,23 @@ public class LanceSplitScanner extends ConnectorScanner {
         try {
             LOG.debug("Open Lance reader");
 
-            dataset = Dataset.open(datasetUri, new ReadOptions.Builder().setStorageOptions(storageOptions).build());
+            if (restInfo == null || restInfo.isEmpty()) {
+                dataset = Dataset.open(datasetUri, new ReadOptions.Builder().setStorageOptions(storageOptions).build());
+            } else {
+                JsonNode info = new ObjectMapper().readTree(restInfo);
+                Set<String> keys = new HashSet<>();
+                info.fieldNames().forEachRemaining(keys::add);
+                if (!keys.equals(Set.of("catalog_uri", "token_file", "table_id", "dataset_version"))
+                        || !info.path("catalog_uri").isTextual() || !info.path("token_file").isTextual()
+                        || !info.path("dataset_version").canConvertToLong() || info.path("dataset_version").asLong() <= 0) {
+                    throw new IllegalArgumentException("Unsupported Lance split metadata");
+                }
+                List<String> id = LanceRestCatalog.parseIdentifier(info.path("table_id").toString());
+                restCatalog = new LanceRestCatalog(info.get("catalog_uri").asText(),
+                        info.get("token_file").asText(), id, datasetUri);
+                dataset = Dataset.open().namespaceClient(restCatalog).tableId(id)
+                        .readOptions(new ReadOptions.Builder().setVersion(info.get("dataset_version").asLong()).build()).build();
+            }
             Schema schema = dataset.getSchema();
             Map<String, String> typeMap = LanceTypeUtils.buildTypeMapping(schema);
 
@@ -113,6 +137,11 @@ public class LanceSplitScanner extends ConnectorScanner {
             String msg = "Failed to close the lance reader.";
             // Native storage errors can contain signed URLs or credentials. Do not expose their text.
             throw new IOException(msg + " Error type: " + e.getClass().getSimpleName());
+        } finally {
+            if (restCatalog != null) {
+                restCatalog.close();
+                restCatalog = null;
+            }
         }
     }
 

@@ -62,7 +62,8 @@ Status LanceDataSource::open(RuntimeState* state) {
 
     std::map<std::string, std::string> jni_scanner_params;
     if (_scan_range.__isset.lance_split_info && !_scan_range.lance_split_info.empty()) {
-        return Status::NotSupported("Lance fragment splits are not supported yet");
+        // The Java reader validates REST metadata and rejects unsupported fragment payloads.
+        jni_scanner_params["lance_split_info"] = _scan_range.lance_split_info;
     }
     jni_scanner_params["lance_dataset_uri"] = std::string(lance_table->lance_dataset_uri());
 

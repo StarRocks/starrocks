@@ -14,11 +14,15 @@
 
 package com.starrocks.connector.lance;
 
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import org.apache.arrow.vector.types.FloatingPointPrecision;
+import org.apache.arrow.vector.types.pojo.ArrowType;
+import org.apache.arrow.vector.types.pojo.Field;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -36,6 +40,67 @@ import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceApiConverter {
+
+    public static Type fromArrowField(Field field) {
+        ArrowType type = field.getType();
+        if (type instanceof ArrowType.Bool) {
+            return BOOLEAN;
+        } else if (type instanceof ArrowType.Int) {
+            ArrowType.Int integer = (ArrowType.Int) type;
+            if (!integer.getIsSigned()) {
+                switch (integer.getBitWidth()) {
+                    case 8:
+                        return SMALLINT;
+                    case 16:
+                        return INT;
+                    case 32:
+                        return BIGINT;
+                    case 64:
+                        return TypeFactory.createUnifiedDecimalType(20, 0);
+                    default:
+                        throw new StarRocksConnectorException("Unsupported Lance integer width");
+                }
+            }
+            switch (integer.getBitWidth()) {
+                case 8:
+                    return TINYINT;
+                case 16:
+                    return SMALLINT;
+                case 32:
+                    return INT;
+                case 64:
+                    return BIGINT;
+                default:
+                    break;
+            }
+        } else if (type instanceof ArrowType.FloatingPoint) {
+            FloatingPointPrecision precision = ((ArrowType.FloatingPoint) type).getPrecision();
+            if (precision == FloatingPointPrecision.SINGLE) {
+                return FLOAT;
+            } else if (precision == FloatingPointPrecision.DOUBLE) {
+                return DOUBLE;
+            }
+        } else if (type instanceof ArrowType.Utf8 || type instanceof ArrowType.LargeUtf8) {
+            return VARCHAR;
+        } else if (type instanceof ArrowType.Binary || type instanceof ArrowType.LargeBinary) {
+            return VARBINARY;
+        } else if (type instanceof ArrowType.Date) {
+            return DATE;
+        } else if (type instanceof ArrowType.Timestamp) {
+            return DATETIME;
+        } else if (type instanceof ArrowType.Decimal) {
+            ArrowType.Decimal decimal = (ArrowType.Decimal) type;
+            if (decimal.getBitWidth() == 128 && decimal.getPrecision() <= 38 && decimal.getScale() >= 0
+                    && decimal.getScale() <= decimal.getPrecision()) {
+                return TypeFactory.createUnifiedDecimalType(decimal.getPrecision(), decimal.getScale());
+            }
+        } else if (type instanceof ArrowType.List || type instanceof ArrowType.FixedSizeList) {
+            if (field.getChildren().size() == 1) {
+                return new ArrayType(fromArrowField(field.getChildren().get(0)));
+            }
+        }
+        throw new StarRocksConnectorException("Unsupported Lance Arrow type: " + type);
+    }
 
     /**
      * Maps safe string representations of Apache Arrow / Lance data types to StarRocks Types recursively.

@@ -75,6 +75,15 @@ public class LanceClassLoaderTest {
                 } finally {
                     fixture.getMethod("restoreTestAllocator").invoke(test);
                 }
+                Class<?> restFixture = loader.loadClass("com.starrocks.lance.reader.LanceRestCatalogTest");
+                Object restTest = restFixture.getConstructor().newInstance();
+                restFixture.getField("temp").set(restTest, Path.of(args[1]));
+                restFixture.getMethod("start").invoke(restTest);
+                try {
+                    restFixture.getMethod("testCatalogToNativeScanner").invoke(restTest);
+                } finally {
+                    restFixture.getMethod("stop").invoke(restTest);
+                }
             }
             System.out.println("Isolated scan passed");
         }

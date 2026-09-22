@@ -37,6 +37,7 @@ import com.starrocks.thrift.TPlanNode;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
@@ -69,6 +70,24 @@ public class LanceScanNodeTest {
         Assertions.assertTrue(scan.isConnectorScanNode());
         Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getLocations().get(0).isSetBackend_id());
         Assertions.assertEquals("-1", scan.getScanRangeLocations(0).get(0).getLocations().get(0).getServer().getHostname());
+    }
+
+    @Test
+    public void testRestCatalogScanCarriesOnlyCredentialReference() {
+        TupleDescriptor tuple = new DescriptorTable().createTupleDescriptor();
+        LanceTable table = new LanceTable(1, "vectors", List.of(), "s3://bucket/vectors.lance");
+        table.setRestCatalog("https://catalog.example.com", "/run/lance/token", List.of("ns", "vectors"), 7);
+        tuple.setTable(table);
+        LanceScanNode scan = new LanceScanNode(new PlanNodeId(0), tuple, "LanceScanNode") {
+            @Override
+            public List<Long> getAllAvailableBackendOrComputeIds() {
+                return List.of(1L);
+            }
+        };
+        scan.setupScanRangeLocations(null, null);
+        THdfsScanRange range = scan.getScanRangeLocations(0).get(0).scan_range.hdfs_scan_range;
+        Assertions.assertEquals(table.getRestCatalogInfo(), new String(range.getLance_split_info(), StandardCharsets.UTF_8));
+        Assertions.assertFalse(new String(range.getLance_split_info(), StandardCharsets.UTF_8).contains("storage_options"));
     }
 
     @Test
