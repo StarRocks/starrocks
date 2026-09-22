@@ -1050,7 +1050,7 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: For range materialized views partitioned by `date_trunc(granularity, col)` where `granularity` is `day` or coarser, whether to mirror the base table's actual (possibly mixed-granularity) partition boundaries instead of unrolling coarser base partitions into fixed-granularity cells. When enabled, a historical base partition that has been merged into a month stays as one month MV partition while recent day partitions stay as day MV partitions, so each base partition maps to one MV partition. For a base partition that is exactly one granularity unit wide (including discrete and multi-union cases), this is identical to the default behavior. For non-aligned input it falls back to the default mapper.
-- Introduced in: v4.2.0
+- Introduced in: -
 
 ### `enable_mv_post_image_reload_cache`
 
