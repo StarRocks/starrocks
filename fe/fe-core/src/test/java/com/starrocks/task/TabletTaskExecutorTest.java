@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.WarehouseManager;
@@ -31,8 +32,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletSchema;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.warehouse.cngroup.ComputeResource;
-import com.starrocks.warehouse.cngroup.WarehouseComputeResource;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -92,7 +91,7 @@ public class TabletTaskExecutorTest {
             @Mock
             List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
                                                             PhysicalPartition partition,
-                                                            ComputeResource computeResource,
+                                                            long warehouseId,
                                                             TabletTaskExecutor.CreateTabletOption option) {
                 return new ArrayList<>(Collections.singletonList(buildLakeTask(nodeId, nextTabletId++)));
             }
@@ -142,7 +141,7 @@ public class TabletTaskExecutorTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         new MockUp<WarehouseManager>() {
             @Mock
-            public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
                 return aliveNodes;
             }
         };
@@ -186,7 +185,7 @@ public class TabletTaskExecutorTest {
         for (int i = 0; i < count; i++) {
             long partId = 100 + i;
             MaterializedIndex index = new MaterializedIndex(200 + i);
-            partitions.add(new PhysicalPartition(partId, partId, index));
+            partitions.add(new PhysicalPartition(partId, "p" + i, partId, index));
         }
         return partitions;
     }
@@ -222,7 +221,7 @@ public class TabletTaskExecutorTest {
 
         Assertions.assertDoesNotThrow(() ->
                 TabletTaskExecutor.buildPartitionsSequentially(DB_ID, mockLakeTable(), mockPartitions(2),
-                        2, 2, WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID),
+                        2, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         new TabletTaskExecutor.CreateTabletOption()));
 
         // Initial send: all 2 tasks go to DEAD_NODE (1 sendTask call) + retry: 2 tasks to ALIVE_NODE (1 sendTask call)
@@ -260,7 +259,7 @@ public class TabletTaskExecutorTest {
 
         Assertions.assertDoesNotThrow(() ->
                 TabletTaskExecutor.buildPartitionsConcurrently(DB_ID, mockLakeTable(), mockPartitions(3),
-                        3, 2, WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID),
+                        3, 2, WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         new TabletTaskExecutor.CreateTabletOption()));
 
         // Initial send: 3 partitions each with 1 task to DEAD_NODE (3 sendTask calls) + retry: tasks to ALIVE_NODE (1 sendTask call)
@@ -294,7 +293,7 @@ public class TabletTaskExecutorTest {
 
         DdlException exception = Assertions.assertThrows(DdlException.class, () ->
                 TabletTaskExecutor.buildPartitionsConcurrently(DB_ID, mockLakeTable(), mockPartitions(2),
-                        2, 1, WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID),
+                        2, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         new TabletTaskExecutor.CreateTabletOption()));
         Assertions.assertTrue(exception.getMessage().contains("No available node for retry"));
     }
@@ -309,7 +308,7 @@ public class TabletTaskExecutorTest {
         // Retry disabled — RuntimeException from sendTask propagates directly
         Assertions.assertThrows(RuntimeException.class, () ->
                 TabletTaskExecutor.buildPartitionsSequentially(DB_ID, mockLakeTable(), mockPartitions(1),
-                        1, 1, WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID),
+                        1, 1, WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         new TabletTaskExecutor.CreateTabletOption()));
     }
 
@@ -325,17 +324,17 @@ public class TabletTaskExecutorTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tid) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 throw new RuntimeException("no assigned node");
             }
             @Mock
-            public List<ComputeNode> getAliveComputeNodes(ComputeResource computeResource) {
+            public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
                 return List.of(aliveNode);
             }
         };
 
-        ComputeResource computeResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
-        long nodeId = TabletTaskExecutor.getNodeIdForTablet(warehouseManager, computeResource, tabletId);
+        long nodeId = TabletTaskExecutor.getNodeIdForTablet(warehouseManager,
+                WarehouseManager.DEFAULT_WAREHOUSE_ID, new LakeTablet(tabletId));
         Assertions.assertEquals(aliveNodeId, nodeId);
     }
 
@@ -346,14 +345,14 @@ public class TabletTaskExecutorTest {
         WarehouseManager warehouseManager = new WarehouseManager();
         new MockUp<WarehouseManager>() {
             @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(ComputeResource computeResource, long tid) {
+            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 throw new RuntimeException("no assigned node");
             }
         };
 
-        ComputeResource computeResource = WarehouseComputeResource.of(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         Assertions.assertThrows(RuntimeException.class, () ->
-                TabletTaskExecutor.getNodeIdForTablet(warehouseManager, computeResource, 20001L));
+                TabletTaskExecutor.getNodeIdForTablet(warehouseManager,
+                        WarehouseManager.DEFAULT_WAREHOUSE_ID, new LakeTablet(20001L)));
     }
 
     @Test

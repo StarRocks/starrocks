@@ -33,6 +33,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TNetworkAddress;
@@ -106,7 +107,7 @@ public class TabletTaskExecutor {
             tasks.forEach(task -> task.setTimeoutMs(maxWaitTimeSeconds * 1000L));
             LOG.info("build partitions sequentially for {}, send task one by one, all tasks timeout {}s",
                     table.getName(), maxWaitTimeSeconds);
-            sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds, computeResource);
+            sendCreateReplicaTasksAndWaitForFinished(tasks, maxWaitTimeSeconds, warehouseId);
             LOG.info("build partitions sequentially for {}, all tasks finished, took {}ms",
                     table.getName(), System.currentTimeMillis() - start);
         }
@@ -189,7 +190,7 @@ public class TabletTaskExecutor {
         }
         if (!failedTasks.isEmpty()) {
             if (maxRetries > 0) {
-                failedTasks = retryFailedTasks(failedTasks, maxRetries, maxWaitTimeSeconds, computeResource);
+                failedTasks = retryFailedTasks(failedTasks, maxRetries, maxWaitTimeSeconds, warehouseId);
             }
             if (!failedTasks.isEmpty()) {
                 throw new DdlException("Failed to create tablets: " + failedTasks.get(0).getErrorMsg());
@@ -199,14 +200,9 @@ public class TabletTaskExecutor {
         }
     }
 
-<<<<<<< HEAD
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                                                   long warehouseId, CreateTabletOption option)
-=======
     // Visible for testing
     static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<PhysicalPartition> partitions,
-                                                           ComputeResource computeResource, CreateTabletOption option)
->>>>>>> d897c91 ([Enhancement] Support create tablet retry for lake table in shared-data mode (backport #71068) (#71927))
+                                                           long warehouseId, CreateTabletOption option)
             throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (PhysicalPartition partition : partitions) {
@@ -216,17 +212,11 @@ public class TabletTaskExecutor {
         return tasks;
     }
 
-<<<<<<< HEAD
-    private static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
-                                                                   PhysicalPartition physicalPartition,
-                                                                   long warehouseId, CreateTabletOption option)
-=======
     // Visible for testing
     static List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
                                                            PhysicalPartition physicalPartition,
-                                                           ComputeResource computeResource,
+                                                           long warehouseId,
                                                            CreateTabletOption option)
->>>>>>> d897c91 ([Enhancement] Support create tablet retry for lake table in shared-data mode (backport #71068) (#71927))
             throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) physicalPartition.storageReplicaCount());
         for (MaterializedIndex index : physicalPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
@@ -265,16 +255,11 @@ public class TabletTaskExecutor {
                 .addColumns(indexMeta.getSchema())
                 .build().toTabletSchema();
 
+        final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         for (Tablet tablet : index.getTablets()) {
             List<Long> nodeIdsOfReplicas = new ArrayList<>();
             if (isCloudNativeTable) {
-<<<<<<< HEAD
-                long nodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) tablet).getId();
-
-=======
-                long nodeId = getNodeIdForTablet(warehouseManager, computeResource, tablet.getId());
->>>>>>> d897c91 ([Enhancement] Support create tablet retry for lake table in shared-data mode (backport #71068) (#71927))
+                long nodeId = getNodeIdForTablet(warehouseManager, warehouseId, (LakeTablet) tablet);
                 nodeIdsOfReplicas.add(nodeId);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -321,9 +306,9 @@ public class TabletTaskExecutor {
      * node is unavailable and retry is enabled.
      */
     // Visible for testing
-    static long getNodeIdForTablet(WarehouseManager warehouseManager, ComputeResource computeResource, long tabletId) {
+    static long getNodeIdForTablet(WarehouseManager warehouseManager, long warehouseId, LakeTablet tablet) {
         try {
-            return warehouseManager.getComputeNodeAssignedToTablet(computeResource, tabletId).getId();
+            return warehouseManager.getComputeNodeAssignedToTablet(warehouseId, tablet).getId();
         } catch (Exception e) {
             // When retry is disabled, propagate the exception immediately.
             // When retry is enabled, fallback to a random alive node so that the task can be
@@ -331,18 +316,18 @@ public class TabletTaskExecutor {
             if (Config.lake_create_tablet_max_retries <= 0) {
                 throw e;
             }
-            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(computeResource);
+            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(warehouseId);
             if (aliveNodes.isEmpty()) {
                 throw e;
             }
             long nodeId = aliveNodes.get(ThreadLocalRandom.current().nextInt(aliveNodes.size())).getId();
-            LOG.debug("failed to get assigned node for tablet {}, fallback to node {}", tabletId, nodeId);
+            LOG.debug("failed to get assigned node for tablet {}, fallback to node {}", tablet.getId(), nodeId);
             return nodeId;
         }
     }
 
     private static void sendCreateReplicaTasksAndWaitForFinished(List<CreateReplicaTask> tasks, long timeout,
-                                                                  ComputeResource computeResource)
+                                                                  long warehouseId)
             throws DdlException {
         if (tasks.isEmpty()) {
             return;
@@ -366,7 +351,7 @@ public class TabletTaskExecutor {
 
         if (!failedTasks.isEmpty()) {
             if (maxRetries > 0) {
-                failedTasks = retryFailedTasks(failedTasks, maxRetries, timeout, computeResource);
+                failedTasks = retryFailedTasks(failedTasks, maxRetries, timeout, warehouseId);
             }
             if (!failedTasks.isEmpty()) {
                 throw new DdlException("Failed to create tablets: " + failedTasks.get(0).getErrorMsg());
@@ -381,13 +366,13 @@ public class TabletTaskExecutor {
      * @param failedTasks tasks that failed in the previous round
      * @param maxRetries  max number of retry attempts
      * @param timeout     timeout in seconds for each retry round
-     * @param computeResource compute resource for selecting alternative nodes
+     * @param warehouseId warehouse used for selecting alternative nodes
      * @return remaining failed tasks after all retries (empty if all succeeded)
      */
     private static List<CreateReplicaTask> retryFailedTasks(List<CreateReplicaTask> failedTasks,
                                                             int maxRetries,
                                                             long timeout,
-                                                            ComputeResource computeResource)
+                                                            long warehouseId)
             throws DdlException {
         Set<Long> excludeNodes = new HashSet<>();
         for (int retry = 0; retry < maxRetries && !failedTasks.isEmpty(); retry++) {
@@ -398,7 +383,7 @@ public class TabletTaskExecutor {
                     retry + 1, failedTasks.size(), excludeNodes);
 
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(computeResource);
+            List<ComputeNode> aliveNodes = warehouseManager.getAliveComputeNodes(warehouseId);
             List<ComputeNode> candidates = aliveNodes.stream()
                     .filter(n -> !excludeNodes.contains(n.getId()))
                     .collect(Collectors.toList());
