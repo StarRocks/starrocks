@@ -229,10 +229,10 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
                 IndexDeltaGroupEntryPB entry;
                 RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
                 if (entry.keys_size() == 0) {
-                    // Every index was skipped on this segment because its column
-                    // is physically absent (see classify_index_for_segment). No
-                    // .idx file was written, so publishing an entry would point
-                    // readers at payloads that do not exist.
+                    // Every index was skipped because the segment is empty or its
+                    // column is physically absent (see build_idg_for_segment).
+                    // No .idx file was written, so publishing an entry would
+                    // point readers at payloads that do not exist.
                     return Status::OK();
                 }
                 std::lock_guard<std::mutex> lg(_op_mtx);
@@ -426,6 +426,20 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     ASSIGN_OR_RETURN(auto segment,
                      _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint, read_opts,
                                                /*fill_meta_cache*/ false, _authoritative_schema));
+
+    // DELETE-only writes on primary-key tablets keep an empty segment alongside
+    // the .del file to preserve operation offsets. Its write schema can contain
+    // only key columns, so non-key columns are legitimately absent even when they
+    // are NOT NULL and have no default. There are no values to index; skip the
+    // physical segment before classifying columns or allocating an .idx file.
+    // Use the footer's row count instead of rowset metadata: after tablet split,
+    // a rowset can report zero apportioned rows while still referencing a shared
+    // physical segment that contains data.
+    if (segment->num_rows() == 0) {
+        VLOG(2) << "ADD INDEX fast path: skipping empty segment " << seg_name << ". tablet=" << _new_tablet.id()
+                << " txn_id=" << _txn_id;
+        return Status::OK();
+    }
 
     // 1b. Decide, per index, whether this segment can carry it. A column added by
     //     a metadata-only ALTER has no bytes in segments written before the ALTER,

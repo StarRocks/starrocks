@@ -30,6 +30,7 @@
 #include "column/schema.h"
 #include "common/config_rowset_fwd.h"
 #include "common/thread/threadpool.h"
+#include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
@@ -42,6 +43,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/general_tablet_writer.h"
 #include "storage/lake/index_delta_group.h"
 #include "storage/lake/index_delta_group_loader.h"
 #include "storage/lake/index_file_writer.h"
@@ -195,6 +197,55 @@ protected:
         delta_writer->close();
         CHECK_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, txn_id).status());
         return version + 1;
+    }
+
+    std::shared_ptr<TabletMetadata> create_pk_tablet_metadata() {
+        auto metadata = create_base_tablet_metadata();
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->mutable_column()->DeleteSubrange(2, schema->column_size() - 2);
+        schema->mutable_column(1)->set_aggregation("REPLACE");
+        return metadata;
+    }
+
+    // DELETE-only writes leave an empty segment whose physical schema contains
+    // only the PK. Write that shape through a real tablet/segment writer, while
+    // retaining the full logical schema in tablet metadata.
+    SegmentPtr append_pk_rowset(TabletMetadata* metadata, bool key_only, int nrows, bool bundled) {
+        auto full_schema = TabletSchema::create(metadata->schema());
+        std::vector<ColumnUID> column_uids{_c0_uid};
+        if (!key_only) column_uids.push_back(_c1_uid);
+        auto write_schema = TabletSchema::create_with_uid(full_schema, column_uids);
+        Columns columns;
+        for (size_t c = 0; c < write_schema->num_columns(); ++c) {
+            auto column = Int32Column::create();
+            for (int i = 0; i < nrows; ++i) column->append_datum(Datum(i + 1));
+            columns.push_back(std::move(column));
+        }
+        Chunk chunk(std::move(columns), std::make_shared<Schema>(ChunkHelper::convert_schema(write_schema)));
+        BundleWritableFileContext bundle_context;
+        if (bundled) bundle_context.increase_active_writers();
+        HorizontalGeneralTabletWriter writer(_tablet_manager.get(), metadata->id(), write_schema, next_id(),
+                                             /*is_compaction=*/false, /*flush_pool=*/nullptr,
+                                             bundled ? &bundle_context : nullptr);
+        CHECK_OK(writer.open());
+        CHECK_OK(writer.write(chunk, /*segment=*/nullptr, /*eos=*/true));
+        CHECK_OK(writer.finish());
+        if (bundled) CHECK_OK(bundle_context.decrease_active_writers());
+        CHECK_EQ(1, writer.segments().size());
+
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(metadata->rowsets_size());
+        rowset->set_num_rows(writer.num_rows());
+        const auto& segment_info = writer.segments().front();
+        CHECK_EQ(bundled, segment_info.bundle_file_offset.has_value());
+        segment_info.to_proto(/*segment_idx=*/0, rowset->add_segment_metas());
+        FileInfo file_info = segment_info;
+        file_info.path = _tablet_manager->segment_location(metadata->id(), segment_info.path);
+        writer.close();
+        ASSIGN_OR_ABORT(auto segment, _tablet_manager->load_segment(file_info, /*segment_id=*/0, LakeIOOptions{},
+                                                                    /*fill_meta_cache=*/false, full_schema));
+        return segment;
     }
 
     // Construct a single-column TabletIndexPB.
@@ -490,6 +541,65 @@ TEST_F(AddIndexSchemaChangeTest, run_empty_tablet_noop) {
     EXPECT_EQ(1, op.alter_version());
     ASSERT_EQ(1, op.new_indexes_size());
     EXPECT_EQ(IndexType::BITMAP, op.new_indexes(0).index_type());
+}
+
+TEST_F(AddIndexSchemaChangeTest, run_empty_pk_segment_skips_indexes_without_default) {
+    for (bool bundled : {false, true}) {
+        for (bool record_num_rows : {false, true}) {
+            auto metadata = create_pk_tablet_metadata();
+            auto segment = append_pk_rowset(metadata.get(), /*key_only=*/true, /*nrows=*/0, bundled);
+            ASSERT_EQ(0, segment->num_rows());
+            ASSERT_NE(nullptr, segment->column_with_uid(_c0_uid));
+            ASSERT_EQ(nullptr, segment->column_with_uid(_c1_uid));
+            if (!record_num_rows) metadata->mutable_rowsets(0)->mutable_segment_metas(0)->clear_num_rows();
+
+            VersionedTablet vt(_tablet_manager.get(), metadata);
+            ASSERT_FALSE(vt.get_schema()->column(1).is_nullable());
+            ASSERT_FALSE(vt.get_schema()->column(1).has_default_value());
+            for (auto type : {IndexType::BITMAP, IndexType::BLOOM_FILTER}) {
+                SCOPED_TRACE(::testing::Message() << "bundled=" << bundled << " record_num_rows=" << record_num_rows
+                                                  << " index_type=" << type);
+                AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {make_index(type, _c1_uid)},
+                                        vt.version(), vt.get_schema());
+                TxnLogPB_OpAddIndex op;
+                ASSERT_OK(sc.run(&op));
+                EXPECT_EQ(0, op.segment_entries_size());
+                ASSERT_EQ(1, op.new_indexes_size());
+                EXPECT_EQ(type, op.new_indexes(0).index_type());
+                EXPECT_EQ(0, count_idx_files());
+            }
+        }
+    }
+}
+
+TEST_F(AddIndexSchemaChangeTest, run_mixed_empty_and_nonempty_pk_segments_uses_physical_row_count) {
+    auto metadata = create_pk_tablet_metadata();
+    auto empty = append_pk_rowset(metadata.get(), /*key_only=*/true, /*nrows=*/0, /*bundled=*/false);
+    auto nonempty = append_pk_rowset(metadata.get(), /*key_only=*/false, /*nrows=*/3, /*bundled=*/true);
+    ASSERT_EQ(0, empty->num_rows());
+    ASSERT_EQ(3, nonempty->num_rows());
+    // A split can apportion the rowset count to zero while its segment still
+    // holds rows. Legacy metadata can also omit the per-segment row count.
+    auto* nonempty_rowset = metadata->mutable_rowsets(1);
+    nonempty_rowset->set_num_rows(0);
+    nonempty_rowset->mutable_segment_metas(0)->clear_num_rows();
+    VersionedTablet vt(_tablet_manager.get(), metadata);
+    for (auto type : {IndexType::BITMAP, IndexType::BLOOM_FILTER}) {
+        SCOPED_TRACE(::testing::Message() << "index_type=" << type);
+        const auto idx_before = count_idx_files();
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, {make_index(type, _c1_uid)}, vt.version(),
+                                vt.get_schema());
+        TxnLogPB_OpAddIndex op;
+        ASSERT_OK(sc.run(&op));
+        ASSERT_EQ(1, op.segment_entries_size());
+        EXPECT_EQ(nonempty_rowset->id(), op.segment_entries(0).segment_id());
+        const auto& entry = op.segment_entries(0).entry();
+        ASSERT_EQ(1, entry.keys_size());
+        EXPECT_EQ(_c1_uid, entry.keys(0).col_unique_id());
+        EXPECT_EQ(type, entry.keys(0).index_type());
+        EXPECT_GT(entry.file_size(), 0);
+        EXPECT_EQ(idx_before + 1, count_idx_files());
+    }
 }
 
 // GIN -> NotSupported. Triggers cleanup_written_idx_files via the run()
