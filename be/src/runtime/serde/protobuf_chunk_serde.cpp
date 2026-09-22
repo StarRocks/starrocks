@@ -53,7 +53,8 @@ int64_t ProtobufChunkSerde::max_serialized_size(const Chunk& chunk, const std::s
         }
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
-            serialized_size += ColumnArraySerde::max_serialized_size(*chunk.columns()[i], context->get_encode_level(i));
+            serialized_size += ColumnArraySerde::max_serialized_size(
+                    *chunk.columns()[i], exchange_encode_level(context->get_encode_level(i)));
         }
     }
     return serialized_size;
@@ -127,9 +128,10 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const Chunk& chunk,
         using Serd = ColumnArraySerde;
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
-            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i)));
+            const auto encode_level = exchange_encode_level(context->get_encode_level(i));
+            ASSIGN_OR_RETURN(buff, Serd::serialize(*chunk.columns()[i], buff, false, encode_level));
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
-            if (EncodeContext::enable_encode_integer(context->get_encode_level(i))) { // may be use streamvbyte
+            if (EncodeContext::enable_encode_integer(encode_level)) { // may be use streamvbyte
                 padding_size = context->STREAMVBYTE_PADDING_SIZE;
             }
         }
