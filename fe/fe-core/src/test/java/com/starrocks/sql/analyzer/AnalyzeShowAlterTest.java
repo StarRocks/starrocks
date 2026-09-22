@@ -76,6 +76,41 @@ public class AnalyzeShowAlterTest {
     }
 
     @Test
+    public void testFinishTimeSpellingOnRollupLayout() {
+        // RollupProcDir shows the column as FinishedTime; SchemaChangeProcDir and OptimizeProcDir
+        // show it as FinishTime, and the analyzer's vocabulary was written against the latter.
+        // ROLLUP and MATERIALIZED VIEW take either spelling and key the filter by their own.
+        for (String prefix : new String[] {"SHOW ALTER TABLE ROLLUP FROM db", "SHOW ALTER MATERIALIZED VIEW FROM db"}) {
+            for (String column : new String[] {"FinishedTime", "FinishTime"}) {
+                ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
+                        prefix + " WHERE `" + column + "` > '2019-12-04 00:00:00'");
+                Assertions.assertTrue(statement.getFilterMap().containsKey("finishedtime"),
+                        prefix + " WHERE " + column + " should be keyed by finishedtime");
+                Assertions.assertFalse(statement.getFilterMap().containsKey("finishtime"));
+            }
+        }
+
+        // CreateTime shares the same branch and is spelled the same everywhere, so it keeps its key.
+        ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
+                "SHOW ALTER TABLE ROLLUP FROM db WHERE `CreateTime` > '2019-12-04 00:00:00'");
+        Assertions.assertTrue(statement.getFilterMap().containsKey("createtime"));
+
+        // The other two layouts are untouched: FinishTime keeps its key, FinishedTime is not a
+        // column they return and stays rejected.
+        for (String prefix : new String[] {"SHOW ALTER TABLE COLUMN FROM db", "SHOW ALTER TABLE OPTIMIZE FROM db"}) {
+            ShowAlterStmt stmt = (ShowAlterStmt) analyzeSuccess(
+                    prefix + " WHERE `FinishTime` > '2019-12-04 00:00:00'");
+            Assertions.assertTrue(stmt.getFilterMap().containsKey("finishtime"));
+            analyzeFail(prefix + " WHERE `FinishedTime` > '2019-12-04 00:00:00'",
+                    "The columns of TableName/CreateTime/FinishTime/State are supported");
+        }
+
+        // An unknown column names the spelling that layout actually returns.
+        analyzeFail("SHOW ALTER TABLE ROLLUP FROM db WHERE `bad_column` = 'x'",
+                "The columns of TableName/CreateTime/FinishedTime/State are supported");
+    }
+
+    @Test
     public void normalTest() {
         analyzeSuccess("SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1;");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",

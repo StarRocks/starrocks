@@ -52,6 +52,16 @@ public class ShowAlterStmtAnalyzer {
 
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
+        // ROLLUP and MATERIALIZED VIEW rows both come from RollupProcDir, whose column names
+        // differ from SchemaChangeProcDir's. Remembered so a predicate can be checked against
+        // the layout that will actually answer.
+        private ShowAlterStmt.AlterType alterType;
+
+        private boolean isRollupLayout() {
+            return alterType == ShowAlterStmt.AlterType.ROLLUP
+                    || alterType == ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
+        }
+
         public void analyze(ShowAlterStmt statement, ConnectContext session) {
             visit(statement, session);
         }
@@ -108,6 +118,7 @@ public class ShowAlterStmtAnalyzer {
 
             ShowAlterStmt.AlterType type = statement.getType();
             Preconditions.checkNotNull(type);
+            this.alterType = type;
 
             Expr whereClause = statement.getWhereClause();
             // analyze where clause if not null
@@ -155,10 +166,18 @@ public class ShowAlterStmtAnalyzer {
                             "Where clause : TableName = \"table1\" or "
                                     + "State = \"FINISHED|CANCELLED|RUNNING|PENDING|WAITING_TXN\"");
                 }
-            } else if (leftKey.equals("createtime") || leftKey.equals("finishtime")) {
+            // FinishedTime is the name the rollup layout actually shows, and a predicate should be
+            // able to name the column the statement returns. FinishTime stays accepted there as
+            // well: this vocabulary was written against SchemaChangeProcDir, so that spelling has
+            // always analyzed on a rollup - never filtering anything, but never rejected either -
+            // and turning it into an error now would break statements that parse today. The thing
+            // being worked around is that the three layouts disagree on this column's name; the
+            // alias covers it until they are made to agree.
+            } else if (leftKey.equals("createtime") || leftKey.equals("finishtime")
+                    || (leftKey.equals("finishedtime") && isRollupLayout())) {
                 if (!(subExpr.getChild(1) instanceof StringLiteral)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Where clause : CreateTime/FinishTime =|>=|<=|>|<|!= "
+                            "Where clause : CreateTime/" + finishTimeColumnName() + " =|>=|<=|>|<|!= "
                                     + "\"2019-12-02|2019-12-02 14:54:00\"");
                 }
                 try {
@@ -166,11 +185,25 @@ public class ShowAlterStmtAnalyzer {
                 } catch (AnalysisException e) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }
+                // Key the filter by the name the answering layout uses, so a proc dir can look it
+                // up with its own title and neither side has to know about the other spelling.
+                // CreateTime shares this branch and is spelled the same everywhere, so leave it.
+                if (!leftKey.equals("createtime")) {
+                    leftKey = finishTimeColumnName().toLowerCase();
+                }
             } else {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                        "The columns of TableName/CreateTime/FinishTime/State are supported.");
+                        "The columns of TableName/CreateTime/" + finishTimeColumnName()
+                                + "/State are supported.");
             }
             filterMap.put(leftKey, subExpr);
+        }
+
+        // SchemaChangeProcDir and OptimizeProcDir call the column FinishTime, RollupProcDir calls
+        // it FinishedTime. Both spellings are accepted on the rollup layout; this is the one the
+        // filter is keyed by and the one the error messages name.
+        private String finishTimeColumnName() {
+            return isRollupLayout() ? "FinishedTime" : "FinishTime";
         }
 
         private void analyzeSubPredicate(Expr subExpr) {
