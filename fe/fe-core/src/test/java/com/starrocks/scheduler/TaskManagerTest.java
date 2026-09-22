@@ -174,6 +174,77 @@ public class TaskManagerTest {
         assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
+    private static Task makeTask(TaskManager taskManager, String name, long id) {
+        Task task = new Task(name);
+        task.setId(id);
+        taskManager.replayCreateTask(task);
+        return task;
+    }
+
+    private static TaskRun makeRun(TaskManager taskManager, Task task, String queryId) {
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(queryId, System.currentTimeMillis());
+        return taskRun;
+    }
+
+    private static void addToHistory(TaskManager taskManager, Task task, String queryId) {
+        TaskRunStatus finished = new TaskRunStatus();
+        finished.setTaskId(task.getId());
+        finished.setTaskName(task.getName());
+        finished.setQueryId(queryId);
+        finished.setState(Constants.TaskRunState.SUCCESS);
+        taskManager.getTaskRunHistory().addHistory(finished);
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusDedupsARunFoundInTwoSources() {
+        // A run migrating from the running map into the history while getMatchedTaskRunStatus walks the
+        // sources is found in both: the running map still holds the RUNNING record, the history already
+        // holds the finished one.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_dedup", 1000L);
+
+        TaskRun runningTaskRun = makeRun(taskManager, task, "query_dedup");
+        runningTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(runningTaskRun);
+        addToHistory(taskManager, task, "query_dedup");
+
+        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(new TGetTasksParams());
+        assertEquals(1, taskRuns.size());
+        // The history is the source it migrated into, so it carries the final state.
+        assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusKeepsDistinctRunsOfTheSameTask() {
+        // One task id owns many runs, so only an equal query id may collapse two records.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_distinct", 1001L);
+
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, "query_pending"));
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, task, "query_running"));
+        addToHistory(taskManager, task, "query_history_1");
+        addToHistory(taskManager, task, "query_history_2");
+
+        assertEquals(4, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusCollapsesRunsWithoutQueryId() {
+        // Only a record restored from persisted state can lack a query id, and nothing then tells two
+        // of them apart -- as the in-memory history, itself keyed by query id, already treats them. The
+        // two records below carry the two shapes of "no query id", which must not count as two runs.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_without_query_id", 1002L);
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, null));
+
+        // A second task, because the running map holds at most one run per task id.
+        Task otherTask = makeTask(taskManager, "other_task_without_query_id", 1003L);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, otherTask, ""));
+
+        assertEquals(1, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
     @Test
     public void testTaskRunPriority() {
         Queue<TaskRun> queue = Queues.newPriorityBlockingQueue();
