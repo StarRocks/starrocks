@@ -323,6 +323,68 @@ public class CopyUnsafeTablesCollectorTest extends ConnectorPlanTestBase {
     }
 
     /**
+     * UPDATE / DELETE / MERGE INTO are judged exactly like an INSERT: the write target goes through the same
+     * verdict as any other table, and the trade only tips when the statement reads through a connector.
+     *
+     * <p>MERGE INTO targets an Iceberg table, so its target abstains outright (the lock never covered it)
+     * and what has to be snapshot-able is the internal source it reads.
+     */
+    @Test
+    public void testADmlReadingThroughAConnectorDoesNotHoldTheLock() throws Throwable {
+        Assertions.assertFalse(isCopySafe("delete from test.tprimary where pk in (select v4 from test.t1)"),
+                "a purely local DELETE");
+        Assertions.assertFalse(isCopySafe("update test.tprimary set v2 = 1 where pk in (select v4 from test.t1)"),
+                "a purely local UPDATE");
+
+        Assertions.assertTrue(isCopySafe(
+                "delete from test.tprimary where pk in (select l_orderkey from hive0.tpch.lineitem)"),
+                "a DELETE whose predicate reads a connector");
+        Assertions.assertTrue(isCopySafe(
+                "update test.tprimary set v2 = 1 where pk in (select l_orderkey from hive0.tpch.lineitem)"),
+                "an UPDATE whose predicate reads a connector");
+        Assertions.assertTrue(isCopySafe(
+                "merge into iceberg0.unpartitioned_db.t0_v2 as t using test.tprimary as s on t.id = s.pk "
+                        + "when matched then update set data = s.v1"),
+                "a MERGE INTO an external target from an internal source");
+
+        // A table over the MV limit on the read side does not bring the lock back either: same trade, same
+        // answer as for a SELECT.
+        withT0OverTheMvLimit(() -> Assertions.assertTrue(isCopySafe(
+                "delete from test.tprimary where pk in (select v1 from test.t0 "
+                        + "union select l_orderkey from hive0.tpch.lineitem)")));
+    }
+
+    /**
+     * Everything a DML reads has to be in the lock set, not just its target. {@code PlannerMetaLocker} is
+     * built before {@code Analyzer.analyze}, so at that point a DML has no query statement and the inherited
+     * traversal reaches nothing: the other tables are still in the raw USING / FROM clause and in the where
+     * predicate's subqueries. That matters twice over now -- planning snapshots every OlapTable of the
+     * analyzed statement while this lock is held, so a table missing here would be copied without one.
+     */
+    @Test
+    public void testADmlLocksTheTablesItReadsAndNotJustItsTarget() throws Exception {
+        long tprimary = tableId("test", "tprimary");
+        long t0 = tableId("test", "t0");
+        long t1 = tableId("test", "t1");
+
+        Assertions.assertEquals(Set.of(tprimary, t0),
+                lockedTableIds("delete from test.tprimary where pk in (select v1 from test.t0)"),
+                "the DELETE's subquery table is not locked");
+        Assertions.assertEquals(Set.of(tprimary, t0),
+                lockedTableIds("update test.tprimary set v2 = 1 where pk in (select v1 from test.t0)"),
+                "the UPDATE's subquery table is not locked");
+        Assertions.assertEquals(Set.of(tprimary, t0, t1),
+                lockedTableIds("delete from test.tprimary using test.t0 join test.t1 on t0.v1 = t1.v4 "
+                        + "where test.tprimary.pk = test.t0.v1"),
+                "the DELETE's USING tables are not locked");
+
+        // An external catalog stays out of it, the way it does for every other statement.
+        Assertions.assertEquals(Set.of(tprimary),
+                lockedTableIds("delete from test.tprimary where pk in "
+                        + "(select l_orderkey from hive0.tpch.lineitem)"));
+    }
+
+    /**
      * A target with no snapshot to plan against stays copy-unsafe whatever the SELECT reads -- the gate the
      * target now passes through is the same one {@link #testInternalDbExternalEngineTableIsUnchanged}
      * asserts for a table on the read side.

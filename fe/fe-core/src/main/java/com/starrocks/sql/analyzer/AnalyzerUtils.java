@@ -1208,10 +1208,11 @@ public class AnalyzerUtils {
         private final Map<TableName, Table> overTheMvLimit = Maps.newHashMap();
 
         /**
-         * The INSERT target, when it is a table planning could work off a snapshot of. Held aside for the same
-         * reason {@link #overTheMvLimit} is -- see {@link #isCopySafe()} for what lets it through.
+         * The write target of an INSERT / UPDATE / DELETE / MERGE INTO, when it is a table planning could work
+         * off a snapshot of. Held aside for the same reason {@link #overTheMvLimit} is -- see
+         * {@link #isCopySafe()} for what lets it through.
          */
-        private final Map<TableName, Table> snapshotableInsertTarget = Maps.newHashMap();
+        private final Map<TableName, Table> snapshotableWriteTarget = Maps.newHashMap();
 
         /** Whether the statement touches a table the meta lock cannot protect, i.e. one in an external catalog. */
         private boolean readsThroughAConnector;
@@ -1234,45 +1235,79 @@ public class AnalyzerUtils {
          * carries. A bounded local copy is the better trade against an unbounded remote wait, so the limit does
          * not get to decide here.
          *
-         * <p><b>Why the INSERT target is held to the same rule.</b> Same trade, same answer: an INSERT whose
-         * SELECT reads through a connector runs the whole optimization -- external statistics, partition lists,
-         * file lists -- and today it does all of it under the lock, because the target lands in the copy-unsafe
-         * set unconditionally (see {@link #visitInsertStatement}). The target itself is snapshot-able exactly
-         * like any other native table, so what is gated here is not its safety but whether the trade is worth
-         * making. Requiring a connector read keeps every purely local INSERT on the path it has always taken.
+         * <p><b>Why a write target is held to the same rule.</b> Same trade, same answer: a DML whose query
+         * reads through a connector runs the whole optimization -- external statistics, partition lists, file
+         * lists -- and used to do all of it under the lock, because the target landed in the copy-unsafe set
+         * unconditionally (see {@link #judgeWriteTarget}). The target itself is snapshot-able exactly like any
+         * other native table, so what is gated here is not its safety but whether the trade is worth making.
+         * Requiring a connector read keeps every purely local INSERT / UPDATE / DELETE on the path it has
+         * always taken.
          */
         public boolean isCopySafe() {
             return tables.isEmpty()
-                    && (readsThroughAConnector || (overTheMvLimit.isEmpty() && snapshotableInsertTarget.isEmpty()));
+                    && (readsThroughAConnector || (overTheMvLimit.isEmpty() && snapshotableWriteTarget.isEmpty()));
         }
 
         /**
-         * The INSERT target does not reach {@link #visitTable}: {@link TableCollector} puts it straight into
-         * {@code tables}. That was added for the privilege collector (#18808) -- collecting every table a
-         * statement names -- long before this subclass reused the same map as a verdict, so ever since, no
-         * INSERT has been copy-safe and {@code StatementPlanner.isLockFreeInsertStmt} has always answered
-         * false. Put the target through the same verdict the other tables get instead.
+         * A DML's write target does not reach {@link #visitTable}: {@link TableCollector} puts it straight
+         * into {@code tables}. That was added for the privilege collector (#18808) -- collecting every table a
+         * statement names -- long before this subclass reused the same map as a verdict, so for as long as
+         * that has been so, no INSERT / UPDATE / DELETE / MERGE INTO has been copy-safe and every one of them
+         * planned with the lock held. Put the target through the same verdict the other tables get instead.
+         *
+         * @param target    the analyzed target table, or null when the statement has not been analyzed yet
+         * @param targetName the name to file it under, only used for the copy-unsafe maps
          */
-        @Override
-        public Void visitInsertStatement(InsertStmt node, Void context) {
-            Table target = node.getTargetTable();
-            TableName targetName = TableName.fromTableRef(node.getTableRef());
+        private void judgeWriteTarget(Table target, TableName targetName) {
             if (target == null) {
                 // Not analyzed yet, so there is nothing to judge: stay on the locked path.
                 tables.put(targetName, target);
             } else if (!target.isMetaLockTarget()) {
-                // INSERT INTO an external catalog. The lock never covered it, so it has no say -- same
-                // abstention visitTable applies to a table read through a connector.
+                // Writing into an external catalog -- INSERT INTO hive, MERGE INTO iceberg. The lock never
+                // covered it, so it has no say -- same abstention visitTable applies to a table read through
+                // a connector.
                 readsThroughAConnector = true;
             } else if (target.isNativeTableOrMaterializedView()) {
-                snapshotableInsertTarget.put(targetName, target);
+                snapshotableWriteTarget.put(targetName, target);
             } else {
                 // A lock target with no snapshot to plan against: ENGINE=MYSQL, ExternalOlapTable, and
                 // resource-mapping external tables. Unchanged -- the lock has to stay for the whole phase.
                 tables.put(targetName, target);
             }
+        }
+
+        @Override
+        public Void visitInsertStatement(InsertStmt node, Void context) {
+            judgeWriteTarget(node.getTargetTable(), TableName.fromTableRef(node.getTableRef()));
             // Deliberately not super.visitInsertStatement: that is the blanket put this override replaces.
             // AstTraverser only walks the query statement from here, so do exactly that.
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            judgeWriteTarget(node.getTable(), TableName.fromTableRef(node.getTableRef()));
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            judgeWriteTarget(node.getTable(), TableName.fromTableRef(node.getTableRef()));
+            if (node.getQueryStatement() != null) {
+                visit(node.getQueryStatement(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            judgeWriteTarget(node.getTable(), TableName.fromTableRef(node.getTableRef()));
             if (node.getQueryStatement() != null) {
                 visit(node.getQueryStatement(), context);
             }
@@ -1364,6 +1399,37 @@ public class AnalyzerUtils {
             Table copied = copyTable(node.getTargetTable());
             if (copied != null) {
                 node.setTargetTable(copied);
+            }
+            return null;
+        }
+
+        /**
+         * The UPDATE / DELETE target has to be replaced for the same reason the INSERT target is: the planner
+         * reads it for the output schema and the sink ({@code UpdatePlanner} / {@code DeletePlanner} both
+         * start from {@code stmt.getTable()}), and on the lock-free path that read happens with the lock
+         * released. The target also appears as a relation inside the synthesized query, so the copy handed
+         * back here is the one {@link #visitTable} already made -- {@code copyTable} keys its map on
+         * (table id, base index id), which is what keeps the scan and the sink on the same object.
+         *
+         * <p>MERGE INTO needs no such override: its target is always an Iceberg table, which
+         * {@code copyTable} does not copy.
+         */
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            super.visitUpdateStatement(node, context);
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            super.visitDeleteStatement(node, context);
+            Table copied = copyTable(node.getTable());
+            if (copied != null) {
+                node.setTable(copied);
             }
             return null;
         }
