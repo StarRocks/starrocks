@@ -75,6 +75,7 @@ import java.util.Vector;
 
 import static com.starrocks.type.AnyArrayType.ANY_ARRAY;
 import static com.starrocks.type.AnyElementType.ANY_ELEMENT;
+import static com.starrocks.type.AnyGeographyType.GEOGRAPHY;
 import static com.starrocks.type.AnyMapType.ANY_MAP;
 import static com.starrocks.type.AnyStructType.ANY_STRUCT;
 import static com.starrocks.type.ArrayType.ARRAY_BIGINT;
@@ -365,7 +366,6 @@ ${default_values}
             [i for i in fnm["args"] if i != "..."]
         )
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
-
         if fnm.get("binary_type") == "AI":
             return ai_fn_template.substitute(fnm)
 
