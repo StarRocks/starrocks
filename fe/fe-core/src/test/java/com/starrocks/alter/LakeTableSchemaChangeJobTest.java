@@ -32,7 +32,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -624,17 +623,16 @@ public class LakeTableSchemaChangeJobTest {
         AtomicBoolean sendCalled = new AtomicBoolean(false);
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
-            public void sendAgentTaskAndWait(AgentBatchTask batchTask,
-                                             MarkedCountDownLatch<Long, Long> countDownLatch,
-                                             long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
-                                             AtomicBoolean isCancelling) throws AlterCancelException {
+            public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
                 sendCalled.set(true);
+                AgentTaskQueue.addBatchTask(batchTask);
+                AgentTaskExecutor.submit(batchTask);
             }
         };
 
         alterTable(connectContext, "ALTER TABLE t_zstd SET ('zstd_compression_columns' = 'c2:256k')");
         LakeTableSchemaChangeJob schemaChangeJob = getAlterJob(zstdTable);
-        schemaChangeJob.runPendingJob();
+        drivePendingJob(schemaChangeJob);
         Assertions.assertEquals(AlterJobV2.JobState.WAITING_TXN, schemaChangeJob.getJobState());
         Assertions.assertTrue(sendCalled.get(),
                     "a zstd compression column change must fall back to normal tablet creation even when "
