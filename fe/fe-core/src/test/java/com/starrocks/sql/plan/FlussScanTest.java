@@ -24,6 +24,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
@@ -36,6 +37,7 @@ import com.starrocks.planner.FlussScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -48,6 +50,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -180,6 +183,102 @@ public class FlussScanTest extends PlanTestBase {
         GetRemoteFilesParams params = mockedFlussMetadata.getLastParams();
         Assertions.assertEquals("substr(4: category, 1, 1) = p", params.getPredicate().toString());
         Assertions.assertEquals(3, params.getPartitionKeys().size());
+    }
+
+    /**
+     * The combination the lock report left unmeasured: a statement that reads Fluss together with an
+     * internal table. Fluss lives in an external catalog, so it is never in the lock set and abstains
+     * from the copy-safety verdict; the planner therefore drops the lock before it asks the connector
+     * for statistics and splits. Pinned end to end here because the report's own conclusion about
+     * {@code computeFlussScanNode} was structural -- "same shape as the other compute*ScanNode sites"
+     * -- and never run.
+     */
+    @Test
+    public void testFlussMetadataIsNotFetchedUnderTheLock() throws Exception {
+        // The mixed statement has to be planned from the internal catalog, as a real one would be:
+        // it is the internal table that brings the lock, and setUp above left fluss0 current.
+        connectContext.changeCatalogDb("default_catalog.test");
+        try {
+            Map<String, Boolean> underLock = probeConnectorCalls();
+            getFragmentPlan("select t.v1, e.id from test.t0 t "
+                    + "join fluss0.fluss_db.log_events e on t.v1 = e.id");
+            Assertions.assertFalse(underLock.isEmpty(),
+                    "planning never reached the fluss catalog, the probe proves nothing");
+            underLock.forEach((site, held) -> Assertions.assertFalse(held,
+                    "an FE metadata lock was held while planning contacted fluss, at " + site));
+        } finally {
+            connectContext.changeCatalogDb(CATALOG + "." + DB);
+        }
+    }
+
+    /**
+     * And the residual, asserted as the deliberate current behaviour rather than as a defect: a table
+     * the planner has no snapshot for -- an ENGINE=mysql external table here, an {@code ExternalOlapTable}
+     * or a resource-mapping table just as well -- keeps the whole statement on the locked path, and every
+     * connector call in it is then made under the lock again. The Fluss side is guiltless; what decides
+     * is the table that cannot be copied.
+     */
+    @Test
+    public void testATableWithNoSnapshotPutsFlussBackUnderTheLock() throws Exception {
+        connectContext.changeCatalogDb("default_catalog.test");
+        starRocksAssert.useDatabase("test").withTable("CREATE EXTERNAL TABLE fluss_lock_mysql_tbl\n"
+                + "(\n"
+                + "    k1 INT,\n"
+                + "    k2 VARCHAR(64)\n"
+                + ")\n"
+                + "ENGINE=mysql\n"
+                + "PROPERTIES\n"
+                + "(\n"
+                + "    \"host\" = \"127.0.0.1\",\n"
+                + "    \"port\" = \"3306\",\n"
+                + "    \"user\" = \"mysql_user\",\n"
+                + "    \"password\" = \"mysql_passwd\",\n"
+                + "    \"database\" = \"mysql_db_test\",\n"
+                + "    \"table\" = \"mysql_table_test\"\n"
+                + ");");
+        try {
+            Map<String, Boolean> underLock = probeConnectorCalls();
+            getFragmentPlan("select m.k1, e.id from test.fluss_lock_mysql_tbl m "
+                    + "join fluss0.fluss_db.log_events e on m.k1 = e.id");
+            Assertions.assertFalse(underLock.isEmpty(),
+                    "planning never reached the fluss catalog, the probe proves nothing");
+            Assertions.assertTrue(underLock.values().stream().anyMatch(Boolean::booleanValue),
+                    "a statement with no snapshot for one of its tables is expected to plan under the "
+                            + "lock; if this now passes, the residual entry point is closed and the "
+                            + "lock plan doc should say so: " + underLock);
+        } finally {
+            starRocksAssert.dropTable("test.fluss_lock_mysql_tbl");
+            connectContext.changeCatalogDb(CATALOG + "." + DB);
+        }
+    }
+
+    /**
+     * Whether any connector call made while planning ran with an FE metadata lock held, per entry point.
+     * OR-accumulated: one planning run calls these along several paths and a plain put would keep only
+     * the last sample.
+     */
+    private Map<String, Boolean> probeConnectorCalls() {
+        Map<String, Boolean> underLock = Maps.newConcurrentMap();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatistics(Invocation invocation, OptimizerContext session, String catalogName,
+                                                 Table table, Map<ColumnRefOperator, Column> columns,
+                                                 List<PartitionKey> partitionKeys, ScalarOperator predicate,
+                                                 long limit, TvrVersionRange versionRange) {
+                underLock.merge("getTableStatistics:" + table.getName(), LockHoldDepth.isUnderLock(),
+                        Boolean::logicalOr);
+                return invocation.proceed(session, catalogName, table, columns, partitionKeys, predicate, limit,
+                        versionRange);
+            }
+
+            @Mock
+            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table, GetRemoteFilesParams params) {
+                underLock.merge("getRemoteFiles:" + table.getName(), LockHoldDepth.isUnderLock(),
+                        Boolean::logicalOr);
+                return invocation.proceed(table, params);
+            }
+        };
+        return underLock;
     }
 
     private static String toPartitionName(PartitionKey partitionKey) {
