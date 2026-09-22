@@ -1910,10 +1910,8 @@ public class PlanFragmentBuilder {
                     lanceScanNode.getConjuncts()
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
-                lanceScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
-                HDFSScanNodePredicates scanNodePredicates = lanceScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
-                prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                lanceScanNode.setupScanRangeLocations();
+                // Lance uses the complete scan predicate above; partition pruning is not supported yet.
             } catch (Exception e) {
                 LOG.warn("Lance scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
