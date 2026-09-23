@@ -1082,6 +1082,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 是否为云原生表启用 File Bundling 优化。启用此功能 (设置为 `true`) 后，系统会自动捆绑加载、Compaction 或 Publish 操作生成的数据文件，从而降低因频繁访问外部存储系统而产生的 API 成本。您还可以使用 CREATE TABLE 属性 `file_bundling` 在表级别控制此行为。
 - 引入版本: v4.0
 
+### `enable_flexible_partial_update`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 【实验功能】是否接受 `partial_update_mode` 为 `flexible` 或 `flexible_row` 的 Stream Load 导入（存算分离主键表的灵活部分更新：JSON 格式导入的每一行只更新该行中出现的列）。同名的 BE 配置项也需要设置为 `true`。设置为 `false`（默认）时，这类导入会失败。请在所有 BE 和 CN 都升级到支持灵活部分更新的版本之后再开启：更早版本的节点会把这类导入当作普通部分更新执行，把行中未出现的列更新为 `NULL`。出于同样的原因，降级之前请先关闭此配置，并等待所有灵活部分更新的导入完成发布。
+- 引入版本: -
+
 ### `enable_pipeline_routine_load`
 
 - 默认值: false
