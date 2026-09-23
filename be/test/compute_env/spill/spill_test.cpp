@@ -467,6 +467,64 @@ TEST_F(SpillTest, unsorted_process) {
     }
 }
 
+// Pins what spiller.h documents about the two flush-stage timers on an unordered writer. The
+// default SpilledOptions gives init_partition_nums = -1 (so a RawSpillerWriter) with
+// is_unordered = true -- the shape the nested-loop join operators use. Mem tables are still
+// flushed there, so FlushMemTableTime is attributed, but _need_compact_block() bails out on
+// is_unordered, so no compaction work is ever done even with block compaction enabled.
+TEST_F(SpillTest, unordered_writer_reports_flush_stage_but_never_compacts) {
+    ObjectPool pool;
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    RandomChunkBuilder chunk_builder;
+    auto factory = spill::make_spilled_factory();
+
+    SpilledOptions spill_options;
+    // The default ctor delegates to SpilledOptions(-1): unordered, and not partitioned.
+    ASSERT_TRUE(spill_options.is_unordered);
+    ASSERT_EQ(-1, spill_options.init_partition_nums);
+    spill_options.mem_table_pool_size = 2;
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+    // Enabled deliberately: it is the is_unordered gate, not this flag, that keeps compaction away.
+    spill_options.enable_block_compaction = true;
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    for (size_t i = 0; i < 1024; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+        ASSERT_OK(spiller->_spilled_task_status);
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+
+    // Mem tables were written out, so the first stage of the flush task is attributed.
+    ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+    ASSERT_LE(metrics.flush_mem_table_timer->value(), metrics.flush_timer->value());
+    // The compaction stage never selected any block group, so nothing was merged or rewritten.
+    // compact_timer itself is not asserted to be zero: it is scoped before the _need_compact_block()
+    // early return, so entering the stage at all leaves a negligible non-zero value there.
+    ASSERT_EQ(0, metrics.compact_count->value());
+    ASSERT_EQ(0, metrics.compact_merge_timer->value());
+    ASSERT_EQ(0, metrics.compact_bytes_read->value());
+    ASSERT_EQ(0, metrics.compact_bytes_written->value());
+}
+
 struct FailedGuard {
     bool scoped_begin() const { return false; }
     void scoped_end() const {}
