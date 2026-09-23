@@ -586,7 +586,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - タイプ: Int
 - 単位: -
 - 変更可能: はい
-- 説明: connector スキャンオペレーターごとに同時実行できる footer プリフェッチタスクの最大数。プリフェッチタスクはオペレーターごとの io-task 予算をデータタスクと共有し（データタスクとプリフェッチタスクの合計が `connector_io_tasks_per_scan_operator` を超えない）、この値によって footer をどの程度積極的に先読みするかが制限されます。`enable_connector_footer_prefetch` が `true` の場合にのみ有効です。
+- 説明: connector スキャンオペレーターごとに同時実行できる footer プリフェッチタスクの最大数。新しいプリフェッチタスクは `connector_io_tasks_per_scan_operator` の予算内の空き容量を使用します。プリフェッチの実行中にデータスキャンの並列度が増えると、タスクの合計が一時的に予算を超える場合があります。データスキャンはプリフェッチの完了を待ちません。`enable_connector_footer_prefetch` が `true` の場合にのみ有効です。
 - 導入バージョン: -
 
 ### connector_footer_prefetch_lead_multiplier

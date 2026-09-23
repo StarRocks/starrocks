@@ -543,8 +543,8 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     // Data io-tasks had first pick of this instance's slots above; fill whatever the data scan left
     // spare (governor throttle) with footer warm tasks, ahead of the scan. Warm runs on its own
-    // counter, so it neither perturbs the adaptive governor nor blocks data re-submission while
-    // total (data + warm) stays within the per-instance cap. No-op unless overridden (connector
+    // counter, so it neither perturbs the adaptive governor nor blocks data re-submission. A later
+    // increase in the data target can temporarily exceed the combined budget. No-op unless overridden (connector
     // scans) and the feature is armed.
     try_submit_metadata_prefetch(state);
 

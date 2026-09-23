@@ -57,7 +57,7 @@ public:
     // -- cache footprint / wasted reads if the scan terminates early. The scan node derives it as
     // scan_dop * connector_footer_prefetch_max_inflight * connector_footer_prefetch_lead_multiplier.
     // Concurrency is NOT bounded here -- each operator caps its own warm tasks against its free
-    // io-task slots (data + warm <= connector_io_tasks_per_scan_operator).
+    // io-task slots at admission. A later increase in data concurrency does not wait for warm tasks.
     // metacache_on / datacache_populate_on: which caches can hold a warmed footer; if neither
     // is set the prefetcher never warms.
     FooterPrefetchState(std::vector<FooterPrefetchItem> files, int lead_distance, bool metacache_on,

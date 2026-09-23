@@ -595,7 +595,7 @@ This topic introduces the following types of BE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: The maximum number of concurrent footer-prefetch tasks per connector scan operator. Prefetch tasks share the per-operator io-task budget (data tasks plus prefetch tasks do not exceed `connector_io_tasks_per_scan_operator`), so this caps how aggressively footers are warmed ahead of the data scan. Only takes effect when `enable_connector_footer_prefetch` is `true`.
+- Description: The maximum number of concurrent footer-prefetch tasks per connector scan operator. New prefetch tasks use spare capacity under `connector_io_tasks_per_scan_operator`. If the adaptive data-scan target increases while prefetch is running, the combined count can temporarily exceed that budget; data scans do not wait for prefetch tasks to drain. Only takes effect when `enable_connector_footer_prefetch` is `true`.
 - Introduced in: -
 
 ### connector_footer_prefetch_lead_multiplier

@@ -583,7 +583,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Int
 - 单位：-
 - 是否动态：是
-- 描述：每个 connector 扫描算子并发执行的 footer 预取任务数上限。预取任务与数据任务共享每个算子的 io-task 预算（数据任务与预取任务之和不超过 `connector_io_tasks_per_scan_operator`），因此该参数限制了提前预热 footer 的激进程度。仅当 `enable_connector_footer_prefetch` 为 `true` 时生效。
+- 描述：每个 connector 扫描算子并发执行的 footer 预取任务数上限。新的预取任务使用 `connector_io_tasks_per_scan_operator` 预算中的空闲容量。如果自适应数据扫描在预取运行期间提高并发目标，任务总数可能暂时超过该预算；数据扫描不会等待预取任务结束。仅当 `enable_connector_footer_prefetch` 为 `true` 时生效。
 - 引入版本：-
 
 ### connector_footer_prefetch_lead_multiplier
