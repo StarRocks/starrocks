@@ -16,6 +16,7 @@
 // on GlobalStateMgr used by this test.
 package com.starrocks.server;
 
+import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.ha.FrontendNodeType;
@@ -27,7 +28,11 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -408,9 +413,10 @@ public class LeaderDaemonTest {
     }
 
     @Test
-    public void testDemotionDrainWaitsForOwnedPoolAndCleanupWithoutInterrupting() throws Exception {
+    public void testDemotionDoesNotWaitForUnrelatedPoolOrCleanup() throws Exception {
         TestGlobalStateMgr gsm = activeLeader();
-        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newSingleThreadExecutor();
+        ExecutorService pool = Executors.newSingleThreadExecutor();
+        ExecutorService demotionExecutor = Executors.newSingleThreadExecutor();
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch releaseTask = new CountDownLatch(1);
         CountDownLatch cleanupEntered = new CountDownLatch(1);
@@ -444,27 +450,125 @@ public class LeaderDaemonTest {
         daemon.start();
         try {
             Assertions.assertTrue(entered.await(3, TimeUnit.SECONDS));
-            gsm.beginLeaderDemotion(FrontendNodeType.FOLLOWER);
             daemon.stopBestEffort();
+            Future<?> demotion = demotionExecutor.submit(
+                    () -> gsm.executeLeaderDemotionStages(FrontendNodeType.FOLLOWER));
+            demotion.get(3, TimeUnit.SECONDS);
+            Assertions.assertEquals(FrontendNodeType.FOLLOWER, gsm.getFeType());
+            Assertions.assertEquals(GlobalStateMgr.LeaderRoleState.INACTIVE, gsm.getLeaderRoleState());
+            Assertions.assertFalse(gsm.isLeaderWorkAdmissionOpen());
+            Assertions.assertTrue(gsm.findLeaderSessionStragglers().contains(daemon.getName()),
+                    "the old pool must still prevent re-activation, even though demotion has completed");
             IllegalStateException timeout = Assertions.assertThrows(IllegalStateException.class,
-                    () -> gsm.awaitLeaderSessionQuiesced(100L));
+                    () -> LeaderDaemon.awaitQuiesced(List.of(daemon), 100L));
             Assertions.assertTrue(timeout.getMessage().contains("owned-pool-drain"));
             Assertions.assertFalse(pool.isTerminated());
             Assertions.assertFalse(interrupted.get());
             releaseTask.countDown();
             Assertions.assertTrue(cleanupEntered.await(3, TimeUnit.SECONDS));
             Assertions.assertTrue(pool.isTerminated());
-            Assertions.assertThrows(IllegalStateException.class, () -> gsm.awaitLeaderSessionQuiesced(100L));
-            Assertions.assertEquals(FrontendNodeType.LEADER, gsm.getFeType());
+            Assertions.assertThrows(IllegalStateException.class,
+                    () -> LeaderDaemon.awaitQuiesced(List.of(daemon), 100L));
+            Assertions.assertTrue(gsm.findLeaderSessionStragglers().contains(daemon.getName()),
+                    "unfinished cleanup must remain visible to the re-activation gate");
             releaseCleanup.countDown();
-            gsm.awaitLeaderSessionQuiesced(3000L);
+            LeaderDaemon.awaitQuiesced(List.of(daemon), 3000L);
             Assertions.assertFalse(daemon.isRunning());
+            Assertions.assertFalse(gsm.findLeaderSessionStragglers().contains(daemon.getName()));
             Assertions.assertFalse(interrupted.get());
         } finally {
             releaseTask.countDown();
             releaseCleanup.countDown();
             stopAndAwait(daemon);
             pool.shutdown();
+            demotionExecutor.shutdown();
+            Assertions.assertTrue(demotionExecutor.awaitTermination(3, TimeUnit.SECONDS));
+        }
+    }
+
+    @Test
+    public void testDemotionDoesNotWaitForActiveTaskRun() throws Exception {
+        TestGlobalStateMgr gsm = activeLeader();
+        ExecutorService taskRunPool = Deencapsulation.getField(
+                gsm.getTaskManager().getTaskRunManager().getTaskRunExecutor(), "taskRunPool");
+        AtomicBoolean taskManagerStarted = Deencapsulation.getField(gsm.getTaskManager(), "isStart");
+        // Enable the real stop path without starting unrelated scheduler loops.
+        taskManagerStarted.set(true);
+        CountDownLatch entered = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean interrupted = new AtomicBoolean();
+        ExecutorService demotionExecutor = Executors.newSingleThreadExecutor();
+        taskRunPool.submit(() -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+            }
+        });
+        try {
+            Assertions.assertTrue(entered.await(3, TimeUnit.SECONDS));
+            demotionExecutor.submit(() -> gsm.executeLeaderDemotionStages(FrontendNodeType.FOLLOWER))
+                    .get(3, TimeUnit.SECONDS);
+            Assertions.assertEquals(FrontendNodeType.FOLLOWER, gsm.getFeType());
+            Assertions.assertTrue(taskRunPool.isShutdown());
+            Assertions.assertFalse(taskRunPool.isTerminated());
+            Assertions.assertTrue(gsm.findLeaderSessionStragglers().contains("taskManager(schedulers)"));
+            Assertions.assertFalse(interrupted.get());
+        } finally {
+            release.countDown();
+            taskRunPool.shutdown();
+            demotionExecutor.shutdown();
+            Assertions.assertTrue(taskRunPool.awaitTermination(3, TimeUnit.SECONDS));
+            Assertions.assertTrue(demotionExecutor.awaitTermination(3, TimeUnit.SECONDS));
+        }
+        Assertions.assertFalse(gsm.findLeaderSessionStragglers().contains("taskManager(schedulers)"));
+    }
+
+    @Test
+    public void testDemotionWaitsForJournalVisibleStateReset() throws Exception {
+        TestGlobalStateMgr gsm = activeLeader();
+        CountDownLatch cycleEntered = new CountDownLatch(1);
+        CountDownLatch resetEntered = new CountDownLatch(1);
+        CountDownLatch releaseReset = new CountDownLatch(1);
+        SchemaChangeHandler handler = new SchemaChangeHandler() {
+            @Override
+            protected GlobalStateMgr getGlobalStateMgr() {
+                return gsm;
+            }
+
+            @Override
+            protected void runAfterLeaseValid() {
+                cycleEntered.countDown();
+            }
+
+            @Override
+            protected void onStopped() {
+                resetEntered.countDown();
+                com.google.common.util.concurrent.Uninterruptibles.awaitUninterruptibly(releaseReset);
+                super.onStopped();
+            }
+        };
+        Deencapsulation.setField(gsm.getAlterJobMgr(), "schemaChangeHandler", handler);
+        ExecutorService demotionExecutor = Executors.newSingleThreadExecutor();
+        handler.start();
+        try {
+            Assertions.assertTrue(cycleEntered.await(3, TimeUnit.SECONDS));
+            Future<?> demotion = demotionExecutor.submit(
+                    () -> gsm.executeLeaderDemotionStages(FrontendNodeType.FOLLOWER));
+            Assertions.assertTrue(resetEntered.await(3, TimeUnit.SECONDS));
+            Assertions.assertThrows(TimeoutException.class, () -> demotion.get(200, TimeUnit.MILLISECONDS),
+                    "journal-visible reset must finish before demotion completes");
+            Assertions.assertEquals(FrontendNodeType.LEADER, gsm.getFeType());
+            releaseReset.countDown();
+            demotion.get(3, TimeUnit.SECONDS);
+            Assertions.assertEquals(FrontendNodeType.FOLLOWER, gsm.getFeType());
+            Assertions.assertFalse(handler.isRunning());
+        } finally {
+            releaseReset.countDown();
+            stopAndAwait(handler);
+            demotionExecutor.shutdown();
+            Assertions.assertTrue(demotionExecutor.awaitTermination(3, TimeUnit.SECONDS));
         }
     }
 

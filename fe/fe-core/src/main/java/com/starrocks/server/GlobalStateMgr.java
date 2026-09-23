@@ -1463,8 +1463,8 @@ public class GlobalStateMgr {
         journalWriter.startDaemon();
 
         // Verify the previous leader session (if any) has fully quiesced before starting a new one.
-        // Demotion already drains these workers before follower replay; keep this final guard against
-        // any previous-session work surviving until re-election. Done before
+        // Demotion only waits for journal-visible state resets before follower replay. Other workers
+        // may still be finishing, so check all previous-session work here. Done before
         // feType flips to LEADER so no new leader work (or a stale straggler's admission) can slip in.
         assertLeaderSessionQuiescedOrExit();
 
@@ -1837,8 +1837,9 @@ public class GlobalStateMgr {
      * demotion and the FE singletons become reusable when this node is re-elected.
      */
     void stopLeaderOnlyDaemonThreads() {
-        // Request every cooperative stop before awaiting the session in a separate stage. Each daemon
-        // drains its owned pools and cleans up on its worker; no business thread is interrupted.
+        // Request every cooperative stop without joining. Only journal-visible state resets are awaited
+        // before follower replay; other workers drain asynchronously and are checked before re-activation.
+        // Each daemon drains its owned pools and cleans up on its worker; no business thread is interrupted.
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
         if (RunMode.isSharedDataMode()) {
             stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
@@ -1923,9 +1924,10 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Final activation guard, in addition to the drain performed before follower replay. A previous
-     * session must have finished its workers, callbacks and cleanup before starting another worker
-     * against the same singleton state. Log any remaining workers/pools and exit for a clean restart.
+     * Re-activation cleanliness gate. Demotion waits only for journal-visible state resets before
+     * follower replay; other workers and pools may finish asynchronously. The previous session must
+     * have finished all workers, callbacks and cleanup before starting another worker against the
+     * same singleton state. Log any remaining workers/pools and exit for a clean restart.
      */
     private void assertLeaderSessionQuiescedOrExit() {
         List<String> stragglers = findLeaderSessionStragglers();
@@ -2079,14 +2081,11 @@ public class GlobalStateMgr {
     void executeLeaderDemotionStages(FrontendNodeType targetType) {
         LOG.info("leader demotion to {} starting", targetType);
         long startMs = System.currentTimeMillis();
-        long deadlineNs = System.nanoTime()
-                + TimeUnit.SECONDS.toNanos(Math.max(1L, Config.leader_demotion_drain_timeout_sec));
         runDemotionStage("beginLeaderDemotion", () -> beginLeaderDemotion(targetType));
         runDemotionStage("abandonInFlightAgentTasks", this::abandonInFlightAgentTasks);
         runDemotionStage("sealJournalWriter", this::sealJournalWriter);
         runDemotionStage("stopLeaderOnlyDaemonThreads", this::stopLeaderOnlyDaemonThreads);
-        runDemotionStage("awaitLeaderSessionQuiesced", () -> awaitLeaderSessionQuiesced(
-                Math.max(1L, TimeUnit.NANOSECONDS.toMillis(deadlineNs - System.nanoTime()))));
+        runDemotionStage("awaitJournalVisibleStateResets", this::awaitJournalVisibleStateResets);
         runDemotionStage("switchFrontendType", () -> feType = targetType);
         runDemotionStage("completeLeaderDemotion", this::completeLeaderDemotion);
         LOG.info("leader demotion to {} completed in {}ms", targetType, System.currentTimeMillis() - startMs);
@@ -2119,37 +2118,17 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Cooperatively drain the previous session before changing FE type or starting follower replay.
-     * In-flight bodies, callbacks and onStopped resets can mutate the same objects as replay. Keeping
-     * feType unchanged during this wait also prevents old internal DML from being forwarded by this
-     * FE as follower work; the closed WAL gate rejects further local writes. A Future being cancelled
-     * is not proof that its body ended: the registry and pool termination predicates track actual exit.
-     * A stuck session fails demotion within the configured budget, without interrupting business code.
+     * Wait only for daemons whose onStopped() resets journal-visible state before follower replay.
+     * Alter and routine-load resets mutate the same job objects as replay, so a late reset could
+     * overwrite newly replayed state. Their cleanup also waits for the tasks it depends on.
+     * Other leader-session workers and pools finish asynchronously: a long-running task alone must
+     * not prevent this FE from becoming a follower. The re-activation gate checks the whole session.
+     * This reset stage gets its own configured timeout, independently of journal sealing.
      */
-    @VisibleForTesting
-    void awaitLeaderSessionQuiesced(long timeoutMs) {
-        long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(Math.max(1L, timeoutMs));
-        long nextLogNs = System.nanoTime();
-        while (true) {
-            List<String> stragglers = findLeaderSessionStragglers();
-            if (stragglers.isEmpty()) {
-                return;
-            }
-            long now = System.nanoTime();
-            if (now >= deadlineNs) {
-                throw new IllegalStateException("timed out draining leader session before follower replay: " + stragglers);
-            }
-            if (now >= nextLogNs) {
-                LOG.info("waiting for leader session to drain before follower replay: {}", stragglers);
-                nextLogNs = now + TimeUnit.SECONDS.toNanos(10L);
-            }
-            try {
-                TimeUnit.NANOSECONDS.sleep(Math.min(TimeUnit.MILLISECONDS.toNanos(10L), deadlineNs - now));
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new IllegalStateException("interrupted while draining leader session", e);
-            }
-        }
+    private void awaitJournalVisibleStateResets() {
+        LeaderDaemon.awaitQuiesced(
+                Lists.newArrayList(getSchemaChangeHandler(), getRollupHandler(), routineLoadScheduler),
+                Math.max(1000L, Config.leader_demotion_drain_timeout_sec * 1000L));
     }
 
     @VisibleForTesting

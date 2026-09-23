@@ -151,8 +151,8 @@ public class PriorityLeaderTaskExecutor {
 
     /**
      * Close admission without interrupting active work. Queued tasks skip their bodies after shutdown.
-     * A zero timeout only requests stop; the global session drain checks actual pool termination before
-     * follower replay or re-activation. A positive timeout provides a bounded local wait.
+     * A zero timeout only requests stop; the re-activation gate checks actual pool termination before
+     * starting the next leader session. A positive timeout provides a bounded local wait.
      */
     public void close(long awaitMillis) {
         LeaderDaemon.shutdownLeaderExecutor(scheduledThreadPool);

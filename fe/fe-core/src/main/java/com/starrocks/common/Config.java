@@ -980,10 +980,10 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
-     * Timeout, in seconds, for leader demotion to drain WAL applies, seal the journal writer and
-     * cooperatively drain leader-session workers, pools and cleanup before follower replay. The
-     * session wait uses the budget left after sealing. A drain timeout exits the FE for a clean
-     * restart; demotion never interrupts active business tasks to force them to finish.
+     * Timeout, in seconds, applied separately to journal sealing (including the WAL apply drain)
+     * and to the journal-visible state resets required before follower replay. Other leader-session
+     * workers and pools finish asynchronously and are checked before re-activation. A required drain
+     * timeout exits the FE; demotion never interrupts active business tasks to force them to finish.
      */
     @ConfField(mutable = true)
     public static int leader_demotion_drain_timeout_sec = 180;

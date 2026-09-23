@@ -177,8 +177,8 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
-     * Cooperatively close all leader-session pools. GlobalStateMgr calls stop(0), then waits for
-     * schedulersStoppedButNotTerminated() to clear before follower replay. Queued tasks skip execution,
+     * Cooperatively close all leader-session pools. GlobalStateMgr calls stop(0) without waiting for
+     * task runs before follower replay, and checks actual termination before re-activation. Queued tasks skip execution,
      * delayed/periodic schedules are cancelled, and active checks and task runs finish without interrupt.
      * A positive timeout requests a bounded local wait as well.
      *
@@ -203,7 +203,7 @@ public class TaskManager implements MemoryTrackable {
         LeaderDaemon.shutdownLeaderExecutor(periodScheduler);
         LeaderDaemon.shutdownLeaderExecutor(dispatchScheduler);
         // Keep actual task bodies and completion callbacks visible until they exit, so they cannot
-        // race replay or a re-elected leader's cleanup of unfinished task statuses.
+        // race a re-elected leader's cleanup of unfinished task statuses.
         taskRunManager.getTaskRunExecutor().shutdown();
         if (timeoutMs > 0L) {
             long deadline = System.currentTimeMillis() + timeoutMs;

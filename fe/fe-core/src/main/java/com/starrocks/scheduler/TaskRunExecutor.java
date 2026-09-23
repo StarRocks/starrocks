@@ -32,7 +32,7 @@ import java.util.concurrent.TimeUnit;
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
-    // Leader-session pool: demotion drains its actual task bodies before replay, then start rebuilds it.
+    // Leader-session pool: demotion closes admission; re-activation requires termination before rebuilding it.
     private volatile ExecutorService taskRunPool = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
 

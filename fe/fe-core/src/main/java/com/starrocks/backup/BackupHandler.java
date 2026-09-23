@@ -249,7 +249,7 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
         isInit = false;
         // repoMgr was started by start(); stop its ping loop so it does not keep talking to
         // remote storage after demotion. Its worker self-cleans in onStopped() and deregisters;
-        // the global session drain waits for that nested worker too. The same instance is reused on
+        // the re-activation gate checks that nested worker too. The same instance is reused on
         // re-election; its persisted repo maps remain intact across the stop/start cycle.
         repoMgr.stopBestEffort();
     }

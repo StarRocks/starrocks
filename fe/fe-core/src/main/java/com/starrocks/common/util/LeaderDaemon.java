@@ -50,8 +50,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * A stop request wakes the worker without interrupting business code. The worker finishes its safe
  * step, runs {@link #onStopped()}, and clears {@link #isRunning} only after cleanup succeeds.
- * Demotion requests every stop, then waits for the whole session before starting follower replay.
- * A timeout or cleanup failure terminates the FE; re-activation also checks for remaining workers.
+ * Demotion requests every stop, then waits only for journal-visible state resets before follower replay.
+ * Other workers finish asynchronously and must be quiesced before re-activation. A required reset
+ * timing out or any cleanup failure terminates the FE.
  */
 public abstract class LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
@@ -102,8 +103,9 @@ public abstract class LeaderDaemon {
 
     /**
      * Close a leader-session pool without interrupting active tasks and wait for actual termination.
-     * The owning daemon stays registered/isRunning until this returns. GlobalStateMgr bounds the
-     * whole session drain and exits on timeout; the daemon thread here never blocks process exit.
+     * The owning daemon stays registered/isRunning until this returns. GlobalStateMgr bounds the wait
+     * only for journal-visible state resets before replay; all other pools may finish asynchronously
+     * but must terminate before re-activation. The daemon thread here never blocks process exit.
      */
     public static void shutdownAndAwaitTermination(String poolName, ExecutorService pool) {
         if (pool == null) {
@@ -116,7 +118,7 @@ public abstract class LeaderDaemon {
                 terminated = pool.awaitTermination(1, TimeUnit.MINUTES);
                 if (!terminated) {
                     LOG.warn("{} has not terminated after cooperative shutdown; still draining. "
-                            + "The leader-session drain must finish before follower replay or re-activation.", poolName);
+                            + "The owning daemon remains registered until this pool terminates.", poolName);
                 }
             } catch (InterruptedException e) {
                 // An unrelated interrupt cannot make a live pool look quiesced. Keep draining.
@@ -209,7 +211,7 @@ public abstract class LeaderDaemon {
     /**
      * Request cooperative stop and return without joining. The worker finishes its current safe
      * business step, runs {@link #onStopped()}, and only then deregisters. Demotion requests every
-     * stop before waiting for the whole session to drain, so one slow daemon cannot delay notifying
+     * stop before waiting for journal-visible state resets, so one slow daemon cannot delay notifying
      * the others. Never interrupt a worker: it may be inside JE or a committed WAL apply.
      */
     public final void stopBestEffort() {
@@ -331,8 +333,8 @@ public abstract class LeaderDaemon {
      * Demotion never interrupts a running cycle. Check {@link #shouldStop()} between business steps
      * and after blocking calls, and bound waits or wake them through {@link #onStopRequested()}.
      * Already admitted WAL operations must finish commit/apply before a check may abandon further work.
-     * A cycle that cannot drain keeps isRunning true; demotion fails rather than replaying journals
-     * concurrently with its unfinished work.
+     * A cycle that cannot drain keeps isRunning true and prevents re-activation. Only daemons whose
+     * cleanup resets journal-visible state must also finish before follower replay.
      */
     protected abstract void runAfterLeaseValid() throws InterruptedException;
 
