@@ -123,6 +123,9 @@ public:
     Status process(RuntimeState* state, const ChunkPtr& request_chunk) override;
 
 private:
+    StatusOr<ChunkPtr> _restore_row_order(RuntimeState* state, ChunkPtr result_chunk, const ColumnPtr& position_column,
+                                          const Buffer<uint32_t>& replicated_offsets);
+
     StatusOr<ChunkPtr> _get_data_from_storage(
             RuntimeState* state,
             const phmap::flat_hash_map<int32_t, std::shared_ptr<SparseRange<int64_t>>>& row_id_ranges);

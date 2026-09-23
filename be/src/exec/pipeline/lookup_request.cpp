@@ -21,6 +21,7 @@
 #include "base/container/raw_container.h"
 #include "base/failpoint/fail_point.h"
 #include "base/status.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/column_helper.h"
@@ -261,7 +262,9 @@ StatusOr<ChunkPtr> IcebergLookUpTask::_get_data_from_storage(
         data_source->set_runtime_profile(_ctx->profile);
         data_source->set_row_id_ranges(&native_range);
 
+        DeferOp close_data_source([&]() { data_source->close(state); });
         RETURN_IF_ERROR(data_source->open(state));
+        size_t fetched_rows = 0;
         do {
             ChunkPtr chunk = std::make_shared<Chunk>();
             auto status = data_source->get_next(state, &chunk);
@@ -276,6 +279,7 @@ StatusOr<ChunkPtr> IcebergLookUpTask::_get_data_from_storage(
                 continue;
             }
 
+            fetched_rows += chunk->num_rows();
             // Accumulate data from multiple chunks, excluding row_id columns
             if (result_chunk == nullptr) {
                 result_chunk = std::make_shared<Chunk>();
@@ -297,7 +301,11 @@ StatusOr<ChunkPtr> IcebergLookUpTask::_get_data_from_storage(
                 }
             }
         } while (true);
-        data_source->close(state);
+        if (fetched_rows != native_range.span_size()) {
+            return Status::InternalError(fmt::format(
+                    "Iceberg lookup fetched {} rows for scan range {} but {} distinct positions were requested",
+                    fetched_rows, scan_range_id, native_range.span_size()));
+        }
     }
     return result_chunk;
 }
@@ -315,35 +323,10 @@ Status IcebergLookUpTask::process(RuntimeState* state, const ChunkPtr& request_c
                      _calculate_row_id_range(state, request_chunk, &row_id_ranges, &replicated_offsets));
     ASSIGN_OR_RETURN(auto result_chunk, _get_data_from_storage(state, row_id_ranges));
 
-    if (result_chunk == nullptr) {
-        // A non-empty request must fetch at least one row; returning OK here would leave
-        // response_columns empty and crash FetchProcessor::_build_output_chunk. Fail soft instead.
-        return Status::InternalError("Iceberg lookup fetched no rows for a non-empty request");
-    }
-
-    {
-        auto unordered_position_column = sorted_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
-        if (!replicated_offsets.empty()) {
-            // Replicate data for duplicate row_ids
-            for (const auto& [slot_id, _] : result_chunk->get_slot_id_to_index_map()) {
-                auto old_column = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
-                ASSIGN_OR_RETURN(auto new_column, old_column->replicate(replicated_offsets));
-                result_chunk->append_or_update_column(std::move(new_column), slot_id);
-            }
-            result_chunk->check_or_die();
-        }
-        // The fetched payload must have exactly one row per requested position; otherwise the
-        // position-column pairing below is misaligned. check_or_die() is a no-op in release builds,
-        // so guard explicitly to fail soft instead of overrunning the permutation in _sort_chunk.
-        if (result_chunk->num_rows() != unordered_position_column->size()) {
-            return Status::InternalError(fmt::format("Iceberg lookup fetched {} rows but {} positions were requested",
-                                                     result_chunk->num_rows(), unordered_position_column->size()));
-        }
-        result_chunk->append_column(unordered_position_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
-        result_chunk->check_or_die();
-        ASSIGN_OR_RETURN(auto sorted_result_chunk, _sort_chunk(state, result_chunk, {unordered_position_column}));
-        result_chunk = sorted_result_chunk;
-    }
+    ASSIGN_OR_RETURN(result_chunk,
+                     _restore_row_order(state, result_chunk,
+                                        sorted_chunk->get_column_by_slot_id(Chunk::SORT_ORDINAL_COLUMN_SLOT_ID),
+                                        replicated_offsets));
 
     auto tuple_desc = state->desc_tbl().get_tuple_descriptor(_ctx->request_tuple_id);
     std::vector<SlotDescriptor*> slots;
@@ -363,6 +346,28 @@ Status IcebergLookUpTask::process(RuntimeState* state, const ChunkPtr& request_c
     }
 
     return Status::OK();
+}
+
+StatusOr<ChunkPtr> IcebergLookUpTask::_restore_row_order(RuntimeState* state, ChunkPtr result_chunk,
+                                                         const ColumnPtr& position_column,
+                                                         const Buffer<uint32_t>& replicated_offsets) {
+    const size_t expected_rows = replicated_offsets.empty() ? position_column->size() : replicated_offsets.size() - 1;
+    const size_t fetched_rows = result_chunk == nullptr ? 0 : result_chunk->num_rows();
+    // replicate() assumes every distinct input row exists and may otherwise read past the column.
+    if (result_chunk == nullptr || fetched_rows != expected_rows) {
+        return Status::InternalError(
+                fmt::format("Iceberg lookup fetched {} rows but {} distinct positions were requested", fetched_rows,
+                            expected_rows));
+    }
+    if (!replicated_offsets.empty()) {
+        for (const auto& [slot_id, _] : result_chunk->get_slot_id_to_index_map()) {
+            auto old_column = result_chunk->get_column_by_slot_id(slot_id)->as_mutable_raw_ptr();
+            ASSIGN_OR_RETURN(auto new_column, old_column->replicate(replicated_offsets));
+            result_chunk->append_or_update_column(std::move(new_column), slot_id);
+        }
+    }
+    result_chunk->append_column(position_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
+    return _sort_chunk(state, result_chunk, {position_column});
 }
 
 Status NativeLookUpTask::process(RuntimeState* state, const ChunkPtr& request_chunk) {

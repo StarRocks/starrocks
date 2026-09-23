@@ -1207,6 +1207,49 @@ TEST_F(FileReaderTest, TestGetNext) {
     ASSERT_TRUE(status.is_end_of_file());
 }
 
+TEST_F(FileReaderTest, TestIcebergPositionalLookupAcrossRowGroups) {
+    Utils::SlotDesc slots[] = {{"col1", TYPE_INT_DESC, 1}, {"col2", TYPE_INT_DESC, 2}, {""}};
+    for (int chunk_size : {1, 2, 4096}) {
+        for (bool with_deletes : {false, true}) {
+            for (const auto& requested : std::vector<std::vector<uint64_t>>{{1, 6, 8}, {0, 2, 3, 5, 7}, {}}) {
+                SparseRange<uint64_t> positions;
+                std::vector<int32_t> expected;
+                for (auto pos : requested) {
+                    positions.add(Range<uint64_t>(pos, pos + 1));
+                    if (!with_deletes || (pos != 1 && pos != 6)) expected.push_back(pos + 1);
+                }
+                auto skip_rows = std::make_shared<SkipRowsContext>();
+                auto* bitmap = roaring64_bitmap_create();
+                if (with_deletes) {
+                    roaring64_bitmap_add(bitmap, 1);
+                    roaring64_bitmap_add(bitmap, 6);
+                }
+                skip_rows->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
+                auto file = _create_file(_filter_row_group_path_3);
+                FileReader reader(chunk_size, file.get(), std::filesystem::file_size(_filter_row_group_path_3),
+                                  _mock_datacache_options(), nullptr, skip_rows);
+                auto* ctx = _create_scan_context(slots, _filter_row_group_path_3);
+                ctx->row_id_ranges = &positions;
+                ASSERT_OK(reader.init(ctx));
+                std::vector<int32_t> actual;
+                while (true) {
+                    auto chunk = std::make_shared<Chunk>();
+                    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), 1);
+                    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), 2);
+                    auto status = reader.get_next(&chunk);
+                    if (status.is_end_of_file()) break;
+                    ASSERT_OK(status);
+                    for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                        actual.push_back(chunk->get_column_by_slot_id(1)->get(row).get_int32());
+                        EXPECT_EQ(actual.back() * 11, chunk->get_column_by_slot_id(2)->get(row).get_int32());
+                    }
+                }
+                EXPECT_EQ(expected, actual);
+            }
+        }
+    }
+}
+
 TEST_F(FileReaderTest, TestGetNextWithSkipID) {
     roaring64_bitmap_t* bitmap = roaring64_bitmap_create();
     roaring64_bitmap_add(bitmap, 1);
