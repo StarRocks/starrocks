@@ -23,12 +23,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Deque;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class CheckReplicatedTableJobTest {
     private static StarRocksAssert starRocksAssert;
+    private static final Deque<Runnable> STARTED_JOBS = new ConcurrentLinkedDeque<>();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -44,12 +47,31 @@ public class CheckReplicatedTableJobTest {
                 AnalyzeTestUtil.getConnectContext());
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt));
 
+        // A failover group job is queued rather than run inline: in production
+        // CheckReplicatedTableJob#execute starts it while holding the database lock, and it runs on
+        // the failover_group_job pool, which does not hold that lock. Run inline, it would inherit
+        // the lock and send its create-replica RPCs under it -- a shape production does not have.
+        // Nor can it run on a thread of its own and be joined: it takes the table's WRITE lock while
+        // the caller still holds the database READ lock. So it runs once the caller has returned,
+        // see executeAndRunTheJobsItStarts. Everything else still runs inline.
         new MockUp<ThreadPoolExecutor>() {
             @Mock
             public void execute(Runnable command) {
-                command.run();
+                if (command instanceof FailoverGroupJob) {
+                    STARTED_JOBS.add(command);
+                } else {
+                    command.run();
+                }
             }
         };
+    }
+
+    private static void executeAndRunTheJobsItStarts(CheckReplicatedTableJob job) {
+        job.execute();
+        Runnable started;
+        while ((started = STARTED_JOBS.poll()) != null) {
+            started.run();
+        }
     }
 
     @Test
@@ -107,7 +129,7 @@ public class CheckReplicatedTableJobTest {
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
                 (OlapTable) tableMeta.getTable(), tableMeta.getDatabase(), true);
-        job.execute();
+        executeAndRunTheJobsItStarts(job);
 
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
     }
@@ -143,7 +165,7 @@ public class CheckReplicatedTableJobTest {
 
         CheckReplicatedTableJob job = new CheckReplicatedTableJob(failoverGroup, tableMeta.getDatabase(),
                 remoteTable, tableMeta.getDatabase(), true);
-        job.execute();
+        executeAndRunTheJobsItStarts(job);
 
         Assert.assertEquals(localPhysicalPartitionCount, localPartition.getSubPartitions().size());
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
@@ -188,11 +210,11 @@ public class CheckReplicatedTableJobTest {
                 remoteTable, tableMeta.getDatabase(), true);
         Partition localPartition = localTable.getPartition("p1");
         int initialCount = localPartition.getSubPartitions().size();
-        job.execute();
+        executeAndRunTheJobsItStarts(job);
 
         Assert.assertEquals(initialCount + 1, localPartition.getSubPartitions().size());
 
-        job.execute();
+        executeAndRunTheJobsItStarts(job);
         Assert.assertEquals(initialCount + 1, localPartition.getSubPartitions().size());
         Assert.assertTrue(!failoverGroup.getJobExecutor().hasFailedJobs());
     }

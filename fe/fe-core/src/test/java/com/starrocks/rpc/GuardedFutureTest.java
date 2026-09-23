@@ -53,6 +53,7 @@ public class GuardedFutureTest {
     @AfterEach
     public void tearDown() {
         Config.lock_blocking_call_validation_mode = savedMode;
+        LockInvariantViolations.restoreBlockingCallTestEscalation();
         LockInvariantViolations.clearViolations();
         LockHoldDepth.reset();
     }
@@ -60,6 +61,7 @@ public class GuardedFutureTest {
     @Test
     public void testWaitingUnderALockIsReported() throws Exception {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         // Still in flight when the wait starts, and answered while the caller sits in get() -- a
         // response that arrives, not one that was already in hand. The delay is generous because
         // what must hold is only that the future is pending at the instant get() is entered; the
@@ -94,6 +96,7 @@ public class GuardedFutureTest {
     @Test
     public void testTheReportNamesTheCallerNotTheWrapper() {
         Config.lock_blocking_call_validation_mode = "warn";
+        LockInvariantViolations.suspendBlockingCallTestEscalation();
         Future<String> guarded = GuardedFuture.guard(new CompletableFuture<>(), TRANSPORT);
 
         Locker locker = new Locker();

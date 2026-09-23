@@ -52,6 +52,14 @@ under the License.
 
         <!-- Empty unless the jdk-allow-security-manager profile below activates it. -->
         <security.manager.arg></security.manager.arg>
+
+        <!-- Raise the two FE metadata lock rules from warn to error in the test JVM, so a test that
+             breaks one fails instead of logging it: lock.invariant.strict for a lock on an object the
+             FE does not own, lock.blocking.strict for a wait on an external system (HMS, JDBC, iceberg
+             catalog, BRPC, ...) under a lock. On for every `mvn test`; production is unaffected.
+             Pass -Dlock.invariant.strict=false / -Dlock.blocking.strict=false to fall back to warn. -->
+        <lock.invariant.strict>true</lock.invariant.strict>
+        <lock.blocking.strict>true</lock.blocking.strict>
     </properties>
 
     <profiles>
@@ -1280,10 +1288,12 @@ under the License.
                     <!-->not reuse forked jvm, so that each unit test will run in separate jvm. to avoid singleton confict<-->
                     <reuseForks>false</reuseForks>
 
-                    <!-- starrocks.lock.invariant.strict.in.test raises lock_target_validation_mode=warn
-                         to error for the whole test JVM, so a newly introduced lock-target violation fails
-                         the test that introduced it. FeConstants.runningUnitTest cannot serve this purpose:
-                         it is opt-in per test class. -->
+                    <!-- starrocks.lock.invariant.strict.in.test and starrocks.lock.blocking.strict.in.test
+                         raise lock_target_validation_mode / lock_blocking_call_validation_mode from warn to
+                         error for the whole test JVM, so a newly introduced violation fails the test that
+                         introduced it. FeConstants.runningUnitTest cannot serve this purpose: it is opt-in
+                         per test class. They follow ${lock.invariant.strict} and ${lock.blocking.strict};
+                         see those properties for the defaults. -->
                     <argLine>
                         -javaagent:${settings.localRepository}/com/github/hazendaz/jmockit/jmockit/${jmockit.version}/jmockit-${jmockit.version}.jar
                         -javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar
@@ -1292,7 +1302,8 @@ under the License.
                         -XX:TieredStopAtLevel=1 -XX:CICompilerCount=1 -XX:-BackgroundCompilation -XX:+UseSerialGC
                         -Duser.timezone=Asia/Shanghai
                         -Djacoco-agent.destfile=${project.build.directory}/jacoco.exec
-                        -Dstarrocks.lock.invariant.strict.in.test=true
+                        -Dstarrocks.lock.invariant.strict.in.test=${lock.invariant.strict}
+                        -Dstarrocks.lock.blocking.strict.in.test=${lock.blocking.strict}
                         ${security.manager.arg}
                     </argLine>
                     <!-- Set maven to use independent class loading to avoid unit test failure due to the early shutdown of the JVM -->
