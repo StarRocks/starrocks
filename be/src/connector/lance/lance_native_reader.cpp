@@ -44,6 +44,66 @@ Status reader_error(char* error) {
     sr_lance_free_error(error);
     return Status::IOError(message);
 }
+// The generic load converter permits narrowing integer casts. A stale external
+// schema must fail a query instead of silently truncating dataset values.
+Status validate_integer_width(const arrow::DataType* source, const TypeDescriptor& target) {
+    if (target.type == TYPE_ARRAY && target.children.size() == 1 && source->num_fields() == 1) {
+        return validate_integer_width(source->field(0)->type().get(), target.children[0]);
+    }
+    int target_bits;
+    switch (target.type) {
+    case TYPE_TINYINT:
+        target_bits = 8;
+        break;
+    case TYPE_SMALLINT:
+        target_bits = 16;
+        break;
+    case TYPE_INT:
+        target_bits = 32;
+        break;
+    case TYPE_BIGINT:
+        target_bits = 64;
+        break;
+    case TYPE_LARGEINT:
+        target_bits = 128;
+        break;
+    default:
+        return Status::OK();
+    }
+    int source_bits;
+    switch (source->id()) {
+    case arrow::Type::INT8:
+        source_bits = 8;
+        break;
+    case arrow::Type::UINT8:
+        source_bits = 9;
+        break;
+    case arrow::Type::INT16:
+        source_bits = 16;
+        break;
+    case arrow::Type::UINT16:
+        source_bits = 17;
+        break;
+    case arrow::Type::INT32:
+        source_bits = 32;
+        break;
+    case arrow::Type::UINT32:
+        source_bits = 33;
+        break;
+    case arrow::Type::INT64:
+        source_bits = 64;
+        break;
+    case arrow::Type::UINT64:
+        source_bits = 65;
+        break;
+    default:
+        return Status::OK();
+    }
+    if (source_bits > target_bits) {
+        return Status::DataQualityError("Lance integer type exceeds the projected column width");
+    }
+    return Status::OK();
+}
 // Preserve the Lance reader's UTC/floor semantics, including sub-second values
 // before the epoch. Generic load converters use source timezones and truncation.
 template <LogicalType LT>
@@ -202,6 +262,7 @@ Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescript
         if (!slot->is_nullable() && array->null_count() != 0) {
             return Status::DataQualityError("Null in non-nullable Lance column: " + std::string(slot->col_name()));
         }
+        RETURN_IF_ERROR(validate_integer_width(array->type().get(), slot->type()));
         ConvertFuncTree plan;
         Expr* cast = nullptr;
         MutableColumnPtr column;
