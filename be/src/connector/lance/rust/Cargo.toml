@@ -1,0 +1,29 @@
+[package]
+name = "starrocks-lance"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.96.1"
+license = "Apache-2.0"
+
+[lib]
+name = "starrocks_lance"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+arrow-cast = "=58.1.0"
+arrow-array = { version = "=58.1.0", features = ["ffi"] }
+arrow-schema = { version = "=58.1.0", features = ["ffi"] }
+futures = "0.3"
+mimalloc = { version = "0.1", default-features = false }
+lance = { version = "=8.0.1", default-features = false, features = ["aws", "azure", "gcp"] }
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+url = "2"
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev]
+debug = 0
+
+[profile.release]
+strip = "debuginfo"

@@ -259,6 +259,8 @@ if (WITH_CONNECTOR_LANCE)
             hive/hive_test_main.cpp
             lance/lance_connector_test.cpp
     )
+    target_compile_definitions(connector_lance_test PRIVATE
+            LANCE_TEST_DATASET="${CMAKE_BINARY_DIR}/lance-rust/testdata/rows.lance")
     target_link_libraries(connector_lance_test ConnectorLance ${CONNECTOR_HIVE_TEST_LINK_LIBS} hdfs jvm)
     set_target_properties(connector_lance_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
