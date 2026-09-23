@@ -283,6 +283,7 @@ public class FunctionSet {
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String GET_JSON_SCALAR = "get_json_scalar";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
