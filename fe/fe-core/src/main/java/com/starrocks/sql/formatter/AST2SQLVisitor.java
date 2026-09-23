@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -386,11 +387,34 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         return sqlBuilder.toString();
     }
 
+    // "AS OF <expr>" is the only typed form that exists: QueryPeriod's constructor always takes an end and
+    // never a start, and the StarRocks parser records the BETWEEN/FROM..TO/ALL forms as raw text instead of
+    // building a period. Fail loudly rather than emit SQL that has quietly lost the clause.
+    private String buildQueryPeriod(QueryPeriod queryPeriod) {
+        Expr end = queryPeriod.getEnd().orElseThrow(
+                () -> new IllegalStateException("Cannot render a query period without an end bound"));
+        return "FOR " + queryPeriod.getPeriodType().name() + " AS OF " + visit(end);
+    }
+
     @Override
     public String visitTable(TableRelation node, Void outerScope) {
         StringBuilder sqlBuilder = new StringBuilder();
         sqlBuilder.append(node.getName().toSql());
 
+<<<<<<< HEAD
+=======
+        if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
+            sqlBuilder.append(" ");
+            sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        } else if (node.getQueryPeriod() != null) {
+            // The raw clause text is only recorded by the StarRocks parser (it is also what gets pushed
+            // down to MySQL external tables). Other producers - the Trino dialect - build the typed period
+            // alone, so render that here: without it a serialize/reparse round trip would drop the time
+            // travel clause and silently read the latest snapshot.
+            sqlBuilder.append(" ").append(buildQueryPeriod(node.getQueryPeriod()));
+        }
+
+>>>>>>> e84c688 ([BugFix] Keep Iceberg time travel when the SQL dialect is Trino (#79171))
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
