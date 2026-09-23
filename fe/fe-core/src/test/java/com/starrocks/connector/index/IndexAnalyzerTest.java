@@ -37,6 +37,7 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -51,11 +52,17 @@ public class IndexAnalyzerTest {
             new ColumnRefOperator(2, IntegerType.INT, "range_col", true);
     private final ColumnRefOperator vectorColumn =
             new ColumnRefOperator(3, ArrayType.ARRAY_FLOAT, "embedding", true);
+    private final ColumnRefOperator stringRangeColumn =
+            new ColumnRefOperator(4, VarcharType.VARCHAR, "string_range_col", true);
+    private final ColumnRefOperator floatRangeColumn =
+            new ColumnRefOperator(5, FloatType.FLOAT, "float_range_col", true);
 
     private final ConnectorIndexMetadata metadata = ConnectorIndexMetadata.of(Map.of(
             bitmapColumn.getName(), Set.of(ConnectorIndexType.BITMAP),
             rangeColumn.getName(), Set.of(ConnectorIndexType.RANGE),
-            vectorColumn.getName(), Set.of(ConnectorIndexType.VECTOR)));
+            vectorColumn.getName(), Set.of(ConnectorIndexType.VECTOR),
+            stringRangeColumn.getName(), Set.of(ConnectorIndexType.RANGE),
+            floatRangeColumn.getName(), Set.of(ConnectorIndexType.RANGE)));
 
     @Test
     public void testConnectorMetadataContract() {
@@ -91,6 +98,12 @@ public class IndexAnalyzerTest {
         Assertions.assertNull(analyzer.getIndexPredicate(unsupportedBitmapRange));
         Assertions.assertEquals(rangePredicate, analyzer.getIndexPredicate(rangePredicate));
 
+        IndexCondition condition = analyzer.getIndexCondition(Utils.compoundAnd(bitmapEquality, rangePredicate));
+        Assertions.assertNotNull(condition);
+        Assertions.assertEquals(Map.of(
+                bitmapColumn.getName(), ConnectorIndexType.BITMAP,
+                rangeColumn.getName(), ConnectorIndexType.RANGE), condition.getRequiredIndexes());
+
         ScalarOperator original = Utils.compoundAnd(bitmapEquality, unsupportedBitmapRange);
         Assertions.assertEquals(bitmapEquality, analyzer.getIndexPredicate(original));
         Assertions.assertEquals(Utils.compoundAnd(bitmapEquality, unsupportedBitmapRange), original);
@@ -118,8 +131,12 @@ public class IndexAnalyzerTest {
         Assertions.assertEquals(isNullPredicate, analyzer.getIndexPredicate(isNullPredicate));
 
         CallOperator startsWith = new CallOperator(FunctionSet.STARTS_WITH, BooleanType.BOOLEAN,
-                List.of(rangeColumn, ConstantOperator.createVarchar("prefix")));
+                List.of(stringRangeColumn, ConstantOperator.createVarchar("prefix")));
         Assertions.assertEquals(startsWith, analyzer.getIndexPredicate(startsWith));
+
+        CallOperator invalidStartsWith = new CallOperator(FunctionSet.STARTS_WITH, BooleanType.BOOLEAN,
+                List.of(rangeColumn, ConstantOperator.createVarchar("prefix")));
+        Assertions.assertNull(analyzer.getIndexPredicate(invalidStartsWith));
 
         BinaryPredicateOperator reversedEquality =
                 new BinaryPredicateOperator(BinaryType.EQ, ConstantOperator.createInt(7), bitmapColumn);
@@ -128,7 +145,30 @@ public class IndexAnalyzerTest {
         BinaryPredicateOperator twoColumns =
                 new BinaryPredicateOperator(BinaryType.EQ, bitmapColumn, rangeColumn);
         Assertions.assertNull(analyzer.getIndexPredicate(twoColumns));
+        Assertions.assertNull(analyzer.getIndexPredicate(new BinaryPredicateOperator(
+                BinaryType.EQ, rangeColumn, ConstantOperator.createNull(IntegerType.INT))));
+        Assertions.assertNull(analyzer.getIndexPredicate(new BinaryPredicateOperator(
+                BinaryType.EQ, floatRangeColumn, ConstantOperator.createFloat(0.0))));
         Assertions.assertNull(analyzer.getIndexPredicate(ConstantOperator.createBoolean(true)));
+    }
+
+    @Test
+    public void testScalarPredicateRejectsCastsThatChangeSerializedLiteralValue() {
+        IndexAnalyzer analyzer = new IndexAnalyzer(metadata);
+
+        BinaryPredicateOperator sameType = new BinaryPredicateOperator(BinaryType.EQ, rangeColumn,
+                new CastOperator(IntegerType.INT, ConstantOperator.createInt(7)));
+        BinaryPredicateOperator widening = new BinaryPredicateOperator(BinaryType.EQ, rangeColumn,
+                new CastOperator(IntegerType.BIGINT, ConstantOperator.createInt(7)));
+        BinaryPredicateOperator narrowing = new BinaryPredicateOperator(BinaryType.EQ, rangeColumn,
+                new CastOperator(IntegerType.TINYINT, ConstantOperator.createInt(257)));
+        BinaryPredicateOperator stringToInteger = new BinaryPredicateOperator(BinaryType.EQ, rangeColumn,
+                new CastOperator(IntegerType.INT, ConstantOperator.createVarchar("7")));
+
+        Assertions.assertEquals(sameType, analyzer.getIndexPredicate(sameType));
+        Assertions.assertEquals(widening, analyzer.getIndexPredicate(widening));
+        Assertions.assertNull(analyzer.getIndexPredicate(narrowing));
+        Assertions.assertNull(analyzer.getIndexPredicate(stringToInteger));
     }
 
     @Test
@@ -156,7 +196,7 @@ public class IndexAnalyzerTest {
                 List.of(vectorColumn, queryVector));
         Assertions.assertFalse(analyzer.supportsVectorTopN(unsupported, true));
 
-        ColumnRefOperator unindexed = new ColumnRefOperator(4, ArrayType.ARRAY_FLOAT, "other", true);
+        ColumnRefOperator unindexed = new ColumnRefOperator(6, ArrayType.ARRAY_FLOAT, "other", true);
         CallOperator unindexedL2 = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
                 List.of(unindexed, queryVector));
         Assertions.assertFalse(analyzer.supportsVectorTopN(unindexedL2, true));

@@ -41,6 +41,8 @@ public class VariableVarConverters {
         CONVERTERS.put(SessionVariable.INSERT_MAX_FILTER_RATIO, new InsertMaxFilterRatioConverter());
         CONVERTERS.put(SessionVariable.CUSTOM_SESSION_NAME, new CustomSessionNameConverter());
         CONVERTERS.put(SessionVariable.PAIMON_READER_MODE, new PaimonReaderModeConverter());
+        CONVERTERS.put(SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE,
+                new PaimonGlobalIndexScanStageConverter());
     }
 
     public static String convert(String varName, String value) throws DdlException {
@@ -81,6 +83,23 @@ public class VariableVarConverters {
             } catch (IllegalArgumentException e) {
                 throw new DdlException("paimon_reader_mode only supports AUTO, JNI, or NATIVE");
             }
+        }
+    }
+
+    public static class PaimonGlobalIndexScanStageConverter implements VariableVarConverterI {
+        @Override
+        public String convert(String value) throws DdlException {
+            try {
+                int stage = Integer.parseInt(value);
+                if (stage < 0 || stage > 2) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_VALUE,
+                            SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, value, "one of {0, 1, 2}");
+                }
+            } catch (NumberFormatException e) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_INVALID_VALUE,
+                        SessionVariable.PAIMON_GLOBAL_INDEX_SCAN_STAGE, value, "one of {0, 1, 2}");
+            }
+            return value;
         }
     }
 

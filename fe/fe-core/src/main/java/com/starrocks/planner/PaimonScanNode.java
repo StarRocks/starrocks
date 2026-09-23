@@ -26,6 +26,8 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.paimon.PaimonGlobalIndexService;
 import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
 import com.starrocks.connector.paimon.PaimonSplitUtils;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
@@ -131,21 +133,52 @@ public class PaimonScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit) {
+        setupScanRangeLocations(tupleDescriptor, predicate, limit, null);
+    }
+
+    public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate, long limit,
+                                        @Nullable IndexCondition indexCondition) {
         List<String> fieldNames =
                 tupleDescriptor.getSlots().stream().map(s -> s.getColumn().getName()).collect(Collectors.toList());
+        int globalIndexScanStage = ConnectContext.get().getSessionVariable().getPaimonGlobalIndexScanStage();
+        boolean disableGlobalIndex = globalIndexScanStage == 0;
         GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
                 .setPredicate(predicate)
                 .setFieldNames(fieldNames)
                 .setTableVersionRange(tvrVersionRange)
                 .setLimit(limit)
+                .setDisableGlobalIndex(disableGlobalIndex)
                 .build();
+        long snapshotId = tvrVersionRange == null ? -1L : tvrVersionRange.end().orElse(-1L);
+        if (globalIndexScanStage == 2 && indexCondition != null
+                && !indexCondition.getRequiredIndexes().isEmpty() && snapshotId >= 0) {
+            try {
+                params.setConnectorIndexResult(
+                        new PaimonGlobalIndexService(paimonTable, indexCondition, snapshotId).evaluate());
+            } catch (RuntimeException e) {
+                // Index execution is an optimization. The original predicate is still attached to
+                // the normal scan, so failure safely falls back to Paimon's regular split planning.
+                LOG.warn("Failed to evaluate Paimon Global Index at snapshot {}; falling back to a normal scan",
+                        snapshotId, e);
+            }
+        }
         List<RemoteFileInfo> fileInfos;
-        try (Timer ignored = Tracers.watchScope(EXTERNAL, paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
-            fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        try {
+            fileInfos = getRemoteFiles(params);
+        } catch (RuntimeException e) {
+            if (params.getConnectorIndexResult() == null) {
+                throw e;
+            }
+            // Applying the row-id result is part of the optional index path too. Retry without it
+            // if Paimon rejects the result or an IndexedSplit cannot be planned.
+            LOG.warn("Failed to apply Paimon Global Index result at snapshot {}; "
+                    + "falling back to a normal scan", snapshotId, e);
+            GetRemoteFilesParams fallbackParams = params.copy();
+            fallbackParams.setConnectorIndexResult(null);
+            fileInfos = getRemoteFiles(fallbackParams);
         }
 
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+        PaimonSplitsInfo splitsInfo = getSplitsInfo(fileInfos);
         String predicateInfo = encodeObjectToString(splitsInfo.getPredicate());
         List<Split> splits = splitsInfo.getPaimonSplits();
 
@@ -206,6 +239,21 @@ public class PaimonScanNode extends ScanNode {
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
         traceReaderMetrics();
         traceDeletionVectorMetrics();
+    }
+
+    private List<RemoteFileInfo> getRemoteFiles(GetRemoteFilesParams params) {
+        try (Timer ignored = Tracers.watchScope(EXTERNAL,
+                paimonTable.getCatalogTableName() + ".getPaimonRemoteFileInfos")) {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(paimonTable, params);
+        }
+    }
+
+    private static PaimonSplitsInfo getSplitsInfo(List<RemoteFileInfo> fileInfos) {
+        if (fileInfos.isEmpty() || fileInfos.get(0).getFiles().isEmpty()) {
+            throw new StarRocksConnectorException("Paimon metadata returned no RemoteFileInfo descriptor");
+        }
+        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+        return remoteFileDesc.getPaimonSplitsInfo();
     }
 
     private void traceReaderMetrics() {

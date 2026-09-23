@@ -25,7 +25,6 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,14 +69,14 @@ public class ApplyPredicateIndexRule extends TransformationRule {
             return List.of();
         }
 
-        ScalarOperator indexPredicate = new IndexAnalyzer(indexMetadata).getIndexPredicate(scan.getPredicate());
-        if (indexPredicate == null) {
+        IndexCondition indexCondition = new IndexAnalyzer(indexMetadata).getIndexCondition(scan.getPredicate());
+        if (indexCondition == null) {
             return List.of();
         }
 
         LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scan);
         LogicalScanOperator newScan = (LogicalScanOperator) builder.withOperator(scan)
-                .setIndexCondition(new IndexCondition(indexPredicate))
+                .setIndexCondition(indexCondition)
                 .build();
         return List.of(OptExpression.create(newScan, input.getInputs()));
     }

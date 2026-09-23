@@ -27,8 +27,11 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.Type;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -46,13 +49,33 @@ public final class IndexAnalyzer {
 
     /** Returns the supported conjuncts without removing them from the original scan predicate. */
     public ScalarOperator getIndexPredicate(ScalarOperator predicate) {
+        IndexCondition condition = getIndexCondition(predicate);
+        return condition == null ? null : condition.getPredicate();
+    }
+
+    /** Returns the supported conjuncts together with the concrete per-column index choices. */
+    public IndexCondition getIndexCondition(ScalarOperator predicate) {
         if (predicate == null || metadata.isEmpty()) {
             return null;
         }
         List<ScalarOperator> supported = Utils.extractConjuncts(predicate).stream()
                 .filter(this::supportsScalarPredicate)
                 .collect(Collectors.toList());
-        return supported.isEmpty() ? null : Utils.compoundAnd(supported);
+        if (supported.isEmpty()) {
+            return null;
+        }
+
+        Map<String, ConnectorIndexType> requiredIndexes = new LinkedHashMap<>();
+        for (ScalarOperator conjunct : supported) {
+            IndexUse use = getIndexUse(conjunct);
+            if (use == null) {
+                continue;
+            }
+            requiredIndexes.merge(use.columnName, use.indexType,
+                    (left, right) -> left == ConnectorIndexType.RANGE || right == ConnectorIndexType.RANGE
+                            ? ConnectorIndexType.RANGE : left);
+        }
+        return new IndexCondition(Utils.compoundAnd(supported), requiredIndexes);
     }
 
     /**
@@ -90,56 +113,79 @@ public final class IndexAnalyzer {
     }
 
     private boolean supportsScalarPredicate(ScalarOperator predicate) {
+        return getIndexUse(predicate) != null;
+    }
+
+    private IndexUse getIndexUse(ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
-            return supportsBinaryPredicate((BinaryPredicateOperator) predicate);
+            return getBinaryIndexUse((BinaryPredicateOperator) predicate);
         }
         if (predicate instanceof InPredicateOperator) {
             InPredicateOperator in = (InPredicateOperator) predicate;
             if (in.isSubquery() || !(in.getChild(0) instanceof ColumnRefOperator)
-                    || !in.allValuesMatch(IndexAnalyzer::isLiteral) || in.hasAnyNullValues()) {
-                return false;
+                    || !in.allValuesMatch(IndexAnalyzer::isNonNullScalarLiteral) || in.hasAnyNullValues()) {
+                return null;
             }
-            return supportsEquality(((ColumnRefOperator) in.getChild(0)).getName());
+            ColumnRefOperator column = (ColumnRefOperator) in.getChild(0);
+            return supportedScalarType(column) ? equalityIndexUse(column.getName()) : null;
         }
         if (predicate instanceof IsNullPredicateOperator) {
             ScalarOperator child = predicate.getChild(0);
-            return child instanceof ColumnRefOperator
-                    && supportsEquality(((ColumnRefOperator) child).getName());
+            if (!(child instanceof ColumnRefOperator) || !supportedScalarType((ColumnRefOperator) child)) {
+                return null;
+            }
+            return equalityIndexUse(((ColumnRefOperator) child).getName());
         }
         if (predicate instanceof CallOperator) {
             CallOperator call = (CallOperator) predicate;
-            return FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName())
+            boolean supported = FunctionSet.STARTS_WITH.equalsIgnoreCase(call.getFnName())
                     && call.getChildren().size() == 2
                     && call.getChild(0) instanceof ColumnRefOperator
-                    && isLiteral(call.getChild(1))
+                    && call.getChild(0).getType().isStringType()
+                    && isNonNullScalarLiteral(call.getChild(1))
                     && metadata.supports(((ColumnRefOperator) call.getChild(0)).getName(),
                     ConnectorIndexType.RANGE);
+            return supported ? new IndexUse(((ColumnRefOperator) call.getChild(0)).getName(),
+                    ConnectorIndexType.RANGE) : null;
         }
-        return false;
+        return null;
     }
 
-    private boolean supportsBinaryPredicate(BinaryPredicateOperator predicate) {
+    private IndexUse getBinaryIndexUse(BinaryPredicateOperator predicate) {
         ScalarOperator first = predicate.getChild(0);
         ScalarOperator second = predicate.getChild(1);
-        String columnName;
-        if (first instanceof ColumnRefOperator && isLiteral(second)) {
-            columnName = ((ColumnRefOperator) first).getName();
-        } else if (second instanceof ColumnRefOperator && isLiteral(first)) {
-            columnName = ((ColumnRefOperator) second).getName();
+        ColumnRefOperator column;
+        if (first instanceof ColumnRefOperator && isNonNullScalarLiteral(second)) {
+            column = (ColumnRefOperator) first;
+        } else if (second instanceof ColumnRefOperator && isNonNullScalarLiteral(first)) {
+            column = (ColumnRefOperator) second;
         } else {
-            return false;
+            return null;
+        }
+        if (!supportedScalarType(column)) {
+            return null;
         }
 
         if (EQUALITY_TYPES.contains(predicate.getBinaryType())) {
-            return supportsEquality(columnName);
+            return equalityIndexUse(column.getName());
         }
         return RANGE_TYPES.contains(predicate.getBinaryType())
-                && metadata.supports(columnName, ConnectorIndexType.RANGE);
+                && metadata.supports(column.getName(), ConnectorIndexType.RANGE)
+                ? new IndexUse(column.getName(), ConnectorIndexType.RANGE) : null;
     }
 
-    private boolean supportsEquality(String columnName) {
-        return metadata.supports(columnName, ConnectorIndexType.BITMAP)
-                || metadata.supports(columnName, ConnectorIndexType.RANGE);
+    private IndexUse equalityIndexUse(String columnName) {
+        if (metadata.supports(columnName, ConnectorIndexType.BITMAP)) {
+            return new IndexUse(columnName, ConnectorIndexType.BITMAP);
+        }
+        return metadata.supports(columnName, ConnectorIndexType.RANGE)
+                ? new IndexUse(columnName, ConnectorIndexType.RANGE) : null;
+    }
+
+    private static boolean supportedScalarType(ColumnRefOperator column) {
+        return column.getType().isBoolean() || column.getType().isTinyint() || column.getType().isSmallint()
+                || column.getType().isInt() || column.getType().isBigint()
+                || column.getType().isStringType();
     }
 
     private static ScalarOperator unwrapFloatingPointCast(ScalarOperator expression) {
@@ -168,5 +214,56 @@ public final class IndexAnalyzer {
         return unwrapped instanceof ArrayOperator && unwrapped.getType() instanceof ArrayType
                 && ((ArrayType) unwrapped.getType()).getItemType().isFloatingPointType()
                 && isLiteral(unwrapped);
+    }
+
+    private static boolean isNonNullScalarLiteral(ScalarOperator expression) {
+        if (expression == null || !isSupportedScalarLiteralType(expression.getType())) {
+            return false;
+        }
+        if (expression instanceof CastOperator) {
+            ScalarOperator child = expression.getChild(0);
+            return isJsonLiteralPreservingCast(child.getType(), expression.getType())
+                    && isNonNullScalarLiteral(child);
+        }
+        return expression instanceof ConstantOperator && !((ConstantOperator) expression).isNull();
+    }
+
+    private static boolean isSupportedScalarLiteralType(Type type) {
+        return type.isBoolean() || type.isTinyint() || type.isSmallint() || type.isInt() || type.isBigint()
+                || type.isStringType();
+    }
+
+    private static int integerTypeRank(Type type) {
+        if (type.isTinyint()) {
+            return 1;
+        }
+        if (type.isSmallint()) {
+            return 2;
+        }
+        if (type.isInt()) {
+            return 3;
+        }
+        if (type.isBigint()) {
+            return 4;
+        }
+        return -1;
+    }
+
+    private static boolean isJsonLiteralPreservingCast(Type from, Type to) {
+        if (from.equals(to)) {
+            return true;
+        }
+        int fromIntegerRank = integerTypeRank(from);
+        return fromIntegerRank > 0 && integerTypeRank(to) >= fromIntegerRank;
+    }
+
+    private static final class IndexUse {
+        private final String columnName;
+        private final ConnectorIndexType indexType;
+
+        private IndexUse(String columnName, ConnectorIndexType indexType) {
+            this.columnName = columnName;
+            this.indexType = indexType;
+        }
     }
 }

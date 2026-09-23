@@ -1587,6 +1587,13 @@ Used for MySQL client compatibility. No practical usage.
 * **Data type**: String
 * **Introduced in**: v4.2
 
+### paimon_global_index_scan_stage
+
+* **Description**: Controls how StarRocks uses a Paimon Global Index. Valid values are `0`, `1`, and `2`. `0` disables the Global Index and performs regular Paimon split planning. `1` lets the Paimon Java SDK evaluate the index during split planning. `2` lets StarRocks evaluate the index in a distributed two-stage plan and passes the result to Paimon when planning data splits. If distributed index evaluation fails, StarRocks falls back to regular Paimon split planning without changing query semantics.
+* **Default**: 1
+* **Data type**: Integer
+* **Introduced in**: v4.2
+
 ### parallel_exchange_instance_num
 
 Used to set the number of exchange nodes that an upper-level node uses to receive data from a lower-level node in the execution plan. The default value is -1, meaning the number of exchange nodes is equal to the number of execution instances of the lower-level node. When  this variable is set to be greater than 0 but smaller than the number of execution instances of the lower-level node, the number of exchange nodes equals the set value.

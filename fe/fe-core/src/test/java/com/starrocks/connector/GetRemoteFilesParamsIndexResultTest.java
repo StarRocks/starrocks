@@ -17,7 +17,9 @@ package com.starrocks.connector;
 import com.starrocks.connector.index.ConnectorIndexResult;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class GetRemoteFilesParamsIndexResultTest {
     @Test
@@ -28,5 +30,21 @@ public class GetRemoteFilesParamsIndexResultTest {
                 .build();
 
         assertSame(indexResult, params.copy().getConnectorIndexResult());
+
+        ConnectorIndexResult replacement = () -> 8L;
+        params.setConnectorIndexResult(replacement);
+        assertSame(replacement, params.getConnectorIndexResult());
+    }
+
+    @Test
+    public void testCopyPreservesDisableGlobalIndex() {
+        GetRemoteFilesParams defaults = GetRemoteFilesParams.newBuilder().build();
+        assertFalse(defaults.isDisableGlobalIndex());
+
+        GetRemoteFilesParams disabled = GetRemoteFilesParams.newBuilder()
+                .setDisableGlobalIndex(true)
+                .build();
+        assertTrue(disabled.isDisableGlobalIndex());
+        assertTrue(disabled.copy().isDisableGlobalIndex());
     }
 }
