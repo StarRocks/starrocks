@@ -297,10 +297,6 @@ public class AuthenticationHandler {
                 continue;
             }
 
-<<<<<<< HEAD
-            if (!Objects.requireNonNull(AuthPlugin.covertFromServerToClient(securityIntegration.getType()))
-                    .equalsIgnoreCase(authContext.getAuthPlugin())) {
-=======
             // Match the integration against the client plugin the caller declared: mysql_clear_password for a
             // cleartext password (MySQL clear-password frame or HTTP Basic), a token plugin for JWT / OAuth2.
             // An integration type without a client-side plugin cannot match, so skip it instead of throwing.
@@ -311,7 +307,6 @@ public class AuthenticationHandler {
                 // integration. Say so once per attempt instead of leaving nothing in the log.
                 LOG.warn("security integration {} has type {}, which maps to no client-side auth plugin; skipping it",
                         authMechanism, securityIntegration.getType());
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
                 continue;
             }
             if (expectedClientPlugin != null

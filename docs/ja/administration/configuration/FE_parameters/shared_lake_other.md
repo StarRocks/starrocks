@@ -913,8 +913,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
 
-<<<<<<< HEAD
-=======
 ### `authentication_ldap_simple_conn_read_timeout_ms`
 
 - デフォルト：30000
@@ -951,7 +949,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：`authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性名のクラスター全体のデフォルト値。`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。同名の security integration プロパティがこの値を上書きします。
 - 導入時期：v4.2
 
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
 ### `authentication_ldap_simple_server_host`
 
 - デフォルト：Empty string

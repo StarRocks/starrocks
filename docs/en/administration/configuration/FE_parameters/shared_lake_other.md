@@ -909,8 +909,6 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
-<<<<<<< HEAD
-=======
 ### `authentication_ldap_simple_conn_read_timeout_ms`
 
 - Default: 30000
@@ -947,7 +945,6 @@ This topic introduces the following types of FE configurations:
 - Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
 - Introduced in: v4.2
 
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string

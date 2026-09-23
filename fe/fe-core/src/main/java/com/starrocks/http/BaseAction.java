@@ -318,15 +318,10 @@ public abstract class BaseAction implements IAction {
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
         try {
-<<<<<<< HEAD
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
-=======
             // HTTP Basic carries a cleartext password: declare that so security integrations that
             // consume a password (LDAP) are matched instead of skipped.
             return AuthenticationHandler.authenticateWithClearPassword(context, authInfo.fullUserName,
                     authInfo.remoteIp, authInfo.password);
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }

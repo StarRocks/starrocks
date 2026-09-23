@@ -909,8 +909,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
 
-<<<<<<< HEAD
-=======
 ### `authentication_ldap_simple_conn_read_timeout_ms`
 
 - 默认值: 30000
@@ -947,7 +945,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用户条目上承载组成员关系的属性名的集群级默认值，在 `authentication_ldap_simple_group_source` 取 `memberof` 或 `both` 时使用。`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP；Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。Security Integration 上的同名属性会覆盖该值。
 - 引入版本: v4.2
 
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
 ### `authentication_ldap_simple_server_host`
 
 - 默认值: 空字符串

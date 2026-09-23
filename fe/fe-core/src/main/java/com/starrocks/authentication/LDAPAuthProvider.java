@@ -103,10 +103,6 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
             // set distinguished name to auth context
             authContext.setDistinguishedName(distinguishedName);
-<<<<<<< HEAD
-        } catch (Exception e) {
-            LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
-=======
         } catch (AuthenticationException e) {
             // Already classified (empty password, user not found, or a nested bind failure): pass it through.
             LOG.warn("check password failed for user: {}", user, e);
@@ -114,7 +110,6 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         } catch (javax.naming.AuthenticationException e) {
             // The directory answered and rejected the credential -- a definitive "wrong password".
             LOG.warn("check password failed for user: {}", user, e);
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
             throw new AuthenticationException(e.getMessage());
         } catch (Exception e) {
             // Anything else means we could not get an answer: connection refused, timeout, TLS failure.
@@ -173,9 +168,6 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 return dn;
             } catch (Exception e) {
                 lastException = e;
-<<<<<<< HEAD
-                LOG.debug("direct bind failed for pattern '{}' with user '{}': {}", pattern, user, e.getMessage());
-=======
                 LOG.debug("direct bind failed for dn '{}' with user '{}': {}", dn, user, e.getMessage());
             }
         }
@@ -216,7 +208,6 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 ctx.close();
             } catch (Exception e) {
                 // ignore
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
             }
         }
         throw lastException;

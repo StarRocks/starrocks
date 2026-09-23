@@ -1286,14 +1286,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
             return UserIdentity.ROOT;
         }
-<<<<<<< HEAD
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8));
-=======
         ConnectContext context = new ConnectContext();
         UserIdentity currentUser = AuthenticationHandler.authenticateWithClearPassword(
                 context, user, clientIp, passwd);
->>>>>>> d4829eb1c2f ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#60772))
         // check INSERT action on table
         try {
             ConnectContext context = new ConnectContext();
