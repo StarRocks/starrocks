@@ -119,6 +119,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
 }
 
 Status RawSpillerWriter::_spill_mem_table(workgroup::YieldContext& yield_ctx, const MemTablePtr& mem_table) {
+    SCOPED_TIMER(_spiller->metrics().flush_mem_table_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
 
@@ -144,6 +145,7 @@ Status RawSpillerWriter::_spill_mem_table(workgroup::YieldContext& yield_ctx, co
 }
 
 Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) {
+    SCOPED_TIMER(_spiller->metrics().compact_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
     // flush_ctx->output is not nullptr means the task is resumed from yield point
@@ -159,6 +161,9 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
 
         COUNTER_UPDATE(_spiller->metrics().compact_count, 1);
         COUNTER_UPDATE(_spiller->metrics().compact_block_count, block_groups.size());
+        COUNTER_UPDATE(_spiller->metrics().compact_bytes_read,
+                       std::accumulate(block_groups.begin(), block_groups.end(), int64_t{0},
+                                       [](int64_t sum, const auto& group) { return sum + group->data_size(); }));
 
         flush_ctx->compact_input_num_rows =
                 std::accumulate(block_groups.begin(), block_groups.end(), 0,
@@ -174,11 +179,12 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
                                                              options().sort_exprs, options().sort_desc));
     }
     auto st = DataTranster::transfer(yield_ctx, _runtime_state, _spiller->serde().get(), flush_ctx->output,
-                                     flush_ctx->input_stream);
+                                     flush_ctx->input_stream, _spiller->metrics().compact_merge_timer);
     RETURN_IF(!st.is_ok_or_eof(), st);
     RETURN_IF_YIELD(yield_ctx.need_yield);
     RETURN_IF_ERROR(flush_ctx->output->flush());
     flush_ctx->output.reset();
+    COUNTER_UPDATE(_spiller->metrics().compact_bytes_written, flush_ctx->block_group->data_size());
     // On cancellation the transfer stops early, so the compacted block group holds fewer rows than
     // its input; only assert full compaction while the query is still running. Query cancel sets
     // the runtime state (which the transfer honors) but not necessarily the spiller flag.

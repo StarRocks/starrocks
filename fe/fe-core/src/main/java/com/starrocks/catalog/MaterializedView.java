@@ -814,8 +814,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * This can be time costing because `evictMaterializedViewCache` may visit all its base tables to build ast key, so only use
-     * it when necessary.
+     * Marks this mv inactive and drops it from the rewrite caches. Callers hold a metadata lock --
+     * AlterJobMgr's replay paths, LocalMetastore#replayAlterMaterializedViewProperties, backup and
+     * restore -- so nothing here may wait on an external system: `evictMaterializedViewCache` used to
+     * rebuild this mv's ast keys, which re-analyzed the define query and resolved every base table
+     * through the connector, and now walks the cache instead.
      * @param reason the reason for being inactive
      */
     public synchronized void setInactiveAndReason(String reason) {

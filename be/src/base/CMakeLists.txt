@@ -83,6 +83,7 @@ ADD_BE_LIB(Base
   time/monotime.cpp
   time/time.cpp
   time/timezone_utils.cpp
+  time/tz_offset_cache.cpp
   template/mustache/mustache.cc
   # base/testutil is not the UT-only TestUtil library. Production sources
   # include its BE_TEST-gated sync-point/fault-injection macros, which compile

@@ -300,7 +300,9 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | OverallThroughput | 吞吐率。 |
 | NetworkTime | 数据包传输所花费的时间（不包括接收后的处理时间）。 |
 | NetworkBandwidth | 估计的网络带宽。 |
-| WaitTime | 由于发送者队列已满而等待的时间。 |
+| WaitTime | `BufferFullTime` 与 `PendingFinishTime` 之和。 |
+| BufferFullTime | 记录的发送端缓冲区已满的累计时间。属于 `WaitTime` 的子指标。 |
+| PendingFinishTime | 从发送端缓冲区开始进入结束阶段到更新 Profile 时的经过时间；进入结束阶段前为零。属于 `WaitTime` 的子指标，与 Pipeline 级别的同名指标分别统计。 |
 | OverallTime | 整个传输过程的总时间，即从发送第一个数据包到确认最后一个数据包正确接收的时间。 |
 | RpcAvgTime | RPC 的平均时间。 |
 | RpcCount | RPC 的总次数。 |
@@ -497,3 +499,201 @@ OlapTableSink Operator 负责执行 `INSERT INTO <table>` 操作。
 | `RpcServerSideTime` | 服务器端记录的导入的总 RPC 时间消耗。 |
 | `PrepareDataTime` | 数据准备阶段的总时间消耗，包括数据格式转换和数据质量检查。 |
 | `SendDataTime` | 发送数据的本地时间消耗，包括序列化和压缩数据的时间，以及将任务提交到发送者队列的时间。 |
+
+### 落盘指标
+
+查询内存超限时，支持落盘的 operator 会把中间结果写到本地磁盘或远端存储。这些 operator 在各自的
+profile 中都会输出同一组计数器 `SpillStatistics`，包括聚合与去重 operator、Hash Join 与 Nested Loop
+Join 的 build/probe operator，以及排序 operator。
+
+哪些计数器有值，取决于 operator 使用的是哪一种写入器：
+
+- **排序写入器**：用于 blocking 聚合与 blocking `DISTINCT` operator（按 `GROUP BY` 表达式排序），
+  以及排序 operator（按 `ORDER BY` 表达式排序）。memtable 排好序后作为一个有序 block group 写出，
+  攒够若干个之后再归并成一个。只有它有 compaction 阶段。`SortChunkTime`、`MaterializeChunkTime`
+  只在这里非零；`CompactTime`、`CompactMergeTime`、`CompactCount`、`CompactBlockCount`、
+  `CompactBytesRead`、`CompactBytesWritten` 也是如此，而且还要开启 block compaction——目前是
+  blocking 聚合 operator 和排序 operator。
+- **分区写入器**：用于 Hash Join 的 build/probe operator，以及 partition-wise 聚合与
+  `DISTINCT` operator。数据按哈希分区，各分区独立写出，没有 compaction 阶段。分区涨过 memtable
+  上限时改为一分为二，这部分开销计入 `SplitPartitionTime` 而不是 `FlushTime`。`ShuffleTime`、
+  `SplitPartitionTime`、`PartitionWriterPeakMemoryBytes` 以及 `SkewMemTable*` 系列只在这里非零。
+- **无序写入器**：用于 Nested Loop Join 的 build/probe operator。memtable 原样写出，不排序、
+  不分区、也没有 compaction。
+
+`FlushMemTableTime` 统计的是第一次写出，由排序写入器和无序写入器上报；分区写入器没有这个阶段，
+该计数器恒为 0。
+
+#### 计数器层级
+
+```text
+SpillStatistics
+├── AppendDataTime
+├── RowsSpilled
+├── FlushTime
+│   ├── FlushMemTableTime
+│   └── CompactTime
+│       └── CompactMergeTime
+├── WriteIOTime
+│   ├── LocalWriteIOTime
+│   └── RemoteWriteIOTime
+├── RowsRestored
+├── RestoreTime
+├── ReadIOTime
+│   ├── LocalReadIOTime
+│   └── RemoteReadIOTime
+├── BytesFlush
+│   ├── BytesFlushToLocalDisk
+│   └── BytesFlushToRemoteStorage
+├── BytesRestore
+│   ├── BytesRestoreFromLocalDisk
+│   └── BytesRestoreFromRemoteStorage
+├── SerializeTime
+├── DeserializeTime
+├── MemTablePeakMemoryBytes
+├── InputStreamPeakMemoryBytes
+├── SortChunkTime
+├── MaterializeChunkTime
+├── ShuffleTime
+├── SplitPartitionTime
+├── PartitionWriterPeakMemoryBytes
+├── RowsRestoreFromMemTable
+├── BytesRestoreFromMemTable
+├── BlockCount
+│   ├── LocalBlockCount
+│   └── RemoteBlockCount
+├── ReadIOCount
+│   ├── LocalReadIOCount
+│   └── RemoteReadIOCount
+├── CompactCount
+├── CompactBlockCount
+├── CompactBytesRead
+├── CompactBytesWritten
+├── FlushIOTaskCount
+├── PeakFlushIOTaskCount
+├── RestoreIOTaskCount
+├── PeakRestoreIOTaskCount
+├── MemTableFinalizeTime
+├── FlushIOTaskYieldCount
+├── RestoreIOTaskYieldCount
+└── SkewMemTableCount / SkewMemTableSkewRatio / SkewMemTableMergeTime /
+    SkewMemTableInputRows / SkewMemTableOutputRows /
+    SkewMemTableInputBytes / SkewMemTableOutputBytes
+```
+
+层级中的父子关系只有在描述里写明时才表示“包含”。有些计数器在树上是兄弟节点，时间上却是重叠的，
+因为同一段工作被记到了多个计数器上，详见[计数器之间的重叠](#计数器之间的重叠)。
+
+:::note
+对查询落盘来说，`WriteIOTime`、`ReadIOTime`、`BytesFlush`、`BytesRestore`、`BlockCount`、
+`ReadIOCount` 只是分组节点：数值总是记在与 block 所在位置对应的 `Local...` 或 `Remote...` 子项上，
+父节点始终为 `0`。看总量请看子项。
+:::
+
+#### 接收数据
+
+这几个计数器记在 operator 自己的线程上，属于 operator 耗时的一部分。
+
+| 指标 | 描述 | 写入器 |
+|--------|-------------|------|
+| `AppendDataTime` | 接收一个 chunk 的耗时：把它追加进内存中的 memtable；分区路径下还包括把行分发到各分区。 | 通用 |
+| `RowsSpilled` | 写入 spiller 的行数。 | 通用 |
+| `ShuffleTime` | 计算每行所属分区并把行拷贝到对应分区 memtable 的耗时，包含在 `AppendDataTime` 内。 | 分区 |
+| `SortChunkTime` | memtable 写满后按排序键排序的耗时。在触发刷写时、提交刷写任务之前计入。 | 排序 |
+| `MaterializeChunkTime` | 按排序得到的 permutation 重建有序 chunk 的耗时，与 `SortChunkTime` 一并计入。 | 排序 |
+| `MemTablePeakMemoryBytes` | memtable 占用内存的峰值。 | 通用 |
+| `PartitionWriterPeakMemoryBytes` | 分区写入器在所有分区上占用内存的峰值。 | 分区 |
+| `SkewMemTableCount` | 因单个 group-by 值占比过高而被合并的 memtable 个数。需要 operator 提供倾斜合并器。 | 分区 |
+| `SkewMemTableSkewRatio` | 该合并消除掉的 memtable 字节占比，取观测到的最低值。 | 分区 |
+| `SkewMemTableMergeTime` | 合并倾斜 memtable 的耗时。 | 分区 |
+| `SkewMemTableInputRows` / `SkewMemTableOutputRows` | 倾斜合并前后的行数。 | 分区 |
+| `SkewMemTableInputBytes` / `SkewMemTableOutputBytes` | 倾斜合并前后的 memtable 字节数。 | 分区 |
+
+#### 写出数据
+
+这几个计数器记在落盘 I/O 线程上。它们是异步执行的，不直接计入 operator 耗时；只有当 operator 等不到
+空闲 memtable 时，才会拖慢查询。
+
+| 指标 | 描述 | 写入器 |
+|--------|-------------|------|
+| `FlushTime` | 刷写任务的总耗时。排序写入器下等于 `FlushMemTableTime` 加 `CompactTime`；无序写入器下就是 `FlushMemTableTime`；分区写入器下是逐个写出写满的分区，没有子阶段。 | 通用 |
+| `FlushMemTableTime` | 把一个 memtable 作为新的 block group 写出的耗时。 | 排序、无序 |
+| `CompactTime` | 把多个有序 block group 归并成一个的耗时。未开启 block compaction，或 block group 数量始终没到归并阈值时为 0。 | 排序 |
+| `CompactMergeTime` | 归并本身的耗时：比较排序键、组装归并后的 chunk。 | 排序 |
+| `MemTableFinalizeTime` | memtable 自身序列化循环的耗时。排序写入器和无序写入器下位于 `FlushMemTableTime` 内，分区写入器下直接位于 `FlushTime` 内。 | 通用 |
+| `SerializeTime` | 写出前序列化 chunk 的耗时。 | 通用 |
+| `WriteIOTime` | 向 block 追加数据并刷写的耗时。看 `LocalWriteIOTime` 与 `RemoteWriteIOTime` 子项。 | 通用 |
+| `BytesFlush` | 写出的字节数。看 `BytesFlushToLocalDisk` 与 `BytesFlushToRemoteStorage` 子项。 | 通用 |
+| `BlockCount` | 申请的 block 个数。看 `LocalBlockCount` 与 `RemoteBlockCount` 子项。 | 通用 |
+| `FlushIOTaskCount` | 提交的刷写 I/O 任务数。 | 通用 |
+| `PeakFlushIOTaskCount` | 同时在执行的刷写任务数的峰值。 | 通用 |
+| `FlushIOTaskYieldCount` | 刷写任务用完时间片被重新提交、留待后续继续执行的次数。 | 通用 |
+| `SplitPartitionTime` | 拆分超出 memtable 上限的分区的耗时，包括把该分区读回来、再把两半写出去。不计入 `FlushTime`。 | 分区 |
+
+#### Compaction
+
+| 指标 | 描述 | 写入器 |
+|--------|-------------|------|
+| `CompactCount` | compaction 的轮数。 | 排序 |
+| `CompactBlockCount` | 这些轮次一共吃进去多少个 **block group**。名字容易误解：它数的是 block group，不是 block。 | 排序 |
+| `CompactBytesRead` | compaction 读回的字节数，是 `BytesRestore` 的子集。 | 排序 |
+| `CompactBytesWritten` | compaction 重写出去的字节数，是 `BytesFlush` 的子集。 | 排序 |
+
+#### 读回数据
+
+| 指标 | 描述 | 写入器 |
+|--------|-------------|------|
+| `RestoreTime` | 从预取缓冲里取出下一个 chunk 并发起下一次预取的耗时，记在 operator 自己的线程上。 | 通用 |
+| `RowsRestored` | 返还给 operator 的行数。 | 通用 |
+| `DeserializeTime` | 反序列化从 block 读回的 chunk 的耗时。 | 通用 |
+| `ReadIOTime` | 读取 block 的耗时。看 `LocalReadIOTime` 与 `RemoteReadIOTime` 子项。 | 通用 |
+| `ReadIOCount` | 读操作次数。看 `LocalReadIOCount` 与 `RemoteReadIOCount` 子项。 | 通用 |
+| `BytesRestore` | 读回的字节数。看 `BytesRestoreFromLocalDisk` 与 `BytesRestoreFromRemoteStorage` 子项。 | 通用 |
+| `InputStreamPeakMemoryBytes` | 已预取但尚未被消费的 chunk 占用内存的峰值。 | 通用 |
+| `RestoreIOTaskCount` | 提交的读回 I/O 任务数。 | 通用 |
+| `PeakRestoreIOTaskCount` | 同时在执行的读回任务数的峰值。 | 通用 |
+| `RestoreIOTaskYieldCount` | 读回任务用完时间片被重新提交、留待后续继续执行的次数。 | 通用 |
+| `RowsRestoreFromMemTable` / `BytesRestoreFromMemTable` | 预留给“直接从常驻内存的分区取数”这种情况。当前实现并不更新它们，因此恒为 `0`。 | 分区 |
+
+#### 计数器之间的重叠
+
+有几组计数器统计的是同一段工作，直接相加会重复计算：
+
+- `MemTableFinalizeTime` 已经包含它写出这个 memtable 时的 `SerializeTime` 和写 I/O。它是一个阶段
+  边界，不是额外开销。
+- `SerializeTime`、`WriteIOTime`、`BytesFlush` 同时统计首次写出和 compaction 重写两部分。
+  `CompactBytesWritten` 就是 `BytesFlush` 中属于 compaction 的那一份。
+- `DeserializeTime`、`ReadIOTime`、`ReadIOCount`、`BytesRestore` 由读回和 compaction 共用——
+  compaction 读自己的输入走的也是这条路径。`CompactBytesRead` 是 `BytesRestore` 中属于 compaction
+  的那一份，减掉它才是读回本身读了多少。
+- `CompactMergeTime` 与 `DeserializeTime`、`ReadIOTime` **不**重叠。归并只从预取好的输入缓冲里取
+  chunk，填充这个缓冲的读 I/O 和反序列化是单独计时的。
+
+#### 怎么读这组计数器
+
+1. **先看 `FlushTime`。** 落盘成为查询瓶颈时，`FlushTime` 通常是这组里最大的值，上游 operator 的
+   等待时间也会与它接近。
+
+2. **把 `FlushTime` 拆成两个阶段**（仅排序写入器）：
+   `FlushTime` = `FlushMemTableTime` + `CompactTime`。
+
+   - `FlushMemTableTime` 占大头：开销在第一次把数据写出去。比较 `SerializeTime` 与
+     `LocalWriteIOTime`、`RemoteWriteIOTime`，判断是序列化吃 CPU 还是设备慢，再看 `BytesFlush`
+     确认数据量。表很宽、或者列大部分为 NULL 时，序列化通常是更大的那一项。
+   - `CompactTime` 占大头：查询不断产生有序 block group，反复触达归并阈值，同一批数据被反复重写。
+     `CompactCount` 是轮数，`CompactBlockCount` 是这些轮次吃进去的 block group 个数；把
+     `CompactBytesRead`、`CompactBytesWritten` 与 `BytesRestore`、`BytesFlush` 相比，就是
+     compaction 带来的写放大——两者接近时，说明大部分 I/O 都花在重写而不是推进查询上。
+
+3. **再看 `CompactTime` 里的 `CompactMergeTime`。** 它是归并本身，占比说明 compaction 卡在哪：
+
+   - 占比高说明归并是 CPU 瓶颈。排序列多、chunk 宽、一次归并的路数多，都会推高键比较和 chunk 组装
+     的开销。
+   - 占比低说明归并在等输入或等输出。`CompactTime` 剩下的部分要么在读侧（`ReadIOTime`、
+     `DeserializeTime`），要么在写侧（`SerializeTime`、`WriteIOTime`），看这几个计数器即可区分。
+
+4. **确认并发是否受限。** `PeakFlushIOTaskCount` 和 `PeakRestoreIOTaskCount` 反映同时跑过多少个
+   I/O 任务；`FlushIOTaskYieldCount` 很高则说明刷写任务反复用完时间片、只能重新提交。
+
+5. **不要把重叠的计数器相加。** 在把这组计数器当作 `FlushTime` 的拆解之前，先看
+   [计数器之间的重叠](#计数器之间的重叠)。

@@ -21,7 +21,6 @@ import com.starrocks.load.Load;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,16 +49,19 @@ import java.util.List;
  * FE-local access cannot reach. Routing footer reads through a
  * broker-backed seekable input is a deliberate follow-up.
  *
- * <p>Non-identity file groups (per-group {@code WHERE}, {@code SET}/explicit
- * column list, {@code columns_from_path}, negative-load, or legacy hadoop
- * functions) map or filter the sort key, so the raw footer column would diverge
- * from the loaded value; they are rejected before any footer read (reusing the
- * data tier's {@code rejectNonIdentityFileGroups} guard) and fall back to data
- * tier, which skips pre-split for the same shapes.
+ * <p>A file group whose column mapping would perturb a sampled key column is
+ * rejected before any footer read, reusing the data tier's
+ * {@code rejectKeyPerturbingFileGroups} guard so both tiers agree: a per-group
+ * {@code WHERE}, a negative load, a legacy hadoop function, a {@code SET} /
+ * derived column, a key column supplied by {@code COLUMNS FROM PATH} (its value
+ * is in the directory name, not the footer), or a {@code COLUMNS} list that
+ * omits a key column. An all-identity {@code COLUMNS} list and path columns
+ * disjoint from the key are accepted — the footer still carries the key columns
+ * verbatim under the names the load reads them by.
  *
  * <p>Hadoop-side wiring (configuration build, broker → Hadoop file-status
- * conversion) is shared with the INSERT-from-FILES provider via
- * {@link PreSplitHadoopAccess}.
+ * conversion, concurrent footer reads) is shared with the INSERT-from-FILES
+ * provider via {@link PreSplitHadoopAccess}.
  */
 final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
 
@@ -72,23 +74,25 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
         List<List<TBrokerFileStatus>> fileStatusesPerGroup = context.fileStatusesPerGroup();
         List<Column> sortKeyColumns = request.getSortKey();
 
-        // A non-identity file group (per-group WHERE / SET / columns_from_path / negative-load / hadoop
-        // functions) maps or filters the sort key, so the raw footer column diverges from the value the
-        // load actually inserts and footer-derived boundaries would be skewed. Reuse the data tier's
-        // identity guard as the single source of truth; on rejection defer to the data tier, which
-        // rejects the same shapes and skips pre-split.
+        // A file group whose mapping perturbs a sampled key column (per-group WHERE / SET / negative
+        // load / hadoop function), supplies one from the path, or never names one, makes the raw
+        // footer column diverge from the value the load actually inserts, so footer-derived
+        // boundaries would be skewed. Reuse the data tier's guard as the single source of truth;
+        // on rejection defer to the data tier, which applies the same test.
         try {
-            BrokerLoadSampleSubqueryExecutor.rejectNonIdentityFileGroups(fileGroups);
+            BrokerLoadSampleSubqueryExecutor.rejectKeyPerturbingFileGroups(
+                    fileGroups, BrokerLoadSampleSubqueryExecutor.sampledKeyColumns(request));
         } catch (StarRocksException nonIdentity) {
             throw new MetaTierUnavailableException(nonIdentity.getMessage());
         }
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(brokerDesc.getProperties());
 
-        // Read every non-directory file's footer across all file groups. The
-        // pipeline picks K from total file bytes, so partial enumeration would
-        // bias the planner's quantile cuts.
-        List<RowGroupStatistics> aggregated = new ArrayList<>();
+        // Resolve every non-directory file's reader across all file groups. The pipeline picks K
+        // from total file bytes, so partial enumeration would bias the planner's quantile cuts.
+        // Format resolution runs first for every file: it touches no storage, so an unsupported
+        // format defers to the data tier without having paid for a single footer read.
+        List<PreSplitHadoopAccess.FooterRead> footerReads = new ArrayList<>();
         for (int groupIndex = 0; groupIndex < fileGroups.size(); groupIndex++) {
             BrokerFileGroup fileGroup = fileGroups.get(groupIndex);
             String declaredFormat = fileGroup.getFileFormat();
@@ -100,11 +104,11 @@ final class BrokerLoadRowGroupStatisticsProvider implements RowGroupStatisticsPr
                 // wins; otherwise the file extension), then pick the reader.
                 MetaTierFormat format = MetaTierFormat.fromBrokerFormatType(
                         Load.getFormatType(declaredFormat, brokerFileStatus.path), brokerFileStatus.path);
-                FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-                aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumns, context.loadTimeZone()));
+                footerReads.add(new PreSplitHadoopAccess.FooterRead(
+                        format, PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus)));
             }
         }
-        return aggregated;
+        return PreSplitHadoopAccess.readFooters(footerReads, hadoopConfig, sortKeyColumns, context.loadTimeZone());
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request)
