@@ -146,14 +146,6 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
-<<<<<<< HEAD
-=======
-    // Index bytes written after finalize_columns() returned, which the vertical rowset writer must
-    // fold into its own index-size total: it accumulates from finalize_columns(), and the tail
-    // region is written later, from finalize_footer(). Left at zero on the horizontal path, whose
-    // finalize() already reported them.
-    uint64_t unreported_index_size() const { return _unreported_small_index_region_size; }
-
     // Bytes of standalone index files (the vector index .vi) produced by finalize_columns().
     // They are included in the index_size reported by finalize()/finalize_columns() but do
     // NOT live in the segment file, so a caller that derives the column-data bytes as
@@ -161,7 +153,6 @@ public:
     // segments whose .vi is larger than their data.
     uint64_t standalone_index_size() const { return _standalone_index_size; }
 
->>>>>>> fbfaccb ([BugFix] Fix compaction SIGFPE when a vector-index rowset reports negative data_disk_size (#78959))
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
     const std::string& segment_path() const;
@@ -203,38 +194,9 @@ private:
     SegmentFooterPB _footer;
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
-<<<<<<< HEAD
-=======
-    // Ordinal-index builders taken from column writers that have otherwise finished, accumulated
-    // across every finalize_columns() call and flushed as one contiguous region by
-    // finalize_footer(). A vertical writer calls finalize_columns() once per column group, so an
-    // early group's ordinal index can only reach the tail by outliving the last group's data.
-    //
-    // Only the builders are held: the writers themselves are destroyed on the usual schedule, so
-    // what survives here is roughly 17 bytes per page and nothing else -- no zone map, bitmap or
-    // bloom state, whose finish() flushes but does not return its memory.
-    std::vector<DeferredOrdinalIndex> _deferred_ordinal_indexes;
-    // Whether this segment uses the tail index region, decided once in the constructor and never
-    // re-read. Two reasons it is latched rather than consulted per call:
-    //   * config::lake_enable_segment_tail_index_region is mutable, and a vertical writer finalizes one
-    //     column group at a time -- a flip mid-segment would produce a hybrid, some groups'
-    //     ordinal indexes in the advertised tail and the rest still inline;
-    //   * the shared-data check below is a global lookup, and this is a per-column-group path.
-    const bool _tail_index_layout;
-    // Cleared when init() continues an existing segment (partial-update rewrite): the copied
-    // columns keep their original scattered index pages, so a tail region built from the appended
-    // columns alone would describe only part of the segment.
-    bool _tail_index_layout_usable;
-    bool _small_index_region_deferred = false;
-    // Bytes of the tail region, recorded only when _write_small_index_region() had no index_size
-    // out-param to add them to -- i.e. when it ran from finalize_footer() on the vertical path.
-    // The horizontal path reports them through finalize()'s index_size and leaves this at zero,
-    // so a caller adding both can never double count.
-    uint64_t _unreported_small_index_region_size = 0;
     // Accumulated size of standalone index files written by finalize_columns(); see
     // standalone_index_size().
     uint64_t _standalone_index_size = 0;
->>>>>>> fbfaccb ([BugFix] Fix compaction SIGFPE when a vector-index rowset reports negative data_disk_size (#78959))
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;

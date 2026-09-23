@@ -39,22 +39,7 @@
 #include <string>
 #include <vector>
 
-<<<<<<< HEAD
 #include "column/datum_tuple.h"
-=======
-#include "base/string/slice.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "column/datum_tuple.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/config_vector_index_fwd.h"
-#include "exec/exec_env.h"
-#include "fs/fs_factory.h"
->>>>>>> fbfaccb ([BugFix] Fix compaction SIGFPE when a vector-index rowset reports negative data_disk_size (#78959))
 #include "fs/fs_util.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -84,6 +69,7 @@
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 #include "util/slice.h"
 
 using std::string;
@@ -1593,7 +1579,7 @@ TEST_F(RowsetTest, horizontal_writer_standalone_vector_index_not_subtracted_from
     const size_t num_rows = 64;
     std::vector<uint32_t> column_indexes{0, 1};
     auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-    auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+    auto chunk = ChunkHelper::new_chunk(schema, num_rows);
     append_vector_rows(chunk.get(), column_indexes, num_rows);
     ASSERT_OK(rowset_writer->add_chunk(*chunk));
     ASSERT_OK(rowset_writer->flush());
@@ -1621,7 +1607,7 @@ TEST_F(RowsetTest, vertical_writer_standalone_vector_index_not_subtracted_from_d
     {
         std::vector<uint32_t> column_indexes{0};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
         append_vector_rows(chunk.get(), column_indexes, num_rows);
         ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, true));
         ASSERT_OK(rowset_writer->flush_columns());
@@ -1629,7 +1615,7 @@ TEST_F(RowsetTest, vertical_writer_standalone_vector_index_not_subtracted_from_d
     {
         std::vector<uint32_t> column_indexes{1};
         auto schema = ChunkHelper::convert_schema(tablet_schema, column_indexes);
-        auto chunk = ChunkFactory::new_chunk(schema, num_rows);
+        auto chunk = ChunkHelper::new_chunk(schema, num_rows);
         append_vector_rows(chunk.get(), column_indexes, num_rows);
         ASSERT_OK(rowset_writer->add_columns(*chunk, column_indexes, false));
         ASSERT_OK(rowset_writer->flush_columns());

@@ -14,21 +14,8 @@
 
 #include "rowset_column_update_state.h"
 
-<<<<<<< HEAD
-=======
 #include <algorithm>
 
-#include "base/phmap/phmap.h"
-#include "base/time/time.h"
-#include "base/utility/defer_op.h"
-#include "column/chunk_factory.h"
-#include "column/chunk_schema_helper.h"
-#include "column/serde/column_array_serde.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_exec_fwd.h"
-#include "common/config_primary_key_fwd.h"
-#include "common/stack_util.h"
->>>>>>> fbfaccb ([BugFix] Fix compaction SIGFPE when a vector-index rowset reports negative data_disk_size (#78959))
 #include "common/tracer.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"

@@ -14,15 +14,11 @@
 
 #include "storage/compaction_utils.h"
 
-<<<<<<< HEAD
-#include "common/config.h"
-#include "storage/row_source_mask.h"
-=======
 #include <algorithm>
 #include <limits>
 
-#include "common/config_compaction_fwd.h"
->>>>>>> fbfaccb ([BugFix] Fix compaction SIGFPE when a vector-index rowset reports negative data_disk_size (#78959))
+#include "common/config.h"
+#include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
