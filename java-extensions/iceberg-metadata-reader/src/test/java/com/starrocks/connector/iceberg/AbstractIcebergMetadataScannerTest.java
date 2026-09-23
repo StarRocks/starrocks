@@ -16,9 +16,17 @@ package com.starrocks.connector.iceberg;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -35,6 +43,31 @@ public class AbstractIcebergMetadataScannerTest {
         DeserializedTableCache rebuilt = AbstractIcebergMetadataScanner.tableCache(128);
         assertNotSame(first, rebuilt, "changed capacity rebuilds the cache");
         assertSame(rebuilt, AbstractIcebergMetadataScanner.tableCache(128), "stable after rebuild");
+    }
+
+    @Test
+    public void testConcurrentCapacityChangesReturnMatchingCache() throws Exception {
+        int threads = 8;
+        CyclicBarrier gate = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<?>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                int capacity = 64 + i;
+                futures.add(pool.submit(() -> {
+                    gate.await();
+                    for (int j = 0; j < 1000; j++) {
+                        assertEquals(capacity, AbstractIcebergMetadataScanner.tableCache(capacity).maxEntries());
+                    }
+                    return null;
+                }));
+            }
+            for (Future<?> future : futures) {
+                future.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
     }
 
     // The cache capacity is read from the table_cache_max_entries param the BE passes per scanner.

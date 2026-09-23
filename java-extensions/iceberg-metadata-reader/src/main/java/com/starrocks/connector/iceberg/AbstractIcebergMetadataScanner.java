@@ -56,7 +56,6 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     private static final long TABLE_CACHE_TTL_SECONDS = 600;
     private static final int DEFAULT_TABLE_CACHE_MAX_ENTRIES = 128;
     private static volatile DeserializedTableCache tableCache;
-    private static volatile int tableCacheCapacity = -1;
 
     public AbstractIcebergMetadataScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -76,13 +75,12 @@ public abstract class AbstractIcebergMetadataScanner extends ConnectorScanner {
     // capacity. Rebuilding drops cached entries, but capacity changes are rare.
     static DeserializedTableCache tableCache(int maxEntries) {
         DeserializedTableCache cache = tableCache;
-        if (cache != null && tableCacheCapacity == maxEntries) {
+        if (cache != null && cache.maxEntries() == maxEntries) {
             return cache;
         }
         synchronized (AbstractIcebergMetadataScanner.class) {
-            if (tableCache == null || tableCacheCapacity != maxEntries) {
+            if (tableCache == null || tableCache.maxEntries() != maxEntries) {
                 tableCache = new DeserializedTableCache(TABLE_CACHE_TTL_SECONDS, maxEntries);
-                tableCacheCapacity = maxEntries;
             }
             return tableCache;
         }

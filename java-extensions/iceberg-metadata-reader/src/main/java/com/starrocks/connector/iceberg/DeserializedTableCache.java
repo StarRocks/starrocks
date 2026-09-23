@@ -88,6 +88,10 @@ public class DeserializedTableCache {
                 .build();
     }
 
+    int maxEntries() {
+        return maxEntries;
+    }
+
     public Table get(String serializedTable) {
         return get(serializedTable, () -> deserializeFromBase64(serializedTable));
     }

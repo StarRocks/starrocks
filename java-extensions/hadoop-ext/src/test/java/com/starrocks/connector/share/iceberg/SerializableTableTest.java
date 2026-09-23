@@ -17,10 +17,14 @@ package com.starrocks.connector.share.iceberg;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.inmemory.InMemoryCatalog;
 import org.apache.iceberg.inmemory.InMemoryFileIO;
+import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.io.InputFile;
+import org.apache.iceberg.io.OutputFile;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Test;
 
@@ -33,8 +37,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -114,6 +120,61 @@ public class SerializableTableTest {
                 assertSame(first, future.get(10, TimeUnit.SECONDS),
                         "double-checked lazy init must publish a single schema instance");
             }
+        } finally {
+            pool.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testConcurrentMetadataAccessReadsFileOnce() throws Exception {
+        Table source = createTable(new HashMap<>());
+        AtomicInteger reads = new AtomicInteger();
+        FileIO countingIO = new FileIO() {
+            @Override
+            public InputFile newInputFile(String path) {
+                reads.incrementAndGet();
+                // Widen the first-read window so concurrent metadata loads overlap.
+                try {
+                    Thread.sleep(20);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(e);
+                }
+                return source.io().newInputFile(path);
+            }
+
+            @Override
+            public OutputFile newOutputFile(String path) {
+                return source.io().newOutputFile(path);
+            }
+
+            @Override
+            public void deleteFile(String path) {
+                source.io().deleteFile(path);
+            }
+        };
+        SerializableTable table = new SerializableTable(source, countingIO);
+        assertEquals(0, reads.get());
+        table.schema();
+        table.specs();
+        assertEquals(0, reads.get(), "schema and partition specs must not load full metadata");
+        int threads = 32;
+        CyclicBarrier gate = new CyclicBarrier(threads);
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        try {
+            List<Future<TableMetadata>> futures = new ArrayList<>();
+            for (int i = 0; i < threads; i++) {
+                futures.add(pool.submit(() -> {
+                    gate.await();
+                    return table.operations().current();
+                }));
+            }
+            TableMetadata first = futures.get(0).get(10, TimeUnit.SECONDS);
+            assertNotNull(first);
+            for (Future<TableMetadata> future : futures) {
+                assertSame(first, future.get(10, TimeUnit.SECONDS));
+            }
+            assertEquals(1, reads.get(), "shared table must read and parse metadata only once");
         } finally {
             pool.shutdownNow();
         }
