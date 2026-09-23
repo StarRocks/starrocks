@@ -46,6 +46,7 @@ import org.apache.kudu.ColumnSchema;
 import org.apache.kudu.ColumnTypeAttributes;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
+import org.apache.paimon.types.BlobType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
@@ -509,6 +510,10 @@ public class ColumnTypeConverter {
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
         public Type visit(BinaryType binaryType) {
+            return VARBINARY;
+        }
+
+        public Type visit(BlobType blobType) {
             return VARBINARY;
         }
 
