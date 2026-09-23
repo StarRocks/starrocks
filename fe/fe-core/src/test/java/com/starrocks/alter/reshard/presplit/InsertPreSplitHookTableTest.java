@@ -719,6 +719,47 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void prepareRendersTheFoldedWherePredicate() throws Exception {
+        // prepare must hand the sampler the predicate folded in the caller's context, not the
+        // parsed one: the parsed date_sub(current_date(), 7) would be evaluated as ROOT.
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            Expr folded = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(folded);
+                gate.when(() -> SamplingPredicateGate.toSql(folded)).thenReturn("`dt` >= '2026-09-16'");
+
+                InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+                Assertions.assertNotNull(scanContext);
+                Assertions.assertEquals("`dt` >= '2026-09-16'", scanContext.wherePredicateSql());
+            }
+        }
+    }
+
+    @Test
+    public void prepareSkipsWhenTheWherePredicateDoesNotFold() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(null);
+
+                Assertions.assertNull(fixture.prepareScanContext());
+            }
+        }
+    }
+
+    @Test
     public void prepareSourceEqualsTargetStillProducesScanContext() throws Exception {
         // INSERT INTO t SELECT * FROM t -- the source resolves to the SAME OlapTable
         // instance as the target. The hook holds no locks, so source == target is NOT
