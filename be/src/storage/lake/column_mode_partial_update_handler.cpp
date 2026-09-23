@@ -663,6 +663,13 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
         if (params.metadata->has_range()) {
             return Status::NotSupported("flexible partial update is not supported on range-distributed tables");
         }
+        // FE rejects these tables, and the apply has no flexible-aware handling of the auto-increment column
+        // (the row mode rejects them in RowsetUpdateState::rewrite_segment as well).
+        for (const auto& column : params.tablet_schema->columns()) {
+            if (column.is_auto_increment()) {
+                return Status::NotSupported("flexible partial update does not support auto-increment columns");
+            }
+        }
         _flexible_column_sets.reserve(txn_meta.distinct_column_sets_size());
         for (const auto& set_pb : txn_meta.distinct_column_sets()) {
             _flexible_column_sets.emplace_back(set_pb.column_unique_ids().begin(), set_pb.column_unique_ids().end());

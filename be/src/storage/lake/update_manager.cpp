@@ -1159,7 +1159,9 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         PrimaryIndex::DeletesMap segment_deletes;
         RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
                                      pk_column_for_upsert->size(), &segment_deletes));
-        new_rows_segment_of_rssid.emplace(rowset_id + new_segment_id, segment_idx);
+        if (flexible_upsert) {
+            new_rows_segment_of_rssid.emplace(rowset_id + new_segment_id, segment_idx);
+        }
 
         // These deletes are not necessarily empty. The index probe that classified a row as an
         // insert runs once, before the first insert, so every occurrence of a key within this load

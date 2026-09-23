@@ -714,8 +714,8 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (request.__isset.flexible_partial_update && request.flexible_partial_update &&
         !planned_as_flexible_partial_update(ctx->put_result.params)) {
         return Status::NotSupported(
-                "the FE did not plan this load as a flexible partial update; enable enable_flexible_partial_update "
-                "only after every FE supports it");
+                "the FE did not plan this load as a flexible partial update; set enable_flexible_partial_update to "
+                "true only after every FE supports it");
     }
     VLOG(3) << "params is " << thrift_plan_debug_string(ctx->put_result.params);
     // if we not use streaming, we must download total content before we begin
