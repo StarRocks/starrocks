@@ -225,4 +225,44 @@ public class OlapTableSinkMultiNodeWriteTest {
         Assertions.assertFalse(OlapTableSink.spreadsIndex(1, 1));
     }
 
+    @Test
+    public void testRuntimePartitionSpreadsLikeAPlannedOne() {
+        // The shape automatic partitioning produces: one tablet, because the new partition's data
+        // boundaries have not been seen yet, on a load worth three writers.
+        List<Long> nodeIds = OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, 3, 1, 7L);
+        Assertions.assertEquals(3, nodeIds.size());
+        Assertions.assertEquals(11L, nodeIds.get(0).longValue());
+        // Same list createLocation would have built for a planned partition of the same shape.
+        Assertions.assertEquals(OlapTableSink.buildWriterNodeIds(11L, NODES, 3, 7L), nodeIds);
+    }
+
+    @Test
+    public void testRuntimePartitionWithEnoughTabletsKeepsOneNode() {
+        // Bucket-level parallelism already reaches the width, exactly as spreadsIndex decides for a
+        // planned partition.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, 3, 3, 7L));
+    }
+
+    @Test
+    public void testRuntimePartitionKeepsOneNodeWithoutAWidth() {
+        // A load whose plan recorded no width did not set TOlapTableSink.enable_multi_node_write, so BE
+        // would read a multi-node list as a REPLICA set and write every row to every node in it. The
+        // no-width case has to stay a single node for that reason, not merely because it wins nothing.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, NODES, OlapTableSink.NO_MULTI_NODE_WRITE, 1, 7L));
+        // The warehouse lost its other nodes since the plan was built: a recorded width it can no longer
+        // spend spreads nothing.
+        Assertions.assertEquals(Lists.newArrayList(11L),
+                OlapTableSink.buildRuntimePartitionNodeIds(11L, Lists.newArrayList(), 3, 1, 7L));
+    }
+
+    @Test
+    public void testRuntimePartitionClampedToAliveNodes() {
+        // Fewer nodes alive now than the plan resolved: the width shrinks to what is left.
+        List<Long> twoNodes = Lists.newArrayList(10L, 11L);
+        List<Long> nodeIds = OlapTableSink.buildRuntimePartitionNodeIds(11L, twoNodes, 4, 1, 7L);
+        Assertions.assertEquals(Lists.newArrayList(11L, 10L), nodeIds);
+    }
+
 }
