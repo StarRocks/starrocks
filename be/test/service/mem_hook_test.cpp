@@ -16,11 +16,8 @@
 // when doing the ASAN init. Can't make it work so just disable it for now.
 #ifndef ADDRESS_SANITIZER
 
-<<<<<<< HEAD
 #include "service/mem_hook.h"
 
-=======
->>>>>>> eea6365 ([Enhancement] Expose the large memory allocation report threshold as a BE config (#79251))
 #include <gtest/gtest.h>
 
 #include <cstdint>
@@ -44,9 +41,6 @@ TEST(MemhookTest, test_should_report_large_memory_alloc) {
 }
 
 } // namespace starrocks
-
-// The remaining mem hook behavior is only testable when the production hook is enabled.
-#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
 #include <vector>
 

@@ -95,7 +95,6 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
-<<<<<<< HEAD
 static int64_t g_large_memory_alloc_failure_threshold = 0;
 
 namespace starrocks {
@@ -107,9 +106,6 @@ int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
 }
 } // namespace starrocks
 
-const size_t large_memory_alloc_report_threshold = 1073741824;
-=======
->>>>>>> eea6365 ([Enhancement] Expose the large memory allocation report threshold as a BE config (#79251))
 inline thread_local bool skip_report = false;
 inline void report_large_memory_alloc(size_t size) {
     // Read the config once: it is a plain int64_t global, so this is a load from a cache line that
