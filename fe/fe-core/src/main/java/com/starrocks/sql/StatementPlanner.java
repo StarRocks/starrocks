@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -93,6 +94,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 
 import static com.starrocks.qe.StmtExecutor.buildExplainString;
 
@@ -172,10 +175,22 @@ public class StatementPlanner {
                 ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session, snapshot);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
                 return plan;
+<<<<<<< HEAD
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
                 return new DeletePlanner().plan((DeleteStmt) stmt, session);
+=======
+            } else if (stmt instanceof UpdateStmt updateStmt) {
+                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new UpdatePlanner().plan(updateStmt, session));
+            } else if (stmt instanceof DeleteStmt deleteStmt) {
+                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new DeletePlanner().plan(deleteStmt, session));
+            } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
+                return planDmlOffSnapshots(stmt, session, plannerMetaLocker, snapshot,
+                        () -> new MergeIntoPlanner().plan(mergeIntoStmt, session));
+>>>>>>> 7dcaa12 ([BugFix] Plan UPDATE, DELETE and MERGE INTO off snapshots instead of under the meta lock (#79517))
             }
         } catch (OutOfMemoryError e) {
             LOG.warn("planner out of memory, sql is:" + stmt.getOrigStmt().getOrigStmt());
@@ -311,14 +326,15 @@ public class StatementPlanner {
     /**
      * The private copies planning will work off, plus the instant they were taken.
      *
-     * @param originalOlapTables   the live tables the copies were made from, to revalidate against at the end
-     * @param planStartTime        generated before the lock was dropped, so any schema update that races with
-     *                             planning sorts after it
-     * @param originalInsertTarget the target table the statement carried in, so planning can put it back --
-     *                             see {@code InsertPlanner#plan}. Null for anything that is not an INSERT.
+     * @param originalOlapTables  the live tables the copies were made from, to revalidate against at the end
+     * @param planStartTime       generated before the lock was dropped, so any schema update that races with
+     *                            planning sorts after it
+     * @param originalWriteTarget the target table the statement carried in, so planning can put it back --
+     *                            see {@code InsertPlanner#plan} and {@link #planDmlOffSnapshots}. Null for a
+     *                            statement that does not write.
      */
     public record PlanningSnapshot(Set<OlapTable> originalOlapTables, long planStartTime,
-                                   Table originalInsertTarget) {
+                                   Table originalWriteTarget) {
     }
 
     /**
@@ -338,6 +354,8 @@ public class StatementPlanner {
             lockFree = isLockFree(AnalyzerUtils.areTablesCopySafe(stmt), session);
         } else if (stmt instanceof InsertStmt insertStmt) {
             lockFree = isLockFreeInsertStmt(insertStmt, session);
+        } else if (stmt instanceof UpdateStmt || stmt instanceof DeleteStmt || stmt instanceof MergeIntoStmt) {
+            lockFree = isLockFree(AnalyzerUtils.areTablesCopySafe(stmt), session);
         } else {
             return null;
         }
@@ -347,12 +365,95 @@ public class StatementPlanner {
 
         long planStartTime = OptimisticVersion.generate();
         // Captured before the copy, because copying replaces it on the statement.
-        Table originalInsertTarget = stmt instanceof InsertStmt insert ? insert.getTargetTable() : null;
+        Table originalWriteTarget = writeTargetOf(stmt);
         Set<OlapTable> originalOlapTables = Sets.newHashSet();
         // The lock is still held, which is what makes the copy safe against a concurrent modification.
         AnalyzerUtils.copyOlapTable(stmt, originalOlapTables);
         unLock(plannerMetaLocker);
-        return new PlanningSnapshot(originalOlapTables, planStartTime, originalInsertTarget);
+        return new PlanningSnapshot(originalOlapTables, planStartTime, originalWriteTarget);
+    }
+
+    /** The table a writing statement writes into, or null for anything else. */
+    private static Table writeTargetOf(StatementBase stmt) {
+        if (stmt instanceof InsertStmt insertStmt) {
+            return insertStmt.getTargetTable();
+        } else if (stmt instanceof UpdateStmt updateStmt) {
+            return updateStmt.getTable();
+        } else if (stmt instanceof DeleteStmt deleteStmt) {
+            return deleteStmt.getTable();
+        } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
+            return mergeIntoStmt.getTable();
+        }
+        return null;
+    }
+
+    private static void setWriteTarget(StatementBase stmt, Table table) {
+        if (stmt instanceof UpdateStmt updateStmt) {
+            updateStmt.setTable(table);
+        } else if (stmt instanceof DeleteStmt deleteStmt) {
+            deleteStmt.setTable(table);
+        } else if (stmt instanceof MergeIntoStmt mergeIntoStmt) {
+            mergeIntoStmt.setTable(table);
+        }
+    }
+
+    /**
+     * UPDATE / DELETE / MERGE INTO planning, off the private copies when there are any.
+     *
+     * <p>Without a snapshot this is what it has always been: one pass with the meta lock held from analysis
+     * to the end of fragment building, which for a statement that also reads an external catalog means the
+     * lock is held across that catalog's statistics, partition lists and file lists. With one, the lock is
+     * already released and the shape is {@code InsertPlanner#planWithRetry}: plan off the copies, take the
+     * lock back, and accept the plan only if nothing it was built on changed in the meantime.
+     *
+     * <p>One difference from the INSERT path, and the reason there is no "put the live target back before
+     * re-analyzing" step here: re-analysis of these three resolves the target from metadata again
+     * ({@code UpdateAnalyzer} / {@code DeleteAnalyzer} / {@code MergeIntoAnalyzer} all end in
+     * {@code setTable}), so the previous attempt's copy cannot leak into the next one. The copy is still put
+     * back when planning is done, because a statement's caller is entitled to find it as it left it --
+     * {@code StmtExecutor} resolves the live target itself, and leaving a snapshot behind would hand a later
+     * re-plan a table object that predates whatever it is re-planning for.
+     *
+     * <p>Returns with the lock held, as the caller's {@code finally} expects.
+     */
+    private static ExecPlan planDmlOffSnapshots(StatementBase stmt, ConnectContext session,
+                                                PlannerMetaLocker plannerMetaLocker, PlanningSnapshot snapshot,
+                                                Supplier<ExecPlan> planner) {
+        if (snapshot == null) {
+            return planner.get();
+        }
+        Set<OlapTable> olapTables = snapshot.originalOlapTables();
+        long planStartTime = snapshot.planStartTime();
+        Stopwatch watch = Stopwatch.createStarted();
+        try {
+            for (int i = 0; i < Config.max_query_retry_time; i++) {
+                if (i > 0) {
+                    // Always generated before the copies it will be compared against: a version that is too
+                    // early only costs a spurious retry, one that is too late accepts a racing change.
+                    planStartTime = OptimisticVersion.generate();
+                    olapTables = reAnalyzeStmt(stmt, session, plannerMetaLocker);
+                }
+                // A no-op on the first pass -- the caller released the lock when it took the snapshot, so
+                // that the authorization check runs off the lock too -- and the actual release on a retry.
+                plannerMetaLocker.unlock();
+                ExecPlan plan;
+                try {
+                    plan = planner.get();
+                } finally {
+                    try (Timer ignore = Tracers.watchScope("Lock")) {
+                        lock(plannerMetaLocker);
+                    }
+                }
+                long validateAgainst = planStartTime;
+                if (olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, validateAgainst))) {
+                    return plan;
+                }
+            }
+            throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                    watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+        } finally {
+            setWriteTarget(stmt, snapshot.originalWriteTarget());
+        }
     }
 
     /** For callers that still hold the lock and have not decided anything about it. */
