@@ -1029,6 +1029,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 .map(t -> t.getId())
                 .collect(Collectors.toSet());
 
+        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
+        // Resolve the external base tables' partition names before locking: it is the only remote metadata call
+        // the version update needs, and the mv write lock below is contended by other refresh runs and DDLs.
+        Map<TableSnapshotInfo, List<String>> externalTablePartitionNames =
+                mvVersionManager.collectExternalTablePartitionNames(snapshotBaseTables, refBaseTableIds);
+
         Locker locker = new Locker();
         // update the meta if succeed
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE,
@@ -1037,10 +1043,18 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
 
-        MVVersionManager mvVersionManager = new MVVersionManager(this.mv, mvContext);
         try {
+            // The existence check above ran before the unlocked connector call, so re-verify under the lock:
+            // a DROP that landed in that window must abort the refresh instead of persisting a refresh-scheme
+            // journal entry and an MV_REFRESHED event for a detached mv.
+            if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), this.mv.getId()) == null) {
+                throw new DmlException("update meta failed: materialized view %s.%s does not exist, " +
+                                "it may have been dropped during refresh",
+                        db.getFullName(), this.mv.getName());
+            }
             mvVersionManager.updateMVVersionInfo(snapshotBaseTables, mvRefreshedPartitions,
-                    refBaseTableIds, refTableAndPartitionNames, !mvContext.hasNextBatchPartition());
+                    refBaseTableIds, refTableAndPartitionNames, externalTablePartitionNames,
+                    !mvContext.hasNextBatchPartition());
         } catch (Exception e) {
             logger.warn("update final meta failed after mv refreshed:", DebugUtil.getRootStackTrace(e));
             throw e;
