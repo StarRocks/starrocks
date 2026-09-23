@@ -344,6 +344,18 @@ TEST(CpuInfoParsingAlgorithm, FailsClosedOnBadStream) {
             << "A bad stream must fail closed and return 0, never a partial/stale result";
 }
 
+TEST(CpuInfoHwcapAvailability, ZeroMeansUnavailable) {
+    // NEON/ASIMD is mandatory on every conforming AArch64 core, so a genuinely all-zero HWCAP
+    // is the only signal we can trust that the auxv vector could not be populated.
+    EXPECT_FALSE(CpuInfo::TEST_hwcap_available(0));
+}
+
+TEST(CpuInfoHwcapAvailability, NonZeroMeansAvailable) {
+    EXPECT_TRUE(CpuInfo::TEST_hwcap_available(1UL));
+    EXPECT_TRUE(CpuInfo::TEST_hwcap_available(1UL << 1));
+    EXPECT_TRUE(CpuInfo::TEST_hwcap_available(~0UL));
+}
+
 TEST(ArmCpuInfoDarwin, SysctlProbing) {
     // 1. Modern Darwin sysctl probing (macOS 12+)
     auto mock_sysctl_modern = [](const char* name) -> bool {

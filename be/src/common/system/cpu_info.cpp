@@ -231,6 +231,16 @@ int64_t CpuInfo::_intersect_procfs_features(std::istream& stream, const std::vec
     return intersection_flags;
 }
 
+bool CpuInfo::_hwcap_available(unsigned long hwcap) {
+    // glibc's getauxval() special-cases AT_HWCAP/AT_HWCAP2: it reads GLRO(dl_hwcap) directly
+    // and never sets errno for these two auxv types (verified against glibc 2.39 in PR #79278
+    // review), so an errno==0 check can never observe "unavailable" -- it is always true.
+    // NEON/ASIMD is mandatory on every conforming AArch64 core, so a genuinely all-zero HWCAP
+    // is the only signal we can trust that the auxv vector could not be populated (non-glibc
+    // libc, sandboxed/emulated environment).
+    return hwcap != 0;
+}
+
 int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
     return _intersect_procfs_features(stream, _flag_mappings());
 }
@@ -297,13 +307,9 @@ void CpuInfo::init() {
     int num_cores = 0;
 
 #if defined(__linux__) && defined(__aarch64__)
-    errno = 0;
     const unsigned long hwcap = getauxval(AT_HWCAP);
-    const bool hwcap_available = (errno == 0);
-
-    errno = 0;
     const unsigned long hwcap2 = getauxval(AT_HWCAP2);
-
+    const bool hwcap_available = _hwcap_available(hwcap);
     int64_t aux_flags = _init_arm_auxval(hwcap, hwcap2);
 #endif
 
@@ -352,9 +358,14 @@ void CpuInfo::init() {
 
 #if defined(__linux__) && defined(__aarch64__)
     {
+        // Only parse /proc/cpuinfo when auxv genuinely could not supply flags -- when
+        // hwcap_available is true (the overwhelming common case), the procfs result would be
+        // computed and immediately discarded by _resolve_arm_flags below, so skip the work.
         int64_t procfs_arm_flags = 0;
-        std::istringstream arm_cpuinfo(cpuinfo_content);
-        procfs_arm_flags = _init_arm_procfs(arm_cpuinfo);
+        if (!hwcap_available) {
+            std::istringstream arm_cpuinfo(cpuinfo_content);
+            procfs_arm_flags = _init_arm_procfs(arm_cpuinfo);
+        }
         hardware_flags_ |= _resolve_arm_flags(hwcap_available, aux_flags, procfs_arm_flags);
     }
 #endif

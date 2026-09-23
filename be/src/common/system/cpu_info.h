@@ -156,12 +156,17 @@ public:
     static int64_t TEST_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
         return _resolve_arm_flags(aux_available, aux_flags, procfs_flags);
     }
+    static bool TEST_hwcap_available(unsigned long hwcap) { return _hwcap_available(hwcap); }
 
 private:
     static int64_t _init_arm_auxval(unsigned long hwcap, unsigned long hwcap2);
     static int64_t _init_arm_procfs(std::istream& stream);
     static int64_t _init_arm_darwin(const std::function<bool(const char*)>& check_sysctl);
     static int64_t _resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags);
+
+    // Arch-independent precedence/predicate helpers — no dependency on ARM_*/x86 constants,
+    // so they stay testable on any host regardless of which vocabulary Task 3 compiles in.
+    static bool _hwcap_available(unsigned long hwcap);
 
     // This build's single feature vocabulary (see cpu_info.cpp). Exactly one definition exists
     // per compiled binary -- x86 and ARM64 tokens are never in the same table.
