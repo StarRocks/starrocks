@@ -389,12 +389,12 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### enable_jemalloc_decay_under_rss_pressure
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：当进程常驻内存（RSS）接近 `mem_limit` 时，是否收紧 Jemalloc 的 `dirty_decay_ms` 和 `muzzy_decay_ms`。进程内存 Tracker 统计的是 BE 申请的字节数，而 OOM Killer 看到的是内核实际持有的物理页。当 Jemalloc 无法复用 BE 已释放的内存时，两者会出现偏差：Tracker 显示仍低于 `mem_limit` 并继续放行查询，而 RSS 已涨到机器上限，进程被外部 Kill。该项设置为 `true` 时，BE 会启动一个后台线程（`mem_purge`），每 100 毫秒读取一次 `/proc/self/statm` 与 `mem_limit` 比较，并分档收紧 decay：达到限制的 70% 时设为所配置 decay 的 60%，85% 时设为 20%，100% 时设为 `0` —— 在 BE 默认的 5000 毫秒下即为 3000 毫秒、1000 毫秒和 `0`。采用比例而非绝对值，是为了让配置得比默认更紧的 BE 不会出现某一档反而比其基线更松的情况；当 RSS 持续低于某一档位达 `jemalloc_decay_rss_step_down_hold_ms` 后，恢复 `jemalloc_conf` 中配置的 decay。decay 为 `0` 时会同步回收，在大堆上可能耗时数秒，因此先走开销较低的档位。该功能以内存分配吞吐为代价换取 RSS 能跟随实际释放量，因此仅建议在 RSS 明显超出内存 Tracker 统计值的 BE 上开启。将该项改回 `false` 会恢复 `jemalloc_conf` 中配置的 decay。仅在非 macOS 构建上生效。
-- 引入版本：v4.2.0
+- 描述：当进程常驻内存（RSS）接近 `mem_limit` 时，是否收紧 Jemalloc 的 `dirty_decay_ms` 和 `muzzy_decay_ms`。进程内存 Tracker 统计的是 BE 申请的字节数，而 OOM Killer 看到的是内核实际持有的物理页。当 Jemalloc 无法复用 BE 已释放的内存时，两者会出现偏差：Tracker 显示仍低于 `mem_limit` 并继续放行查询，而 RSS 已涨到机器上限，进程被外部 Kill。该项设置为 `true` 时，BE 会启动一个后台线程（`mem_purge`），每 100 毫秒读取一次 `/proc/self/statm` 与 `mem_limit` 比较，并分档收紧 decay：达到限制的 70% 时设为所配置 decay 的 60%，85% 时设为 20%，100% 时设为 `0` —— 在 BE 默认的 5000 毫秒下即为 3000 毫秒、1000 毫秒和 `0`。采用比例而非绝对值，是为了让配置得比默认更紧的 BE 不会出现某一档反而比其基线更松的情况；当 RSS 持续低于某一档位达 `jemalloc_decay_rss_step_down_hold_ms` 后，恢复 `jemalloc_conf` 中配置的 decay。decay 为 `0` 时会同步回收，在大堆上可能耗时数秒，因此先走开销较低的档位。该功能以内存分配吞吐为代价换取 RSS 能跟随实际释放量，默认开启：RSS 明显超出内存 Tracker 统计值的 BE 会在 Tracker 察觉之前就被外部 Kill。将该项设置为 `false` 会恢复 `jemalloc_conf` 中配置的 decay。仅在非 macOS 构建上生效。
+- 引入版本：v26.2.1
 
 ### enable_jemalloc_memory_tracker
 
@@ -457,7 +457,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：毫秒
 - 是否动态：是
 - 描述：`enable_jemalloc_decay_under_rss_pressure` 开启后，扫描线程比较进程常驻内存（RSS）与 `mem_limit` 的频率。该值决定了两次决策之间 RSS 最多能涨多少，因此当负载分配速度快到跨过一个档位、在下一次扫描发现之前就已经冲高时，应调整该项：以 16 GB/s 分配的负载在默认的 100 毫秒内会增加 1.6 GB。每次扫描只读取 `/proc/self/statm`，开销仅为一对系统调用，因此缩短间隔的代价很低；但若将其延长到超过负载跨越一整个档位所需的时间，分档机制就失去了意义。降档前的观察窗口按墙上时钟计算，不随该项变化。取值范围为 `10` 到 `1000`，超出范围会被就近截断。低于 `10` 没有意义 —— 小于等于 `0` 会变成空转循环，而开销最低的一次 decay 切换本身就需要约 5 毫秒；高于 `1000` 时，在本功能所针对的分配速率下，单个间隔覆盖的内存增量已超过两个档位之间的差值，可能整档跳过。仅在 `enable_jemalloc_decay_under_rss_pressure` 设置为 `true` 时生效。
-- 引入版本：v4.2.0
+- 引入版本：v26.2.1
 
 ### jemalloc_decay_rss_step_down_hold_ms
 
@@ -466,7 +466,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：毫秒
 - 是否动态：是
 - 描述：`enable_jemalloc_decay_under_rss_pressure` 在把 Jemalloc decay 放松回某一档之前，进程常驻内存（RSS）必须持续低于该档的时长。两个方向有意不对称：收紧在跨过阈值时立即执行，因为分配速度足够快的负载可能在等待期间就被 Kill；而放松需要等待，因为这个方向的误判代价要付两次 —— 切到 decay 为 `0` 的那一档是同步回收，在大堆上需要数秒，若在压力尚未真正消退时放松，这个代价还要再付一遍。该等待与"进入档位的比例"和"退出档位的比例"之间 5 个百分点的间隔是叠加关系而非替代关系：比例间隔防止在阈值附近来回抖动，而该等待防止在负载只是短暂停顿时就放松。它按墙上时钟计量，因此不随 `jemalloc_decay_rss_scan_interval_ms` 变化。取值范围为 `0` 到 `300000`，超出范围会被就近截断。`0` 表示 RSS 一低于档位就立即放松，仅保留比例间隔的保护。仅在 `enable_jemalloc_decay_under_rss_pressure` 设置为 `true` 时生效。
-- 引入版本：v4.2.0
+- 引入版本：v26.2.1
 
 ### large_memory_alloc_report_threshold
 

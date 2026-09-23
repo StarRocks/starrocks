@@ -368,12 +368,12 @@ This topic introduces the following types of BE configurations:
 
 ### enable_jemalloc_decay_under_rss_pressure
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to tighten jemalloc's `dirty_decay_ms` and `muzzy_decay_ms` as the process resident size approaches `mem_limit`. The process memory tracker counts the bytes the BE asked for, while the OOM killer counts the pages the kernel still holds. When jemalloc cannot reuse what the BE freed, the two drift apart: the tracker stays under `mem_limit` and keeps admitting queries while the resident size runs to the machine ceiling and the process is killed from outside. When this item is set to `true`, a background thread (`mem_purge`) compares `/proc/self/statm` against `mem_limit` every 100 ms and shortens the decay in steps -- 60% of the configured decay at 70% of the limit, 20% at 85%, and `0` at 100%, which is 3000 ms, 1000 ms and `0` at the 5000 ms the BE ships with -- restoring the decay configured in `jemalloc_conf` once the resident size has stayed below a step for `jemalloc_decay_rss_step_down_hold_ms`. A decay of `0` purges synchronously and can take seconds on a large heap, which is why the cheaper steps run first. This trades allocator throughput for a resident size that tracks what was actually freed, so enable it only on a BE whose resident size runs ahead of what its memory tracker reports. Setting this item back to `false` restores the decay configured in `jemalloc_conf`. Only effective on non-macOS builds.
-- Introduced in: v4.2.0
+- Description: Whether to tighten jemalloc's `dirty_decay_ms` and `muzzy_decay_ms` as the process resident size approaches `mem_limit`. The process memory tracker counts the bytes the BE asked for, while the OOM killer counts the pages the kernel still holds. When jemalloc cannot reuse what the BE freed, the two drift apart: the tracker stays under `mem_limit` and keeps admitting queries while the resident size runs to the machine ceiling and the process is killed from outside. When this item is set to `true`, a background thread (`mem_purge`) compares `/proc/self/statm` against `mem_limit` every 100 ms and shortens the decay in steps -- 60% of the configured decay at 70% of the limit, 20% at 85%, and `0` at 100%, which is 3000 ms, 1000 ms and `0` at the 5000 ms the BE ships with -- restoring the decay configured in `jemalloc_conf` once the resident size has stayed below a step for `jemalloc_decay_rss_step_down_hold_ms`. A decay of `0` purges synchronously and can take seconds on a large heap, which is why the cheaper steps run first. This trades allocator throughput for a resident size that tracks what was actually freed, and is enabled by default because a BE whose resident size runs ahead of what its memory tracker reports is killed from outside before the tracker reports a problem. Setting this item to `false` restores the decay configured in `jemalloc_conf`. Only effective on non-macOS builds.
+- Introduced in: v26.2.1
 
 ### enable_jemalloc_memory_tracker
 
@@ -436,7 +436,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: How often the scan thread enabled by `enable_jemalloc_decay_under_rss_pressure` compares the process resident size against `mem_limit`. This value decides how far the resident size can climb between two decisions, so it is the item to adjust when a load allocates fast enough to cross a step and overshoot before the next scan observes it: a load allocating 16 GB/s covers 1.6 GB within the default 100 ms. Each pass reads `/proc/self/statm`, which costs a pair of system calls and nothing else, so shortening the interval is cheap; lengthening it beyond the time a load needs to cross a whole step defeats the purpose of the steps. The hold before a step is relaxed is measured in wall-clock time and therefore does not change with this item. Accepted values are `10` to `1000`; anything outside is clamped to the nearer bound. Below `10` the scan buys nothing -- `0` or less would spin, and the cheapest decay transition already costs about 5 ms -- while above `1000` a single interval covers more than the gap between two steps at the allocation rates this guards against, so a step can be skipped entirely. This item has no effect unless `enable_jemalloc_decay_under_rss_pressure` is set to `true`.
-- Introduced in: v4.2.0
+- Introduced in: v26.2.1
 
 ### jemalloc_decay_rss_step_down_hold_ms
 
@@ -445,7 +445,7 @@ This topic introduces the following types of BE configurations:
 - Unit: Milliseconds
 - Is mutable: Yes
 - Description: How long the process resident size must stay below a step before `enable_jemalloc_decay_under_rss_pressure` relaxes the jemalloc decay back to that step. The two directions are deliberately not symmetric: tightening is applied as soon as a threshold is crossed, because a load that allocates fast enough can be killed while a hold elapses, whereas relaxing waits, because it is the direction that can be wrong twice -- the step to a decay of `0` purges synchronously and takes seconds on a large heap, so relaxing into pressure that has not actually passed pays that cost again. This hold is in addition to, not instead of, the 5-percentage-point gap between the ratio that enters a step and the ratio that leaves it: the gap stops oscillation at a threshold, while this hold stops the system from relaxing into a load that is merely pausing. It is measured in wall-clock time, so it does not change with `jemalloc_decay_rss_scan_interval_ms`. Accepted values are `0` to `300000`; anything outside is clamped to the nearer bound. `0` relaxes as soon as the resident size is under the step, leaving only the ratio gap. This item has no effect unless `enable_jemalloc_decay_under_rss_pressure` is set to `true`.
-- Introduced in: v4.2.0
+- Introduced in: v26.2.1
 
 ### large_memory_alloc_report_threshold
 

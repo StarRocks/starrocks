@@ -70,10 +70,10 @@ CONF_mString(jemalloc_conf,
 // A decay of 0 purges synchronously and costs seconds on a large heap, which is why the cheaper
 // steps run first.
 //
-// Off by default: it trades allocator throughput for a resident size that tracks what was
-// actually freed, and only a BE whose resident size runs ahead of its tracker needs that trade.
-// Turning it off restores the configured decay.
-CONF_mBool(enable_jemalloc_decay_under_rss_pressure, "false");
+// On by default: it trades allocator throughput for a resident size that tracks what was
+// actually freed, and a BE whose resident size runs ahead of its tracker is killed from outside
+// before the tracker ever admits there is a problem. Turning it off restores the configured decay.
+CONF_mBool(enable_jemalloc_decay_under_rss_pressure, "true");
 
 // How often the scan thread of `enable_jemalloc_decay_under_rss_pressure` compares the process
 // resident size against `mem_limit`.
