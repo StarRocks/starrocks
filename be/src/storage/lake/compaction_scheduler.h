@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <functional>
 #include <memory>
 
 #include "base/concurrency/blocking_queue.hpp"
@@ -61,7 +62,8 @@ public:
 
     DISALLOW_COPY_AND_MOVE(CompactionTaskCallback);
 
-    void finish_task(std::unique_ptr<CompactionTaskContext>&& context);
+    // on_accepted must not throw; it runs once the context is owned, before the RPC can finish.
+    void finish_task(std::unique_ptr<CompactionTaskContext>&& context, const std::function<void()>& on_accepted = {});
 
     // used to check if compaction should be aborted early
     Status has_error() const;
@@ -155,6 +157,11 @@ class CompactionScheduler {
 
         // Compaction task finished with Status::MemoryLimitExceeded error.
         void memory_limit_exceeded();
+
+        // Puts a token back without recording a task outcome, for a holder that is handing its token over
+        // instead of having finished work with it. Unlike no_memory_limit_exceeded() this does not count a
+        // success towards restoring reserved concurrency: nothing completed, so there is nothing to judge.
+        void return_token();
 
         int16_t concurrency() const;
         int16_t max_concurrency() const;
@@ -266,6 +273,11 @@ public:
 
     void stop();
 
+    // Lets a test play the part of a competing worker and take limiter tokens out of circulation, so that
+    // the "token claimed by someone else while we were planning" path can be driven deterministically.
+    bool acquire_token_for_test() { return _limiter.acquire(); }
+    void return_token_for_test() { _limiter.return_token(); }
+
 private:
     friend class CompactionTaskCallback;
     FRIEND_TEST(LakeCompactionLimiterTest, test_adapt_to_task_queue_size_shrink_with_reserved);
@@ -280,7 +292,9 @@ private:
 
     void thread_task(int id);
 
-    Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
+    // |token_given_up| is set when the worker's limiter token was taken over by parallel subtasks
+    // (or could not be reclaimed), meaning the caller must not credit a token back.
+    Status do_compaction(std::unique_ptr<CompactionTaskContext> context, bool* token_given_up);
 
     void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
@@ -302,9 +316,11 @@ private:
     // Per-tablet parallel compaction manager
     std::unique_ptr<TabletParallelCompactionManager> _parallel_mgr;
 
-    // Process compaction request with parallel mode
-    void process_parallel_compaction(const CompactRequest* request, CompactResponse* response,
-                                     const std::shared_ptr<CompactionTaskCallback>& callback);
+    // Tries to replace one tablet's serial compaction with parallel subtasks. Called from do_compaction(),
+    // i.e. on a resident worker where the planning IO is safe. Returns true only if subtasks were
+    // submitted, in which case they own the tablet's completion and |context| has been unlinked and
+    // destroyed; returns false to have the caller compact the tablet serially with the same context.
+    bool try_hand_off_to_parallel(std::unique_ptr<CompactionTaskContext>& context, bool* token_given_up);
 };
 
 inline bool CompactionScheduler::Limiter::acquire() {
@@ -337,6 +353,11 @@ inline void CompactionScheduler::Limiter::memory_limit_exceeded() {
     } else {
         _free++;
     }
+}
+
+inline void CompactionScheduler::Limiter::return_token() {
+    std::lock_guard l(_mtx);
+    _free++;
 }
 
 inline int16_t CompactionScheduler::Limiter::concurrency() const {
