@@ -17,7 +17,6 @@
 #include <bthread/bthread.h>
 #include <fmt/format.h>
 
-#include <boost/algorithm/string/predicate.hpp>
 #include <memory>
 #include <shared_mutex>
 #include <utility>
@@ -41,6 +40,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/delta_writer.h"
+#include "storage/flexible_row_merger.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/load_spill_pipeline_merge_context.h"
 #include "storage/lake/meta_file.h"
@@ -333,6 +333,9 @@ private:
     // in through DeltaWriterBuilder::set_flexible_partial_update (never inferred from the slot names).
     // When true FE has injected the hidden "__cset__" slot directly before "__op".
     bool _flexible_partial_update = false;
+    // Flexible partial update: merges the rows of a repeated key in every memtable, and owns the column-set
+    // dictionary of this writer that the written "__cset__" ids refer to.
+    std::unique_ptr<FlexibleRowMerger> _flexible_row_merger;
 
     int64_t _last_write_ts = 0;
 
@@ -525,6 +528,16 @@ Status DeltaWriterImpl::build_schema_and_writer() {
                     "Failed to create flush token for delta writer, tablet_id={}, txn_id={}", _tablet_id, _txn_id));
         }
         _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
+        if (_flexible_partial_update) {
+            // init_write_schema() appends "__cset__" as the last column of _write_schema, and "__op", when
+            // the load has it, follows it in the memtable schema.
+            const int cset_column = static_cast<int>(_write_schema->num_columns()) - 1;
+            const int last_field = static_cast<int>(_write_schema_for_mem_table.num_fields()) - 1;
+            DCHECK_EQ(LOAD_CSET_COLUMN, _write_schema_for_mem_table.field(cset_column)->name());
+            const int op_column = last_field > cset_column ? last_field : -1;
+            _flexible_row_merger =
+                    std::make_unique<FlexibleRowMerger>(_txn_id, _write_schema_for_mem_table, cset_column, op_column);
+        }
 
         // A flexible partial update appends a synthetic "__cset__" column to _write_schema that maps to
         // no tablet column, so _write_schema may hold one column more than the tablet schema and
@@ -563,6 +576,10 @@ inline Status DeltaWriterImpl::reset_memtable() {
     } else {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
+    }
+
+    if (_flexible_row_merger != nullptr) {
+        _mem_table->set_flexible_row_merger(_flexible_row_merger.get());
     }
 
     PrimaryKeyEncodingType pk_encoding_type = PrimaryKeyEncodingType::PK_ENCODING_TYPE_NONE;
@@ -877,13 +894,13 @@ bool DeltaWriterImpl::is_partial_update() const {
 }
 
 Status DeltaWriterImpl::fold_column_set_dict(TxnLogPB_OpWrite* op_write) const {
-    // The dictionary was interned by the json scanner under this txn_id -- in this process, or on the
-    // sender's node and shipped here on the eos request (LakeTabletsChannel::add_chunk). The segments
-    // written above carry each row's set-id in "__cset__", so a missing dictionary cannot be read as "no
-    // column sets": applied as a plain partial update, the load would overwrite every column a row did
-    // not declare with its NULL placeholder. Fail the load instead.
-    auto dict = FlexiblePartialUpdateRegistry::instance()->get(_txn_id);
-    if (dict == nullptr || dict->size() == 0) {
+    // Every flushed row carries a set id of this writer's dictionary (FlexibleRowMerger), which the merge of
+    // each memtable filled from the load's dictionary. A missing dictionary cannot be read as "no column
+    // sets": applied as a plain partial update, the load would overwrite every column a row did not
+    // declare with its NULL placeholder. Fail the load instead.
+    const auto column_sets = _flexible_row_merger != nullptr ? _flexible_row_merger->column_sets()
+                                                             : std::vector<std::vector<uint32_t>>();
+    if (column_sets.empty()) {
         if (op_write->rowset().num_rows() > 0) {
             return Status::InternalError(fmt::format(
                     "flexible partial update: the per-row column-set dictionary of txn {} is missing on this node",
@@ -893,27 +910,13 @@ Status DeltaWriterImpl::fold_column_set_dict(TxnLogPB_OpWrite* op_write) const {
         return Status::OK();
     }
     auto* txn_meta = op_write->mutable_txn_meta();
-    for (const auto& names : dict->snapshot()) {
+    for (const auto& columns : column_sets) {
         auto* set_pb = txn_meta->add_distinct_column_sets();
-        for (const auto& name : names) {
-            // The dictionary holds the source column names of the load, matched to the table columns
-            // case-insensitively by FE, while TabletSchema::field_index is case-sensitive: resolve the
-            // same way FE did, or a load whose `columns` header differs in case from the table would
-            // silently never apply that column.
-            auto idx = static_cast<int32_t>(_tablet_schema->field_index(name));
-            if (idx < 0) {
-                for (int32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
-                    if (boost::iequals(_tablet_schema->column(i).name(), name)) {
-                        idx = i;
-                        break;
-                    }
-                }
-            }
-            // A source column that is not a table column (a skipped field of the load) writes nothing.
-            if (idx < 0) {
-                continue;
-            }
-            set_pb->add_column_unique_ids(_tablet_schema->column(idx).unique_id());
+        for (auto column : columns) {
+            // The sets hold memtable columns, the first of which are the columns of _write_schema; the
+            // merger never lists "__cset__" or "__op".
+            DCHECK_LT(column, _write_schema->num_columns());
+            set_pb->add_column_unique_ids(_write_schema->column(column).unique_id());
         }
     }
     txn_meta->set_flexible_partial_update(true);

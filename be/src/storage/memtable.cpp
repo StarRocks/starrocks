@@ -31,6 +31,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/load_fail_point.h"
 #include "storage/chunk_helper.h"
+#include "storage/flexible_row_merger.h"
 #include "storage/memtable_sink.h"
 #include "storage/non_retryable_load_errors.h"
 #include "storage/row_store_encoder.h"
@@ -256,7 +257,9 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
     // The merge will be done during finalize() in the flush thread instead.
     // This avoids redundant merge operations and allows the write thread to return
     // earlier, improving overall throughput by parallelizing write and finalize operations.
-    if (is_full() && !config::enable_parallel_memtable_finalize) {
+    // A flexible partial update merges the rows of a key only once, in finalize(): the aggregator of an
+    // early merge would let the last row of a key replace the rows before it.
+    if (is_full() && !config::enable_parallel_memtable_finalize && _flexible_row_merger == nullptr) {
         size_t orig_bytes = write_buffer_size();
         RETURN_IF_ERROR(_merge());
         size_t new_bytes = write_buffer_size();
@@ -297,7 +300,7 @@ Status MemTable::finalize() {
                 int64_t t1 = MonotonicMicros();
                 RETURN_IF_ERROR(_sort(true));
                 int64_t t2 = MonotonicMicros();
-                _aggregate(true);
+                RETURN_IF_ERROR(_aggregate(true));
                 int64_t t3 = MonotonicMicros();
                 VLOG(2) << strings::Substitute("memtable final sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
             } else {
@@ -429,22 +432,29 @@ Status MemTable::_merge() {
     int64_t t1 = MonotonicMicros();
     RETURN_IF_ERROR(_sort(false));
     int64_t t2 = MonotonicMicros();
-    _aggregate(false);
+    RETURN_IF_ERROR(_aggregate(false));
     int64_t t3 = MonotonicMicros();
     VLOG(2) << strings::Substitute("memtable sort:$0 agg:$1 total:$2", t2 - t1, t3 - t2, t3 - t1);
     ++_merge_count;
     return Status::OK();
 }
 
-void MemTable::_aggregate(bool is_final) {
+Status MemTable::_aggregate(bool is_final) {
     if (_result_chunk == nullptr || _result_chunk->num_rows() <= 0) {
-        return;
+        return Status::OK();
     }
     auto start_time = MonotonicNanos();
     DeferOp defer([&]() { ADD_COUNTER_RELAXED(_stats.agg_time_ns, MonotonicNanos() - start_time); });
     ADD_COUNTER_RELAXED(_stats.agg_count, 1);
     DCHECK(_result_chunk->num_rows() < INT_MAX);
     DCHECK(_aggregator->source_exhausted());
+
+    if (_flexible_row_merger != nullptr) {
+        // insert() skips the early merges, so this is the only aggregation and the keys the aggregator sees
+        // are unique.
+        DCHECK_EQ(0, _merge_count);
+        RETURN_IF_ERROR(_flexible_row_merger->merge(&_result_chunk));
+    }
 
     _aggregator->update_source(_result_chunk);
 
@@ -464,6 +474,7 @@ void MemTable::_aggregate(bool is_final) {
     } else {
         _result_chunk->reset();
     }
+    return Status::OK();
 }
 
 Status MemTable::_sort(bool is_final, bool by_sort_key) {

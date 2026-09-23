@@ -257,6 +257,7 @@ SET(DW_TEST_FILES
     ./storage/del_vector_test.cpp
     ./storage/dictionary_cache_manager_test.cpp
     ./storage/fast_schema_evolution_test.cpp
+    ./storage/flexible_row_merger_test.cpp
     ./storage/get_use_pk_index_test.cpp
     ./storage/index/vector_index_test.cpp
     ./storage/index/vector_search_test.cpp

@@ -15,6 +15,8 @@
 #include "storage/lake/update_manager.h"
 
 #include <algorithm>
+#include <map>
+#include <unordered_map>
 
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
@@ -906,6 +908,115 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
     return Status::OK();
 }
 
+// Flexible partial update: a key that a load inserts from several of its segments is inserted by each of
+// them -- the index probe that classified the rows as inserts ran once, before the first insert -- and each
+// insert supersedes the one before it. So that the key ends with, for every column, the value of the last
+// row that declares it, a row whose key an earlier segment of this publish inserted takes each column it
+// does not declare from the row that segment inserted, which already carries the rows before it.
+static Status merge_with_earlier_inserts(const TabletSchemaCSPtr& tschema, Tablet* tablet,
+                                         const std::shared_ptr<FileSystem>& fs, LakePersistentIndex& index,
+                                         const Schema& pkey_schema, PrimaryKeyEncodingType pk_encoding_type,
+                                         const RowsetMetadataPB& new_rows,
+                                         const std::unordered_map<uint32_t, uint32_t>& new_rows_segment_of_rssid,
+                                         const FlexibleInsertMask& flexible_insert_mask, uint32_t seg,
+                                         const std::vector<uint32_t>& insert_rowids,
+                                         const std::vector<uint32_t>& update_cids, Chunk* full_chunk) {
+    const size_t n = full_chunk->num_rows();
+    DCHECK_EQ(n, insert_rowids.size());
+    MutableColumnPtr pks;
+    RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pks, pk_encoding_type));
+    PrimaryKeyEncoder::encode(pkey_schema, *full_chunk, 0, n, pks.get(), pk_encoding_type);
+    std::vector<uint64_t> found(n, NullIndexValue);
+    RETURN_IF_ERROR(index.get(*pks, &found));
+
+    // The positions in this batch whose key an earlier segment inserted, by that segment, as (rowid in the
+    // segment, position) in rowid order.
+    std::map<uint32_t, std::vector<std::pair<uint32_t, uint32_t>>> earlier_by_segment;
+    for (uint32_t i = 0; i < n; ++i) {
+        if (found[i] == NullIndexValue) {
+            continue;
+        }
+        // Every row here was classified as an insert, so only this publish can have put its key in the index.
+        const auto rssid = static_cast<uint32_t>(found[i] >> 32);
+        auto it = new_rows_segment_of_rssid.find(rssid);
+        if (it == new_rows_segment_of_rssid.end()) {
+            return Status::InternalError(fmt::format(
+                    "flexible partial update: a key inserted by this load was found in segment {} of tablet {}", rssid,
+                    tablet->id()));
+        }
+        earlier_by_segment[it->second].emplace_back(static_cast<uint32_t>(found[i] & 0xFFFFFFFF), i);
+    }
+    if (earlier_by_segment.empty()) {
+        return Status::OK();
+    }
+
+    const auto& set_ids = flexible_insert_mask.set_ids_by_segment[seg];
+    const auto& column_sets = flexible_insert_mask.distinct_column_sets;
+    auto declares = [&](uint32_t position, ColumnUID uid) {
+        // _read_chunk_for_upsert has checked the rowid and the set id.
+        const auto& column_set = column_sets[set_ids[insert_rowids[position]]];
+        return std::find(column_set.begin(), column_set.end(), uid) != column_set.end();
+    };
+
+    for (auto& [segment_pos, rows] : earlier_by_segment) {
+        std::sort(rows.begin(), rows.end());
+        const auto& segment_meta = new_rows.segment_metas(static_cast<int>(segment_pos));
+        FileInfo file_info{.path = tablet->segment_location(segment_meta.filename()),
+                           .encryption_meta = segment_meta.encryption_meta()};
+        file_info.size = segment_meta.size();
+        ASSIGN_OR_RETURN(auto segment, Segment::open(fs, file_info, segment_pos, tschema));
+        RandomAccessFileOptions opts;
+        if (!file_info.encryption_meta.empty()) {
+            ASSIGN_OR_RETURN(auto unwrap, KeyCache::instance().unwrap_encryption_meta(file_info.encryption_meta));
+            opts.encryption_info = std::move(unwrap);
+        }
+        ColumnIteratorOptions iter_opts;
+        OlapReaderStatistics stats;
+        iter_opts.stats = &stats;
+        ASSIGN_OR_RETURN(auto raf, fs->new_random_access_file_with_bundling(opts, file_info));
+        iter_opts.read_file = raf.get();
+
+        std::vector<uint32_t> rowids;
+        std::vector<std::pair<uint32_t, uint32_t>> targets; // (position, index in `rowids`)
+        std::vector<uint32_t> positions;
+        std::vector<uint32_t> selection;
+        for (uint32_t cid : update_cids) {
+            const TabletColumn& column = tschema->column(cid);
+            if (column.is_key()) {
+                continue;
+            }
+            const auto uid = static_cast<ColumnUID>(column.unique_id());
+            rowids.clear();
+            targets.clear();
+            for (const auto& [rowid, position] : rows) {
+                if (!declares(position, uid)) {
+                    targets.emplace_back(position, static_cast<uint32_t>(rowids.size()));
+                    rowids.push_back(rowid);
+                }
+            }
+            if (rowids.empty()) {
+                continue;
+            }
+            auto* mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            auto earlier = mut_col->clone_empty();
+            ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator_or_default(column, nullptr));
+            RETURN_IF_ERROR(col_iter->init(iter_opts));
+            RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), earlier.get()));
+            std::sort(targets.begin(), targets.end());
+            positions.clear();
+            selection.clear();
+            for (const auto& [position, index_in_rowids] : targets) {
+                positions.push_back(position);
+                selection.push_back(index_in_rowids);
+            }
+            auto values = mut_col->clone_empty();
+            values->append_selective(*earlier, selection.data(), 0, selection.size());
+            RETURN_IF_EXCEPTION(mut_col->update_rows(*values, positions.data()));
+        }
+    }
+    return Status::OK();
+}
+
 Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                                  const TabletMetadataPtr& metadata, Tablet* tablet,
                                                  LakePersistentIndex& index, MetaFileBuilder* builder,
@@ -961,6 +1072,8 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
     std::map<uint32_t, size_t> segment_id_to_add_dels_new_acc;
     // Rows superseded within this load, keyed by the synthesized segment they live in.
     std::map<uint32_t, std::vector<uint32_t>> new_deletes_by_rssid;
+    // Flexible partial update: rssid -> position in new_rows_op of every segment written so far.
+    std::unordered_map<uint32_t, uint32_t> new_rows_segment_of_rssid;
 
     DCHECK_EQ(insert_rowids_by_segment.size(), op_write.rowset().segment_metas_size());
 
@@ -1011,6 +1124,12 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
             ChunkPtr full_chunk;
             RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
                                                    flexible_insert_mask, &full_chunk));
+            if (flexible_upsert && !new_rows_segment_of_rssid.empty()) {
+                RETURN_IF_ERROR(merge_with_earlier_inserts(tschema, tablet, fs, index, pkey_schema, pk_encoding_type,
+                                                           new_rows_op.rowset(), new_rows_segment_of_rssid,
+                                                           flexible_insert_mask, seg, batch_insert_rowids, update_cids,
+                                                           full_chunk.get()));
+            }
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -1040,6 +1159,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
         PrimaryIndex::DeletesMap segment_deletes;
         RETURN_IF_ERROR(index.upsert(rowset_id + new_segment_id, 0, *pk_column_for_upsert, 0,
                                      pk_column_for_upsert->size(), &segment_deletes));
+        new_rows_segment_of_rssid.emplace(rowset_id + new_segment_id, segment_idx);
 
         // These deletes are not necessarily empty. The index probe that classified a row as an
         // insert runs once, before the first insert, so every occurrence of a key within this load

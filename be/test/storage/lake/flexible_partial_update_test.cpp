@@ -38,6 +38,7 @@
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_ingest_fwd.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/compaction_task.h"
@@ -92,6 +93,63 @@ void apply_to_model(const std::vector<Row>& rows, Table* table) {
             }
         }
     }
+}
+
+// The rows of one memtable that decide the result: a delete followed by more rows of its key is dropped
+// together with the rows of the key before it, as the memtable of a plain load drops them.
+std::vector<Row> rows_kept_by_memtable(const std::vector<Row>& rows) {
+    std::map<int, size_t> last_delete;
+    std::map<int, size_t> last_row;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        if (rows[i].del) {
+            last_delete[rows[i].key] = i;
+        }
+        last_row[rows[i].key] = i;
+    }
+    std::vector<Row> kept;
+    for (size_t i = 0; i < rows.size(); ++i) {
+        auto it = last_delete.find(rows[i].key);
+        if (it != last_delete.end() && it->second < last_row[rows[i].key] && i <= it->second) {
+            continue;
+        }
+        kept.push_back(rows[i]);
+    }
+    return kept;
+}
+
+// Rows that repeat keys of the base table [0, 100) and new keys, by occurrence: batch i holds the i-th row
+// of every key that has one.
+std::vector<std::vector<Row>> repeated_rows_by_occurrence() {
+    return {
+            {
+                    {5, {"c1"}, {501, 0, 0}},
+                    {6, {"c1", "c2"}, {601, 602, 0}},
+                    {7, {"c1"}, {701, 0, 0}},
+                    {8, {"c1", "c2", "c3"}, {801, 802, 803}},
+                    {9, {"c1"}, {901, 0, 0}},
+                    {10, {}, {0, 0, 0}},
+                    {11, {"c3"}, {0, 0, 1103}},
+                    {1000, {"c1"}, {1, 0, 0}},
+                    {1001, {"c2"}, {0, 2, 0}},
+                    {1002, {"c1", "c2"}, {1, 2, 0}},
+            },
+            {
+                    {5, {"c2"}, {0, 502, 0}},                 // disjoint
+                    {6, {"c2", "c3"}, {0, 612, 613}},         // overlapping
+                    {7, {"c1", "c2", "c3"}, {711, 712, 713}}, // superset
+                    {8, {"c2"}, {0, 822, 0}},                 // subset
+                    {9, {"c2"}, {0, 902, 0}},                 // disjoint, then a third row
+                    {10, {"c3"}, {0, 0, 1003}},               // after a row declaring only the key
+                    {11, {}, {0, 0, 0}},                      // declaring only the key
+                    {1000, {"c3"}, {0, 0, 3}},                // new key, disjoint
+                    {1001, {"c2"}, {0, 22, 0}},               // new key, the same set
+                    {1002, {"c2", "c3"}, {0, 12, 13}},        // new key, overlapping, then a third row
+            },
+            {
+                    {9, {"c1"}, {911, 0, 0}},
+                    {1002, {"c1"}, {21, 0, 0}},
+            },
+    };
 }
 
 } // namespace
@@ -239,10 +297,12 @@ protected:
         // Intern the column names in upper case, as a `columns` header written in another case would.
         bool upper_case_names = false;
         std::string merge_condition;
+        // Flush after every batch, so that every batch becomes its own segment.
+        bool flush_each_batch = true;
     };
 
-    // Writes |batches| as ONE flexible load, flushing after each batch so that every batch becomes its own
-    // segment, and publishes it.
+    // Writes |batches| as ONE flexible load, by default flushing after each batch so that every batch
+    // becomes its own segment, and publishes it.
     Status flexible_load(const std::vector<std::vector<Row>>& batches, PartialUpdateMode mode, int64_t* version,
                          const LoadOptions& options) {
         auto txn_id = next_id();
@@ -275,7 +335,9 @@ protected:
             std::vector<uint32_t> indexes(rows.size());
             for (size_t i = 0; i < rows.size(); ++i) indexes[i] = static_cast<uint32_t>(i);
             RETURN_IF_ERROR(delta_writer->write(chunk, indexes.data(), indexes.size()));
-            RETURN_IF_ERROR(delta_writer->flush());
+            if (options.flush_each_batch) {
+                RETURN_IF_ERROR(delta_writer->flush());
+            }
         }
         RETURN_IF_ERROR(delta_writer->finish_with_txnlog().status());
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), *version + 1, txn_id).status());
@@ -431,9 +493,9 @@ TEST_P(LakeFlexiblePartialUpdateModeTest, existing_key_in_two_segments_of_one_lo
     expect_table_eq(model, read_table(version));
 }
 
-// Row mode publishes the segments of a flexible load one by one, so a new key written by two segments
-// keeps what the first one declared and the second one did not.
-TEST_F(LakeFlexiblePartialUpdateTest, row_mode_new_key_in_two_segments_of_one_load) {
+// A new key written by two segments of one load keeps what the first one declared and the second one did
+// not.
+TEST_P(LakeFlexiblePartialUpdateModeTest, new_key_in_two_segments_of_one_load) {
     int64_t version = 1;
     Table model;
     write_base(kBaseRows, &version, &model);
@@ -441,9 +503,85 @@ TEST_F(LakeFlexiblePartialUpdateTest, row_mode_new_key_in_two_segments_of_one_lo
             {{2000, {"c1"}, {2000001, 0, 0}}},
             {{2000, {"c3"}, {0, 0, 2000003}}},
     };
-    ASSERT_OK(flexible_load(batches, PartialUpdateMode::ROW_MODE, &version));
+    ASSERT_OK(flexible_load(batches, GetParam(), &version));
     apply_to_model(batches[0], &model);
     apply_to_model(batches[1], &model);
+    expect_table_eq(model, read_table(version));
+}
+
+// Rows of one memtable that repeat a key are merged column by column: every column takes the value of the
+// last row that declares it.
+TEST_P(LakeFlexiblePartialUpdateModeTest, repeated_key_in_one_memtable) {
+    int64_t version = 1;
+    Table model;
+    write_base(kBaseRows, &version, &model);
+    std::vector<Row> rows;
+    for (const auto& batch : repeated_rows_by_occurrence()) {
+        rows.insert(rows.end(), batch.begin(), batch.end());
+    }
+    ASSERT_OK(flexible_load({rows}, GetParam(), &version));
+    apply_to_model(rows, &model);
+    expect_table_eq(model, read_table(version));
+}
+
+// The same rows, every occurrence of a key in its own segment.
+TEST_P(LakeFlexiblePartialUpdateModeTest, repeated_key_across_segments) {
+    int64_t version = 1;
+    Table model;
+    write_base(kBaseRows, &version, &model);
+    const auto batches = repeated_rows_by_occurrence();
+    ASSERT_OK(flexible_load(batches, GetParam(), &version));
+    for (const auto& batch : batches) {
+        apply_to_model(batch, &model);
+    }
+    expect_table_eq(model, read_table(version));
+}
+
+// A memtable that fills up is flushed without the early merge of a plain load, whose aggregation would let
+// the last row of a key replace the rows before it.
+TEST_P(LakeFlexiblePartialUpdateModeTest, repeated_key_when_memtable_fills_up) {
+    const auto saved_write_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    DeferOp restore([&]() { config::write_buffer_size = saved_write_buffer_size; });
+    int64_t version = 1;
+    Table model;
+    write_base(kBaseRows, &version, &model);
+    const auto batches = repeated_rows_by_occurrence();
+    LoadOptions options;
+    options.flush_each_batch = false;
+    ASSERT_OK(flexible_load(batches, GetParam(), &version, options));
+    for (const auto& batch : batches) {
+        apply_to_model(batch, &model);
+    }
+    expect_table_eq(model, read_table(version));
+}
+
+// Deletes among the rows of a key keep the semantics of a plain load: a key whose last row is a delete is
+// deleted, and a delete followed by more rows is dropped with the rows before it.
+TEST_P(LakeFlexiblePartialUpdateModeTest, repeated_key_with_deletes_in_one_memtable) {
+    int64_t version = 1;
+    Table model;
+    write_base(kBaseRows, &version, &model);
+    const std::vector<Row> rows = {
+            {12, {"c1"}, {1201, 0, 0}},  {13, {"c1"}, {1301, 0, 0}}, {14, {}, {0, 0, 0}, true},
+            {15, {"c1"}, {1501, 0, 0}},  {16, {"c1"}, {1601, 0, 0}}, {2000, {"c1"}, {1, 0, 0}},
+            {2001, {"c1"}, {1, 0, 0}},   {12, {}, {0, 0, 0}, true}, // deleted
+            {13, {}, {0, 0, 0}, true},                              // then updated again: c1 keeps the table's value
+            {14, {"c3"}, {0, 0, 1403}},                             // updated after a delete
+            {15, {"c2"}, {0, 1502, 0}},                             // deleted after two updates
+            {16, {}, {0, 0, 0}, true},   // then updated twice: both updates count, c1 keeps the table's value
+            {2000, {}, {0, 0, 0}, true}, // a new key deleted again
+            {2001, {}, {0, 0, 0}, true}, // a new key deleted, then inserted again
+            {13, {"c2"}, {0, 1302, 0}},  {15, {}, {0, 0, 0}, true},  {16, {"c2"}, {0, 1602, 0}},
+            {2001, {"c2"}, {0, 2, 0}},   {16, {"c3"}, {0, 0, 1603}},
+    };
+    ASSERT_OK(flexible_load({rows}, GetParam(), &version));
+    apply_to_model(rows_kept_by_memtable(rows), &model);
+    EXPECT_EQ(0, model.count(12));
+    EXPECT_EQ(13 * 11, model[13][0]);
+    EXPECT_EQ((std::array<int, kNumValueColumns>{16 * 11, 1602, 1603}), model[16]);
+    EXPECT_EQ(0, model.count(2000));
+    EXPECT_EQ(kDefaults[0], model[2001][0]);
     expect_table_eq(model, read_table(version));
 }
 
