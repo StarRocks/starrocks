@@ -1,0 +1,46 @@
+-- name: test_split_join_or_to_union_alignment
+CREATE TABLE t_or_a (
+  v1 BIGINT,
+  v2 BIGINT,
+  v3 BIGINT
+) DUPLICATE KEY(v1) DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+CREATE TABLE t_or_b (
+  v4 BIGINT,
+  v5 BIGINT,
+  v6 BIGINT
+) DUPLICATE KEY(v4) DISTRIBUTED BY HASH(v4) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t_or_a values (1,1,1),(2,2,2),(3,3,3);
+insert into t_or_b values (1,5,1),(2,6,2),(9,2,3);
+set enable_rewrite_or_to_union_all_join = true;
+
+-- SplitJoinORToUnionRule pairs the union's branches by position. Its output columns used to come
+-- from a ColumnRefSet (column-id order) while the other branches came from RowOutputInfo (the
+-- projection map's iteration order); ColumnRefOperator hashes on its id, so the two agree only while
+-- the ids stay inside one hash bucket range. Otherwise the branches rotate against each other and
+-- the rows come back with the column values shifted.
+-- Each column sits in its own value range (1000s/2000s/3000s/4000s), so a rotation is visible in the
+-- rows themselves. The pad columns exist only to shift column ids; the sweep covers a full period of
+-- 16. Without the fix, pad 6..9 return rotated rows.
+
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9, v1 + 10 as p10 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9, v1 + 10 as p10, v1 + 11 as p11 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9, v1 + 10 as p10, v1 + 11 as p11, v1 + 12 as p12 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9, v1 + 10 as p10, v1 + 11 as p11, v1 + 12 as p12, v1 + 13 as p13 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
+select x.v3 + 1000 c3, b.v6 + 2000 c6, x.v1 + 3000 c1, b.v4 + 4000 c4 from (select v1, v2, v3, v1 + 0 as p0, v1 + 1 as p1, v1 + 2 as p2, v1 + 3 as p3, v1 + 4 as p4, v1 + 5 as p5, v1 + 6 as p6, v1 + 7 as p7, v1 + 8 as p8, v1 + 9 as p9, v1 + 10 as p10, v1 + 11 as p11, v1 + 12 as p12, v1 + 13 as p13, v1 + 14 as p14 from t_or_a) x join t_or_b b on x.v1 = b.v4 or x.v2 = b.v5 order by 1, 2, 3, 4;
