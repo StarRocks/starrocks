@@ -35,6 +35,25 @@
 
 namespace starrocks {
 
+TEST(IcebergGLMContextTest, ScanRangeSurvivesConcurrentRegistration) {
+    IcebergGlobalLateMaterilizationContext ctx;
+    THdfsScanRange original;
+    original.__set_full_path("s3://bucket/original.parquet");
+    original.__set_offset(123);
+    original.__set_length(456);
+    auto id = ctx.assign_scan_range_id(original);
+    const auto& saved = ctx.get_hdfs_scan_range(id);
+    // Registrations can grow the vector after the lookup's shared lock has been released.
+    for (int i = 0; i < 1024; ++i) {
+        THdfsScanRange other;
+        other.__set_full_path("s3://bucket/other.parquet");
+        ctx.assign_scan_range_id(other);
+    }
+    EXPECT_EQ(original.full_path, saved.full_path);
+    EXPECT_EQ(original.offset, saved.offset);
+    EXPECT_EQ(original.length, saved.length);
+}
+
 namespace {
 
 class DummyGLMContext final : public GlobalLateMaterilizationContext {

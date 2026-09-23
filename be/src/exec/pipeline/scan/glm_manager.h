@@ -44,7 +44,8 @@ public:
         return hdfs_scan_ranges.size() - 1;
     }
 
-    const THdfsScanRange& get_hdfs_scan_range(int32_t scan_range_id) const {
+    // Return an owned range: concurrent scanners may reallocate hdfs_scan_ranges.
+    THdfsScanRange get_hdfs_scan_range(int32_t scan_range_id) const {
         std::shared_lock lock(_mutex);
         DCHECK(scan_range_id < hdfs_scan_ranges.size())
                 << "scan_range_id: " << scan_range_id << ", size: " << hdfs_scan_ranges.size();
