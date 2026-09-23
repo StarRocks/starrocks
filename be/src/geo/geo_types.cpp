@@ -128,7 +128,6 @@ static GeoParseStatus to_s2loop(const GeoCoordinateList& coords, std::unique_ptr
     if (!(*loop)->IsValid()) {
         return GEO_PARSE_LOOP_INVALID;
     }
-    (*loop)->Normalize();
     return GEO_PARSE_OK;
 }
 
