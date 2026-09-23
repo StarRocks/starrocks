@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
@@ -194,11 +195,9 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
      * one is the source. The lock covers the internal source, and the target's statistics and file lists
      * used to be fetched while it was held.
      *
-     * <p>One residual, pinned rather than asserted away: resolving the target itself still happens under the
-     * lock. {@code MergeIntoAnalyzer} resolves it unconditionally, so unlike a table on the read side it
-     * cannot be pre-resolved before the lock by handing the analyzer the answer -- closing it means changing
-     * the analyzer, and what it costs today is one {@code getTable} against a synchronous connector cache,
-     * not the unbounded statistics-and-file-list traffic this change moves out.
+     * <p>Resolving the target is included: it is an external object, so the lock covers nothing about it,
+     * and the pre-pass resolves it before the lock is taken (see {@code PreResolvedWriteTargets}). That was
+     * the last entry point left under the lock for this statement.
      */
     @Test
     public void testAMergeIntoReadingAConnectorPlansWithoutTheLock() throws Exception {
@@ -206,7 +205,85 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
                 + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
         plan(sql);
-        assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0_v2");
+        assertNothingWentRemoteUnderTheLock(sql);
+    }
+
+    /**
+     * The same shape on the INSERT side, which reaches the target through a different analyzer:
+     * {@code INSERT INTO <external> SELECT FROM <internal>} takes the lock for the internal source and used
+     * to resolve the external target inside it.
+     */
+    @Test
+    public void testAnInsertIntoAConnectorTargetPlansWithoutTheLock() throws Exception {
+        probeConnectorCalls();
+        String sql = "INSERT INTO iceberg0.unpartitioned_db.t0_v2 "
+                + "SELECT CAST(pk AS INT), CAST(v1 AS STRING), CAST(v2 AS STRING) FROM test.tprimary";
+        plan(sql);
+        assertNothingWentRemoteUnderTheLock(sql);
+    }
+
+    /**
+     * What the pre-pass is actually worth, stated as a difference rather than asserted in prose: turn it
+     * off and the target's resolve goes straight back inside the lock, while the statistics stay outside it
+     * -- those are two independent mechanisms (the pre-pass, and the snapshot that drops the lock before
+     * optimization) and this pins which one owns which entry point.
+     */
+    @Test
+    public void testWithoutThePrePassTheTargetGoesBackUnderTheLock() throws Exception {
+        boolean saved = Config.enable_experimental_external_table_preparse;
+        Config.enable_experimental_external_table_preparse = false;
+        try {
+            probeConnectorCalls();
+            String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
+                    + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
+            plan(sql);
+            assertOnlyTheseWentRemoteUnderTheLock(sql, "getTable:iceberg0.t0_v2");
+        } finally {
+            Config.enable_experimental_external_table_preparse = saved;
+        }
+    }
+
+    /**
+     * The pre-pass must never be the thing that changes what a statement does. When it cannot resolve
+     * the target -- a database that is not there, a catalog that is not registered -- it leaves the
+     * stash empty and the locked analyzer reports exactly what it always reported, at the same place.
+     * <p>
+     * That fallback is the path every purely internal DML takes as well, so it is not an edge case:
+     * it is what keeps the change to external targets from being a change to all of them.
+     */
+    @Test
+    public void testAnUnresolvableTargetIsStillReportedByTheAnalyzer() {
+        for (String sql : List.of(
+                "DELETE FROM no_such_db.t WHERE pk = 1",
+                "UPDATE no_such_db.t SET v = 1 WHERE pk = 1",
+                "INSERT INTO no_such_db.t SELECT 1",
+                "MERGE INTO no_such_db.t AS a USING test.tprimary AS s ON a.pk = s.pk "
+                        + "WHEN MATCHED THEN UPDATE SET v = s.v1")) {
+            Exception e = Assertions.assertThrows(Exception.class, () -> plan(sql), sql);
+            Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("no_such_db"),
+                    "the analyzer should still name the database it could not find, for " + sql
+                            + ", but said: " + e.getMessage());
+        }
+        // And a catalog that does not exist at all: the name cannot even be normalized, which the
+        // pre-pass has to survive rather than turn into its own error.
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> plan("DELETE FROM no_such_catalog.db.t WHERE pk = 1"));
+        Assertions.assertNotNull(e.getMessage());
+    }
+
+    /**
+     * The target is handed over, not merely warmed: the analyzer must take what the pre-pass resolved rather
+     * than resolve it again off a cache that happens to be warm. Reverting either half -- the pre-pass entry
+     * or the analyzer's {@code take} -- puts a {@code getTable} back inside the lock, which is what the two
+     * tests above would then catch.
+     */
+    @Test
+    public void testThePreResolvedTargetIsConsumedByTheAnalyzer() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t USING test.tprimary AS s "
+                + "ON t.id = s.pk WHEN MATCHED THEN UPDATE SET data = s.v1";
+        plan(sql);
+        Assertions.assertTrue(connectContext.getPreResolvedWriteTargets().isEmpty(),
+                "the pre-resolved target was left behind, so the analyzer resolved its own copy instead");
     }
 
     /**
