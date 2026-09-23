@@ -312,10 +312,10 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
-        // will fall back to the legacy rewrite path; without this cleanup
-        // the orphan .idx files would sit on object storage until a later
-        // compaction or vacuum reclaims them, and could also confuse any
-        // tool that scans segment dirs.
+        // returns the error without falling back to the legacy rewrite path,
+        // so FE cancels the alter and no txn log ever references these files;
+        // without this cleanup they would sit on object storage as orphans
+        // and could also confuse any tool that scans segment dirs.
         cleanup_written_idx_files();
     }
     return run_st;
@@ -525,7 +525,7 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     // Track the .idx path so `run()` can delete it on failure. Recording
     // happens right after the remote file is created — even a half-written
     // payload occupies an S3 object that benefits from explicit cleanup on
-    // fallback, rather than waiting for vacuum to treat it as an orphan.
+    // failure, rather than waiting for vacuum to treat it as an orphan.
     {
         std::lock_guard<std::mutex> lg(_written_paths_mtx);
         _written_paths.emplace_back(idx_path);
