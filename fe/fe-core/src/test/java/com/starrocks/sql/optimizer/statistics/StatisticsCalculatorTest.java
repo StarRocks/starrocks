@@ -1437,7 +1437,7 @@ public class StatisticsCalculatorTest {
         ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
         Assertions.assertFalse(rowNumberStatistic.isUnknown());
         Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(1000, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getMaxValue(), 0.001);
         Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
     }

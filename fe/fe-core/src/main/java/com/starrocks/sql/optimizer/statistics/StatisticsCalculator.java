@@ -2198,10 +2198,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return ExpressionStatisticCalculator.calculate(call, inputStatistics);
         }
         double rowCount = inputStatistics.getOutputRowCount();
+        double rowsPerPartition = estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount);
         return ColumnStatistic.builder()
                 .setMinValue(1)
-                .setMaxValue(rowCount)
-                .setDistinctValuesCount(estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount))
+                .setMaxValue(rowsPerPartition)
+                .setDistinctValuesCount(rowsPerPartition)
                 .setNullsFraction(0)
                 .setAverageRowSize(call.getType().getTypeSize())
                 .build();
