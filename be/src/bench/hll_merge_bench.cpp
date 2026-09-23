@@ -33,23 +33,7 @@
 
 namespace starrocks {
 
-// Build a HLL that ends up in the FULL register format (>> HLL_EXPLICLIT_INT64_NUM
-// distinct hashes), then serialize it to a heap buffer.
-static std::string make_serialized_full(int n_distinct, uint64_t seed) {
-    HyperLogLog hll;
-    std::mt19937_64 rng(seed);
-    for (int i = 0; i < n_distinct; ++i) {
-        hll.update(rng());
-    }
-    std::string buf;
-    buf.resize(hll.max_serialized_size());
-    size_t n = hll.serialize(reinterpret_cast<uint8_t*>(buf.data()));
-    buf.resize(n);
-    return buf;
-}
-
-// Build a HLL that stays in the EXPLICIT format (<= HLL_EXPLICLIT_INT64_NUM hashes).
-static std::string make_serialized_explicit(int n_distinct, uint64_t seed) {
+static std::string make_serialized_hll(int n_distinct, uint64_t seed) {
     HyperLogLog hll;
     std::mt19937_64 rng(seed);
     for (int i = 0; i < n_distinct; ++i) {
@@ -65,13 +49,16 @@ static std::string make_serialized_explicit(int n_distinct, uint64_t seed) {
 static constexpr int kSources = 256;
 
 template <bool kDirect>
-static void do_merge(benchmark::State& state, bool full) {
-    const int n_distinct = full ? 50000 : 64;
+static void do_merge(benchmark::State& state, HllDataType type) {
+    const int n_distinct = type == HLL_DATA_FULL ? 50000 : (type == HLL_DATA_SPARSE ? 1024 : 64);
     std::vector<std::string> sources;
     sources.reserve(kSources);
     for (int i = 0; i < kSources; ++i) {
-        sources.emplace_back(full ? make_serialized_full(n_distinct, i + 1)
-                                  : make_serialized_explicit(n_distinct, i + 1));
+        sources.emplace_back(make_serialized_hll(n_distinct, i + 1));
+        if (static_cast<uint8_t>(sources.back()[0]) != type) {
+            state.SkipWithError("Unexpected HLL wire format");
+            return;
+        }
     }
 
     for (auto _ : state) {
@@ -104,7 +91,7 @@ static void do_merge_groupby(benchmark::State& state) {
         std::vector<std::string> p;
         p.reserve(kSources);
         for (int i = 0; i < kSources; ++i) {
-            p.emplace_back(make_serialized_full(50000, i + 1)); // FULL on the wire
+            p.emplace_back(make_serialized_hll(50000, i + 1)); // FULL on the wire
         }
         return p;
     }();
@@ -129,16 +116,22 @@ static void do_merge_groupby(benchmark::State& state) {
 }
 
 static void BM_HllMergeFullSingle_Legacy(benchmark::State& state) {
-    do_merge<false>(state, /*full=*/true);
+    do_merge<false>(state, HLL_DATA_FULL);
 }
 static void BM_HllMergeFullSingle_Direct(benchmark::State& state) {
-    do_merge<true>(state, /*full=*/true);
+    do_merge<true>(state, HLL_DATA_FULL);
 }
 static void BM_HllMergeExplicitSingle_Legacy(benchmark::State& state) {
-    do_merge<false>(state, /*full=*/false);
+    do_merge<false>(state, HLL_DATA_EXPLICIT);
 }
 static void BM_HllMergeExplicitSingle_Direct(benchmark::State& state) {
-    do_merge<true>(state, /*full=*/false);
+    do_merge<true>(state, HLL_DATA_EXPLICIT);
+}
+static void BM_HllMergeSparseSingle_Legacy(benchmark::State& state) {
+    do_merge<false>(state, HLL_DATA_SPARSE);
+}
+static void BM_HllMergeSparseSingle_Direct(benchmark::State& state) {
+    do_merge<true>(state, HLL_DATA_SPARSE);
 }
 static void BM_HllMergeFullGroupBy_Legacy(benchmark::State& state) {
     do_merge_groupby<false>(state);
@@ -206,6 +199,8 @@ BENCHMARK(BM_HllMergeFullSingle_Legacy);
 BENCHMARK(BM_HllMergeFullSingle_Direct);
 BENCHMARK(BM_HllMergeExplicitSingle_Legacy);
 BENCHMARK(BM_HllMergeExplicitSingle_Direct);
+BENCHMARK(BM_HllMergeSparseSingle_Legacy);
+BENCHMARK(BM_HllMergeSparseSingle_Direct);
 BENCHMARK(BM_HllMergeFullGroupBy_Legacy)->Args({4096, 64})->Args({4096, 512});
 BENCHMARK(BM_HllMergeFullGroupBy_Direct)->Args({4096, 64})->Args({4096, 512});
 BENCHMARK(BM_HllConvert_Legacy)->Arg(1024)->Arg(4096);

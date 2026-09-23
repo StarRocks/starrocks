@@ -357,25 +357,17 @@ void HyperLogLog::merge(const HyperLogLog& other) {
 }
 
 void HyperLogLog::merge(const Slice& src) {
-    // Invalid / null / empty input must be a no-op, matching the behavior of the
-    // HyperLogLog(const Slice&) ctor + merge() path this replaces: an unparseable
-    // slice becomes an empty HLL there, and merging an empty HLL does nothing.
-    // The null-pointer guard mirrors deserialize() (some ingested HLL data has a
-    // null data pointer); it must come before is_valid(), which dereferences
-    // src.data as soon as src.size >= 1.
-    if (src.data == nullptr || !is_valid(src)) {
+    if (src.data == nullptr || src.size == 0) {
         return;
     }
     const auto type = static_cast<HllDataType>(*reinterpret_cast<const uint8_t*>(src.data));
-    if (type == HLL_DATA_EMPTY) {
-        return;
-    }
-    // Only the FULL payload can be merged in place byte-identically. EXPLICIT
-    // serialization depends on hash-set iteration order, and SPARSE deserialize is
-    // last-write-wins on duplicate indexes (not max); both must go through the
-    // temp-object path to keep the serialized bytes identical to the old code.
+    // EXPLICIT hash order and SPARSE duplicate-index handling come from deserialize().
+    // Let it validate these inputs once, including the SPARSE index bounds.
     if (type != HLL_DATA_FULL) {
         merge(HyperLogLog(src));
+        return;
+    }
+    if (src.size != 1 + HLL_REGISTERS_COUNT) {
         return;
     }
 

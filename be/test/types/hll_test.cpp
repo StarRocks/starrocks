@@ -362,6 +362,11 @@ TEST_F(TestHll, MergeSlice) {
         t2.merge(Slice(full_bytes.data(), full_bytes.size() - 1)); // truncated FULL
         EXPECT_EQ(before, serialize_to_string(t2));
 
+        expect_merge_slice_matches(full_src, full_bytes + std::string(1, '\0'));
+        expect_merge_slice_matches(full_src, "");
+        expect_merge_slice_matches(full_src, std::string(1, HLL_DATA_EXPLICIT));
+        expect_merge_slice_matches(full_src, sparse_bytes.substr(0, sparse_bytes.size() - 1));
+
         uint8_t bad_type = 60;
         HyperLogLog t3(full_src);
         t3.merge(Slice(reinterpret_cast<char*>(&bad_type), 1)); // unknown type

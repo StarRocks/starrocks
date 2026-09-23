@@ -18,6 +18,7 @@
 #include <cmath>
 #include <memory>
 
+#include "base/hash/hash_util.hpp"
 #include "common/config_exec_fwd.h"
 #include "exprs/agg/base_aggregate_test.h"
 
@@ -44,6 +45,82 @@ protected:
     FunctionContext* ctx{};
     std::unique_ptr<CountingAllocatorWithHook> _allocator;
 };
+TEST_F(AggregateTest, test_hll_convert_to_serialize_format) {
+    FunctionUtils hll_utils;
+    auto* ctx = hll_utils.get_fn_ctx();
+    auto check = [&](const char* name, LogicalType input_type, const ColumnPtr& input) {
+        SCOPED_TRACE(name);
+        SCOPED_TRACE(input_type);
+        SCOPED_TRACE(input->is_nullable());
+        const auto return_type = std::string(name) == "hll_raw" ? TYPE_HLL : TYPE_BIGINT;
+        const auto* func = get_aggregate_function(name, input_type, return_type, input->is_nullable());
+        ASSERT_NE(nullptr, func);
+        auto make_output = [&]() -> MutableColumnPtr {
+            if (input->is_nullable()) {
+                return NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+            }
+            return BinaryColumn::create();
+        };
+        auto converted = make_output();
+        func->convert_to_serialize_format(ctx, Columns{input}, input->size(), converted);
+        ASSERT_EQ(input->size(), converted->size());
+
+        auto expected = make_output();
+        const Column* raw_input = input.get();
+        for (size_t i = 0; i < input->size(); ++i) {
+            auto state = ManagedAggrState::create(ctx, func);
+            func->update(ctx, &raw_input, state->state(), i);
+            func->serialize_to_column(ctx, state->state(), expected.get());
+        }
+        for (size_t i = 0; i < input->size(); ++i) {
+            SCOPED_TRACE(i);
+            ASSERT_EQ(expected->is_null(i), converted->is_null(i));
+            if (!expected->is_null(i)) {
+                EXPECT_EQ(expected->get(i).get_slice().to_string(), converted->get(i).get_slice().to_string());
+            }
+        }
+        const Column* data = converted.get();
+        if (converted->is_nullable()) {
+            data = down_cast<const NullableColumn*>(data)->data_column().get();
+        }
+        const auto* binary = down_cast<const BinaryColumn*>(data);
+        const auto& offsets = binary->get_offset();
+        ASSERT_EQ(input->size() + 1, offsets.size());
+        EXPECT_EQ(0, offsets[0]);
+        EXPECT_EQ(binary->get_bytes().size(), offsets.back());
+        for (size_t i = 1; i < offsets.size(); ++i) {
+            EXPECT_LE(offsets[i - 1], offsets[i]);
+        }
+    };
+
+    auto numbers = Int64Column::create();
+    for (int64_t value : {int64_t{0}, int64_t{-1}, int64_t{42}, int64_t{42}, int64_t{0x0660d0cc1f69c219}}) {
+        numbers->append(value);
+    }
+    // This byte string hashes to zero with MURMUR_SEED, exercising the EMPTY record.
+    const std::string zero_hash("\x19\xc2\x69\x1f\xcc\xd0\x60\x06", 8);
+    ASSERT_EQ(0, HashUtil::murmur_hash64A(zero_hash.data(), zero_hash.size(), HashUtil::MURMUR_SEED));
+    auto strings = BinaryColumn::create();
+    for (const auto& value :
+         {std::string(), std::string("hello"), std::string("a\0b", 3), zero_hash, std::string(1024, 'x')}) {
+        strings->append(Slice(value));
+    }
+    for (const char* name : {"ndv", "approx_count_distinct", "hll_raw"}) {
+        check(name, TYPE_BIGINT, numbers);
+        check(name, TYPE_VARCHAR, strings);
+        check(name, TYPE_BIGINT, Int64Column::create());
+        check(name, TYPE_VARCHAR, BinaryColumn::create());
+        for (bool all_null : {false, true}) {
+            auto nulls = NullColumn::create();
+            for (size_t i = 0; i < numbers->size(); ++i) {
+                nulls->append(all_null || i == 1);
+            }
+            check(name, TYPE_BIGINT, NullableColumn::create(numbers->clone(), nulls->clone()));
+            check(name, TYPE_VARCHAR, NullableColumn::create(strings->clone(), nulls->clone()));
+        }
+    }
+}
+
 TEST_F(AggregateTest, test_count) {
     const AggregateFunction* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, false);
     test_agg_function<int16_t, int64_t>(ctx, func, 1026, 1000, 2026);
