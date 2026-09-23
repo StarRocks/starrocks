@@ -114,4 +114,20 @@ public class TaskTest {
         Assertions.assertEquals(false, Constants.TaskRunState.PENDING.isSuccessState());
         Assertions.assertEquals(false, Constants.TaskRunState.RUNNING.isSuccessState());
     }
+
+    @Test
+    public void testDbNameIsStoredWithoutClusterPrefix() {
+        Task task = new Task("t1");
+        task.setDbName("default_cluster:db1");
+        Assertions.assertEquals("db1", task.getDbName());
+        task.setDbName("db2");
+        Assertions.assertEquals("db2", task.getDbName());
+        Assertions.assertTrue(GsonUtils.GSON.toJson(task).contains("\"dbName\":\"db2\""));
+
+        // written by an older version
+        Task old = GsonUtils.GSON.fromJson("{\"id\":1,\"name\":\"t1\",\"dbName\":\"default_cluster:db3\"}",
+                Task.class);
+        Assertions.assertEquals("db3", old.getDbName());
+        Assertions.assertTrue(GsonUtils.GSON.toJson(old).contains("\"dbName\":\"db3\""));
+    }
 }

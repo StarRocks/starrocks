@@ -106,4 +106,22 @@ public class TaskRunStatusTest {
         status.setState(Constants.TaskRunState.SUCCESS);
         Assertions.assertEquals(Constants.TaskRunState.SUCCESS, status.getLastRefreshState());
     }
+
+    @Test
+    public void testDbNameIsStoredWithoutClusterPrefix() {
+        TaskRunStatus status = new TaskRunStatus();
+        status.setDbName("default_cluster:db1");
+        Assertions.assertEquals("db1", status.getDbName());
+        status.setDbName("db2");
+        Assertions.assertEquals("db2", status.getDbName());
+        Assertions.assertTrue(status.toJSON().contains("\"dbName\":\"db2\""));
+
+        // written by an older version: an image, an edit log or a task_run_history row
+        TaskRunStatus old = TaskRunStatus.fromJson("{\"taskId\":1,\"dbName\":\"default_cluster:db3\"}");
+        Assertions.assertEquals("db3", old.getDbName());
+        Assertions.assertTrue(old.toJSON().contains("\"dbName\":\"db3\""));
+        TaskRunStatus.TaskRunStatusJSONRecord record = TaskRunStatus.TaskRunStatusJSONRecord.fromJson(
+                "{\"data\":[{\"taskId\":2,\"dbName\":\"default_cluster:db4\"}]}");
+        Assertions.assertEquals("db4", record.data.get(0).getDbName());
+    }
 }

@@ -19,11 +19,13 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonPostProcessable;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-public class ModifyTableColumnOperationLog implements Writable {
+public class ModifyTableColumnOperationLog implements Writable, GsonPostProcessable {
 
     @SerializedName(value = "dbName")
     private String dbName;
@@ -33,14 +35,19 @@ public class ModifyTableColumnOperationLog implements Writable {
     private List<Column> columns = new ArrayList<>();
 
     public ModifyTableColumnOperationLog(String dbName, String tableName, List<Column> columns) {
-        // compatible with old version
-        this.dbName = ClusterNamespace.getFullName(dbName);
+        this.dbName = ClusterNamespace.getNameFromFullName(dbName);
         this.tableName = tableName;
         this.columns = columns;
     }
 
     public String getDbName() {
-        return ClusterNamespace.getNameFromFullName(dbName);
+        return dbName;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        // Edit logs written by older versions carry the default_cluster prefix.
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public String getTableName() {
