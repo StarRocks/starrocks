@@ -36,6 +36,7 @@ package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
@@ -126,17 +127,12 @@ public class RangePartitionPruner implements PartitionPruner {
 
                 // eg: [10, 10], [null, null]
                 if (lowerBound instanceof NullLiteral && upperBound instanceof NullLiteral) {
-                    // replace Null with min value
-                    LiteralExpr minKeyValue = LiteralExprFactory.createInfinity(
-                            TypeFactory.createType(keyColumn.getPrimitiveType()), false);
-                    minKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
-                    maxKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
-                } else {
-                    LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
-                    LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
-                    minKey.pushColumn(lowerBoundExpr, keyColumn.getPrimitiveType());
-                    maxKey.pushColumn(upperBoundExpr, keyColumn.getPrimitiveType());
+                    return pruneIsNull(rangeMap, columnIdx, minKey);
                 }
+                LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
+                LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
+                minKey.pushColumn(lowerBoundExpr, keyColumn.getPrimitiveType());
+                maxKey.pushColumn(upperBoundExpr, keyColumn.getPrimitiveType());
                 List<Long> result = prune(rangeMap, columnIdx + 1, minKey, maxKey, complex);
                 minKey.popColumn();
                 maxKey.popColumn();
@@ -216,6 +212,45 @@ public class RangePartitionPruner implements PartitionPruner {
         }
 
         return new ArrayList<>(resultSet);
+    }
+
+    // `col IS NULL` does not mean `col = MIN`. A NULL sorts strictly below every value of its own
+    // column, and the row is then placed by ordinary tuple order: on RANGE(a, b) with
+    // p0 = [MIN, (5,-128)) and p1 = [(5,-128), (5,10)), the row (5, NULL) lands in p0 while
+    // (40, NULL) lands in the partition holding (40, ...). Looking the key up as `prefix + MIN`
+    // therefore reads one partition too high whenever a partition boundary falls exactly on
+    // `prefix + MIN` -- the rows are just below that boundary, the lookup lands just above it, and
+    // the partition actually holding them is pruned away. So take the partitions below the
+    // boundary instead, with the upper end open so the partition that starts on it is excluded.
+    private List<Long> pruneIsNull(RangeMap<PartitionKey, Long> rangeMap, int columnIdx, PartitionKey prefix)
+            throws AnalysisException {
+        PartitionKey boundary = new PartitionKey(Lists.newArrayList(prefix.getKeys()),
+                Lists.newArrayList(prefix.getTypes()));
+        for (int i = columnIdx; i < partitionColumns.size(); i++) {
+            Column column = partitionColumns.get(i);
+            boundary.pushColumn(
+                    LiteralExprFactory.createInfinity(TypeFactory.createType(column.getPrimitiveType()), false),
+                    column.getPrimitiveType());
+        }
+        PartitionKey globalMin = PartitionKey.createInfinityPartitionKey(partitionColumns, false);
+        try {
+            // A leading IS NULL puts the boundary at the global minimum, and there is nothing below
+            // it to select: the first partition's lower endpoint is that same key standing in for
+            // -infinity, so the NULL rows sit inside it rather than beneath it. Ask for the
+            // partition holding that key.
+            if (boundary.compareTo(globalMin) <= 0) {
+                return Lists.newArrayList(
+                        rangeMap.subRangeMap(Range.closed(globalMin, globalMin)).asMapOfRanges().values());
+            }
+            // Everything below the boundary, of which only the last entry can hold the NULLs: the
+            // ranges are disjoint and ascending, so that is the one covering the key immediately
+            // below it. Keeping the rest would be sound but would scan partitions that cannot match.
+            Collection<Long> below =
+                    rangeMap.subRangeMap(Range.closedOpen(globalMin, boundary)).asMapOfRanges().values();
+            return below.isEmpty() ? Lists.newArrayList() : Lists.newArrayList(Iterables.getLast(below));
+        } catch (IllegalArgumentException e) {
+            return Lists.newArrayList();
+        }
     }
 
     public List<Long> prune() throws AnalysisException {
