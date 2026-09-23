@@ -689,7 +689,8 @@ public class BinaryPredicateStatisticCalculator {
     public static Optional<Histogram> updateHistWithLessThan(ColumnStatistic columnStatistic,
                                                              Optional<ConstantOperator> constant,
                                                              boolean containUpper) {
-        if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
+        if (columnStatistic.getHistogram() == null || !constant.isPresent()
+                || hasOnlyNonFiniteBuckets(columnStatistic.getHistogram())) {
             return Optional.empty();
         }
 
@@ -764,7 +765,8 @@ public class BinaryPredicateStatisticCalculator {
     public static Optional<Histogram> updateHistWithGreaterThan(ColumnStatistic columnStatistic,
                                                                 Optional<ConstantOperator> constant,
                                                                 boolean containUpper) {
-        if (columnStatistic.getHistogram() == null || !constant.isPresent()) {
+        if (columnStatistic.getHistogram() == null || !constant.isPresent()
+                || hasOnlyNonFiniteBuckets(columnStatistic.getHistogram())) {
             return Optional.empty();
         }
 
