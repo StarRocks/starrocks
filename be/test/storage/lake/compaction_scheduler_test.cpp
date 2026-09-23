@@ -25,6 +25,7 @@
 #include "base/testutil/sync_point.h"
 #include "base/utility/scoped_cleanup.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_storage_fwd.h"
 #include "common/thread/threadpool.h"
 #include "gen_cpp/lake_service.pb.h"
 #include "runtime/descriptors.h"
@@ -137,6 +138,19 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks_hides_parallel_merged_contex
     EXPECT_TRUE(tasks.empty());
 
     context->RemoveFromList();
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_rejects_non_positive) {
+    auto old_target = _compaction_scheduler._task_queues.target_size();
+    auto old_config = config::compact_threads;
+    SCOPED_CLEANUP({ config::compact_threads = old_config; });
+
+    for (int32_t v : {0, -1}) {
+        config::compact_threads = v;
+        _compaction_scheduler.update_compact_threads(v);
+        EXPECT_EQ(old_target, _compaction_scheduler._task_queues.target_size());
+        EXPECT_EQ(old_target, config::compact_threads);
+    }
 }
 
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {

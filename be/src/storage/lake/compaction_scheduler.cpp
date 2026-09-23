@@ -518,6 +518,7 @@ void CompactionScheduler::update_compact_threads(int32_t new_val) {
         LOG(ERROR) << "compact_threads can't be set to " << new_val << ", reset it back to "
                    << _task_queues.target_size();
         config::compact_threads = _task_queues.target_size();
+        return;
     }
 
     _task_queues.set_target_size(new_val);
