@@ -1417,12 +1417,43 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
+     * Resolve the base tables that live in an external catalog, so that {@link #collectBaseTableSnapshotInfos}
+     * does not have to do it while holding the read lock: resolving one is a connector RPC, and the lock does
+     * not protect external base tables anyway (see {@link #collectDatabases}).
+     *
+     * @return the resolved table per external base table info; internal base tables are absent, they stay
+     *         resolved under the lock because reading the local metastore is not I/O
+     */
+    private Map<BaseTableInfo, Optional<Table>> resolveExternalBaseTables(MaterializedView mv,
+                                                                          List<BaseTableInfo> baseTableInfos) {
+        Map<BaseTableInfo, Optional<Table>> externalTables = Maps.newHashMap();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (baseTableInfo.isInternalCatalog()) {
+                continue;
+            }
+            Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+            externalTables.put(baseTableInfo, tableOpt);
+            // IcebergTable#getNativeTable loads lazily through the connector and caches on the table object, so
+            // warm it here or the partition spec check below faults it in under the lock. The condition has to
+            // stay identical to that check's, otherwise this loads metadata for MVs that never needed it.
+            if (tableOpt.isPresent() && tableOpt.get() instanceof IcebergTable
+                    && !mv.getPartitionInfo().isUnPartitioned()) {
+                ((IcebergTable) tableOpt.get()).getNativeTable();
+            }
+        }
+        return externalTables;
+    }
+
+    /**
      * Collect all base table snapshot infos for the mv which the snapshot infos are kept and used in the final
      * update meta phase.
      * </p>
      * NOTE:
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
-     * 2. no needs to lock the base table's metadata since the metadata is not changed during the refresh process.
+     * 2. internal base tables are locked for READ here because copyOnlyForQuery reads their in-memory partition
+     *    and index state, which a concurrent DDL can mutate. External base tables are not locked (see
+     *    collectDatabases), so they are resolved before the lock is taken (see resolveExternalBaseTables):
+     *    resolving inside would put a connector RPC in the critical section in exchange for no protection at all.
      *
      * @param mv the mv to collect
      * @return the base table and its snapshot info map
@@ -1434,6 +1465,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
 
         LockParams lockParams = collectDatabases(mv);
+        Map<BaseTableInfo, Optional<Table>> externalTables = resolveExternalBaseTables(mv, baseTableInfos);
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(lockParams, LockType.READ, Config.mv_refresh_try_lock_timeout_ms,
                 TimeUnit.MILLISECONDS)) {
@@ -1443,7 +1475,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         Stopwatch stopwatch = Stopwatch.createStarted();
         try {
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                Optional<Table> tableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
+                // An external base table was already resolved above, outside the lock.
+                Optional<Table> tableOpt = baseTableInfo.isInternalCatalog()
+                        ? MvUtils.getTableWithIdentifier(baseTableInfo)
+                        : externalTables.get(baseTableInfo);
                 if (tableOpt.isEmpty()) {
                     logger.warn("table {} doesn't exist", baseTableInfo.getTableInfoStr());
                     throw new DmlException("Materialized view base table: %s not exist.",
