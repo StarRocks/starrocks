@@ -87,6 +87,26 @@ public class RollupProcDirTest {
     }
 
     @Test
+    public void testFetchResultTakesTheSameRoad() throws AnalysisException {
+        // The other entry point. SHOW PROC and the proc HTTP endpoints call this one rather than
+        // fetchResultByFilter, and it used to build its answer with its own copy of the loop; it
+        // now goes through ProcUtils.toProcResult like the filtered road does. Asserting it here
+        // keeps that from quietly coming apart again.
+        BaseProcResult result = (BaseProcResult) rollupProcDir.fetchResult();
+        List<List<String>> rows = result.getRows();
+        Assertions.assertEquals(RollupProcDir.TITLE_NAMES, result.getColumnNames());
+        Assertions.assertEquals(3, rows.size());
+        Assertions.assertEquals(RollupProcDir.TITLE_NAMES.size(), rows.get(0).size());
+        // Every cell arrives stringified, which is what the shared builder does.
+        Assertions.assertEquals(List.of("1", "tb1", "2020-01-01", "2020-01-01", "base", "rollup",
+                "101", "0", "FINISHED", "", "100", "10000"), rows.get(0));
+
+        // No filter, so the two roads must answer with the same rows.
+        Assertions.assertEquals(
+                ((BaseProcResult) rollupProcDir.fetchResultByFilter(null, null, null)).getRows(), rows);
+    }
+
+    @Test
     public void testWhereIsApplied() throws AnalysisException {
         HashMap<String, Expr> filter = Maps.newHashMap();
         filter.put("tablename", new BinaryPredicate(BinaryType.EQ,

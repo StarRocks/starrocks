@@ -39,8 +39,11 @@ import com.starrocks.server.RunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.ArrayList;
 import java.util.Collections;
+=======
+>>>>>>> 2afdae9 ([Refactor] Build a proc dir's result in one place (#79622))
 import java.util.HashMap;
 import java.util.List;
 
@@ -170,18 +173,7 @@ public class SchemaChangeProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(schemaChangeHandler);
 
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-
-        List<List<Comparable>> schemaChangeJobInfos = schemaChangeHandler.getAlterJobInfosByDb(db);
-        for (List<Comparable> infoStr : schemaChangeJobInfos) {
-            List<String> oneInfo = new ArrayList<String>(TITLE_NAMES.size());
-            for (Comparable element : infoStr) {
-                oneInfo.add(element.toString());
-            }
-            result.addRow(oneInfo);
-        }
-        return result;
+        return ProcUtils.toProcResult(TITLE_NAMES, schemaChangeHandler.getAlterJobInfosByDb(db));
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
