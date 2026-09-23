@@ -38,7 +38,7 @@ public:
         if (!read_status.ok()) {
             return read_status;
         }
-        (*chunk)->get_column_by_index(0)->append_datum(Datum(int32_t(42)));
+        (*chunk)->get_column_by_index(0)->as_mutable_ptr()->append_datum(Datum(int32_t(42)));
         return Status::OK();
     }
     void do_close(RuntimeState*) noexcept override { ++*_close_count; }
