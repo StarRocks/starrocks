@@ -61,6 +61,12 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AddMVColumnClause;
+import com.starrocks.sql.ast.AlterClause;
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
 import com.starrocks.sql.ast.AlterMaterializedViewStatusClause;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
@@ -84,6 +90,11 @@ import org.threeten.extra.PeriodDuration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+<<<<<<< HEAD
+=======
+import java.util.Objects;
+import java.util.Optional;
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -346,10 +357,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                     PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE, String.valueOf(queryRewriteSwitch));
             tableProperty.setMvQueryRewriteSwitch(queryRewriteSwitch);
             if (!materializedView.isEnableRewrite()) {
-                // invalidate caches for mv rewrite when disable mv rewrite.
+                // invalidate caches for mv rewrite when disable mv rewrite. Eviction walks the cache
+                // and contacts nothing, so it can stay in the critical section.
                 CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(materializedView);
             } else {
-                CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(materializedView);
+                // Caching re-analyzes the define query to build the ast key, which resolves every
+                // base table -- deferred past the unlock, see AlterJobExecutor#postUnlockActions.
+                postUnlockActions.add(
+                        () -> CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(materializedView));
             }
         });
     }
@@ -512,15 +527,108 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         });
     }
 
+    // Resolved by resolveBeforeLock, consumed by the clause visitors below. Null when the clause is
+    // of another kind, or when this clause needs nothing resolved.
+    private Map<String, String> preResolvedPropClone;
+    private List<Runnable> preResolvedAppliers;
+    private ParseNode preResolvedDefineQueryAst;
+    private String preResolvedDefineSql;
+    private Boolean preResolvedHasNonNativeBaseTable;
+
+    /**
+     * Everything ALTER MATERIALIZED VIEW used to resolve while holding the MV's write lock.
+     *
+     * <p>Each of these reaches MetadataMgr, and for a base table or a referenced table in an external
+     * catalog that is a connector call: constraint analysis resolves every table the constraint
+     * names, the ASYNC-without-interval check resolves every base table, and add/drop column
+     * re-analyzes the define query. Resolving here costs nothing extra -- the work happens exactly
+     * once either way -- it just happens before the lock rather than under it.
+     *
+     * <p>Reading the MV unlocked is what visitAlterTableStatement already does for the same
+     * analysis; the checks that guard the mutation (db exists, MV state NORMAL) stay under the lock.
+     */
+    @Override
+    protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        if (alterClause instanceof ModifyTablePropertiesClause) {
+            Map<String, String> properties = ((ModifyTablePropertiesClause) alterClause).getProperties();
+            // The clone has to be taken before the analyzers run, because they consume the keys they
+            // handle -- whatever is left over at the end is treated as session variables -- while the
+            // editlog has to carry the properties as written.
+            preResolvedPropClone = Maps.newHashMap(properties);
+            preResolvedAppliers = new ArrayList<>();
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+                alterUniqueConstraint(properties, mv, preResolvedAppliers);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+                alterForeignKeyConstraint(properties, preResolvedPropClone, mv, preResolvedAppliers);
+            }
+        } else if (alterClause instanceof RefreshSchemeClause) {
+            // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
+            // would change behaviour rather than just its timing: getTableChecked throws when a base
+            // table is gone, so ALTER ... REFRESH MANUAL on an MV with a dropped base table would
+            // start failing where it succeeds today.
+            RefreshSchemeClause refreshSchemeDesc = (RefreshSchemeClause) alterClause;
+            if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc
+                    && ((AsyncRefreshSchemeDesc) refreshSchemeDesc).getIntervalLiteral() == null) {
+                preResolvedHasNonNativeBaseTable = mv.getBaseTableInfos().stream().anyMatch(tableInfo ->
+                        !MvUtils.getTableChecked(tableInfo).isNativeTableOrMaterializedView());
+            }
+        } else if (alterClause instanceof AddMVColumnClause || alterClause instanceof DropMVColumnClause) {
+            // The definition the AST is built from is captured with it, so the visitor can tell under
+            // the lock whether the AST is still current -- see takePreResolvedDefineQueryAst.
+            preResolvedDefineSql = mv.getOriginalViewDefineSql();
+            preResolvedDefineQueryAst = mv.initDefineQueryParseNode();
+        }
+    }
+
+    /**
+     * The define-query AST resolved before the lock, once it is known to still be current.
+     *
+     * <p>ADD/DROP COLUMN rewrites the AST in place and serializes it back into the MV's definition, so
+     * the AST has to correspond to the definition being replaced. resolveBeforeLock runs before the MV
+     * write lock is taken, which means two overlapping statements can both snapshot the definition
+     * before either mutates it:
+     *
+     * <pre>
+     *   T1: snapshot(def0) ──lock──► add x ──► write def0+x ──unlock──►
+     *   T2: snapshot(def0) ─────────────────────────lock──► add y ──► write def0+y   ← x lost
+     * </pre>
+     *
+     * The physical schema would then hold both columns while the definition names only the second, and
+     * refresh and replay would disagree with the schema. The definition is rewritten under the lock, so
+     * comparing it here catches exactly that case; rejecting is the right answer for a manual DDL, and
+     * keeps the critical section free of the connector call that rebuilding the AST would make.
+     */
+    private ParseNode takePreResolvedDefineQueryAst(MaterializedView mv) {
+        if (!Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())) {
+            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                    + "please retry the statement", mv.getName()));
+        }
+        return preResolvedDefineQueryAst;
+    }
+
     @Override
     public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause modifyTablePropertiesClause,
                                                  ConnectContext context) {
         MaterializedView materializedView = (MaterializedView) table;
 
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
+<<<<<<< HEAD
         Map<String, String> propClone = Maps.newHashMap();
         propClone.putAll(properties);
         int partitionTTL = INVALID;
+=======
+        // Both come from resolveBeforeLock: the clone was taken before the constraint analyzers
+        // consumed their keys, and the appliers they produced are carried over. Constraint appliers
+        // therefore run first rather than in property order, which is immaterial -- each applier
+        // writes a different property.
+        Map<String, String> propClone = preResolvedPropClone != null
+                ? preResolvedPropClone : Maps.newHashMap(properties);
+        List<Runnable> appliers = preResolvedAppliers != null
+                ? new ArrayList<>(preResolvedAppliers) : new ArrayList<>();
+        TableProperty tableProperty = materializedView.getTableProperty();
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
         }
@@ -574,6 +682,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
         }
+<<<<<<< HEAD
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
@@ -583,6 +692,36 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
             foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
+=======
+        // The two constraint clauses are analyzed in resolveBeforeLock, above: they resolve the
+        // tables the constraint names, which is a connector call for an external one.
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
+            alterForceExternalTableQueryRewrite(properties, tableProperty, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_QUERY_REWRITE_CONSISTENCY)) {
+            alterQueryRewriteConsistency(properties, tableProperty, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE)) {
+            alterEnableQueryRewrite(properties, materializedView, tableProperty, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTY_TRANSPARENT_MV_REWRITE_MODE)) {
+            alterTransparentMvRewriteMode(properties, tableProperty, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            alterWarehouse(properties, materializedView, appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
+            alterLabelsLocation(properties, materializedView, appliers);
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)) {
+            alterBFColumns(properties, materializedView,  appliers);
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+            alterColocateWith(properties, materializedView);
+        }
+        if (!properties.isEmpty()) {
+            alterSessionVariables(properties, tableProperty, appliers);
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
         }
 
         TableProperty.QueryRewriteConsistencyMode oldExternalQueryRewriteConsistencyMode =
@@ -856,6 +995,443 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public Void visitAddMVColumnClause(AddMVColumnClause clause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        String columnName = clause.getColumnName();
+        
+        // Check if column already exists
+        if (mv.getColumn(columnName) != null) {
+            throw new SemanticException("Column '%s' already exists in materialized view", columnName);
+        }
+        List<Table> baseTables = mv.getBaseTables();
+        if (baseTables.size() != 1) {
+            throw new SemanticException("Add column to materialized view only supports single base table");
+        }
+        Table baseTable = baseTables.get(0);
+
+        // Validate aggregate expression - it should contain aggregate functions.
+        // Analyzed in resolveBeforeLock: initDefineQueryParseNode re-analyzes the define query and
+        // so resolves every base table, which is a connector call for an external one.
+        ParseNode astParseNode = takePreResolvedDefineQueryAst(mv);
+        // check mv's parse node is a simple QueryStatement
+        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+            throw new SemanticException("Materialized view definition is invalid");
+        }
+        QueryStatement queryStatement = (QueryStatement) astParseNode;
+        if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("Materialized view definition is invalid, only support select statement");
+        }
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+
+        // Determine the column type from the aggregate expression
+        Expr addColumnExpr = clause.getAggregateExpression();
+        boolean isAggregateFunction = false;
+        if (addColumnExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr funcExpr = (FunctionCallExpr) addColumnExpr;
+            String funcName = funcExpr.getFunctionName();
+            isAggregateFunction = ExprUtils.isAggregateFunction(funcName);
+        }
+        GroupByClause groupByClause = selectRelation.getGroupByClause();
+        if (isAggregateFunction &&
+                ((groupByClause != null && groupByClause.isEmpty()) ||
+                 (selectRelation.getGroupBy() != null && selectRelation.getGroupBy().isEmpty()))) {
+            throw new SemanticException("Add new aggregate function column failed: Materialized view must contain group by " +
+                    "columns.");
+        }
+
+        List<Expr> newOutputCols = Lists.newArrayList(selectRelation.getOutputExpression());
+        // always add it into output column
+        newOutputCols.add(addColumnExpr);
+        // if the column is not a expr, it can be:
+        // - group by column, if the query contains aggregate
+        // - output column, if the query contains no aggregate
+        if (isAggregateFunction) {
+            if (selectRelation.getAggregate() != null) {
+                selectRelation.getAggregate().add((FunctionCallExpr) addColumnExpr);
+            }
+        } else {
+            if (selectRelation.getAggregate() != null && !selectRelation.getAggregate().isEmpty()) {
+                groupByClause.getGroupingExprs().add(addColumnExpr);
+                groupByClause.getOriGroupingExprs().add(addColumnExpr);
+                List<Expr> groupByExprs = selectRelation.getGroupBy();
+                groupByExprs.add(addColumnExpr);
+            }
+        }
+        selectRelation.setOutputExpr(newOutputCols);
+        SelectList selectList = selectRelation.getSelectList();
+        List<SelectListItem> selectListItems = selectList.getItems();
+        selectListItems.add(new SelectListItem(addColumnExpr, columnName));
+
+        // analyze this ast
+        ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
+        Analyzer.analyze(queryStatement, connectContext);
+
+        List<SlotRef> slots = Lists.newArrayList();
+        addColumnExpr.collect(SlotRef.class, slots);
+        if (slots.size() != 1) {
+            throw new SemanticException("Materialized view definition is invalid, " +
+                    "the added column expression must be a simple column reference");
+        }
+        // find the base column from base table
+        SlotRef slotRef = slots.get(0);
+        String baseColumnName = slotRef.getColumnName();
+        if (baseColumnName == null) {
+            throw new SemanticException("Materialized view definition is invalid, " +
+                    "the added column expression must be a simple column reference");
+        }
+        Column baseColumn = baseTable.getColumn(baseColumnName);
+        if (baseColumn == null) {
+            throw new SemanticException("Materialized view definition is invalid, " +
+                    "the added column expression must be a simple column reference");
+        }
+        MaterializedView.AsyncRefreshContext mvAsyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
+        long baseColumnCreatedTime = baseColumn.getCreatedTime();
+        Set<String> toRefreshPartitionNames = Sets.newHashSet();
+        if (baseColumnCreatedTime == -1) {
+            // If the new column's definition requires re-calculating historical data to maintain consistency,
+            // FSE will throw an exception.
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
+                String reason = String.format("Cannot add column " +
+                        "'%s' to materialized view '%s' because the base column '%s' created time is unknown and needs " +
+                        "to refresh the whole base table.", columnName, mv.getName(), baseColumnName);
+                throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
+            }
+            // In force mode with clear partition enabled, invalidate all partitions since we don't know
+            // which partitions are affected when base column timestamp is unknown.
+            if (isMvFastSchemaChangeClearPartition() && baseTable.isNativeTable()) {
+                Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+                if (olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                    Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                            olapTableVisiblePartitionMap.get(baseTable.getId());
+                    if (basePartitionInfoMap != null) {
+                        toRefreshPartitionNames.addAll(basePartitionInfoMap.keySet());
+                        LOG.info("Base column '{}' created time is unknown for materialized view {}, " +
+                                        "invalidating all {} partitions in force mode",
+                                baseColumnName, mv.getName(), toRefreshPartitionNames.size());
+                    }
+                }
+            }
+        } else {
+            checkMVVisibleVersionAffectedBySchemaChange(mv, baseTable,
+                    mvAsyncRefreshContext, columnName, baseColumnCreatedTime, toRefreshPartitionNames);
+        }
+
+        // correct new column type
+        Type newColumnType = AnalyzerUtils.transformTableColumnType(addColumnExpr.getType(), false);
+        AddColumnsClause addColumnsClause = clause.toAddColumnsClause(newColumnType);
+
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            schemaChangeHandler.process(Lists.newArrayList(addColumnsClause), db, mv);
+        } catch (StarRocksException e) {
+            throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
+        }
+
+        try {
+            // Clear affected partition entries from the version map when enabled by config,
+            // so that MV refresh will recompute data for those partitions.
+            if (isMvFastSchemaChangeClearPartition() && !toRefreshPartitionNames.isEmpty()) {
+                LOG.info("Clearing affected partition versions for materialized view {} after adding column: {}",
+                        mv.getName(), toRefreshPartitionNames);
+                Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                        mvAsyncRefreshContext.getBaseTableVisibleVersionMap().get(baseTable.getId());
+                if (basePartitionInfoMap != null) {
+                    for (String partitionName : toRefreshPartitionNames) {
+                        basePartitionInfoMap.remove(partitionName);
+                    }
+                }
+            }
+
+            // renew materialized view's defined query
+            String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
+                    .setEnableDigest(false)).visit(astParseNode);
+            mv.setViewDefineSql(newDefinedSql);
+            mv.setSimpleDefineSql(newDefinedSql);
+            mv.setOriginalViewDefineSql(newDefinedSql);
+            mv.resetDefinedQueryParseNode();
+            // new query output index
+            List<Integer> newQueryOutputIndices = Lists.newArrayList(mv.getQueryOutputIndices());
+            if (!newQueryOutputIndices.isEmpty()) {
+                newQueryOutputIndices.add(newQueryOutputIndices.size());
+                mv.setQueryOutputIndices(newQueryOutputIndices);
+            }
+            // Deferred past the unlock: caching rebuilds the ast key from the define query, which
+            // resolves every base table. See AlterJobExecutor#postUnlockActions.
+            postUnlockActions.add(() -> CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(mv));
+
+            // to be compatible with old MV schema.
+            mv.initUniqueId();
+
+            // write edit log to persist schema change
+            AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(null, mv,
+                            AlterMaterializedViewBaseTableInfosLog.AlterType.ADD_COLUMN);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(log);
+
+            LOG.info("Logged schema change for materialized view '{}': added column '{}' with expression '{}'",
+                    mv.getName(), columnName, addColumnExpr.toString());
+            return null;
+        } catch (DmlException e) {
+            throw new AlterJobException("Failed to add column to materialized view: " + e.getMessage(), e);
+        }
+    }
+
+    private void checkMVVisibleVersionAffectedBySchemaChange(MaterializedView mv, Table baseTable,
+                                                             MaterializedView.AsyncRefreshContext mvAsyncRefreshContext,
+                                                             String columnName,
+                                                             long baseColumnCreatedTime,
+                                                             Set<String> toRefreshPartitionNames) {
+        if (baseTable.isNativeTable()) {
+            Map<Long, Map<String, MaterializedView.BasePartitionInfo>> olapTableVisiblePartitionMap =
+                    mvAsyncRefreshContext.getBaseTableVisibleVersionMap();
+            if (!olapTableVisiblePartitionMap.containsKey(baseTable.getId())) {
+                return;
+            }
+            OlapTable olapBaseTable = (OlapTable) baseTable;
+            Map<String, MaterializedView.BasePartitionInfo> basePartitionInfoMap =
+                    olapTableVisiblePartitionMap.get(baseTable.getId());
+            if (basePartitionInfoMap == null || basePartitionInfoMap.isEmpty()) {
+                return;
+            }
+            for (Map.Entry<String, MaterializedView.BasePartitionInfo> entry : basePartitionInfoMap.entrySet()) {
+                Partition partition = olapBaseTable.getPartition(entry.getKey());
+                // Skip if partition is null (may have been dropped while MV's version map still contains it)
+                if (partition == null) {
+                    LOG.warn("Partition {} not found in base table {} for materialized view {}, " +
+                                    "it may have been dropped",
+                            entry.getKey(), baseTable.getName(), mv.getName());
+                    continue;
+                }
+                // if the partition's visible version time is greater than base column's created time which means
+                // the base table has changed after the column is added, so we need to remove this partition info
+                // to trigger a full refresh for this partition.
+                PhysicalPartition latestPhysicalPartition = partition.getLatestPhysicalPartition();
+                if (latestPhysicalPartition != null &&
+                        latestPhysicalPartition.getVisibleVersionTime() > baseColumnCreatedTime) {
+                    toRefreshPartitionNames.add(entry.getKey());
+                }
+            }
+            // if toRefreshPartitionNames's not empty, throw exception when all partitions are affected
+            if (!toRefreshPartitionNames.isEmpty()
+                    && !mv.isSupportFastSchemaEvolutionInDanger()
+                    && !isMvFastSchemaChangeForceMode()) {
+                LOG.warn("After adding column to materialized view {}, to remove partition infos {} " +
+                                "to trigger full refresh, base column created time: {}, " +
+                                "partition visible version time: {}, to-refresh partitions: {}",
+                        mv.getName(), toRefreshPartitionNames, baseColumnCreatedTime,
+                        olapTableVisiblePartitionMap.get(baseTable.getId()), toRefreshPartitionNames);
+                String reason = String.format("Cannot add column " +
+                                "'%s' to materialized view '%s' because partitions in the base table '%s' are affected " +
+                                "by this schema change and need to be refreshed: %s.",
+                        columnName, mv.getName(), baseTable.getName(), toRefreshPartitionNames);
+                throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
+            }
+        } else {
+            if (!mv.isSupportFastSchemaEvolutionInDanger() && !isMvFastSchemaChangeForceMode()) {
+                String reason = String.format("Cannot add column " +
+                        "'%s' to materialized view '%s' because the base table '%s' is not an olap table and " +
+                        "we cannot determine which partitions are affected by this schema change.",
+                        columnName, mv.getName(), baseTable.getName());
+                throw new SemanticException(MaterializedViewExceptions.unSupportedReasonForMVFSE(reason));
+            }
+        }
+    }
+
+    private static boolean isMvFastSchemaChangeForceMode() {
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode) || "force_no_clear".equalsIgnoreCase(mode);
+    }
+
+    private static boolean isMvFastSchemaChangeClearPartition() {
+        // TODO: support clear partition entries in `strict` mode
+        String mode = Config.mv_fast_schema_change_mode;
+        return "force".equalsIgnoreCase(mode);
+    }
+
+    @Override
+    public Void visitDropMVColumnClause(DropMVColumnClause clause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        String columnName = clause.getColumnName();
+
+        if (mv.getColumn(columnName) == null) {
+            throw new SemanticException("Column '%s' does not exist in materialized view", columnName);
+        }
+
+        // Analyzed in resolveBeforeLock; see visitAddMVColumnClause.
+        ParseNode astParseNode = takePreResolvedDefineQueryAst(mv);
+        if (astParseNode == null || !(astParseNode instanceof QueryStatement)) {
+            throw new SemanticException("Materialized view definition is invalid");
+        }
+        QueryStatement queryStatement = (QueryStatement) astParseNode;
+        if (!(queryStatement.getQueryRelation() instanceof SelectRelation)) {
+            throw new SemanticException("Materialized view definition is invalid, only support select statement");
+        }
+        SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
+        List<Column> visibleSchema = mv.getFullVisibleSchema();
+        int columnIndex = -1;
+        for (int i = 0; i < visibleSchema.size(); i++) {
+            if (visibleSchema.get(i).getName().equalsIgnoreCase(columnName)) {
+                columnIndex = i;
+                break;
+            }
+        }
+        if (columnIndex < 0) {
+            throw new SemanticException("Column '%s' does not exist in materialized view", columnName);
+        }
+
+        List<Expr> outputExpr = selectRelation.getOutputExpression();
+        SelectList selectList = selectRelation.getSelectList();
+        List<SelectListItem> selectListItems = selectList.getItems();
+        if (outputExpr == null || columnIndex >= outputExpr.size() || columnIndex >= selectListItems.size()) {
+            throw new SemanticException("Materialized view definition is invalid");
+        }
+        List<Expr> newOutputExpr = Lists.newArrayList(outputExpr);
+        Expr removedExpr = newOutputExpr.remove(columnIndex);
+        if (selectRelation.getGroupByClause() != null) {
+            GroupByClause groupByClause = selectRelation.getGroupByClause();
+            if (groupByClause.getGroupingExprs().stream()
+                    .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
+            }
+            if (groupByClause.getOriGroupingExprs().stream()
+                    .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
+            }
+            if (selectRelation.getGroupBy().stream()
+                    .anyMatch(expr -> expr == removedExpr || expr.equals(removedExpr))) {
+                throw new SemanticException("Cannot drop column '%s' because it is used in GROUP BY clause", columnName);
+            }
+        }
+
+        selectRelation.setOutputExpr(newOutputExpr);
+        selectListItems.remove(columnIndex);
+        // if the removed expr is an aggregate function, remove it from aggregate list
+        if (removedExpr instanceof FunctionCallExpr && selectRelation.getAggregate() != null) {
+            selectRelation.getAggregate().removeIf(expr -> expr == removedExpr || expr.equals(removedExpr));
+        }
+
+        // Validate and adjust query output indices before schema change
+        List<Integer> newQueryOutputIndices = Lists.newArrayList(mv.getQueryOutputIndices());
+        if (!newQueryOutputIndices.isEmpty()) {
+            if (columnIndex < 0 || columnIndex >= newQueryOutputIndices.size()) {
+                throw new SemanticException(String.format("Materialized view with ordered output indices %s is invalid: " +
+                        "cannot drop column '%s'", columnIndex, columnName));
+            }
+            // Remove the dropped column index and adjust remaining indices
+            newQueryOutputIndices.remove(columnIndex);
+            // Decrement all indices greater than the removed column index
+            for (int i = 0; i < newQueryOutputIndices.size(); i++) {
+                if (newQueryOutputIndices.get(i) > columnIndex) {
+                    newQueryOutputIndices.set(i, newQueryOutputIndices.get(i) - 1);
+                }
+            }
+        }
+
+        ConnectContext connectContext = context == null ? ConnectContext.buildInner() : context;
+        Analyzer.analyze(queryStatement, connectContext);
+
+        // fast schema evolution
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            schemaChangeHandler.process(Lists.newArrayList(clause.toDropColumnClause()), db, mv);
+            mv.lastSchemaUpdateTime.set(System.nanoTime());
+        } catch (StarRocksException e) {
+            throw new AlterJobException("Failed to drop column from materialized view: " + e.getMessage(), e);
+        }
+
+        try {
+            String newDefinedSql = AST2SQLVisitor.withOptions(FormatOptions.allEnable()
+                    .setEnableDigest(false)).visit(astParseNode);
+            mv.setViewDefineSql(newDefinedSql);
+            mv.setSimpleDefineSql(newDefinedSql);
+            mv.setQueryOutputIndices(newQueryOutputIndices);
+            mv.setOriginalViewDefineSql(newDefinedSql);
+            mv.resetDefinedQueryParseNode();
+            // Deferred past the unlock, as in visitAddMVColumnClause.
+            postUnlockActions.add(() -> CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(mv));
+            // to be compatible with old MV schema.
+            mv.initUniqueId();
+
+            // write edit log to persist schema change
+            AlterMaterializedViewBaseTableInfosLog log = new AlterMaterializedViewBaseTableInfosLog(null, mv,
+                    AlterMaterializedViewBaseTableInfosLog.AlterType.DROP_COLUMN);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(log);
+
+            // inactive related mvs
+            inactiveRelatedMaterializedViewsRecursive(mv, Sets.newHashSet(columnName));
+
+            LOG.info("Logged schema change for materialized view '{}': dropped column '{}'",
+                    mv.getName(), columnName);
+        } catch (DmlException e) {
+            throw new AlterJobException("Failed to drop column from materialized view: " + e.getMessage(), e);
+        }
+        return null;
+    }
+
+    @Override
+    public Void visitReorderColumnsClause(ReorderColumnsClause clause, ConnectContext context) {
+        MaterializedView mv = (MaterializedView) table;
+        SortKeyResolution sortKey = resolveSortKey(mv, clause.getColumnsByPos());
+        List<Integer> sortKeyIdxes = sortKey.sortKeyIdxes();
+        List<Integer> sortKeyUniqueIds = sortKey.sortKeyUniqueIds();
+        // NOTE: this visitor already runs under the MV table WRITE lock taken by
+        // AlterJobExecutor.visitAlterMaterializedViewStatement -- do NOT wrap another AutoCloseableLock/
+        // Locker here (a second Locker instance is not reentrant and would self-deadlock).
+        ErrorReport.wrapWithRuntimeException(() ->
+                GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                        .submitMvSortKeyRewriteJob(db, mv, sortKeyIdxes, sortKeyUniqueIds));
+        return null;
+    }
+
+    /**
+     * Result of {@link #resolveSortKey}: the resolved sort-key column positions and (possibly empty)
+     * unique ids.
+     */
+    private record SortKeyResolution(List<Integer> sortKeyIdxes, List<Integer> sortKeyUniqueIds) {
+    }
+
+    /**
+     * Resolve ORDER BY column names to positions (and, if every resolved column carries a stable unique
+     * id, their unique ids) in the MV's base schema, in a single pass. Mirrors the column-matching loop
+     * and unique-id accumulation in {@code SchemaChangeHandler#processModifySortKeyColumn}; existence/
+     * duplicate/keysType checks are already enforced by
+     * {@code AlterMVClauseAnalyzerVisitor#visitReorderColumnsClause}. If any resolved column's unique id
+     * is not stable, the returned unique ids are empty (the job then derives the sort key from
+     * {@code sortKeyIdxes} alone).
+     */
+    private static SortKeyResolution resolveSortKey(MaterializedView mv, List<String> orderBy) {
+        List<Column> baseSchema = mv.getSchemaByIndexMetaId(mv.getBaseIndexMetaId());
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        List<Integer> sortKeyUniqueIds = Lists.newArrayList();
+        boolean useSortKeyUniqueId = true;
+        for (String colName : orderBy) {
+            int sortKeyIdx = -1;
+            for (int i = 0; i < baseSchema.size(); i++) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(colName)) {
+                    sortKeyIdx = i;
+                    break;
+                }
+            }
+            if (sortKeyIdx < 0) {
+                throw new SemanticException("ORDER BY column '" + colName + "' does not exist "
+                        + "in materialized view '" + mv.getName() + "'");
+            }
+            sortKeyIdxes.add(sortKeyIdx);
+            int uniqueId = baseSchema.get(sortKeyIdx).getUniqueId();
+            if (useSortKeyUniqueId && uniqueId > Column.COLUMN_UNIQUE_ID_INIT_VALUE) {
+                sortKeyUniqueIds.add(uniqueId);
+            } else {
+                useSortKeyUniqueId = false;
+                sortKeyUniqueIds.clear();
+            }
+        }
+        return new SortKeyResolution(sortKeyIdxes, sortKeyUniqueIds);
+    }
+
+    @Override
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
     public Void visitRefreshSchemeClause(RefreshSchemeClause refreshSchemeDesc, ConnectContext context) {
         try {
             MaterializedView materializedView = (MaterializedView) table;
@@ -909,9 +1485,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         asyncRefreshContext.setStep(step.getLongValue());
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {
-                        if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
-                                !MvUtils.getTableChecked(tableInfo).isNativeTableOrMaterializedView()
-                        )) {
+                        // Resolved in resolveBeforeLock: getTableChecked goes to the connector for
+                        // an external base table, and this runs under the MV's write lock.
+                        if (Boolean.TRUE.equals(preResolvedHasNonNativeBaseTable)) {
                             throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                                     "external table");
                         }

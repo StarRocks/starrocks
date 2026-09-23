@@ -122,6 +122,17 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     protected TableName tableName;
     protected Database db;
     protected Table table;
+
+    /**
+     * Work a clause visitor defers until the metadata lock is released.
+     *
+     * <p>The rewrite caches of a materialized view are refreshed by re-analyzing its define query,
+     * which resolves every base table -- a connector round trip for an external one. Done inside the
+     * critical section, the MV's write lock is held for the length of that round trip and every
+     * reader of the MV waits on the metastore. It does not belong there on its own terms either: the
+     * editlog is already written by then, so a cache refresh is not part of the metadata change.
+     */
+    protected final List<Runnable> postUnlockActions = new ArrayList<>();
     private boolean isSynchronous;
 
     public AlterJobExecutor() {
@@ -275,6 +286,35 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         return null;
     }
 
+    /**
+     * Resolve, before the lock is taken, whatever the clause visitors would otherwise resolve while
+     * holding it: a critical section may mutate state already in hand, it may not go and find state.
+     * For an MV over external base tables "finding" means a connector call with the MV's write lock
+     * held. visitAlterTableStatement already has this shape -- it runs updateTableConstraint before
+     * locking -- and this hook gives ALTER MATERIALIZED VIEW the same one.
+     *
+     * <p>Overrides read the clause and stash what they resolved; the clause visitor then consumes it
+     * instead of resolving again, so each resolve still happens exactly once.
+     */
+    protected void resolveBeforeLock(AlterClause alterClause, ConnectContext context) {
+    }
+
+    /**
+     * Run what the clause visitors deferred. A failure here is logged, not thrown: the metadata
+     * change is already committed to the editlog, so failing the statement now would report an error
+     * for a change that happened. The caches involved rebuild themselves on the next miss.
+     */
+    protected void runPostUnlockActions() {
+        for (Runnable action : postUnlockActions) {
+            try {
+                action.run();
+            } catch (Exception e) {
+                LOG.warn("post-unlock action failed for {}", tableName, e);
+            }
+        }
+        postUnlockActions.clear();
+    }
+
     @Override
     public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt, ConnectContext context) {
         // check db
@@ -312,6 +352,9 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         AlterClause alterClause = stmt.getAlterTableClause();
         boolean dbLevelClause = alterClause instanceof TableRenameClause || alterClause instanceof SwapTableClause;
 
+        // Everything that has to be resolved for this clause is resolved here, outside the lock.
+        resolveBeforeLock(alterClause, context);
+
         Locker locker = new Locker();
         if (dbLevelClause) {
             locker.lockDatabase(db.getId(), LockType.WRITE);
@@ -330,10 +373,14 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         + "Do not allow to do ALTER ops");
             }
 
+<<<<<<< HEAD
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().stopMaintainMV(materializedView);
             visit(alterClause);
             GlobalStateMgr.getCurrentState().getMaterializedViewMgr().rebuildMaintainMV(materializedView);
             return null;
+=======
+            visit(alterClause, context);
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
         } finally {
             if (dbLevelClause) {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -341,6 +388,11 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             }
         }
+
+        // Only on the success path: if visit threw, the exception propagates through the finally
+        // above and there is no committed change whose caches need refreshing.
+        runPostUnlockActions();
+        return null;
     }
 
     //Alter table clause
