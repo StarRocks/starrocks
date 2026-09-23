@@ -25,7 +25,8 @@ import java.util.Optional;
 public interface IDictManager {
     boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime);
 
-    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion, long versionTime);
+    void updateGlobalDict(OlapTable table, ColumnId columnName, long collectedVersion,
+                          long versionTime, Long contentIdentity);
 
     boolean hasGlobalDict(long tableId, ColumnId columnName);
 
