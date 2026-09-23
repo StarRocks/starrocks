@@ -25,12 +25,29 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
+<<<<<<< HEAD
 #include "simd/expand.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 #include "util/cpu_info.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
+=======
+#include "runtime/current_thread.h"
+
+namespace {
+// Single-pass min/max bounds check for dictionary indices. Reads the unsigned
+// indices through a signed reinterpret to feed SIMD min/max; any value
+// >= INT32_MAX surfaces as a negative min, which is also "out of bounds" for
+// any realistic dictionary, so the signed view is correct.
+inline bool indices_out_of_bounds(const uint32_t* indices, int32_t count, size_t dict_size) {
+    if (count <= 0) return false;
+    int32_t min_idx, max_idx;
+    starrocks::simd_minmax_int32(reinterpret_cast<const int32_t*>(indices), count, min_idx, max_idx);
+    return min_idx < 0 || static_cast<size_t>(max_idx) >= dict_size;
+}
+} // anonymous namespace
+>>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
 namespace starrocks::parquet {
 
@@ -438,7 +455,8 @@ public:
         _dict.resize(num_values);
 
         // reserve enough memory to use append_strings_overflow
-        raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE);
+        TRY_CATCH_BAD_ALLOC(
+                raw::stl_vector_resize_uninitialized(&_dict_data, total_length + Column::APPEND_OVERFLOW_MAX_SIZE));
 
         size_t offset = 0;
         _max_value_length = 0;
@@ -454,7 +472,8 @@ public:
     }
 
     Status get_dict_values(Column* column) override {
-        auto ret = column->append_strings_overflow(_dict.data(), _dict.size(), _max_value_length);
+        bool ret = false;
+        TRY_CATCH_BAD_ALLOC(ret = column->append_strings_overflow(_dict.data(), _dict.size(), _max_value_length));
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
         }
@@ -495,7 +514,8 @@ public:
             }
         }
 
-        bool ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length);
+        bool ret = false;
+        TRY_CATCH_BAD_ALLOC(ret = column->append_strings_overflow(slices.data(), slices.size(), _max_value_length));
 
         if (UNLIKELY(!ret)) {
             return Status::InternalError("DictDecoder append strings to column failed");
@@ -641,7 +661,7 @@ private:
             if (read_count == 0) {
                 return Status::OK();
             }
-            binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length);
+            TRY_CATCH_BAD_ALLOC(binary_column->append_bytes_overflow(datas, lengths, read_count, _max_value_length));
             DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         }
 
@@ -676,19 +696,21 @@ private:
             }
             auto* binary_column = down_cast<BinaryColumn*>(data_column);
             size_t num_excluded = 0;
-            for (int i = 0; i < count; ++i) {
-                if (filter[i]) {
-                    binary_column->append(_dict[_indexes[i]]);
-                } else {
-                    // Skipping the dictionary lookup means this row contributes no bytes, so it
-                    // must be marked NULL to keep the layout invariant (see the class comment).
-                    binary_column->append_default();
-                    if (null_data != nullptr) {
-                        null_data[i] = 1;
+            TRY_CATCH_BAD_ALLOC({
+                for (int i = 0; i < count; ++i) {
+                    if (filter[i]) {
+                        binary_column->append(_dict[_indexes[i]]);
+                    } else {
+                        // Skipping the dictionary lookup means this row contributes no bytes, so it
+                        // must be marked NULL to keep the layout invariant (see the class comment).
+                        binary_column->append_default();
+                        if (null_data != nullptr) {
+                            null_data[i] = 1;
+                        }
+                        ++num_excluded;
                     }
-                    ++num_excluded;
                 }
-            }
+            });
             if (num_excluded > 0 && null_data != nullptr) {
                 down_cast<NullableColumn*>(dst)->set_has_null(true);
             }
@@ -698,7 +720,7 @@ private:
             if (UNLIKELY(ret <= 0)) {
                 return Status::InternalError("DictDecoder<Slice> GetBatchWithDict failed");
             }
-            ret = dst->append_strings_overflow(_slices.data(), _slices.size(), _max_value_length);
+            TRY_CATCH_BAD_ALLOC(ret = dst->append_strings_overflow(_slices.data(), _slices.size(), _max_value_length));
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("DictDecoder append strings to column failed");
             }

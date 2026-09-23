@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
+<<<<<<< HEAD
 #include "types/int256.h"
 #include "util/bit_stream_utils.h"
 #include "util/bit_util.h"
@@ -31,6 +32,9 @@
 #include "util/faststring.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
+=======
+#include "runtime/current_thread.h"
+>>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
 #ifdef __AVX2__
 #include <immintrin.h>
@@ -254,6 +258,7 @@ public:
         }
 
         // fill bytes data
+<<<<<<< HEAD
         max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
         if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
             binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
@@ -262,6 +267,18 @@ public:
             binary_column->append_bytes(datas, lengths, read_count);
             DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
         }
+=======
+        max_size = std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                static_cast<decltype(max_size)>(8));
+        TRY_CATCH_BAD_ALLOC({
+            if (datas[read_count - 1] - _data.data + max_size <= _data.size) {
+                binary_column->append_bytes_overflow(datas, lengths, read_count, max_size);
+            } else {
+                binary_column->append_bytes(datas, lengths, read_count);
+            }
+        });
+        DCHECK_EQ(binary_column->get_bytes().size(), binary_column->get_offset().back());
+>>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
         return Status::OK();
     }
@@ -307,12 +324,25 @@ public:
             CHECK_DECODING_BOUND
             bool ret = false;
             // when last slices offset + max_size > _data.size, there is overflow on reading
+<<<<<<< HEAD
             max_size = std::max(BitUtil::next_power_of_two(max_size), 8L);
             if (slices[count - 1].data - _data.data + max_size <= _data.size) {
                 ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
             } else {
                 ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
             }
+=======
+            max_size =
+                    std::max<decltype(max_size)>(static_cast<decltype(max_size)>(BitUtil::next_power_of_two(max_size)),
+                                                 static_cast<decltype(max_size)>(8));
+            TRY_CATCH_BAD_ALLOC({
+                if (slices[count - 1].data - _data.data + max_size <= _data.size) {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices, num_decoded, max_size);
+                } else {
+                    ret = ColumnHelper::get_binary_column(dst)->append_strings(slices, num_decoded);
+                }
+            });
+>>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
 
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("PlainDecoder append strings to column failed");
