@@ -81,7 +81,7 @@ final class JsonExtractFusionReuse {
                 args.addAll(paths.keySet());
                 Function many = ExprUtils.getBuiltinFunction(FunctionSet.JSON_QUERY_MANY_FROM_STRING,
                         args.stream().map(ScalarOperator::getType).toArray(Type[]::new),
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE);
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 ScalarOperator outputPath = ConstantOperator.createVarchar("$." + paths.get(call.getChild(1)));
                 Function query = ExprUtils.getBuiltinFunction(FunctionSet.JSON_QUERY,
                         new Type[] {JsonType.JSON, outputPath.getType()}, Function.CompareMode.IS_IDENTICAL);
@@ -92,7 +92,7 @@ final class JsonExtractFusionReuse {
                 return new CallOperator(query.functionName(), JsonType.JSON, List.of(shared, outputPath), query);
             }
         };
-        Projection result = projection.clone();
+        Projection result = projection.deepClone();
         result.getColumnRefMap().replaceAll((column, expression) -> expression.accept(rewriter, null));
         return result;
     }
