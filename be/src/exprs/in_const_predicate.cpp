@@ -24,6 +24,11 @@ ExprContext* VectorizedInConstPredicateBuilder::_create() {
 
     TExprNode node;
     LogicalType probe_type = probe_expr->type().type;
+    // IN uses IEEE equality for floats and cannot retain NaN matches required by <=>.
+    if (_is_join_runtime_filter && _eq_null && is_float_type(probe_type)) {
+        _st = Status::NotSupported("Floating-point null-safe joins cannot use an IN runtime filter");
+        return nullptr;
+    }
 
     // create TExprNode
     node.__set_node_type(TExprNodeType::IN_PRED);

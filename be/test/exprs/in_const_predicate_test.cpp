@@ -53,4 +53,17 @@ TEST_F(InConstPredicateTest, clone) {
     ASSERT_EQ(new_values.size(), 5);
 }
 
+TEST_F(InConstPredicateTest, NullSafeFloatRuntimeFilter) {
+    for (LogicalType type : {TYPE_FLOAT, TYPE_DOUBLE, TYPE_INT}) {
+        for (bool eq_null : {false, true}) {
+            auto* ref = _pool.add(new ColumnRef(TypeDescriptor(type), 1));
+            VectorizedInConstPredicateBuilder builder(&_runtime_state, &_pool, ref);
+            builder.set_eq_null(eq_null);
+            builder.use_as_join_runtime_filter();
+            Status status = builder.create();
+            ASSERT_EQ(status.ok(), !(eq_null && is_float_type(type)));
+        }
+    }
+}
+
 } // namespace starrocks

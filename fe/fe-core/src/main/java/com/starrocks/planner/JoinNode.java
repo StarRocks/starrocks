@@ -203,6 +203,13 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||
                     BinaryPredicate.IS_EQ_PREDICATE.apply(joinConjunct));
 
+            // Float runtime filters use IEEE comparisons, which reject NaN. Null-safe equality
+            // must keep NaN rows for the join even when the build key is also NaN.
+            if (BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct)
+                    && joinConjunct.getChild(0).getType().isFloatingPointType()) {
+                continue;
+            }
+
             RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
             rf.setBuildPlanNodeId(this.id.asInt());
             rf.setBuildPlanNode(this);

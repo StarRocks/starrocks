@@ -27,6 +27,19 @@ public class RuntimeFilterTest extends PlanTestBase {
     }
 
     @Test
+    public void testNullSafeFloatingPointJoinKeepsNanRows() throws Exception {
+        for (String type : new String[] {"FLOAT", "DOUBLE"}) {
+            String sql = "select * from (select cast(v1 as " + type + ") k from t0) a "
+                    + "join [broadcast] (select cast(v4 as " + type + ") k from t1) b on a.k <=> b.k";
+            String plan = getVerboseExplain(sql);
+            assertContains(plan, "<=>");
+            assertNotContains(plan, "build runtime filters:");
+        }
+        String integerPlan = getVerboseExplain("select * from t0 join [broadcast] t1 on v1 <=> v4");
+        assertContains(integerPlan, "build runtime filters:");
+    }
+
+    @Test
     public void testDeterministicBroadcastJoinForColocateJoin() throws Exception {
         String sql = "select * from \n" +
                 "  t0 vt1 join [bucket] t0 vt2 on vt1.v1 = vt2.v1\n" +
