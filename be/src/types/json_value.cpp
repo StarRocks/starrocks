@@ -303,7 +303,8 @@ static int sliceCompare(const vpack::Slice& left, const vpack::Slice& right) {
             // negative. int128_t orders every such pair without a conversion that can throw.
             return cmpInt128(integerToInt128(left), integerToInt128(right));
         } else {
-            return cmpDouble(left.getNumber<double>(), right.getNumber<double>());
+            // mixed number encodings: integer vs Double
+            return cmpDouble(left.getNumericValue<double>(), right.getNumericValue<double>());
         }
     } else {
         if (left.type() == vpack::ValueType::MinKey) {
