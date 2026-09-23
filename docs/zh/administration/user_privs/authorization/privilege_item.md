@@ -96,6 +96,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限   | 用途                         |
 | ------ | ---------------------------- |
 | SELECT | 查询视图 (view) 中的数据。   |
+| EXPORT | 导出 StarRocks 视图中的数据。 |
 | ALTER  | 修改一个视图的定义。         |
 | DROP   | 删除一个逻辑视图。           |
 | ALL    | 拥有对该视图的上述所有权限。 |
@@ -105,6 +106,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
 | SELECT  | 查询时引用该物化视图 (materialized view) 的数据，以加速查询。 |
+| EXPORT  | 导出 StarRocks 物化视图中的数据。                             |
 | ALTER   | 更改物化视图。                                               |
 | REFRESH | 刷新物化视图。                                               |
 | DROP    | 删除物化视图。                                               |
