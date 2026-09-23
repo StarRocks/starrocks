@@ -25,12 +25,17 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Task implements Writable, GsonPostProcessable {
+
+    private static final Logger LOG = LogManager.getLogger(Task.class);
 
     @SerializedName("id")
     private long id;
@@ -206,8 +211,16 @@ public class Task implements Writable, GsonPostProcessable {
         if (source == Constants.TaskSource.MV) {
             MaterializedView mv = TaskBuilder.getMvFromTask(this);
             if (mv != null) {
-                return GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getWarehouse(mv.getWarehouseId()).getName();
+                // The MV refers to its warehouse by id and DROP WAREHOUSE leaves that id dangling, so this
+                // lookup can miss. Degrade this one field instead of throwing: the tasks view builds every
+                // row before any predicate is applied, so one dangling id would fail the whole query.
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                        .getWarehouseAllowNull(mv.getWarehouseId());
+                if (warehouse != null) {
+                    return warehouse.getName();
+                }
+                LOG.warn("Failed to get warehouse {} for mv {}, task: {}", mv.getWarehouseId(), mv.getName(), name);
+                return "";
             }
         }
         if (properties != null) {

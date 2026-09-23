@@ -19,8 +19,11 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -98,6 +101,37 @@ public class TaskTest {
 
         // Verify it's an MV task
         Assertions.assertEquals(Constants.TaskSource.MV, mvTask.getSource());
+    }
+
+    @Test
+    public void testGetWarehouseNameForMvTaskWithDroppedWarehouse() {
+        MaterializedView mv = new MaterializedView();
+        mv.setId(10003L);
+        mv.setName("test_mv3");
+        mv.setTableProperty(new TableProperty());
+        // An id that was never registered stands for a warehouse that has since been dropped.
+        mv.setWarehouseId(9999L);
+
+        Task mvTask = TaskBuilder.buildMvTask(mv, "test_db");
+
+        new MockUp<TaskBuilder>() {
+            @Mock
+            public MaterializedView getMvFromTask(Task task) {
+                return mv;
+            }
+        };
+        // A real WarehouseManager, not MockedWarehouseManager: the latter resolves every id to the default
+        // warehouse and so cannot reproduce a dangling reference.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new WarehouseManager();
+            }
+        };
+
+        // The dangling id used to throw ErrorReportException, which failed the whole
+        // information_schema.tasks query instead of degrading this one field.
+        Assertions.assertEquals("", mvTask.getWarehouseName());
     }
 
     @Test
