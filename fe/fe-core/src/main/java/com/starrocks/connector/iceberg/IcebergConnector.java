@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -101,6 +102,11 @@ public class IcebergConnector implements Connector {
     // icebergNativeCatalog is lazy, mainly to prevent fe restart failure.
     public IcebergCatalog getNativeCatalog() {
         if (icebergNativeCatalog == null) {
+            // Inside the null check, not at the entry: this method is called on every getMetadata,
+            // and once the catalog exists it returns a field. Only the build contacts anything --
+            // REST does GET /v1/config, hive connects to HMS, glue builds an AWS client -- and it
+            // is deliberately lazy so an unreachable metastore cannot stop the FE from starting.
+            BlockingCallValidator.validateNotUnderLock("iceberg-catalog", catalogName);
             IcebergCatalog nativeCatalog = buildIcebergNativeCatalog();
 
             if (icebergCatalogProperties.enableIcebergMetadataCache() && !isResourceMappingCatalog(catalogName)) {
