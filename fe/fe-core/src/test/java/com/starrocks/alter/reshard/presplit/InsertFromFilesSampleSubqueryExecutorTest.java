@@ -24,6 +24,7 @@ import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
@@ -493,6 +494,31 @@ class InsertFromFilesSampleSubqueryExecutorTest {
 
         Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `file_col` FROM FILES("),
                 "the projection must name the FILES column, not the target column: " + capturedSql);
+    }
+
+    @Test
+    void literalFedPartitionColumnIsProjectedAsTheLiteralCastToTheColumnType() throws Exception {
+        // INSERT INTO t BY NAME SELECT k, '20260917' AS dt FROM FILES("path" = ".../dt=20260917/*"):
+        // dt is in the directory name, not the file, so projecting a FILES column for it would fail.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/dt=20260917/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/dt=20260917/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(bigintColumn("sort_key")), List.of(new Column("dt", DateType.DATE)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(
+                capturedSql.toString().startsWith("SELECT `sort_key`, CAST('20260917' AS date) FROM FILES("),
+                "the literal stands in for the partition column: " + capturedSql);
     }
 
     @Test

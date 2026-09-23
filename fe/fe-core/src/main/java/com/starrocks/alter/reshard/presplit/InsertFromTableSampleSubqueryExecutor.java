@@ -56,7 +56,7 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                 context.sourceTotalBytes(),
                 context.computeResource(),
                 identsOf(mapToSource(request.getSortKey(), context.targetToSourceColumnNames())),
-                identsOf(mapToSource(request.getPartitionSourceColumns(), context.targetToSourceColumnNames())),
+                partitionProjections(request.getPartitionSourceColumns(), context),
                 request.getSortKey(),
                 request.getPartitionSourceColumns(),
                 context.sourceTotalRows(),
@@ -71,6 +71,21 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                     + " -- wire only the INSERT-from-table load kind here");
         }
         return context;
+    }
+
+    /**
+     * Projects each partition column by its source column, or -- when the SELECT feeds it a literal --
+     * by that literal cast to the column type. Throws on a column backed by neither, like
+     * {@link #mapToSource}.
+     */
+    private static List<String> partitionProjections(
+            List<Column> partitionColumns, InsertFromTableScanContext context) throws StarRocksException {
+        List<String> projections = InsertSelectSourceColumns.partitionProjections(
+                partitionColumns, context.targetToSourceColumnNames(), context.targetToConstantPartitionSql());
+        if (projections == null) {
+            throw new StarRocksException(ERROR_PREFIX + "a partition column has neither a source column nor a constant");
+        }
+        return projections;
     }
 
     /**

@@ -91,16 +91,18 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, targetColumns, sourceTable,
                 filesRelation.getName(), /*sourceAlias*/ null, sortKeyColumns, partitionColumns,
                 InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
-        if (targetToSource == null) {
+        if (resolved == null) {
             return null;
         }
+        Map<String, String> targetToSource = resolved.targetToSource();
         InsertFromFilesScanContext scanContext =
                 new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
-                        context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql);
+                        context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql,
+                        resolved.targetToConstantPartitionSql());
         // Deliberately the WHOLE file byte total even when a predicate narrows the load: FILES()
         // exposes no row count, so the data tier has no denominator to turn its observed hit ratio
         // into a filtered size the way the table path does. Sizing from the full input can only

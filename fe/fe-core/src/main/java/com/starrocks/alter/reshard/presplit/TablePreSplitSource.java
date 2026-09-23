@@ -105,19 +105,21 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (targetColumns == null) {
             return null;
         }
-        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, targetColumns,
                 resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
                 sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
-        if (targetToSource == null) {
+        if (resolved == null) {
             return null;
         }
+        Map<String, String> targetToSource = resolved.targetToSource();
         InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
                 resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
                 targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource(),
-                resolvedSource.totalBytes(), resolvedSource.totalRows());
+                resolvedSource.totalBytes(), resolvedSource.totalRows(),
+                resolved.targetToConstantPartitionSql());
         long estimatedBytes = resolvedSource.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource());
