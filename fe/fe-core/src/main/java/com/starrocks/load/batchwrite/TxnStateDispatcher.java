@@ -17,6 +17,7 @@ package com.starrocks.load.batchwrite;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.proto.PUpdateTransactionStateRequest;
 import com.starrocks.proto.PUpdateTransactionStateResponse;
 import com.starrocks.proto.TransactionStatePB;
@@ -165,6 +166,11 @@ public class TxnStateDispatcher {
                         "can't get txn state, exception: " + e.getMessage());
             }
         }
+        // This one does not go through BackendServiceClient, so it does not get the door that
+        // wraps the futures handed out there. It is placed before the try on purpose: the catch
+        // below turns everything into a retryable failure, which in error mode would swallow the
+        // refusal and report it as a flaky backend.
+        BlockingCallValidator.validateNotUnderLock("be-update-transaction-state");
         try {
             TransactionStatePB statePB = new TransactionStatePB();
             statePB.setTxnId(txnId);

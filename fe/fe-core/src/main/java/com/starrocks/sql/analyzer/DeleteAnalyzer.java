@@ -265,12 +265,18 @@ public class DeleteAnalyzer {
 
         TableRef tableRef = deleteStatement.getTableRef();
         TableName tableName = TableName.fromTableRef(tableRef);
-        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getDb(session, tableName.getCatalog(), tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+        // An external target was resolved before the lock was taken, because the lock covers nothing about
+        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
+        // succeed -- falls through to the resolve this has always done.
+        Table table = session.getPreResolvedWriteTargets().take(tableName);
+        if (table == null) {
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
+            table = MetaUtils.getSessionAwareTable(session, null, tableName);
         }
-        Table table = MetaUtils.getSessionAwareTable(session, null, tableName);
         MetaUtils.checkNotSupportCatalog(table, TableOperation.DELETE);
 
         // Handle Iceberg table delete

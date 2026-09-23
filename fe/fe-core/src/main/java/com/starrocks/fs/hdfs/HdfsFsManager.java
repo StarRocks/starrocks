@@ -24,6 +24,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -399,6 +400,20 @@ public class HdfsFsManager {
      * <p>
      * On success the returned HdfsFs has its lock held — the caller MUST release it in a
      * finally block.
+     * <p>
+     * This is also where the construction half of the blocking-call door lives, for every scheme
+     * at once. Each per-scheme helper creates its underlying {@link FileSystem} inside
+     * {@code if (fileSystem.getDFSFileSystem() == null)}, which is two layers in: inside the
+     * per-identity lock this method takes, and inside a {@code catch (Exception)} that rewrites
+     * everything into a StarRocksException, so a guard there would be swallowed in error mode. A
+     * guard at {@code getFileSystem}'s entry is no good either -- it would report every cache hit.
+     * <p>
+     * So the check happens here, on the entry this method is about to hand back, at the one moment
+     * its state cannot move: the entry's lock is held and it has been confirmed to still be in the
+     * map, which is exactly the state the caller will find when it tests
+     * {@code getDFSFileSystem() == null}. Checking before the loop instead would be racy in the
+     * direction that matters -- the expiration checker can evict a built file system in between, and
+     * the caller would then build a new one with nothing reported.
      */
     private HdfsFs acquireCachedFileSystem(HdfsFsIdentity identity) throws StarRocksException {
         for (int attempt = 0; attempt < MAX_CACHE_ACQUIRE_RETRIES; attempt++) {
@@ -410,6 +425,16 @@ public class HdfsFsManager {
             }
             fileSystem.getLock().lock();
             if (cachedFileSystem.containsKey(identity)) {
+                if (fileSystem.getDFSFileSystem() == null) {
+                    // The caller is about to build it. In error mode the guard throws, so the lock
+                    // this method acquired has to be given back before it leaves.
+                    try {
+                        BlockingCallValidator.validateNotUnderLock("remote-storage");
+                    } catch (RuntimeException e) {
+                        fileSystem.getLock().unlock();
+                        throw e;
+                    }
+                }
                 return fileSystem; // lock held
             }
             // Entry was evicted while we waited for the lock — unlock and retry.
@@ -1210,6 +1235,7 @@ public class HdfsFsManager {
 
     public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
         HdfsFs fileSystem = getFileSystem(srcPath, properties, null);
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             fileSystem.getDFSFileSystem().copyToLocalFile(false, new Path(new WildcardURI(srcPath).getPath()),
                     new Path(destPath), true);
@@ -1225,6 +1251,7 @@ public class HdfsFsManager {
 
     public void copyFromLocal(String srcPath, String destPath, Map<String, String> properties) throws StarRocksException {
         HdfsFs fileSystem = getFileSystem(destPath, properties, null);
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             WildcardURI destPathUri = new WildcardURI(destPath);
             File srcFile = new File(srcPath);
@@ -1243,6 +1270,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, properties, null);
         Path pathPattern = new Path(pathUri.getPath());
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
             return files != null ? Lists.newArrayList(files) : Lists.newArrayList();
@@ -1265,6 +1293,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path pathPattern = new Path(pathUri.getPath());
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FileStatus[] files = fileSystem.getDFSFileSystem().globStatus(pathPattern);
             if (files == null) {
@@ -1314,6 +1343,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             fileSystem.getDFSFileSystem().delete(filePath, true);
         } catch (InterruptedIOException e) {
@@ -1345,6 +1375,7 @@ public class HdfsFsManager {
         HdfsFs fileSystem = getFileSystem(srcPath, loadProperties, null);
         Path srcfilePath = new Path(srcPathUri.getPath());
         Path destfilePath = new Path(destPathUri.getPath());
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             boolean isRenameSuccess = fileSystem.getDFSFileSystem().rename(srcfilePath, destfilePath);
             if (!isRenameSuccess) {
@@ -1365,6 +1396,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
         Path filePath = new Path(pathUri.getPath());
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             return fileSystem.getDFSFileSystem().exists(filePath);
         } catch (InterruptedIOException e) {
@@ -1382,6 +1414,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FSDataInputStream fsDataInputStream = fileSystem.getDFSFileSystem().open(inputFilePath, readBufferSize);
             fsDataInputStream.seek(startOffset);
@@ -1403,6 +1436,7 @@ public class HdfsFsManager {
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
             long currentStreamOffset;
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
             try {
                 currentStreamOffset = fsDataInputStream.getPos();
             } catch (InterruptedIOException e) {
@@ -1471,6 +1505,7 @@ public class HdfsFsManager {
     public void closeReader(TBrokerFD fd) throws StarRocksException {
         FSDataInputStream fsDataInputStream = ioStreamManager.getFsDataInputStream(fd);
         synchronized (fsDataInputStream) {
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
             try {
                 fsDataInputStream.close();
             } catch (InterruptedIOException e) {
@@ -1490,6 +1525,7 @@ public class HdfsFsManager {
         WildcardURI pathUri = new WildcardURI(path);
         Path inputFilePath = new Path(pathUri.getPath());
         HdfsFs fileSystem = getFileSystem(path, loadProperties, null);
+        BlockingCallValidator.validateNotUnderLock("remote-storage");
         try {
             FSDataOutputStream fsDataOutputStream = fileSystem.getDFSFileSystem().create(inputFilePath,
                     true, writeBufferSize);
@@ -1516,6 +1552,7 @@ public class HdfsFsManager {
                 throw new StarRocksException("current outputstream offset is " + currentStreamOffset
                         + " not equal to request " + offset);
             }
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
             try {
                 fsDataOutputStream.write(data);
             } catch (InterruptedIOException e) {
@@ -1533,6 +1570,7 @@ public class HdfsFsManager {
     public void closeWriter(TBrokerFD fd) throws StarRocksException {
         FSDataOutputStream fsDataOutputStream = ioStreamManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
+            BlockingCallValidator.validateNotUnderLock("remote-storage");
             try {
                 fsDataOutputStream.hsync();
                 fsDataOutputStream.close();

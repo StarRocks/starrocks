@@ -22,6 +22,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -49,10 +50,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -80,14 +79,12 @@ public class SplitTabletJobReplayTest {
         starRocksAssert.withDatabase("test").useDatabase("test");
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
-        // Run the publish the reshard daemon submits on the calling thread, so a job driven by run()
-        // observes its own publish result in the next cycle.
-        new MockUp<ThreadPoolExecutor>() {
-            @Mock
-            public <T> Future<T> submit(Callable<T> task) throws Exception {
-                return CompletableFuture.completedFuture(task.call());
-            }
-        };
+        // Run the publish the reshard daemon submits synchronously, so a job driven by run() observes
+        // its own publish result in the next cycle -- but on a thread of its own, which is what the
+        // helper is for. Running it inline would hand the publish the two metadata locks the caller
+        // holds, and SplitTabletJob.publishVersion would then contact the BEs under a lock it never
+        // has in production, where that publish goes to publishThreadPool.
+        LockTestUtils.fakeSynchronousExecutorOffTheCallersThread();
 
         // Silence the reshard daemon. It is a started leader-only daemon on a 10 ms tick
         // (Config.tablet_reshard_job_scheduler_interval_ms) that runs every non-final job in
