@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.common.lock;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.concurrent.lock.DeadlockException;
 import com.starrocks.common.util.concurrent.lock.LockException;
@@ -30,6 +31,24 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class LockTestUtils {
+    private static final String DEFAULT_BLOCKING_CALL_VALIDATION_MODE = Config.lock_blocking_call_validation_mode;
+
+    /**
+     * Opt a test out of the blocking-call-under-lock check.
+     * <p>
+     * For a test that holds a metadata lock across a blocking call <em>on purpose</em> -- one that
+     * reproduces such a site, or asserts what the FE does when the connector is slow. A test that
+     * merely happens to trip the check is reporting a real defect and must not use this. Pair with
+     * {@link #restoreBlockingCallValidation()} in teardown.
+     */
+    public static void disableBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = "off";
+    }
+
+    public static void restoreBlockingCallValidation() {
+        Config.lock_blocking_call_validation_mode = DEFAULT_BLOCKING_CALL_VALIDATION_MODE;
+    }
+
     /**
      * Fake {@code ThreadPoolExecutor.submit} so the task runs on a thread of its own and is joined,
      * instead of running inline on the caller's thread.
