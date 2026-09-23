@@ -344,24 +344,37 @@ public class CachingMvPlanContextBuilder {
             MVTimelinessMgr mvTimelinessMgr = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getMvTimelinessMgr();
             mvTimelinessMgr.remove(mv);
 
-            List<AstKey> astKeys = getAstKeysOfMV(mv);
-            if (CollectionUtils.isEmpty(astKeys)) {
-                return;
-            }
+            // Drop this mv from the ast cache by walking the map, not by recomputing its keys.
+            //
+            // getAstKeysOfMV goes through MaterializedView#getDefineQueryParseNode, which on an mv
+            // whose parse node is not cached yet re-analyzes the define query -- resolving every base
+            // table, the external ones through the connector. Eviction runs under a metadata lock at
+            // every caller: MaterializedView#setInactiveAndReason is called from AlterJobMgr's replay
+            // paths, LocalMetastore#replayAlterMaterializedViewProperties, BackupJob, BackupHandler
+            // and RestoreJob, and #onDropImpl runs inside the DROP MATERIALIZED VIEW db WRITE lock.
+            // So the lock's hold time became a metastore round-trip -- paid to learn which keys to
+            // remove, for work that is otherwise a map removal.
+            //
+            // The keys are not needed to answer that: Table#equals is by id, so each value set
+            // already knows whether it holds this mv. Walking every entry is O(number of cached
+            // asts), one or two per rewrite-enabled mv, on a path that runs when an mv changes state
+            // rather than per query.
+            //
+            // It also fixes a leak. The old code returned early when getAstKeysOfMV came back empty,
+            // which is exactly what happens once the define query no longer parses -- and this is the
+            // path that marks an mv inactive, so that case is not hypothetical. The mv then stayed in
+            // the ast cache for good, and text-based rewrite kept offering it as a candidate.
+            //
+            // Touching every entry does not widen the unsynchronized read in #getMvsByAst: a set that
+            // does not hold this mv is not structurally modified, because HashSet#remove bumps
+            // modCount only when it actually removes something.
             synchronized (AST_TO_MV_MAP) {
-                for (AstKey astKey : astKeys) {
-                    if (!AST_TO_MV_MAP.containsKey(astKey)) {
-                        continue;
-                    }
-                    // remove mv from ast cache
-                    Set<MaterializedView> relatedMVs = AST_TO_MV_MAP.get(astKey);
+                AST_TO_MV_MAP.entrySet().removeIf(entry -> {
+                    Set<MaterializedView> relatedMVs = entry.getValue();
                     relatedMVs.remove(mv);
-
-                    // remove ast key if no related mvs
-                    if (relatedMVs.isEmpty()) {
-                        AST_TO_MV_MAP.remove(astKey);
-                    }
-                }
+                    // drop the ast key once nothing points at it
+                    return relatedMVs.isEmpty();
+                });
             }
             LOG.debug("Remove mv {} from ast cache", mv.getName());
         } catch (Exception e) {
