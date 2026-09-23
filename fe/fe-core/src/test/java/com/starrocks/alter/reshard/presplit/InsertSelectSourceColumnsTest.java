@@ -54,6 +54,18 @@ public class InsertSelectSourceColumnsTest {
         return stmt;
     }
 
+    /**
+     * Build a mock InsertStmt carrying an explicit target column list. BY NAME and a written
+     * column list cannot be combined by the parser, but {@code InsertAnalyzer} sets the list to
+     * the SELECT output names for a BY NAME statement, so the analyzed INSERT OVERWRITE ... BY
+     * NAME that the overwrite hooks see does carry both.
+     */
+    private static InsertStmt insertStmt(boolean byName, List<String> targetColumnNames) {
+        InsertStmt stmt = insertStmt(byName);
+        when(stmt.getTargetColumnNames()).thenReturn(targetColumnNames);
+        return stmt;
+    }
+
     /** Build a mock OlapTable stubbing getBaseSchemaWithoutGeneratedColumn and
      * getVisibleColumnsWithoutGeneratedColumn to return the given column lists,
      * and hasGeneratedColumn() to the given flag.  We intentionally do NOT stub
@@ -673,6 +685,168 @@ public class InsertSelectSourceColumnsTest {
 
         Map<String, String> result = InsertSelectSourceColumns.resolve(
                 insertStmt(false), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    // --- explicit target column list: outputs pair against the list, not the base schema ---
+
+    @Test
+    public void partialColumnListByPositionMapsOnlyListedColumns() {
+        // target base [k, v, extra]; INSERT INTO t (k, v) SELECT k, v -- the omitted "extra"
+        // is defaulted by the load and simply never enters the map.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("k", "v")), bareRelation(bareItem("k"), bareItem("v")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void reorderedColumnListByPositionPairsInListOrder() {
+        // target base [k, v]; INSERT INTO t (v, k) SELECT k, v -> v<-"k", k<-"v".
+        // Pairing against the base schema instead would give the identity map.
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("v", "k")), bareRelation(bareItem("k"), bareItem("v")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "v", "v", "k"), result);
+    }
+
+    @Test
+    public void starWithPartialColumnListMapsListedColumns() {
+        // target base [k, v, extra]; INSERT INTO t (k, v) SELECT * FROM src(k, v).
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("k", "v")), starRelation(),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void partialColumnListByPositionLengthMismatchReturnsNull() {
+        // INSERT INTO t (k, v) SELECT k -- two listed targets, one output.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("k", "v")), bareRelation(bareItem("k")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void partialColumnListByNameMapsListedColumns() {
+        // target base [k, v, extra]; BY NAME with the analyzed list (k, v) and outputs k, v.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(true, List.of("k", "v")), bareRelation(bareItem("k"), bareItem("v")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void reorderedColumnListByNameMapsBySelectOutputName() {
+        // target base [k, v, extra]; BY NAME with the analyzed list (v, k) -- partial AND in an
+        // order the schema does not have. Matching stays by output name, so SELECT v AS k,
+        // k AS v gives k<-"v" and v<-"k", and the unlisted "extra" stays out of the map.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        SelectRelation rel = bareRelation(
+                bareItem("v", null, "k"),   // SELECT v AS k
+                bareItem("k", null, "v"));  // SELECT k AS v
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(true, List.of("v", "k")), rel,
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "v", "v", "k"), result);
+    }
+
+    @Test
+    public void columnListByNameOutputSetMismatchReturnsNull() {
+        // BY NAME: the outputs must be exactly the listed columns, not a subset of them.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("extra"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(true, List.of("k", "v")), bareRelation(bareItem("k")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void columnListOmittingSortKeyReturnsNull() {
+        // INSERT INTO t (v) SELECT v, with k the sort key. targetColumnListIsPreSplitSafe rejects
+        // this upstream; the sort-key lookup here is the second line of defence.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+        List<Column> sourceCols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(targetCols, targetCols, false);
+        OlapTable source = olapTable(sourceCols, sourceCols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("v")), bareRelation(bareItem("v")),
+                target, source, SRC_NAME, null,
+                Collections.singletonList(col("k")),
+                Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void columnListNamingUnresolvableColumnReturnsNull() {
+        // A name that is not a base non-generated column cannot be paired with an output.
+        List<Column> cols = Arrays.asList(col("k"), col("v"));
+        OlapTable target = olapTable(cols, cols, false);
+        OlapTable source = olapTable(cols, cols, false);
+
+        Map<String, String> result = InsertSelectSourceColumns.resolve(
+                insertStmt(false, List.of("k", "typo")), bareRelation(bareItem("k"), bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
