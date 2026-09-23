@@ -89,6 +89,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UpdateStmt;
@@ -2427,11 +2428,13 @@ public class QueryAnalyzer {
          * lock held -- the tail of the same problem
          * {@code StatementPlanner#planDmlOffSnapshots} takes the optimizer off that lock for.
          *
-         * <p>The write target is deliberately not visited: the locked analyzer resolves it, which is where an
-         * internal target belongs, since that is the object the lock protects.
+         * <p>The write target is not visited as a relation, but it is pre-resolved when it lives in an
+         * external catalog -- see {@link #preResolveExternalWriteTarget}. An internal target stays with the
+         * locked analyzer, since that is the object the lock protects.
          */
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
             if (node.getQueryStatement() != null) {
                 return super.visitUpdateStatement(node, context);
             }
@@ -2447,6 +2450,7 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
             if (node.getQueryStatement() != null) {
                 return super.visitDeleteStatement(node, context);
             }
@@ -2459,6 +2463,7 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
             if (node.getQueryStatement() != null) {
                 return super.visitMergeIntoStatement(node, context);
             }
@@ -2476,6 +2481,47 @@ public class QueryAnalyzer {
                 }
             }
             return null;
+        }
+
+        /**
+         * Resolve a DML's write target here, without the lock, when it lives in an external catalog.
+         *
+         * <p>An internal target is left alone: it is the object the lock is taken for, and the locked
+         * analyzer is where it belongs. An external one is the opposite -- {@code PlannerMetaLocker} never
+         * put it in the lock set, so the lock makes nothing about it stable, and resolving it under the lock
+         * only binds the lock's hold time to that catalog's latency. The four DML analyzers pick the answer
+         * up through {@link PreResolvedWriteTargets}.
+         *
+         * <p>Nothing here may change what the statement does. A name that does not normalize, a catalog that
+         * is not registered, a table that is not there, a connector that refuses -- all of them leave the
+         * stash empty and the analyzer resolves the target exactly as it did before, reporting the same
+         * error at the same place.
+         */
+        private void preResolveExternalWriteTarget(TableRef tableRef) {
+            if (tableRef == null) {
+                return;
+            }
+            TableName tableName;
+            try {
+                tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
+                tableName.normalization(session);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (Strings.isNullOrEmpty(tableName.getCatalog()) || Strings.isNullOrEmpty(tableName.getDb())
+                    || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                return;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                if (table != null) {
+                    session.getPreResolvedWriteTargets().put(tableName, table);
+                }
+            } catch (RuntimeException e) {
+                // left to the locked analyzer, which reports it the way it always has
+            }
         }
 
         /**
@@ -2670,7 +2716,15 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, Void context) {
-            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            // An internal target's metadata is deliberately not touched here -- that is the object the lock
+            // is taken for. An external one is pre-resolved, because the lock covers nothing about it and
+            // resolving it under the lock only binds the hold time to that catalog. Not for the targets
+            // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
+            // are built from the statement rather than looked up.
+            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
+                    && !statement.useBlackHoleTableAsTargetTable()) {
+                preResolveExternalWriteTarget(statement.getTableRef());
+            }
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }

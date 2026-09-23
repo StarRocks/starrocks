@@ -210,8 +210,10 @@ public class StatementPlanner {
             }
             // Whatever the pre-pass captured belongs to this statement only: anything expansion did not
             // consume (a view behind a branch that was never reached, a body the "still current" check
-            // rejected) must not be offered to the next one.
+            // rejected) must not be offered to the next one. Same for a write target the analyzer did not
+            // come to collect -- a statement that failed before it reached its target, say.
             session.getPreResolvedViewBodies().clear();
+            session.getPreResolvedWriteTargets().clear();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 
