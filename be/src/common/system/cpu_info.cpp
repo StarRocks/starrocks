@@ -120,26 +120,15 @@ std::vector<long> CpuInfo::cache_line_sizes;
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
 #if defined(__x86_64__) || defined(__i386__)
     static const std::vector<FlagMapping> mappings = {
-            {"ssse3", CpuInfo::SSSE3},
-            {"sse4_1", CpuInfo::SSE4_1},
-            {"sse4_2", CpuInfo::SSE4_2},
-            {"popcnt", CpuInfo::POPCNT},
-            {"avx", CpuInfo::AVX},
-            {"avx2", CpuInfo::AVX2},
-            {"avx512f", CpuInfo::AVX512F},
-            {"avx512bw", CpuInfo::AVX512BW},
+            {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
+            {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
+            {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
     };
 #elif defined(__aarch64__)
     static const std::vector<FlagMapping> mappings = {
-            {"asimd", CpuInfo::ARM_NEON},
-            {"crc32", CpuInfo::ARM_CRC32},
-            {"pmull", CpuInfo::ARM_PMULL},
-            {"aes", CpuInfo::ARM_AES},
-            {"atomics", CpuInfo::ARM_LSE},
-            {"sve", CpuInfo::ARM_SVE},
-            {"sve2", CpuInfo::ARM_SVE2},
-            {"sha1", CpuInfo::ARM_SHA1},
-            {"sha2", CpuInfo::ARM_SHA2},
+            {"asimd", CpuInfo::ARM_NEON}, {"crc32", CpuInfo::ARM_CRC32}, {"pmull", CpuInfo::ARM_PMULL},
+            {"aes", CpuInfo::ARM_AES},    {"atomics", CpuInfo::ARM_LSE}, {"sve", CpuInfo::ARM_SVE},
+            {"sve2", CpuInfo::ARM_SVE2},  {"sha1", CpuInfo::ARM_SHA1},   {"sha2", CpuInfo::ARM_SHA2},
     };
 #else
 #error "CpuInfo CPU feature mappings support only x86 or aarch64"

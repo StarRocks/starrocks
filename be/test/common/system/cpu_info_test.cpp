@@ -109,7 +109,6 @@ TEST_F(CpuInfoTest, ArmHardwareFlagsSet) {
 }
 #endif
 
-
 #if defined(__aarch64__)
 TEST_F(CpuInfoTest, ArmFailCpuFlagsCheck) {
 #if defined(__aarch64__) && defined(__ARM_NEON)
@@ -141,7 +140,6 @@ TEST_F(CpuInfoTest, ArmFailCpuFlagsCheck) {
 }
 #endif
 
-
 #if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, StrictTokenMatching) {
     // Compound flag string containing substrings like "sve2", "sveaes", "svepmull"
@@ -155,7 +153,6 @@ TEST(ArmCpuInfoParsing, StrictTokenMatching) {
     EXPECT_FALSE(flags & CpuInfo::ARM_PMULL) << "Compound 'svepmull' must not trigger 'pmull'";
 }
 #endif
-
 
 #if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
@@ -191,7 +188,6 @@ TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
 }
 #endif
 
-
 #if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, AuxvalMapping) {
     // Linux HWCAP bits
@@ -223,7 +219,6 @@ TEST(ArmCpuInfoParsing, AuxvalMapping) {
     EXPECT_EQ(0, CpuInfo::TEST_init_arm_auxval(0, 0));
 }
 #endif
-
 
 #if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, HeterogeneousCoreProcfsIntersection) {
@@ -270,7 +265,6 @@ TEST(ArmCpuInfoParsing, HeterogeneousCoreProcfsIntersection) {
 }
 #endif
 
-
 #if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, ProcfsTruncatedStreamFailClosed) {
     // Corrupted or truncated stream with I/O error must fail closed
@@ -283,7 +277,6 @@ TEST(ArmCpuInfoParsing, ProcfsTruncatedStreamFailClosed) {
             << "Truncated or errored stream must fail closed and return 0 flags";
 }
 #endif
-
 
 TEST(ArmCpuInfoParsing, AuxvalPriorityOverProcfsFallback) {
     // Plain bit literals, not CpuInfo::ARM_* constants: this test verifies arch-agnostic
@@ -419,6 +412,5 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
     EXPECT_FALSE(flags_neon_only & CpuInfo::ARM_AES);
 }
 #endif
-
 
 } // namespace starrocks

@@ -47,15 +47,15 @@ public:
     static const int64_t AVX512BW = (1LL << 8);
 #elif defined(__aarch64__)
     // Detected at runtime via /proc/cpuinfo "Features" and getauxval(AT_HWCAP/AT_HWCAP2).
-    static const int64_t ARM_NEON = (1LL << 1);   ///< Advanced SIMD (NEON); mandatory on aarch64
-    static const int64_t ARM_CRC32 = (1LL << 2);  ///< Hardware CRC-32C (__crc32cw / __crc32cd)
-    static const int64_t ARM_PMULL = (1LL << 3);  ///< Polynomial multiply (vmull_p64 / PMULL)
-    static const int64_t ARM_AES = (1LL << 4);    ///< Hardware AES encryption/decryption
-    static const int64_t ARM_LSE = (1LL << 5);    ///< ARMv8.1-A Large System Extensions atomics
-    static const int64_t ARM_SVE = (1LL << 6);    ///< Scalable Vector Extension
-    static const int64_t ARM_SVE2 = (1LL << 7);   ///< Scalable Vector Extension 2
-    static const int64_t ARM_SHA1 = (1LL << 8);   ///< Hardware SHA-1
-    static const int64_t ARM_SHA2 = (1LL << 9);   ///< Hardware SHA-256
+    static const int64_t ARM_NEON = (1LL << 1);  ///< Advanced SIMD (NEON); mandatory on aarch64
+    static const int64_t ARM_CRC32 = (1LL << 2); ///< Hardware CRC-32C (__crc32cw / __crc32cd)
+    static const int64_t ARM_PMULL = (1LL << 3); ///< Polynomial multiply (vmull_p64 / PMULL)
+    static const int64_t ARM_AES = (1LL << 4);   ///< Hardware AES encryption/decryption
+    static const int64_t ARM_LSE = (1LL << 5);   ///< ARMv8.1-A Large System Extensions atomics
+    static const int64_t ARM_SVE = (1LL << 6);   ///< Scalable Vector Extension
+    static const int64_t ARM_SVE2 = (1LL << 7);  ///< Scalable Vector Extension 2
+    static const int64_t ARM_SHA1 = (1LL << 8);  ///< Hardware SHA-1
+    static const int64_t ARM_SHA2 = (1LL << 9);  ///< Hardware SHA-256
 #else
 #error "CpuInfo CPU feature detection supports only x86 or aarch64"
 #endif
