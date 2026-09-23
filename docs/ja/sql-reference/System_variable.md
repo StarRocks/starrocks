@@ -872,6 +872,15 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: long
 * **単位**: ミリ秒
 
+### enable_percentile_compact_intermediate (global)
+
+* **スコープ**: Global のみ。`SET GLOBAL enable_percentile_compact_intermediate = true` または `false` で設定します。
+* **デフォルト**: false
+* **データ型**: boolean
+* **説明**: exchange と spill で、`percentile_approx`、`percentile_approx_weighted` およびその配列形式のパススルーレコードをコンパクトにします。永続化される集約状態には、引き続き必要な情報をすべて含む形式を使用します。
+
+  ローリングアップグレード中は無効のままにしてください。すべての FE、BE、CN ノードがコンパクト形式に対応した後でのみ有効にします。既存の接続を含め、各ステートメントは実行開始時にグローバル設定を読み取ります。実行中のステートメントは元の設定を保持します。コンパクト形式を読み取れないバージョンへワーカーをダウングレードする前に、このオプションを無効にし、有効な状態で開始されたすべてのステートメントの完了を待ってください。
+
 ### enable_query_cache
 
 * **説明**: Query Cache 機能を有効にするかどうかを指定します。有効な値: true および false。`true` はこの機能を有効にし、`false` はこの機能を無効にします。この機能が有効な場合、[Query Cache](../using_starrocks/caching/query_cache.md#application-scenarios) の適用シナリオで指定された条件を満たすクエリに対してのみ機能します。

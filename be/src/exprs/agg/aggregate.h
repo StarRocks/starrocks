@@ -178,6 +178,13 @@ public:
     virtual void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                              MutableColumnPtr& dst) const = 0;
 
+    // Transient exchange/spill records may use the query context when read.
+    // Persisted aggregate states must use the self-contained serialize format.
+    virtual void convert_to_exchange_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                            MutableColumnPtr& dst) const {
+        convert_to_serialize_format(ctx, src, chunk_size, dst);
+    }
+
     // Insert current aggregation state into dst column from start to end
     // For aggregation window functions
     virtual void get_values(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* dst, size_t start,
