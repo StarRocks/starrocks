@@ -29,6 +29,7 @@ import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TIcebergDeletionVectorBlob;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.PrimitiveType;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
@@ -320,7 +321,6 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw.
         // The query analyzer will reject queries on these columns at analysis time.
         Assertions.assertTrue(fromIcebergType(Types.GeometryType.crs84()).isUnknown());
-        Assertions.assertTrue(fromIcebergType(Types.GeographyType.crs84()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.FixedType.ofLength(16)).isUnknown());
     }
 
@@ -339,13 +339,15 @@ public class IcebergV3UnsupportedFeaturesTest extends TableTestBase {
         Assertions.assertFalse(fromIcebergType(Types.UUIDType.get()).isUnknown());
         Assertions.assertFalse(fromIcebergType(Types.TimeType.get()).isUnknown());
         Assertions.assertTrue(fromIcebergType(Types.VariantType.get()).isVariantType());
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY,
+                fromIcebergType(Types.GeographyType.crs84()).getPrimitiveType());
     }
 
     @Test
     public void testToFullSchemasDegradesToUnknownForUnsupportedType() {
         // Unsupported V3 types should degrade to UNKNOWN_TYPE, not throw,
         // so that queries not involving the column still work.
-        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeographyType.crs84());
+        Types.NestedField field = Types.NestedField.optional(1, "geo_col", Types.GeometryType.crs84());
         Schema schema = new Schema(field);
 
         List<Column> columns = IcebergApiConverter.toFullSchemas(schema);

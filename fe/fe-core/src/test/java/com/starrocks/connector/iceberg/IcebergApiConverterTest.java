@@ -56,6 +56,7 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.types.Conversions;
+import org.apache.iceberg.types.EdgeAlgorithm;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.DateTimeUtil;
 import org.apache.iceberg.util.StructProjection;
@@ -190,6 +191,50 @@ public class IcebergApiConverterTest {
         org.apache.iceberg.types.Type icebergType = Types.StructType.of(fields);
         Type resType = fromIcebergType(icebergType);
         assertTrue(resType.isStructType());
+    }
+
+    @Test
+    public void testNativeGeographyIsExposedWithoutConfiguration() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "geo", Types.GeographyType.crs84()),
+                Types.NestedField.required(2, "required_geo", Types.GeographyType.crs84()),
+                Types.NestedField.optional(3, "id", Types.IntegerType.get()));
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertEquals(PrimitiveType.GEOGRAPHY, columns.get(0).getType().getPrimitiveType());
+        assertTrue(columns.get(0).isAllowNull());
+        assertEquals(PrimitiveType.GEOGRAPHY, columns.get(1).getType().getPrimitiveType());
+        assertFalse(columns.get(1).isAllowNull());
+        assertTrue(columns.get(2).getType().isIntegerType());
+    }
+
+    @Test
+    public void testOnlyCanonicalGeographyIsExposed() {
+        for (EdgeAlgorithm edge : EdgeAlgorithm.values()) {
+            for (String crs : new String[] {"OGC:CRS84", "EPSG:4326", "srid:4326", "EPSG:3857"}) {
+                Schema schema = new Schema(
+                        Types.NestedField.optional(1, "geo", Types.GeographyType.of(crs, edge)));
+                Type type = IcebergApiConverter.toFullSchemas(schema).get(0).getType();
+                assertEquals(!crs.equals("OGC:CRS84") || edge != EdgeAlgorithm.SPHERICAL, type.isUnknown());
+            }
+        }
+    }
+
+    @Test
+    public void testNestedGeographyUsesSharedTypeConversion() {
+        Schema schema = new Schema(
+                Types.NestedField.optional(1, "array_geo",
+                        Types.ListType.ofOptional(2, Types.GeographyType.crs84())),
+                Types.NestedField.optional(3, "struct_geo", Types.StructType.of(
+                        Types.NestedField.optional(4, "shape", Types.GeographyType.crs84()))),
+                Types.NestedField.optional(5, "map_geo", Types.MapType.ofOptional(
+                        6, 7, Types.IntegerType.get(), Types.GeographyType.crs84())));
+        List<Column> columns = IcebergApiConverter.toFullSchemas(schema);
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((ArrayType) columns.get(0).getType()).getItemType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((StructType) columns.get(1).getType()).getField("shape").getType().getPrimitiveType());
+        assertEquals(PrimitiveType.GEOGRAPHY,
+                ((MapType) columns.get(2).getType()).getValueType().getPrimitiveType());
     }
 
     @Test
