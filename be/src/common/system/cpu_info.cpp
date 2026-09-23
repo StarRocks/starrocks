@@ -317,7 +317,12 @@ void CpuInfo::init() {
         if (file.is_open()) {
             std::stringstream buffer;
             buffer << file.rdbuf();
-            cpuinfo_content = buffer.str();
+            if (file.bad() || (file.fail() && !file.eof())) {
+                LOG(ERROR) << "I/O error reading /proc/cpuinfo; CPU feature detection may be incomplete";
+                cpuinfo_content.clear();
+            } else {
+                cpuinfo_content = buffer.str();
+            }
         } else {
             LOG(ERROR) << "Unable to open /proc/cpuinfo; CPU feature detection may be incomplete";
         }
@@ -348,9 +353,7 @@ void CpuInfo::init() {
             }
         }
     }
-    if (cpuinfo.bad() || (cpuinfo.fail() && !cpuinfo.eof())) {
-        LOG(ERROR) << "I/O error reading /proc/cpuinfo; CPU feature detection may be incomplete";
-    }
+
 #endif
 
 #if defined(__linux__) && defined(__aarch64__)
