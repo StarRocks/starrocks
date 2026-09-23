@@ -375,4 +375,29 @@ TEST_F(ORCScannerTest, adjacent_ranges_cover_entire_file) {
     EXPECT_EQ(0, counter.num_rows_filtered);
 }
 
+TEST_F(ORCScannerTest, file_path_only_across_files) {
+    auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    auto ranges = create_scan_range({data_file_path("boolean_type.orc"), data_file_path("date_type.orc")}).ranges;
+    for (auto& range : ranges) {
+        range.__set_num_of_columns_from_file(0);
+        range.__set_columns_from_path({"partition"});
+        range.__set_include_file_path_column(true);
+    }
+    auto scanner = create_orc_scanner({varchar_type, varchar_type}, {"partition", "_filepath"}, ranges);
+    ASSERT_OK(scanner->open());
+    for (const auto& range : ranges) {
+        auto result = scanner->get_next();
+        ASSERT_TRUE(result.ok()) << result.status();
+        auto chunk = result.value();
+        ASSERT_EQ(2, chunk->num_rows());
+        ASSERT_EQ(2, chunk->num_columns());
+        for (size_t row = 0; row < chunk->num_rows(); ++row) {
+            EXPECT_EQ("['partition', '" + range.path + "']", chunk->debug_row(row));
+        }
+    }
+    EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
+    EXPECT_EQ(0, scanner->TEST_scanner_counter()->num_rows_filtered);
+    scanner->close();
+}
+
 } // namespace starrocks

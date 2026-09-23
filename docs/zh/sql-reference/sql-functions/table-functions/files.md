@@ -34,7 +34,7 @@ toc_max_heading_level: 5
 ### 语法
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, path_column ] [, list_files_only ] [, list_recursively])
 ```
 
 ### 参数
@@ -641,6 +641,20 @@ StarRocks 目前支持使用简单身份验证访问 HDFS，使用基于 IAM 用
 ```
 
 假设数据文件 **file1** 存储在格式为 `/geo/country=US/city=LA/` 的路径下。您可以将 `columns_from_path` 参数指定为 `"columns_from_path" = "country, city"`，以提取文件路径中的地理信息作为返回列的值。有关进一步说明，请参见示例 4。
+
+#### `path_column`
+
+添加一个 `VARCHAR` 列，为每行返回其来源文件的路径。返回值是具体文件的路径，而不是 `path` 中指定的通配符模式。支持 CSV、Parquet、ORC 和 Avro 格式。
+
+```SQL
+SELECT _filepath FROM FILES(
+    "path" = "s3://bucket/data/*.parquet",
+    "format" = "parquet",
+    "path_column" = "_filepath"
+);
+```
+
+该列追加在文件列和 `columns_from_path` 列之后，列名不能与其他列名重复。可以单独选择该列，也可以与数据列一起选择。不指定 `path_column` 时，表结构保持不变。
 
 #### `schema`
 

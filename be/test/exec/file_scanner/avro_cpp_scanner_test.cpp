@@ -306,4 +306,26 @@ TEST_F(AvroCppScannerTest, test_read_logical_types) {
     scanner->close();
 }
 
+TEST_F(AvroCppScannerTest, test_file_path_only_across_files) {
+    auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    auto ranges = create_range_descs({"complex.avro", "complex_nest.avro"}, 0);
+    for (auto& range : ranges) {
+        range.__set_columns_from_path({"partition"});
+        range.__set_include_file_path_column(true);
+    }
+    auto scanner = create_avro_scanner({"partition", "_filepath"}, {varchar_type, varchar_type}, ranges);
+    ASSERT_OK(scanner->open());
+    for (const auto& range : ranges) {
+        auto result = scanner->get_next();
+        ASSERT_TRUE(result.ok()) << result.status();
+        auto chunk = result.value();
+        ASSERT_EQ(1, chunk->num_rows());
+        ASSERT_EQ(2, chunk->num_columns());
+        EXPECT_EQ("['partition', '" + range.path + "']", chunk->debug_row(0));
+    }
+    EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
+    EXPECT_EQ(0, scanner->TEST_scanner_counter()->num_rows_filtered);
+    scanner->close();
+}
+
 } // namespace starrocks

@@ -193,7 +193,8 @@ Status ParquetScanner::append_batch_to_src_chunk(ChunkPtr* chunk) {
 }
 
 Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
-    auto num_rows = (*chunk)->filter(_chunk_filter);
+    // Without projected file columns, no conversion can reject rows and the chunk has no row count.
+    auto num_rows = (*chunk)->num_columns() == 0 ? _chunk_start_idx : (*chunk)->filter(_chunk_filter);
     _counter->num_rows_filtered += _chunk_start_idx - num_rows;
     ChunkPtr cast_chunk = std::make_shared<Chunk>();
     {
@@ -213,12 +214,11 @@ Status ParquetScanner::finalize_src_chunk(ChunkPtr* chunk) {
         }
         const auto& range = _scan_range.ranges.at(_next_file - 1);
         if (range.__isset.num_of_columns_from_file) {
-            fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path,
-                                   cast_chunk->num_rows());
+            fill_columns_from_path(cast_chunk, range.num_of_columns_from_file, range.columns_from_path, num_rows);
         }
         if (range.__isset.include_file_path_column && range.include_file_path_column) {
             int path_column_slot = range.num_of_columns_from_file + range.columns_from_path.size();
-            fill_file_path_column(cast_chunk, path_column_slot, range.path, cast_chunk->num_rows());
+            fill_file_path_column(cast_chunk, path_column_slot, range.path, num_rows);
         }
         if (VLOG_ROW_IS_ON) {
             VLOG_ROW << "after finalize chunk: " << cast_chunk->debug_columns();
@@ -298,7 +298,7 @@ StatusOr<ChunkPtr> ParquetScanner::get_next() {
         // if chunk is not empty, then just break the loop and finalize the chunk
         // so always empty chunks read data from files
         _curr_file_reader.reset();
-        if (chunk->num_rows() > 0) {
+        if (_chunk_start_idx > 0) {
             break;
         }
         // the chunk is empty and the file reach its end, this situation happens when

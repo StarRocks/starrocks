@@ -142,14 +142,16 @@ StatusOr<ChunkPtr> ORCScanner::get_next() {
 StatusOr<ChunkPtr> ORCScanner::_next_orc_chunk() {
     try {
         ASSIGN_OR_RETURN(ChunkPtr chunk, _next_orc_batch());
+        // A path-only projection has no data columns to carry the ORC batch row count.
+        const auto num_rows = chunk->num_columns() == 0 ? _orc_reader->get_cvb_size() : chunk->num_rows();
         // fill path column
         const TBrokerRangeDesc& range = _scan_range.ranges.at(_next_range - 1);
         if (range.__isset.num_of_columns_from_file) {
-            fill_columns_from_path(chunk, range.num_of_columns_from_file, range.columns_from_path, chunk->num_rows());
+            fill_columns_from_path(chunk, range.num_of_columns_from_file, range.columns_from_path, num_rows);
         }
         if (range.__isset.include_file_path_column && range.include_file_path_column) {
             int path_column_slot = range.num_of_columns_from_file + range.columns_from_path.size();
-            fill_file_path_column(chunk, path_column_slot, range.path, chunk->num_rows());
+            fill_file_path_column(chunk, path_column_slot, range.path, num_rows);
         }
         return std::move(chunk);
     } catch (orc::ParseError& e) {
@@ -213,8 +215,10 @@ StatusOr<ChunkPtr> ORCScanner::_next_orc_batch() {
         // create chunk after the _orc_reader is initialized
         auto result = _create_src_chunk();
         SCOPED_RAW_TIMER(&_counter->fill_ns);
-        RETURN_IF_ERROR(_orc_reader->fill_chunk(&result));
-        _counter->num_rows_filtered += _orc_reader->get_num_rows_filtered();
+        if (result->num_columns() > 0) {
+            RETURN_IF_ERROR(_orc_reader->fill_chunk(&result));
+            _counter->num_rows_filtered += _orc_reader->get_num_rows_filtered();
+        }
         return result;
     }
 }

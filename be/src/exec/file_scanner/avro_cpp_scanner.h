@@ -39,7 +39,7 @@ public:
 private:
     Status create_column_readers();
     Status create_src_chunk(ChunkPtr* chunk);
-    Status next_avro_chunk(ChunkPtr& chunk);
+    Status next_avro_chunk(ChunkPtr& chunk, int64_t* rows_read);
     Status open_next_reader();
     StatusOr<AvroReaderUniquePtr> open_avro_reader(const TBrokerRangeDesc& range_desc);
     void materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);

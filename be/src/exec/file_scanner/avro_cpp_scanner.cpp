@@ -112,19 +112,20 @@ StatusOr<ChunkPtr> AvroCppScanner::get_next() {
     ChunkPtr src_chunk;
     RETURN_IF_ERROR(create_src_chunk(&src_chunk));
 
+    int64_t rows_read = 0;
     while (true) {
-        RETURN_IF_ERROR(next_avro_chunk(src_chunk));
-        if (!src_chunk->is_empty()) {
+        RETURN_IF_ERROR(next_avro_chunk(src_chunk, &rows_read));
+        if (rows_read > 0) {
             materialize_src_chunk_adaptive_nullable_column(src_chunk);
             break;
         }
     }
 
     const auto& range = _scan_range.ranges[_next_range - 1];
-    fill_columns_from_path(src_chunk, _num_of_columns_from_file, range.columns_from_path, src_chunk->num_rows());
+    fill_columns_from_path(src_chunk, _num_of_columns_from_file, range.columns_from_path, rows_read);
     if (range.__isset.include_file_path_column && range.include_file_path_column) {
         int path_column_slot = _num_of_columns_from_file + range.columns_from_path.size();
-        fill_file_path_column(src_chunk, path_column_slot, range.path, src_chunk->num_rows());
+        fill_file_path_column(src_chunk, path_column_slot, range.path, rows_read);
     }
 
     return materialize(src_chunk, src_chunk);
@@ -147,11 +148,12 @@ Status AvroCppScanner::create_src_chunk(ChunkPtr* chunk) {
     return Status::OK();
 }
 
-Status AvroCppScanner::next_avro_chunk(ChunkPtr& chunk) {
+Status AvroCppScanner::next_avro_chunk(ChunkPtr& chunk, int64_t* rows_read) {
     RETURN_IF_ERROR(open_next_reader());
 
     SCOPED_RAW_TIMER(&_counter->read_batch_ns);
-    auto st = _cur_file_reader->read_chunk(chunk, _max_chunk_size);
+    *rows_read = 0;
+    auto st = _cur_file_reader->read_chunk(chunk, _max_chunk_size, rows_read);
     if (st.is_end_of_file()) {
         _cur_file_eof = true;
     } else if (!st.is_time_out()) {

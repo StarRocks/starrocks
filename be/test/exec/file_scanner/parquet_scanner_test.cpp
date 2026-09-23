@@ -1167,4 +1167,35 @@ TEST_F(ParquetScannerTest, optional_map_key) {
     }
 }
 
+TEST_F(ParquetScannerTest, test_file_path_only_across_files) {
+    auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+    SlotTypeDescInfoArray slots = {{"partition", varchar_type, true}, {"_filepath", varchar_type, true}};
+    auto ranges = generate_ranges(_file_names, 0, {"partition"});
+    for (auto& range : ranges) {
+        range.__set_include_file_path_column(true);
+    }
+    auto* desc_tbl = DescTblHelper::generate_desc_tbl(_runtime_state, _obj_pool, {slots, {}});
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges, 1024);
+    ASSERT_OK(scanner->open());
+    const std::vector<size_t> expected = {0, 1, 4095, 4096, 4097, 8191, 8192, 8193};
+    for (size_t file = 0; file < ranges.size(); ++file) {
+        size_t rows = 0;
+        while (rows < expected[file]) {
+            auto result = scanner->get_next();
+            ASSERT_TRUE(result.ok()) << result.status();
+            auto chunk = result.value();
+            ASSERT_GT(chunk->num_rows(), 0);
+            ASSERT_EQ(2, chunk->num_columns());
+            rows += chunk->num_rows();
+            for (size_t row = 0; row < chunk->num_rows(); ++row) {
+                EXPECT_EQ("['partition', '" + ranges[file].path + "']", chunk->debug_row(row));
+            }
+        }
+        EXPECT_EQ(expected[file], rows);
+    }
+    EXPECT_TRUE(scanner->get_next().status().is_end_of_file());
+    EXPECT_EQ(0, scanner->TEST_scanner_counter()->num_rows_filtered);
+    scanner->close();
+}
+
 } // namespace starrocks

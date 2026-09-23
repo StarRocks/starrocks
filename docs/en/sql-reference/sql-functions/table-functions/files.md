@@ -34,7 +34,7 @@ From v3.1.0 onwards, StarRocks supports defining read-only files in remote stora
 ### Syntax
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, path_column ] [, list_files_only ] [, list_recursively])
 ```
 
 ### Parameters
@@ -641,6 +641,20 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 ```
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
+
+#### `path_column`
+
+Adds a `VARCHAR` column containing the source file path for each row. The value is the individual file path, not the wildcard pattern supplied in `path`. Supported for CSV, Parquet, ORC, and Avro.
+
+```SQL
+SELECT _filepath FROM FILES(
+    "path" = "s3://bucket/data/*.parquet",
+    "format" = "parquet",
+    "path_column" = "_filepath"
+);
+```
+
+The column is appended after the file columns and any `columns_from_path` columns. Its name must not duplicate another column name. You can select it alone or together with data columns. Omit `path_column` to leave the schema unchanged.
 
 #### `schema`
 

@@ -34,7 +34,7 @@ v3.1.0 以降、StarRocks はテーブル関数 `FILES()` を使用してリモ�
 ### 構文
 
 ```SQL
-FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ] [, list_recursively])
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, path_column ] [, list_files_only ] [, list_recursively])
 ```
 
 ### パラメータ
@@ -641,6 +641,20 @@ v3.2 以降、StarRocks はファイルパスからキー/値ペアの値を抽�
 ```
 
 データファイル **file1** が `/geo/country=US/city=LA/` 形式のパスに保存されているとします。このパラメータを `"columns_from_path" = "country, city"` と指定することで、ファイルパス内の地理情報を返される列の値として抽出できます。詳細な指示については、例 4 を参照してください。
+
+#### `path_column`
+
+各行のソースファイルのパスを格納する `VARCHAR` 列を追加します。値は個々のファイルのパスであり、`path` に指定したワイルドカードパターンではありません。CSV、Parquet、ORC、Avro をサポートします。
+
+```SQL
+SELECT _filepath FROM FILES(
+    "path" = "s3://bucket/data/*.parquet",
+    "format" = "parquet",
+    "path_column" = "_filepath"
+);
+```
+
+この列は、ファイルの列と `columns_from_path` の列の後に追加されます。列名は他の列名と重複できません。この列だけを選択することも、データ列と一緒に選択することもできます。`path_column` を省略すると、スキーマは変更されません。
 
 #### `schema`
 
