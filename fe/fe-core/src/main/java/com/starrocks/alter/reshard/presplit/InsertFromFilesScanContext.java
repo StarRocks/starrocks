@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -33,14 +34,32 @@ import java.util.Objects;
  * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
  * query globals use). The meta-tier readers use it to reproduce the BE's
  * offset for a UTC-adjusted timestamp; a non-fixed / null zone -> data tier.
+ *
+ * <p>{@code targetToSourceColumnNames} maps each directly projected target column to the FILES
+ * column that backs it, so a statement that names, reorders, or renames its columns is sampled
+ * from the same physical column the load writes. An EMPTY map means the projection is
+ * name-identity and every consumer may project a target column by its own name.
+ *
+ * <p>{@code wherePredicateSql} is the statement's WHERE clause rendered back to SQL, or
+ * {@code null}. The data tier copies it into its sampling sub-query; the meta tier cannot apply a
+ * predicate to a footer at all and declines the request when one is present.
  */
 public record InsertFromFilesScanContext(
         TableFunctionTable sourceTable,
         ComputeResource computeResource,
-        String loadTimeZone) implements ScanContext {
+        String loadTimeZone,
+        Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> FILES column name
+        String wherePredicateSql) implements ScanContext {                              // nullable
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(computeResource, "computeResource");
+        Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
+    }
+
+    /** A name-identity projection with no predicate -- the original bare {@code SELECT *} shape. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone) {
+        this(sourceTable, computeResource, loadTimeZone, Map.of(), null);
     }
 }

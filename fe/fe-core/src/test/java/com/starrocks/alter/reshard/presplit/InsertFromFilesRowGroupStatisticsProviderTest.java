@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 class InsertFromFilesRowGroupStatisticsProviderTest {
 
@@ -294,6 +295,56 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
         } finally {
             Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
         }
+    }
+
+    @Test
+    void wherePredicateFallsBackToDataTier() throws Exception {
+        // A footer describes every row in the file; nothing in it can be narrowed to the rows a
+        // predicate keeps, so boundaries planned from one would describe a row set the load never
+        // writes. Only the data tier can apply the predicate.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), "`sort_key` > 10"),
+                List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void renamedSortKeyIsLocatedByItsFilesColumnName() throws Exception {
+        // INSERT INTO t(target_key) SELECT sort_key FROM FILES(...): the file has no "target_key"
+        // field, so locating the footer column by the TARGET name would fall back to the data tier.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("target_key", "sort_key"), /*wherePredicateSql=*/ null),
+                List.of(new Column("target_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
+    void sortKeyWithNoFilesMappingFallsBackToDataTier() throws Exception {
+        // The sort key is named after a field the file DOES carry, so reading the footer would
+        // succeed -- what must stop it is that the projection never mapped that target column, so
+        // nothing proves the file's like-named field is the one the load writes into it.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null),
+                List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {

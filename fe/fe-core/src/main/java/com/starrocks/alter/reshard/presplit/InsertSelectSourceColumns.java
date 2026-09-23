@@ -36,10 +36,11 @@ import java.util.Set;
 /**
  * Resolves the target-&gt;source column-name map (lower-cased target name -&gt; source column
  * name) for directly mapped outputs of a parsed
- * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
- * the map to project any index's sort key (base or rollup) and the partition columns by their
- * source-table column names. Non-key target columns may be expressions over the source relation
- * and are omitted from the map.
+ * {@code INSERT INTO <range-dist target> SELECT ... FROM <single source relation>}, where the
+ * source is one OLAP / Iceberg table or one {@code FILES(...)} call. The sampler uses the map to
+ * project any index's sort key (base or rollup) and the partition columns by their source column
+ * names. Non-key target columns may be expressions over the source relation and are omitted from
+ * the map.
  *
  * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
  * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
@@ -55,30 +56,54 @@ final class InsertSelectSourceColumns {
     }
 
     /**
+     * How closely the source's own column set has to mirror the target's for a {@code SELECT *}
+     * (or a {@code BY NAME} projection) to be mappable.
+     */
+    enum SchemaPairing {
+        /**
+         * The two schemas must be images of each other: same column set under {@code BY NAME},
+         * same name at every ordinal under by-position. Right for a table source, where a column
+         * on one side and not the other is a statement {@code InsertAnalyzer} rejects outright, so
+         * pre-split would be resharding for a load that never runs.
+         */
+        EXACT,
+        /**
+         * Pair up whatever columns correspond and leave the rest alone. Right for a
+         * {@code FILES(...)} source: a file wider than the target is the normal case for
+         * {@code BY NAME} (the extra fields are simply not read), and a file narrower than the
+         * target leaves the missing columns NULL rather than failing. Neither says anything about
+         * the columns that ARE paired, and an unpaired sort-key or partition column is still
+         * caught by this method's final presence gate.
+         */
+        PER_COLUMN
+    }
+
+    /**
      * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
      *
      * @param insertStmt          the parsed INSERT statement
      * @param selectRelation      the SELECT body of the INSERT
-     * @param targetTable         the INSERT target (range-distributed)
-     * @param sourceTable         the single OLAP source table
+     * @param targetCols          the target columns the load writes, in INSERT (by-position) order:
+     *                            the explicit target column list when the statement carries one,
+     *                            otherwise the target's non-generated base schema
+     * @param sourceTable         the single source table (OLAP, Iceberg, or the inferred
+     *                            {@code TableFunctionTable} of a {@code FILES(...)} call)
      * @param normalizedSourceName fully-qualified source name (catalog/db/tbl) for qualifier matching
      * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
      * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
      * @param partitionColumns    partition columns of the target
+     * @param pairing             how closely the source schema must mirror the target's
      * @return the target-&gt;source column-name map, or {@code null} when the projection is
      *         ambiguous or unsafe
      */
     static Map<String, String> resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, Table sourceTable,
+            List<Column> targetCols, Table sourceTable,
             TableName normalizedSourceName, String sourceAlias,
-            List<Column> sortKeyColumns, List<Column> partitionColumns) {
+            List<Column> sortKeyColumns, List<Column> partitionColumns,
+            SchemaPairing pairing) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
-        List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
-        if (targetCols == null) {
-            return null;
-        }
         // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
         List<Column> sourceCols = sourceTable instanceof OlapTable olapTable
                 ? olapTable.getVisibleColumnsWithoutGeneratedColumn()
@@ -103,20 +128,29 @@ final class InsertSelectSourceColumns {
                 return null;
             }
             if (byName) {
-                // Exact-set match: reject source columns absent from the effective target, and vice versa.
-                if (!sourceColumnMap.keySet().equals(targetNames(targetCols))) {
+                // EXACT: reject source columns absent from the effective target, and vice versa.
+                if (pairing == SchemaPairing.EXACT && !sourceColumnMap.keySet().equals(targetNames(targetCols))) {
                     return null;
                 }
                 for (Column targetCol : targetCols) {
                     String targetName = targetCol.getName().toLowerCase();
-                    targetToSource.put(targetName, sourceColumnMap.get(targetName));
+                    String sourceName = sourceColumnMap.get(targetName);
+                    // Under EXACT the set check above already proved every target name is present;
+                    // under PER_COLUMN a target column the source never supplies stays unmapped.
+                    if (sourceName != null) {
+                        targetToSource.put(targetName, sourceName);
+                    }
                 }
             } else {
                 if (sourceCols.size() != targetCols.size()) {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    if (!targetCols.get(i).getName().equalsIgnoreCase(sourceCols.get(i).getName())) {
+                    // By position the load writes source column i into target column i whatever the
+                    // two are called, so the ordinal IS the mapping. EXACT additionally demands the
+                    // names agree; PER_COLUMN records the pairing the ordinals already establish.
+                    if (pairing == SchemaPairing.EXACT
+                            && !targetCols.get(i).getName().equalsIgnoreCase(sourceCols.get(i).getName())) {
                         return null;
                     }
                     targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceCols.get(i).getName());
@@ -164,8 +198,8 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     }
                 }
-                // Exact-set match: output names must be exactly the effective target columns.
-                if (!outputNames.equals(targetNames(targetCols))) {
+                // EXACT: output names must be exactly the effective target columns.
+                if (pairing == SchemaPairing.EXACT && !outputNames.equals(targetNames(targetCols))) {
                     return null;
                 }
             } else {
@@ -203,7 +237,7 @@ final class InsertSelectSourceColumns {
      * return below is therefore unreachable in practice and exists so that a name this method
      * cannot resolve skips pre-split rather than NPEs.
      */
-    private static List<Column> effectiveTargetColumns(InsertStmt insertStmt, OlapTable targetTable) {
+    static List<Column> effectiveTargetColumns(InsertStmt insertStmt, OlapTable targetTable) {
         List<Column> baseCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
         List<String> targetColumnNames = insertStmt.getTargetColumnNames();
         if (targetColumnNames == null || targetColumnNames.isEmpty()) {
