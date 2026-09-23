@@ -476,6 +476,12 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                     out.writeByte(0);
                 } else {
                     out.writeByte(1);
+                    // Iceberg groups all NaN payloads into one partition.
+                    if (value instanceof Float f && f.isNaN()) {
+                        value = Float.NaN;
+                    } else if (value instanceof Double d && d.isNaN()) {
+                        value = Double.NaN;
+                    }
                     ByteBuffer buffer = Conversions.toByteBuffer(type, value).duplicate();
                     byte[] valueBytes = new byte[buffer.remaining()];
                     buffer.get(valueBytes);
