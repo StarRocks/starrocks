@@ -534,52 +534,64 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     // in-flight data from before a throttle-down still cannot be exceeded). The teardown race
     // against set_finishing() is handled inside WarmSlotReservation.
     const int max_warm_inflight = config::connector_footer_prefetch_max_inflight;
-    while (true) {
-        int data_reserved = std::max<int>(_num_running_io_tasks.load(), current_io_task_target());
-        if (!_warm_slots.try_reserve(max_warm_inflight, data_reserved, _io_tasks_per_scan_operator)) {
-            break;
-        }
-        FooterPrefetchItem item;
-        if (!fp->try_take_next(&item)) {
-            _warm_slots.release();
-            break;
-        }
-        workgroup::ScanTask task(wg, [wp = query_ctx(), this, state, fp, item](workgroup::YieldContext&) {
-            if (auto sp = wp.lock()) {
-                // Wake parked scan observers when this warm task finishes (event scheduler): a driver
-                // with no buffered chunks must re-check progress after warm drains, same as data tasks.
-                auto notify = scan_defer_notify(this);
-                // Skip the actual footer read if the operator is winding down: an already-queued task
-                // must not spend a remote footer read once the scan will no longer consume it, so
-                // pending_finish() drains promptly instead of waiting on wasted reads. Three signals,
-                // cheapest/promptest first: fragment cancel/finish (state->is_cancelled()), operator-
-                // local finish (_warm_slots disabled by set_finishing() even without a fragment
-                // cancel), and factory close (fp->cancelled(), the latest).
-                if (!state->is_cancelled() && !_warm_slots.disabled() && !fp->cancelled()) {
-                    connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
-                    fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
-                }
-                // While a build stall parks the driver (is_buffer_full), the data-side scheduling
-                // that re-drives prefetch does not run, so sustain warming here. Re-drive before
-                // releasing this task's slot so `this` stays alive across the re-submit.
-                if (is_buffer_full()) {
-                    try_submit_metadata_prefetch(state);
-                }
-                _warm_slots.release();
+    try {
+        while (true) {
+            int data_reserved = std::max<int>(_num_running_io_tasks.load(), current_io_task_target());
+            if (!_warm_slots.try_reserve(max_warm_inflight, data_reserved, _io_tasks_per_scan_operator)) {
+                break;
             }
-        });
-        task.task_group = task_group;
-        task.set_query_type(query_type);
-        // Opportunistic background prefetch: pin warm at priority 0, the bottom of the data scan's
-        // range (OlapScanNode::compute_priority is 5-20 in practice, 0 only for huge scans), so a
-        // data io-task wins a free executor thread over a queued warm task. Throughput is the lead's
-        // job, not priority -- warm at the small lead does not wait in the queue anyway.
-        task.priority = 0;
-        if (!executor->submit(std::move(task))) {
-            fp->untake(item.key); // give the file back; the task never ran
-            _warm_slots.release();
-            break;
+            bool submitted = false;
+            DeferOp release_unsubmitted([&]() {
+                if (!submitted) _warm_slots.release();
+            });
+            FooterPrefetchItem item;
+            if (!fp->try_take_next(&item)) {
+                break;
+            }
+            workgroup::ScanTask task(wg, [wp = query_ctx(), this, state, fp, item](workgroup::YieldContext&) {
+                if (auto sp = wp.lock()) {
+                    // Wake parked scan observers when this warm task finishes (event scheduler): a driver
+                    // with no buffered chunks must re-check progress after warm drains, same as data tasks.
+                    auto notify = scan_defer_notify(this);
+                    DeferOp release_slot([&]() { _warm_slots.release(); });
+                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+                    try {
+                        // Skip the actual footer read if the operator is winding down: an already-queued task
+                        // must not spend a remote footer read once the scan will no longer consume it, so
+                        // pending_finish() drains promptly instead of waiting on wasted reads. Three signals,
+                        // cheapest/promptest first: fragment cancel/finish (state->is_cancelled()), operator-
+                        // local finish (_warm_slots disabled by set_finishing() even without a fragment
+                        // cancel), and factory close (fp->cancelled(), the latest).
+                        if (!state->is_cancelled() && !_warm_slots.disabled() && !fp->cancelled()) {
+                            connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
+                            fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
+                        }
+                        // While a build stall parks the driver (is_buffer_full), the data-side scheduling
+                        // that re-drives prefetch does not run, so sustain warming here. Re-drive before
+                        // releasing this task's slot so `this` stays alive across the re-submit.
+                        if (is_buffer_full()) {
+                            try_submit_metadata_prefetch(state);
+                        }
+                    } catch (const std::exception& e) {
+                        LOG(WARNING) << "Connector footer prefetch failed: " << e.what();
+                    }
+                }
+            });
+            task.task_group = task_group;
+            task.set_query_type(query_type);
+            // Opportunistic background prefetch: pin warm at priority 0, the bottom of the data scan's
+            // range (OlapScanNode::compute_priority is 5-20 in practice, 0 only for huge scans), so a
+            // data io-task wins a free executor thread over a queued warm task. Throughput is the lead's
+            // job, not priority -- warm at the small lead does not wait in the queue anyway.
+            task.priority = 0;
+            if (!executor->submit(std::move(task))) {
+                fp->untake(item.key); // give the file back; the task never ran
+                break;
+            }
+            submitted = true;
         }
+    } catch (const std::exception& e) {
+        LOG(WARNING) << "Connector footer prefetch submission failed: " << e.what();
     }
 }
 
