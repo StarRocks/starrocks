@@ -115,7 +115,7 @@ public class LanceMetadataTest {
         Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
         Assertions.assertEquals("vectors_db", lanceDiscovered.getCatalogDBName());
         Assertions.assertEquals("vectors_db", lanceDiscovered.toThrift(List.of()).getDbName());
-        Assertions.assertFalse(lanceDiscovered.isSupported());
+        Assertions.assertTrue(lanceDiscovered.isSupported());
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
 
         Table events = metadata.getTable(null, "vectors_db", "events");

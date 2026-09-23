@@ -65,7 +65,7 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         OptExpression physical = OptExpression.create(new PhysicalLanceScanOperator(logical));
         physical.setStatistics(Statistics.builder().setOutputRowCount(3)
                 .addColumnStatistic(id, ColumnStatistic.unknown()).build());
-        // Exercise fragment translation directly: this series layer intentionally has no SQL entry point yet.
+        // Exercise fragment translation directly to verify the scan predicate is serialized exactly once.
         return PlanFragmentBuilder.createPhysicalPlan(physical, connectContext, List.of(id), factory,
                 List.of("id"), TResultSinkType.MYSQL_PROTOCAL, false);
     }
