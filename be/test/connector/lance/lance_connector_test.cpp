@@ -297,6 +297,22 @@ TEST_F(LanceConnectorTest, RejectsMissingProjectedColumn) {
     EXPECT_TRUE(LanceNativeReader::convert_batch(_state.get(), _tuple, batch, &chunk).is_internal_error());
 }
 
+TEST_F(LanceConnectorTest, RejectsNarrowingNestedIntegerSchema) {
+    TypeDescriptor type(TYPE_ARRAY);
+    type.children.push_back(TypeDescriptor(TYPE_INT));
+    const auto* tuple = tuple_for_type(type);
+    ASSERT_NE(nullptr, tuple);
+    auto values = std::make_shared<arrow::Int64Builder>();
+    arrow::ListBuilder builder(arrow::default_memory_pool(), values);
+    ASSERT_TRUE(builder.Append().ok());
+    ASSERT_TRUE(values->Append(INT64_MAX).ok());
+    std::shared_ptr<arrow::Array> array;
+    ASSERT_TRUE(builder.Finish(&array).ok());
+    auto batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 1, {array});
+    ChunkPtr chunk;
+    EXPECT_TRUE(LanceNativeReader::convert_batch(_state.get(), tuple, batch, &chunk).is_data_quality_error());
+}
+
 TEST_F(LanceConnectorTest, CancelledQueryDoesNotRead) {
     LanceDataSourceProvider provider(nullptr, _plan);
     auto source = provider.create_data_source(_range);
