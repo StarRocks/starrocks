@@ -60,6 +60,24 @@ TEST(WarmSlotReservationTest, DisableIsSticky) {
     EXPECT_FALSE(slots.try_reserve(4, 0, 8));
 }
 
+TEST(WarmSlotReservationTest, HandoffAtSingleSlotLimitKeepsLifetimeGuard) {
+    WarmSlotReservation slots;
+    ASSERT_TRUE(slots.try_reserve(1, 7, 8));
+    EXPECT_FALSE(slots.try_reserve(1, 7, 8));
+    for (int i = 0; i < 100; ++i) {
+        ASSERT_TRUE(slots.can_continue(1, 7, 8));
+        EXPECT_EQ(1, slots.running());
+    }
+    // A larger data target or a disabled prefetcher prevents the next handoff.
+    EXPECT_FALSE(slots.can_continue(1, 8, 8));
+    EXPECT_FALSE(slots.can_continue(0, 7, 8));
+    slots.disable();
+    EXPECT_FALSE(slots.can_continue(1, 7, 8));
+    EXPECT_EQ(1, slots.running());
+    slots.release();
+    EXPECT_EQ(0, slots.running());
+}
+
 // The teardown race the class exists for: once disable() was called and the driver observed
 // running() == 0 (pending_finish() returned false), a late try_reserve from an executor thread
 // must never succeed -- otherwise a warm task re-arms after operator teardown began and runs

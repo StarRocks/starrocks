@@ -48,6 +48,13 @@ public:
         return true;
     }
 
+    // An existing owner can hand its slot to another task without changing the count.
+    // The reservation stays visible to pending_finish throughout the handoff.
+    bool can_continue(int max_warm_inflight, int data_reserved, int io_task_cap) const {
+        int count = _running.load();
+        return !_disabled.load() && count > 0 && count <= max_warm_inflight && data_reserved + count <= io_task_cap;
+    }
+
     // Release a slot taken by try_reserve, either when the warm task finishes or when the
     // caller fails to submit it.
     void release() { _running.fetch_sub(1); }

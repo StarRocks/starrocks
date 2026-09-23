@@ -31,6 +31,7 @@ namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
 class FooterPrefetchState;
+struct FooterPrefetchItem;
 
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
@@ -139,6 +140,8 @@ public:
     int64_t get_scan_table_id() const override;
 
 private:
+    bool _submit_footer_prefetch_task(RuntimeState* state, const std::shared_ptr<FooterPrefetchState>& fp,
+                                      const FooterPrefetchItem& item);
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     bool _can_reuse_chunk_source_for(Morsel& morsel) const override;
     void _record_reusable_chunk_source_event(ReusableChunkSourceEvent event) override;

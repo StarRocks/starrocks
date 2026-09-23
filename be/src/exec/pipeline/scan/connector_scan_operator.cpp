@@ -516,23 +516,6 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
     if (fp == nullptr || fp->cancelled() || !fp->warmable()) {
         return;
     }
-    workgroup::ScanExecutor* executor = scan_executor();
-    if (executor == nullptr) {
-        return;
-    }
-    workgroup::WorkGroupPtr wg = scan_workgroup();
-    std::shared_ptr<workgroup::ScanTaskGroup> task_group =
-            down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
-    TQueryType::type query_type = state->query_options().query_type;
-
-    // Warm fills the io-task slots the data scan leaves spare so footers are read ahead of the scan
-    // cursor. Slots come from _warm_slots, separate from data's _num_running_io_tasks: the adaptive
-    // governor and the data re-submit gate read data only and so are not perturbed by warm, while
-    // pending_finish() waits on the warm count (keeping `this` alive until tasks drain). Two bounds:
-    // at most connector_footer_prefetch_max_inflight concurrent warm tasks per instance, and
-    // data + warm <= the per-instance cap (data side bounded by max(current data, target) so
-    // in-flight data from before a throttle-down still cannot be exceeded). The teardown race
-    // against set_finishing() is handled inside WarmSlotReservation.
     const int max_warm_inflight = config::connector_footer_prefetch_max_inflight;
     try {
         while (true) {
@@ -540,59 +523,69 @@ void ConnectorScanOperator::try_submit_metadata_prefetch(RuntimeState* state) {
             if (!_warm_slots.try_reserve(max_warm_inflight, data_reserved, _io_tasks_per_scan_operator)) {
                 break;
             }
-            bool submitted = false;
-            DeferOp release_unsubmitted([&]() {
-                if (!submitted) _warm_slots.release();
-            });
+            CancelableDefer release_slot([&]() { _warm_slots.release(); });
             FooterPrefetchItem item;
-            if (!fp->try_take_next(&item)) {
+            if (!fp->try_take_next(&item) || !_submit_footer_prefetch_task(state, fp, item)) {
                 break;
             }
-            workgroup::ScanTask task(wg, [wp = query_ctx(), this, state, fp, item](workgroup::YieldContext&) {
-                if (auto sp = wp.lock()) {
-                    // Wake parked scan observers when this warm task finishes (event scheduler): a driver
-                    // with no buffered chunks must re-check progress after warm drains, same as data tasks.
-                    auto notify = scan_defer_notify(this);
-                    DeferOp release_slot([&]() { _warm_slots.release(); });
-                    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
-                    try {
-                        // Skip the actual footer read if the operator is winding down: an already-queued task
-                        // must not spend a remote footer read once the scan will no longer consume it, so
-                        // pending_finish() drains promptly instead of waiting on wasted reads. Three signals,
-                        // cheapest/promptest first: fragment cancel/finish (state->is_cancelled()), operator-
-                        // local finish (_warm_slots disabled by set_finishing() even without a fragment
-                        // cancel), and factory close (fp->cancelled(), the latest).
-                        if (!state->is_cancelled() && !_warm_slots.disabled() && !fp->cancelled()) {
-                            connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
-                            fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
-                        }
-                        // While a build stall parks the driver (is_buffer_full), the data-side scheduling
-                        // that re-drives prefetch does not run, so sustain warming here. Re-drive before
-                        // releasing this task's slot so `this` stays alive across the re-submit.
-                        if (is_buffer_full()) {
-                            try_submit_metadata_prefetch(state);
-                        }
-                    } catch (const std::exception& e) {
-                        LOG(WARNING) << "Connector footer prefetch failed: " << e.what();
-                    }
-                }
-            });
-            task.task_group = task_group;
-            task.set_query_type(query_type);
-            // Opportunistic background prefetch: pin warm at priority 0, the bottom of the data scan's
-            // range (OlapScanNode::compute_priority is 5-20 in practice, 0 only for huge scans), so a
-            // data io-task wins a free executor thread over a queued warm task. Throughput is the lead's
-            // job, not priority -- warm at the small lead does not wait in the queue anyway.
-            task.priority = 0;
-            if (!executor->submit(std::move(task))) {
-                fp->untake(item.key); // give the file back; the task never ran
-                break;
-            }
-            submitted = true;
+            release_slot.cancel();
         }
     } catch (const std::exception& e) {
         LOG(WARNING) << "Connector footer prefetch submission failed: " << e.what();
     }
+}
+
+bool ConnectorScanOperator::_submit_footer_prefetch_task(RuntimeState* state,
+                                                         const std::shared_ptr<FooterPrefetchState>& fp,
+                                                         const FooterPrefetchItem& item) {
+    // The caller owns one reservation. Transfer it only after a successful submission.
+    auto* executor = scan_executor();
+    if (executor == nullptr) {
+        fp->untake(item.key);
+        return false;
+    }
+    workgroup::ScanTask task(scan_workgroup(), [wp = query_ctx(), this, state, fp, item](workgroup::YieldContext&) {
+        if (auto sp = wp.lock()) {
+            auto notify = scan_defer_notify(this);
+            CancelableDefer release_slot([&]() { _warm_slots.release(); });
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
+            try {
+                auto stopped = [&]() {
+                    return state->is_cancelled() || _warm_slots.disabled() || fp->cancelled() ||
+                           (_morsel_queue != nullptr && _morsel_queue->reach_limit());
+                };
+                if (stopped()) {
+                    return;
+                }
+                connector::FooterWarmResult r = connector::warm_footer(item, fp->metacache_on());
+                fp->record_warm(r.wrote_pagecache, r.wrote_blockcache);
+
+                // A parked driver cannot submit more work. Pass this slot to the next file without
+                // dropping the lifetime guard or trying to reserve a second slot at the inflight cap.
+                // Each footer gets a separate queued task so data tasks can run between them.
+                int data_reserved = std::max<int>(_num_running_io_tasks.load(), current_io_task_target());
+                if (!stopped() && is_buffer_full() &&
+                    _warm_slots.can_continue(config::connector_footer_prefetch_max_inflight, data_reserved,
+                                             _io_tasks_per_scan_operator)) {
+                    FooterPrefetchItem next;
+                    if (fp->try_take_next(&next) && _submit_footer_prefetch_task(state, fp, next)) {
+                        release_slot.cancel();
+                    }
+                }
+            } catch (const std::exception& e) {
+                LOG(WARNING) << "Connector footer prefetch failed: " << e.what();
+            }
+        }
+    });
+    task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
+    task.set_query_type(state->query_options().query_type);
+    // Background work stays below the data scan's priority range.
+    task.priority = 0;
+    if (!executor->submit(std::move(task))) {
+        fp->untake(item.key);
+        return false;
+    }
+    return true;
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
