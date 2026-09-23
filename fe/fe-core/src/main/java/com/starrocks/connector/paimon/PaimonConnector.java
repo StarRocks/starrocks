@@ -169,13 +169,22 @@ public class PaimonConnector implements Connector {
             // snapshot/schema revisions; privilege wrapper stays outside, as in createCatalog.
             Catalog unwrapped = CatalogFactory.createUnwrappedCatalog(context,
                     CatalogFactory.class.getClassLoader());
+            // Directly around the unwrapped catalog, so the per-call door only sees requests that
+            // are really going to the metastore. Anything mounted above the cache would report its
+            // hits instead; see GuardedPaimonCatalog.
+            Catalog guarded = new GuardedPaimonCatalog(catalogName, unwrapped);
             if (!getPaimonOptions().get(CatalogOptions.CACHE_ENABLED)) {
                 // no cache layer, hence nothing for the background refresh to track
-                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(unwrapped, getPaimonOptions());
+                this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(guarded, getPaimonOptions());
                 return paimonNativeCatalog;
             }
+<<<<<<< HEAD
             CachingPaimonCatalog cachingCatalog =
                     new CachingPaimonCatalog(catalogName, unwrapped, getPaimonOptions());
+=======
+            CachingPaimonCatalog cachingCatalog = new CachingPaimonCatalog(catalogName, guarded, getPaimonOptions(),
+                    refreshExecutor, tableCacheRefreshIntervalSec);
+>>>>>>> 1f85523 ([BugFix] Resolve a DML's external write target before the lock, and give paimon, brpc and the file-system layer a door (#79623))
             this.paimonNativeCatalog = PrivilegedCatalog.tryToCreate(cachingCatalog, getPaimonOptions());
             GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                     .registerPaimonCatalog(catalogName, cachingCatalog);

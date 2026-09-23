@@ -76,6 +76,7 @@ import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
+import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -1946,6 +1947,147 @@ public class QueryAnalyzer {
             return super.visitSetOp(node, context);
         }
 
+<<<<<<< HEAD
+=======
+        /**
+         * A DML's query statement is built by its own analyzer, so at this point -- before the lock is taken
+         * -- there is nothing for the inherited traversal to walk: {@link AstTraverser} reaches an UPDATE /
+         * DELETE / MERGE INTO's tables only through {@code getQueryStatement()}. Walk the raw clauses
+         * instead, so an external table one of them reads is pre-resolved exactly like one a SELECT reads.
+         * Without this the locked analyzer resolves it, and that connector round trip happens with the meta
+         * lock held -- the tail of the same problem
+         * {@code StatementPlanner#planDmlOffSnapshots} takes the optimizer off that lock for.
+         *
+         * <p>The write target is not visited as a relation, but it is pre-resolved when it lives in an
+         * external catalog -- see {@link #preResolveExternalWriteTarget}. An internal target stays with the
+         * locked analyzer, since that is the object the lock protects.
+         */
+        @Override
+        public Void visitUpdateStatement(UpdateStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
+            if (node.getQueryStatement() != null) {
+                return super.visitUpdateStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getFromRelations());
+                visitIfPresent(node.getWherePredicate());
+                if (node.getAssignments() != null) {
+                    node.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+                }
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
+            if (node.getQueryStatement() != null) {
+                return super.visitDeleteStatement(node, context);
+            }
+            withCteScope(node.getCommonTableExpressions(), () -> {
+                visitAll(node.getUsingRelations());
+                visitIfPresent(node.getWherePredicate());
+            });
+            return null;
+        }
+
+        @Override
+        public Void visitMergeIntoStatement(MergeIntoStmt node, Void context) {
+            preResolveExternalWriteTarget(node.getTableRef());
+            if (node.getQueryStatement() != null) {
+                return super.visitMergeIntoStatement(node, context);
+            }
+            visitIfPresent(node.getSourceRelation());
+            visitIfPresent(node.getMergeCondition());
+            if (node.getWhenClauses() != null) {
+                for (MergeWhenClause whenClause : node.getWhenClauses()) {
+                    visitIfPresent(whenClause.getOptionalCondition());
+                    if (whenClause instanceof MergeWhenMatchedUpdateClause updateClause) {
+                        updateClause.getAssignments().forEach(assignment -> visitIfPresent(assignment.getExpr()));
+                    } else if (whenClause instanceof MergeWhenNotMatchedInsertClause insertClause
+                            && insertClause.getValues() != null) {
+                        insertClause.getValues().forEach(this::visitIfPresent);
+                    }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Resolve a DML's write target here, without the lock, when it lives in an external catalog.
+         *
+         * <p>An internal target is left alone: it is the object the lock is taken for, and the locked
+         * analyzer is where it belongs. An external one is the opposite -- {@code PlannerMetaLocker} never
+         * put it in the lock set, so the lock makes nothing about it stable, and resolving it under the lock
+         * only binds the lock's hold time to that catalog's latency. The four DML analyzers pick the answer
+         * up through {@link PreResolvedWriteTargets}.
+         *
+         * <p>Nothing here may change what the statement does. A name that does not normalize, a catalog that
+         * is not registered, a table that is not there, a connector that refuses -- all of them leave the
+         * stash empty and the analyzer resolves the target exactly as it did before, reporting the same
+         * error at the same place.
+         */
+        private void preResolveExternalWriteTarget(TableRef tableRef) {
+            if (tableRef == null) {
+                return;
+            }
+            TableName tableName;
+            try {
+                tableName = new TableName(tableRef.getCatalogName(), tableRef.getDbName(),
+                        tableRef.getTableName(), tableRef.getPos());
+                tableName.normalization(session);
+            } catch (RuntimeException e) {
+                return;
+            }
+            if (Strings.isNullOrEmpty(tableName.getCatalog()) || Strings.isNullOrEmpty(tableName.getDb())
+                    || CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+                return;
+            }
+            try (Timer ignored = Tracers.watchScope("AnalyzeTable")) {
+                Table table = metadataMgr.getTable(session, tableName.getCatalog(), tableName.getDb(),
+                        tableName.getTbl());
+                if (table != null) {
+                    session.getPreResolvedWriteTargets().put(tableName, table);
+                }
+            } catch (RuntimeException e) {
+                // left to the locked analyzer, which reports it the way it always has
+            }
+        }
+
+        /**
+         * Run {@code body} with these CTE names in scope, the way {@link #visitSelect} does for a with
+         * clause: a name that resolves to a CTE must not be pre-resolved as a table.
+         */
+        private void withCteScope(List<CTERelation> cteRelations, Runnable body) {
+            boolean scoped = cteRelations != null && !cteRelations.isEmpty();
+            if (scoped) {
+                cteNameStack.push(collectCteNames(cteRelations));
+            }
+            try {
+                if (scoped) {
+                    cteRelations.forEach(this::visit);
+                }
+                body.run();
+            } finally {
+                if (scoped) {
+                    cteNameStack.pop();
+                }
+            }
+        }
+
+        private void visitAll(List<Relation> relations) {
+            if (relations != null) {
+                relations.forEach(this::visitIfPresent);
+            }
+        }
+
+        private void visitIfPresent(ParseNode node) {
+            if (node != null) {
+                visit(node);
+            }
+        }
+
+>>>>>>> 1f85523 ([BugFix] Resolve a DML's external write target before the lock, and give paimon, brpc and the file-system layer a door (#79623))
         @Override
         public Void visitTable(TableRelation tableRelation, Void context) {
             if (tableRelation.getTable() != null) {
@@ -2105,7 +2247,15 @@ public class QueryAnalyzer {
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, Void context) {
-            // Avoid touching target table metadata here; only pre-resolve external tables in the query part.
+            // An internal target's metadata is deliberately not touched here -- that is the object the lock
+            // is taken for. An external one is pre-resolved, because the lock covers nothing about it and
+            // resolving it under the lock only binds the hold time to that catalog. Not for the targets
+            // that are not catalog objects at all: a CTAS target does not exist yet, and files() / blackhole
+            // are built from the statement rather than looked up.
+            if (!statement.isForCTAS() && !statement.useTableFunctionAsTargetTable()
+                    && !statement.useBlackHoleTableAsTargetTable()) {
+                preResolveExternalWriteTarget(statement.getTableRef());
+            }
             if (statement.getQueryStatement() != null) {
                 visit(statement.getQueryStatement());
             }

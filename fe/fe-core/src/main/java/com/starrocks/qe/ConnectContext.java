@@ -76,6 +76,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PreResolvedViewBodies;
+import com.starrocks.sql.analyzer.PreResolvedWriteTargets;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
@@ -262,6 +263,19 @@ public class ConnectContext {
     // analyzer when it expands those views. Scoped to one statement: StatementPlanner clears it.
     private final PreResolvedViewBodies preResolvedViewBodies = new PreResolvedViewBodies();
 
+<<<<<<< HEAD
+=======
+    // The DML write target the same pre-pass resolved, when it lives in an external catalog and so is not
+    // an object the meta lock covers. Scoped to one statement, cleared alongside the view bodies.
+    private final PreResolvedWriteTargets preResolvedWriteTargets = new PreResolvedWriteTargets();
+
+    // FE-side Sample-Based Tablet Pre-Split runs before the load coordinator exists. INSERT keeps
+    // its per-statement timings here so the eventual profile can attach them. Broker Load instead
+    // uses a job-owned collector because its asynchronous work must not depend on this context's
+    // statement-level reset or on a reused client context.
+    private volatile PreSplitProfile preSplitProfile;
+
+>>>>>>> 1f85523 ([BugFix] Resolve a DML's external write target before the lock, and give paimon, brpc and the file-system layer a door (#79623))
     // Query source to distinguish different types of queries
     private QuerySource querySource = QuerySource.EXTERNAL;
 
@@ -1326,6 +1340,21 @@ public class ConnectContext {
         return preResolvedViewBodies;
     }
 
+<<<<<<< HEAD
+=======
+    public PreResolvedWriteTargets getPreResolvedWriteTargets() {
+        return preResolvedWriteTargets;
+    }
+
+    public StatisticsLoadBudget getStatisticsLoadBudget() {
+        return statisticsLoadBudget;
+    }
+
+    public void setStatisticsLoadBudget(StatisticsLoadBudget statisticsLoadBudget) {
+        this.statisticsLoadBudget = statisticsLoadBudget;
+    }
+
+>>>>>>> 1f85523 ([BugFix] Resolve a DML's external write target before the lock, and give paimon, brpc and the file-system layer a door (#79623))
     public QuerySource getQuerySource() {
         return querySource;
     }
