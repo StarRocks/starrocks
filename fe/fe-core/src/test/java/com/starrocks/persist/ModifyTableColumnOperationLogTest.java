@@ -22,8 +22,7 @@ import org.junit.jupiter.api.Test;
 public class ModifyTableColumnOperationLogTest {
     @Test
     public void testDbNameIsStoredWithoutClusterPrefix() {
-        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog("default_cluster:db1", "t1",
-                Lists.newArrayList());
+        ModifyTableColumnOperationLog log = new ModifyTableColumnOperationLog("db1", "t1", Lists.newArrayList());
         Assertions.assertEquals("db1", log.getDbName());
         Assertions.assertEquals("t1", log.getTableName());
         String json = GsonUtils.GSON.toJson(new ModifyTableColumnOperationLog("db2", "t2", Lists.newArrayList()));

@@ -110,8 +110,6 @@ public class TaskRunStatusTest {
     @Test
     public void testDbNameIsStoredWithoutClusterPrefix() {
         TaskRunStatus status = new TaskRunStatus();
-        status.setDbName("default_cluster:db1");
-        Assertions.assertEquals("db1", status.getDbName());
         status.setDbName("db2");
         Assertions.assertEquals("db2", status.getDbName());
         Assertions.assertTrue(status.toJSON().contains("\"dbName\":\"db2\""));

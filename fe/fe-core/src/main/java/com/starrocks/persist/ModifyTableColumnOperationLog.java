@@ -35,7 +35,7 @@ public class ModifyTableColumnOperationLog implements Writable, GsonPostProcessa
     private List<Column> columns = new ArrayList<>();
 
     public ModifyTableColumnOperationLog(String dbName, String tableName, List<Column> columns) {
-        this.dbName = ClusterNamespace.getNameFromFullName(dbName);
+        this.dbName = dbName;
         this.tableName = tableName;
         this.columns = columns;
     }

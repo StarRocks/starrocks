@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 public class DropDbInfoTest {
     @Test
     public void testDbNameIsStoredWithoutClusterPrefix() {
-        DropDbInfo info = new DropDbInfo("default_cluster:db1", true);
+        DropDbInfo info = new DropDbInfo("db1", true);
         Assertions.assertEquals("db1", info.getDbName());
         Assertions.assertTrue(info.isForceDrop());
         String json = GsonUtils.GSON.toJson(new DropDbInfo("db2", false));

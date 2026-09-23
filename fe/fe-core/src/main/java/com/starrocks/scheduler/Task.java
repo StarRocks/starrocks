@@ -164,9 +164,7 @@ public class Task implements Writable, GsonPostProcessable {
     }
 
     public void setDbName(String dbName) {
-        // Stored plain; a name that still carries the default_cluster prefix (an older FE forwarding the statement)
-        // is normalized here.
-        this.dbName = ClusterNamespace.getNameFromFullName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDefinition() {

@@ -53,7 +53,7 @@ public class DropDbInfo implements Writable, GsonPostProcessable {
     }
 
     public DropDbInfo(String dbName, boolean forceDrop) {
-        this.dbName = ClusterNamespace.getNameFromFullName(dbName);
+        this.dbName = dbName;
         if (this.dbName == null) {
             this.dbName = "";
         }

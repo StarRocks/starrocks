@@ -92,7 +92,6 @@ import com.starrocks.catalog.system.sys.RoleEdges;
 import com.starrocks.catalog.system.sys.SysFeLocks;
 import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -518,19 +517,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         LOG.debug("get db names: {}", dbNames);
 
         List<String> dbs = new ArrayList<>();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
+        for (String db : dbNames) {
             if (!PatternMatcher.matchPattern(params.getPattern(), db, matcher, caseSensitive)) {
                 continue;
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, db);
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            dbs.add(fullName);
+            dbs.add(db);
         }
         result.setDbs(dbs);
         return result;

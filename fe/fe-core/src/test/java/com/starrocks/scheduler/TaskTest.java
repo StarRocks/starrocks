@@ -118,8 +118,6 @@ public class TaskTest {
     @Test
     public void testDbNameIsStoredWithoutClusterPrefix() {
         Task task = new Task("t1");
-        task.setDbName("default_cluster:db1");
-        Assertions.assertEquals("db1", task.getDbName());
         task.setDbName("db2");
         Assertions.assertEquals("db2", task.getDbName());
         Assertions.assertTrue(GsonUtils.GSON.toJson(task).contains("\"dbName\":\"db2\""));

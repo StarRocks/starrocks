@@ -250,8 +250,7 @@ public class TaskRunStatus implements Writable, GsonPostProcessable {
     }
 
     public void setDbName(String dbName) {
-        // Stored plain; a name that still carries the default_cluster prefix is normalized here.
-        this.dbName = ClusterNamespace.getNameFromFullName(dbName);
+        this.dbName = dbName;
     }
 
     @Override

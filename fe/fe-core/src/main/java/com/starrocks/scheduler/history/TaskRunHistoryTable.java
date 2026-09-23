@@ -207,9 +207,8 @@ public class TaskRunHistoryTable {
      * prefix and stay until their partition expires, so both forms are matched.
      */
     private static String dbNamePredicate(String dbName) {
-        String plain = ClusterNamespace.getNameFromFullName(dbName);
-        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(plain) + ", "
-                + quoteLiteral(ClusterNamespace.getFullName(plain)) + ")";
+        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(dbName) + ", "
+                + quoteLiteral(ClusterNamespace.getFullName(dbName)) + ")";
     }
 
     public List<TaskRunStatus> lookup(TGetTasksParams params) {

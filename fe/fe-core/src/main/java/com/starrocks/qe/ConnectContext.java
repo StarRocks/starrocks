@@ -51,7 +51,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -1924,7 +1923,7 @@ public class ConnectContext {
         public List<String> toRow(long nowMs, boolean full) {
             List<String> row = Lists.newArrayList();
             row.add("" + connectionId);
-            row.add(ClusterNamespace.getNameFromFullName(getQualifiedUser()));
+            row.add(getQualifiedUser());
             // Ip + port
             if (ConnectContext.this instanceof HttpConnectContext) {
                 String remoteAddress = ((HttpConnectContext) (ConnectContext.this)).getRemoteAddress();
@@ -1932,7 +1931,7 @@ public class ConnectContext {
             } else {
                 row.add(getMysqlChannel().getRemoteHostPortString());
             }
-            row.add(ClusterNamespace.getNameFromFullName(currentDb));
+            row.add(currentDb);
             // Command
             row.add(command.toString());
             // connection start Time
