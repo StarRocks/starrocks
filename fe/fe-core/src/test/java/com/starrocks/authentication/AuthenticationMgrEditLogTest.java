@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
@@ -83,6 +84,13 @@ public class AuthenticationMgrEditLogTest {
     private Map<String, String> createUnixGroupProviderProperties() {
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "unix");
+        return properties;
+    }
+
+    private Map<String, String> createExtensionGroupProviderProperties(String factoryClassName) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", ExtensionGroupProvider.TYPE);
+        properties.put(ExtensionGroupProvider.PROVIDER_FACTORY_CLASS_PROPERTY, factoryClassName);
         return properties;
     }
 
@@ -889,5 +897,54 @@ public class AuthenticationMgrEditLogTest {
             masterAuthenticationMgr.dropSecurityIntegration(nonExistentName);
         });
         Assertions.assertTrue(exception.getMessage().contains("security integration '" + nonExistentName + "' not found"));
+    }
+
+    /**
+     * A frontend that does not have the extension deployed must skip the provider and carry on
+     * replaying: an exception here aborts journal replay and the frontend never starts.
+     */
+    @Test
+    public void testReplayCreateExtensionGroupProviderWithoutTheExtension() {
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+
+        Assertions.assertDoesNotThrow(() -> followerAuthMgr.replayCreateGroupProvider(
+                TEST_PROVIDER_NAME, createExtensionGroupProviderProperties("com.example.NotDeployed")));
+
+        Assertions.assertNull(followerAuthMgr.getGroupProvider(TEST_PROVIDER_NAME),
+                "a provider that cannot be resolved must not be registered");
+    }
+
+    @Test
+    public void testReplayCreateExtensionGroupProviderWithTheExtension() {
+        AuthenticationMgr followerAuthMgr = new AuthenticationMgr();
+
+        followerAuthMgr.replayCreateGroupProvider(TEST_PROVIDER_NAME,
+                createExtensionGroupProviderProperties(ReplayableExtensionGroupProviderFactory.class.getName()));
+
+        GroupProvider provider = followerAuthMgr.getGroupProvider(TEST_PROVIDER_NAME);
+        Assertions.assertNotNull(provider);
+        Assertions.assertEquals(ExtensionGroupProvider.TYPE, provider.getType());
+    }
+
+    /**
+     * Minimal factory standing in for a deployed extension. The provider it returns is an anonymous
+     * subclass, which is deliberate but only safe because nothing here serialises it - subtypes of
+     * {@link GroupProvider} have to be registered in the gson runtime type adapter, and an anonymous
+     * class cannot be. Do not reuse this factory in a test that writes an image.
+     */
+    public static class ReplayableExtensionGroupProviderFactory implements ExtensionGroupProviderFactory {
+        @Override
+        public GroupProvider create(String name, Map<String, String> properties) {
+            return new GroupProvider(name, properties) {
+                @Override
+                public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
+                    return Set.of("replayed_group");
+                }
+
+                @Override
+                public void checkProperty() {
+                }
+            };
+        }
     }
 }
