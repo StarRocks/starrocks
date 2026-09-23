@@ -256,6 +256,7 @@ public abstract class ScanNode extends PlanNode {
         return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
                 this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
                 this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
+                this instanceof PaimonIndexScanNode ||
                 this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode ||
                 this instanceof FlussScanNode;
     }

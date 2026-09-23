@@ -33,6 +33,8 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -137,6 +139,15 @@ public interface ConnectorMetadata {
     /** Returns connector-neutral index capabilities exposed for the table. */
     default ConnectorIndexMetadata getIndexMetadata(Table table) {
         return ConnectorIndexMetadata.empty();
+    }
+
+    /**
+     * Returns snapshot-bound index shards only when every requested index completely covers the
+     * connector data ranges. An empty result means the caller must use the normal scan path.
+     */
+    default List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<String, ConnectorIndexType> requiredIndexes) {
+        return Lists.newArrayList();
     }
 
     /**

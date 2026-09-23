@@ -68,7 +68,9 @@ public class ApplyConnectorIndexRuleTest {
         Assertions.assertEquals(1, outputs.size());
         LogicalScanOperator annotated = (LogicalScanOperator) outputs.get(0).getOp();
         Assertions.assertSame(predicate, annotated.getPredicate());
-        Assertions.assertEquals(new IndexCondition(predicate), annotated.getIndexCondition());
+        Assertions.assertEquals(
+                new IndexCondition(predicate, Map.of("id", ConnectorIndexType.BITMAP)),
+                annotated.getIndexCondition());
     }
 
     @Test

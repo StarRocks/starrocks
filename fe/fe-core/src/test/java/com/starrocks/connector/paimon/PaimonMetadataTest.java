@@ -40,6 +40,9 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
@@ -1093,6 +1096,28 @@ public class PaimonMetadataTest {
             }
 
             long snapshotId = table.latestSnapshot().orElseThrow().id();
+            ConnectorIndexMetadata indexMetadata = localMetadata.getIndexMetadata(starRocksTable);
+            assertTrue(indexMetadata.isEmpty());
+            assertTrue(localMetadata.getIndexShards(
+                    starRocksTable, -1L, Map.of("id", ConnectorIndexType.RANGE)).isEmpty());
+            assertTrue(localMetadata.getIndexShards(
+                    starRocksTable, snapshotId, Map.of()).isEmpty());
+            List<ConnectorIndexShard> uncoveredShards = localMetadata.getIndexShards(
+                    starRocksTable, snapshotId, Map.of("id", ConnectorIndexType.RANGE));
+            assertTrue(uncoveredShards.isEmpty());
+
+            GetRemoteFilesParams disabledIndexParams = GetRemoteFilesParams.newBuilder()
+                    .setFieldNames(fields)
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
+                    .setDisableGlobalIndex(true)
+                    .build();
+            List<Split> disabledIndexSplits = ((PaimonRemoteFileDesc) localMetadata
+                    .getRemoteFiles(starRocksTable, disabledIndexParams).get(0).getFiles().get(0))
+                    .getPaimonSplitsInfo().getPaimonSplits();
+            assertFalse(disabledIndexSplits.isEmpty());
+            assertTrue(disabledIndexSplits.stream().allMatch(DataSplit.class::isInstance));
+            assertEquals(2L, PaimonMetadata.getRowCount(disabledIndexSplits));
+
             RoaringNavigableMap64 selectedRows = new RoaringNavigableMap64();
             selectedRows.add(0L);
             PaimonGlobalIndexResult indexResult = new PaimonGlobalIndexResult(

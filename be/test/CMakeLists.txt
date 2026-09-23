@@ -461,8 +461,12 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
         connector/paimon/paimon_blob_converter_test.cpp
+        connector/paimon/paimon_global_index_evaluator_test.cpp
+        connector/paimon/paimon_global_index_scanner_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_global_index_evaluator.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_global_index_scanner.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
     )

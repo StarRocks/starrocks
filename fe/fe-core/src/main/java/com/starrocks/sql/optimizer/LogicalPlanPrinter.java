@@ -506,6 +506,11 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitPhysicalIndexScan(OptExpression optExpression, Integer step) {
+            return visitScanCommon(optExpression, step, "CONNECTOR INDEX SCAN");
+        }
+
+        @Override
         public OperatorStr visitPhysicalFlussScan(OptExpression optExpression, Integer step) {
             return visitScanCommon(optExpression, step, "FLUSS SCAN");
         }
