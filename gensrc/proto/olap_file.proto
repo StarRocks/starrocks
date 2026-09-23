@@ -182,6 +182,10 @@ message RowsetMetaPB {
     repeated bytes segment_encryption_metas = 64;
     repeated bytes delfile_encryption_metas = 65;
     repeated bytes updatefile_encryption_metas = 66;
+    // Bytes of standalone index files (e.g. the vector index .vi) that are part of
+    // index_disk_size but live outside the segment (.dat) files. Lets consumers that
+    // start from the segment file size recover the embedded-only index bytes.
+    optional int64 standalone_index_size = 67;
 }
 
 enum DataFileType {
