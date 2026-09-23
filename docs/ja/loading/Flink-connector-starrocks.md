@@ -6,6 +6,8 @@ description: "StarRocks Flink コネクタは DataStream API・Table API & SQL�
 
 # Apache Flink® からデータを継続的にロードする
 
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
+
 StarRocks は、Apache Flink® 用の StarRocks Connector（以下、Flink コネクタ）という独自開発のコネクタを提供しており、Flink を使用して StarRocks テーブルにデータをロードするのに役立ちます。基本的な原理は、データを蓄積し、それを一度に StarRocks に [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md) を通じてロードすることです。
 
 Flink コネクタは DataStream API、Table API & SQL、Python API をサポートしています。これは、Apache Flink® が提供する [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) よりも高い安定したパフォーマンスを持っています。
@@ -89,6 +91,10 @@ Maven プロジェクトの `pom.xml` ファイルに、以下の形式で Flink
 > **注意**
 >
 > 正式にリリースされていない Flink コネクタの名前には `SNAPSHOT` サフィックスが含まれています。
+
+## StarRocks に接続する
+
+<FlinkStarRocksConnection />
 
 ## オプション
 

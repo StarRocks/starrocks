@@ -6,6 +6,8 @@ description: "How to use the StarRocks Flink connector to continuously load data
 
 # Continuously load data from Apache Flink®
 
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
+
 StarRocks provides a self-developed connector named StarRocks Connector for Apache Flink® (Flink connector for short) to help you load data into a StarRocks table by using Flink. The basic principle is to accumulate the data and then load it all at a time into StarRocks through [STREAM LOAD](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md).
 
 The Flink connector supports DataStream API, Table API & SQL, and Python API. It has a higher and more stable performance than [flink-connector-jdbc](https://nightlies.apache.org/flink/flink-docs-master/docs/connectors/table/jdbc/) provided by Apache Flink®.
@@ -89,6 +91,10 @@ In your Maven project's `pom.xml` file, add the Flink connector as a dependency 
 > **NOTE**
 >
 > The name of Flink connector which is not formally released contains the `SNAPSHOT` suffix.
+
+## Connect to StarRocks
+
+<FlinkStarRocksConnection />
 
 ## Options
 

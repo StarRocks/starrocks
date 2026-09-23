@@ -24,6 +24,7 @@
 
 #include "base/coding.h"
 #include "base/compression/compression_headers.h"
+#include "base/simd/simd.h"
 #include "base/status.h"
 #include "base/statusor.h"
 #include "column/array_column.h"
@@ -46,6 +47,21 @@
 #include "types/percentile_value.h"
 
 namespace starrocks::serde {
+
+bool is_all_null_column(const Column& column) {
+    if (!column.is_nullable()) {
+        return false;
+    }
+    const auto& nullable = down_cast<const NullableColumn&>(column);
+    // The row count is stored as uint32_t, matching how the other serdes size their payloads.
+    if (nullable.size() == 0 || nullable.size() > std::numeric_limits<uint32_t>::max() || !nullable.has_null()) {
+        return false;
+    }
+    // Stop at the first non-NULL row instead of counting every NULL. On an ordinary load almost no
+    // column is entirely NULL and most bail on row 0, so this costs a memchr that returns at once;
+    // null_count() would SIMD-scan the whole null column every time.
+    return !SIMD::contain_zero(nullable.immutable_null_column_data());
+}
 
 static Status check_remaining_size(const uint8_t* current, const uint8_t* end, size_t expected_remains) {
     if (expected_remains > static_cast<size_t>(end - current)) {
@@ -783,14 +799,33 @@ private:
 };
 
 class NullableColumnSerde {
+    // With ENCODE_ALL_NULL the payload is prefixed by a one-byte tag. kAllNull replaces both
+    // sub-column payloads with the row count: a column whose rows are all NULL still pays one null
+    // flag plus one offset/value slot per row per column otherwise, which dominates the payload of
+    // very wide schemas where most columns are empty. Without the bit the layout is unchanged.
 public:
     using Serde = serde::ColumnArraySerde;
+
     static int64_t max_serialized_size(const NullableColumn& column, const int encode_level) {
-        return Serde::max_serialized_size(*column.null_column(), encode_level) +
+        if (!is_all_null_encoding_enabled(encode_level)) {
+            return Serde::max_serialized_size(*column.null_column(), encode_level) +
+                   Serde::max_serialized_size(*column.data_column(), encode_level);
+        }
+        if (_is_all_null(column)) {
+            return kTagSize + kRowCountSize;
+        }
+        return kTagSize + Serde::max_serialized_size(*column.null_column(), encode_level) +
                Serde::max_serialized_size(*column.data_column(), encode_level);
     }
 
     static StatusOr<uint8_t*> serialize(const NullableColumn& column, uint8_t* buff, const int encode_level) {
+        if (is_all_null_encoding_enabled(encode_level)) {
+            const bool all_null = _is_all_null(column);
+            buff = write_little_endian_8(all_null ? kAllNull : kNotAllNull, buff);
+            if (all_null) {
+                return write_little_endian_32(static_cast<uint32_t>(column.size()), buff);
+            }
+        }
         ASSIGN_OR_RETURN(buff, Serde::serialize(*column.null_column(), buff, false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::serialize(*column.data_column(), buff, false, encode_level));
         return buff;
@@ -798,11 +833,40 @@ public:
 
     static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, NullableColumn* column,
                                                 const int encode_level) {
+        if (is_all_null_encoding_enabled(encode_level)) {
+            uint8_t tag = kNotAllNull;
+            ASSIGN_OR_RETURN(buff, read_little_endian_8(buff, end, &tag));
+            if (tag == kAllNull) {
+                uint32_t num_rows = 0;
+                ASSIGN_OR_RETURN(buff, read_little_endian_32(buff, end, &num_rows));
+                // Rebuild the rows the writer dropped. append_nulls() leaves the data column
+                // uninitialized, so fill it with defaults instead: these values are never read,
+                // but they are written out to the segment and garbage compresses far worse than a
+                // constant.
+                Column* data_column = column->data_column_raw_ptr();
+                data_column->resize(0);
+                data_column->append_default(num_rows);
+                column->null_column_raw_ptr()->get_data().assign(num_rows, 1);
+                column->update_has_null();
+                return buff;
+            }
+            if (UNLIKELY(tag != kNotAllNull)) {
+                return Status::InvalidArgument(fmt::format("Invalid nullable column tag {}", tag));
+            }
+        }
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->null_column_raw_ptr(), false, encode_level));
         ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, column->data_column_raw_ptr(), false, encode_level));
         column->update_has_null();
         return buff;
     }
+
+private:
+    static constexpr uint8_t kNotAllNull = 0;
+    static constexpr uint8_t kAllNull = 1;
+    static constexpr int64_t kTagSize = sizeof(uint8_t);
+    static constexpr int64_t kRowCountSize = sizeof(uint32_t);
+
+    static bool _is_all_null(const NullableColumn& column) { return serde::is_all_null_column(column); }
 };
 
 class ArrayColumnSerde {

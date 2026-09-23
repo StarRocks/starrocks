@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -273,25 +274,80 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
-    void columnsFromPathIsRejected() {
+    void columnsFromPathDisjointFromKeyIsAcceptedAndForwardedToFiles() {
+        // The ordinary "Parquet under a partition directory" load:
+        //   COLUMNS (sort_key, dt) COLUMNS FROM PATH AS (dt)
+        // dt is the partition column and comes from the directory name; the sort key is read
+        // verbatim from the file. Nothing perturbs the sampled key, so this must sample rather
+        // than skip -- and columns_from_path must reach FILES so dt is projectable.
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
-        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("partition_col"));
+        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("dt"));
+        Mockito.when(fileGroup.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("dt")));
+        StringBuilder capturedSql = new StringBuilder();
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
 
-        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> executor.execute(bigintRequest(
-                        new BrokerDesc(Map.of()),
-                        List.of(fileGroup),
-                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
-        Assertions.assertTrue(thrown.getMessage().contains("columns_from_path"),
-                "error should call out columns_from_path rejection: " + thrown.getMessage());
+        Assertions.assertDoesNotThrow(() -> executor.execute(partitionedRequest(
+                new BrokerDesc(Map.of()),
+                List.of(fileGroup),
+                List.of(List.of(brokerFileStatus("s3://b/dt=20260921/x.parquet", 1024L))))));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"columns_from_path\" = \"dt\""),
+                "columns_from_path must be forwarded to FILES: " + capturedSql);
+        Assertions.assertTrue(capturedSql.toString().contains("`sort_key`")
+                        && capturedSql.toString().contains("`dt`"),
+                "the sub-query must project both the sort key and the path-derived partition column: "
+                        + capturedSql);
     }
 
     @Test
-    void columnExprListIsRejected() {
+    void columnsFromPathSupplyingAKeyColumnIsRejected() {
+        // Here the path supplies the SORT KEY itself. Its value is in the directory name, not in
+        // the file, so no footer or file scan can reproduce it -- boundaries must not be sampled.
         BrokerFileGroup fileGroup = mockFileGroup("parquet");
-        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(Mockito.mock(ImportColumnDesc.class)));
+        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("sort_key"));
+        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(identityColumn("sort_key")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/sort_key=7/x.parquet", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("columns_from_path")
+                        && thrown.getMessage().contains("sort_key"),
+                "error should name the key column supplied from the path: " + thrown.getMessage());
+    }
+
+    @Test
+    void identityColumnListIsAccepted() {
+        // A COLUMNS list with no SET clause only NAMES the source fields. Both tiers are
+        // Parquet/ORC-only and the BE resolves those by name, so the sampler's by-name SELECT
+        // lands on the same physical column the load reads.
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("payload")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        Assertions.assertDoesNotThrow(() -> executor.execute(bigintRequest(
+                new BrokerDesc(Map.of()),
+                List.of(fileGroup),
+                List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
+    }
+
+    @Test
+    void derivedColumnIsRejected() {
+        // SET sort_key = <expr>: the sampler would read the file's raw sort_key while the load
+        // inserts the mapped value.
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(
+                new ImportColumnDesc("sort_key", Mockito.mock(Expr.class))));
         BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
                 /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
 
@@ -300,8 +356,87 @@ class BrokerLoadSampleSubqueryExecutorTest {
                         new BrokerDesc(Map.of()),
                         List.of(fileGroup),
                         List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
-        Assertions.assertTrue(thrown.getMessage().contains("explicit column list"),
-                "error should call out column-list/SET rejection: " + thrown.getMessage());
+        Assertions.assertTrue(thrown.getMessage().contains("derived column"),
+                "error should call out the derived column: " + thrown.getMessage());
+    }
+
+    @Test
+    void columnListOmittingAKeyColumnIsRejected() {
+        // The load never populates sort_key from the source (it stays at its default), but the
+        // sampler would read whatever the file carries under that name.
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(identityColumn("payload")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("does not name key column"),
+                "error should call out the unnamed key column: " + thrown.getMessage());
+    }
+
+    @Test
+    void columnsFromPathSupplyingARollupSortKeyIsRejected() {
+        // The guard spans every sampled key, not just the base sort key. Here the base key
+        // (sort_key) is read from the file and would pass on its own, but a visible rollup sorts by
+        // rollup_key, which the path supplies -- so the rollup's boundaries could not be sampled and
+        // the whole request must be rejected.
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("rollup_key"));
+        Mockito.when(fileGroup.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("rollup_key")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(rollupRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/rollup_key=7/x.parquet", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("columns_from_path")
+                        && thrown.getMessage().contains("rollup_key"),
+                "error should name the ROLLUP key column supplied from the path: " + thrown.getMessage());
+    }
+
+    @Test
+    void rollupSortKeyMissingFromColumnListIsRejected() {
+        // Same reach, the other rejection arm: the COLUMNS list names the base key but not the
+        // rollup's, so the load never populates rollup_key from the source.
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(identityColumn("sort_key")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(rollupRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("does not name key column")
+                        && thrown.getMessage().contains("rollup_key"),
+                "error should name the unlisted ROLLUP key column: " + thrown.getMessage());
+    }
+
+    @Test
+    void fileGroupsDisagreeingOnColumnsFromPathAreRejected() {
+        // One FILES call carries one columns_from_path list.
+        BrokerFileGroup withPath = mockFileGroup("parquet");
+        Mockito.when(withPath.getColumnsFromPath()).thenReturn(List.of("dt"));
+        BrokerFileGroup withoutPath = mockFileGroup("parquet");
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(withPath, withoutPath),
+                        List.of(List.of(brokerFileStatus("s3://b/dt=1/x.parquet", 1024L)),
+                                List.of(brokerFileStatus("s3://b/y.parquet", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("disagree on columns_from_path"),
+                "error should call out the columns_from_path disagreement: " + thrown.getMessage());
     }
 
     @Test
@@ -404,6 +539,41 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
         Assertions.assertEquals(1, capturedResources.size());
         Assertions.assertSame(expectedComputeResource, capturedResources.get(0));
+    }
+
+    /** An {@code ImportColumnDesc} that only names a source field (expr == null -> isColumn()). */
+    private static ImportColumnDesc identityColumn(String columnName) {
+        return new ImportColumnDesc(columnName);
+    }
+
+    /** A request carrying one visible rollup that sorts by {@code rollup_key}. */
+    private static SampleRequest rollupRequest(
+            BrokerDesc brokerDesc,
+            List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
+        return new SampleRequest(
+                new BrokerLoadScanContext(brokerDesc, fileGroups, fileStatusesPerGroup,
+                        Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(bigintColumn("sort_key")),
+                List.of(new SecondaryIndexSpec(/*indexMetaId=*/ 1001L,
+                        List.of(bigintColumn("rollup_key")))),
+                /*partitionSourceColumns=*/ List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+    }
+
+    /** A request whose target is partitioned by {@code dt}, so the sub-query projects it. */
+    private static SampleRequest partitionedRequest(
+            BrokerDesc brokerDesc,
+            List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
+        return new SampleRequest(
+                new BrokerLoadScanContext(brokerDesc, fileGroups, fileStatusesPerGroup,
+                        Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(bigintColumn("sort_key")),
+                List.of(new Column("dt", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
     }
 
     private static BrokerFileGroup mockFileGroup(String fileFormat) {

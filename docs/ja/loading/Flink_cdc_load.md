@@ -7,6 +7,7 @@ description: "Flink CDC を使用して MySQL の変更データをリアルタ�
 # MySQL からのリアルタイム同期
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks は、MySQL から StarRocks へのデータをリアルタイムで同期する複数の方法をサポートしており、大量データの低遅延リアルタイム分析を実現します。
 
@@ -185,6 +186,12 @@ MySQL からリアルタイムでデータを同期するには、システム�
     +---------------+-------+
     1 row in set (0.00 sec)
     ```
+
+### StarRocks に接続する
+
+SMT の設定ファイルでは、これらのアドレスを `flink.starrocks.jdbc-url` と `flink.starrocks.load-url` で設定します。
+
+<FlinkStarRocksConnection />
 
 ## データベース & テーブルスキーマの同期
 
