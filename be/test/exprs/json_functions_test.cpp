@@ -2362,6 +2362,140 @@ void assert_diff_get_json_string(const DiffJsonCase& tc) {
 
 } // namespace
 
+namespace {
+
+StatusOr<ColumnPtr> run_json_many(const std::vector<std::string>& rows, const std::vector<std::string>& paths,
+                                  bool enabled = true, bool strict = false) {
+    TQueryOptions options;
+    options.__set_enable_json_extract_fusion(enabled);
+    options.__set_allow_throw_exception(strict);
+    RuntimeState state(TUniqueId(), options, TQueryGlobals(), nullptr);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
+    context->set_runtime_state(&state);
+    auto input = BinaryColumn::create();
+    for (const auto& row : rows) {
+        input->append(row);
+    }
+    Columns columns{input};
+    for (const auto& path : paths) {
+        auto data = BinaryColumn::create();
+        data->append(path);
+        columns.emplace_back(ConstColumn::create(data, rows.size()));
+    }
+    context->set_constant_columns(columns);
+    RETURN_IF_ERROR(JsonFunctions::json_query_many_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL));
+    auto result = JsonFunctions::json_query_many_from_string(context.get(), columns);
+    EXPECT_TRUE(JsonFunctions::json_query_many_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    return result;
+}
+
+void assert_json_many_matches_independent(const std::vector<std::string>& rows, const std::vector<std::string>& paths,
+                                          bool enabled = true) {
+    auto combined = run_json_many(rows, paths, enabled);
+    ASSERT_TRUE(combined.ok()) << combined.status();
+    ColumnViewer<TYPE_JSON> many(combined.value());
+    for (size_t path = 0; path < paths.size(); ++path) {
+        auto expected = run_get_json_string_with_flag(enabled, {paths[path], rows, paths[path]},
+                                                      JsonFunctions::json_query_from_string);
+        ColumnViewer<TYPE_JSON> single(expected);
+        for (size_t row = 0; row < rows.size(); ++row) {
+            SCOPED_TRACE(paths[path] + " input=" + rows[row]);
+            auto actual = many.is_null(row) ? noneJsonSlice() : many.value(row)->to_vslice().get(std::to_string(path));
+            ASSERT_EQ(single.is_null(row), actual.isNone());
+            if (!single.is_null(row)) {
+                ASSERT_EQ(single.value(row)->to_string_uncheck(), JsonValue(actual).to_string_uncheck());
+            }
+        }
+    }
+}
+
+} // namespace
+
+TEST_F(JsonFunctionsTest, json_query_many_shared_paths) {
+    const std::vector<std::string> rows{R"({"b":2,"a":{"x":1,"y":[10,null,30]},"c":"text"})",
+                                        R"({"a":[{"x":7},null,9],"b":null})",
+                                        R"({"\u0061":{"x":"\u0062"},"b":"a\nb"})",
+                                        R"({"a":1,"a":2,"b":3})",
+                                        R"([{"a":1},{"a":2}])",
+                                        R"("root")",
+                                        "123",
+                                        "",
+                                        "   ",
+                                        "{}"};
+    const std::vector<std::string> paths{"$.a.x", "$.a.y[2]", "$.a[0].x", "$.a[1]", "$.b", "$.c", "$.missing"};
+    assert_json_many_matches_independent(rows, paths);
+    assert_json_many_matches_independent(rows, paths, false);
+    assert_json_many_matches_independent(rows, {"$", "$.a", "$.a.x", "$.a.y[2]", "$[1].a", "$.a[*]", "$.a.$.b"});
+}
+
+TEST_F(JsonFunctionsTest, json_query_many_damaged_values) {
+    const std::vector<std::string> rows{R"({"a":1,"bad":invalid,"b":2})",
+                                        R"({"bad":notjson,"a":1,"b":2})",
+                                        R"({"a":invalid,"b":2})",
+                                        R"({"a":1,"b":invalid})",
+                                        R"({"a":"\q","b":2})",
+                                        R"({"a":{"x":1,"bad":invalid},"b":2})",
+                                        R"({"a":[1,,2],"b":2})",
+                                        "{",
+                                        "[1,2,"};
+    assert_json_many_matches_independent(rows, {"$.a", "$.b", "$.a.x", "$.missing"});
+    assert_json_many_matches_independent(rows, {"$.a.x", "$.b", "$.a[*]", "$"});
+    assert_json_many_matches_independent(rows, {"$.a", "$.b"}, false);
+    for (const auto& row : rows) {
+        ASSERT_FALSE(run_json_many({row}, {"$.a", "$.b"}, true, true).ok()) << row;
+    }
+}
+
+TEST_F(JsonFunctionsTest, json_query_many_concurrent_context) {
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
+    Columns constants{nullptr};
+    for (const auto& path : {"$.nested.a", "$.nested.b"}) {
+        auto column = BinaryColumn::create();
+        column->append(path);
+        constants.emplace_back(ConstColumn::create(column, 16));
+    }
+    context->set_constant_columns(constants);
+    ASSERT_OK(JsonFunctions::json_query_many_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL));
+    std::atomic<bool> failed{false};
+    std::vector<std::thread> workers;
+    for (int thread = 0; thread < 8; ++thread) {
+        workers.emplace_back([&, thread]() {
+            std::string value = "thread_" + std::to_string(thread);
+            auto input = BinaryColumn::create();
+            for (int row = 0; row < 16; ++row) {
+                input->append("{\"nested\":{\"b\":\"" + value + "\",\"a\":\"" + value + "\"}}");
+            }
+            Columns columns{input, constants[1], constants[2]};
+            for (int iteration = 0; iteration < 200 && !failed.load(); ++iteration) {
+                auto result = JsonFunctions::json_query_many_from_string(context.get(), columns);
+                if (!result.ok()) {
+                    failed = true;
+                    break;
+                }
+                ColumnViewer<TYPE_JSON> viewer(result.value());
+                for (int row = 0; row < 16; ++row) {
+                    if (viewer.is_null(row)) {
+                        failed = true;
+                        break;
+                    }
+                    auto object = viewer.value(row)->to_vslice();
+                    for (const auto& key : {"0", "1"}) {
+                        auto actual = object.get(key);
+                        if (!actual.isString() || actual.copyString() != value) {
+                            failed = true;
+                        }
+                    }
+                }
+            }
+        });
+    }
+    for (auto& worker : workers) {
+        worker.join();
+    }
+    ASSERT_FALSE(failed.load());
+    ASSERT_OK(JsonFunctions::json_query_many_close(context.get(), FunctionContext::FRAGMENT_LOCAL));
+}
+
 TEST_F(JsonFunctionsTest, diff_get_json_all_result_types) {
     const std::vector<std::string> values{"null",
                                           "true",

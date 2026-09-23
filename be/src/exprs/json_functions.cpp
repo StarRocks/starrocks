@@ -20,6 +20,8 @@
 #include <boost/tokenizer.hpp>
 #include <memory>
 #include <mutex>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "column/chunk.h"
@@ -786,6 +788,266 @@ StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, con
     ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
     const auto& paths = columns[1];
     return _full_json_query_impl<ResultType>(context, Columns{jsons, paths});
+}
+
+namespace {
+
+struct JsonExtractNode {
+    std::unordered_map<std::string_view, size_t> fields;
+    std::unordered_map<size_t, size_t> indexes;
+    std::vector<size_t> outputs;
+};
+
+struct JsonMultiExtractState {
+    // Trie keys reference the immutable field strings owned by paths.
+    std::vector<std::unique_ptr<NativeJsonState>> paths;
+    std::vector<std::string> output_keys;
+    std::vector<JsonExtractNode> nodes{1};
+    std::vector<size_t> legacy_paths;
+};
+
+void append_json_selection(vpack::Slice value, const JsonMultiExtractState& state, size_t node_id,
+                           vpack::Builder* selected) {
+    if (value.isNone()) {
+        return;
+    }
+    const auto& node = state.nodes[node_id];
+    for (size_t output : node.outputs) {
+        selected->add(state.output_keys[output], value);
+    }
+    if (value.isObject()) {
+        for (const auto& [key, child] : node.fields) {
+            append_json_selection(value.get(vpack::StringRef(key.data(), key.size())), state, child, selected);
+        }
+    } else if (value.isArray()) {
+        for (const auto& [index, child] : node.indexes) {
+            if (index < value.length()) {
+                append_json_selection(value.at(index), state, child, selected);
+            }
+        }
+    }
+}
+
+// A terminal path consumes its entire value; descendants then read that same VPack value.
+// Other nodes visit each input field/array element at most once and skip unselected values.
+bool extract_json_selection(simdjson::ondemand::value value, const JsonMultiExtractState& state, size_t node_id,
+                            JsonGetThreadState* scratch, std::vector<uint8_t>* visited, vpack::Builder* selected) {
+    const auto& node = state.nodes[node_id];
+    if (!node.outputs.empty()) {
+        scratch->leaf_builder.clear();
+        if (!convert_simdjson_to_vpack(value, &scratch->leaf_builder).ok()) {
+            return false;
+        }
+        append_json_selection(scratch->leaf_builder.slice(), state, node_id, selected);
+        return true;
+    }
+    simdjson::ondemand::json_type type;
+    if (value.type().get(type)) {
+        return false;
+    }
+    if (type == simdjson::ondemand::json_type::object && !node.fields.empty()) {
+        simdjson::ondemand::object object;
+        if (value.get_object().get(object)) {
+            return false;
+        }
+        size_t remaining = node.fields.size();
+        for (auto field : object) {
+            if (field.error()) {
+                return false;
+            }
+            auto key = field_unescaped_key_safe(field, &scratch->key_scratch);
+            if (key.error()) {
+                return false;
+            }
+            auto it = node.fields.find(key.value());
+            if (it == node.fields.end() || (*visited)[it->second]) {
+                continue;
+            }
+            (*visited)[it->second] = 1; // Match the first occurrence of a duplicate key.
+            simdjson::ondemand::value child;
+            if (field.value().get(child) ||
+                !extract_json_selection(child, state, it->second, scratch, visited, selected)) {
+                return false;
+            }
+            if (--remaining == 0) {
+                break;
+            }
+        }
+    } else if (type == simdjson::ondemand::json_type::array && !node.indexes.empty()) {
+        simdjson::ondemand::array array;
+        if (value.get_array().get(array)) {
+            return false;
+        }
+        size_t index = 0;
+        size_t remaining = node.indexes.size();
+        for (auto element : array) {
+            if (element.error()) {
+                return false;
+            }
+            auto it = node.indexes.find(index++);
+            if (it == node.indexes.end()) {
+                continue;
+            }
+            simdjson::ondemand::value child;
+            if (element.get(child) || !extract_json_selection(child, state, it->second, scratch, visited, selected)) {
+                return false;
+            }
+            if (--remaining == 0) {
+                break;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+Status JsonFunctions::json_query_many_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    auto state = std::make_unique<JsonMultiExtractState>();
+    for (int i = 1; i < context->get_num_constant_columns(); ++i) {
+        if (!context->is_notnull_constant_column(i)) {
+            return Status::InvalidArgument("json_query_many_from_string requires constant non-null paths");
+        }
+        auto path = std::make_unique<NativeJsonState>();
+        auto text = ColumnHelper::get_const_value<TYPE_VARCHAR>(context->get_constant_column(i));
+        ASSIGN_OR_RETURN(auto parsed, JsonPath::parse(text));
+        path->json_path.reset(std::move(parsed));
+        _plan_fast_moves(path->json_path, path.get());
+        size_t output = state->paths.size();
+        state->output_keys.emplace_back(std::to_string(output));
+        if (path->fast_shape == JsonPathShape::Unsupported) {
+            state->legacy_paths.push_back(output);
+        } else {
+            size_t node = 0;
+            for (const auto& move : path->fast_moves) {
+                size_t child;
+                bool inserted;
+                if (move.kind == JsonMoveStep::Kind::Field) {
+                    auto result = state->nodes[node].fields.emplace(move.field, state->nodes.size());
+                    child = result.first->second;
+                    inserted = result.second;
+                } else {
+                    auto result = state->nodes[node].indexes.emplace(move.index, state->nodes.size());
+                    child = result.first->second;
+                    inserted = result.second;
+                }
+                if (inserted) {
+                    state->nodes.emplace_back();
+                }
+                node = child;
+            }
+            state->nodes[node].outputs.push_back(output);
+        }
+        state->paths.emplace_back(std::move(path));
+    }
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status JsonFunctions::json_query_many_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete static_cast<JsonMultiExtractState*>(context->get_function_state(scope));
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> JsonFunctions::json_query_many_from_string(FunctionContext* context, const Columns& columns) {
+    const auto* state =
+            static_cast<const JsonMultiExtractState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state == nullptr || columns.size() < 2 || state->paths.size() + 1 != columns.size()) {
+        return Status::InvalidArgument("json_query_many_from_string requires prepared constant paths");
+    }
+    const bool strict = context->allow_throw_exception();
+    const bool enabled = context->state() == nullptr || context->state()->enable_json_extract_fusion();
+    auto* scratch = get_json_thread_state(context);
+    ColumnViewer<TYPE_VARCHAR> input(columns[0]);
+    const size_t num_rows = columns[0]->size();
+    const bool constant = ColumnHelper::is_all_const(columns) && num_rows > 0;
+    const size_t evaluated_rows = constant ? 1 : num_rows;
+    ColumnBuilder<TYPE_JSON> result(evaluated_rows);
+    vpack::Builder selected;
+    vpack::Builder legacy_scratch;
+    std::vector<uint8_t> visited(state->nodes.size());
+    for (size_t row = 0; row < evaluated_rows; ++row) {
+        if (input.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        Slice raw = input.value(row);
+        bool structured = false;
+        if (!raw.empty()) {
+            auto first =
+                    std::find_if_not(raw.data, raw.data + raw.size, [](unsigned char c) { return std::isspace(c); });
+            structured = first != raw.data + raw.size && (*first == '{' || *first == '[');
+        }
+        const bool legacy = strict || !enabled || !structured;
+        selected.clear();
+        selected.openObject();
+        bool success = true;
+        if (!legacy) {
+            if (raw.size > kJSONLengthLimit) {
+                result.append_null();
+                continue;
+            }
+            const size_t capacity = raw.size + simdjson::SIMDJSON_PADDING;
+            scratch->padded_scratch.resize(capacity);
+            std::memcpy(scratch->padded_scratch.data(), raw.data, raw.size);
+            std::memset(scratch->padded_scratch.data() + raw.size, 0, simdjson::SIMDJSON_PADDING);
+            std::fill(visited.begin(), visited.end(), 0);
+            simdjson::ondemand::document document;
+            simdjson::ondemand::value root;
+            success = !scratch->parser.iterate(scratch->padded_scratch.data(), raw.size, capacity).get(document) &&
+                      !document.get_value().get(root) &&
+                      extract_json_selection(root, *state, 0, scratch, &visited, &selected);
+        }
+        if (legacy || !state->legacy_paths.empty()) {
+            auto parsed = JsonValue::parse_json_or_string(raw);
+            if (!parsed.ok() && strict) {
+                return parsed.status();
+            }
+            if (parsed.ok()) {
+                for (size_t i = 0; i < state->paths.size(); ++i) {
+                    if (!legacy && state->paths[i]->fast_shape != JsonPathShape::Unsupported) {
+                        continue;
+                    }
+                    legacy_scratch.clear();
+                    auto value = JsonPath::extract(&parsed.value(), state->paths[i]->json_path, &legacy_scratch);
+                    if (!value.isNone()) {
+                        selected.add(state->output_keys[i], value);
+                    }
+                }
+            }
+        }
+        if (!success) {
+            // A malformed selected value must not suppress other valid selections. Re-evaluate
+            // only this exceptional row with the existing independent extraction semantics.
+            selected.clear();
+            selected.openObject();
+            for (size_t i = 0; i < state->paths.size(); ++i) {
+                ColumnBuilder<TYPE_JSON> value(1);
+                if (state->paths[i]->fast_shape == JsonPathShape::Unsupported ||
+                    _fused_extract_one<TYPE_JSON>(raw, state->paths[i].get(), scratch, value) ==
+                            ExtractResult::FallbackRow) {
+                    RETURN_IF_ERROR(_fallback_extract_one<TYPE_JSON>(raw, state->paths[i].get(), scratch, value));
+                }
+                auto column = value.build(false);
+                if (!column->is_null(0)) {
+                    ColumnViewer<TYPE_JSON> viewer(column);
+                    selected.add(state->output_keys[i], viewer.value(0)->to_vslice());
+                }
+            }
+        }
+        selected.close();
+        result.append(JsonValue(selected.slice()));
+    }
+    auto column = result.build(constant);
+    if (constant) {
+        column->resize(num_rows);
+    }
+    return column;
 }
 
 StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {

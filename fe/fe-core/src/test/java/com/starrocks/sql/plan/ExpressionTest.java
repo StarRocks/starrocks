@@ -2008,6 +2008,34 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testJsonFusionSharesPaths() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        try {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            String first = "cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as bigint)";
+            String second = "cast(json_query(parse_json(cast(v4 as varchar)), '$.b') as bigint)";
+            for (String sql : List.of("select " + first + ", " + second + " from t1",
+                    "select sum(" + first + "), sum(" + second + ") from t1")) {
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "common expressions:", "json_query_many_from_string(");
+                Assertions.assertEquals(1, StringUtils.countMatches(plan, "json_query_many_from_string("));
+                Assertions.assertFalse(plan.contains("json_query_from_string("));
+            }
+            String repeated = getFragmentPlan("select " + first + ", " + first + " from t1");
+            Assertions.assertFalse(repeated.contains("json_query_many_from_string("));
+            assertContains(repeated, "json_query_from_string(");
+            String independent = getFragmentPlan("select " + first + ", " + second.replace("v4", "v5") + " from t1");
+            Assertions.assertFalse(independent.contains("json_query_many_from_string("));
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(false);
+            String off = getFragmentPlan("select " + first + ", " + second + " from t1");
+            Assertions.assertEquals(1, StringUtils.countMatches(off, "parse_json("));
+            Assertions.assertFalse(off.contains("json_query_many_from_string("));
+        } finally {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
     public void testJsonQuery() throws Exception {
         String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
         String plan = getFragmentPlan(sql);
