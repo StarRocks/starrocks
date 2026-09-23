@@ -210,7 +210,9 @@ TEST_F(LanceConnectorTest, PreservesReaderInitFailure) {
     _init_status = Status::IOError("init failed");
     LanceDataSourceProvider provider(nullptr, _plan);
     auto source = provider.create_data_source(_range);
-    EXPECT_EQ(_init_status.to_string(), source->open(_state.get()).to_string());
+    Status status = source->open(_state.get());
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(_init_status.message(), status.message());
     source->close(_state.get());
     EXPECT_EQ(1, _close_count);
 }
@@ -219,7 +221,9 @@ TEST_F(LanceConnectorTest, PreservesReaderOpenFailure) {
     _open_status = Status::IOError("open failed");
     LanceDataSourceProvider provider(nullptr, _plan);
     auto source = provider.create_data_source(_range);
-    EXPECT_EQ(_open_status.to_string(), source->open(_state.get()).to_string());
+    Status status = source->open(_state.get());
+    EXPECT_TRUE(status.is_io_error());
+    EXPECT_EQ(_open_status.message(), status.message());
     source->close(_state.get());
     EXPECT_EQ(1, _close_count);
 }
