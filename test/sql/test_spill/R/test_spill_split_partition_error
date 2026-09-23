@@ -1,0 +1,50 @@
+-- name: test_spill_split_partition_error @sequential
+set enable_spill=true;
+-- result:
+-- !result
+set spill_mode="force";
+-- result:
+-- !result
+set pipeline_dop=1;
+-- result:
+-- !result
+set spill_mem_table_size=262144;
+-- result:
+-- !result
+set spill_mem_table_num=2;
+-- result:
+-- !result
+CREATE TABLE t1 (
+    k1 INT,
+    k2 VARCHAR(64),
+    k3 VARCHAR(128))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 8 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t1 SELECT generate_series,
+                      concat('key-', generate_series),
+                      concat('payload-', repeat('x', 40), '-', generate_series)
+               FROM TABLE(generate_series(1, 1000000));
+-- result:
+-- !result
+admin enable failpoint 'spill_split_partition_error';
+-- result:
+-- !result
+admin enable failpoint 'spill_split_yield_after_error';
+-- result:
+-- !result
+select count(l.k1),count(l.k2),count(l.k3) from t1 l join t1 r on l.k1 = r.k1;
+-- result:
+[REGEX].*inject spill_split_partition_error.*
+-- !result
+admin disable failpoint 'spill_split_yield_after_error';
+-- result:
+-- !result
+admin disable failpoint 'spill_split_partition_error';
+-- result:
+-- !result
+select count(l.k1),count(l.k2),count(l.k3) from t1 l join t1 r on l.k1 = r.k1;
+-- result:
+1000000	1000000	1000000
+-- !result

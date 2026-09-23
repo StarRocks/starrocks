@@ -17,6 +17,7 @@
 #include "common/statusor.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/utils.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -519,7 +520,7 @@ Status StringColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col, si
 
     auto& vb = values->get_bytes();
     // Need to resize after insert, because of padding char existed
-    vb.reserve(vb.size() + len);
+    TRY_CATCH_BAD_ALLOC(vb.reserve(vb.size() + len));
 
     auto& vo = values->get_offset();
     // We can resize directly
@@ -671,7 +672,7 @@ Status VarbinaryColumnReader::get_next(orc::ColumnVectorBatch* cvb, Column* col,
     size_t write_pos = vb.size();
 
     // vb is using RawVectorPad16, resize will not initialize vector
-    vb.resize(vb.size() + len);
+    TRY_CATCH_BAD_ALLOC(vb.resize(vb.size() + len));
     vo.resize_uninitialized(vo.size() + size, vb.size());
 
     if (cvb->hasNulls) {

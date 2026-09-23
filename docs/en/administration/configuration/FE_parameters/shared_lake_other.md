@@ -176,6 +176,14 @@ This topic introduces the following types of FE configurations:
 - Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the federated token file used for Workload Identity authentication when creating the built-in ADLS2 storage volume. Set it together with `azure_adls2_oauth2_tenant_id` and `azure_adls2_oauth2_client_id`, and keep `azure_adls2_oauth2_use_managed_identity` as `false`. Mount the file at the same readable path on every FE and CN. An empty string disables token-file authentication. Restart the FE after changing this configuration.
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - Default: false
@@ -373,6 +381,15 @@ This topic introduces the following types of FE configurations:
 - Is mutable: No
 - Description: Whether to use the Service Account that is bound to your Compute Engine.
 - Introduced in: v3.5.1
+
+### `group_provider`
+
+- Default: Empty
+- Type: String[]
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
+- Introduced in: v3.5
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -650,6 +667,24 @@ This topic introduces the following types of FE configurations:
 - Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
 - Introduced in: v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether StarMgr journals a replica-only tablet change as a replica delta instead of a full tablet snapshot. Adding, removing, or transitioning a single replica otherwise re-serializes the entire tablet metadata entry, including its file path, storage credentials, properties, and every replica, of which roughly 95% describes state that no replica operation can change. On a cluster that schedules tablets heavily, those snapshots dominate the metadata journal. Every FE that offers this item understands the delta entry on replay, and only the writer is gated by it, so a cluster becomes able to replay the entry by first deploying a version that offers this item with the item left as `false`, and only then setting it to `true`. Do not enable it while any FE in the cluster still runs an earlier version: such an FE skips every replica update rather than one, and writes the resulting divergence into its own checkpoint without reporting a failure. To roll back, set this item to `false`, force a metadata checkpoint so that the image absorbs the entries already written, and only then downgrade, because setting it to `false` does not retract what is already in the journal. Only the Leader FE's value has any effect, and changing it at runtime is safe, because a journal that carries both entry kinds replays correctly.
+- Introduced in: v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether StarMgr maintains a Compute Node to tablets reverse index. Rescheduling the tablets of a restarted Compute Node and validating the replicas that a Compute Node reports on each heartbeat otherwise both scan the whole tablet map and test each tablet for a replica on that Compute Node, which costs time proportional to the number of tablets in the cluster for each Compute Node. With the index, they cost only the Compute Node's own tablet count. The index is derived state: it is rebuilt from the tablet map when the metadata image loads and is maintained under the same lock from then on, and when this item is `false` it is neither built nor held, so leaving it disabled costs nothing. StarMgr reads this item once while the metadata image loads, so a change takes effect only after the FE restarts.
+- Introduced in: v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - Default: 600
@@ -900,6 +935,24 @@ This topic introduces the following types of FE configurations:
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
 
+### `authentication_ldap_simple_group_source`
+
+- Default: group_provider
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for where the groups of an LDAP-authenticated user come from. Valid values: `group_provider` (only the configured group providers, the behavior of earlier versions), `memberof` (only the group membership attribute of the user's own LDAP entry), `both` (the union of the two). A security integration property of the same name overrides this value. An illegal value is treated as `group_provider` and logged at ERROR level, so that a typo cannot lock every LDAP user out.
+- Introduced in: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- Default: memberOf
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Cluster-wide default for the name of the attribute on the user entry that carries its group membership, used when `authentication_ldap_simple_group_source` is `memberof` or `both`. `memberOf` fits Active Directory and OpenLDAP with the `memberof` overlay installed; Oracle Directory Server and 389 Directory Server use `isMemberOf`. A security integration property of the same name overrides this value.
+- Introduced in: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - Default: Empty string
@@ -924,7 +977,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The name of the attribute that identifies users in LDAP objects.
+- Description: The name of the attribute that carries the login name on a user entry, used to build the search filter of search-and-bind mode. `uid` suits OpenLDAP; on Active Directory set it to `sAMAccountName`, because an AD entry's RDN is the display name and its `uid` is empty unless an administrator populated it. That choice also rules out `authentication_ldap_simple_bind_dn_pattern` - see the property of the same name in [Security Integration](../../user_privs/authentication/security_integration.md).
 - Introduced in: -
 
 ### `backup_clean_check_interval_seconds`

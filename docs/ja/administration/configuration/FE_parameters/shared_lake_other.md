@@ -177,6 +177,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のテナント ID。
 - 導入時期：v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：いいえ
+- 説明：組み込み ADLS2 ストレージボリュームの作成時に、ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。`azure_adls2_oauth2_tenant_id` と `azure_adls2_oauth2_client_id` も設定し、`azure_adls2_oauth2_use_managed_identity` は `false` のままにします。すべての FE と CN で同じ読み取り可能なパスにファイルをマウントしてください。空文字列の場合、トークン ファイル認証は使用しません。変更後は FE の再起動が必要です。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - デフォルト：false
@@ -374,6 +382,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：No
 - 説明：Compute Engine にバインドされているサービスアカウントを使用するかどうか。
 - 導入時期：v3.5.1
+
+### `group_provider`
+
+- デフォルト：Empty
+- タイプ：String[]
+- 単位：-
+- 変更可能：Yes
+- 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
+- 導入時期：v3.5
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -651,6 +668,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：colocate group サンプリングの密度ガードで、許容される空サンプルの最大割合をパーセントで表します。抽出された tablet が候補 Compute Node 上にレプリカを持たない場合 (まだ配置されていない、またはその Compute Node 上にない場合)、その抽出は空サンプルとみなされます。空サンプルの割合がこのパーセンテージを超える場合、その group は配置が疎すぎてサンプルが真の分布を表せない (group が空の状態から一括で埋められている最中に起こります) ため、スケジューラはサンプルを破棄して全走査にフォールバックします。言い換えると、抽出された tablet の少なくとも (100 - この値)% が候補 Compute Node 上に配置されている場合にのみサンプルが信頼されます。したがって値が小さいほど保守的になり、サンプリングを行うためにより密な group が必要になります。安定して完全に配置された group は空サンプルがほぼ 0% になり、この値にかかわらず常に高速なサンプリング経路を通るため、この項目は一括充填中の過渡期のみを制御します。フォールバックを完全に無効にするには `100` に設定します。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
 - 導入時期：v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarMgr がレプリカのみに関わる tablet の変更を、tablet 全体のスナップショットではなくレプリカの差分としてジャーナルに記録するかどうか。そうしない場合、単一のレプリカの追加、削除、状態遷移のたびに、ファイルパス、ストレージ認証情報、プロパティ、すべてのレプリカを含む tablet メタデータ全体が再シリアライズされます。そのうち約 95% は、レプリカ操作では変化しない状態を表しています。tablet のスケジューリングが頻繁なクラスタでは、これらのスナップショットがメタデータジャーナルの大半を占めます。この項目を持つ FE はすべて、リプレイ時に差分エントリを解釈できます。ゲートされるのは書き込み側だけなので、まずこの項目を持つバージョンを `false` のままデプロイしてクラスタが差分エントリをリプレイできる状態にし、その後で `true` に設定してください。クラスタ内にそれ以前のバージョンの FE が残っている間は有効にしないでください。そのような FE は 1 件ではなくすべてのレプリカ更新をスキップし、その結果生じた差異をエラーを報告しないまま自身のチェックポイントに書き込みます。ロールバックする場合は、この項目を `false` に設定し、メタデータチェックポイントを強制実行して既に書き込まれたエントリをイメージに取り込ませてから、バージョンをダウングレードしてください。`false` に設定しても、既にジャーナルにあるエントリが取り消されるわけではありません。有効なのは Leader FE の値のみで、両方の種類のエントリを含むジャーナルは正しくリプレイされるため、実行時の変更は安全です。
+- 導入時期：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：StarMgr が Compute Node から tablet への逆引きインデックスを保持するかどうか。そうしない場合、再起動した Compute Node の tablet を再スケジュールする処理と、Compute Node がハートビートごとに報告するレプリカを検証する処理は、いずれも tablet マップ全体を走査し、各 tablet にその Compute Node 上のレプリカがあるかを判定するため、Compute Node ごとにクラスタ内の tablet 数に比例したコストがかかります。このインデックスがあれば、コストはその Compute Node 自身の tablet 数のみに比例します。このインデックスは派生状態です。メタデータイメージのロード時に tablet マップから再構築され、以降は同じロックの下で維持されます。この項目が `false` の場合は構築も保持もされないため、無効のままにしてもコストはかかりません。StarMgr はメタデータイメージのロード時にこの項目を一度だけ読み取るため、変更は FE の再起動後にのみ有効になります。
+- 導入時期：v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - デフォルト：600
@@ -904,6 +939,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
 
+### `authentication_ldap_simple_group_source`
+
+- デフォルト：group_provider
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：LDAP で認証されたユーザーのグループの取得元に関するクラスター全体のデフォルト値。有効な値：`group_provider`（設定された Group Provider のみ。以前のバージョンと同じ動作）、`memberof`（ユーザー自身の LDAP エントリーのグループメンバーシップ属性のみ）、`both`（両方の和集合）。同名の security integration プロパティがこの値を上書きします。不正な値は `group_provider` として扱われ、ERROR レベルで記録されます。これにより、入力ミスによってすべての LDAP ユーザーがログインできなくなることを防ぎます。
+- 導入時期：v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- デフォルト：memberOf
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性名のクラスター全体のデフォルト値。`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。同名の security integration プロパティがこの値を上書きします。
+- 導入時期：v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - デフォルト：Empty string
@@ -928,7 +981,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
+- 説明：ユーザーエントリー上でログイン名を保持する属性の名前で、検索バインドモードの検索フィルターの構築に使われます。`uid` は OpenLDAP に適しています。Active Directory では `sAMAccountName` を設定してください。AD のエントリーの RDN は表示名であり、`uid` は管理者が設定しない限り空だからです。この選択により `authentication_ldap_simple_bind_dn_pattern` は使えなくなります。詳細は [Security Integration](../../user_privs/authentication/security_integration.md) の同名プロパティを参照してください。
 - 導入時期：-
 
 ### `backup_clean_check_interval_seconds`

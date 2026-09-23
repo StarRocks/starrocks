@@ -54,6 +54,15 @@ This topic introduces the following types of FE configurations:
 
 ## User, role, and privilege
 
+### `authorization_enable_query_profile_access_check`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to restrict who can read cached query profiles. When set to `true`, SHOW PROFILELIST, ANALYZE PROFILE, the `get_query_profile` function, the `/api/profile` and `/api/query/progress` HTTP endpoints, and the `/query` and `/query_profile` Web UI pages return a profile only to the user who ran the query or to a user with the SYSTEM-level OPERATE privilege. Profiles that record no user (for example, EXPORT jobs and stream loads) are readable only with OPERATE. The `/api/query_detail` and `/api/v2/query_detail` endpoints keep listing every query but omit the `profile` field, and the `explain` field when it holds a plan rendered from that profile, under the same rule. When `authorization_enable_admin_user_protection` is also enabled, profiles of queries run by `root` are readable only by `root`. When set to `false` (the default), every authenticated user can read every profile, which is the behavior of earlier versions. Each FE enforces the check for the profiles it holds, so to restrict access cluster-wide, set this item in `fe.conf` on every FE after all FEs have been upgraded to a version that supports it. Enabling it has two further consequences to plan for: `/api/query/progress` stops accepting anonymous requests, because the rule needs a caller identity, so an existing anonymous poller of that endpoint starts receiving `401`; and `get_query_profile()` requires the OPERATE privilege for a `query_id` whose profile is not cached on the FE the session is connected to, because the RPC that fetches it from the other FEs carries no caller identity to authorize there, which restricts the cross-FE lookup to OPERATE holders while the check is on.
+- Introduced in: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - Default: true
@@ -182,6 +191,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The auxiliary per-scan estimated-row budget for external-table statistics collection (Iceberg). A statistics scan stops early once the estimated number of rows it has scanned reaches this budget. Because per-split row counts can only be estimated (the record count is recorded per file, not per split), this is an auxiliary soft budget rather than the primary control. The default aligns with `connector_table_query_trigger_analyze_small_table_rows`. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")`.
+- Introduced in: v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- Default: 360
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
 - Introduced in: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`

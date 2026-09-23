@@ -54,6 +54,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 用户、角色和权限
 
+### `authorization_enable_query_profile_access_check`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否限制缓存的 Query Profile 的读取权限。设置为 `true` 时，SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 函数、`/api/profile` 和 `/api/query/progress` HTTP 接口，以及 `/query` 和 `/query_profile` Web 页面只向执行该查询的用户，或拥有 SYSTEM 级 OPERATE 权限的用户返回 Profile；未记录用户的 Profile（例如 EXPORT 作业和 Stream Load 导入）只有拥有 OPERATE 权限的用户才能读取。`/api/query_detail` 和 `/api/v2/query_detail` 接口仍会列出所有查询，但按同样的规则省略 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段。若同时开启 `authorization_enable_admin_user_protection`，`root` 执行的查询的 Profile 仅 `root` 自己可以读取。设置为 `false`（默认值）时，任何已登录用户都可以读取所有 Profile，与此前版本的行为一致。每个 FE 只对自身持有的 Profile 执行此检查。若要在整个集群范围内限制访问，请在所有 FE 升级到支持该配置项的版本后，在每个 FE 的 `fe.conf` 中设置该项。开启前还需注意两点影响：一是 `/api/query/progress` 不再接受匿名请求，因为权限判断需要调用方身份，原先匿名轮询该接口的程序会收到 `401`；二是如果 `query_id` 对应的 Profile 未缓存在当前会话连接的 FE 上，`get_query_profile()` 需要 OPERATE 权限——跨 FE 获取 Profile 的 RPC 不携带调用方身份，无法在对端完成鉴权，因此开启该检查期间，跨 FE 获取 Profile 仅限拥有 OPERATE 权限的用户。
+- 引入版本: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - 默认值: true
@@ -182,6 +191,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- 默认值: 360
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条外部表统计信息收集查询允许运行的最长时间。统计收集会按 (分区, 列组) 拆分成多条查询，每条只读取一个分区、受上述扫描预算限制并产出固定大小的 sketch，正常情况下远小于一秒即可返回。若没有该上限，每条查询都会继承 `statistic_collect_query_timeout` 的剩余时间——而后者是整个收集任务的预算，因此一条被过载 BE 卡住的查询就可能耗尽全部预算，导致其后的所有分区都来不及采集。对于冷存储或远端对象存储，受限扫描确实可能更慢，可调大该值。取值 `0` 或更小表示不设置独立上限，查询可再次使用任务的全部剩余预算。实际生效的超时始终取该值与任务剩余预算中的较小者。
 - 引入版本: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`

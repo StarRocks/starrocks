@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -30,7 +31,9 @@
 #include "column/variant_column.h"
 #include "column/variant_encoder.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_expr_fwd.h"
 #include "common/object_pool.h"
+#include "exprs/column_ref.h"
 #include "exprs/exprs_test_helper.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "runtime/mem_pool.h"
@@ -1119,5 +1122,161 @@ TEST_F(VectorizedCaseExprTest, simpleCaseReturnsVariant) {
     Chunk chunk;
     ColumnPtr result = expr->evaluate(nullptr, &chunk);
     assert_case_variant_result(result, {"100", "201", "302", "303"});
+}
+
+// The selective-evaluation path (config::case_when_selective_eval_ratio > 0) must produce exactly the
+// same column as evaluating every THEN over the whole chunk. WHEN/THEN read real slots so the branch
+// actually takes the gather/scatter path instead of falling back.
+TEST_F(VectorizedCaseExprTest, selectiveEvaluationMatchesFullEvaluation) {
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.case_expr.has_case_expr = false;
+
+    const TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    constexpr size_t kNumRows = 12;
+
+    // when0 owns rows 0..2, when1 is true on 2..4 but only owns 3 and 4 (row 2 goes to when0),
+    // row 5 is null in both, the rest fall through to ELSE.
+    auto make_when = [](const std::vector<std::optional<bool>>& values) {
+        auto column = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), true);
+        for (const auto& v : values) {
+            if (v.has_value()) {
+                column->append_datum(Datum(static_cast<uint8_t>(*v ? 1 : 0)));
+            } else {
+                column->append_nulls(1);
+            }
+        }
+        return column;
+    };
+    auto when0 = make_when({true, true, true, false, false, std::nullopt, false, false, false, false, false, false});
+    auto when1 = make_when({false, false, true, true, true, std::nullopt, false, false, false, false, false, false});
+
+    auto make_maps = [&](int32_t base) {
+        auto column = ColumnHelper::create_column(type_map_int_int, true);
+        for (size_t i = 0; i < kNumRows; ++i) {
+            if (i % 5 == 4) {
+                column->append_nulls(1);
+                continue;
+            }
+            DatumMap map;
+            map[static_cast<int32_t>(base + i)] = static_cast<int32_t>(base * 10 + i);
+            map[static_cast<int32_t>(base + i + 1)] = static_cast<int32_t>(base * 10 + i + 1);
+            column->append_datum(map);
+        }
+        return column;
+    };
+
+    Chunk chunk;
+    chunk.append_column(std::move(when0), 0);
+    chunk.append_column(std::move(when1), 1);
+    chunk.append_column(make_maps(100), 2);
+    chunk.append_column(make_maps(200), 3);
+    chunk.append_column(make_maps(300), 4);
+
+    ObjectPool pool;
+    auto evaluate = [&](bool has_else) {
+        expr_node.case_expr.has_else_expr = has_else;
+        Expr* expr = pool.add(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_MAP, TYPE_BOOLEAN));
+        expr->set_type(type_map_int_int);
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 0)));
+        expr->add_child(pool.add(new ColumnRef(type_map_int_int, 2)));
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 1)));
+        expr->add_child(pool.add(new ColumnRef(type_map_int_int, 3)));
+        if (has_else) {
+            expr->add_child(pool.add(new ColumnRef(type_map_int_int, 4)));
+        }
+        return expr->evaluate(nullptr, &chunk);
+    };
+
+    const int32_t saved_ratio = config::case_when_selective_eval_ratio;
+    DeferOp restore([&]() { config::case_when_selective_eval_ratio = saved_ratio; });
+
+    for (bool has_else : {true, false}) {
+        SCOPED_TRACE(has_else ? "with else" : "without else");
+        config::case_when_selective_eval_ratio = 0; // selective evaluation off
+        ColumnPtr expected = evaluate(has_else);
+        ASSERT_EQ(kNumRows, expected->size());
+
+        // ratio 1 compacts every branch that does not own the whole chunk, 2 is the shipped default.
+        for (int32_t ratio : {1, 2}) {
+            SCOPED_TRACE(ratio);
+            config::case_when_selective_eval_ratio = ratio;
+            ColumnPtr actual = evaluate(has_else);
+            ASSERT_EQ(expected->size(), actual->size());
+            for (size_t i = 0; i < kNumRows; ++i) {
+                SCOPED_TRACE(i);
+                EXPECT_EQ(expected->is_null(i), actual->is_null(i));
+                if (!expected->is_null(i)) {
+                    EXPECT_TRUE(expected->equals(i, *actual, i));
+                }
+            }
+        }
+    }
+}
+
+// A const WHEN column cannot be walked row-wise, so it claims every row still unclaimed. That path has
+// to keep `remaining` exact, otherwise the per-branch cursors of the compacted branches drift.
+TEST_F(VectorizedCaseExprTest, selectiveEvaluationWithConstWhen) {
+    expr_node.child_type = TPrimitiveType::BOOLEAN;
+    expr_node.case_expr.has_case_expr = false;
+    expr_node.case_expr.has_else_expr = false;
+
+    const TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
+    constexpr size_t kNumRows = 12;
+
+    auto when0 = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), true);
+    for (size_t i = 0; i < kNumRows; ++i) {
+        when0->append_datum(Datum(static_cast<uint8_t>(i < 3 ? 1 : 0)));
+    }
+    auto make_maps = [&](int32_t base) {
+        auto column = ColumnHelper::create_column(type_map_int_int, true);
+        for (size_t i = 0; i < kNumRows; ++i) {
+            DatumMap map;
+            map[static_cast<int32_t>(base + i)] = static_cast<int32_t>(base * 10 + i);
+            column->append_datum(map);
+        }
+        return column;
+    };
+
+    Chunk chunk;
+    chunk.append_column(std::move(when0), 0);
+    chunk.append_column(make_maps(100), 2);
+    chunk.append_column(make_maps(200), 3);
+
+    ObjectPool pool;
+    TExprNode bool_node = expr_node;
+    bool_node.node_type = TExprNodeType::BOOL_LITERAL;
+    bool_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    auto evaluate = [&]() {
+        Expr* expr = pool.add(VectorizedCaseExprFactory::from_thrift(expr_node, TYPE_MAP, TYPE_BOOLEAN));
+        expr->set_type(type_map_int_int);
+        // branch 0 owns rows 0..2 and is sparse enough to be compacted; branch 1's const-true WHEN then
+        // has to claim exactly rows 3..11.
+        expr->add_child(pool.add(new ColumnRef(TypeDescriptor(TYPE_BOOLEAN), 0)));
+        expr->add_child(pool.add(new ColumnRef(type_map_int_int, 2)));
+        expr->add_child(pool.add(new MockConstVectorizedExpr<TYPE_BOOLEAN>(bool_node, 1)));
+        expr->add_child(pool.add(new ColumnRef(type_map_int_int, 3)));
+        return expr->evaluate(nullptr, &chunk);
+    };
+
+    const int32_t saved_ratio = config::case_when_selective_eval_ratio;
+    DeferOp restore([&]() { config::case_when_selective_eval_ratio = saved_ratio; });
+
+    config::case_when_selective_eval_ratio = 0; // selective evaluation off
+    ColumnPtr expected = evaluate();
+    ASSERT_EQ(kNumRows, expected->size());
+
+    for (int32_t ratio : {1, 2}) {
+        SCOPED_TRACE(ratio);
+        config::case_when_selective_eval_ratio = ratio;
+        ColumnPtr actual = evaluate();
+        ASSERT_EQ(expected->size(), actual->size());
+        for (size_t i = 0; i < kNumRows; ++i) {
+            SCOPED_TRACE(i);
+            EXPECT_EQ(expected->is_null(i), actual->is_null(i));
+            if (!expected->is_null(i)) {
+                EXPECT_TRUE(expected->equals(i, *actual, i));
+            }
+        }
+    }
 }
 } // namespace starrocks

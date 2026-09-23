@@ -1,0 +1,227 @@
+-- name: test_share_json_parse_equivalence
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table edge (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into edge values
+ (1, '{"a": 1, "b": "x", "c": {"d": [1, 2, {"e": null}]}}'),
+ (2, '{"a": 9223372036854775807, "b": 1.5e308, "c": 18446744073709551615}'),
+ (3, '{"a": "line\\nbreak \\u00e9 \\"q\\"", "b": true, "c": false}'),
+ (4, '[{"a": 1}, {"a": 2}]'),
+ (5, 'not json at all'),
+ (6, '{"a": 1,'),
+ (7, ''),
+ (8, NULL),
+ (9, '   {"a" : "  spaced  " }   '),
+ (10, '"just a string"'),
+ (11, '123'),
+ (12, '{"a": {"b": {"c": "deep"}}, "b": [], "c": {}}'),
+ (13, '{"a": 1, "a": 2}'),
+ (14, '{"": "empty key", "a.b": "dotted"}');
+-- result:
+-- !result
+set enable_share_json_parse = false;
+-- result:
+-- !result
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from edge", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id,
+ get_json_string(doc, '$.a'), get_json_string(doc, '$.b'), get_json_string(doc, '$.c'),
+ get_json_string(doc, '$.c.d'), get_json_string(doc, '$.c.d[2].e'), get_json_string(doc, '$[1].a'),
+ get_json_string(doc, '$.a.b.c'), get_json_string(doc, '$'), get_json_string(doc, '$."a.b"'),
+ get_json_int(doc, '$.a'), get_json_int(doc, '$.b'), get_json_int(doc, '$.c'),
+ get_json_double(doc, '$.a'), get_json_double(doc, '$.b'), get_json_double(doc, '$.c'),
+ get_json_object(doc, '$.c'), get_json_object(doc, '$.a'),
+ get_json_scalar(doc, '$.a'), get_json_scalar(doc, '$.c'),
+ if(id > 5, get_json_string(doc, '$.a'), get_json_string(doc, '$.b'))
+from edge order by id;
+-- result:
+1	1	x	{"d": [1, 2, {"e": null}]}	[1, 2, {"e": null}]	None	None	None	{"a": 1, "b": "x", "c": {"d": [1, 2, {"e": null}]}}	None	1	None	None	1.0	None	None	{"d": [1, 2, {"e": null}]}	1	1	None	x
+2	9223372036854775807	1.5e+308	18446744073709551615	None	None	None	None	{"a": 9223372036854775807, "b": 1.5e+308, "c": 18446744073709551615}	None	9223372036854775807	None	None	9.223372036854776e+18	1.5e+308	1.8446744073709552e+19	18446744073709551615	9223372036854775807	9223372036854775807	18446744073709551615	1.5e+308
+3	line
+break é "q"	true	false	None	None	None	None	{"a": "line\nbreak é \"q\"", "b": true, "c": false}	None	None	1	0	None	1.0	0.0	false	line
+break é "q"	line
+break é "q"	false	true
+4	None	None	None	None	None	2	None	[{"a": 1}, {"a": 2}]	None	None	None	None	None	None	None	None	None	None	None	None
+5	None	None	None	None	None	None	None	not json at all	None	None	None	None	None	None	None	None	None	None	None	None
+6	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+7	None	None	None	None	None	None	None		None	None	None	None	None	None	None	None	None	None	None	None
+8	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+9	  spaced  	None	None	None	None	None	None	{"a": "  spaced  "}	None	None	None	None	None	None	None	None	  spaced  	  spaced  	None	  spaced  
+10	None	None	None	None	None	None	None	just a string	None	None	None	None	None	None	None	None	None	None	None	None
+11	None	None	None	None	None	None	None	123	None	None	None	None	None	None	None	None	None	None	None	None
+12	{"b": {"c": "deep"}}	[]	{}	None	None	None	deep	{"a": {"b": {"c": "deep"}}, "b": [], "c": {}}	None	None	None	None	None	None	None	{}	{"b": {"c": "deep"}}	None	None	{"b": {"c": "deep"}}
+13	1	None	None	None	None	None	None	{"a": 1, "a": 2}	None	1	None	None	1.0	None	None	None	1	1	None	1
+14	None	None	None	None	None	None	None	{"": "empty key", "a.b": "dotted"}	dotted	None	None	None	None	None	None	None	None	None	None	None
+-- !result
+set enable_share_json_parse = true;
+-- result:
+-- !result
+function: assert_explain_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from edge", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id,
+ get_json_string(doc, '$.a'), get_json_string(doc, '$.b'), get_json_string(doc, '$.c'),
+ get_json_string(doc, '$.c.d'), get_json_string(doc, '$.c.d[2].e'), get_json_string(doc, '$[1].a'),
+ get_json_string(doc, '$.a.b.c'), get_json_string(doc, '$'), get_json_string(doc, '$."a.b"'),
+ get_json_int(doc, '$.a'), get_json_int(doc, '$.b'), get_json_int(doc, '$.c'),
+ get_json_double(doc, '$.a'), get_json_double(doc, '$.b'), get_json_double(doc, '$.c'),
+ get_json_object(doc, '$.c'), get_json_object(doc, '$.a'),
+ get_json_scalar(doc, '$.a'), get_json_scalar(doc, '$.c'),
+ if(id > 5, get_json_string(doc, '$.a'), get_json_string(doc, '$.b'))
+from edge order by id;
+-- result:
+1	1	x	{"d": [1, 2, {"e": null}]}	[1, 2, {"e": null}]	None	None	None	{"a": 1, "b": "x", "c": {"d": [1, 2, {"e": null}]}}	None	1	None	None	1.0	None	None	{"d": [1, 2, {"e": null}]}	1	1	None	x
+2	9223372036854775807	1.5e+308	18446744073709551615	None	None	None	None	{"a": 9223372036854775807, "b": 1.5e+308, "c": 18446744073709551615}	None	9223372036854775807	None	None	9.223372036854776e+18	1.5e+308	1.8446744073709552e+19	18446744073709551615	9223372036854775807	9223372036854775807	18446744073709551615	1.5e+308
+3	line
+break é "q"	true	false	None	None	None	None	{"a": "line\nbreak é \"q\"", "b": true, "c": false}	None	None	1	0	None	1.0	0.0	false	line
+break é "q"	line
+break é "q"	false	true
+4	None	None	None	None	None	2	None	[{"a": 1}, {"a": 2}]	None	None	None	None	None	None	None	None	None	None	None	None
+5	None	None	None	None	None	None	None	not json at all	None	None	None	None	None	None	None	None	None	None	None	None
+6	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+7	None	None	None	None	None	None	None		None	None	None	None	None	None	None	None	None	None	None	None
+8	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+9	  spaced  	None	None	None	None	None	None	{"a": "  spaced  "}	None	None	None	None	None	None	None	None	  spaced  	  spaced  	None	  spaced  
+10	None	None	None	None	None	None	None	just a string	None	None	None	None	None	None	None	None	None	None	None	None
+11	None	None	None	None	None	None	None	123	None	None	None	None	None	None	None	None	None	None	None	None
+12	{"b": {"c": "deep"}}	[]	{}	None	None	None	deep	{"a": {"b": {"c": "deep"}}, "b": [], "c": {}}	None	None	None	None	None	None	None	{}	{"b": {"c": "deep"}}	None	None	{"b": {"c": "deep"}}
+13	1	None	None	None	None	None	None	{"a": 1, "a": 2}	None	1	None	None	1.0	None	None	None	1	1	None	1
+14	None	None	None	None	None	None	None	{"": "empty key", "a.b": "dotted"}	dotted	None	None	None	None	None	None	None	None	None	None	None
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_share_json_parse_threshold
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, '{"a": "x", "b": 2, "c": 3.5}'), (2, '{"a": "y", "b": 4}'), (3, NULL);
+-- result:
+-- !result
+set enable_share_json_parse = true;
+-- result:
+-- !result
+set share_json_parse_min_extractions = 3;
+-- result:
+-- !result
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t", "parse_json")
+-- result:
+None
+-- !result
+function: assert_explain_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b'), get_json_double(doc, '$.c') from t", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id, get_json_string(doc, '$.a'), get_json_int(doc, '$.b'), get_json_double(doc, '$.c') from t order by id;
+-- result:
+1	x	2	3.5
+2	y	4	None
+3	None	None	None
+-- !result
+set share_json_parse_min_extractions = 2;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_share_json_parse_throw_exception_mode
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int, doc varchar(1000)) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, '{"a": "x", "b": 2}'), (2, '{"a": "y", "b": 4}');
+-- result:
+-- !result
+set enable_share_json_parse = true;
+-- result:
+-- !result
+set sql_mode = 'ALLOW_THROW_EXCEPTION';
+-- result:
+-- !result
+function: assert_explain_not_contains("select get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id, get_json_string(doc, '$.a'), get_json_int(doc, '$.b') from t order by id;
+-- result:
+1	x	2
+2	y	4
+-- !result
+set sql_mode = '';
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+-- name: test_share_json_parse_json_column
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int, j json) duplicate key(id) distributed by hash(id) buckets 1 properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t values (1, parse_json('{"a": "x", "payload": "{\\"k\\": 1, \\"v\\": \\"one\\"}"}')),
+ (2, parse_json('{"a": "y", "payload": "{\\"k\\": 2}"}')), (3, NULL);
+-- result:
+-- !result
+set enable_share_json_parse = true;
+-- result:
+-- !result
+function: assert_explain_not_contains("select get_json_string(j, '$.a'), get_json_string(j, '$.payload') from t", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id, get_json_string(j, '$.a'), get_json_string(j, '$.payload') from t order by id;
+-- result:
+1	x	{"k": 1, "v": "one"}
+2	y	{"k": 2}
+3	None	None
+-- !result
+set enable_share_json_parse = false;
+-- result:
+-- !result
+[ORDER]select id, get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t order by id;
+-- result:
+1	1	one
+2	2	None
+3	None	None
+-- !result
+set enable_share_json_parse = true;
+-- result:
+-- !result
+function: assert_explain_contains("select get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t", "parse_json")
+-- result:
+None
+-- !result
+[ORDER]select id, get_json_int(get_json_string(j, '$.payload'), '$.k'), get_json_string(get_json_string(j, '$.payload'), '$.v') from t order by id;
+-- result:
+1	1	one
+2	2	None
+3	None	None
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

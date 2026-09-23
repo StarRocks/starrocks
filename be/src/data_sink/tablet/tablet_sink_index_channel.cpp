@@ -22,6 +22,8 @@
 #include "column/chunk.h"
 #include "column/column_viewer.h"
 #include "column/nullable_column.h"
+#include "column/serde/column_array_serde.h"
+#include "column/serde/encode_level.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_compression_fwd.h"
@@ -261,6 +263,9 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         // false/unset, the legacy "sender_id == 0 collects all" rule is used.
         request.mutable_lake_tablet_params()->set_enable_per_partition_coordinator(
                 _parent->_enable_lake_per_partition_coordinator_txn_log);
+        // Tells the CN its delta writers only see PART of each tablet's rows, so their txn logs must
+        // not be cached under the per-tablet metacache key that publish consults first.
+        request.mutable_lake_tablet_params()->set_multi_node_write(_parent->_enable_multi_node_write);
     }
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
@@ -426,6 +431,16 @@ Status NodeChannel::_open_wait(RefCountClosure<PTabletWriterOpenResult>* open_cl
         _enable_colocate_mv_index = false;
     }
 
+    // Negotiate the chunk encode level with this BE: ask for the bits we want, keep only the ones
+    // it said it honors. An unset field reads as 0, so a peer predating the negotiation -- which
+    // parses the payload at level 0 unconditionally -- turns this off on its own. Every index of
+    // the channel, and every later incremental open, talks to that same BE and so recomputes the
+    // same value; each chunk carries the level it was actually serialized with, so even a change
+    // here mid-load stays consistent.
+    _chunk_encode_level = config::enable_load_chunk_all_null_encoding
+                                  ? (serde::ENCODE_ALL_NULL & open_closure->result.supported_chunk_encode_level())
+                                  : 0;
+
     if (open_closure->result.immutable_partition_ids_size() > 0) {
         auto immutable_partition_ids_size = _immutable_partition_ids.size();
         _immutable_partition_ids.insert(open_closure->result.immutable_partition_ids().begin(),
@@ -447,11 +462,34 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
 
     {
         SCOPED_RAW_TIMER(&_serialize_batch_ns);
+        // Decide PER CHUNK, not once per channel. The bit only changes the layout of a column
+        // whose every row is NULL; for a chunk with no such column it is pure cost -- a tag byte
+        // on every nullable column plus a per-column encode_level in ChunkPB -- for no benefit.
+        // So probe first, and fall back to the untouched legacy path when there is nothing to
+        // gain, which makes an ordinary load byte-for-byte identical to before this change.
+        // The probe is cheap and returns on the first qualifying column: a populated column costs
+        // one has_null() test, and a wide mostly-NULL schema usually hits a match immediately.
+        // The receiver already copes with either form -- an absent encode_level means level 0.
+        bool worth_encoding = false;
+        if (_chunk_encode_level != 0) {
+            for (const auto& column : src->columns()) {
+                if (serde::is_all_null_column(*column)) {
+                    worth_encoding = true;
+                    break;
+                }
+            }
+        }
+        if (!worth_encoding) {
+            _encode_context.reset();
+        } else if (_encode_context == nullptr || _encode_context->get_encode_levels().size() != src->columns().size()) {
+            _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(
+                    static_cast<int>(src->columns().size()), _chunk_encode_level);
+        }
         StatusOr<ChunkPB> res = Status::OK();
         // This lambda is to get the result of TRY_CATCH_ALLOC_SCOPE_END()
         auto st = [&]() {
             TRY_CATCH_ALLOC_SCOPE_START()
-            res = serde::ProtobufChunkSerde::serialize(*src);
+            res = serde::ProtobufChunkSerde::serialize(*src, _encode_context, worth_encoding);
             return res.status();
             TRY_CATCH_ALLOC_SCOPE_END()
         }();
@@ -461,6 +499,11 @@ Status NodeChannel::_serialize_chunk(const Chunk* src, ChunkPB* dst) {
             return _err_st;
         }
         res->Swap(dst);
+        if (_encode_context != nullptr) {
+            // Tell the receiver which level to parse each column with. Swap() above left |dst|
+            // holding the freshly built message, so this cannot accumulate across requests.
+            _encode_context->set_encode_levels_in_pb(dst);
+        }
     }
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());

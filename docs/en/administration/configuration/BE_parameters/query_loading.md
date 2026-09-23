@@ -217,6 +217,16 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable compaction for Flat JSON data.
 - Introduced in: v3.3.3
 
+### enable_default_value_column_zonemap_filter
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Valid values: `true`, `false`
+- Is mutable: Yes
+- Description: Whether to prune data by constant-folding the value of a column that is physically absent from a segment. A column added by fast schema evolution (`ALTER TABLE ... ADD COLUMN`) is not written into pre-existing segments, so every row of it holds the column default (or `NULL`). When this is `true`, a predicate on such a column is evaluated against that constant and the segment is skipped entirely when nothing can match. When set to `false`, those segments are read in full and every batch is re-checked against the delete condition, which is the behavior before this option existed. Set it to `false` to roll back if a query returns unexpected results on a table that has had columns added. This option is deliberately separate from `enable_index_page_level_zonemap_filter`, which does not cover the runtime filter path.
+- Introduced in: -
+
 ### enable_json_flat
 
 - Default: true
@@ -656,6 +666,15 @@ This topic introduces the following types of BE configurations:
 - Unit: -
 - Is mutable: No
 - Description: The maximum task queue length of SCAN thread pool for Pipeline execution engine.
+- Introduced in: -
+
+### case_when_selective_eval_ratio
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Controls whether each `THEN` branch of a searched `CASE WHEN` is evaluated only on the rows that branch owns, instead of being evaluated over the whole chunk and having its rows picked afterwards. It only applies when the `CASE` returns a collection (ARRAY/MAP/STRUCT) or VARIANT type, where materializing a row is expensive enough to pay for compacting the branch's input rows into a sub-chunk. A branch is compacted only when `owned_rows * case_when_selective_eval_ratio < chunk_rows`, that is, when the branch owns less than `1 / case_when_selective_eval_ratio` of the chunk; a branch above the threshold is still evaluated over the whole chunk, because compacting its input would copy more than the skipped evaluation saves. Setting this item to `1` compacts every branch that does not own the whole chunk. Setting it to `0` or a negative value turns the optimization off entirely and restores the previous behavior, including the behavior change it carries: a `THEN` or `ELSE` that would raise an error is no longer evaluated when no row selects it.
 - Introduced in: -
 
 ### enable_lock_free_scan_task_queue
@@ -1281,6 +1300,15 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Is mutable: Yes
 - Description: When enabled, handling of load-channel open RPCs (for example, `PTabletWriterOpen`) is offloaded from the BRPC worker to a dedicated thread pool: the request handler creates a `ChannelOpenTask` and submits it to the internal `_async_rpc_pool` instead of running `LoadChannelMgr::_open` inline. This reduces work and blocking inside BRPC threads and allows tuning concurrency via `load_channel_rpc_thread_pool_num` and `load_channel_rpc_thread_pool_queue_size`. If the thread pool submission fails (when pool is full or shut down), the request is canceled and an error status is returned. The pool is shut down on `LoadChannelMgr::close()`, so consider capacity and lifecycle when you want to enable this feature so as to avoid request rejections or delayed processing.
 - Introduced in: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether this BE takes part in the compact encoding of all-NULL columns on the tablet sink RPC, the hop on which a load routes rows to the BE that holds the target tablet. When enabled, a receiving BE advertises support for the encoding in its tablet writer open response, and a sending BE that sees the advertisement sends a row count in place of the payload of any column whose rows are all NULL, rather than a null flag and an offset for every row. This mainly helps wide tables in which most columns hold no data, and reduces both the bytes sent on this hop and the serialization work on either end. The encoding is used only when both ends of the RPC agree on it, so a mixed-version cluster or a downgrade falls back to the original layout automatically. Set this to `false` on either the sending or the receiving BE to turn the encoding off for loads that pass through that node. This item is not dynamically configurable: a receiving BE uses it both to advertise support and to decide whether to apply the encoding a sender declares, and changing it at runtime would leave those two decisions inconsistent.
+- Introduced in: v4.2.0
 
 ### enable_load_diagnose
 
