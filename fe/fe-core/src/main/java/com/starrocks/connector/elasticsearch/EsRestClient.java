@@ -63,6 +63,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -90,10 +91,12 @@ public class EsRestClient {
 
     private static OkHttpClient sslNetworkClient;
 
-    private final Request.Builder builder;
+    private final String authHeader;
     private final String[] nodes;
-    private String currentNode;
-    private int currentNodeIndex = 0;
+    // Index of the node that served the last successful request. New requests start from this node
+    // instead of always starting from nodes[0], so a dead first node won't block every request
+    // for a connection timeout. AtomicInteger makes this shared state thread-safe.
+    private final AtomicInteger currentNodeIndex = new AtomicInteger(0);
 
     private boolean sslEnabled;
 
@@ -104,21 +107,11 @@ public class EsRestClient {
 
     public EsRestClient(String[] nodes, String authUser, String authPassword) {
         this.nodes = nodes;
-        this.builder = new Request.Builder();
         if (!Strings.isEmpty(authUser) && !Strings.isEmpty(authPassword)) {
-            this.builder.addHeader(HttpHeaders.AUTHORIZATION,
-                    Credentials.basic(authUser, authPassword));
+            this.authHeader = Credentials.basic(authUser, authPassword);
+        } else {
+            this.authHeader = null;
         }
-        this.currentNode = nodes[currentNodeIndex];
-    }
-
-    private void selectNextNode() {
-        currentNodeIndex++;
-        // reroute, because the previously failed node may have already been restored
-        if (currentNodeIndex >= nodes.length) {
-            currentNodeIndex = 0;
-        }
-        currentNode = nodes[currentNodeIndex];
     }
 
     public Map<String, EsNodeInfo> getHttpNodes() throws StarRocksConnectorException {
@@ -189,8 +182,12 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
+<<<<<<< HEAD
     private String execute(String path) throws StarRocksConnectorException {
         int retrySize = nodes.length;
+=======
+    String execute(String path) throws StarRocksConnectorException {
+>>>>>>> 7117e73 ([BugFix] fix elasticsearch request error because of url confusion on concurrent queries (#79391))
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
         if (sslEnabled) {
@@ -198,39 +195,50 @@ public class EsRestClient {
         } else {
             client = NETWORK_CLIENT;
         }
-        for (int i = 0; i < retrySize; i++) {
+        // Start from the node that served the last successful request and wrap around,
+        // so a dead node[0] does not make every request wait for its timeout first.
+        int startIndex = currentNodeIndex.get();
+        for (int attempt = 0; attempt < nodes.length; attempt++) {
+            int i = (startIndex + attempt) % nodes.length;
             // maybe should add HTTP schema to the address
             // actually, at this time we can only process http protocol
-            // NOTE. currentNode may have some spaces.
+            // NOTE. nodes[i] may have some spaces.
             // User may set a config like described below:
             // hosts: "http://192.168.0.1:8200, http://192.168.0.2:8200"
-            // then currentNode will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
+            // then nodes[i] will be "http://192.168.0.1:8200", " http://192.168.0.2:8200"
             // If use ipv6, remember to use format like [2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080
-            currentNode = currentNode.trim();
-            if (!(currentNode.startsWith("http://") || currentNode.startsWith("https://"))) {
-                currentNode = "http://" + currentNode;
+            String node = nodes[i].trim();
+            if (!(node.startsWith("http://") || node.startsWith("https://"))) {
+                node = "http://" + node;
             }
-            Request request = builder.get()
-                    .url(currentNode + "/" + path)
+            Request.Builder localBuilder = new Request.Builder();
+            if (authHeader != null) {
+                localBuilder.addHeader(HttpHeaders.AUTHORIZATION, authHeader);
+            }
+            Request request = localBuilder.get()
+                    .url(node + "/" + path)
                     .build();
             Response response = null;
             if (LOG.isTraceEnabled()) {
-                LOG.trace("es rest client request URL: {}", currentNode + "/" + path);
+                LOG.trace("es rest client request URL: {}", node + "/" + path);
             }
             try {
                 response = client.newCall(request).execute();
                 if (response.isSuccessful()) {
-                    return response.body().string();
+                    if (attempt > 0) {
+                        currentNodeIndex.set(i);
+                    }
+                    String result = response.body().string();
+                    return result;
                 }
             } catch (IOException e) {
-                LOG.warn("request node [{}] [{}] failures {}, try next nodes", currentNode, path, e);
+                LOG.warn("request node [{}] [{}] failures {}, try next nodes", node, path, e);
                 scratchExceptionForThrow = new StarRocksConnectorException(e.getMessage());
             } finally {
                 if (response != null) {
                     response.close();
                 }
             }
-            selectNextNode();
         }
         LOG.warn("try all nodes [{}],no other nodes left", (Object) nodes);
         if (scratchExceptionForThrow != null) {
