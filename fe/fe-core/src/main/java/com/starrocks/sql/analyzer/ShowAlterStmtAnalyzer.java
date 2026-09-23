@@ -31,6 +31,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
@@ -53,8 +54,8 @@ public class ShowAlterStmtAnalyzer {
         private final HashMap<String, Expr> filterMap = new HashMap<>();
 
         // ROLLUP and MATERIALIZED VIEW rows both come from RollupProcDir, whose column names
-        // differ from SchemaChangeProcDir's. Remembered so a predicate can be checked against
-        // the layout that will actually answer.
+        // differ from SchemaChangeProcDir's. Remembered so the where and order by clauses can
+        // be resolved against the layout that will actually answer.
         private ShowAlterStmt.AlterType alterType;
 
         private boolean isRollupLayout() {
@@ -138,7 +139,14 @@ public class ShowAlterStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        index = SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        // Resolve against the columns the statement will actually return. Rollup
+                        // and materialized view rows come from RollupProcDir, whose layout parts
+                        // company with SchemaChangeProcDir's at the fourth column -- State is 8
+                        // there and 9 here -- so resolving everything against one list sorts by
+                        // the wrong column.
+                        index = isRollupLayout()
+                                ? RollupProcDir.analyzeColumn(rollupColumnName(slotRef.getColumnName()))
+                                : SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
                     } catch (AnalysisException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                     }
@@ -204,6 +212,10 @@ public class ShowAlterStmtAnalyzer {
         // filter is keyed by and the one the error messages name.
         private String finishTimeColumnName() {
             return isRollupLayout() ? "FinishedTime" : "FinishTime";
+        }
+
+        private String rollupColumnName(String columnName) {
+            return "FinishTime".equalsIgnoreCase(columnName) ? "FinishedTime" : columnName;
         }
 
         private void analyzeSubPredicate(Expr subExpr) {
