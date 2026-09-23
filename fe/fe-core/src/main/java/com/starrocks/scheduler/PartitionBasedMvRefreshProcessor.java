@@ -1409,13 +1409,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     /**
-     * Collect all deduplicated databases of the materialized view's base tables.
+     * Collect all deduplicated databases of the materialized view's base tables that are worth locking.
+     * <p>
+     * Only internal-catalog base tables enter the lock set. An external base table carries no usable lock
+     * identity: {@link BaseTableInfo#getTableId()} is left at its -1 default by the external constructor, and
+     * the database id comes from the connector. Locking on those either never contends or serializes every
+     * external base table in the FE behind a single entry, while protecting nothing: connector metadata refresh
+     * replaces cache entries and never takes the FE Locker.
+     * <p>
+     * The database existence check still runs for every base table, external ones included, so the diagnostics
+     * are unchanged.
      *
      * @param mv: the mv to check
-     * @return: the deduplicated databases of the materialized view's base tables,
+     * @return: the deduplicated internal databases of the materialized view's base tables,
      * throw exception if the database does not exist.
      */
-    private LockParams collectDatabases(MaterializedView mv) {
+    @VisibleForTesting
+    public LockParams collectDatabases(MaterializedView mv) {
         LockParams lockParams = new LockParams();
         for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
             Optional<Database> dbOpt =
@@ -1423,6 +1433,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (dbOpt.isEmpty()) {
                 logger.warn("database {} do not exist", baseTableInfo.getDbInfoStr());
                 throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
+            }
+            // Judged on the catalog name BaseTableInfo carries, not through Table#isMetaLockTarget: the ids
+            // about to be locked are the ones this name produced, and a resource-mapping base table both
+            // resolves its Database through the connector and never gets a real tableId (see BaseTableInfo).
+            if (!baseTableInfo.isInternalCatalog()) {
+                continue;
             }
             Database db = dbOpt.get();
             lockParams.add(db, baseTableInfo.getTableId());
