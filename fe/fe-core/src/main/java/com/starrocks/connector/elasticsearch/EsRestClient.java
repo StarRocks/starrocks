@@ -255,7 +255,9 @@ public class EsRestClient {
             try {
                 response = client.newCall(request).execute();
                 if (response.isSuccessful()) {
-                    currentNodeIndex.set(i);
+                    if (attempt > 0) {
+                        currentNodeIndex.set(i);
+                    }
                     String result = response.body().string();
                     return result;
                 }
