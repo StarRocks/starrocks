@@ -92,6 +92,28 @@ public class PaimonPartitionRefreshOnceTest {
     }
 
     @Test
+    public void testLaterMissRefreshesEarlierCacheHit() throws Exception {
+        when(catalog.listPartitions(ID)).thenReturn(List.of(partition("one", 100000L)));
+        metadata.listPartitionNames("db", "t", null);
+        long oldTime = metadata.getPartitions(table, List.of("dt=one")).get(0).getModifiedTime();
+        when(catalog.listPartitions(ID)).thenReturn(List.of(partition("one", 300000L), partition("two", 200000L)));
+
+        List<PartitionInfo> partitions = metadata.getPartitions(table, List.of("dt=one", "dt=two", "dt=missing"));
+        assertEquals(2, partitions.size());
+        assertEquals("dt=one", ((Partition) partitions.get(0)).getPartitionName());
+        assertEquals(oldTime + 200000L, partitions.get(0).getModifiedTime());
+        assertEquals("dt=two", ((Partition) partitions.get(1)).getPartitionName());
+        assertEquals(oldTime + 100000L, partitions.get(1).getModifiedTime());
+        verify(catalog, times(2)).listPartitions(ID);
+    }
+
+    @Test
+    public void testEmptyRequestDoesNotLoadColdCache() throws Exception {
+        assertTrue(metadata.getPartitions(table, List.of()).isEmpty());
+        verify(catalog, never()).listPartitions(ID);
+    }
+
+    @Test
     public void testUnpartitionedTableDoesNotList() throws Exception {
         when(nativeTable.partitionKeys()).thenReturn(List.of());
         PaimonTable unpartitioned = new PaimonTable("paimon", "db", "t", List.of(), nativeTable);

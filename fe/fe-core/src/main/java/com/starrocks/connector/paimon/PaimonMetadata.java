@@ -207,7 +207,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    private void updatePartitionInfo(String databaseName, String tableName) {
+    private void updateAllPartitionInfos(String databaseName, String tableName) {
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         RowType dataTableRowType;
@@ -293,7 +293,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
         Identifier identifier = new Identifier(databaseName, tableName);
-        updatePartitionInfo(databaseName, tableName);
+        updateAllPartitionInfos(databaseName, tableName);
         if (this.partitionInfos.get(identifier) == null) {
             return Lists.newArrayList();
         }
@@ -1003,16 +1003,23 @@ public class PaimonMetadata implements ConnectorMetadata {
             return result;
         }
         Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
-        // Reload the partition cache at most once per call. A single listing already reflects
-        // every partition of the table, so retrying it for each missing name only adds
-        // catalog round trips without changing the result.
-        boolean refreshed = false;
-        for (String partitionName : partitionNames) {
-            if (!refreshed && (partitionInfo == null || partitionInfo.get(partitionName) == null)) {
-                this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
-                partitionInfo = this.partitionInfos.get(identifier);
-                refreshed = true;
+        // Refresh before collecting results so a later cache miss also updates earlier hits.
+        boolean hasRefreshed = false;
+        if (partitionInfo == null && !partitionNames.isEmpty()) {
+            this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+            partitionInfo = this.partitionInfos.get(identifier);
+            hasRefreshed = true;
+        }
+        if (!hasRefreshed && partitionInfo != null) {
+            for (String partitionName : partitionNames) {
+                if (!partitionInfo.containsKey(partitionName)) {
+                    this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                    partitionInfo = this.partitionInfos.get(identifier);
+                    break;
+                }
             }
+        }
+        for (String partitionName : partitionNames) {
             if (partitionInfo != null && partitionInfo.get(partitionName) != null) {
                 result.add(partitionInfo.get(partitionName));
             } else {
