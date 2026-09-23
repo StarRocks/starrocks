@@ -1260,6 +1260,23 @@ public class SyncPartitionUtilsTest extends StarRocksTestBase {
     }
 
     @Test
+    public void testMirrorMapperMinValueWithWeekGranularity() throws AnalysisException {
+        // A base table whose first partition is `VALUES LESS THAN (...)` has a MIN lower bound.
+        // It must not be floored (for week granularity, flooring 0000-01-01 would go negative and
+        // produce an invalid date), the MIN lower bound should be kept as-is.
+        Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
+        baseRangeMap.put("p_less_than", createLessThanRange("2020-05-13"));
+
+        Map<String, Range<PartitionKey>> mirror =
+                toMirrorMappingRanges(baseRangeMap, "week", PrimitiveType.DATE);
+
+        Assertions.assertEquals(1, mirror.size());
+        Assertions.assertTrue(mirror.containsKey("p00010101_20200518"), "mirror: " + mirror.keySet());
+        Assertions.assertEquals("2020-05-18",
+                mirror.get("p00010101_20200518").upperEndpoint().getKeys().get(0).getStringValue());
+    }
+
+    @Test
     public void testMirrorMapperRollupDaysToMonth() throws AnalysisException {
         Map<String, Range<PartitionKey>> baseRangeMap = Maps.newHashMap();
         baseRangeMap.put("p20200101", createRange("2020-01-01", "2020-01-02"));

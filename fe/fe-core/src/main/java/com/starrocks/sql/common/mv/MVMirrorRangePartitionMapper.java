@@ -20,6 +20,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import com.starrocks.sql.common.PRangeCell;
@@ -71,13 +72,20 @@ public class MVMirrorRangePartitionMapper extends MVRangePartitionMapper {
         List<Range<PartitionKey>> snappedRanges = Lists.newArrayList();
         for (PCellWithName rangeEntry : baseRangeMap.getPartitions()) {
             PRangeCell rangeCell = rangeEntry.cell().cast();
+            Range<PartitionKey> baseRange = rangeCell.getRange();
             // Snap the base partition's endpoints to the mv granularity, keeping it as a single mv partition.
-            // The lazy mapper's single-range method is exactly this snap logic (lower floor / upper ceil with
-            // MIN/MAX handling), so reuse it here instead of duplicating it.
-            PartitionMapping mapping = MVLazyRangePartitionMapper.INSTANCE.toMappingRanges(
-                    rangeCell.getRange(), granularity);
+            // The lazy mapper's single-range method is exactly this snap logic (lower floor / upper ceil), so
+            // reuse it here instead of duplicating it.
+            PartitionMapping mapping = MVLazyRangePartitionMapper.INSTANCE.toMappingRanges(baseRange, granularity);
             try {
-                PartitionKey lowerKey = toPartitionKey(mapping.getLowerDateTime(), partitionType);
+                // The lazy helper only guards MAX, not MIN: flooring the MIN lower bound can go out of range
+                // (e.g. MIN '0000-01-01' is a Saturday, so flooring to week Monday yields a negative date and
+                // `toPartitionKey` fails with "Invalid date value"). Keep the MIN lower bound as-is and only
+                // snap the upper bound, same as MVEagerRangePartitionMapper's `isLowerMin` short-circuit.
+                LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
+                PartitionKey lowerKey = lowerExpr.isMinValue()
+                        ? baseRange.lowerEndpoint()
+                        : toPartitionKey(mapping.getLowerDateTime(), partitionType);
                 PartitionKey upperKey = toPartitionKey(mapping.getUpperDateTime(), partitionType);
                 snappedRanges.add(Range.closedOpen(lowerKey, upperKey));
             } catch (AnalysisException e) {
