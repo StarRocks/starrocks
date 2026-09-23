@@ -39,6 +39,7 @@ public class StatsConstants {
     public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
     public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
     public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
+<<<<<<< HEAD
     // Reserved, not produced here: the enterprise build uses 21 for an external-statistics query that
     // also reports how many partitions its aggregate covers. Declared so the number cannot be handed to
     // a different result shape on this side - the version travels between frontend and backend, and two
@@ -49,6 +50,11 @@ public class StatsConstants {
     // external-statistics query that additionally reports the distinct counts of two nested subsets of
     // the partitions it covers. Also left out of STATISTIC_SUPPORTED_VERSION.
     public static final int STATISTIC_EXTERNAL_QUERY_V4_VERSION = 22;
+=======
+    // Same per-column aggregate as V2, plus the number of partitions it covers and the per-partition
+    // distinct counts added up, so the read path can size and scale the result from the rows themselves.
+    public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
+>>>>>>> dec74b54547... [Enhancement] Make external statistics collection survive a busy backend, finish across runs, and estimate from the rows it collected (#63508)
 
 
 
@@ -69,6 +75,7 @@ public class StatsConstants {
                     .add(STATISTIC_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_PARTITION_VERSION_V2)
+                    .add(STATISTIC_EXTERNAL_QUERY_V3_VERSION)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

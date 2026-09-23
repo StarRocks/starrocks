@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
@@ -74,6 +75,25 @@ public abstract class StatisticsCollectJob {
     //     and would fail the same way however often it is retried.
     protected static final String TOO_MANY_VERSIONS_MARKER = "Too many versions";
     protected static final String PROCESS_MEMORY_EXHAUSTED_MARKER = "Memory of process exceed limit";
+
+    // Backend-wide memory exhaustion is transient, so a rejected statistics statement is retried after a
+    // pause instead of being counted as a failure. Short first, since the spike this was written for cleared
+    // in about a second; the later step covers a longer-running neighbour without pinning the job to a
+    // backend that is genuinely saturated - once these are exhausted the statement counts as failed and the
+    // job's usual tolerance rules apply.
+    //
+    // Only the external-table jobs wait: the native paths keep failing immediately, as they always have.
+    private static final long[] PROCESS_MEMORY_RETRY_BACKOFF_MS = {10_000L, 30_000L};
+
+    // Total time this job has already spent waiting for a backend to free memory, charged against
+    // Config.connector_table_analyze_memory_backoff_budget_second. Waiting is only worth it while the
+    // shortage is a passing spike. Under a sustained one every statement is rejected, so an unbounded
+    // per-statement retry turns into a job that sleeps for its entire deadline while occupying one of the
+    // few analyze slots (connector_table_query_trigger_analyze_max_running_task_num) - starving every other
+    // table of statistics to keep retrying the one table the cluster currently has no memory for. Past the
+    // budget the job stops waiting and degrades to the pre-retry behaviour: failures count, tolerance
+    // decides, and the job ends soon enough to be re-triggered when the cluster has recovered.
+    private long processMemoryBackoffSpentMs = 0;
 
     protected final Database db;
     protected final Table table;
@@ -248,6 +268,51 @@ public abstract class StatisticsCollectJob {
         context.getSessionVariable().setQueryTimeoutS((int) remainingSeconds);
         context.getSessionVariable().setInsertTimeoutS((int) remainingSeconds);
         return (int) remainingSeconds;
+    }
+
+    // True when the failure is the backend as a whole running out of memory, which says nothing about the
+    // statement that hit it and will stop being true on its own. A query-level limit means the statement is
+    // too big for its own budget, which a retry would reproduce exactly; the distinction comes from the
+    // backend's own wording (see PROCESS_MEMORY_EXHAUSTED_MARKER).
+    static boolean isProcessMemoryExhausted(Throwable failure) {
+        for (Throwable t = failure; t != null && t != t.getCause(); t = t.getCause()) {
+            if (t.getMessage() != null && t.getMessage().contains(PROCESS_MEMORY_EXHAUSTED_MARKER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** How many times one statement may be retried while the backend is short of memory. */
+    protected int maxProcessMemoryRetries() {
+        return PROCESS_MEMORY_RETRY_BACKOFF_MS.length;
+    }
+
+    // Overridable so tests do not have to sleep through the real backoff.
+    protected long retryBackoffMillis(int attempt) {
+        return PROCESS_MEMORY_RETRY_BACKOFF_MS[Math.min(attempt, PROCESS_MEMORY_RETRY_BACKOFF_MS.length - 1)];
+    }
+
+    /**
+     * Waits for a backend to free memory, and reports whether the job could still afford to. Returns false
+     * without sleeping once the job has used up its waiting budget (see processMemoryBackoffSpentMs), which
+     * the caller should treat as "stop retrying and let this statement fail".
+     */
+    protected boolean awaitBackendMemory(long backoffMs) throws InterruptedException {
+        long budgetMs = Config.connector_table_analyze_memory_backoff_budget_second * 1000L;
+        if (budgetMs > 0 && processMemoryBackoffSpentMs + backoffMs > budgetMs) {
+            LOG.warn("[ExternalStats] memory backoff budget exhausted, no longer waiting | spentMs={} budgetMs={} " +
+                    "job={}", processMemoryBackoffSpentMs, budgetMs, this);
+            return false;
+        }
+        Thread.sleep(backoffMs);
+        processMemoryBackoffSpentMs += backoffMs;
+        return true;
+    }
+
+    @VisibleForTesting
+    long getProcessMemoryBackoffSpentMs() {
+        return processMemoryBackoffSpentMs;
     }
 
     protected void collectStatisticSync(String sql, ConnectContext context, AnalyzeStatus analyzeStatus)
