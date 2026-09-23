@@ -570,4 +570,43 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
                     "MV should be cached after triggerPendingMVPlanCacheLoads");
         });
     }
+
+    /**
+     * Eviction must not have to re-derive the mv's ast keys, because deriving them re-analyzes the
+     * define query and resolves every base table -- through the connector for an external one --
+     * while the caller holds a metadata lock (AlterJobMgr's replay paths, backup/restore,
+     * MaterializedView#onDropImpl under the DROP db WRITE lock).
+     *
+     * Pinned from the outside: an mv whose parse node cannot be produced still leaves the ast cache.
+     * That is also the case that used to leak, and it is not hypothetical -- setInactiveAndReason is
+     * the path taken when something about the mv is already broken.
+     */
+    @Test
+    public void testEvictRemovesMvFromAstCacheWithoutReparsingDefineQuery() throws Exception {
+        String mvName = "test_mv_evict_ast_no_reparse";
+        String createMvSql = "create materialized view " + mvName + " distributed by random refresh manual " +
+                "as select user_id, time, sum(tag_id) from user_tags group by user_id, time";
+
+        starRocksAssert.withMaterializedView(createMvSql, name -> {
+            MaterializedView mv = getMv(MATERIALIZED_DB_NAME, mvName);
+            mv.setActive();
+            Assertions.assertFalse(
+                    CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty(),
+                    "MV should be in the ast cache after setActive");
+
+            // the ast keys are now unobtainable, as they are once the define query no longer resolves
+            new MockUp<MaterializedView>() {
+                @Mock
+                public ParseNode getDefineQueryParseNode() {
+                    return null;
+                }
+            };
+
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+
+            Assertions.assertTrue(
+                    CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty(),
+                    "MV must leave the ast cache even when its ast keys cannot be re-derived");
+        });
+    }
 }
