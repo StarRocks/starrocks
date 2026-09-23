@@ -18,8 +18,8 @@
 #include <string>
 #include <vector>
 
-#include "util/defer_op.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
