@@ -2216,8 +2216,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return rowCount;
         }
 
+        // Duplicate partition keys (e.g. PARTITION BY pk, pk) do not create extra partitions, so deduplicate
+        // before estimating the group count to avoid multiplying the cardinality for the same column.
         List<ColumnRefOperator> partitionColumns = partitionExpressions.stream()
                 .map(ScalarOperator::<ColumnRefOperator>cast)
+                .distinct()
                 .collect(Collectors.toList());
         double partitionCount = computeGroupByStatistics(partitionColumns, inputStatistics, new HashMap<>());
         return rowCount / Math.max(1, partitionCount);
