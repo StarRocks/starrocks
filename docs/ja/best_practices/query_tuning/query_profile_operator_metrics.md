@@ -502,3 +502,170 @@ OlapTableSink Operatorは`INSERT INTO <table>`操作の実行を担当します�
 | `SerializedBytes` | 圧縮前のシリアライズされたチャンクデータのサイズ。`load_transmission_compression_type`のデフォルトは`NO_COMPRESSION`であるため、通常はネットワークに送信されるバイト数と一致します。 |
 | `CompressedInputBytes` | 実際に圧縮器へ入力されたシリアライズ済み（圧縮前）データのサイズ。圧縮が無効な場合や、入力が RPC 圧縮のサイズ上限を超えてスキップされたチャンクは含まれません。 |
 | `CompressedBytes` | 圧縮データのサイズ。実際に圧縮されたチャンクのみが対象のため、デフォルトの`NO_COMPRESSION`ではこのメトリックと`CompressedInputBytes`はいずれも`0`になります。`CompressedInputBytes / CompressedBytes`が圧縮率であり、`SerializedBytes - CompressedInputBytes`が圧縮されなかったデータのサイズです。 |
+
+### スピルメトリクス
+
+クエリがメモリ上限を超えると、スピル可能なオペレーターは中間結果をローカルディスクまたはリモートストレージに書き出します。これらのオペレーターはいずれも、自身のプロファイル内に同じカウンターグループ `SpillStatistics` を出力します。対象となるのは、スピル可能な集計および DISTINCT オペレーター、ハッシュジョインとネステッドループジョインの build / probe オペレーター、そしてソートオペレーターです。
+
+どのカウンターが非ゼロになるかは、オペレーターが使用する 3 種類のライターのいずれかによって決まります。
+
+- **ソートライター**：`GROUP BY` 式でソートするブロッキング集計オペレーターおよびブロッキング `DISTINCT` オペレーターと、`ORDER BY` 式でソートするソートオペレーターが使用します。MemTable はソートされた後、1 つのソート済み block group として書き出され、一定数たまると再度マージされます。コンパクションの段階を持つのはこのライターだけです。`SortChunkTime` と `MaterializeChunkTime` が非ゼロになるのはここだけであり、`CompactTime`、`CompactMergeTime`、`CompactCount`、`CompactBlockCount`、`CompactBytesRead`、`CompactBytesWritten` も同様です。ただし後者は block compaction が有効な場合に限られ、現時点ではブロッキング集計オペレーターとソートオペレーターが該当します。
+- **パーティションライター**：ハッシュジョインの build / probe オペレーターと、パーティション単位の集計および `DISTINCT` オペレーターが使用します。行はハッシュでパーティション分割され、パーティションごとに書き出されます。コンパクションの段階はありません。MemTable の上限を超えたパーティションは 2 つに分割され、その処理は `FlushTime` ではなく `SplitPartitionTime` に計上されます。`ShuffleTime`、`SplitPartitionTime`、`PartitionWriterPeakMemoryBytes`、および `SkewMemTable*` 系のカウンターが非ゼロになるのはここだけです。
+- **非ソートライター**：ネステッドループジョインの build / probe オペレーターが使用します。MemTable はそのまま書き出され、ソートもパーティション分割もコンパクションも行われません。
+
+`FlushMemTableTime` は最初の書き出しを計測するもので、ソートライターと非ソートライターが報告します。パーティションライターにはこの段階がないため、値は 0 のままです。
+
+#### カウンターの階層
+
+```text
+SpillStatistics
+├── AppendDataTime
+├── RowsSpilled
+├── FlushTime
+│   ├── FlushMemTableTime
+│   └── CompactTime
+│       └── CompactMergeTime
+├── WriteIOTime
+│   ├── LocalWriteIOTime
+│   └── RemoteWriteIOTime
+├── RowsRestored
+├── RestoreTime
+├── ReadIOTime
+│   ├── LocalReadIOTime
+│   └── RemoteReadIOTime
+├── BytesFlush
+│   ├── BytesFlushToLocalDisk
+│   └── BytesFlushToRemoteStorage
+├── BytesRestore
+│   ├── BytesRestoreFromLocalDisk
+│   └── BytesRestoreFromRemoteStorage
+├── SerializeTime
+├── DeserializeTime
+├── MemTablePeakMemoryBytes
+├── InputStreamPeakMemoryBytes
+├── SortChunkTime
+├── MaterializeChunkTime
+├── ShuffleTime
+├── SplitPartitionTime
+├── PartitionWriterPeakMemoryBytes
+├── RowsRestoreFromMemTable
+├── BytesRestoreFromMemTable
+├── BlockCount
+│   ├── LocalBlockCount
+│   └── RemoteBlockCount
+├── ReadIOCount
+│   ├── LocalReadIOCount
+│   └── RemoteReadIOCount
+├── CompactCount
+├── CompactBlockCount
+├── CompactBytesRead
+├── CompactBytesWritten
+├── FlushIOTaskCount
+├── PeakFlushIOTaskCount
+├── RestoreIOTaskCount
+├── PeakRestoreIOTaskCount
+├── MemTableFinalizeTime
+├── FlushIOTaskYieldCount
+├── RestoreIOTaskYieldCount
+└── SkewMemTableCount / SkewMemTableSkewRatio / SkewMemTableMergeTime /
+    SkewMemTableInputRows / SkewMemTableOutputRows /
+    SkewMemTableInputBytes / SkewMemTableOutputBytes
+```
+
+この階層における親子関係が「含む」を意味するのは、説明にそう書かれている場合だけです。階層上は兄弟でも時間的には重なるカウンターがいくつかあります。同じ処理が複数のカウンターに計上されるためです。詳細は [カウンター同士の重なり](#カウンター同士の重なり) を参照してください。
+
+:::note
+クエリのスピルにおいて、`WriteIOTime`、`ReadIOTime`、`BytesFlush`、`BytesRestore`、`BlockCount`、`ReadIOCount` はグループ化のための行です。値は常に block の配置先に対応する `Local...` または `Remote...` の子カウンターに計上され、親の行は `0` のままです。合計を見る場合は子カウンターを参照してください。
+:::
+
+#### データの受け取り
+
+これらのカウンターはオペレーター自身のスレッドに計上されるため、オペレーターの処理時間に含まれます。
+
+| メトリック | 説明 | ライター |
+|--------|-------------|------|
+| `AppendDataTime` | チャンクをスピラーに受け取る時間。メモリ上の MemTable への追加と、パーティション経路では各パーティションへの行の振り分けを含みます。 | 共通 |
+| `RowsSpilled` | スピラーが受け取った行数。 | 共通 |
+| `ShuffleTime` | 各行の所属パーティションを計算し、対応するパーティションの MemTable へコピーする時間。`AppendDataTime` に含まれます。 | パーティション |
+| `SortChunkTime` | 満杯になった MemTable をソートキーで並べ替える時間。フラッシュの契機で、フラッシュタスクの投入前に計上されます。 | ソート |
+| `MaterializeChunkTime` | ソートで得た permutation からソート済みチャンクを組み立て直す時間。`SortChunkTime` と同じタイミングで計上されます。 | ソート |
+| `MemTablePeakMemoryBytes` | MemTable が使用したメモリのピーク。 | 共通 |
+| `PartitionWriterPeakMemoryBytes` | パーティションライターが全パーティション合計で使用したメモリのピーク。 | パーティション |
+| `SkewMemTableCount` | 単一の GROUP BY 値が偏って多いためにマージされた MemTable の数。オペレーターがスキュー用のコンパクターを提供している場合に限ります。 | パーティション |
+| `SkewMemTableSkewRatio` | そのマージで削減された MemTable バイト数の割合。観測された最小値が記録されます。 | パーティション |
+| `SkewMemTableMergeTime` | 偏った MemTable をマージする時間。 | パーティション |
+| `SkewMemTableInputRows` / `SkewMemTableOutputRows` | スキューマージ前後の行数。 | パーティション |
+| `SkewMemTableInputBytes` / `SkewMemTableOutputBytes` | スキューマージ前後の MemTable バイト数。 | パーティション |
+
+#### データの書き出し
+
+これらのカウンターはスピル I/O スレッドに計上されます。非同期に実行されるためオペレーターの処理時間には直接加算されず、オペレーターが空き MemTable を待たされたときにクエリを遅くします。
+
+| メトリック | 説明 | ライター |
+|--------|-------------|------|
+| `FlushTime` | フラッシュタスク全体の時間。ソートライターでは `FlushMemTableTime` と `CompactTime` の合計、非ソートライターでは `FlushMemTableTime` そのもの、パーティションライターでは満杯になったパーティションを 1 つずつ書き出す時間であり、サブステージはありません。 | 共通 |
+| `FlushMemTableTime` | 1 つの MemTable を新しい block group として書き出す時間。 | ソート・非ソート |
+| `CompactTime` | 複数のソート済み block group を 1 つにマージする時間。block compaction が無効な場合や、block group 数がマージのしきい値に達しない場合は 0 になります。 | ソート |
+| `CompactMergeTime` | マージそのものの時間。ソートキーの比較とマージ後のチャンクの組み立てです。 | ソート |
+| `MemTableFinalizeTime` | MemTable 自身のシリアライズループの時間。ソートライターと非ソートライターでは `FlushMemTableTime` の内側、パーティションライターでは `FlushTime` の直下で実行されます。 | 共通 |
+| `SerializeTime` | 書き出し前にチャンクをシリアライズする時間。 | 共通 |
+| `WriteIOTime` | block への追加とフラッシュに要した時間。`LocalWriteIOTime` と `RemoteWriteIOTime` の子カウンターを参照してください。 | 共通 |
+| `BytesFlush` | 書き出したバイト数。`BytesFlushToLocalDisk` と `BytesFlushToRemoteStorage` の子カウンターを参照してください。 | 共通 |
+| `BlockCount` | 確保した block の数。`LocalBlockCount` と `RemoteBlockCount` の子カウンターを参照してください。 | 共通 |
+| `FlushIOTaskCount` | 投入されたフラッシュ I/O タスクの数。 | 共通 |
+| `PeakFlushIOTaskCount` | 同時に実行されたフラッシュタスク数のピーク。 | 共通 |
+| `FlushIOTaskYieldCount` | フラッシュタスクがタイムスライスを使い切り、続きを実行するために再投入された回数。 | 共通 |
+| `SplitPartitionTime` | MemTable の上限を超えたパーティションを分割する時間。対象パーティションの読み戻しと、分割後の 2 つの書き出しを含みます。`FlushTime` には含まれません。 | パーティション |
+
+#### コンパクション
+
+| メトリック | 説明 | ライター |
+|--------|-------------|------|
+| `CompactCount` | コンパクションの実行回数。 | ソート |
+| `CompactBlockCount` | それらの実行が取り込んだ **block group** の数。名前が紛らわしいですが、block ではなく block group を数えます。 | ソート |
+| `CompactBytesRead` | コンパクションが読み戻したバイト数。`BytesRestore` の一部です。 | ソート |
+| `CompactBytesWritten` | コンパクションが書き直したバイト数。`BytesFlush` の一部です。 | ソート |
+
+#### データの読み戻し
+
+| メトリック | 説明 | ライター |
+|--------|-------------|------|
+| `RestoreTime` | プリフェッチバッファから次のチャンクを取り出し、次のプリフェッチを開始する時間。オペレーター自身のスレッドに計上されます。 | 共通 |
+| `RowsRestored` | オペレーターに返された行数。 | 共通 |
+| `DeserializeTime` | block から読み戻したチャンクをデシリアライズする時間。 | 共通 |
+| `ReadIOTime` | block の読み取りに要した時間。`LocalReadIOTime` と `RemoteReadIOTime` の子カウンターを参照してください。 | 共通 |
+| `ReadIOCount` | 読み取り操作の回数。`LocalReadIOCount` と `RemoteReadIOCount` の子カウンターを参照してください。 | 共通 |
+| `BytesRestore` | 読み戻したバイト数。`BytesRestoreFromLocalDisk` と `BytesRestoreFromRemoteStorage` の子カウンターを参照してください。 | 共通 |
+| `InputStreamPeakMemoryBytes` | プリフェッチ済みでまだ消費されていないチャンクが使用したメモリのピーク。 | 共通 |
+| `RestoreIOTaskCount` | 投入されたリストア I/O タスクの数。 | 共通 |
+| `PeakRestoreIOTaskCount` | 同時に実行されたリストアタスク数のピーク。 | 共通 |
+| `RestoreIOTaskYieldCount` | リストアタスクがタイムスライスを使い切り、続きを実行するために再投入された回数。 | 共通 |
+| `RowsRestoreFromMemTable` / `BytesRestoreFromMemTable` | メモリ上に残ったままのパーティションから直接行を返すケース向けに用意されたカウンター。現在の実装では更新されないため、常に `0` です。 | パーティション |
+
+#### カウンター同士の重なり
+
+同じ処理を対象とするカウンターがいくつかあるため、単純に足し合わせると二重計上になります。
+
+- `MemTableFinalizeTime` は、その MemTable を書き出す際の `SerializeTime` と書き込み I/O をすでに含んでいます。追加のコストではなく、ステージの区切りです。
+- `SerializeTime`、`WriteIOTime`、`BytesFlush` は、最初の書き出しとコンパクションによる書き直しの両方を計上します。`BytesFlush` のうちコンパクション分が `CompactBytesWritten` です。
+- `DeserializeTime`、`ReadIOTime`、`ReadIOCount`、`BytesRestore` はリストアとコンパクションで共有されます。コンパクションも同じ経路で入力を読み戻すためです。`BytesRestore` のうちコンパクション分が `CompactBytesRead` であり、これを差し引いた分がリストア自身の読み取り量です。
+- `CompactMergeTime` は `DeserializeTime` や `ReadIOTime` と重なり**ません**。マージはプリフェッチ済みの入力バッファからチャンクを受け取るだけであり、そのバッファを満たす読み取り I/O とデシリアライズは別に計時されています。
+
+#### カウンターの読み方
+
+1. **まず `FlushTime` を見ます。** スピルがクエリのボトルネックになっている場合、`FlushTime` はこのグループで最大の値になることが多く、上流オペレーターの待ち時間もこれに近い値になります。
+
+2. **`FlushTime` を 2 つのステージに分解します**（ソートライターのみ）:
+   `FlushTime` = `FlushMemTableTime` + `CompactTime`
+
+   - `FlushMemTableTime` が大半を占める場合、コストは最初の書き出しにあります。`SerializeTime` と `LocalWriteIOTime` / `RemoteWriteIOTime` を比べてシリアライズによる CPU 負荷かデバイスの遅さかを見分け、`BytesFlush` でデータ量を確認します。テーブルの列が多い場合や、列の大半が NULL の場合は、シリアライズ側が大きくなりがちです。
+   - `CompactTime` が大半を占める場合、ソート済み block group が次々にマージのしきい値に達し、同じデータが繰り返し書き直されています。`CompactCount` が実行回数、`CompactBlockCount` がそこで取り込まれた block group の数です。`CompactBytesRead` / `CompactBytesWritten` を `BytesRestore` / `BytesFlush` と比べると、コンパクションによる書き込み増幅が分かります。両者が近いほど、I/O の大半が処理を進めるためではなく書き直しに費やされています。
+
+3. **`CompactTime` の中の `CompactMergeTime` を見ます。** これはマージそのものなので、その比率からコンパクションのどこで詰まっているかが分かります。
+
+   - 比率が高い場合、マージが CPU バウンドです。ソート列が多い、チャンクが大きい、一度にマージする本数が多いといった要因で、キー比較とチャンク組み立てのコストが増えます。
+   - 比率が低い場合、マージは入力または出力を待っています。`CompactTime` の残りは読み取り側（`ReadIOTime`、`DeserializeTime`）か書き込み側（`SerializeTime`、`WriteIOTime`）にあり、これらのカウンターで判別できます。
+
+4. **並行度の頭打ちを確認します。** `PeakFlushIOTaskCount` と `PeakRestoreIOTaskCount` は同時に実行された I/O タスク数を示します。`FlushIOTaskYieldCount` が大きい場合、フラッシュタスクがタイムスライスを使い切って再投入を繰り返しています。
+
+5. **重なり合うカウンターを足し合わせないでください。** このグループを `FlushTime` の内訳として扱う前に、[カウンター同士の重なり](#カウンター同士の重なり) を確認してください。
