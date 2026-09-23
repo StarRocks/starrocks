@@ -59,30 +59,39 @@ TEST_F(CpuInfoTest, test_fail_cpu_flags_check) {
 #endif
 }
 
+#if defined(__aarch64__)
 TEST(ArmCpuInfoConstants, BitmaskValues) {
-    // Verify each ARM flag occupies a unique, non-overlapping bit.
-    EXPECT_EQ(int64_t(1LL << 9), int64_t(CpuInfo::ARM_NEON));
-    EXPECT_EQ(int64_t(1LL << 10), int64_t(CpuInfo::ARM_CRC32));
-    EXPECT_EQ(int64_t(1LL << 11), int64_t(CpuInfo::ARM_PMULL));
-    EXPECT_EQ(int64_t(1LL << 12), int64_t(CpuInfo::ARM_AES));
-    EXPECT_EQ(int64_t(1LL << 13), int64_t(CpuInfo::ARM_LSE));
-    EXPECT_EQ(int64_t(1LL << 14), int64_t(CpuInfo::ARM_SVE));
-    EXPECT_EQ(int64_t(1LL << 15), int64_t(CpuInfo::ARM_SVE2));
-    EXPECT_EQ(int64_t(1LL << 16), int64_t(CpuInfo::ARM_SHA1));
-    EXPECT_EQ(int64_t(1LL << 17), int64_t(CpuInfo::ARM_SHA2));
-
-    // No two flags may share a bit.
+    EXPECT_EQ(int64_t(1LL << 1), int64_t(CpuInfo::ARM_NEON));
+    EXPECT_EQ(int64_t(1LL << 2), int64_t(CpuInfo::ARM_CRC32));
+    EXPECT_EQ(int64_t(1LL << 3), int64_t(CpuInfo::ARM_PMULL));
+    EXPECT_EQ(int64_t(1LL << 4), int64_t(CpuInfo::ARM_AES));
+    EXPECT_EQ(int64_t(1LL << 5), int64_t(CpuInfo::ARM_LSE));
+    EXPECT_EQ(int64_t(1LL << 6), int64_t(CpuInfo::ARM_SVE));
+    EXPECT_EQ(int64_t(1LL << 7), int64_t(CpuInfo::ARM_SVE2));
+    EXPECT_EQ(int64_t(1LL << 8), int64_t(CpuInfo::ARM_SHA1));
+    EXPECT_EQ(int64_t(1LL << 9), int64_t(CpuInfo::ARM_SHA2));
     const int64_t all_arm = CpuInfo::ARM_NEON | CpuInfo::ARM_CRC32 | CpuInfo::ARM_PMULL | CpuInfo::ARM_AES |
                             CpuInfo::ARM_LSE | CpuInfo::ARM_SVE | CpuInfo::ARM_SVE2 | CpuInfo::ARM_SHA1 |
                             CpuInfo::ARM_SHA2;
-    EXPECT_EQ(int64_t((1LL << 18) - (1LL << 9)), all_arm);
-
-    // No ARM flag may overlap any existing x86 flag.
+    EXPECT_EQ((1LL << 10) - (1LL << 1), all_arm);
+}
+#elif defined(__x86_64__) || defined(__i386__)
+TEST(X86CpuInfoConstants, BitmaskValues) {
+    EXPECT_EQ(int64_t(1LL << 1), int64_t(CpuInfo::SSSE3));
+    EXPECT_EQ(int64_t(1LL << 2), int64_t(CpuInfo::SSE4_1));
+    EXPECT_EQ(int64_t(1LL << 3), int64_t(CpuInfo::SSE4_2));
+    EXPECT_EQ(int64_t(1LL << 4), int64_t(CpuInfo::POPCNT));
+    EXPECT_EQ(int64_t(1LL << 5), int64_t(CpuInfo::AVX));
+    EXPECT_EQ(int64_t(1LL << 6), int64_t(CpuInfo::AVX2));
+    EXPECT_EQ(int64_t(1LL << 7), int64_t(CpuInfo::AVX512F));
+    EXPECT_EQ(int64_t(1LL << 8), int64_t(CpuInfo::AVX512BW));
     const int64_t all_x86 = CpuInfo::SSSE3 | CpuInfo::SSE4_1 | CpuInfo::SSE4_2 | CpuInfo::POPCNT | CpuInfo::AVX |
                             CpuInfo::AVX2 | CpuInfo::AVX512F | CpuInfo::AVX512BW;
-    EXPECT_EQ(0, all_arm & all_x86);
+    EXPECT_EQ((1LL << 9) - (1LL << 1), all_x86);
 }
+#endif
 
+#if defined(__aarch64__)
 TEST_F(CpuInfoTest, ArmHardwareFlagsSet) {
 #if defined(__aarch64__)
     // NEON is mandatory on all AArch64 processors — must always be set.
@@ -98,7 +107,10 @@ TEST_F(CpuInfoTest, ArmHardwareFlagsSet) {
     GTEST_SKIP() << "ARM hardware flags are not applicable on non-aarch64 hosts.";
 #endif
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST_F(CpuInfoTest, ArmFailCpuFlagsCheck) {
 #if defined(__aarch64__) && defined(__ARM_NEON)
     int64_t* flags = CpuInfo::TEST_mutable_hardware_flags();
@@ -127,7 +139,10 @@ TEST_F(CpuInfoTest, ArmFailCpuFlagsCheck) {
     GTEST_SKIP() << "AArch64 NEON is not active in this build — skipping ARM guard test.";
 #endif
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, StrictTokenMatching) {
     // Compound flag string containing substrings like "sve2", "sveaes", "svepmull"
     // Must NOT spuriously enable "sve", "aes", or "pmull" if the standalone tokens are absent.
@@ -139,7 +154,10 @@ TEST(ArmCpuInfoParsing, StrictTokenMatching) {
     EXPECT_FALSE(flags & CpuInfo::ARM_AES) << "Compound 'sveaes' must not trigger 'aes'";
     EXPECT_FALSE(flags & CpuInfo::ARM_PMULL) << "Compound 'svepmull' must not trigger 'pmull'";
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
     // Simulated full /proc/cpuinfo Features line from an ARM64 server core (e.g. Neoverse V1)
     std::string cpuinfo_features =
@@ -171,7 +189,10 @@ TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
     std::string no_flags = "fp evtstrm cpuid";
     EXPECT_EQ(0, CpuInfo::TEST_parse_flags(no_flags, CpuInfo::TEST_flag_mappings()));
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, AuxvalMapping) {
     // Linux HWCAP bits
     const unsigned long hwcap_asimd = (1UL << 1);
@@ -201,7 +222,10 @@ TEST(ArmCpuInfoParsing, AuxvalMapping) {
 
     EXPECT_EQ(0, CpuInfo::TEST_init_arm_auxval(0, 0));
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, HeterogeneousCoreProcfsIntersection) {
     // In a big.LITTLE / heterogeneous setup, core 0 might have SVE and crypto while core 1 lacks them.
     // The fallback procfs parser must intersect all online core feature sets so non-common
@@ -244,7 +268,10 @@ TEST(ArmCpuInfoParsing, HeterogeneousCoreProcfsIntersection) {
     std::istringstream iss3(stream_no_features);
     EXPECT_EQ(0, CpuInfo::TEST_init_arm_procfs(iss3));
 }
+#endif
 
+
+#if defined(__aarch64__)
 TEST(ArmCpuInfoParsing, ProcfsTruncatedStreamFailClosed) {
     // Corrupted or truncated stream with I/O error must fail closed
     std::string stream_data =
@@ -255,6 +282,8 @@ TEST(ArmCpuInfoParsing, ProcfsTruncatedStreamFailClosed) {
     EXPECT_EQ(0, CpuInfo::TEST_init_arm_procfs(iss))
             << "Truncated or errored stream must fail closed and return 0 flags";
 }
+#endif
+
 
 TEST(ArmCpuInfoParsing, AuxvalPriorityOverProcfsFallback) {
     // Plain bit literals, not CpuInfo::ARM_* constants: this test verifies arch-agnostic
@@ -356,6 +385,7 @@ TEST(CpuInfoHwcapAvailability, NonZeroMeansAvailable) {
     EXPECT_TRUE(CpuInfo::TEST_hwcap_available(~0UL));
 }
 
+#if defined(__aarch64__)
 TEST(ArmCpuInfoDarwin, SysctlProbing) {
     // 1. Modern Darwin sysctl probing (macOS 12+)
     auto mock_sysctl_modern = [](const char* name) -> bool {
@@ -388,5 +418,7 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
     EXPECT_FALSE(flags_neon_only & CpuInfo::ARM_CRC32);
     EXPECT_FALSE(flags_neon_only & CpuInfo::ARM_AES);
 }
+#endif
+
 
 } // namespace starrocks

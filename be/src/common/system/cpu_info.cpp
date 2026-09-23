@@ -118,8 +118,8 @@ std::vector<long> CpuInfo::cache_sizes;
 std::vector<long> CpuInfo::cache_line_sizes;
 
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
+#if defined(__x86_64__) || defined(__i386__)
     static const std::vector<FlagMapping> mappings = {
-            // x86 flags — sourced from /proc/cpuinfo "flags" line.
             {"ssse3", CpuInfo::SSSE3},
             {"sse4_1", CpuInfo::SSE4_1},
             {"sse4_2", CpuInfo::SSE4_2},
@@ -128,8 +128,9 @@ const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
             {"avx2", CpuInfo::AVX2},
             {"avx512f", CpuInfo::AVX512F},
             {"avx512bw", CpuInfo::AVX512BW},
-            // ARM64 flags — sourced from /proc/cpuinfo "Features" line.
-            // Kernel string names match what appears in "Features: asimd crc32 pmull aes ..."
+    };
+#elif defined(__aarch64__)
+    static const std::vector<FlagMapping> mappings = {
             {"asimd", CpuInfo::ARM_NEON},
             {"crc32", CpuInfo::ARM_CRC32},
             {"pmull", CpuInfo::ARM_PMULL},
@@ -140,6 +141,9 @@ const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
             {"sha1", CpuInfo::ARM_SHA1},
             {"sha2", CpuInfo::ARM_SHA2},
     };
+#else
+#error "CpuInfo CPU feature mappings support only x86 or aarch64"
+#endif
     return mappings;
 }
 
@@ -157,6 +161,7 @@ int64_t CpuInfo::_parse_flags(const string& values, const std::vector<FlagMappin
     return flags;
 }
 
+#if defined(__aarch64__)
 // ARM64 Linux HWCAP / HWCAP2 constants for getauxval
 #ifndef HWCAP_ASIMD
 #define HWCAP_ASIMD (1UL << 1)
@@ -199,6 +204,7 @@ int64_t CpuInfo::_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
     if (hwcap & HWCAP_SHA2) flags |= ARM_SHA2;
     return flags;
 }
+#endif
 
 int64_t CpuInfo::_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
     std::string line;
@@ -241,6 +247,7 @@ bool CpuInfo::_hwcap_available(unsigned long hwcap) {
     return hwcap != 0;
 }
 
+#if defined(__aarch64__)
 int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
     return _intersect_procfs_features(stream, _flag_mappings());
 }
@@ -289,6 +296,7 @@ int64_t CpuInfo::_init_arm_darwin(const std::function<bool(const char*)>& check_
     // Fail closed: Unknown capability state must NOT enable optional extensions blindly.
     return flags;
 }
+#endif
 
 int64_t CpuInfo::_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
     if (aux_available) {
