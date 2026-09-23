@@ -70,7 +70,7 @@ public class LanceStatisticsCalculatorTest {
                     .addColumnStatistic(fixture.ref, fixture.columnStatistic)
                     .setStatsSource(Statistics.StatsSource.TABLE_METADATA).build());
             // Statistics.Builder normalizes row counts; simulate the raw values a connector may return.
-            doReturn(rows.doubleValue()).when(connectorStats).getOutputRowCount();
+            doReturn(rows).when(connectorStats).getOutputRowCount();
         }
         fixture.stub(connectorStats);
         fixture.calculate();
