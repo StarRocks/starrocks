@@ -239,6 +239,16 @@ message PTabletWriterOpenResult {
     optional bool is_repeated_chunk = 2 [default = false];
     repeated int64 immutable_tablet_ids = 3;
     repeated int64 immutable_partition_ids = 4;
+    // Mask of serde encode-level bits this BE honors in the ChunkPB payloads of
+    // tablet_writer_add_chunk(s).
+    //
+    // The level a receiver applies is the one the *sender* records per column in ChunkPB, so a
+    // sender may only set a bit the receiver has advertised here. A BE predating this field leaves
+    // it unset and always parses the payload at level 0; the sender must therefore read "absent"
+    // as "level 0 only". This is the only version signal on the path -- the two ends of this RPC
+    // are different BEs, and a rolling upgrade can put the scan fragment and the sink on nodes of
+    // different versions.
+    optional int32 supported_chunk_encode_level = 5;
 };
 
 // Add batch to tablet writer.
