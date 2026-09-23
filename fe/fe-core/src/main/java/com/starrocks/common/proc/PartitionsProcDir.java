@@ -509,12 +509,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public int analyzeColumn(String columnName) {
-        for (int i = 0; i < this.titleNames.size(); ++i) {
-            if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
+        // This one reports through ErrorReport instead of throwing, and its title list is built per
+        // table rather than being a constant, so only the lookup is shared.
+        try {
+            return ProcUtils.analyzeColumn(this.titleNames, columnName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+            return -1;
         }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        return -1;
     }
 }

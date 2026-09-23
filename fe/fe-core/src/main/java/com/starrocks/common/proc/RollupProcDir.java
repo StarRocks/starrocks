@@ -162,12 +162,7 @@ public class RollupProcDir implements ProcDirInterface {
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
-        for (int i = 0; i < TITLE_NAMES.size(); ++i) {
-            if (TITLE_NAMES.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
-        }
-        throw new AnalysisException("Title name[" + columnName + "] does not exist");
+        return ProcUtils.analyzeColumn(TITLE_NAMES, columnName);
     }
 
     @Override
