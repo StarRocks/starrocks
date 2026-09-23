@@ -376,7 +376,8 @@ enum TFunctionBinaryType {
 }
 
 enum TAIModelSource {
-  SYSTEM
+  SYSTEM = 0,
+  PROVIDER = 1
 }
 
 // Represents a fully qualified function name.

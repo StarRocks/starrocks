@@ -110,6 +110,7 @@ import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
@@ -162,6 +163,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -1425,6 +1427,7 @@ public class UtFrameUtils {
         }
 
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+        rejectUncapturedAIProviders(statementBase);
 
         if (statementBase instanceof QueryStatement) {
             return getQueryExecPlan((QueryStatement) statementBase, connectContext);
@@ -1440,10 +1443,20 @@ public class UtFrameUtils {
         tearMockEnv();
     }
 
+    private static void rejectUncapturedAIProviders(StatementBase statement) {
+        if (ResolvedAIFunctionDetector.findAll(statement).stream()
+                .anyMatch(call -> call.getFn().getAiModelSource() == TAIModelSource.PROVIDER)) {
+            throw new SemanticException("Query dump replay does not support named AI providers");
+        }
+    }
+
     public static ExecPlan getPlanFragmentFromQueryDump(ConnectContext connectContext, QueryDumpInfo dumpInfo)
             throws Exception {
         String q = initMockEnv(connectContext, dumpInfo);
         try {
+            // Dumps do not capture AI model metadata. Never resolve an uncaptured dependency from live state.
+            StatementBase statement = parseStmtWithNewParser(q, connectContext);
+            rejectUncapturedAIProviders(statement);
             return UtFrameUtils.getPlanAndFragment(connectContext, q).second;
         } finally {
             tearMockEnv();
@@ -1498,6 +1511,7 @@ public class UtFrameUtils {
                 com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
             }
 
+            rejectUncapturedAIProviders(statementBase);
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
             lock(dbs);
 

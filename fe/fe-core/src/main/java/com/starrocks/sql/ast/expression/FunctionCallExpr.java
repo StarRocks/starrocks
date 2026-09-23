@@ -204,6 +204,10 @@ public class FunctionCallExpr extends Expr {
     }
 
     protected FunctionCallExpr(FunctionCallExpr other) {
+        this(other, other.aiModelConfigId);
+    }
+
+    private FunctionCallExpr(FunctionCallExpr other, String aiModelConfigId) {
         super(other);
         fn = other.fn;
         fnRef = other.fnRef;
@@ -219,7 +223,12 @@ public class FunctionCallExpr extends Expr {
             fnParams = new FunctionParams(other.fnParams.isDistinct(), children, other.fnParams.getOrderByElements());
         }
         this.isMergeAggFn = other.isMergeAggFn;
-        this.aiModelConfigId = other.aiModelConfigId;
+        this.aiModelConfigId = aiModelConfigId;
+    }
+
+    /** Copies a planner-created execution call with its immutable, credential-free configuration ID. */
+    public FunctionCallExpr withAiModelConfigId(String aiModelConfigId) {
+        return new FunctionCallExpr(this, aiModelConfigId);
     }
 
     public String getAiModelConfigId() {

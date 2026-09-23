@@ -23,6 +23,15 @@ import java.util.Map;
 public class SqlCredentialRedactorTest {
 
     @Test
+    public void testRedactAIProviderApiKey() {
+        String sql = "CREATE AI PROVIDER p PROPERTIES ('API_KEY'='secret-ai-key')";
+        Assertions.assertTrue(SqlCredentialRedactor.mayNeedCredentialRedaction(sql));
+        Assertions.assertFalse(SqlCredentialRedactor.redact(sql).contains("secret-ai-key"));
+        Assertions.assertFalse(new PrintableMap<>(java.util.Map.of("api_key", "secret-ai-key"),
+                "=", true, false, true).toString().contains("secret-ai-key"));
+    }
+
+    @Test
     public void testRedactAwsCredentials() {
         String sql = "select * from FILES(\n" +
                 "        \"path\" = \"s3://chaoyli/people.parquet\",\n" +

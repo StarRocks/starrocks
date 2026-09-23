@@ -875,7 +875,7 @@ public class PlanFragmentBuilder {
             if (aiProject) {
                 projectNode = new AIProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap,
-                        context.getOrCreateSystemChatConfig());
+                        context.bindAIModelConfigs(projectMap));
             } else {
                 projectNode = new ProjectNode(context.getNextNodeId(), tupleDescriptor,
                         inputFragment.getPlanRoot(), projectMap, commonExprMap);
