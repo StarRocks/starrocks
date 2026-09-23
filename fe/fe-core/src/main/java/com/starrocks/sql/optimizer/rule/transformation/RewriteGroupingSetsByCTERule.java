@@ -30,6 +30,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -189,6 +190,20 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
                 .setChildOutputColumns(childOutputColumns)
                 .isUnionAll(true);
         OptExpression rightTree = OptExpression.create(unionAllBuilder.build(), children);
+
+        // The aggregation being replaced may carry a HAVING predicate, a limit and a projection.
+        // The union above outputs exactly that aggregation's own column refs (see outputColumns),
+        // so they can be re-attached here without remapping. Without this the HAVING silently
+        // disappears and the query returns the rows it was supposed to filter out.
+        if (aggregate.getPredicate() != null) {
+            rightTree = OptExpression.create(new LogicalFilterOperator(aggregate.getPredicate()), rightTree);
+        }
+        if (aggregate.hasLimit()) {
+            rightTree.getOp().setLimit(aggregate.getLimit());
+        }
+        if (aggregate.getProjection() != null) {
+            rightTree.getOp().setProjection(aggregate.getProjection());
+        }
 
         context.getCteContext().addForceCTE(cteId);
 
