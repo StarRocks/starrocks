@@ -738,8 +738,15 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [fe-ut, be-ut]
-    if: always()
+    needs: [basic-checker, fe-ut, be-ut]
+    # Skip when the RUN CHECKER gate did not pass: nothing downstream ran, so there is
+    # nothing to clean and no artifact worth uploading.
+    #
+    # `result`, not `outputs.PASS`: PASS is written by the job's FIRST step, so it is already
+    # 'true' by the time any of the later gates (blacklist, title format, branch access,
+    # approve) fails. Gating on it alone let Teardown run after every RUN CHECKER failure.
+    # PASS is still checked, for the case where the job succeeds but holds the PR (`pending`).
+    if: always() && needs.basic-checker.result == 'success' && needs.basic-checker.outputs.PASS == 'true'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}

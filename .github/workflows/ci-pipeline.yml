@@ -1483,7 +1483,13 @@ jobs:
       - basic-checker
     # Skip when the gate (RUN CHECKER) did not pass: nothing downstream ran, so there
     # is no cluster/ECI to clean, and this would otherwise waste a scarce quick runner.
-    if: always() && needs.basic-checker.outputs.PASS == 'true'
+    #
+    # `result` is what actually catches a failed gate. PASS is written by the job's FIRST
+    # step, so it is already 'true' when a later step (blacklist, title format, branch
+    # access, approve) fails -- checking PASS alone never skipped anything, and Teardown ran
+    # after every RUN CHECKER failure. PASS is kept for the case where the job succeeds but
+    # holds the PR (`pending` label).
+    if: always() && needs.basic-checker.result == 'success' && needs.basic-checker.outputs.PASS == 'true'
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
