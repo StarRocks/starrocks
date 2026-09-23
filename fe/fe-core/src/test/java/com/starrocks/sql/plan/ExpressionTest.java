@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.planner.TupleId;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.CastExpr;
@@ -1983,6 +1984,25 @@ public class ExpressionTest extends PlanTestBase {
             plan = getFragmentPlan(sql);
             assertContains(plan, "CAST(json_query(parse_json(", "AS TINYINT");
         } finally {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
+    public void testJsonFusionStrictModeKeepsSharedParse() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        long previousSqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            connectContext.getSessionVariable().setSqlMode(previousSqlMode | SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION);
+            String sql = "select cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as bigint), "
+                    + "cast(json_query(parse_json(cast(v4 as varchar)), '$.b') as bigint) from t1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "common expressions:", "parse_json(");
+            Assertions.assertEquals(1, StringUtils.countMatches(plan, "parse_json("));
+            Assertions.assertFalse(plan.contains("json_query_from_string"));
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(previousSqlMode);
             connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
         }
     }

@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -38,6 +39,11 @@ public class JsonExtractFusionRule extends BottomUpScalarOperatorRewriteRule {
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
         ConnectContext connectContext = ConnectContext.get();
         if (connectContext == null || !connectContext.getSessionVariable().isEnableJsonExtractFusion()) {
+            return call;
+        }
+        // The BE must fully parse strict input, so fusion cannot save work and would prevent shared parsing.
+        if (SqlModeHelper.check(connectContext.getSessionVariable().getSqlMode(),
+                SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION)) {
             return call;
         }
         if (FunctionSet.JSON_QUERY.equalsIgnoreCase(call.getFnName()) && call.getChildren().size() == 2) {
