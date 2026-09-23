@@ -279,12 +279,36 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Slice* data, size_t size
     } else if (max_length <= 128) {
         append_fixed_length<T, 128>(data, size, &_bytes, &_offsets);
     } else {
+        // Values wider than the largest fixed-length specialization are copied at their
+        // exact length, so we cannot reuse append_fixed_length here. Size the destination
+        // up front anyway: appending one value at a time lets the byte buffer grow
+        // geometrically, which re-copies the whole buffer on every doubling and leaves the
+        // final capacity at up to twice the bytes actually held. That is what turns a chunk
+        // of large strings into a multi-hundred-MB allocation spike in the scan path.
+        uint64_t total_length = 0;
         for (size_t i = 0; i < size; i++) {
+<<<<<<< HEAD
             const auto& s = data[i];
             const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
             _bytes.insert(_bytes.end(), p, p + s.size);
             _offsets.emplace_back(_bytes.size());
+=======
+            total_length += data[i].size;
+>>>>>>> d386963 ([BugFix] Bound the data-driven allocations in the parquet/orc/csv read path against the query memory limit (#78573))
         }
+
+        const uint64_t old_bytes_size = bytes.size();
+        const uint64_t new_bytes_size = old_bytes_size + total_length;
+        bytes.resize(new_bytes_size);
+
+        auto* __restrict dst_bytes = bytes.data();
+        uint64_t offset = old_bytes_size;
+        for (size_t i = 0; i < size; i++) {
+            memcpy(dst_bytes + offset, data[i].data, data[i].size);
+            offset += data[i].size;
+            _offsets.emplace_back(offset);
+        }
+        DCHECK_EQ(offset, new_bytes_size);
     }
     _slices_cache = false;
     return true;
