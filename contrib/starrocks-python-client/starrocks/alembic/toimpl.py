@@ -21,6 +21,7 @@ from sqlalchemy import MetaData
 
 from starrocks.alembic.ops import (
     AlterMaterializedViewOp,
+    AlterTableColumnsOp,
     AlterTableDistributionOp,
     AlterTableEngineOp,
     AlterTableKeyOp,
@@ -32,7 +33,6 @@ from starrocks.alembic.ops import (
     CreateViewOp,
     DropMaterializedViewOp,
     DropViewOp,
-    StarRocksAlterColumnsOp,
 )
 from starrocks.sql.ddl import (
     AlterMaterializedView,
@@ -171,8 +171,8 @@ def alter_table_properties(operations, op: AlterTablePropertiesOp):
     )
 
 
-@Operations.implementation_for(StarRocksAlterColumnsOp)
-def starrocks_alter_columns(operations, op: StarRocksAlterColumnsOp):
+@Operations.implementation_for(AlterTableColumnsOp)
+def alter_table_columns(operations, op: AlterTableColumnsOp):
     """Execute a combined ALTER TABLE ADD/DROP COLUMN statement.
 
     Emits a single ``ALTER TABLE ... ADD COLUMN ..., DROP COLUMN ...`` so
@@ -183,7 +183,7 @@ def starrocks_alter_columns(operations, op: StarRocksAlterColumnsOp):
 
     from starrocks.sql.ddl import AlterTableColumns
     logger.debug(
-        "implementation starrocks_alter_columns: %s (adds=%s, drops=%s)",
+        "implementation alter_table_columns: %s (adds=%s, drops=%s)",
         op.table_name, [c.name for c in op.adds], [c.name for c in op.drops],
     )
 

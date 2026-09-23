@@ -992,8 +992,8 @@ class AlterTablePropertiesOp(ops.AlterTableOp):
         return ("alter_table_properties", self.schema, self.table_name, self.properties)
 
 
-@Operations.register_operation("starrocks_alter_columns")
-class StarRocksAlterColumnsOp(ops.AlterTableOp):
+@Operations.register_operation("alter_table_columns")
+class AlterTableColumnsOp(ops.AlterTableOp):
     """Represent a combined ALTER TABLE ADD/DROP COLUMN operation for StarRocks.
 
     A single StarRocks table can only have one in-flight schema-change job at a
@@ -1028,7 +1028,7 @@ class StarRocksAlterColumnsOp(ops.AlterTableOp):
         self.drops: List[Column] = list(drops or [])
 
     @classmethod
-    def starrocks_alter_columns(
+    def alter_table_columns(
         cls,
         operations: Operations,
         table_name: str,
@@ -1040,9 +1040,9 @@ class StarRocksAlterColumnsOp(ops.AlterTableOp):
         op = cls(table_name, adds=adds, drops=drops, schema=schema)
         return operations.invoke(op)
 
-    def reverse(self) -> "StarRocksAlterColumnsOp":
+    def reverse(self) -> "AlterTableColumnsOp":
         """Reverse the operation: drop what was added and re-add what was dropped."""
-        return StarRocksAlterColumnsOp(
+        return AlterTableColumnsOp(
             table_name=self.table_name,
             adds=list(self.drops),
             drops=list(self.adds),
@@ -1050,14 +1050,14 @@ class StarRocksAlterColumnsOp(ops.AlterTableOp):
         )
 
     def __str__(self) -> str:
-        return (f"StarRocksAlterColumnsOp(table_name={self.table_name!r}, "
+        return (f"AlterTableColumnsOp(table_name={self.table_name!r}, "
                 f"adds={[c.name for c in self.adds]!r}, "
                 f"drops={[c.name for c in self.drops]!r}, schema={self.schema!r})")
 
     def to_diff_tuple(self) -> Tuple[Any, ...]:
         """Return Alembic diff tuple."""
         return (
-            "starrocks_alter_columns",
+            "alter_table_columns",
             self.schema,
             self.table_name,
             [c.name for c in self.adds],
@@ -1066,7 +1066,7 @@ class StarRocksAlterColumnsOp(ops.AlterTableOp):
 
 
 # Rewriter that coalesces multiple per-column ALTER TABLE operations on the same
-# table into a single StarRocksAlterColumnsOp, so autogenerate emits one
+# table into a single AlterTableColumnsOp, so autogenerate emits one
 # ``ALTER TABLE ... ADD/DROP COLUMN`` statement (one schema-change job) instead
 # of one statement per column. Wire it into ``env.py`` via
 # ``context.configure(process_revision_directives=combine_column_alters)``.
@@ -1078,7 +1078,7 @@ def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
     """Coalesce a table's AddColumnOp/DropColumnOp into a single combined op.
 
     Every ``ADD COLUMN`` and ``DROP COLUMN`` for the table is folded into one
-    ``StarRocksAlterColumnsOp`` (a single ``ALTER TABLE``, hence one
+    ``AlterTableColumnsOp`` (a single ``ALTER TABLE``, hence one
     schema-change job), placed at the position of the first column change. Other
     operations keep their relative position. With fewer than two column changes
     there is nothing to combine and the container is returned unchanged.
@@ -1115,7 +1115,7 @@ def _combine_column_alters(context, revision, op: ops.ModifyTableOps):
 
     # Drop the combined op into the placeholder slot, preserving the position of
     # any non-column operations relative to the column changes.
-    new_ops[combined_pos] = StarRocksAlterColumnsOp(
+    new_ops[combined_pos] = AlterTableColumnsOp(
         table_name=op.table_name,
         adds=adds,
         drops=drops,

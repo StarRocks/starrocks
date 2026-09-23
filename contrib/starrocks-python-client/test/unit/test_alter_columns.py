@@ -23,8 +23,8 @@ from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Column, MetaData, Table
 
 from starrocks import INTEGER, VARCHAR
-from starrocks.alembic.ops import StarRocksAlterColumnsOp, _combine_column_alters
-from starrocks.alembic.render import _render_starrocks_alter_columns
+from starrocks.alembic.ops import AlterTableColumnsOp, _combine_column_alters
+from starrocks.alembic.render import _render_alter_table_columns
 from starrocks.dialect import StarRocksDialect
 from starrocks.sql.ddl import AlterTableColumns
 
@@ -57,7 +57,7 @@ class TestCombineColumnAltersRewriter:
 
         assert len(res.ops) == 1
         combined = res.ops[0]
-        assert isinstance(combined, StarRocksAlterColumnsOp)
+        assert isinstance(combined, AlterTableColumnsOp)
         assert combined.table_name == "my_table"
         assert combined.schema == "mydb"
         assert [c.name for c in combined.adds] == ["a", "b"]
@@ -81,7 +81,7 @@ class TestCombineColumnAltersRewriter:
         res = _combine_column_alters(None, None, mto)
 
         assert len(res.ops) == 2
-        assert isinstance(res.ops[0], StarRocksAlterColumnsOp)
+        assert isinstance(res.ops[0], AlterTableColumnsOp)
         assert [c.name for c in res.ops[0].adds] == ["a"]
         assert [c.name for c in res.ops[0].drops] == ["c"]
         assert res.ops[1] is other
@@ -98,11 +98,11 @@ class TestCombineColumnAltersRewriter:
         assert combined.adds == []
 
 
-class TestStarRocksAlterColumnsOp:
+class TestAlterTableColumnsOp:
     def test_reverse_swaps_adds_and_drops(self):
         add_col = Column("a", INTEGER)
         drop_col = Column("c", VARCHAR(50))
-        op = StarRocksAlterColumnsOp("t", adds=[add_col], drops=[drop_col], schema="db")
+        op = AlterTableColumnsOp("t", adds=[add_col], drops=[drop_col], schema="db")
 
         rev = op.reverse()
         assert [c.name for c in rev.adds] == ["c"]
@@ -110,13 +110,13 @@ class TestStarRocksAlterColumnsOp:
         assert rev.schema == "db"
 
     def test_to_diff_tuple(self):
-        op = StarRocksAlterColumnsOp(
+        op = AlterTableColumnsOp(
             "t",
             adds=[Column("a", INTEGER)],
             drops=[Column("c", INTEGER)],
             schema="db",
         )
-        assert op.to_diff_tuple() == ("starrocks_alter_columns", "db", "t", ["a"], ["c"])
+        assert op.to_diff_tuple() == ("alter_table_columns", "db", "t", ["a"], ["c"])
 
 
 class TestAlterTableColumnsCompile:
@@ -150,20 +150,68 @@ class TestAlterTableColumnsCompile:
             ddl.compile(dialect=StarRocksDialect())
 
 
-class TestRenderStarRocksAlterColumns:
+class TestRenderAlterTableColumns:
     def test_render_add_and_drop(self):
         ctx = _autogen_context()
-        op = StarRocksAlterColumnsOp(
+        op = AlterTableColumnsOp(
             "my_table",
             adds=[Column("a", INTEGER), Column("b", VARCHAR(50))],
             drops=[Column("c", INTEGER)],
             schema="mydb",
         )
-        rendered = _normalize(_render_starrocks_alter_columns(ctx, op))
-        assert rendered.startswith("op.starrocks_alter_columns(")
+        rendered = _normalize(_render_alter_table_columns(ctx, op))
+        assert rendered.startswith("op.alter_table_columns(")
         assert "'my_table'" in rendered
         assert "adds=[" in rendered
         assert "sa.Column('a'" in rendered
         assert "sa.Column('b'" in rendered
         assert "drops=[sa.Column('c')]" in rendered
         assert "schema='mydb'" in rendered
+
+
+class TestRangeSortKeyCoalescing:
+    """Pin the SQL shape the FE rejects on shared-data RANGE-distributed tables.
+
+    ``SchemaChangeHandler`` routes an ADD of a key column or a DROP of a
+    sort-key column on such a table to a dedicated rewrite job and throws
+    "... can not be combined with other alter operations" when the statement
+    carries more than one clause. These tests record that the rewriter is
+    currently distribution-blind, so it emits exactly that shape; the live
+    behaviour is covered by
+    ``test/integration/test_combine_column_alters_range_key.py``.
+    """
+
+    def test_sort_key_drop_is_coalesced_with_another_change(self):
+        # k2 would be part of the sort key of a DUPLICATE KEY(k1, k2) table.
+        mto = ops.ModifyTableOps("t_range", ops=[
+            ops.DropColumnOp("t_range", "k2"),
+            ops.AddColumnOp("t_range", Column("v2", INTEGER)),
+        ], schema="mydb")
+
+        res = _combine_column_alters(None, None, mto)
+
+        assert len(res.ops) == 1
+        combined = res.ops[0]
+        assert isinstance(combined, AlterTableColumnsOp)
+        # Both changes land in one statement -- rejected by the FE on a
+        # shared-data RANGE table. A fix must leave the sort-key drop standalone.
+        assert [c.name for c in combined.drops] == ["k2"]
+        assert [c.name for c in combined.adds] == ["v2"]
+
+    def test_coalesced_ddl_renders_as_one_multi_clause_statement(self):
+        add_col = Column("v2", INTEGER)
+        # Bind the column to a table so the compiler can render its full
+        # specification, mirroring the toimpl implementation.
+        Table("t_range", MetaData(), add_col, schema="mydb")
+        ddl = AlterTableColumns(
+            "t_range",
+            adds=[add_col],
+            drops=["k2"],
+            schema="mydb",
+        )
+        sql = _normalize(str(ddl.compile(dialect=StarRocksDialect())))
+
+        assert sql.count("ALTER TABLE") == 1
+        assert "ADD COLUMN" in sql and "DROP COLUMN" in sql
+        # One ALTER carrying two clauses: the shape the routed range paths refuse.
+        assert sql.index("DROP COLUMN") > sql.index("ALTER TABLE")

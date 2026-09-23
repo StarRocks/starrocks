@@ -588,7 +588,7 @@ With the rewriter enabled, autogenerate emits a single combined operation for ea
 ```python
 # inside versions/<revision_id>_...py
 def upgrade():
-    op.starrocks_alter_columns(
+    op.alter_table_columns(
         'my_table',
         adds=[sa.Column('a', INTEGER(), nullable=True),
               sa.Column('b', VARCHAR(50), nullable=True)],
@@ -596,7 +596,7 @@ def upgrade():
     )
 
 def downgrade():
-    op.starrocks_alter_columns(
+    op.alter_table_columns(
         'my_table',
         adds=[sa.Column('c', INTEGER(), nullable=True)],
         drops=[sa.Column('a'), sa.Column('b')],
@@ -607,7 +607,15 @@ def downgrade():
 
 - Only `ADD COLUMN` and `DROP COLUMN` are coalesced. `MODIFY COLUMN` (type/nullability changes) and property/distribution changes remain separate statements. If a table has both a combined add/drop *and* a modify in the same revision, they are still two schema-change jobs — enable the wait option below, or split them into separate revisions.
 - The combined operation compiles to a single `ALTER TABLE`, so its column ordering within one statement does not matter to StarRocks.
-- Already-generated migration scripts are not rewritten retroactively; the rewriter only affects new `--autogenerate` runs. You can also call `op.starrocks_alter_columns(...)` by hand.
+- **Known gap — RANGE-distributed tables (StarRocks 4.2 / CelerData 26.2, private preview).** In shared-data mode with the FE config `enable_range_distribution = true`, a table declared with an explicit key type or `ORDER BY` and no `DISTRIBUTED BY` clause is distributed by range. On such a table, StarRocks routes a change that shifts the range sort key — adding a key column, or dropping a sort-key column — to a dedicated rewrite job that it refuses to run alongside any other clause:
+
+  ```
+  ERROR 1064: DROP COLUMN that changes the range sort key on a range-distribution
+  table can not be combined with other alter operations
+  ```
+
+  The rewriter coalesces those changes like any other, so a revision that mixes one of them with a second column change produces a statement the FE rejects — even though the same changes succeed as separate statements. Until this is fixed, on a range-distributed table either keep such a revision to a single column change, or skip the rewriter for it and apply the changes as individual `op.add_column`/`op.drop_column` calls with the wait option below enabled (the routed job is a real data rewrite, so the next statement is only accepted once it has finished). Earlier versions are unaffected: range distribution does not exist before 4.1, and on 4.1 these column changes are rejected outright whether or not they are combined.
+- Already-generated migration scripts are not rewritten retroactively; the rewriter only affects new `--autogenerate` runs. You can also call `op.alter_table_columns(...)` by hand.
 
 #### Waiting for schema changes to reach a terminal state (opt-in)
 

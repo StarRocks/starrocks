@@ -22,6 +22,7 @@ from sqlalchemy.types import TypeEngine
 
 from .ops import (
     AlterMaterializedViewOp,
+    AlterTableColumnsOp,
     AlterTableDistributionOp,
     AlterTableOrderOp,
     AlterTablePropertiesOp,
@@ -30,7 +31,6 @@ from .ops import (
     CreateViewOp,
     DropMaterializedViewOp,
     DropViewOp,
-    StarRocksAlterColumnsOp,
 )
 
 
@@ -307,9 +307,9 @@ def _render_alter_table_properties(autogen_context: AutogenContext, op: AlterTab
     return _render_op_call(autogen_context, "alter_table_properties", args)
 
 
-@renderers.dispatch_for(StarRocksAlterColumnsOp)
-def _render_starrocks_alter_columns(autogen_context: AutogenContext, op: StarRocksAlterColumnsOp) -> str:
-    """Render a StarRocksAlterColumnsOp as a single op.starrocks_alter_columns(...) call.
+@renderers.dispatch_for(AlterTableColumnsOp)
+def _render_alter_table_columns(autogen_context: AutogenContext, op: AlterTableColumnsOp) -> str:
+    """Render an AlterTableColumnsOp as a single op.alter_table_columns(...) call.
 
     Added columns are rendered with Alembic's standard column renderer (so
     StarRocks types and their imports are handled just like op.add_column).
@@ -328,6 +328,6 @@ def _render_starrocks_alter_columns(autogen_context: AutogenContext, op: StarRoc
     if op.schema:
         args.append(f"schema={op.schema!r}")
 
-    call = _render_op_call(autogen_context, "starrocks_alter_columns", args)
-    logger.debug("render starrocks_alter_columns: %s", call)
+    call = _render_op_call(autogen_context, "alter_table_columns", args)
+    logger.debug("render alter_table_columns: %s", call)
     return call

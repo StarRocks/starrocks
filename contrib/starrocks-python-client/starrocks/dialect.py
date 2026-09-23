@@ -1672,11 +1672,30 @@ class StarRocksDialect(MySQLDialect_pymysql):
 
     @staticmethod
     def gen_show_alter_table_statement(table_name: str, alter_type: str,
-            schema: Optional[str] = None, state: str = 'RUNNING') -> str:
-        """Generate the SHOW ALTER TABLE OPTIMIZE statement for a given table."""
+            schema: Optional[str] = None, state: Optional[str] = 'RUNNING',
+            order_by: Optional[str] = None, limit: Optional[int] = None,
+            bind_table_name: bool = False) -> str:
+        """Generate a SHOW ALTER TABLE [ COLUMN | OPTIMIZE ] statement for a table.
+
+        Args:
+            table_name: The name of the table to filter on.
+            alter_type: ``COLUMN`` or ``OPTIMIZE``.
+            schema: The schema (StarRocks database) of the table.
+            state: Filter on a job state (e.g. ``RUNNING``); pass ``None`` to
+                return jobs in any state.
+            order_by: An ``ORDER BY`` expression, e.g. ``JobId DESC``.
+            limit: A ``LIMIT`` row count.
+            bind_table_name: Render the table predicate as the bound parameter
+                ``:table_name`` instead of a literal, so the caller can pass it
+                through the driver (the caller then binds ``table_name``).
+        """
         from_db_clause = f"FROM `{schema}` " if schema else ""
+        table_predicate = ":table_name" if bind_table_name else f"'{table_name}'"
         state_clause = f" AND State='{state}'" if state else ""
-        stmt = f"SHOW ALTER TABLE {alter_type} {from_db_clause}WHERE TableName='{table_name}'{state_clause}"
+        order_by_clause = f" ORDER BY {order_by}" if order_by else ""
+        limit_clause = f" LIMIT {int(limit)}" if limit else ""
+        stmt = (f"SHOW ALTER TABLE {alter_type} {from_db_clause}"
+                f"WHERE TableName={table_predicate}{state_clause}{order_by_clause}{limit_clause}")
         # logger.debug("generate show alter table statement: %s", stmt)
         return stmt
 
