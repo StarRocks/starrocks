@@ -156,11 +156,21 @@ bool SinkBuffer::is_finished() const {
 }
 
 void SinkBuffer::update_profile(RuntimeProfile* profile) {
+<<<<<<< HEAD
     auto* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
     auto* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
     auto* overall_timer = ADD_TIMER(profile, "OverallTime");
+=======
+    RuntimeProfile::Counter* rpc_count = ADD_COUNTER(profile, "RpcCount", TUnit::UNIT);
+    RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
+    RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
+    RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
+    RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
+    RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
+>>>>>>> b8de366 ([Enhancement] Split exchange sink wait time in profiles (#79293))
 
     COUNTER_SET(rpc_count, _rpc_count);
     COUNTER_SET(rpc_avg_timer, _rpc_cumulative_time / std::max(_rpc_count.load(), static_cast<int64_t>(1)));
@@ -168,11 +178,19 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
+<<<<<<< HEAD
     // WaitTime consists two parts
     // 1. buffer full time
     // 2. pending finish time
     COUNTER_SET(wait_timer, _full_time);
     COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+=======
+    const int64_t buffer_full_time = _full_time.load();
+    const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
+    COUNTER_SET(buffer_full_timer, buffer_full_time);
+    COUNTER_SET(pending_finish_timer, pending_finish_time);
+    COUNTER_SET(wait_timer, buffer_full_time + pending_finish_time);
+>>>>>>> b8de366 ([Enhancement] Split exchange sink wait time in profiles (#79293))
 
     auto* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     auto* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
