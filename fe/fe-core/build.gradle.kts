@@ -94,6 +94,7 @@ dependencies {
     implementation("com.fasterxml.uuid:java-uuid-generator")
     implementation("com.github.ben-manes.caffeine:caffeine")
     testImplementation("com.github.hazendaz.jmockit:jmockit")
+    testImplementation("com.unboundid:unboundid-ldapsdk")
     implementation("com.github.oshi:oshi-core")
     implementation("com.github.seancfoley:ipaddress")
     implementation("com.google.cloud.bigdataoss:gcs-connector")
@@ -167,6 +168,11 @@ dependencies {
     testImplementation("org.apache.commons:commons-dbcp2")
     implementation("org.apache.commons:commons-lang3")
     implementation("org.apache.commons:commons-pool2")
+    implementation("org.apache.flink:flink-core")
+    implementation("org.apache.fluss:fluss-client")
+    implementation("org.apache.fluss:fluss-common")
+    implementation("org.apache.fluss:fluss-flink-common")
+    implementation("org.apache.fluss:fluss-lake-paimon")
     implementation("org.apache.groovy:groovy-groovysh")
     implementation("org.apache.hadoop:hadoop-aliyun") {
         exclude(group = "org.jdom", module = "jdom2")
@@ -550,8 +556,8 @@ checkstyle {
 tasks.withType<Checkstyle>().configureEach {
     // Don't check generated source files
     setSource(source.filter {
-        !it.path.contains("/generated-sources/") &&
-                !it.path.contains("/sql/parser/gen/")
+        val path = it.path.replace('\\', '/')
+        !path.contains("/generated-sources/") && !path.contains("/sql/parser/gen/")
     })
 
     ignoreFailures = false  // Match Maven behavior: failsOnError=true
