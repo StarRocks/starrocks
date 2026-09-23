@@ -3447,12 +3447,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableJdbcColumnStatistics = true;
 
     // Let a JDBC scan render the join runtime filters it already receives into the remote SQL's
-    // outermost WHERE, instead of dropping them and pulling every row back. Off by default while
-    // the type coverage is still narrow. Deliberately not INVISIBLE, unlike three of the four
+    // outermost WHERE, instead of dropping them and pulling every row back. Deliberately not
+    // INVISIBLE, unlike three of the four
     // push-down switches above: those do not show up in SHOW VARIABLES LIKE '%jdbc%', which makes
     // it easy to conclude a switch does not exist while diagnosing a scan that is not pushing down.
     @VarAttr(name = ENABLE_JDBC_RUNTIME_FILTER_PUSH_DOWN)
-    private boolean enableJdbcRuntimeFilterPushDown = false;
+    private boolean enableJdbcRuntimeFilterPushDown = true;
 
     // Max items in a literal IN list that predicate/HAVING pushdown will send to a JDBC source:
     // -1 = no limit; 0 = never push an IN down; N > 0 = push only lists of at most N items.

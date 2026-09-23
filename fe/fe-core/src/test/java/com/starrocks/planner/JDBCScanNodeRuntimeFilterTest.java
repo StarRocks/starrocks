@@ -566,10 +566,10 @@ public class JDBCScanNodeRuntimeFilterTest {
         Assertions.assertEquals(0, toThrift(scanNode).getRuntime_filter_columnsSize());
     }
 
-    /** The variable is off unless someone turns it on: a fresh session must not push down. */
+    /** A fresh session enables JDBC runtime filter pushdown by default. */
     @Test
-    public void testRuntimeFilterPushDownIsOffByDefault() {
-        Assertions.assertFalse(new ConnectContext().getSessionVariable().isEnableJdbcRuntimeFilterPushDown());
+    public void testRuntimeFilterPushDownIsOnByDefault() {
+        Assertions.assertTrue(new ConnectContext().getSessionVariable().isEnableJdbcRuntimeFilterPushDown());
     }
 
     /** No session at all (e.g. an internal replay path) must not be read as permission. */
