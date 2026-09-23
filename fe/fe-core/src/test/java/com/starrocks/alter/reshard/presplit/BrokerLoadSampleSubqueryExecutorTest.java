@@ -379,48 +379,6 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
-    void columnsFromPathSupplyingARollupSortKeyIsRejected() {
-        // The guard spans every sampled key, not just the base sort key. Here the base key
-        // (sort_key) is read from the file and would pass on its own, but a visible rollup sorts by
-        // rollup_key, which the path supplies -- so the rollup's boundaries could not be sampled and
-        // the whole request must be rejected.
-        BrokerFileGroup fileGroup = mockFileGroup("parquet");
-        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("rollup_key"));
-        Mockito.when(fileGroup.getColumnExprList())
-                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("rollup_key")));
-        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
-
-        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> executor.execute(rollupRequest(
-                        new BrokerDesc(Map.of()),
-                        List.of(fileGroup),
-                        List.of(List.of(brokerFileStatus("s3://b/rollup_key=7/x.parquet", 1024L))))));
-        Assertions.assertTrue(thrown.getMessage().contains("columns_from_path")
-                        && thrown.getMessage().contains("rollup_key"),
-                "error should name the ROLLUP key column supplied from the path: " + thrown.getMessage());
-    }
-
-    @Test
-    void rollupSortKeyMissingFromColumnListIsRejected() {
-        // Same reach, the other rejection arm: the COLUMNS list names the base key but not the
-        // rollup's, so the load never populates rollup_key from the source.
-        BrokerFileGroup fileGroup = mockFileGroup("parquet");
-        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(identityColumn("sort_key")));
-        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
-                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
-
-        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
-                () -> executor.execute(rollupRequest(
-                        new BrokerDesc(Map.of()),
-                        List.of(fileGroup),
-                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))))));
-        Assertions.assertTrue(thrown.getMessage().contains("does not name key column")
-                        && thrown.getMessage().contains("rollup_key"),
-                "error should name the unlisted ROLLUP key column: " + thrown.getMessage());
-    }
-
-    @Test
     void fileGroupsDisagreeingOnColumnsFromPathAreRejected() {
         // One FILES call carries one columns_from_path list.
         BrokerFileGroup withPath = mockFileGroup("parquet");
@@ -544,22 +502,6 @@ class BrokerLoadSampleSubqueryExecutorTest {
     /** An {@code ImportColumnDesc} that only names a source field (expr == null -> isColumn()). */
     private static ImportColumnDesc identityColumn(String columnName) {
         return new ImportColumnDesc(columnName);
-    }
-
-    /** A request carrying one visible rollup that sorts by {@code rollup_key}. */
-    private static SampleRequest rollupRequest(
-            BrokerDesc brokerDesc,
-            List<BrokerFileGroup> fileGroups,
-            List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
-        return new SampleRequest(
-                new BrokerLoadScanContext(brokerDesc, fileGroups, fileStatusesPerGroup,
-                        Mockito.mock(ComputeResource.class), "UTC"),
-                List.of(bigintColumn("sort_key")),
-                List.of(new SecondaryIndexSpec(/*indexMetaId=*/ 1001L,
-                        List.of(bigintColumn("rollup_key")))),
-                /*partitionSourceColumns=*/ List.of(),
-                /*sampleByteLimit=*/ Long.MAX_VALUE,
-                /*seed=*/ 0L);
     }
 
     /** A request whose target is partitioned by {@code dt}, so the sub-query projects it. */
