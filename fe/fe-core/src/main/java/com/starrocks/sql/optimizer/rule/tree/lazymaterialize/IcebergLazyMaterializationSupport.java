@@ -28,6 +28,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.type.IntegerType;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public class IcebergLazyMaterializationSupport implements LazyMaterializationSupport {
@@ -60,7 +61,15 @@ public class IcebergLazyMaterializationSupport implements LazyMaterializationSup
     @Override
     public ColumnRefSet predicateUsedColumns(PhysicalScanOperator scanOperator) {
         PhysicalIcebergScanOperator spec = (PhysicalIcebergScanOperator) scanOperator;
-        return spec.getScanOperatorPredicates().getUsedColumns();
+        ColumnRefSet earlyColumns = spec.getScanOperatorPredicates().getUsedColumns().clone();
+        // Per-file metadata uses the scan tuple's slot IDs and cannot be reconstructed in the lookup tuple.
+        // _pos must also remain in the scan when explicitly selected: it is the lookup locator itself.
+        scanOperator.getColRefToColumnMetaMap().forEach((ref, column) -> {
+            if (IcebergTable.ICEBERG_META_COLUMNS.contains(column.getName().toLowerCase(Locale.ROOT))) {
+                earlyColumns.union(ref);
+            }
+        });
+        return earlyColumns;
     }
 
     @Override
