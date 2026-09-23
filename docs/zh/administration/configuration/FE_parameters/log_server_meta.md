@@ -1549,6 +1549,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: LockChecker 前端守护程序（名为 "deadlock-checker"）执行的间隔（秒）。守护程序执行死锁检测和慢锁扫描；配置值乘以 1000 以设置计时器（毫秒）。减小此值可减少检测延迟但增加调度和 CPU 开销；增加此值可减少开销但延迟检测和慢锁报告。更改在运行时生效，因为守护程序每次运行都会重置其间隔。此设置与 `lock_checker_enable_deadlock_check`（启用死锁检查）和 `slow_lock_threshold_ms`（定义慢锁的构成）交互。
 - 引入版本: v3.2.0
 
+### `lock_manager_lock_table_num`
+
+- 默认值: 256
+- 类型: Int
+- 单位: -
+- 是否可变: No
+- 描述: Lock Manager 用于分片元数据锁的哈希桶（即锁表）数量。每个资源按其资源 ID 映射到一个桶，每个桶由各自的互斥量保护，因此该值越大，操作不相关资源的加锁者之间的竞争越小，代价是略微增加内存占用。该值仅在创建 Lock Manager 时读取一次，因此修改后需重启 FE 才能生效。自 v4.1.0、v4.0.1 和 v3.5.8 起，默认值从 `32` 变更为 `256`。
+- 引入版本: v3.3.0
+
 ### `master_sync_policy`
 
 - 默认值: SYNC
