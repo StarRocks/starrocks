@@ -93,7 +93,9 @@ final class JsonExtractFusionReuse {
             }
         };
         Projection result = projection.deepClone();
-        result.getColumnRefMap().replaceAll((column, expression) -> expression.accept(rewriter, null));
+        result.getColumnRefMap().replaceAll((column, expression) ->
+                expression.getDepth() <= Config.max_scalar_operator_optimize_depth
+                        ? expression.accept(rewriter, null) : expression);
         return result;
     }
 
