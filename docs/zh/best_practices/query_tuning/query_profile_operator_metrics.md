@@ -499,6 +499,10 @@ OlapTableSink Operator 负责执行 `INSERT INTO <table>` 操作。
 | `RpcServerSideTime` | 服务器端记录的导入的总 RPC 时间消耗。 |
 | `PrepareDataTime` | 数据准备阶段的总时间消耗，包括数据格式转换和数据质量检查。 |
 | `SendDataTime` | 发送数据的本地时间消耗，包括序列化和压缩数据的时间，以及将任务提交到发送者队列的时间。 |
+| `RawInputBytes` | 参与序列化的 chunk 在内存中的字节数。 |
+| `SerializedBytes` | 序列化后、压缩前的 chunk 字节数。`load_transmission_compression_type` 默认为 `NO_COMPRESSION`，此时该值也就是实际发送到网络上的字节数。 |
+| `CompressedInputBytes` | 实际送入压缩器的序列化数据（压缩前）的大小。未开启压缩、或输入超过 RPC 压缩大小上限而跳过的 chunk 不计入其中。 |
+| `CompressedBytes` | 压缩数据的大小。仅统计实际被压缩的 chunk，因此在默认的 `NO_COMPRESSION` 下该指标与 `CompressedInputBytes` 均为 `0`。`CompressedInputBytes / CompressedBytes` 即为压缩率，`SerializedBytes - CompressedInputBytes` 即为未被压缩的数据大小。 |
 
 ### 落盘指标
 
