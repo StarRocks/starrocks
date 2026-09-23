@@ -107,6 +107,7 @@ under the License.
         <bytebuddy.version>1.17.7</bytebuddy.version>
         <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
+        <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
@@ -318,7 +319,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.3</version>
+                <version>${httpclient5.version}</version>
             </dependency>
 
             <dependency>
