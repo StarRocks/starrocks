@@ -88,11 +88,25 @@ final class PreSplitFlow {
      * requested tablet count; computeResource sizes the active CN count; scanContext carries
      * the source-specific scan inputs; secondaryIndexSpecs names every OTHER visible index
      * (rollup) whose sort key the multi-partition data-tier sampler should project alongside
-     * the base sort key -- empty for single-index targets.
+     * the base sort key -- empty for single-index targets; sessionPreSplitEnabled is the
+     * enable_tablet_pre_split opt-out the calling load resolved for itself, or null to leave every
+     * gate below reading the session the flow runs under.
      */
     record Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
                     List<Column> partitionColumns, long estimatedBytes,
-                    ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
+                    ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs,
+                    Boolean sessionPreSplitEnabled) {
+
+        /**
+         * For a caller planning on the very session that decided the opt-out -- every INSERT shape.
+         * A deferred load resolves the value itself and uses the canonical constructor.
+         */
+        Prepared(ScanContext scanContext, List<Column> sortKeyColumns,
+                 List<Column> partitionColumns, long estimatedBytes,
+                 ComputeResource computeResource, List<SecondaryIndexSpec> secondaryIndexSpecs) {
+            this(scanContext, sortKeyColumns, partitionColumns, estimatedBytes, computeResource,
+                    secondaryIndexSpecs, null);
+        }
     }
 
     static void dispatch(Database database, OlapTable target, Prepared prepared,
@@ -149,7 +163,7 @@ final class PreSplitFlow {
                 target.database(), target.olapTable(), target.indexTargets(), prepared.estimatedBytes(), loadKind,
                 prepared.computeResource());
         submitAndAwaitSinglePartition(target, pipeline, prepared.scanContext(), loadKind,
-                activeComputeNodeCount, shouldAbort);
+                activeComputeNodeCount, shouldAbort, prepared.sessionPreSplitEnabled());
     }
 
     static void runMultiPartitionFlow(Database database, OlapTable table, Prepared prepared,
@@ -240,7 +254,7 @@ final class PreSplitFlow {
                 target.database(), target.olapTable(), target.indexTargets(), estimates.totalBytes(),
                 LoadKind.MV_REFRESH, computeResource, boundarySource);
         submitAndAwaitSinglePartition(target, pipeline, new MaterializedViewRowIdBoundaries.RowIdScanContext(),
-                LoadKind.MV_REFRESH, activeComputeNodeCount, shouldAbort);
+                LoadKind.MV_REFRESH, activeComputeNodeCount, shouldAbort, null);
     }
 
     /**
@@ -273,10 +287,11 @@ final class PreSplitFlow {
      */
     private static void submitAndAwaitSinglePartition(
             PreSplitTargets.EligibleTarget target, DefaultPreSplitPipeline pipeline, ScanContext scanContext,
-            LoadKind loadKind, int activeComputeNodeCount, BooleanSupplier shouldAbort) {
+            LoadKind loadKind, int activeComputeNodeCount, BooleanSupplier shouldAbort,
+            Boolean sessionPreSplitEnabled) {
         PreSplitOutcome outcome = TabletPreSplitCoordinator.submitAsynchronously(
                 target.database(), target.olapTable(), target.partitionId(), scanContext,
-                loadKind, pipeline, activeComputeNodeCount);
+                loadKind, pipeline, activeComputeNodeCount, sessionPreSplitEnabled);
         LOG.info("Sample-Based Tablet Pre-Split ({}) outcome for table {}: {}",
                 loadKind, target.olapTable().getName(), outcome);
         PreSplitProfile.recordOutcome(outcome);
@@ -404,13 +419,20 @@ final class PreSplitFlow {
      * (the footer min/max tuples span the whole sort key), so the BE's {@code
      * validate_new_tablet_ranges} accepts them just as it does data-tier boundaries.
      *
+     * <p>Serves both file-backed load kinds, so a Broker Load into a partitioned range-bucket table
+     * plans its cuts from footers exactly as the equivalent {@code INSERT INTO ... SELECT FROM FILES()}
+     * does. The per-kind provider ({@link DefaultPreSplitPipeline#rowGroupStatisticsProviderFor})
+     * applies its own source guards — Broker Load defers to the data tier for a broker-backed or
+     * non-identity file group — and raises {@link MetaTierUnavailableException}, which this method's
+     * catch turns into the same data-tier fallback.
+     *
      * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
      * the footer path cannot serve: a load kind without Parquet footers, a rollup target
      * (secondary-index sort keys the footer path does not carry), a partition source column absent
      * from the sort key, or too few usable footer statistics.
      */
     static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
-        if (loadKind != LoadKind.INSERT_FROM_FILES) {
+        if (loadKind != LoadKind.INSERT_FROM_FILES && loadKind != LoadKind.BROKER_LOAD) {
             return null;
         }
         if (!prepared.secondaryIndexSpecs().isEmpty()) {
@@ -441,7 +463,8 @@ final class PreSplitFlow {
                     prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
                     partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
-            List<RowGroupStatistics> rowGroups = new InsertFromFilesRowGroupStatisticsProvider().fetch(request);
+            List<RowGroupStatistics> rowGroups =
+                    DefaultPreSplitPipeline.rowGroupStatisticsProviderFor(loadKind).fetch(request);
             if (rowGroups == null || rowGroups.isEmpty()) {
                 return null;
             }

@@ -22,17 +22,24 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -45,6 +52,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -272,6 +280,54 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 Assertions.assertEquals(1, partitions.size());
                             }
                         });
+        });
+    }
+
+    /**
+     * Collecting the base tables' partition cells reaches the connector for an external base table, so it must
+     * not run inside the mv's read lock -- that lock is taken on the mv alone and only protects the mv's own
+     * partition cells. Pinned on the property (never collected while any FE metadata lock is held) rather than
+     * on where the call sits in the source, so it keeps holding if the code moves. An OLAP base table is enough
+     * to pin it: the lock never covered the base tables either way.
+     */
+    @Test
+    public void testBaseTablePartitionsAreCollectedBeforeTakingTheLock() {
+        AtomicBoolean collected = new AtomicBoolean(false);
+        AtomicBoolean collectedUnderLock = new AtomicBoolean(false);
+        new MockUp<ListPartitionDiffer>() {
+            @Mock
+            public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
+                collected.set(true);
+                if (LockHoldDepth.isUnderLock()) {
+                    collectedUnderLock.set(true);
+                }
+                return invocation.proceed();
+            }
+        };
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                        Assertions.assertNotNull(getExecPlanAfterInsert(taskRun, insertSql));
+
+                        Assertions.assertTrue(collected.get(), "the base table partitions should have been collected");
+                        Assertions.assertFalse(collectedUnderLock.get(),
+                                "collecting base table partitions goes through the connector for an external base " +
+                                        "table and must not run under the mv's lock");
+                    });
         });
     }
 

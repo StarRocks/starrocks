@@ -283,6 +283,7 @@ public class FunctionSet {
     public static final String GET_JSON_INT = "get_json_int";
     public static final String GET_JSON_STRING = "get_json_string";
     public static final String GET_JSON_OBJECT = "get_json_object";
+    public static final String GET_JSON_SCALAR = "get_json_scalar";
     public static final String JSON_LENGTH = "json_length";
     public static final String JSON_REMOVE = "json_remove";
     public static final String JSON_SET = "json_set";
@@ -620,6 +621,9 @@ public class FunctionSet {
     //user and role function
     public static final String IS_ROLE_IN_SESSION = "is_role_in_session";
 
+    // query profile function
+    public static final String GET_QUERY_PROFILE = "get_query_profile";
+
     public static final String QUARTERS_ADD = "quarters_add";
     public static final String QUARTERS_SUB = "quarters_sub";
     public static final String WEEKS_ADD = "weeks_add";
@@ -755,11 +759,13 @@ public class FunctionSet {
 
     // This contains the nullable functions, which cannot return NULL result directly for the NULL parameter.
     // This does not contain any user defined functions. All UDFs handle null values by themselves.
-    // ai_complete treats a top-level NULL options map as an empty option set.
+    // AI functions with options treat a top-level NULL map as an empty option set.
+    // ai_translate accepts a NULL source language for automatic detection.
     private final ImmutableSet<String> notAlwaysNullResultWithNullParamFunctions =
             ImmutableSet.of(IF, CONCAT_WS, IFNULL, NULLIF, NULL_OR_EMPTY, COALESCE, BITMAP_HASH, BITMAP_HASH64,
                     PERCENTILE_HASH, HLL_HASH, JSON_ARRAY, JSON_OBJECT, ROW, STRUCT, NAMED_STRUCT, AES_ENCRYPT, AES_DECRYPT,
-                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE);
+                    ENCODE_FINGERPRINT_SHA256, ENCODE_SORT_KEY, AI_COMPLETE,
+                    "ai_embed", "ai_custom_query", "ai_custom_embedding", "ai_translate");
 
     // If low cardinality string column with global dict, for some string functions,
     // we could evaluate the function only with the dict content, not all string column data.
@@ -1225,7 +1231,6 @@ public class FunctionSet {
     }
 
     private void addBuiltInFunction(Function fn) {
-        Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }

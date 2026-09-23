@@ -131,6 +131,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: endpoint、credential、capability ごとに分けられた chat/text bucket に対する、BE 単位のリクエスト admission rate です。Provider のクォータに合わせる、または送信負荷を抑える場合は値を小さくし、Provider と BE の両方に十分な容量がある場合にのみ増やします。実行時の変更は即時反映され、待機中の admission を起動します。BE の再起動は不要です。
 - 導入バージョン: -
 
+### ai_function_rate_limit_qps_embedding
+
+- デフォルト: 128
+- タイプ: Int（32 ビット）
+- 単位: リクエスト/秒
+- 有効な値: 正の整数
+- 変更可能: はい
+- 説明: 各 BE でエンドポイント、認証情報、capability ごとに分けるテキスト埋め込み HTTP attempt bucket の admission rate です。SYSTEM と AI provider 指定の埋め込み呼び出しに適用され、リトライも含みます。`ai_function_rate_limit_qps_chat` とは独立していますが、プロセス全体の `ai_function_max_inflight` 制限も適用されます。プロバイダーのクォータや送信負荷に合わせて値を下げ、プロバイダーと BE の両方に容量がある場合のみ上げてください。実行時の変更は即時反映され、BE の再起動は不要です。
+- 導入バージョン: -
+
 ### ai_function_max_inflight
 
 - デフォルト: 512
@@ -198,6 +208,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: ビットマップインデックスのメモリキャッシュを有効にするかどうか。ポイントクエリを高速化するためにビットマップインデックスを使用したい場合は、メモリキャッシュを推奨します。
 - 導入バージョン: v3.1
+
+### enable_default_value_column_zonemap_filter
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 有効な値: `true`、`false`
+- 変更可能: はい
+- 説明: セグメントに物理的に存在しない列の値を定数畳み込みしてデータをプルーニングするかどうか。fast schema evolution (`ALTER TABLE ... ADD COLUMN`) で追加された列は既存のセグメントには書き込まれないため、その列の各行は列のデフォルト値 (または `NULL`) になります。`true` の場合、その列に対する述語はこの定数に対して評価され、一致する可能性がなければセグメント全体がスキップされます。`false` の場合、それらのセグメントは全体が読み取られ、各バッチが削除条件に対して再チェックされます。これはこのオプションが導入される前の動作です。列を追加したテーブルでクエリ結果が想定と異なる場合は、`false` に設定してロールバックできます。このオプションは `enable_index_page_level_zonemap_filter` とは独立しています。後者はランタイムフィルターの経路をカバーしないためです。
+- 導入バージョン: -
 
 ### フラットJSON圧縮有効化
 
@@ -629,6 +649,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 単位: -
 - 変更可能: いいえ
 - 説明: パイプライン実行エンジンのSCANスレッドプールの最大タスクキュー長。
+- 導入バージョン: -
+
+### case_when_selective_eval_ratio
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 検索 `CASE WHEN` の各 `THEN` 分岐を、チャンク全体で評価してから行を選び出すのではなく、その分岐が実際に所有する行だけで評価するかどうかを制御します。`CASE` がコレクション型 (ARRAY/MAP/STRUCT) または VARIANT 型を返す場合にのみ適用されます。これらの型は 1 行の実体化コストが高く、分岐の入力行をサブチャンクに圧縮するコストを回収できるためです。分岐が圧縮されるのは `owned_rows * case_when_selective_eval_ratio < chunk_rows` の場合、つまり分岐が所有する行がチャンクの `1 / case_when_selective_eval_ratio` 未満の場合のみです。しきい値を超える分岐はチャンク全体で評価されます。入力の圧縮コストが省略できる評価コストを上回るためです。`1` に設定すると、チャンク全体を占有しないすべての分岐が圧縮されます。`0` または負の値に設定すると最適化が完全に無効になり、以前の動作に戻ります。これには、どの行も選択しない `THEN` や `ELSE` がエラーを発生させるものであっても評価されなくなるという動作の変更も含まれます。
 - 導入バージョン: -
 
 ### enable_lock_free_scan_task_queue
@@ -1201,6 +1230,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: はい
 - 説明: 有効にすると、ロードチャネルオープンRPC（例: `PTabletWriterOpen`）の処理がBRPCワーカーから専用のスレッドプールにオフロードされます。リクエストハンドラは`ChannelOpenTask`を作成し、`LoadChannelMgr::_open`をインラインで実行する代わりに、内部の`_async_rpc_pool`に送信します。これにより、BRPCスレッド内の作業とブロッキングが減少し、`load_channel_rpc_thread_pool_num`と`load_channel_rpc_thread_pool_queue_size`を介して同時実行性を調整できます。スレッドプールの送信が失敗した場合（プールが満杯またはシャットダウンされている場合）、リクエストはキャンセルされ、エラー状態が返されます。プールは`LoadChannelMgr::close()`でシャットダウンされるため、この機能を有効にする場合は、リクエストの拒否や処理の遅延を避けるために、容量とライフサイクルを考慮してください。
 - 導入バージョン: v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- デフォルト: true
+- タイプ: ブール
+- 単位: -
+- 変更可能: いいえ
+- 説明: この BE が、ロード時に行を対象 tablet を保持する BE へルーティングするホップ（tablet sink RPC）において、全行が NULL である列のコンパクトなエンコーディングに参加するかどうかを制御します。有効にすると、受信側の BE は tablet writer の open レスポンスでこのエンコーディングへの対応を通知し、その通知を受け取った送信側の BE は、全行が NULL の列について、行ごとの NULL フラグとオフセットの代わりに行数のみを送信します。列数が多く、その大半にデータが入っていないワイドテーブルで特に効果が大きく、このホップの転送バイト数と送受信両側のシリアライズ処理がいずれも削減されます。このエンコーディングは RPC の両端が対応している場合にのみ使用されるため、バージョンが混在するクラスタやダウングレード後は自動的に従来のレイアウトにフォールバックします。送信側または受信側のいずれかの BE でこの項目を `false` に設定すると、そのノードを経由するロードではエンコーディングが無効になります。この項目は動的に変更できません。受信側の BE はこの値を、対応の通知と、送信側が宣言したエンコーディングを適用するかどうかの判断の両方に使用するため、実行中に変更すると両者が一致しなくなります。
+- 導入バージョン: v4.2.0
 
 ### enable_load_diagnose
 

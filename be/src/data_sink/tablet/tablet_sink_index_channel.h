@@ -39,6 +39,10 @@
 
 namespace starrocks {
 
+namespace serde {
+class EncodeContext;
+} // namespace serde
+
 class MemTracker;
 class TupleDescriptor;
 class TxnLogPB;
@@ -299,6 +303,14 @@ private:
     CompressionTypePB _compress_type = CompressionTypePB::NO_COMPRESSION;
     const BlockCompressionCodec* _compress_codec = nullptr;
     raw::RawString _compression_scratch;
+
+    // Encode level to serialize outgoing chunks with: the bits this BE wants to use, intersected
+    // with what this channel's BE advertised in its open result. 0 means the unencoded layout,
+    // byte-for-byte what a BE predating the negotiation emits, and it stays 0 unless an open
+    // result says otherwise -- a channel whose open never completed must never encode. Only the
+    // send path touches these, like _cur_chunk.
+    int _chunk_encode_level = 0;
+    std::shared_ptr<serde::EncodeContext> _encode_context;
 
     // this should be set in init() using config
     int _rpc_timeout_ms = 60000;

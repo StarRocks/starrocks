@@ -76,6 +76,7 @@
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "runtime/service_contexts.h"
 #include "storage/storage_engine.h"
+#include "storage_primitive/tablet_column.h"
 
 static const uint8_t VALID_SEL_FAILED = 0x0;
 static const uint8_t VALID_SEL_OK = 0x1;
@@ -104,12 +105,17 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     _txn_id = table_sink.txn_id;
     _sink_id = t_sink.__isset.sink_id ? t_sink.sink_id : 0;
     _txn_trace_parent = table_sink.txn_trace_parent;
-    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
     _num_repicas = table_sink.num_replicas;
     _need_gen_rollup = table_sink.need_gen_rollup;
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _write_txn_log = table_sink.write_txn_log;
+    _enable_multi_node_write = table_sink.__isset.enable_multi_node_write && table_sink.enable_multi_node_write;
+    if (_enable_multi_node_write) {
+        for (const auto& location : table_sink.location.tablets) {
+            _multi_node_write_node_num = std::max(_multi_node_write_node_num, location.node_ids.size());
+        }
+    }
     _enable_data_file_bundling = table_sink.enable_data_file_bundling;
     _is_multi_statements_txn = table_sink.is_multi_statements_txn;
     _enable_lake_per_partition_coordinator_txn_log = table_sink.enable_lake_per_partition_coordinator_txn_log;
@@ -200,6 +206,8 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         }
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
     }
+    _span = Tracer::Instance().start_trace_or_add_span("olap_table_sink", _txn_trace_parent);
+    _is_initialized = true;
     return Status::OK();
 }
 
@@ -212,6 +220,10 @@ void OlapTableSink::_prepare_profile(RuntimeState* state) {
     _profile->add_info_string("TxnID", fmt::format("{}", _txn_id));
     _profile->add_info_string("IndexNum", fmt::format("{}", _schema->indexes().size()));
     _profile->add_info_string("ReplicatedStorage", fmt::format("{}", _enable_replicated_storage));
+    // Multi-node write is decided per statement by FE and silently degrades to the single-node path when a
+    // precondition is unmet (no combined txn log, enough tablets already, one CN), so report the width
+    // it actually got: the largest number of nodes any one tablet is spread over.
+    _profile->add_info_string("MultiNodeWriteNodes", fmt::format("{}", _multi_node_write_node_num));
     _profile->add_info_string("AutomaticPartition", fmt::format("{}", _enable_automatic_partition));
     _profile->add_info_string("AutomaticBucketSize", fmt::format("{}", _automatic_bucket_size));
     _profile->add_info_string("DynamicOverwrite", fmt::format("{}", _dynamic_overwrite));
@@ -330,6 +342,13 @@ Status OlapTableSink::prepare(RuntimeState* state) {
         node_channels[it.first] = it.second.get();
     }
 
+    // TabletSinkColocateSender overrides the row dispatch and reads a tablet's node list as a REPLICA
+    // set, so a multi-node write location would make it send every row to all of the tablet's nodes --
+    // silent duplication. FE never produces the combination; refuse it here rather than corrupt data
+    // if that gate is ever relaxed.
+    if (_colocate_mv_index && _enable_multi_node_write) {
+        return Status::NotSupported("multi-node write is not supported with colocate mv index");
+    }
     if (_colocate_mv_index) {
         _tablet_sink_sender = std::make_unique<TabletSinkColocateSender>(
                 _load_id, _txn_id, std::move(index_id_to_tablet_be_map), _vectorized_partition,
@@ -346,7 +365,85 @@ Status OlapTableSink::prepare(RuntimeState* state) {
                 std::move(index_channels), std::move(node_channels), _output_expr_ctxs, _enable_replicated_storage,
                 _write_quorum_type, _num_repicas);
     }
+    ASSIGN_OR_RETURN(auto key_slots, _resolve_multi_node_write_key_slots());
+    _tablet_sink_sender->set_enable_multi_node_write(_enable_multi_node_write, std::move(key_slots));
     return Status::OK();
+}
+
+// A schema change renames every column it rewrites to `__starrocks_shadow_<name>` (FE's
+// SchemaChangeHandler.SHADOW_NAME_PREFIX) by setting the column's NAME only -- its ColumnId keeps
+// the original. FE then emits the two halves of an index under those two different names:
+// TOlapTableIndexSchema.columns, which is what binds the slots and therefore what
+// SlotDescriptor::col_name() returns, carries the shadow name, while TColumn.column_name -- which
+// becomes TabletColumn::name() -- always carries the plain ColumnId. Matching the halves has to undo
+// that, or a shadow KEY column resolves to no slot and the count check below fails a load the
+// feature is documented to support.
+//
+// Stripping is a no-op for every other column, so this keeps the plain case byte-for-byte as it was.
+// FE's own Column.isShadowColumn() is this same prefix test, so a user column that somehow began with
+// the prefix would already be treated as shadow throughout FE -- there is no case this steals.
+std::string_view strip_shadow_column_prefix(std::string_view name) {
+    constexpr std::string_view kShadowColumnPrefix = "__starrocks_shadow_";
+    if (name.size() > kShadowColumnPrefix.size() && name.starts_with(kShadowColumnPrefix)) {
+        return name.substr(kShadowColumnPrefix.size());
+    }
+    return name;
+}
+
+// The key columns whose repeats must land on ONE node, per index; empty when the table has no such
+// columns and rows may therefore stay where they were produced.
+//
+// DUPLICATE KEY is the empty case: its rowset is the union of its segments, so no two rows resolve
+// against each other and the order the folded segments end up in is not observable. Every other key
+// type does resolve repeats -- an aggregate REPLACE, a primary-key upsert-then-delete -- and would
+// otherwise have that resolution decided by which node happened to write which row. Hashing the key
+// removes the question instead of documenting it as a caveat.
+StatusOr<std::unordered_map<int64_t, std::vector<SlotId>>> OlapTableSink::_resolve_multi_node_write_key_slots() const {
+    std::unordered_map<int64_t, std::vector<SlotId>> key_slots_by_index;
+    if (!_enable_multi_node_write || _keys_type == TKeysType::DUP_KEYS || _schema == nullptr) {
+        return key_slots_by_index;
+    }
+    for (const OlapTableIndexSchema* index : _schema->indexes()) {
+        if (index == nullptr || index->column_param == nullptr) {
+            continue;
+        }
+        std::vector<SlotId> key_slots;
+        for (const TabletColumn* column : index->column_param->columns) {
+            if (column == nullptr || !column->is_key()) {
+                continue;
+            }
+            for (const SlotDescriptor* slot : index->slots) {
+                if (slot != nullptr && strip_shadow_column_prefix(slot->col_name()) == column->name()) {
+                    key_slots.emplace_back(slot->id());
+                    break;
+                }
+            }
+        }
+        // A key column the sink does not carry would silently hash a narrower key, sending two rows
+        // that share the real key to different nodes -- the exact failure this routing exists to
+        // prevent. Leave the index on local-first rather than route on a key we cannot see in full.
+        size_t key_column_count = 0;
+        for (const TabletColumn* column : index->column_param->columns) {
+            if (column != nullptr && column->is_key()) {
+                ++key_column_count;
+            }
+        }
+        if (key_slots.size() != key_column_count) {
+            // Not a condition to degrade around. A load on a keyed table carries its key columns by
+            // construction -- that is how it identifies the rows it writes, partial updates and
+            // deletes included -- so getting here means the sink's slots and the index's key columns
+            // have diverged, which is a bug. Degrading to a single-node write would hide it, and
+            // routing on a partial key would send two rows sharing the real key to different nodes,
+            // the exact failure this routing exists to prevent. Fail instead.
+            return Status::InternalError(
+                    fmt::format("multi-node write: index {} exposes {} of {} key columns to the sink", index->index_id,
+                                key_slots.size(), key_column_count));
+        }
+        if (!key_slots.empty()) {
+            key_slots_by_index.emplace(index->index_id, std::move(key_slots));
+        }
+    }
+    return key_slots_by_index;
 }
 
 Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBEMap& index_id_to_tablet_be_map) {
@@ -420,6 +517,10 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state, IndexIdToTabletBE
 }
 
 Status OlapTableSink::open(RuntimeState* state) {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
+
     auto open_span = Tracer::Instance().add_span("open", _span);
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_ts_profile->open_timer);
@@ -430,18 +531,30 @@ Status OlapTableSink::open(RuntimeState* state) {
 }
 
 Status OlapTableSink::try_open(RuntimeState* state) {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
     return _tablet_sink_sender->try_open(state);
 }
 
 bool OlapTableSink::is_open_done() {
+    if (!_is_initialized) {
+        return true;
+    }
     return _tablet_sink_sender->is_open_done();
 }
 
 Status OlapTableSink::open_wait() {
+    if (!_is_initialized) {
+        return Status::OK();
+    }
     return _tablet_sink_sender->open_wait();
 }
 
 bool OlapTableSink::is_full() {
+    if (!_is_initialized) {
+        return false;
+    }
     return _is_automatic_partition_running.load(std::memory_order_acquire) || _tablet_sink_sender->is_full();
 }
 
@@ -879,15 +992,19 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
 }
 
 bool OlapTableSink::is_close_done() {
-    if (_tablet_sink_sender == nullptr) {
+    if (!_is_initialized || _tablet_sink_sender == nullptr) {
         return true;
     }
     return _tablet_sink_sender->is_close_done();
 }
 
 Status OlapTableSink::close(RuntimeState* state, const Status& close_status) {
+    if (!_is_initialized) {
+        return close_wait(state, close_status);
+    }
+
     Status mutable_close_status = close_status;
-    if (mutable_close_status.ok()) {
+    if (mutable_close_status.ok() && _profile != nullptr && _ts_profile != nullptr && _tablet_sink_sender != nullptr) {
         SCOPED_TIMER(_profile->total_time_counter());
         SCOPED_TIMER(_ts_profile->close_timer);
         do {
@@ -906,18 +1023,28 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     }
     _close_wait_done = true;
 
+    if (!_is_initialized) {
+        _close_wait_status = close_status;
+        return close_status;
+    }
+
     DeferOp end_span([&] { _span->End(); });
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);
     _span->SetAttribute("output_rows", _number_output_rows);
 
-    COUNTER_SET(_ts_profile->input_rows_counter, _number_input_rows);
-    COUNTER_SET(_ts_profile->output_rows_counter, _number_output_rows);
-    COUNTER_SET(_ts_profile->filtered_rows_counter, _number_filtered_rows);
-    COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
-    COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
+    if (_ts_profile != nullptr) {
+        COUNTER_SET(_ts_profile->input_rows_counter, _number_input_rows);
+        COUNTER_SET(_ts_profile->output_rows_counter, _number_output_rows);
+        COUNTER_SET(_ts_profile->filtered_rows_counter, _number_filtered_rows);
+        COUNTER_SET(_ts_profile->convert_chunk_timer, _convert_batch_ns);
+        COUNTER_SET(_ts_profile->validate_data_timer, _validate_data_ns);
+    }
 
-    if (_tablet_sink_sender == nullptr) {
+    if (_tablet_sink_sender == nullptr || _ts_profile == nullptr) {
+        if (!close_status.ok()) {
+            _span->SetStatus(trace::StatusCode::kError, std::string(close_status.message()));
+        }
         _close_wait_status = close_status;
         return close_status;
     }

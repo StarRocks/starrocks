@@ -505,12 +505,12 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_simple"));
             Assertions.assertEquals(Set.of("engineers"), groups);
 
             // Unknown DN → empty
-            Assertions.assertTrue(AuthenticationHandler.getGroups(user,
+            Assertions.assertTrue(AuthenticationHandler.resolveGroupsFromProviders(user,
                     "uid=unknown,ou=People,dc=test,dc=com", List.of("gp_dn_simple")).isEmpty());
         } finally {
             gpMap.remove("gp_dn_simple");
@@ -541,7 +541,7 @@ class LDAPAuthProviderTest {
 
             Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com",
                     authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_at"));
             Assertions.assertEquals(Set.of("staff"), groups);
         } finally {
@@ -572,7 +572,7 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_simple"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {
@@ -608,7 +608,7 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             // Lookup key "alice" vs cache key "alice@abc.com" → mismatch → empty
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_wrong"));
             Assertions.assertTrue(groups.isEmpty(),
                     "ldap_user_search_attr=uid extracts 'alice@abc.com' as cache key, " +
@@ -641,7 +641,7 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_regex_correct"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {

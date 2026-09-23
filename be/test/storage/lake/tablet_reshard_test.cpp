@@ -20853,6 +20853,46 @@ TEST_F(LakeTabletReshardTest, test_virtual_merge_copies_a_single_source_page_ver
     EXPECT_EQ(kNewVersion, alias_page.version());
 }
 
+// The verbatim copy above is the alias's ordinary case, so it is also where a corrupted source page
+// would reach the alias undecoded. The copy checksums the bytes it streams, so the publish fails here
+// instead of handing the alias a page that only fails once somebody reads it.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_rejects_a_single_source_page_that_fails_its_checksum) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "checksum_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4, 6};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    const std::string content = delvec_a.save();
+    const std::string delvec_name = "checksum_a.delvec";
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, delvec_name, content);
+    auto& source_page = (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1];
+    source_page.set_crc32c(crc32c::Mask(crc32c::Value(content.data(), content.size())));
+    source_page.set_crc32c_gen_version(10);
+
+    // Rewrite the page with bytes the recorded checksum no longer describes, keeping its length so the
+    // range preflight still passes -- a corrupted cache block looks exactly like this.
+    std::string corrupted = content;
+    corrupted[0] = static_cast<char>(corrupted[0] ^ 0xff);
+    write_file(_tablet_manager->delvec_location(child_a, delvec_name), corrupted);
+
+    const bool old_strict = config::enable_strict_delvec_crc_check;
+    DeferOp restore_strict([&] { config::enable_strict_delvec_crc_check = old_strict; });
+    config::enable_strict_delvec_crc_check = true;
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    EXPECT_TRUE(alias.status().is_corruption()) << alias.status();
+}
+
 // Two children can hold delvec pages that agree on version, offset and size while listing different
 // rowids, so a page cannot be identified by those three alone. One publish advances every child to the
 // same version and each child writes its OWN delvec file for it, its own page at offset 0 -- so when

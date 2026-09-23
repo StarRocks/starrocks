@@ -35,6 +35,7 @@ import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -341,10 +342,15 @@ public class AuthenticationHandler {
                 continue;
             }
 
+            // getGroupProviderName() returns an empty list (never null) when the security integration has no
+            // `group_provider` property, so falling back to the global default must test isEmpty(), not null.
+            List<String> groupProviderNames = securityIntegration.getGroupProviderName().isEmpty()
+                    ? List.of(Config.group_provider)
+                    : securityIntegration.getGroupProviderName();
+
             authenticationResult = new AuthenticationResult(
                     UserIdentity.createEphemeralUserIdent(user, remoteHost),
-                    securityIntegration.getGroupProviderName() == null ?
-                            List.of(Config.group_provider) : securityIntegration.getGroupProviderName(),
+                    groupProviderNames,
                     securityIntegration.getGroupAllowedLoginList(),
                     authMechanism);
         }
@@ -387,22 +393,37 @@ public class AuthenticationHandler {
             context.setSecurityIntegration(authenticationResult.securityIntegration);
         }
 
-        // Step 4: Resolve and set user groups
-        // Get user groups from configured group providers (e.g., LDAP groups)
-        // Groups are used for role-based access control and permission management
-        Set<String> groups = getGroups(context.getCurrentUserIdentity(), context.getDistinguishedName(),
-                authenticationResult.groupProviderName);
+        // Step 4: union the two group sources - the configured group providers, and what the
+        // authentication provider read from the user's own entry (LDAP `memberOf`). It has to happen
+        // here, before roles are derived and before the permitted_groups gate, so both sources take
+        // part in both. Each side is gated on the group source the provider reports.
+        AccessControlContext accessControlContext = context.getAccessControlContext();
+        Set<String> groups = new HashSet<>();
+        if (isGroupProviderUsed(accessControlContext)) {
+            groups.addAll(resolveGroupsFromProviders(context.getCurrentUserIdentity(),
+                    context.getDistinguishedName(), authenticationResult.groupProviderName));
+        }
+        if (isMemberOfUsed(accessControlContext)) {
+            groups.addAll(accessControlContext.getMemberOfGroups());
+        }
         context.setGroups(groups);
         // Set current role IDs based on the authenticated user and groups
         context.setCurrentRoleIds(authenticationResult.authenticatedUser, groups);
 
         // Step 5: Validate group access permissions
-        // If authentication result specifies allowed groups, verify user belongs to at least one
-        // This ensures users can only access groups they are authorized for
+        // `permitted_groups` is a gate, not a filter: the user is refused unless at least one of its
+        // groups is on the list, but the group set itself is left whole - a user admitted by one
+        // group keeps all of them, and they all take part in role mapping and Ranger.
         if (authenticationResult.authenticatedGroupList != null && !authenticationResult.authenticatedGroupList.isEmpty()) {
-            Set<String> intersection = new HashSet<>(groups);
-            intersection.retainAll(authenticationResult.authenticatedGroupList);
-            if (intersection.isEmpty()) {
+            // Matched ignoring case: an LDAP `cn` is case-insensitive in the directory, so a group
+            // name that differs only in case must not silently fail the gate. The group names
+            // themselves are never rewritten - they are handed to Ranger, which matches
+            // case-sensitively. The same relaxation is applied to the group-to-role lookup in
+            // AuthorizationMgr#getRoleIdListByGroup, and the two must stay in sync.
+            Set<String> allowedLowerCase = LDAPMemberOfExtractor.toLowerCaseSet(authenticationResult.authenticatedGroupList);
+            boolean allowed = groups.stream()
+                    .anyMatch(group -> group != null && allowedLowerCase.contains(group.toLowerCase(Locale.ROOT)));
+            if (!allowed) {
                 throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
             }
         }
@@ -434,7 +455,45 @@ public class AuthenticationHandler {
         }
     }
 
-    public static Set<String> getGroups(UserIdentity userIdentity, String distinguishedName, List<String> groupProviderList) {
+    /**
+     * Whether the configured group providers contribute to this login's group set. Only an LDAP login
+     * can turn them off (`group_source = memberof`), and the question is asked of the provider rather
+     * than of the config, which would disable them for native users too.
+     */
+    private static boolean isGroupProviderUsed(AccessControlContext accessControlContext) {
+        AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
+        if (!(provider instanceof LDAPAuthProvider)) {
+            return true;
+        }
+        // enable_auth_check = false skips provider.authenticate() above, so memberOf was never read:
+        // letting `memberof` suppress the providers too would leave the login with no groups at all.
+        return !Config.enable_auth_check || ((LDAPAuthProvider) provider).isGroupProviderUsed();
+    }
+
+    /**
+     * The mirror of {@link #isGroupProviderUsed}. Any other provider leaves the field empty, so this
+     * is belt and braces - but it keeps the two sources from drifting apart.
+     */
+    private static boolean isMemberOfUsed(AccessControlContext accessControlContext) {
+        AuthenticationProvider provider = accessControlContext.getAuthenticationProvider();
+        return provider instanceof LDAPAuthProvider && ((LDAPAuthProvider) provider).isMemberOfUsed();
+    }
+
+    /**
+     * Ask the listed group providers which groups this user belongs to, and union their answers.
+     * <p>
+     * This is **one source out of two**, not the final group set of a session:
+     * <ul>
+     *     <li>the groups read from the user's own LDAP entry (`memberOf`) are <b>not</b> included -
+     *     they are merged on top of this in {@link #setAuthenticationResultToContext};</li>
+     *     <li>`permitted_groups` is <b>not</b> applied - that is a login gate, not a filter, and it
+     *     runs after the merge.</li>
+     * </ul>
+     * Callers that want "the groups of this session" should read AccessControlContext#getGroups()
+     * instead.
+     */
+    public static Set<String> resolveGroupsFromProviders(UserIdentity userIdentity, String distinguishedName,
+                                                         List<String> groupProviderList) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         HashSet<String> groups = new HashSet<>();

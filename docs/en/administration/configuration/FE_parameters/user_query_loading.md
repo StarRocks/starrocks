@@ -54,6 +54,15 @@ This topic introduces the following types of FE configurations:
 
 ## User, role, and privilege
 
+### `authorization_enable_query_profile_access_check`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether to restrict who can read cached query profiles. When set to `true`, SHOW PROFILELIST, ANALYZE PROFILE, the `get_query_profile` function, the `/api/profile` and `/api/query/progress` HTTP endpoints, and the `/query` and `/query_profile` Web UI pages return a profile only to the user who ran the query or to a user with the SYSTEM-level OPERATE privilege. Profiles that record no user (for example, EXPORT jobs and stream loads) are readable only with OPERATE. The `/api/query_detail` and `/api/v2/query_detail` endpoints keep listing every query but omit the `profile` field, and the `explain` field when it holds a plan rendered from that profile, under the same rule. When `authorization_enable_admin_user_protection` is also enabled, profiles of queries run by `root` are readable only by `root`. When set to `false` (the default), every authenticated user can read every profile, which is the behavior of earlier versions. Each FE enforces the check for the profiles it holds, so to restrict access cluster-wide, set this item in `fe.conf` on every FE after all FEs have been upgraded to a version that supports it. Enabling it has two further consequences to plan for: `/api/query/progress` stops accepting anonymous requests, because the rule needs a caller identity, so an existing anonymous poller of that endpoint starts receiving `401`; and `get_query_profile()` requires the OPERATE privilege for a `query_id` whose profile is not cached on the FE the session is connected to, because the RPC that fetches it from the other FEs carries no caller identity to authorize there, which restricts the cross-FE lookup to OPERATE holders while the check is on.
+- Introduced in: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - Default: true
@@ -89,7 +98,7 @@ This topic introduces the following types of FE configurations:
 - Type: String
 - Unit: -
 - Is mutable: Yes
-- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
+- Description: The complete HTTPS POST URL used by SYSTEM `ai_complete` calls. The URL must include a host and cannot contain user information, a query string, a fragment, or control characters. When the port is omitted, HTTPS uses its default port. An explicitly specified port must be in the range 1 through 65535. An empty value disables SYSTEM `ai_complete` analysis until the endpoint is configured. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning. The API key is not an FE configuration item; each BE reads `AI_FUNCTION_MODEL_API_KEY` locally, and FE does not send the key in the query plan. Every BE that executes AI queries must set `AI_FUNCTION_MODEL_ENDPOINT` to exactly this URL so the BE can bind its local credential to the administrator-approved endpoint. Changing the FE endpoint therefore also requires updating this environment variable and restarting each affected BE before new AI queries run there.
 - Introduced in: -
 
 ### `ai_default_chat_model`
@@ -109,6 +118,34 @@ This topic introduces the following types of FE configurations:
 - Valid values: `openai_compatible`
 - Is mutable: Yes
 - Description: The provider protocol used by SYSTEM `ai_complete`. The value must be exactly `openai_compatible`; an empty value or any additional characters, including control characters, cause analysis to fail. Changes take effect dynamically without an FE restart, but only for queries analyzed and planned after the change. Already constructed plans retain the endpoint, model, and provider snapshot captured during planning.
+- Introduced in: -
+
+### `ai_default_embedding_endpoint`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Complete HTTPS POST URL for SYSTEM `ai_embed` calls. Required independently of the chat endpoint. It must contain a host, with no user information, query string, fragment, or control characters; an explicit port must be 1 through 65535. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot. Every executing BE must bind `AI_FUNCTION_EMBEDDING_ENDPOINT` to exactly this URL and provision `AI_FUNCTION_EMBEDDING_API_KEY` locally. Changing either BE environment variable requires restarting that BE. Credentials are not FE configuration and are not sent in plans. See [ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md).
+- Introduced in: -
+
+### `ai_default_embedding_model`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: Default model for SYSTEM `ai_embed` calls without an explicit model. Must be nonblank for those calls and must not contain C0 control characters or DEL. It may remain empty when every embedding call supplies a model. There is no fallback to the chat default model. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
+- Introduced in: -
+
+### `ai_default_embedding_provider`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Valid values: `openai_compatible`
+- Is mutable: Yes
+- Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -154,6 +191,15 @@ This topic introduces the following types of FE configurations:
 - Unit: -
 - Is mutable: Yes
 - Description: The auxiliary per-scan estimated-row budget for external-table statistics collection (Iceberg). A statistics scan stops early once the estimated number of rows it has scanned reaches this budget. Because per-split row counts can only be estimated (the record count is recorded per file, not per split), this is an auxiliary soft budget rather than the primary control. The default aligns with `connector_table_query_trigger_analyze_small_table_rows`. A value of `0` or less means this dimension is unlimited. Can be overridden per statement with `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")`.
+- Introduced in: v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- Default: 360
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
 - Introduced in: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -1161,8 +1207,8 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Default: 4 * 3600
 - Type: Int
 - Unit: Seconds
-- Is mutable: No
-- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner.
+- Is mutable: Yes
+- Description: The time interval at which labels are cleaned up. Unit: second. We recommend that you specify a short time interval to ensure that historical labels can be cleaned up in a timely manner. The value must be greater than 0. A value of 0 or less is rejected, both by `ADMIN SET FRONTEND CONFIG` and when the FE loads `fe.conf` at startup.
 - Introduced in: -
 
 ### `label_keep_max_num`

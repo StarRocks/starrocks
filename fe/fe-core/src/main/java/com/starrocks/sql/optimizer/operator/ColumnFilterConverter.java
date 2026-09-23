@@ -445,7 +445,7 @@ public class ColumnFilterConverter {
         if (callOperator == null) {
             return Optional.empty();
         }
-        if (requireMonotonic && !OperatorFunctionChecker.onlyContainMonotonicFunctions(translate).first) {
+        if (requireMonotonic && !OperatorFunctionChecker.onlyContainIncreasingFunctions(translate).first) {
             return Optional.empty();
         }
         ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);

@@ -65,7 +65,8 @@ namespace starrocks {
 using strings::Substitute;
 
 Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
-                                  const std::vector<Slice>& body, faststring* compressed_body) {
+                                  const std::vector<Slice>& body, faststring* compressed_body,
+                                  const compression::ZstdCDict* cdict) {
     size_t uncompressed_size = Slice::compute_total_size(body);
     auto cleanup = MakeScopedCleanup([&]() { compressed_body->clear(); });
     if (codec != nullptr && codec->exceed_max_input_size(uncompressed_size)) {
@@ -77,8 +78,16 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr,
-                                            compression_options));
+            // ZSTD always uses the compression pool, so the dictionary write path lives here.
+            // A non-null cdict takes the dictionary overload; ZstdBlockCompression ignores
+            // BlockCompressionOptions, so nothing is lost by not passing them.
+            if (cdict != nullptr) {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, cdict));
+            } else {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, compression_options));
+            }
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);

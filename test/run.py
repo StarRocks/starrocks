@@ -199,6 +199,14 @@ if __name__ == "__main__":
     if keep_alive and concurrency != 1:
         print("In alive mode, set concurrency=1 in default!")
         concurrency = 1
+    # check record mode with concurrency=1
+    # Recording selects @sequential cases too (choose_cases skips the opt-in rule when
+    # record_mode is on), so the record pass has to be serial for the same reason the
+    # sequential validate pass is: those cases are marked sequential because they cannot
+    # share a cluster with anything else, and a racy run records a wrong R file.
+    if record and concurrency != 1:
+        print("In record mode, set concurrency=1 in default!")
+        concurrency = 1
 
     # Auto-exclude no_arrow_flight_sql cases in arrow mode
     if arrow_mode:

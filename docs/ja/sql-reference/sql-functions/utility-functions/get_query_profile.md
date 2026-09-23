@@ -11,6 +11,8 @@ description: "query_idを使用してクエリのプロファイルを取得し�
 
 この関数は v3.0 からサポートされています。
 
+FE 設定項目 `authorization_enable_query_profile_access_check` を `true` に設定した場合、この関数は現在のユーザーが実行したクエリのプロファイルのみを返します。SYSTEM レベルの OPERATE 権限を持つユーザーはこの制限を受けません。この場合、定数でない `query_id` を渡すとき、またはそのプロファイルがセッションの接続先 FE にキャッシュされていないときも、OPERATE 権限が必要です。`authorization_enable_admin_user_protection` も有効な場合、接続先 FE にキャッシュされていない `query_id` を渡せるのは `root` のみです。OPERATE 権限を持たないユーザーが自分の profile を参照するには、まず `select last_query_id();` で ID を取得し、返された値をリテラルとして渡してください。使用例は以下を参照してください。
+
 ## 構文
 
 ```Haskell

@@ -50,7 +50,8 @@ public class IcebergGeoMetadataTest {
                 Assertions.assertEquals(TIcebergGeoKind.GEOGRAPHY, geo.getKind());
                 Assertions.assertEquals(crs, geo.getCrs());
                 Assertions.assertEquals(edge.name(), geo.getEdge_algorithm());
-                Assertions.assertTrue(ColumnTypeConverter.fromIcebergType(type).isUnknown());
+                boolean canonical = crs.equals("OGC:CRS84") && edge == EdgeAlgorithm.SPHERICAL;
+                Assertions.assertEquals(!canonical, ColumnTypeConverter.fromIcebergType(type).isUnknown());
             }
         }
     }

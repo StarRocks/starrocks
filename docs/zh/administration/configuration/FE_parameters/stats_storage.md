@@ -153,6 +153,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
 - 引入版本: v4.2.0
 
+### `enable_temporary_table_statistic_collect`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 采集作业是否为临时表收集统计信息。该项作用于根据采集作业定义构建的收集任务，即自动采集作业以及通过 CREATE ANALYZE 创建的作业。设置为 `false` 时，构建这些作业时会跳过临时表，仅对非临时表进行采集。单次执行的 `ANALYZE TABLE` 语句不受该项影响，仍会为临时表收集统计信息。当生命周期很短的临时表带来的采集开销超过其统计信息的价值时，可将该项设置为 `false`。
+- 引入版本: v3.4.0
+
 ## 存储
 
 ### `allow_implicit_key_column_in_agg_add_column`
@@ -805,7 +814,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂 meta tier 从 `FILES()` 数据源并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
+- 描述: 基于采样的 Tablet 预分裂 meta tier 从文件类导入源（`FILES()` 或 Broker Load）并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`

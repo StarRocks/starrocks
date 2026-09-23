@@ -86,6 +86,11 @@ description: "Alphabetical t - z"
 - 单位: 字节
 - 描述: tablet元数据使用的内存。
 
+## `tablet_reshard_merge_candidate_blocked`
+
+- 单位: 计数
+- 描述: 该指标统计的是合并规划过程中 Tablet 被排除事件的累计次数，而不是当前仍被阻塞的 Tablet 数量：只要某次规划把一个原本符合条件的 Tablet 判定为排除，计数就会加一，且不会随后回退，只有 FE 重启才会清零。因此应关注该值的增长速率，而非其绝对大小。一个 Tablet 被排除，原因要么是它仍持有 Tablet 分裂遗留下来、会阻塞合并的共享数据文件，要么是尚未被证实不含这类文件——后一种情况通常意味着 compaction 还没追上，但也可能是该 Tablet 所在 BE 版本过旧、不支持这项检查，或者该 Tablet 还未被观测到。清掉分裂遗留的共享文件需要一次重写它们的 compaction：非主键表可以用 `ALTER TABLE ... COMPACT` 按需触发；主键表执行同样的语句时，只有当该 Tablet 存在未清理的删除时才会触发 base compaction，而刚分裂出来的 Tablet 通常没有删除，因此对它无效，只能等常规 compaction 自行重写到那些 rowset。仅 Leader FE 会递增该计数器。
+
 ## `tablet_schema_mem_bytes`
 
 - 单位: 字节
@@ -118,6 +123,18 @@ description: "Alphabetical t - z"
 - 单位: 毫秒
 - 类型: 瞬时
 - 描述: FE Thrift 接收循环（accept loop）上次返回连接至今的时长（毫秒）。接收循环卡住会使该值上升，但没有 Thrift 流量的 FE 同样会上升，因此应结合连接到达速率一起判断，不要仅凭该指标告警。此外，当接收循环根本没有运行时（Thrift 服务器启动之前、停止之后）该值同样为 `0`，因此基于阈值的告警无法区分 Thrift 服务已停止与服务健康这两种情况。
+
+## `thrift_server_expired_connections_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：因在等待队列中的滞留时间超过 `thrift_server_queue_timeout_ms` 而被 FE Thrift 服务器直接关闭、未予处理的连接总数。该检查默认关闭，因此在运维人员启用该超时之前，本指标恒为 0。该值上升表示 FE 当时正在处理一批调用方几乎肯定已经放弃的积压连接；可结合 `thrift_server_queue_wait_ms` 判断队列落后的程度。
+
+## `thrift_server_queue_wait_ms`
+
+- 单位：毫秒
+- 类型：瞬时
+- 描述：连接在被工作线程取走之前，在 FE Thrift 服务器等待队列中滞留时长的分位数。每个出队连接都会采样，包括随后因超时而被丢弃的连接，因此该分布不会被 `thrift_server_queue_timeout_ms` 截断。这是 Thrift 饱和的先行指标：在工作线程池尚能跟上时它就会上升，远早于 `thrift_server_rejected_connections_total` 开始变化。
 
 ## `thrift_server_rejected_connections_total`
 

@@ -47,6 +47,7 @@ under the License.
         <starrocks.home>${basedir}/../</starrocks.home>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <junit.version>5.8.2</junit.version>
+        <unboundid.ldapsdk.version>7.0.5</unboundid.ldapsdk.version>
         <jprotobuf-starrocks.version>1.0.0</jprotobuf-starrocks.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.21.4</jackson.version>
@@ -54,7 +55,7 @@ under the License.
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <spark.version>3.5.7</spark.version>
         <parquet.version>1.16.0</parquet.version>
-        <ranger.version>2.8.0</ranger.version>
+        <ranger.version>2.9.0</ranger.version>
         <orc.version>1.9.1</orc.version>
         <hadoop.version>3.4.3</hadoop.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
@@ -82,7 +83,7 @@ under the License.
         <fluss.version>0.9.1-incubating</fluss.version>
         <delta-kernel.version>4.3.0</delta-kernel.version>
         <iceberg.version>1.10.0</iceberg.version>
-        <staros.version>4.2-rc4</staros.version>
+        <staros.version>4.2-rc5</staros.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
         <!-- https://stackoverflow.com/questions/66713254/spark-wasb-and-jetty-11 -->
         <jetty.version>9.4.58.v20250814</jetty.version>
@@ -95,8 +96,18 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
-        <bouncycastle.version>1.84</bouncycastle.version>
+        <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
+             (ASM frame merge AIOOBE on delta-kernel Metadata, VerifyError on iceberg REST catalog
+             classes). 1.49.4 cannot redefine sealed JDK classes (java.net.InetAddress on JDK 19+),
+             so tests must not JMockit-mock those; use Mockito for them instead. -->
+        <jmockit.version>1.49.4</jmockit.version>
+        <!-- Mockito 5.x ships a Byte Buddy that understands Java 21 class files;
+             keep byte-buddy and byte-buddy-agent on the version mockito-core declares -->
+        <mockito.version>5.23.0</mockito.version>
+        <bytebuddy.version>1.17.7</bytebuddy.version>
+        <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
+        <httpclient5.version>5.6.4</httpclient5.version>
         <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
 
@@ -308,7 +319,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.4.3</version>
+                <version>${httpclient5.version}</version>
             </dependency>
 
             <dependency>
@@ -423,8 +434,37 @@ under the License.
             <dependency>
                 <groupId>com.github.hazendaz.jmockit</groupId>
                 <artifactId>jmockit</artifactId>
-                <version>1.49.4</version>
+                <version>${jmockit.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
+            <!-- In-process LDAP directory server for tests. Used under the Apache License 2.0,
+                 which this SDK offers as of version 5.0.0. -->
+            <dependency>
+                <groupId>com.unboundid</groupId>
+                <artifactId>unboundid-ldapsdk</artifactId>
+                <version>${unboundid.ldapsdk.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- assertj-core also pulls byte-buddy; pin both artifacts so Maven's
+                 nearest-wins mediation cannot hand Mockito a pre-Java-21 Byte Buddy -->
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${bytebuddy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>${bytebuddy.version}</version>
             </dependency>
 
             <dependency>
@@ -1323,10 +1363,12 @@ under the License.
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+            <!-- 4.0.12+ bundles an ASM that reads Java 21 class files; the Groovy debug shell
+                 (GroovyUDSServer) fails with "Unsupported class file major version 65" on older builds -->
             <dependency>
                 <groupId>org.apache.groovy</groupId>
                 <artifactId>groovy-groovysh</artifactId>
-                <version>4.0.9</version>
+                <version>4.0.33</version>
             </dependency>
 
             <dependency>
@@ -1366,7 +1408,7 @@ under the License.
                         <artifactId>lz4-pure-java</artifactId>
                     </exclusion>
                     <!-- aliyun-java-auth drags in bcprov-jdk15on 1.70 (multiple CVEs);
-                         bcprov-jdk18on 1.84 on the classpath provides the same packages -->
+                         bcprov-jdk18on 1.85 on the classpath provides the same packages -->
                     <exclusion>
                         <groupId>org.bouncycastle</groupId>
                         <artifactId>bcprov-jdk15on</artifactId>
@@ -1665,6 +1707,12 @@ under the License.
                     <exclusion>
                         <groupId>com.sun.jersey</groupId>
                         <artifactId>jersey-bundle</artifactId>
+                    </exclusion>
+                    <!-- Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows
+                         jakarta.ws.rs-api 2.1.6, the same clash hadoop-common excludes it for -->
+                    <exclusion>
+                        <groupId>javax.ws.rs</groupId>
+                        <artifactId>jsr311-api</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
