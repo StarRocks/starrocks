@@ -136,12 +136,12 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
-    private static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-    private static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
-    private static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
-    private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
-    private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
-    private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";

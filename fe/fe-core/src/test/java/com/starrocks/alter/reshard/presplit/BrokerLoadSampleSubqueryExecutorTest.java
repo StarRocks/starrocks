@@ -19,10 +19,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.IntegerType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
@@ -172,8 +179,8 @@ class BrokerLoadSampleSubqueryExecutorTest {
         StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
                 () -> executor.execute(bigintRequest(
                         new BrokerDesc(Map.of()),
-                        List.of(mockFileGroup("csv")),
-                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))))));
+                        List.of(mockFileGroup("json")),
+                        List.of(List.of(brokerFileStatus("s3://b/x.json", 1024L))))));
         Assertions.assertTrue(thrown.getMessage().contains("not yet supported"),
                 "error should call out unsupported format: " + thrown.getMessage());
     }
@@ -539,6 +546,385 @@ class BrokerLoadSampleSubqueryExecutorTest {
 
         Assertions.assertEquals(1, capturedResources.size());
         Assertions.assertSame(expectedComputeResource, capturedResources.get(0));
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // CSV. Unlike Parquet/ORC, a CSV field has no name: the load maps field i onto the i-th entry
+    // of the COLUMNS list, or onto the i-th loadable base-schema column when there is no COLUMNS
+    // list. The sampler must restate that layout to FILES, whose `schema` property CSV matches by
+    // position, or its by-name SELECT would have nothing to bind to.
+    // ---------------------------------------------------------------------------------------
+
+    @Test
+    void csvColumnListIsForwardedAsAPositionalFilesSchema() throws Exception {
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("payload", "sort_key"));
+        Mockito.when(fileGroup.getColumnExprList())
+                .thenReturn(List.of(identityColumn("payload"), identityColumn("sort_key")));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(bigintRequest(
+                new BrokerDesc(Map.of()),
+                List.of(fileGroup),
+                List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)))));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"format\" = \"csv\""),
+                "CSV must reach FILES as its own format: " + capturedSql);
+        // payload sits FIRST, so a by-name read alone would bind sort_key to the wrong field; the
+        // schema has to carry the load's order, not the sort key's.
+        Assertions.assertEquals("`payload` varchar(65533), `sort_key` bigint(20)",
+                capturedFilesSchema(capturedSql.toString()));
+    }
+
+    @Test
+    void csvSortKeyWithUnsetVarcharLengthIsWidenedNotTruncated() throws Exception {
+        // ScalarType.toSql() emits a bare "varchar" when the length was never set, and the FILES
+        // schema parser defaults THAT to length 1 -- which would silently truncate every sampled
+        // sort-key value to one character and wreck the boundaries. Pin the widening guard.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                csvScanContext(List.of(fileGroup), List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))),
+                        /*targetBaseSchema=*/ List.of()),
+                // VarcharType.VARCHAR has length -1
+                List.of(new Column("sort_key", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L));
+
+        String schema = capturedFilesSchema(capturedSql.toString());
+        Assertions.assertEquals("`sort_key` varchar(65533)", schema,
+                "an unset-length VARCHAR sort key must widen, never render as bare `varchar`");
+        List<Column> parsed = SqlParser.parseFilesSchema(schema);
+        Assertions.assertEquals(StringType.DEFAULT_STRING_LENGTH,
+                ((ScalarType) parsed.get(0).getType()).getLength(),
+                "parsed back it must NOT collapse to varchar(1)");
+    }
+
+    @Test
+    void csvFilesSchemaParsesBackToTheProjectedColumnTypes() throws Exception {
+        // The schema string is only useful if FILES can parse it. Round-trip it through the same
+        // parser TableFunctionTable uses, so a type this executor renders but the grammar cannot
+        // read fails here rather than as a mid-load sub-query failure.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key", "name", "skipped"));
+        Mockito.when(fileGroup.getColumnExprList()).thenReturn(List.of(
+                identityColumn("sort_key"), identityColumn("name"), identityColumn("skipped")));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                csvScanContext(List.of(fileGroup), List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))),
+                        /*targetBaseSchema=*/ List.of()),
+                List.of(bigintColumn("sort_key"), new Column("name", new VarcharType(32))),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L));
+
+        List<Column> parsed = SqlParser.parseFilesSchema(capturedFilesSchema(capturedSql.toString()));
+        Assertions.assertEquals(List.of("sort_key", "name", "skipped"),
+                parsed.stream().map(Column::getName).toList());
+        Assertions.assertEquals(PrimitiveType.BIGINT, parsed.get(0).getType().getPrimitiveType());
+        Assertions.assertEquals(PrimitiveType.VARCHAR, parsed.get(1).getType().getPrimitiveType());
+        Assertions.assertEquals(32, ((ScalarType) parsed.get(1).getType()).getLength(),
+                "a projected VARCHAR key must keep its declared length, not collapse to varchar(1)");
+        Assertions.assertEquals(StringType.DEFAULT_STRING_LENGTH,
+                ((ScalarType) parsed.get(2).getType()).getLength(),
+                "an unprojected field only has to hold its position, so it is declared as a wide string");
+    }
+
+    @Test
+    void csvWithoutAColumnListTakesItsLayoutFromTheTargetBaseSchema() throws Exception {
+        // No COLUMNS list: Load.initColumns derives the field order from the base schema, skipping
+        // generated and auto-increment columns because neither is read from the file.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                csvScanContext(List.of(fileGroup), List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))),
+                        List.of(bigintColumn("payload"), autoIncrementColumn("id"),
+                                bigintColumn("sort_key"), generatedColumn("derived"))),
+                List.of(bigintColumn("sort_key")),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L));
+
+        Assertions.assertEquals("`payload` varchar(65533), `sort_key` bigint(20)",
+                capturedFilesSchema(capturedSql.toString()));
+    }
+
+    @Test
+    void csvWithoutAColumnListAndWithoutABaseSchemaIsRejected() {
+        BrokerFileGroup fileGroup = csvFileGroup();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("positional field layout is unknown"),
+                "error should call out the unknown CSV layout: " + thrown.getMessage());
+    }
+
+    @Test
+    void csvColumnsFromPathStaysOutOfTheSchemaAndKeepsItsOwnProperty() throws Exception {
+        // COLUMNS (sort_key) COLUMNS FROM PATH AS (dt): dt is not a CSV field on either side --
+        // Broker Load appends path values after the file's fields and FILES appends path columns
+        // after the declared schema -- so it must not consume a position in the schema.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("dt"));
+        Mockito.when(fileGroup.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("dt")));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                csvScanContext(List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/dt=20260921/x.csv", 1024L))),
+                        /*targetBaseSchema=*/ List.of()),
+                List.of(bigintColumn("sort_key")),
+                List.of(new Column("dt", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L));
+
+        Assertions.assertEquals("`sort_key` bigint(20)", capturedFilesSchema(capturedSql.toString()));
+        Assertions.assertTrue(capturedSql.toString().contains("\"columns_from_path\" = \"dt\""),
+                "the path column must still reach FILES through columns_from_path: " + capturedSql);
+    }
+
+    @Test
+    void csvDialectIsForwardedToFiles() throws Exception {
+        // A different separator / enclose / escape / header skip splits a row into different
+        // fields, which would move the positions the schema names.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(fileGroup.getColumnSeparator()).thenReturn("|");
+        Mockito.when(fileGroup.getRowDelimiter()).thenReturn("\r\n");
+        Mockito.when(fileGroup.getEnclose()).thenReturn((byte) '"');
+        Mockito.when(fileGroup.getEscape()).thenReturn((byte) '\\');
+        Mockito.when(fileGroup.getSkipHeader()).thenReturn(1L);
+        Mockito.when(fileGroup.isTrimspace()).thenReturn(true);
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(bigintRequest(
+                new BrokerDesc(Map.of()),
+                List.of(fileGroup),
+                List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)))));
+
+        String sql = capturedSql.toString();
+        Assertions.assertTrue(sql.contains("\"csv.column_separator\" = \"|\""), sql);
+        Assertions.assertTrue(sql.contains("\"csv.row_delimiter\" = \"\r\n\""), sql);
+        Assertions.assertTrue(sql.contains("\"csv.enclose\" = \"\\\"\""),
+                "a quote enclose must be escaped inside the property literal: " + sql);
+        Assertions.assertTrue(sql.contains("\"csv.escape\" = \"\\\\\""),
+                "a backslash escape must be escaped inside the property literal: " + sql);
+        Assertions.assertTrue(sql.contains("\"csv.skip_header\" = \"1\""), sql);
+        Assertions.assertTrue(sql.contains("\"csv.trim_space\" = \"true\""), sql);
+    }
+
+    @Test
+    void csvDialectLeftAtItsDefaultsIsNotForwarded() throws Exception {
+        // FILES defaults to the same tab / newline / no-enclose / no-escape dialect Broker Load
+        // does, so an untouched dialect emits nothing.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(bigintRequest(
+                new BrokerDesc(Map.of()),
+                List.of(fileGroup),
+                List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)))));
+
+        Assertions.assertFalse(capturedSql.toString().contains("csv."),
+                "no csv.* property should be emitted for a default dialect: " + capturedSql);
+    }
+
+    @Test
+    void csvFileGroupsWithDifferentLengthColumnListsAreRejected() {
+        // The other arm of the layout comparison: lists of DIFFERENT length. One FILES call declares
+        // one positional schema, so a group that names an extra field cannot share it.
+        BrokerFileGroup first = csvFileGroup();
+        Mockito.when(first.getFileFieldNames()).thenReturn(List.of("sort_key", "payload"));
+        Mockito.when(first.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("payload")));
+        BrokerFileGroup second = csvFileGroup();
+        Mockito.when(second.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(second.getColumnExprList()).thenReturn(List.of(identityColumn("sort_key")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(first, second),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)),
+                                List.of(brokerFileStatus("s3://b/y.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("disagree on their column layout"),
+                "error should call out the layout disagreement: " + thrown.getMessage());
+    }
+
+    @Test
+    void csvFileGroupsDisagreeingOnColumnLayoutAreRejected() {
+        BrokerFileGroup first = csvFileGroup();
+        Mockito.when(first.getFileFieldNames()).thenReturn(List.of("sort_key", "payload"));
+        Mockito.when(first.getColumnExprList())
+                .thenReturn(List.of(identityColumn("sort_key"), identityColumn("payload")));
+        BrokerFileGroup second = csvFileGroup();
+        Mockito.when(second.getFileFieldNames()).thenReturn(List.of("payload", "sort_key"));
+        Mockito.when(second.getColumnExprList())
+                .thenReturn(List.of(identityColumn("payload"), identityColumn("sort_key")));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(first, second),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)),
+                                List.of(brokerFileStatus("s3://b/y.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("disagree on their column layout"),
+                "error should call out the layout disagreement: " + thrown.getMessage());
+    }
+
+    @Test
+    void csvFileGroupsDisagreeingOnDialectAreRejected() {
+        BrokerFileGroup first = csvFileGroup();
+        Mockito.when(first.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(first.getColumnSeparator()).thenReturn(",");
+        BrokerFileGroup second = csvFileGroup();
+        Mockito.when(second.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(second.getColumnSeparator()).thenReturn("|");
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(first, second),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L)),
+                                List.of(brokerFileStatus("s3://b/y.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("disagree on parsing options"),
+                "error should call out the dialect disagreement: " + thrown.getMessage());
+    }
+
+    @Test
+    void csvNonAsciiEncloseIsRejected() {
+        // FILES takes enclose as a string and reads its first byte back; a high byte would be
+        // re-encoded as two UTF-8 bytes and silently split fields differently from the load.
+        BrokerFileGroup fileGroup = csvFileGroup();
+        Mockito.when(fileGroup.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(fileGroup.getEnclose()).thenReturn((byte) 0xA7);
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(fileGroup),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("outside ASCII"),
+                "error should call out the non-ASCII enclose byte: " + thrown.getMessage());
+    }
+
+    @Test
+    void csvKeepsEveryKeyPerturbingRejection() throws Exception {
+        // Admitting the format must not widen the mapping guard: a SET clause still diverges the
+        // sampled key from the inserted value whatever the format is.
+        BrokerFileGroup derived = csvFileGroup();
+        Mockito.when(derived.getFileFieldNames()).thenReturn(List.of("sort_key"));
+        Mockito.when(derived.getColumnExprList()).thenReturn(List.of(
+                new ImportColumnDesc("sort_key", Mockito.mock(Expr.class))));
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                /*sampleQueryRunner=*/ (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        StarRocksException thrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(derived),
+                        List.of(List.of(brokerFileStatus("s3://b/x.csv", 1024L))))));
+        Assertions.assertTrue(thrown.getMessage().contains("derived column"),
+                "error should still call out the derived column: " + thrown.getMessage());
+
+        // ... and the path can still not supply a key column, CSV or not.
+        BrokerFileGroup pathKey = csvFileGroup();
+        Mockito.when(pathKey.getFileFieldNames()).thenReturn(List.of("payload"));
+        Mockito.when(pathKey.getColumnsFromPath()).thenReturn(List.of("sort_key"));
+        Mockito.when(pathKey.getColumnExprList())
+                .thenReturn(List.of(identityColumn("payload"), identityColumn("sort_key")));
+        StarRocksException pathThrown = Assertions.assertThrows(StarRocksException.class,
+                () -> executor.execute(bigintRequest(
+                        new BrokerDesc(Map.of()),
+                        List.of(pathKey),
+                        List.of(List.of(brokerFileStatus("s3://b/sort_key=7/x.csv", 1024L))))));
+        Assertions.assertTrue(pathThrown.getMessage().contains("columns_from_path"),
+                "error should still call out the path-supplied key column: " + pathThrown.getMessage());
+    }
+
+    /** Extracts the value of the FILES {@code schema} property from a captured sub-query. */
+    private static String capturedFilesSchema(String sampleSql) {
+        java.util.regex.Matcher matcher =
+                java.util.regex.Pattern.compile("\"schema\" = \"(.*?)\"(?:, |\\))").matcher(sampleSql);
+        Assertions.assertTrue(matcher.find(), "sub-query carries no FILES schema property: " + sampleSql);
+        return matcher.group(1);
+    }
+
+    private static BrokerFileGroup csvFileGroup() {
+        return mockFileGroup("csv");
+    }
+
+    private static Column autoIncrementColumn(String name) {
+        Column column = new Column(name, IntegerType.BIGINT);
+        column.setIsAutoIncrement(true);
+        return column;
+    }
+
+    private static Column generatedColumn(String name) {
+        Column column = new Column(name, IntegerType.BIGINT);
+        column.setGeneratedColumnExpr(ColumnIdExpr.create(new SlotRef(null, "sort_key")));
+        return column;
+    }
+
+    private static BrokerLoadScanContext csvScanContext(
+            List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatusesPerGroup,
+            List<Column> targetBaseSchema) {
+        return new BrokerLoadScanContext(new BrokerDesc(Map.of()), fileGroups, fileStatusesPerGroup,
+                Mockito.mock(ComputeResource.class), "UTC", targetBaseSchema);
     }
 
     /** An {@code ImportColumnDesc} that only names a source field (expr == null -> isColumn()). */
