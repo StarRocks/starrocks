@@ -248,9 +248,9 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | PeakIOTasks | IOタスクのピーク数。 |
 | PeakScanTaskQueueSize | IOタスクキューのピークサイズ。 |
 | MorselQueueType | Morsel キューの種類：このスキャンで Iceberg TopN ファイル枝刈りが有効な場合は `priority_morsel_queue`、それ以外は `dynamic_morsel_queue`。 |
-| TopnReorderEligibleMorsels | Iceberg TopN ファイル枝刈り：ソート列にファイル単位の min/max が利用できたファイル数。 |
-| TopnReorderNoBoundMorsels | Iceberg TopN ファイル枝刈り：利用できる min/max がなく、通常どおり読み取られたファイル数。 |
-| TopnMinMaxFilteredScanRanges | Iceberg TopN ファイル枝刈り：min/max が top-k に到達できないため footer を読む前にスキップされたファイル数。 |
+| TopnReorderEligibleMorsels | ソート列の利用可能な min/max 境界で並べ替えられたスキャンタスク（morsel）の数。 |
+| TopnReorderNoBoundMorsels | 数値の優先順位を使わないスキャンタスクの数。NULLS FIRST で優先されるタスクも含みます。 |
+| TopnMinMaxFilteredScanRanges | min/max がフィルターを通過できないため、footer を読む前にスキップされたスキャン範囲の数。 |
 
 ### エクスチェンジオペレーター
 

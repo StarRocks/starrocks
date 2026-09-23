@@ -430,10 +430,13 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
         if ((useMinMaxOpt || topnReorderSlotId >= 0) && file.nullValueCounts() != null && file.valueCounts() != null) {
-            // fill min/max value
+            // TopN uses only its leading sort key; aggregate min/max needs every requested slot.
+            List<SlotDescriptor> minMaxSlots = useMinMaxOpt ? slots : slots.stream()
+                    .filter(slot -> slot.getId().asInt() == topnReorderSlotId)
+                    .collect(Collectors.toList());
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
                     table.getNativeTable().schema(), file.lowerBounds(), file.upperBounds(),
-                    file.nullValueCounts(), file.valueCounts(), slots);
+                    file.nullValueCounts(), file.valueCounts(), minMaxSlots);
             hdfsScanRange.setMin_max_values(tExprMinMaxValueMap);
         }
 

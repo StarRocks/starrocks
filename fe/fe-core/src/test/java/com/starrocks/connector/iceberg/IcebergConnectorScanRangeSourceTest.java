@@ -65,6 +65,33 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
     }
 
     @Test
+    public void testTopnShipsOnlyLeadingKeyAndKeepsAggregateBounds() throws Exception {
+        mockedNativeTableB.newFastAppend().appendFile(FILE_B_3).commit();
+        List<Column> schema = List.of(new Column("k1", INT), new Column("k2", INT));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableB, Maps.newHashMap());
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(7));
+        for (int id = 1; id <= 2; id++) {
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(id), tuple);
+            slot.setType(INT);
+            slot.setColumn(new Column("k" + id, INT));
+            tuple.addSlot(slot);
+        }
+        FileScanTask task = Lists.newArrayList(mockedNativeTableB.newScan().includeColumnStats().planFiles()).get(0);
+        for (boolean aggregate : new boolean[] {false, true}) {
+            IcebergConnectorScanRangeSource source = new IcebergConnectorScanRangeSource(icebergTable,
+                    RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, tuple, Optional.empty(),
+                    PartitionIdGenerator.of(), false, aggregate);
+            source.setTopnReorderSlotId(1);
+            long partitionId = source.addPartition(task);
+            THdfsScanRange range = source.buildScanRange(task, task.file(), partitionId);
+            Assertions.assertTrue(range.getMin_max_values().containsKey(1));
+            Assertions.assertEquals(aggregate, range.getMin_max_values().containsKey(2));
+            Assertions.assertEquals(aggregate ? 2 : 1, range.getMin_max_values().size());
+        }
+    }
+
+    @Test
     public void testExtractBucketIdFromTask() {
         List<Column> schema = new ArrayList<>();
         schema.add(new Column("id", INT));

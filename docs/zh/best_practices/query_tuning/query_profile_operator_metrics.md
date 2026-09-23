@@ -249,9 +249,9 @@ OLAP_SCAN Operator 负责从 StarRocks 内表中读取数据。
 | PeakIOTasks | I/O 任务的峰值数量。 |
 | PeakScanTaskQueueSize | I/O 任务队列的峰值大小。 |
 | MorselQueueType | Morsel 队列的类型：当该扫描启用 Iceberg TopN 文件裁剪时为 `priority_morsel_queue`，否则为 `dynamic_morsel_queue`。 |
-| TopnReorderEligibleMorsels | Iceberg TopN 文件裁剪：排序列具有可用文件级 min/max 的文件数。 |
-| TopnReorderNoBoundMorsels | Iceberg TopN 文件裁剪：没有可用 min/max、按常规读取的文件数。 |
-| TopnMinMaxFilteredScanRanges | Iceberg TopN 文件裁剪：因 min/max 无法进入 top-k，在读取 footer 前被跳过的文件数。 |
+| TopnReorderEligibleMorsels | 按排序列的可用 min/max 边界排序的扫描任务（morsel）数。 |
+| TopnReorderNoBoundMorsels | 未使用数值优先级的扫描任务数，包括按 NULLS FIRST 优先处理的任务。 |
+| TopnMinMaxFilteredScanRanges | 因 min/max 无法通过过滤条件而在读取 footer 前跳过的扫描范围数。 |
 
 ### Exchange Operator
 

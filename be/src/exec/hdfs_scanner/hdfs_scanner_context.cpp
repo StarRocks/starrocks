@@ -315,7 +315,11 @@ MutableColumnPtr HdfsScannerContext::create_min_max_value_column(SlotDescriptor*
 
 bool HdfsScannerContext::decode_min_max_endpoint(const TypeDescriptor& type, const TExprMinMaxValue& value,
                                                  Datum* min_out, Datum* max_out) {
-    if (value.type == TExprNodeType::NULL_LITERAL) {
+    // An absent endpoint is not a zero bound. Incomplete or inconsistent metadata
+    // must leave the file to the normal reader.
+    const auto expected_type = type.type == TYPE_BOOLEAN ? TExprNodeType::BOOL_LITERAL : TExprNodeType::INT_LITERAL;
+    if (value.type != expected_type || !value.__isset.min_int_value || !value.__isset.max_int_value ||
+        value.min_int_value > value.max_int_value) {
         return false;
     }
     switch (type.type) {

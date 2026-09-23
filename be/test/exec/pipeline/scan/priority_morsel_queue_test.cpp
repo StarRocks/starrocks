@@ -213,6 +213,22 @@ TEST(PriorityMorselQueueTest, unget_reinserts_in_order) {
     EXPECT_EQ(20, min_of(out[1]));
 }
 
+TEST(PriorityMorselQueueTest, retries_do_not_count_as_new_morsels) {
+    Morsels morsels;
+    morsels.emplace_back(bound_morsel(10, 15));
+    morsels.emplace_back(no_bound_morsel());
+    PriorityMorselQueue queue(std::move(morsels), false, kSlotId, false, false);
+    for (int i = 0; i < 3; ++i) {
+        auto first = queue.try_get();
+        ASSERT_TRUE(first.ok());
+        ASSERT_NE(nullptr, first.value());
+        queue.unget(std::move(first.value()));
+    }
+    EXPECT_EQ(1, queue.reorder_eligible_morsels());
+    EXPECT_EQ(1, queue.reorder_no_bound_morsels());
+    EXPECT_EQ(2u, drain(queue).size());
+}
+
 // Diagnostics: eligible (with bound) vs no-bound morsels are counted.
 TEST(PriorityMorselQueueTest, reorder_metrics_counted) {
     PriorityMorselQueue q(morsels_of([] {

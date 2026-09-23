@@ -96,7 +96,7 @@ private:
     std::mutex _mutex;
     std::multiset<Entry, Cmp> _set;
     std::atomic<int64_t> _size = 0;
-    // Reorder diagnostics; bumped in make_entry (under _mutex), read lock-free by the scan operator.
+    // Reorder diagnostics; bumped on append (under _mutex), read lock-free by the scan operator.
     std::atomic<int64_t> _eligible_morsels = 0;
     std::atomic<int64_t> _no_bound_morsels = 0;
     uint64_t _seq = 0;

@@ -79,6 +79,22 @@ public class IcebergTopNScanPruneRuleTest {
     }
 
     @Test
+    public void notFiresForEqualityDeleteScan(@Mocked IcebergTable table, @Mocked OptimizerContext context) {
+        mockSession(context, true, true);
+        OptExpression expr = topnOverScan(table, col(IntegerType.INT), true, false, 10, false);
+        ((LogicalIcebergScanOperator) scanOf(expr)).setFromEqDeleteRewriteRule(true);
+        Assertions.assertFalse(rule.check(expr, context));
+    }
+
+    @Test
+    public void notFiresForPartitionKey(@Mocked IcebergTable table, @Mocked OptimizerContext context) {
+        mockSession(context, true, true);
+        OptExpression expr = topnOverScan(table, col(IntegerType.INT), true, false, 10, false);
+        scanOf(expr).getPartitionColumns().add("c");
+        Assertions.assertFalse(rule.check(expr, context));
+    }
+
+    @Test
     public void firesForIntAscLimit(@Mocked IcebergTable table, @Mocked OptimizerContext context) {
         mockSession(context, true, true);
         ColumnRefOperator key = col(IntegerType.INT);

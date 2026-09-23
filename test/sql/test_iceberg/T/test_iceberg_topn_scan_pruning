@@ -74,6 +74,29 @@ set enable_iceberg_topn_scan_pruning = true;
 select id from ice_topn order by s desc, id desc limit 3;
 select count(*) > 0 from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%MorselQueueType: dynamic_morsel_queue%';
 
+
+-- Ties, mixed NULL files, both null orders and OFFSET with pruning off/on.
+create table ice_topn_edges (a bigint, b bigint);
+insert into ice_topn_edges values (NULL,101),(10,102),(20,103);
+insert into ice_topn_edges values (NULL,201),(10,202),(30,203);
+set enable_iceberg_topn_scan_pruning = false;
+select b from ice_topn_edges order by a asc nulls first, b desc limit 3;
+set enable_iceberg_topn_scan_pruning = true;
+select b from ice_topn_edges order by a asc nulls first, b desc limit 3;
+set enable_iceberg_topn_scan_pruning = false;
+select b from ice_topn_edges order by a desc nulls last, b desc limit 3 offset 1;
+set enable_iceberg_topn_scan_pruning = true;
+select b from ice_topn_edges order by a desc nulls last, b desc limit 3 offset 1;
+set enable_iceberg_topn_scan_pruning = false;
+select b from ice_topn_edges order by a asc nulls last, b desc limit 10;
+set enable_iceberg_topn_scan_pruning = true;
+select b from ice_topn_edges order by a asc nulls last, b desc limit 10;
+set enable_iceberg_topn_scan_pruning = false;
+select b from ice_topn_edges order by a desc nulls first, b desc limit 10;
+set enable_iceberg_topn_scan_pruning = true;
+select b from ice_topn_edges order by a desc nulls first, b desc limit 10;
+drop table ice_topn_edges force;
+
 drop table ice_topn force;
 drop database iceberg_topn_db_${uuid0};
 set catalog default_catalog;

@@ -262,6 +262,47 @@ public class IcebergUtilTest {
     }
 
     @Test
+    public void testTimestamptzTransitionBoundaries() {
+        for (String zone : List.of("America/Los_Angeles", "Australia/Lord_Howe", "Asia/Kathmandu")) {
+            Instant start = Instant.parse(zone.equals("Asia/Kathmandu")
+                    ? "1900-01-01T00:00:00Z" : "2023-04-01T00:00:00Z");
+            java.time.zone.ZoneOffsetTransition transition = java.time.ZoneId.of(zone).getRules().nextTransition(start);
+            assertTrue(transition.getOffsetAfter().getTotalSeconds() < transition.getOffsetBefore().getTotalSeconds());
+            long t = transition.getInstant().getEpochSecond() * 1_000_000L;
+            assertTimestampBoundsAvailable(zone, t - 1, t, false);
+            assertTimestampBoundsAvailable(zone, t - 2, t - 1, true);
+            assertTimestampBoundsAvailable(zone, t, t, true);
+            assertTimestampBoundsAvailable(zone, t, t + 1, true);
+        }
+        long spring = Instant.parse("2023-03-12T10:00:00Z").getEpochSecond() * 1_000_000L;
+        assertTimestampBoundsAvailable("America/Los_Angeles", spring - 1, spring, true);
+        assertTimestampBoundsAvailable("UTC", -1, 0, true);
+    }
+
+    private void assertTimestampBoundsAvailable(String zone, long low, long high, boolean expected) {
+        Schema schema = new Schema(required(5, "ts", Types.TimestampType.withZone()));
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(5), "ts", DateType.DATETIME, true);
+        slot.setColumn(new Column("ts", DateType.DATETIME, true));
+        ConnectContext previous = ConnectContext.get();
+        ConnectContext ctx = new ConnectContext();
+        ctx.getSessionVariable().setTimeZone(zone);
+        ctx.setThreadLocalInfo();
+        try {
+            Map<Integer, TExprMinMaxValue> result = IcebergUtil.toThriftMinMaxValueBySlots(schema,
+                    Map.of(5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), low)),
+                    Map.of(5, org.apache.iceberg.types.Conversions.toByteBuffer(Types.TimestampType.withZone(), high)),
+                    Map.of(5, 0L), Map.of(5, 2L), List.of(slot));
+            assertEquals(expected, result.containsKey(5), zone + ": " + low + ".." + high);
+        } finally {
+            if (previous == null) {
+                ConnectContext.remove();
+            } else {
+                previous.setThreadLocalInfo();
+            }
+        }
+    }
+
+    @Test
     public void testTimestamptzMinMaxDroppedWhenFileSpansDstTransition() {
         // America/Los_Angeles DST fall-back at 2023-11-05T09:00:00Z: PDT (-07:00) drops to PST (-08:00). A file whose
         // timestamptz values straddle that instant covers a backward (offset-decreasing) transition, so UTC->local

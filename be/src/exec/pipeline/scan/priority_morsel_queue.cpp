@@ -112,14 +112,11 @@ PriorityMorselQueue::Entry PriorityMorselQueue::make_entry(MorselPtr&& morsel) {
 
     if (_nulls_first && (all_null || has_null)) {
         e.rank = 0; // nulls lead -> serve first
-        _no_bound_morsels.fetch_add(1, std::memory_order_relaxed);
     } else if (has_bound) {
         e.rank = 1;
         e.key = key;
-        _eligible_morsels.fetch_add(1, std::memory_order_relaxed);
     } else {
         e.rank = 2; // no usable bound -> serve last
-        _no_bound_morsels.fetch_add(1, std::memory_order_relaxed);
     }
     e.morsel = std::move(morsel);
     return e;
@@ -129,7 +126,13 @@ Status PriorityMorselQueue::append_morsels(Morsels&& morsels) {
     std::lock_guard<std::mutex> l(_mutex);
     const int64_t added = static_cast<int64_t>(morsels.size());
     for (auto& m : morsels) {
-        _set.insert(make_entry(std::move(m)));
+        auto entry = make_entry(std::move(m));
+        if (entry.rank == 1) {
+            _eligible_morsels.fetch_add(1, std::memory_order_relaxed);
+        } else {
+            _no_bound_morsels.fetch_add(1, std::memory_order_relaxed);
+        }
+        _set.insert(std::move(entry));
     }
     _size += added;
     return Status::OK();
