@@ -366,6 +366,7 @@ public class ShowResultMetaFactory implements AstVisitorEPack<ShowResultSetMetaD
     public ShowResultSetMetaData visitShowProfilelistStatement(ShowProfilelistStmt statement, Void context) {
         return ShowResultSetMetaData.builder()
                 .addColumn(new Column("QueryId", TypeFactory.createVarcharType(48)))
+                .addColumn(new Column("CustomQueryId", TypeFactory.createVarcharType(128)))
                 .addColumn(new Column("StartTime", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("Time", TypeFactory.createVarcharType(16)))
                 .addColumn(new Column("State", TypeFactory.createVarcharType(16)))

@@ -28,6 +28,7 @@ SHOW PROFILELIST [LIMIT n]
 | **返回**  | **说明**                                                     |
 | --------- | ------------------------------------------------------------ |
 | QueryId   | 查询 ID。                                                    |
+| CustomQueryId | 该查询绑定的自定义查询 ID（如果会话设置了 `custom_query_id`），否则为空。 |
 | StartTime | 查询开始时间。                                               |
 | Time      | 查询时长。                                                   |
 | State     | 查询状态，其中包括`Error`：查询异常。`Finished`：查询执行结束。`Running`：查询正在执行。 |

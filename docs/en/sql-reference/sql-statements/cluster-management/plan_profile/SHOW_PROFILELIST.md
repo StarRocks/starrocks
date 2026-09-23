@@ -26,6 +26,7 @@ SHOW PROFILELIST [LIMIT n]
 | **Return** | **Description**                                              |
 | ---------- | ------------------------------------------------------------ |
 | QueryId    | The ID of the query.                                         |
+| CustomQueryId | The client-assigned custom query ID of the query, if `custom_query_id` was set for the session. Empty otherwise. |
 | StartTime  | The start time of the query.                                 |
 | Time       | The latency of the query.                                    |
 | State      | The status of the query, including:`Error`: The query encounters an error.`Finished`: The query is finished.`Running`: The query is running. |

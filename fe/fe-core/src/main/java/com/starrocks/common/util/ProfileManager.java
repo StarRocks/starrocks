@@ -83,6 +83,7 @@ public class ProfileManager implements MemoryTrackable {
     private static final Gson GSON = new Gson();
     private static ProfileManager INSTANCE = null;
     public static final String QUERY_ID             = ProfileKeyDictionary.QUERY_ID;
+    public static final String CUSTOM_QUERY_ID      = ProfileKeyDictionary.CUSTOM_QUERY_ID;
     public static final String START_TIME           = ProfileKeyDictionary.START_TIME;
     public static final String END_TIME             = ProfileKeyDictionary.END_TIME;
     public static final String TOTAL_TIME           = ProfileKeyDictionary.TOTAL_TIME;
@@ -102,7 +103,7 @@ public class ProfileManager implements MemoryTrackable {
     public static final String LOAD_TYPE_ROUTINE_LOAD = "ROUTINE_LOAD";
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
-            Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
+            Arrays.asList(QUERY_ID, CUSTOM_QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
                     START_TIME, END_TIME, TOTAL_TIME, QUERY_STATE, WAREHOUSE_CNGROUP, SQL_DIALECT));
 
     /**
@@ -165,6 +166,7 @@ public class ProfileManager implements MemoryTrackable {
             ZoneId sessionZone = getSessionZoneId(context);
             List<String> res = Lists.newArrayList();
             res.add(infoStrings.get(QUERY_ID));
+            res.add(infoStrings.get(CUSTOM_QUERY_ID));
             res.add(formatTimestamp(startTimeMs, sessionZone));
             res.add(infoStrings.get(TOTAL_TIME));
             res.add(infoStrings.get(QUERY_STATE));
@@ -183,6 +185,10 @@ public class ProfileManager implements MemoryTrackable {
     // from QueryId to RuntimeProfile
     private final LinkedHashMap<String, ProfileElement> profileMap;
 
+    // from CustomQueryId to QueryId, only populated for profiles whose CUSTOM_QUERY_ID is non-empty.
+    // Guarded by the same lock as profileMap.
+    private final Map<String, String> customQueryIdMap;
+
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new ProfileManager();
@@ -195,6 +201,7 @@ public class ProfileManager implements MemoryTrackable {
         readLock = lock.readLock();
         writeLock = lock.writeLock();
         profileMap = new LinkedHashMap<>();
+        customQueryIdMap = Maps.newHashMap();
     }
 
     // -------------------------------------------------------------------------
@@ -238,13 +245,19 @@ public class ProfileManager implements MemoryTrackable {
                     + "may be forget to insert 'QUERY_ID' column into infoStrings");
         }
 
+        String customQueryId = element.infoStrings.get(ProfileManager.CUSTOM_QUERY_ID);
+
         String removedQueryId = null;
         writeLock.lock();
         try {
             profileMap.put(queryId, element);
+            if (!Strings.isNullOrEmpty(customQueryId)) {
+                customQueryIdMap.put(customQueryId, queryId);
+            }
             if (profileMap.size() > Config.profile_info_reserved_num) {
                 removedQueryId = profileMap.keySet().iterator().next();
-                profileMap.remove(removedQueryId);
+                ProfileElement removedElement = profileMap.remove(removedQueryId);
+                unregisterCustomQueryId(removedElement, removedQueryId);
             }
         } finally {
             writeLock.unlock();
@@ -304,10 +317,28 @@ public class ProfileManager implements MemoryTrackable {
         }
     }
 
+    // Removes the customQueryId -> queryId mapping, but only if it still points at queryId, so evicting
+    // an older profile never clobbers a newer profile that reused the same custom query id.
+    private void unregisterCustomQueryId(ProfileElement element, String queryId) {
+        if (element == null) {
+            return;
+        }
+        String customQueryId = element.infoStrings.get(ProfileManager.CUSTOM_QUERY_ID);
+        if (!Strings.isNullOrEmpty(customQueryId)) {
+            customQueryIdMap.remove(customQueryId, queryId);
+        }
+    }
+
+    // Resolves a caller-supplied id that may be either the real query_id or a client-assigned
+    // custom_query_id, to the query_id key used by profileMap. Must be called while holding readLock/writeLock.
+    private String resolveQueryId(String id) {
+        return customQueryIdMap.getOrDefault(id, id);
+    }
+
     public boolean hasProfile(String queryId) {
         readLock.lock();
         try {
-            return profileMap.containsKey(queryId);
+            return profileMap.containsKey(resolveQueryId(queryId));
         } finally {
             readLock.unlock();
         }
@@ -348,7 +379,9 @@ public class ProfileManager implements MemoryTrackable {
     public void removeProfile(String queryId) {
         writeLock.lock();
         try {
-            profileMap.remove(queryId);
+            String resolvedQueryId = resolveQueryId(queryId);
+            ProfileElement removedElement = profileMap.remove(resolvedQueryId);
+            unregisterCustomQueryId(removedElement, resolvedQueryId);
         } finally {
             writeLock.unlock();
         }
@@ -358,6 +391,7 @@ public class ProfileManager implements MemoryTrackable {
         writeLock.lock();
         try {
             profileMap.clear();
+            customQueryIdMap.clear();
         } finally {
             writeLock.unlock();
         }
@@ -373,7 +407,7 @@ public class ProfileManager implements MemoryTrackable {
         ProfileElement element;
         readLock.lock();
         try {
-            element = profileMap.get(queryId);
+            element = profileMap.get(resolveQueryId(queryId));
         } finally {
             readLock.unlock();
         }
@@ -383,7 +417,7 @@ public class ProfileManager implements MemoryTrackable {
     public ProfileElement getProfileElement(String queryId) {
         readLock.lock();
         try {
-            return profileMap.get(queryId);
+            return profileMap.get(resolveQueryId(queryId));
         } finally {
             readLock.unlock();
         }

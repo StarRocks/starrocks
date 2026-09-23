@@ -1354,12 +1354,13 @@ public class ShowStmtMetaTest {
     public void testShowProfilelistStmt() {
         ShowProfilelistStmt stmt = new ShowProfilelistStmt(10, NodePosition.ZERO);
         ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);
-        Assertions.assertEquals(5, metaData.getColumnCount());
+        Assertions.assertEquals(6, metaData.getColumnCount());
         Assertions.assertEquals("QueryId", metaData.getColumn(0).getName());
-        Assertions.assertEquals("StartTime", metaData.getColumn(1).getName());
-        Assertions.assertEquals("Time", metaData.getColumn(2).getName());
-        Assertions.assertEquals("State", metaData.getColumn(3).getName());
-        Assertions.assertEquals("Statement", metaData.getColumn(4).getName());
+        Assertions.assertEquals("CustomQueryId", metaData.getColumn(1).getName());
+        Assertions.assertEquals("StartTime", metaData.getColumn(2).getName());
+        Assertions.assertEquals("Time", metaData.getColumn(3).getName());
+        Assertions.assertEquals("State", metaData.getColumn(4).getName());
+        Assertions.assertEquals("Statement", metaData.getColumn(5).getName());
     }
 
     @Test
