@@ -2461,7 +2461,7 @@ TEST_F(JsonFunctionsTest, json_query_many_constant_and_null_input) {
         ASSERT_TRUE(result.ok());
         ASSERT_TRUE(result.value()->is_constant());
         ASSERT_EQ(4096, result.value()->size());
-        ASSERT_EQ(1, ColumnHelper::get_data_column(result.value().get())->size());
+        ASSERT_EQ(1, down_cast<const ConstColumn*>(result.value().get())->data_column()->size());
         if (input->only_null()) {
             ASSERT_EQ(4096, ColumnHelper::count_nulls(result.value()));
         } else {
@@ -2591,7 +2591,7 @@ TEST_F(JsonFunctionsTest, parse_json_constant_column) {
     ASSERT_TRUE(result.ok());
     ASSERT_TRUE(result.value()->is_constant());
     ASSERT_EQ(4096, result.value()->size());
-    ASSERT_EQ(1, ColumnHelper::get_data_column(result.value().get())->size());
+    ASSERT_EQ(1, down_cast<const ConstColumn*>(result.value().get())->data_column()->size());
     ASSERT_EQ(result.value()->debug_item(0), result.value()->debug_item(4095));
 }
 
