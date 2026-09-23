@@ -292,32 +292,20 @@ StatusOr<ColumnPtr> JsonFunctions::get_native_json_scalar_string(FunctionContext
 StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
     int num_rows = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
-    ColumnBuilder<TYPE_JSON> result(num_rows);
-
-    // Constant JSON fast path: parse exactly once, replicate the resulting JsonValue across rows.
-    // Builds a one-row JSON column and lets the caller treat it as constant-folded; matches existing
-    // is_all_const(columns) semantics at build time.
     if (columns[0]->is_constant() && !columns[0]->only_null() && num_rows > 0) {
-        Slice slice = viewer.value(0);
-        auto json = JsonValue::parse(slice);
+        auto json = JsonValue::parse(viewer.value(0));
         if (!json.ok()) {
             if (context != nullptr && context->allow_throw_exception()) {
                 return json.status();
             }
-            for (int row = 0; row < num_rows; ++row) {
-                result.append_null();
-            }
-        } else {
-            JsonValue jv = std::move(json.value());
-            for (int row = 0; row < num_rows; ++row) {
-                // ColumnBuilder<TYPE_JSON>::append takes JsonValue&&; build a fresh copy per row.
-                result.append(JsonValue(jv));
-            }
+            return ColumnHelper::create_const_null_column(num_rows);
         }
-        DCHECK(num_rows == result.data_column_raw_ptr()->size());
-        return result.build(ColumnHelper::is_all_const(columns));
+        auto data = JsonColumn::create();
+        data->append(std::move(json.value()));
+        return ConstColumn::create(std::move(data), num_rows);
     }
 
+    ColumnBuilder<TYPE_JSON> result(num_rows);
     for (int row = 0; row < num_rows; row++) {
         if (viewer.is_null(row)) {
             result.append_null();

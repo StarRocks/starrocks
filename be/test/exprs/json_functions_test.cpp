@@ -2418,6 +2418,18 @@ TEST_F(JsonFunctionsTest, diff_get_json_root_and_reset_paths) {
     }
 }
 
+TEST_F(JsonFunctionsTest, parse_json_constant_column) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto input = BinaryColumn::create();
+    input->append(R"({"a":1})");
+    auto result = JsonFunctions::parse_json(ctx.get(), {ConstColumn::create(input, 4096)});
+    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(result.value()->is_constant());
+    ASSERT_EQ(4096, result.value()->size());
+    ASSERT_EQ(1, ColumnHelper::get_data_column(result.value().get())->size());
+    ASSERT_EQ(result.value()->debug_item(0), result.value()->debug_item(4095));
+}
+
 TEST_F(JsonFunctionsTest, parse_json_constant_respects_allow_throw_exception) {
     for (bool strict : {false, true}) {
         TQueryOptions options;
