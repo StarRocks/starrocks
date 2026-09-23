@@ -419,13 +419,20 @@ final class PreSplitFlow {
      * (the footer min/max tuples span the whole sort key), so the BE's {@code
      * validate_new_tablet_ranges} accepts them just as it does data-tier boundaries.
      *
+     * <p>Serves both file-backed load kinds, so a Broker Load into a partitioned range-bucket table
+     * plans its cuts from footers exactly as the equivalent {@code INSERT INTO ... SELECT FROM FILES()}
+     * does. The per-kind provider ({@link DefaultPreSplitPipeline#rowGroupStatisticsProviderFor})
+     * applies its own source guards — Broker Load defers to the data tier for a broker-backed or
+     * non-identity file group — and raises {@link MetaTierUnavailableException}, which this method's
+     * catch turns into the same data-tier fallback.
+     *
      * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
      * the footer path cannot serve: a load kind without Parquet footers, a rollup target
      * (secondary-index sort keys the footer path does not carry), a partition source column absent
      * from the sort key, or too few usable footer statistics.
      */
     static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
-        if (loadKind != LoadKind.INSERT_FROM_FILES) {
+        if (loadKind != LoadKind.INSERT_FROM_FILES && loadKind != LoadKind.BROKER_LOAD) {
             return null;
         }
         if (!prepared.secondaryIndexSpecs().isEmpty()) {
@@ -456,7 +463,8 @@ final class PreSplitFlow {
                     prepared.scanContext(), sortKeyColumns, prepared.secondaryIndexSpecs(),
                     partitionSourceColumns, Config.tablet_pre_split_sample_byte_limit, /*seed*/ 0L)
                     .withQueryTimeoutSeconds((int) Config.tablet_pre_split_pre_submit_timeout_seconds);
-            List<RowGroupStatistics> rowGroups = new InsertFromFilesRowGroupStatisticsProvider().fetch(request);
+            List<RowGroupStatistics> rowGroups =
+                    DefaultPreSplitPipeline.rowGroupStatisticsProviderFor(loadKind).fetch(request);
             if (rowGroups == null || rowGroups.isEmpty()) {
                 return null;
             }

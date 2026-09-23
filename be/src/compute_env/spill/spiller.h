@@ -70,6 +70,15 @@ public:
     RuntimeProfile::Counter* spill_rows = nullptr;
     // time spent to flush data to disk
     RuntimeProfile::Counter* flush_timer = nullptr;
+    // flush_timer split by stage. Only the sorted path (RawSpillerWriter) reports these; the
+    // partitioned writer has no compaction stage and leaves both at zero.
+    // time spent writing a finalized mem table out as a new block group
+    RuntimeProfile::Counter* flush_mem_table_timer = nullptr;
+    // time spent merging several sorted block groups into one
+    RuntimeProfile::Counter* compact_timer = nullptr;
+    // the merging part of compact_timer: comparing keys and assembling the merged chunk. The
+    // deserialize and read IO it feeds on are counted by deserialize_timer/read_io_timer instead.
+    RuntimeProfile::Counter* compact_merge_timer = nullptr;
     // disk io time during flush
     RuntimeProfile::Counter* write_io_timer = nullptr;
     RuntimeProfile::Counter* local_write_io_timer = nullptr;
@@ -127,6 +136,9 @@ public:
     // the number of compact table
     RuntimeProfile::Counter* compact_count = nullptr;
     RuntimeProfile::Counter* compact_block_count = nullptr;
+    // bytes read from and written back to disk by compaction, a subset of restore_bytes/flush_bytes
+    RuntimeProfile::Counter* compact_bytes_read = nullptr;
+    RuntimeProfile::Counter* compact_bytes_written = nullptr;
 
     // flush/restore task count
     RuntimeProfile::Counter* flush_io_task_count = nullptr;

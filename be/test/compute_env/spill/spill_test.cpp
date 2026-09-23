@@ -609,6 +609,17 @@ TEST_F(SpillTest, order_by_process) {
         }
         ASSERT_EQ(contain_rows, restored_rows);
         ASSERT_GT(metrics.compact_count->value(), 0);
+        // FlushTime must be attributable: both stages of the flush task report their own time,
+        // the merge inside compaction is separated from the IO it drives, and compaction reports
+        // the bytes it rewrote.
+        ASSERT_GT(metrics.flush_mem_table_timer->value(), 0);
+        ASSERT_GT(metrics.compact_timer->value(), 0);
+        ASSERT_GT(metrics.compact_merge_timer->value(), 0);
+        ASSERT_LE(metrics.compact_merge_timer->value(), metrics.compact_timer->value());
+        ASSERT_LE(metrics.flush_mem_table_timer->value() + metrics.compact_timer->value(),
+                  metrics.flush_timer->value());
+        ASSERT_GT(metrics.compact_bytes_read->value(), 0);
+        ASSERT_GT(metrics.compact_bytes_written->value(), 0);
     }
 }
 
