@@ -96,7 +96,12 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (!sourceAuthorizedAndPolicyFree(resolvedSource, context)) {
             return null;
         }
-        Expr where = selectRelation.getWhereClause();
+        // Fold plan-time constants in the user's context before the gate, so the ROOT sampler
+        // never evaluates a function that reads session state (time zone, query start time).
+        Expr where = SamplingPredicateGate.foldPlanTimeConstants(selectRelation.getWhereClause(), context);
+        if (where == null && selectRelation.getWhereClause() != null) {
+            return null;
+        }
         if (!SamplingPredicateGate.isDeterministicAndSafe(
                 where, resolvedSource.normalizedName(), resolvedSource.sourceAlias())) {
             return null;
