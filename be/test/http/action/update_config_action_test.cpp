@@ -31,14 +31,11 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-<<<<<<< HEAD
+#include "storage/utils.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
-=======
-#include "storage/utils.h"
->>>>>>> 87a3a88 ([UT] Cut the fixed per-process cost of BE unit tests (#79543))
 
 #ifdef USE_STAROS
 DECLARE_int64(fslib_s3_max_single_part_size);
