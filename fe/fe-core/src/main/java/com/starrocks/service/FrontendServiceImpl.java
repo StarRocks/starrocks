@@ -1291,9 +1291,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 context, user, clientIp, passwd);
         // check INSERT action on table
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            // Reuse the context authentication just populated: it already carries the identity and the
+            // group-derived roles. Rebuilding it from currentUser alone would drop those groups.
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(

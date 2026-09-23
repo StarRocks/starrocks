@@ -302,7 +302,7 @@ public class AuthenticationHandler {
             // cleartext password (MySQL clear-password frame or HTTP Basic), a token plugin for JWT / OAuth2.
             // An integration type without a client-side plugin cannot match, so skip it instead of throwing.
             String expectedClientPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
-            if (expectedClientPlugin == null && !(securityIntegration instanceof LDAPSecurityIntegration)) {
+            if (expectedClientPlugin == null) {
                 // The type -> client plugin table is maintained by hand, so a type supported by
                 // SecurityIntegrationFactory but missing from it would silently refuse every user of that
                 // integration. Say so once per attempt instead of leaving nothing in the log.
@@ -311,8 +311,7 @@ public class AuthenticationHandler {
                 continue;
             }
             if (expectedClientPlugin != null
-                    && !expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())
-                    && !(securityIntegration instanceof LDAPSecurityIntegration)) {
+                    && !expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())) {
                 continue;
             }
 
