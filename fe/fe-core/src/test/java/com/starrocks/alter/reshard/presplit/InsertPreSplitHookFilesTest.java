@@ -202,6 +202,9 @@ public class InsertPreSplitHookFilesTest {
         FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
         TableFunctionTable filesTable = mock(TableFunctionTable.class);
         when(filesTable.loadFileList()).thenReturn(List.of());
+        // The inferred FILES() schema must carry the sort key: the sampler projects it by name, so a
+        // schema without it leaves nothing to sample and the statement is declined before the coordinator.
+        when(filesTable.getFullSchema()).thenReturn(List.of(PresplitTestSupport.bigintColumn("k")));
         when(filesRelation.getTable()).thenReturn(filesTable);
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
         when(stmt.isColumnMatchByName()).thenReturn(true);
