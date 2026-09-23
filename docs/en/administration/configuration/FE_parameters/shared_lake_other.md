@@ -176,6 +176,14 @@ This topic introduces the following types of FE configurations:
 - Description: The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.
 - Introduced in: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- Default: Empty string
+- Type: String
+- Unit: -
+- Is mutable: No
+- Description: Path to the federated token file used for Workload Identity authentication when creating the built-in ADLS2 storage volume. Set it together with `azure_adls2_oauth2_tenant_id` and `azure_adls2_oauth2_client_id`, and keep `azure_adls2_oauth2_use_managed_identity` as `false`. Mount the file at the same readable path on every FE and CN. An empty string disables token-file authentication. Restart the FE after changing this configuration.
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - Default: false
@@ -543,6 +551,15 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum number of threads for Version Publish tasks in a shared-data cluster.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- Default: 60000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: The timeout of the Version Publish RPC of a transaction in a shared-data cluster. It bounds both how long the FE waits for the compute node to answer and the deadline the compute node applies to the publish task itself, so the two always move together. Raise it when a publish legitimately needs longer than the default, for example when a single transaction publishes a large number of tablets and the transaction fails with a publish timeout.
+- Introduced in: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - Default: 3000
@@ -649,6 +666,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The density guard for colocate group sampling, expressed as the maximum tolerated percentage of empty draws. A sampled tablet is an empty draw when it holds no replica on a candidate Compute Node, that is, it is not placed yet or is not on that Compute Node. If more than this percentage of the sample is empty, the group is too sparsely placed for the sample to represent its true distribution, which is what happens while a group is still bulk filling from empty, so the scheduler discards the sample and falls back to a full scan. Equivalently, the sample is trusted only when at least (100 - this value)% of the sampled tablets are placed on a candidate Compute Node, so a lower value is more conservative and demands a denser group before sampling. A stable, fully placed group yields close to 0% empty draws and always takes the fast sampled path regardless of this value, so this item only governs the bulk-fill transient. Set it to `100` to never fall back. This item takes effect only when `lake_scheduler_enable_colocate_group_sample` is set to `true`.
 - Introduced in: v4.1.5
+
+### `lake_enable_incremental_shard_replica_journal`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether StarMgr journals a replica-only tablet change as a replica delta instead of a full tablet snapshot. Adding, removing, or transitioning a single replica otherwise re-serializes the entire tablet metadata entry, including its file path, storage credentials, properties, and every replica, of which roughly 95% describes state that no replica operation can change. On a cluster that schedules tablets heavily, those snapshots dominate the metadata journal. Every FE that offers this item understands the delta entry on replay, and only the writer is gated by it, so a cluster becomes able to replay the entry by first deploying a version that offers this item with the item left as `false`, and only then setting it to `true`. Do not enable it while any FE in the cluster still runs an earlier version: such an FE skips every replica update rather than one, and writes the resulting divergence into its own checkpoint without reporting a failure. To roll back, set this item to `false`, force a metadata checkpoint so that the image absorbs the entries already written, and only then downgrade, because setting it to `false` does not retract what is already in the journal. Only the Leader FE's value has any effect, and changing it at runtime is safe, because a journal that carries both entry kinds replays correctly.
+- Introduced in: v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: No
+- Description: Whether StarMgr maintains a Compute Node to tablets reverse index. Rescheduling the tablets of a restarted Compute Node and validating the replicas that a Compute Node reports on each heartbeat otherwise both scan the whole tablet map and test each tablet for a replica on that Compute Node, which costs time proportional to the number of tablets in the cluster for each Compute Node. With the index, they cost only the Compute Node's own tablet count. The index is derived state: it is rebuilt from the tablet map when the metadata image loads and is maintained under the same lock from then on, and when this item is `false` it is neither built nor held, so leaving it disabled costs nothing. StarMgr reads this item once while the metadata image loads, so a change takes effect only after the FE restarts.
+- Introduced in: v4.2.0
 
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
@@ -1599,7 +1634,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: -
 - Is mutable: Yes
-- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is disable (the system always use the safe, copy-and-lock path). When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
+- Description: Controls when StarRocks applies the "non-lock" optimization for tables that have related materialized views. When this item is set to less than 0, the system always applies non-lock optimization and does not copy related materialized views for queries (FE memory usage and metadata copy/lock contention is reduced but risk of metadata concurrency issues can be increased). When it is set to 0, non-lock optimization is applied only for tables that carry no related materialized view. When it is set to greater than 0, non-lock optimization is applied only for tables whose number of related materialized views is less than or equal to the configured threshold. This threshold is not applied to a statement that also reads a table in an external catalog: holding the lock for the whole planning phase would bind it to partition, statistics, and file-list requests to a system outside the FE's control, while that lock protects nothing on the external side, so such a statement uses the non-lock path however many related materialized views the internal table carries. Additionally, when the value is greater than and equal to 0, the planner records query OLAP tables into the optimizer context to enable materialized view-related rewrite paths; when it is less than 0, this step is skipped.
 - Introduced in: v3.2.1
 
 ### `small_file_dir`

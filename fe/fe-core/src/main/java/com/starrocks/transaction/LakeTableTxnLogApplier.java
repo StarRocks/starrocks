@@ -64,16 +64,112 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 continue;
             }
 
-            // The version of a replication transaction may not continuously
+            // Derive the new nextVersion from the version this transaction was allocated, which
+            // unprotectedCommitPreparedTransaction took from partition.getNextVersion() under the
+            // database lock and journaled with this entry. Deriving it is equivalent to the running
+            // increment this used to do -- but idempotent, which the increment was not.
+            //
+            // A relative increment makes nextVersion a counter that the leader and every replaying
+            // FE maintain independently, and nothing ever reconciles it against the journal. So a
+            // single increment applied twice, or not at all, drifts them apart by one -- permanently
+            // and silently, because no other operation reads nextVersion for correctness. The drift
+            // surfaces only when a lake alter job reserves commitVersion = nextVersion on the leader
+            // and a replaying FE then asserts nextVersion == commitVersion: that assert fails, journal
+            // replay aborts, and every FE exits on that record on every restart (StarRocksTest#12225,
+            // where two followers independently derived 3828 from the journal while the leader held
+            // 3829). Deriving from the journaled version instead makes replay reproduce the leader
+            // exactly, re-applying an entry a no-op, and any pre-existing drift self-heal on the next
+            // transaction.
+            //
+            // The replication branch already worked this way; it is called out separately only
+            // because a replication transaction's versions are not contiguous.
+            //
+            // nextDataVersion is derived the same way and for the same reason: leaving it on the
+            // increment while nextVersion is derived would make a re-applied entry advance one
+            // counter and not the other, which is worse than the drift this fixes -- it breaks the
+            // committed-vs-visible data version equality that ReplicationJob.commitTransaction()
+            // preconditions on. A compaction is the exception: it allocates no data version and
+            // must not advance one.
+            long commitVersion = partitionCommitInfo.getVersion();
+            long commitDataVersion = partitionCommitInfo.getDataVersion();
+
+            // Report a counter that has fallen BEHIND the journal. Such a drift is otherwise
+            // undetectable: nothing else reads nextVersion for correctness, so it stays silent until a
+            // lake alter job's reserved commitVersion disagrees with it and aborts journal replay on
+            // every FE. Reporting it at the first transaction that observes it names that transaction,
+            // so the operation that introduced the drift can be found in the window before it. This
+            // cannot fire on the leader: unprotectedCommitPreparedTransaction allocated commitVersion
+            // from this very field under the same database lock.
+            //
+            // Report only a counter that is behind on a transaction whose version is supposed to be
+            // contiguous with it. Everything else is normal and must stay silent, or the signal is
+            // useless:
+            //   - being at or past commitVersion: applying an entry a second time legitimately leaves
+            //     nextVersion at commitVersion + 1, which is the idempotence this change provides;
+            //   - replication: versions are intentionally noncontiguous;
+            //   - version overwrite: overwriting an EMPTY partition deliberately names a version above
+            //     the counter ("it's next version will less than overwrite version", per
+            //     OlapTableTxnLogApplier);
+            //   - double write: the commit info carries the ORIGINAL partition's version, which can sit
+            //     above this partition's own counter.
+            // These are the same three exemptions applyVisibleLog makes from its continuity
+            // precondition, and for the same reason.
+            boolean versionIsContiguousWithCounter =
+                    txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION
+                            && !txnState.isVersionOverwrite()
+                            && !partitionCommitInfo.isDoubleWrite();
+            if (versionIsContiguousWithCounter && commitVersion > 0
+                    && partition.getNextVersion() < commitVersion) {
+                // Wording kept stable on purpose: this string is what operators grep for, and a
+                // cluster already running the previous build reports it the same way.
+                LOG.warn("partition {} nextVersion {} disagrees with the version transaction {} was " +
+                                "allocated ({}), so an earlier operation advanced this FE's counter out " +
+                                "of step with the journal; converging on the journaled version. source={}",
+                        partitionId, partition.getNextVersion(), txnState.getTransactionId(),
+                        commitVersion, txnState.getSourceType());
+            }
+
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
-                partition.setNextDataVersion(partitionCommitInfo.getDataVersion() + 1);
+                // A replication transaction's versions are not contiguous, so they are taken as given
+                // rather than derived from the counter. Unchanged.
+                partition.setNextVersion(commitVersion + 1);
+                partition.setNextDataVersion(commitDataVersion + 1);
+            } else if (commitVersion > 0) {
+                // Advance to the version this entry carries, but never below where the counter already
+                // is. Overshooting only skips versions; undershooting hands the same version out twice,
+                // so on a mismatch the higher value is always the safe one. This also keeps
+                // INSERT OVERWRITE's documented behaviour -- overwriting a non-empty partition names a
+                // version below the counter and must not move it -- which the shared-nothing applier
+                // spells out in OlapTableTxnLogApplier#applyCommitLog.
+                advanceTo(partition::getNextVersion, partition::setNextVersion, commitVersion + 1);
+                if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
+                    // A compaction allocates no data version and must not advance one.
+                    if (commitDataVersion > 0) {
+                        advanceTo(partition::getNextDataVersion, partition::setNextDataVersion,
+                                commitDataVersion + 1);
+                    } else {
+                        partition.setNextDataVersion(partition.getNextDataVersion() + 1);
+                    }
+                }
             } else {
+                // No version was allocated for this partition (the sentinel survived commit), or the
+                // record predates the field. Deriving from the sentinel would corrupt the version
+                // chain, so keep the historical increment.
+                LOG.warn("partition {} has no committed version in transaction {}; falling back " +
+                        "to incrementing nextVersion", partitionId, txnState.getTransactionId());
                 partition.setNextVersion(partition.getNextVersion() + 1);
                 if (txnState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
                     partition.setNextDataVersion(partition.getNextDataVersion() + 1);
                 }
             }
+        }
+    }
+
+    /** Move a version counter forward to {@code target}, never backwards. */
+    private static void advanceTo(java.util.function.LongSupplier get, java.util.function.LongConsumer set,
+                                  long target) {
+        if (get.getAsLong() < target) {
+            set.accept(target);
         }
     }
 
@@ -248,6 +344,18 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             // These stats came back with the publish of exactly this version.
             lakeTablet.setRowCount(tabletStat.numRows != null ? tabletStat.numRows : 0L, version);
             lakeTablet.setDataSizeUpdateTime(versionTime);
+            // Only apply the observation while the table is NORMAL. A split's children become
+            // catalog-visible while the table is still TABLET_RESHARD, and cross-published
+            // transactions flow through this method and update those same child LakeTablet objects. A
+            // cross-publish that happens to contribute no shared file would mark the tablet clean, and
+            // a merge could be planned in that window before the next cross-publish corrects it -- and
+            // a planned merge's transaction is already committed by publish time, so it cannot be
+            // abandoned. This method already runs under the table write lock that makes the
+            // transaction visible, so the state read here is not a TOCTOU.
+            if (table.getState() == OlapTable.OlapTableState.NORMAL) {
+                // See LakeTablet#observeSharedFiles(Boolean): an absent field fails closed too.
+                lakeTablet.observeSharedFiles(tabletStat.hasSharedFiles);
+            }
             maxTabletSize = Math.max(maxTabletSize, dataSize);
         }
         if (maxTabletSize > 0 && table.isRangeDistribution()) {

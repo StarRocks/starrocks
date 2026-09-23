@@ -127,6 +127,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：每个 BE 中按 endpoint、credential 和 capability 分桶的 chat/text AI HTTP attempt 请求准入速率。为遵守 Provider 配额或降低出站负载可调小；仅在 Provider 与 BE 均有足够容量时调大。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE。
 - 引入版本：-
 
+### ai_function_rate_limit_qps_embedding
+
+- 默认值：128
+- 类型：Int（32 位）
+- 单位：请求/秒
+- 有效值：正整数
+- 是否动态：是
+- 描述：每个 BE 中按端点、凭证和 capability 分桶的文本向量 HTTP attempt 准入速率。适用于 SYSTEM 和 AI provider 指定的向量调用，包括重试。该限制独立于 `ai_function_rate_limit_qps_chat`，同时仍受进程级 `ai_function_max_inflight` 限制。可调小以遵守提供商配额或控制出站负载；仅在提供商和 BE 均有容量时调大。运行时修改实时生效，无需重启 BE。
+- 引入版本：-
+
 ### ai_function_max_inflight
 
 - 默认值：512
@@ -203,6 +213,16 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：控制是否为 Flat Json 数据进行 Compaction。
 - 引入版本：v3.3.3
+
+### enable_default_value_column_zonemap_filter
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 取值范围：`true`、`false`
+- 是否动态：是
+- 描述：是否通过常量折叠对 segment 中物理缺失的列进行数据裁剪。通过 fast schema evolution（`ALTER TABLE ... ADD COLUMN`）新增的列不会写入已有的 segment，因此该列的每一行都是列默认值（或 `NULL`）。取值为 `true` 时，针对该列的谓词会直接对这个常量求值，若不可能命中则整个 segment 被跳过。取值为 `false` 时，这些 segment 会被完整读取，且每个批次都会重新按删除条件检查，即该选项引入之前的行为。如果新增过列的表出现查询结果异常，可将其设为 `false` 回滚。该选项与 `enable_index_page_level_zonemap_filter` 相互独立，后者无法覆盖 runtime filter 路径。
+- 引入版本：-
 
 ### enable_json_flat
 
@@ -643,6 +663,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 单位：-
 - 是否动态：否
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
+- 引入版本：-
+
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）或 VARIANT 时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
 - 引入版本：-
 
 ### enable_lock_free_scan_task_queue

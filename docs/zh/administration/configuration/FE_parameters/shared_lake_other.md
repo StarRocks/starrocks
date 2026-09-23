@@ -177,6 +177,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的租户 ID。
 - 引入版本: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建内置 ADLS2 存储卷时，为 Workload Identity 认证指定的联合令牌文件路径。需同时配置 `azure_adls2_oauth2_tenant_id` 和 `azure_adls2_oauth2_client_id`，并将 `azure_adls2_oauth2_use_managed_identity` 保持为 `false`。请在所有 FE 和 CN 上将文件挂载到相同的可读路径。空字符串表示不使用令牌文件认证。修改后需重启 FE。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - 默认值: false
@@ -544,6 +552,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 存算分离集群中版本发布任务的最大线程数。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- 默认值: 60000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离集群中事务版本发布（Publish Version）RPC 的超时时间。该值同时限定 FE 等待计算节点响应的时长和计算节点执行发布任务的截止时间，两者始终保持一致。如果单个事务发布的 tablet 数量很多，发布确实需要更长时间，并因此出现发布超时导致事务失败，可以调大该值。
+- 引入版本: v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - 默认值: 3000
@@ -650,6 +667,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
 - 引入版本: v4.1.5
+
+### `lake_enable_incremental_shard_replica_journal`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：StarMgr 是否将仅涉及副本的 Tablet 变更以副本增量的形式记入元数据日志，而非记录完整的 Tablet 快照。否则，新增、删除或变更单个副本都会重新序列化整条 Tablet 元数据，包括文件路径、存储凭证、属性以及全部副本，其中约 95% 的内容描述的是任何副本操作都不会改变的状态。在 Tablet 调度频繁的集群中，这些快照会成为元数据日志的主要来源。所有提供该配置项的 FE 在回放时都能识别该增量日志条目，该配置项仅约束写入方。因此，应先部署提供该配置项的版本并保持其为 `false`，使集群具备回放该条目的能力，之后再将其设置为 `true`。当集群中仍有 FE 运行较早版本时，请勿启用：此类 FE 会跳过所有副本更新（而非单条），并在不报错的情况下将由此产生的元数据分歧写入自身的 Checkpoint。如需回退，请先将该项设置为 `false`，强制触发一次元数据 Checkpoint 以使镜像吸收已写入的日志条目，然后再降级版本，因为将该项设置为 `false` 并不会撤销日志中已有的条目。仅 Leader FE 上的取值生效。运行时修改是安全的，因为同时包含两种条目的日志可以被正确回放。
+- 引入版本：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：StarMgr 是否维护 Compute Node 到 Tablet 的反向索引。否则，重新调度已重启 Compute Node 上的 Tablet，以及校验 Compute Node 每次心跳上报的副本，都需要扫描完整的 Tablet 映射并逐个判断该 Tablet 在该 Compute Node 上是否存在副本，对每个 Compute Node 的开销与集群 Tablet 总数成正比。启用该索引后，开销仅与该 Compute Node 自身的 Tablet 数量相关。该索引属于派生状态：在加载元数据镜像时根据 Tablet 映射重建，此后在同一把锁的保护下维护；当该项为 `false` 时既不构建也不占用内存，因此保持关闭不会带来额外开销。StarMgr 仅在加载元数据镜像时读取该项一次，因此修改后需重启 FE 才会生效。
+- 引入版本：v4.2.0
 
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
@@ -1599,7 +1634,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，禁用无锁优化（系统始终使用安全的复制和锁定路径）。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
+- 描述: 控制 StarRocks 何时对具有相关物化视图的表应用“无锁”优化。当此项设置为小于 0 时，系统始终应用无锁优化，并且不为查询复制相关物化视图（减少 FE 内存使用和元数据复制/锁争用，但可能增加元数据并发问题的风险）。当设置为 0 时，仅对没有相关物化视图的表应用无锁优化。当设置为大于 0 时，仅当相关物化视图的数量小于或等于配置阈值时才应用无锁优化。该阈值不适用于同时读取外部 Catalog 表的语句：对这类语句而言，在整个规划阶段持有锁会使锁的持有时长取决于对 FE 无法控制的外部系统发起的分区、统计信息和文件列表请求，而该锁对外部侧不提供任何保护，因此无论内表关联多少个物化视图，此类语句都走无锁路径。此外，当值大于或等于 0 时，规划器会将查询 OLAP 表记录到优化器上下文中以启用与物化视图相关的重写路径；当值小于 0 时，此步骤将被跳过。
 - 引入版本: v3.2.1
 
 ### `small_file_dir`

@@ -63,6 +63,7 @@ import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -1356,8 +1357,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIdSetForAll);
     }
 
-    private void checkPartitionNum(OlapTable olapTable) throws DdlException {
-        if (olapTable.getNumberOfPartitions() > Config.max_partition_number_per_table) {
+    private void checkPartitionNum(OlapTable olapTable, int newPartitionNum) throws DdlException {
+        if (olapTable.getNumberOfPartitions() + (long) newPartitionNum > Config.max_partition_number_per_table) {
             throw new DdlException("Table " + olapTable.getName() + " created partitions exceeded the maximum limit: " +
                     Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
                     " max_partition_number_per_table larger.");
@@ -1382,8 +1383,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // check partition type
             checkPartitionType(partitionInfo);
 
-            // check partition num
-            checkPartitionNum(olapTable);
+            // resolve which of the requested partitions already exist, so that the partition num check below
+            // only counts the ones this batch would really add
+            checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
+
+            // check partition num; temp partitions are not held in idToPartition, so they are counted by
+            // neither side of the comparison
+            checkPartitionNum(olapTable,
+                    isTempPartition ? 0 : partitionDescs.size() - checkExistPartitionName.size());
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
@@ -1396,7 +1403,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
             copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
-            checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         }
@@ -1447,6 +1453,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 if (partitionsToAdd.isEmpty()) {
                     return;
                 }
+
+                // re-check the partition num: the count checked under the READ lock above is stale as soon as
+                // that lock is dropped, and this WRITE lock is the one the batch commits under
+                checkPartitionNum(olapTable, isTempPartition ? 0 : partitionsToAdd.size());
 
                 // check if meta changed
                 checkIfMetaChange(olapTable, copiedTable, tableName);
@@ -1779,6 +1789,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 id, partition.getId(), indexMap.get(olapTable.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
@@ -2091,6 +2104,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 physicalPartitionId, partitionId, indexMap.get(table.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
@@ -4087,6 +4103,57 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Column currentColumn = olapTable.getColumn(newColName);
         if (currentColumn != null) {
             throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
+        }
+
+        // A rename can create the ambiguity that CREATE TABLE refuses: zstd_compression_columns is
+        // rendered as "<name>:<bytes>", and the parser resolves a whole token as a column name before
+        // splitting it, so a column renamed INTO that rendered form would make the table's own DDL name
+        // the wrong column. The property is not restated here and nothing else revalidates it.
+        // Gate on the nomination SET, not the page-size map: the set is what getCommonProperties
+        // renders, and the map is null whenever no nomination carries an explicit size -- which used
+        // to skip these checks entirely for the plain "zstd_compression_columns = v" case.
+        Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
+        Map<ColumnId, Integer> zstdCompressionPageSizes = olapTable.getZstdCompressionPageSizes();
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            // A nominated column's name has to be writable into the property text at all. Renaming it
+            // to something carrying a delimiter does not fail here today, it fails later and silently:
+            // a comma splits the entry in two (naming other columns, or none), and leading/trailing
+            // whitespace is trimmed on the way back in, resolving to a different column.
+            if (zstdCompressionColumns.contains(column.getColumnId())) {
+                String unrepresentable = PropertyAnalyzer.zstdCompressionNameUnrepresentable(newColName);
+                if (unrepresentable != null) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": " + unrepresentable
+                                    + ". Remove the column from "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                    + " first, or pick another name.");
+                }
+            }
+        }
+        if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+            // Both roles move, so the check is against the whole post-rename schema rather than just
+            // the new name: renaming some other column INTO the rendered form breaks it, and so does
+            // renaming the nominated column so that IT renders as a column that was already there.
+            Set<String> postRenameNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column existing : olapTable.getBaseSchema()) {
+                postRenameNames.add(existing.getName().equalsIgnoreCase(colName) ? newColName : existing.getName());
+            }
+            for (Map.Entry<ColumnId, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                Column nominated = olapTable.getColumn(entry.getKey());
+                if (nominated == null || entry.getValue() == null || entry.getValue() <= 0) {
+                    continue;
+                }
+                String nominatedName = nominated.getName().equalsIgnoreCase(colName) ? newColName : nominated.getName();
+                String rendered = nominatedName + ":" + entry.getValue();
+                if (postRenameNames.contains(rendered)) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": the table would then have a column "
+                                    + "named '" + rendered + "', which is exactly how "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " renders column "
+                                    + nominatedName + ", so the table's own DDL could not tell the two apart. "
+                                    + "Drop the page size from that entry first, or pick another name.");
+                }
+            }
         }
 
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);

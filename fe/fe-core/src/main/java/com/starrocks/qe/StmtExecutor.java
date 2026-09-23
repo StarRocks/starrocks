@@ -432,6 +432,7 @@ public class StmtExecutor {
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         java.time.ZoneId profileZone = TimeUtils.getTimeZone().toZoneId();
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(context.getExecutionId()));
+        summaryProfile.addInfoString(ProfileManager.CUSTOM_QUERY_ID, context.getCustomQueryId());
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeStringWithTimeZone(context.getStartTime(), profileZone));
 
@@ -1146,6 +1147,15 @@ public class StmtExecutor {
                     try {
                         //reset query id for each retry
                         if (i > 0) {
+                            // Re-read the cancellation flag: a KILL can land between the gate below and
+                            // here, because the finally block does real work in between (profile cleanup,
+                            // compute-resource re-acquisition). Without this, a query stopped in that
+                            // window still gets a fresh coordinator and is redeployed. This narrows the
+                            // window rather than closing it -- cancel() and the coord handoff inside
+                            // handleQueryStmt are still not atomic, which predates this path.
+                            if (isCancelled()) {
+                                throw new StarRocksException("Query has been cancelled");
+                            }
                             uuid = UUIDUtil.genUUID();
                             LOG.info("transfer QueryId: {} to {}", DebugUtil.printId(context.getQueryId()),
                                     DebugUtil.printId(uuid));
@@ -1164,7 +1174,11 @@ public class StmtExecutor {
                         ExecuteExceptionHandler.handle(e, retryContext);
                         // sync lastExecPlan in case rebuildExecPlan produced a new plan
                         lastExecPlan = retryContext.getExecPlan();
-                        if (!context.getMysqlChannel().isSend()) {
+                        // Two things make a retry unsafe. Results already on the wire (isSend), and a
+                        // cancellation that has reached this statement: KILL QUERY or a closed client
+                        // sets `cancelled`, and without this check a retryable failure recorded before
+                        // the KILL would still start a whole new execution of a query someone stopped.
+                        if (!context.getMysqlChannel().isSend() && !isCancelled()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
                                 originStmt = parsedStmt.getOrigStmt().originStmt;
@@ -2434,6 +2448,10 @@ public class StmtExecutor {
             throw new StarRocksException("Query profile not found for query_id: " + queryId +
                 ". The query may not have generated a profile, or the profile has been evicted from memory.");
         }
+        // Checked again here, not only in the analyzer: a profile absent at analysis time is allowed through,
+        // and a running query publishes its profile every runtime_profile_report_interval, so it can appear
+        // between the two lookups.
+        Authorizer.checkQueryProfileAccessAndReport(context, profileElement);
         // For short circuit query, 'ProfileElement#plan' is null
         if (profileElement.plan == null && profileElement.infoStrings.get(ProfileManager.QUERY_TYPE) != null &&
                 !profileElement.infoStrings.get(ProfileManager.QUERY_TYPE).equals("Load")) {

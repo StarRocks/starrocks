@@ -1905,8 +1905,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2579,6 +2585,29 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, a cached query profile can be read only by the user who ran the query or by a holder of
+     * SYSTEM OPERATE. This gates SHOW PROFILELIST, ANALYZE PROFILE, get_query_profile(), the /api/profile,
+     * /api/query/progress and /api/query_detail endpoints (the last keeps listing every query but drops the
+     * profile text and the plan rendered from it), and the /query and /query_profile web pages; the OPERATE
+     * requirement that enable_http_auth already places on the endpoints is unchanged.
+     * Off by default so an upgrade keeps the earlier behavior, in which every authenticated user can read every
+     * profile; turn it on to restrict profile visibility.
+     *
+     * Turning it on has two visible consequences beyond the rule itself, both deliberate. /api/query/progress
+     * stops accepting anonymous requests, because the rule needs a caller identity -- an existing anonymous
+     * poller of it starts getting 401. And get_query_profile() requires SYSTEM OPERATE for an id whose profile
+     * is not cached on the connected frontend, since the RPC that fetches it from the other frontends carries
+     * no caller identity to authorize there; that narrows the cross-frontend lookup to OPERATE holders while
+     * the check is on.
+     *
+     * Mutable so the check can be toggled without a restart. Changing it needs SYSTEM OPERATE, which already grants
+     * full profile visibility, so the knob opens no path its holder lacks. Callers that apply it across several
+     * rows snapshot it once so a flip mid-operation cannot produce a half-filtered result.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_query_profile_access_check = false;
 
     /**
      * When set to true, guava cache is used to cache the privilege collection
@@ -3712,6 +3741,9 @@ public class Config extends ConfigBase {
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
 
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
+
     // gcp gs
     @ConfField
     public static String gcp_gcs_endpoint = "";
@@ -3921,6 +3953,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
@@ -3973,6 +4011,18 @@ public class Config extends ConfigBase {
                     "placed for the sample to be representative, so the scheduler discards it and " +
                     "falls back to a full scan. Lower is more conservative. Default: 40")
     public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
+    @ConfField(mutable = true, comment =
+            "Whether StarMgr journals a replica-only shard change as a replica delta instead of a full " +
+                    "shard snapshot. Enable only once every FE in the cluster runs a build that carries " +
+                    "this item, otherwise an older FE silently skips all replica updates. Default: false")
+    public static boolean lake_enable_incremental_shard_replica_journal = false;
+
+    @ConfField(mutable = false, comment =
+            "Whether StarMgr maintains a compute node -> shards reverse index, so that per-node shard " +
+                    "lookups cost the node's own fan-out instead of a full shard-map scan. Read once at " +
+                    "FE startup. Default: false")
+    public static boolean lake_enable_worker_shard_reverse_index = false;
 
     @ConfField(mutable = true, comment =
             "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +
@@ -5294,4 +5344,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
+    public static String ai_default_embedding_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    public static String ai_default_embedding_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    public static String ai_default_embedding_provider = "";
 }
