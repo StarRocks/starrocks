@@ -31,6 +31,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
@@ -305,6 +306,19 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // An owned-only rewrite drops the rows this tablet does not own, so the replacement holds
+        // fewer of them, over a narrower stretch of the sort key, than the metadata copied from
+        // op_write says. Nothing else refreshes either: the row count is read by the persistent-index
+        // rebuild accounting and the split statistics, and the sort-key bounds and samples by tablet
+        // splitting and range-split compaction, which would otherwise sample rows this file no longer
+        // holds. Take both from the rewrite whenever it filtered -- keyed on the flag, not on a
+        // positive count, because a split child that owns none of a cross-published segment's rows
+        // legitimately produces a zero-row file. The copy-and-append path leaves the flag false and
+        // the source's metadata standing.
+        if (replace_seg.second.dropped_unowned_rows) {
+            segment_meta->set_num_rows(replace_seg.second.num_rows);
+            replace_seg.second.sort_key_fields_to_proto(segment_meta);
+        }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }
@@ -424,7 +438,7 @@ void MetaFileBuilder::apply_column_mode_partial_update(const TxnLogPB_OpWrite& o
     }
 }
 
-void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
+Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     // 1. Merge IDG entries into idg_meta, one per segment_id. New entry goes
     //    to the front of the per-segment `entries` list so readers see the
     //    newest first (mirrors DCG reverse-by-version ordering). Multiple
@@ -452,6 +466,120 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         }
     }
 
+    auto* schema = _tablet_meta->mutable_schema();
+
+    // 1b. Install the authoritative column definitions the alter resolved from FE,
+    //     when the log carries them. This must happen BEFORE the index/flag
+    //     reconciliation below so those steps land on the right column set.
+    //
+    //     Why the content and not just the id: under fast schema evolution v2 a
+    //     metadata-only ADD COLUMN updates only the FE catalog, and tablet
+    //     metadata catches up lazily on the next write naming a newer schema. In
+    //     that window this metadata is missing the added column, so bump_flag()
+    //     below would find nothing to flag and the content would stay short a
+    //     column - while step 2 stamps FE's new schema id onto it anyway. From
+    //     then on update_metadata_schema() short-circuits on the matching id and
+    //     the tablet never fetches the real schema again: a transient FE/BE schema
+    //     gap frozen into a permanent one, with no error surface anywhere.
+    //
+    //     The id travels INSIDE new_schema (see the field comment in
+    //     lake_types.proto), so content and id always move together: a worker that
+    //     does not understand new_schema finds no id to stamp either, and skips
+    //     schema mutation instead of binding a new id to stale content. The
+    //     standalone new_schema_id path below stays only for logs written before
+    //     new_schema existed.
+    const int64_t pre_apply_schema_id = schema->id();
+    const bool install_new_schema = op.has_new_schema() && op.new_schema().has_id() && op.new_schema().id() > 0;
+    if (install_new_schema) {
+        // Never move backwards. op.new_schema() is the snapshot FE took when it
+        // dispatched the alter; publish happens later, and tablet metadata may
+        // have advanced to a newer schema in between. Installing the older
+        // snapshot would DROP the columns that arrived meanwhile.
+        //
+        // Compare against the version this apply TARGETS. The writer stamped it
+        // onto new_schema, so it is the allocated target, not the FE catalog
+        // snapshot's own version -- comparing the latter would reject every REPLAY,
+        // since after the first apply the metadata already carries the target.
+        // A schema with no columns would wipe the tablet's column definitions and
+        // leave it unreadable. FE always sends the full column set, so an empty one
+        // means the log is not trustworthy -- reject rather than apply it.
+        if (op.new_schema().column_size() == 0) {
+            return Status::InternalError(strings::Substitute(
+                    "apply_add_index: refusing to install a schema with no columns. tablet=$0", _tablet_meta->id()));
+        }
+        const int64_t target_version = op.new_schema().schema_version();
+        if (schema->has_schema_version() && target_version < schema->schema_version()) {
+            return Status::InternalError(strings::Substitute(
+                    "apply_add_index: refusing to install schema version $0 over newer version $1. tablet=$2",
+                    target_version, schema->schema_version(), _tablet_meta->id()));
+        }
+        // Replace only what the column set drags along: the columns themselves and
+        // the fields that index INTO them by ordinal. ADD INDEX changes no key
+        // type, no compression, no bookkeeping, so everything else the tablet
+        // already holds stays correct.
+        //
+        // sort_key_idxes / num_short_key_columns must move WITH the columns because
+        // they are column ordinals, and ADD COLUMN does not always append -- FE's
+        // checkAndAddColumn inserts at a position for ... AFTER c / FIRST, and puts
+        // a new KEY column right after the last key -- so keeping old ordinals
+        // beside new columns would silently misalign the sort key.
+        //
+        // Everything outside that set is preserved by DEFAULT, which is the safe
+        // direction: op.new_schema() comes from convert_t_schema_to_pb_schema(),
+        // shaped by what FE knows rather than a complete TabletSchemaPB. It never
+        // emits dropped_table_indices -- the tombstone a metadata-only DROP INDEX
+        // leaves so readers do not reinterpret the footer payload it could not
+        // erase; dropping that makes has_original_bloom_filter_index() accept an
+        // NGRAM bloom as a plain one and prune away matching rows. It also emits no
+        // table_indices entry for a plain bloom filter (that lives in the
+        // table-level property, not as an FE Index object) and recomputes
+        // num_rows_per_row_block / bf_fpp from its own view. Copying the whole
+        // message and rescuing those by hand is one omission away from the same
+        // corruption, so the narrow replace is both shorter and safer.
+        //
+        // Per-column index flags merge one-way (set, never cleared): they are what
+        // SegmentWriter gates index construction on, so a flag bumped by an earlier
+        // fast-path ADD INDEX whose FE-side catalog mutation has not landed must
+        // survive. An extra flag only costs work; a missing one loses the index.
+        //
+        // Pinned by MetaFileTest.test_apply_add_index_preserves_be_only_schema_fields,
+        // with a guard on TabletSchemaPB's field count so a newly added field forces
+        // a decision on whether it belongs to the column-layout set.
+        std::unordered_map<int32_t, std::pair<bool, bool>> prior_index_flags;
+        for (const auto& col : schema->column()) {
+            prior_index_flags.emplace(col.unique_id(), std::make_pair(col.has_bitmap_index(), col.is_bf_column()));
+        }
+
+        schema->mutable_column()->CopyFrom(op.new_schema().column());
+        schema->mutable_sort_key_idxes()->CopyFrom(op.new_schema().sort_key_idxes());
+        schema->mutable_sort_key_unique_ids()->CopyFrom(op.new_schema().sort_key_unique_ids());
+        if (op.new_schema().has_num_short_key_columns()) {
+            schema->set_num_short_key_columns(op.new_schema().num_short_key_columns());
+        }
+        // The allocation high-water mark belongs to the column set too -- FE just
+        // handed out the added column's unique id, so its value leads. Taken as
+        // max() because FE recomputes it from its CURRENT columns, which on a table
+        // that has dropped columns can sit below ids already issued; letting the
+        // mark move backwards risks handing the same id out twice.
+        if (op.new_schema().has_next_column_unique_id()) {
+            schema->set_next_column_unique_id(
+                    std::max(schema->next_column_unique_id(), op.new_schema().next_column_unique_id()));
+        }
+
+        for (auto& col : *schema->mutable_column()) {
+            auto it = prior_index_flags.find(col.unique_id());
+            if (it == prior_index_flags.end()) {
+                continue;
+            }
+            if (it->second.first) {
+                col.set_has_bitmap_index(true);
+            }
+            if (it->second.second) {
+                col.set_is_bf_column(true);
+            }
+        }
+    }
+
     // 2. Reconcile table_indices: add any new index not already present.
     //    FE typically has pushed the new schema already, so this is a
     //    defensive idempotent step. We do not overwrite existing
@@ -462,7 +590,6 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    names within a table). Non-compatible types (BITMAP/NGRAMBF/
     //    BLOOM_FILTER) share the sentinel id=-1, so id-only dedup would
     //    silently skip every additional index after the first.
-    auto* schema = _tablet_meta->mutable_schema();
     auto present_key = [](const TabletIndexPB& ix) -> std::string {
         if (ix.has_index_id() && ix.index_id() >= 0) {
             return "id:" + std::to_string(ix.index_id());
@@ -512,11 +639,22 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    keys on id and would keep returning the stale pre-index schema — so data
     //    loaded after the index, and compaction output, would build no index.
     //    A new id forces every cache to miss and pick up this indexed schema.
-    if (op.has_new_schema_id() && op.new_schema_id() > 0) {
-        const int64_t new_schema_id = op.new_schema_id();
-        const int64_t old_schema_id = schema->id();
+    // Either encoding supplies the target id: new_schema for logs this version
+    // writes, the standalone field for logs written before it existed.
+    const bool has_target_schema_id = install_new_schema || (op.has_new_schema_id() && op.new_schema_id() > 0);
+    if (has_target_schema_id) {
+        const int64_t new_schema_id = install_new_schema ? op.new_schema().id() : op.new_schema_id();
+        // The id tablet metadata carried before this apply. NOT schema->id():
+        // installing op.new_schema() above overwrites it with FE's catalog id,
+        // and the rowset_to_schema repointing below must match the pins that
+        // reference the pre-apply id.
+        const int64_t old_schema_id = pre_apply_schema_id;
         schema->set_id(new_schema_id);
-        if (op.has_new_schema_version()) {
+        if (install_new_schema) {
+            // Already carried by the installed content; keep it explicit so both
+            // encodings converge on the same end state.
+            schema->set_schema_version(op.new_schema().schema_version());
+        } else if (op.has_new_schema_version()) {
             schema->set_schema_version(static_cast<int32_t>(op.new_schema_version()));
         }
         // Durability across the two schema-resolution regimes:
@@ -563,6 +701,7 @@ void MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
             }
         }
     }
+    return Status::OK();
 }
 
 void MetaFileBuilder::apply_drop_index(const TxnLogPB_OpDropIndex& op) {
@@ -878,6 +1017,10 @@ Status MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compa
             }
             // Collect del files.
             _collect_del_files_above_rebuild_point(&(*it), &collect_del_files);
+            // Drop the delete_predicate before archiving the input rowset into compaction_inputs.
+            // compaction_inputs is consumed only by vacuum/file cleanup, never by readers, so the
+            // predicate is pure metadata bloat once the rowset is compacted away.
+            (*it).clear_delete_predicate();
             _tablet_meta->mutable_compaction_inputs()->Add(std::move(*it));
             it = _tablet_meta->mutable_rowsets()->erase(it);
             deleted_input_rowset_cnt++;
@@ -1452,21 +1595,24 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
                 const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
                 auto source_size_it = resolved_source_sizes.find(source_key);
                 if (source_size_it == resolved_source_sizes.end()) {
-                    RandomAccessFileOptions options{.skip_fill_local_cache = true};
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
-                    ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
-                                                          options, tablet_mgr->delvec_location(
-                                                                           raw.tablet_id, raw.delvec_file.name())));
-                    std::optional<StatusOr<int64_t>> source_size_override;
-                    TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
-                                             &source_size_override);
                     int64_t resolved_size = 0;
-                    if (source_size_override.has_value()) {
-                        RETURN_IF_ERROR(source_size_override->status());
-                        resolved_size = source_size_override->value();
-                    } else {
-                        ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                    {
+                        TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                        RandomAccessFileOptions options{.skip_fill_local_cache = true};
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &options);
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:preflight_source_open", nullptr);
+                        ASSIGN_OR_RETURN(auto reader, fs::new_random_access_file(
+                                                              options, tablet_mgr->delvec_location(
+                                                                               raw.tablet_id, raw.delvec_file.name())));
+                        std::optional<StatusOr<int64_t>> source_size_override;
+                        TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size_override",
+                                                 &source_size_override);
+                        if (source_size_override.has_value()) {
+                            RETURN_IF_ERROR(source_size_override->status());
+                            resolved_size = source_size_override->value();
+                        } else {
+                            ASSIGN_OR_RETURN(resolved_size, reader->get_size());
+                        }
                     }
                     TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_size", &resolved_size);
                     RETURN_IF_ERROR(validate_source_size(resolved_size, page_end, true));
@@ -1527,6 +1673,10 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
         const auto& raw = *output_page.raw_page;
         const auto source_key = std::make_pair(raw.tablet_id, raw.delvec_file.name());
         if (!current_source.has_value() || *current_source != source_key) {
+            // A page copied through raw is never read by get_del_vec, so the read it does here is the
+            // only delvec read of that page -- account for it under the same counter, or the latency of
+            // a whole publish's delvec reads disappears exactly for the pages this path handles.
+            TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
             close_reader();
             RandomAccessFileOptions source_options{.skip_fill_local_cache = true};
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:source_options", &source_options);
@@ -1537,6 +1687,13 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             [[maybe_unused]] int delta = 1;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:copy_source_reader_delta", &delta);
         }
+        // A copied page is never decoded, so get_del_vec's checksum verification never runs over these
+        // bytes -- fold the chunks the copy already holds into a running crc32c instead, which costs one
+        // more pass over bytes in hand and no extra read. Verify under exactly the condition get_del_vec
+        // does: a page whose crc32c_gen_version is not its version carries no live checksum, so there is
+        // nothing to compare against.
+        const bool verify_crc = raw.page.has_crc32c() && raw.page.crc32c_gen_version() == raw.page.version();
+        uint32_t copied_crc = 0;
         uint64_t copied = 0;
         buffer.resize(kDelvecIoChunkSize);
         while (copied < raw.page.size()) {
@@ -1547,10 +1704,44 @@ Status write_compacted_delvec_pages(TabletManager* tablet_mgr, const std::vector
             Status read_status;
             TEST_SYNC_POINT_CALLBACK("write_compacted_delvec_pages:before_read_chunk", &read_status);
             RETURN_IF_ERROR(read_status);
-            RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
-                                                          buffer.data(), static_cast<int64_t>(chunk_size)));
+            {
+                TRACE_COUNTER_SCOPE_LATENCY_US("delvec_file_read_latency_us");
+                RETURN_IF_ERROR(current_reader->read_at_fully(static_cast<int64_t>(raw.page.offset() + copied),
+                                                              buffer.data(), static_cast<int64_t>(chunk_size)));
+            }
+            if (verify_crc) {
+                copied_crc = crc32c::Extend(copied_crc, buffer.data(), chunk_size);
+            }
             RETURN_IF_ERROR(append_delvec_bytes_bounded(writer.get(), Slice(buffer.data(), chunk_size)));
             copied += chunk_size;
+        }
+        if (verify_crc && copied_crc != crc32c::Unmask(raw.page.crc32c())) {
+            // Same report get_del_vec makes for a page it decodes, and it carries the same ABA caveat: a
+            // page last written by a version that did not maintain the checksum can mismatch without being
+            // corrupt, which is what enable_strict_delvec_crc_check lets an operator ride out. Under that
+            // knob the copy still goes through carrying the SOURCE's crc32c, so the mismatch stays visible
+            // to whoever reads the output rather than being laundered into a freshly computed checksum.
+            LOG(ERROR) << fmt::format(
+                    "delvec crc32c mismatch while copying page, tabletid {}, delvecfile {}, offset {}, size {}, "
+                    "expect crc32c {}, actual crc32c {}",
+                    raw.tablet_id, raw.delvec_file.name(), raw.page.offset(), raw.page.size(),
+                    crc32c::Unmask(raw.page.crc32c()), copied_crc);
+            if (config::enable_strict_delvec_crc_check) {
+                // The destination is append-only and these bytes are already in it, so this copy cannot be
+                // repaired in place. Drop the source's local cache -- a corrupted cached block is the
+                // likeliest culprit, exactly as in get_del_vec -- and fail, so the caller's retry rebuilds
+                // the output reading through to remote storage.
+                const std::string source_path = tablet_mgr->delvec_location(raw.tablet_id, raw.delvec_file.name());
+                if (auto drop_status = drop_corrupted_delvec_file_cache(source_path); !drop_status.ok()) {
+                    VLOG(2) << "skip clearing corrupted cache for " << source_path << ": " << drop_status;
+                } else {
+                    LOG(INFO) << "cleared corrupted cache for " << source_path
+                              << ", the next attempt re-reads the delvec page";
+                }
+                return Status::Corruption(
+                        fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}",
+                                    crc32c::Unmask(raw.page.crc32c()), copied_crc));
+            }
         }
     }
 
@@ -1672,6 +1863,13 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
+        // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
+        // "unfiltered".
+        if (replace_seg.second.dropped_unowned_rows) {
+            segment_meta->set_num_rows(replace_seg.second.num_rows);
+            replace_seg.second.sort_key_fields_to_proto(segment_meta);
+        }
         if (segment_meta->has_encryption_meta()) {
             segment_meta->set_encryption_meta(replace_seg.second.encryption_meta);
         }

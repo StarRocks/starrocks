@@ -109,7 +109,7 @@ Status ProjectionIterator::do_get_next(Chunk* chunk) {
                 // does not deref a moved-from ColumnPtr.
                 ColumnPtr empty = input_columns[k]->clone_empty();
                 if (sid >= 0) {
-                    chunk->append_vector_column(std::move(input_columns[k]), f, sid);
+                    chunk->append_or_update_column(std::move(input_columns[k]), f, sid);
                 } else {
                     chunk->append_column(std::move(input_columns[k]), f);
                 }

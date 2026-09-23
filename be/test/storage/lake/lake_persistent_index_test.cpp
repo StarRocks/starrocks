@@ -26,6 +26,8 @@
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <optional>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -400,6 +402,51 @@ protected:
         return sstable;
     }
 
+    // Every sstable of a tablet as its own candidate fileset, the shape
+    // LakePersistentIndexSizeTieredCompactionStrategy produces for standalone sstables and the
+    // shape the parallel compaction manager expects. More than one candidate also keeps the
+    // manager on its merge path instead of the single-fileset "move" shortcut.
+    static std::vector<std::vector<PersistentIndexSstablePB>> sstables_as_candidate_filesets(
+            const PersistentIndexSstableMetaPB& sstable_meta) {
+        std::vector<std::vector<PersistentIndexSstablePB>> candidates;
+        for (const auto& sstable : sstable_meta.sstables()) {
+            candidates.push_back({sstable});
+        }
+        return candidates;
+    }
+
+    // Run |candidates| through the parallel index compaction manager and record the inputs and
+    // outputs into |txn_log| exactly as LakePersistentIndex::parallel_major_compact does, but with
+    // the candidate set and the base/cumulative decision chosen by the caller instead of by the
+    // size-tiered strategy.
+    Status parallel_compact_into_txn_log(const TabletMetadataPtr& metadata,
+                                         const std::vector<std::vector<PersistentIndexSstablePB>>& candidates,
+                                         bool merge_base_level, TxnLogPB* txn_log) {
+        LakePersistentIndexParallelCompactMgr compact_mgr(_tablet_mgr.get());
+        RETURN_IF_ERROR(compact_mgr.init());
+        DeferOp shutdown([&] { compact_mgr.shutdown(); });
+        std::vector<PersistentIndexSstablePB> output_sstables;
+        RETURN_IF_ERROR(compact_mgr.compact(candidates, metadata, merge_base_level, &output_sstables));
+
+        auto* op_compaction = txn_log->mutable_op_compaction();
+        for (const auto& candidate : candidates) {
+            for (const auto& sstable_pb : candidate) {
+                op_compaction->add_input_sstables()->CopyFrom(sstable_pb);
+            }
+        }
+        if (op_compaction->input_sstables().empty()) {
+            return Status::InternalError("no input sstables to compact");
+        }
+        const uint64_t max_rss_rowid =
+                op_compaction->input_sstables(op_compaction->input_sstables_size() - 1).max_rss_rowid();
+        for (const auto& sstable_pb : output_sstables) {
+            auto* output_sstable = op_compaction->add_output_sstables();
+            output_sstable->CopyFrom(sstable_pb);
+            output_sstable->set_max_rss_rowid(max_rss_rowid);
+        }
+        return Status::OK();
+    }
+
     StatusOr<std::vector<std::pair<std::string, IndexValueWithVer>>> read_persistent_index_sstable(
             int64_t tablet_id, const PersistentIndexSstablePB& sstable) {
         std::vector<std::pair<std::string, IndexValueWithVer>> entries;
@@ -530,10 +577,17 @@ protected:
         EXPECT_EQ(first_inventory, sst_inventory(md->id()));
         index.reset();
 
-        ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, parallel);
-        ConfigResetGuard<int32_t> ratio_guard(&config::pk_index_parallel_rebuild_mem_ratio, 100);
-        ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
-                config::pk_index_parallel_rebuild_mem_ratio));
+        // The serial leg drives the cold rebuild onto its single-pass fallback; the parallel leg is
+        // the default, with the memory gate opened so it cannot be taken by surprise.
+        std::optional<RebuildMemPressureGuard> serial_guard;
+        std::optional<ConfigResetGuard<int32_t>> ratio_guard;
+        if (parallel) {
+            ratio_guard.emplace(&config::pk_index_parallel_rebuild_mem_ratio, 100);
+            ASSERT_FALSE(RuntimeEnv::GetInstance()->update_mem_tracker()->limit_exceeded_by_ratio(
+                    config::pk_index_parallel_rebuild_mem_ratio));
+        } else {
+            serial_guard.emplace();
+        }
         std::atomic<int> parallel_callbacks = 0;
         std::atomic<int> serial_callbacks = 0;
         SyncPoint::GetInstance()->SetCallBack("LakePersistentIndex::load_from_lake_tablet:parallel",
@@ -559,14 +613,6 @@ protected:
 };
 
 TEST_F(LakePersistentIndexTest, test_tombstone_survives_cumulative_then_base_compaction_absorbs_it) {
-    const double old_ratio = config::lake_pk_index_cumulative_base_compaction_ratio;
-    const int32_t old_min_versions = config::lake_pk_index_sst_min_compaction_versions;
-    DeferOp restore_compaction_config([&]() {
-        config::lake_pk_index_cumulative_base_compaction_ratio = old_ratio;
-        config::lake_pk_index_sst_min_compaction_versions = old_min_versions;
-    });
-    config::lake_pk_index_sst_min_compaction_versions = 2;
-
     auto metadata = std::make_shared<TabletMetadata>(*_tablet_metadata);
     metadata->set_version(10);
     constexpr uint64_t old_live_value = (static_cast<uint64_t>(3) << 32) | 7;
@@ -582,18 +628,19 @@ TEST_F(LakePersistentIndexTest, test_tombstone_survives_cumulative_then_base_com
     ASSERT_OK(index->get(1, &gone, &value));
     ASSERT_EQ(NullIndexValue, value.get_value());
 
-    // The old live base remains below a cumulative compaction, so its output
+    // The old live base stays out of a cumulative compaction, so its output
     // must retain the tombstone that prevents resurrection.
-    config::lake_pk_index_cumulative_base_compaction_ratio = 100.0;
     TxnLogPB cumulative_log;
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), metadata, &cumulative_log));
+    ASSERT_OK(parallel_compact_into_txn_log(
+            metadata, {{metadata->sstable_meta().sstables(1)}, {metadata->sstable_meta().sstables(2)}},
+            /*merge_base_level=*/false, &cumulative_log));
     ASSERT_EQ(2, cumulative_log.op_compaction().input_sstables_size());
     for (const auto& input : cumulative_log.op_compaction().input_sstables()) {
         EXPECT_NE(old_base_filename, input.filename());
     }
-    ASSERT_TRUE(cumulative_log.op_compaction().has_output_sstable());
+    ASSERT_EQ(1, cumulative_log.op_compaction().output_sstables_size());
     ASSIGN_OR_ABORT(auto cumulative_entries,
-                    read_persistent_index_sstable(metadata->id(), cumulative_log.op_compaction().output_sstable()));
+                    read_persistent_index_sstable(metadata->id(), cumulative_log.op_compaction().output_sstables(0)));
     ASSERT_EQ(1, cumulative_entries.size());
     EXPECT_EQ(NullIndexValue, cumulative_entries[0].second.second.get_value());
     ASSERT_OK(index->apply_opcompaction(metadata, cumulative_log.op_compaction()));
@@ -612,11 +659,11 @@ TEST_F(LakePersistentIndexTest, test_tombstone_survives_cumulative_then_base_com
 
     // A complete base compaction owns the old live input too, so it may absorb
     // both the live value and its tombstone without publishing another SST.
-    config::lake_pk_index_cumulative_base_compaction_ratio = 0.0;
     TxnLogPB base_log;
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), cumulative_metadata, &base_log));
+    ASSERT_OK(parallel_compact_into_txn_log(cumulative_metadata,
+                                            sstables_as_candidate_filesets(cumulative_metadata->sstable_meta()),
+                                            /*merge_base_level=*/true, &base_log));
     ASSERT_EQ(2, base_log.op_compaction().input_sstables_size());
-    EXPECT_FALSE(base_log.op_compaction().has_output_sstable());
     EXPECT_TRUE(base_log.op_compaction().output_sstables().empty());
     ASSERT_OK(cumulative_reopened->apply_opcompaction(cumulative_metadata, base_log.op_compaction()));
     auto final_metadata = std::make_shared<TabletMetadata>(*cumulative_metadata);
@@ -713,16 +760,12 @@ TEST_F(LakePersistentIndexTest, test_basic_api) {
 // then erase every key both with and without parallel execution and compare bit-for-bit.
 TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
     auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
-    auto saved_parallel = config::enable_pk_index_parallel_execution;
     auto saved_min_rows = config::pk_index_parallel_execution_min_rows;
     // Tiny l0 budget forces every batch to flush, so all keys end up in sstables (active memtable
-    // empty) and the whole delete goes through the reverse lookup. A small min-rows lets the parallel
-    // path split the delete into many concurrent subsets without needing a huge key count.
+    // empty) and the whole delete goes through the reverse lookup.
     config::l0_max_mem_usage = 10;
-    config::pk_index_parallel_execution_min_rows = 1000;
     DeferOp restore([&]() {
         config::l0_max_mem_usage = saved_l0_max_mem_usage;
-        config::enable_pk_index_parallel_execution = saved_parallel;
         config::pk_index_parallel_execution_min_rows = saved_min_rows;
     });
 
@@ -752,7 +795,7 @@ TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
                 bks[j] = Slice((uint8_t*)(&bk[j]), sizeof(Key));
                 bv[j] = IndexValue((uint64_t)(gid + 1)); // distinct, non-null
             }
-            index->set_publish_version(EditVersion(b + 1, 0));
+            index->set_publish_version(b + 1);
             std::vector<IndexValue> old(kPerBatch);
             ASSERT_OK(index->upsert(kPerBatch, bks.data(), bv.data(), old.data()));
             ASSERT_OK(index->flush_memtable(true));
@@ -762,12 +805,16 @@ TEST_F(LakePersistentIndexTest, test_erase_parallel_matches_serial) {
         ASSERT_OK(index->erase(kTotal, key_slices.data(), erase_old_values->data(), /*del_rssid=*/12345));
     };
 
+    // erase() only fans out when the unresolved key count exceeds the per-task size, so a min-rows
+    // above kTotal keeps the whole reverse lookup on the caller thread.
     std::vector<IndexValue> serial_values;
-    config::enable_pk_index_parallel_execution = false;
+    config::pk_index_parallel_execution_min_rows = kTotal + 1;
     build_and_erase(&serial_values);
 
+    // A small min-rows lets the parallel path split the delete into many concurrent subsets without
+    // needing a huge key count.
     std::vector<IndexValue> parallel_values;
-    config::enable_pk_index_parallel_execution = true;
+    config::pk_index_parallel_execution_min_rows = 1000;
     build_and_erase(&parallel_values);
 
     ASSERT_EQ(serial_values.size(), parallel_values.size());
@@ -822,13 +869,13 @@ TEST_F(LakePersistentIndexTest, test_bulk_erase_matches_memtable) {
                 bks[j] = key_slices[gid];
                 bv[j] = IndexValue((uint64_t)(gid + 1));
             }
-            index->set_publish_version(EditVersion(b + 1, 0));
+            index->set_publish_version(b + 1);
             std::vector<IndexValue> old(per);
             CHECK_OK(index->upsert(per, bks.data(), bv.data(), old.data()));
             CHECK_OK(index->flush_memtable(true));
             CHECK_OK(index->sync_flush_all_memtables(10000000));
         }
-        index->set_publish_version(EditVersion(batches + 1, 0)); // version stamped on the delete tombstones
+        index->set_publish_version(batches + 1); // version stamped on the delete tombstones
         return index;
     };
 
@@ -1145,6 +1192,119 @@ TEST_F(LakePersistentIndexTest, test_memtable_flush_failure_removes_current_outp
     }
 }
 
+TEST_F(LakePersistentIndexTest, test_sync_flush_times_out_without_1s_poll) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ASSERT_NE(RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool(), nullptr);
+
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+
+    const std::string key = "sync-flush-timeout";
+    const Slice key_slice(key);
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key_slice, &value, /*version=*/1));
+
+    std::atomic<bool> hold_flush{true};
+    std::atomic<bool> flush_started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        flush_started.store(true, std::memory_order_release);
+        while (hold_flush.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->flush_memtable(/*force=*/true));
+    const auto submit_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - submit_start)
+                    .count();
+    ASSERT_LT(submit_ms, 100) << "expected async memtable flush, submit took " << submit_ms << "ms";
+
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!flush_started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < started_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(flush_started.load(std::memory_order_acquire));
+
+    const auto wait_start = std::chrono::steady_clock::now();
+    const Status st = index->sync_flush_all_memtables(150'000);
+    const auto wait_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - wait_start)
+                    .count();
+    EXPECT_TRUE(st.is_time_out()) << st;
+    EXPECT_LT(wait_ms, 800) << "timeout should honor remaining wait budget, not usleep(1s); took " << wait_ms << "ms";
+}
+
+TEST_F(LakePersistentIndexTest, test_sync_flush_wakes_when_async_flush_finishes) {
+    ConfigResetGuard<int32_t> memtable_count(&config::pk_index_memtable_max_count, 2);
+    ASSERT_NE(RuntimeEnv::GetInstance()->pk_index_memtable_flush_thread_pool(), nullptr);
+
+    auto metadata = make_varchar_pk_metadata();
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*metadata));
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), metadata->id());
+    ASSERT_OK(index->init(metadata));
+
+    const std::string key = "sync-flush-wake";
+    const Slice key_slice(key);
+    const IndexValue value(uint64_t{1} << 32);
+    ASSERT_OK(index->insert(1, &key_slice, &value, /*version=*/1));
+
+    std::atomic<bool> hold_flush{true};
+    std::atomic<bool> flush_started{false};
+    SyncPoint::GetInstance()->SetCallBack("PersistentIndexMemtable::flush:after_create", [&](void*) {
+        flush_started.store(true, std::memory_order_release);
+        while (hold_flush.load(std::memory_order_acquire)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        (void)index->sync_flush_all_memtables(10'000'000);
+        SyncPoint::GetInstance()->ClearCallBack("PersistentIndexMemtable::flush:after_create");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    const auto submit_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->flush_memtable(/*force=*/true));
+    const auto submit_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - submit_start)
+                    .count();
+    ASSERT_LT(submit_ms, 100) << "expected async memtable flush, submit took " << submit_ms << "ms";
+
+    const auto started_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!flush_started.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < started_deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_TRUE(flush_started.load(std::memory_order_acquire));
+
+    std::thread releaser([&]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        hold_flush.store(false, std::memory_order_release);
+    });
+    DeferOp join_releaser([&]() {
+        hold_flush.store(false, std::memory_order_release);
+        if (releaser.joinable()) {
+            releaser.join();
+        }
+    });
+    const auto wait_start = std::chrono::steady_clock::now();
+    ASSERT_OK(index->sync_flush_all_memtables(10'000'000));
+    const auto wait_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - wait_start)
+                    .count();
+    EXPECT_LT(wait_ms, 500) << "sync wait should wake on flush completion, not a 1s poll; took " << wait_ms << "ms";
+}
+
 TEST_F(LakePersistentIndexTest, test_replace) {
     auto l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10;
@@ -1183,367 +1343,6 @@ TEST_F(LakePersistentIndexTest, test_replace) {
     config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
-TEST_F(LakePersistentIndexTest, test_major_compaction) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    config::l0_max_mem_usage = 10;
-    using Key = uint64_t;
-    const int M = 5;
-    const int N = 100;
-    vector<Key> total_keys;
-    vector<Slice> total_key_slices;
-    vector<IndexValue> total_values;
-    vector<size_t> idxes;
-    total_key_slices.reserve(M * N);
-    total_keys.reserve(M * N);
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-    int k = 0;
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            keys.emplace_back(j);
-            total_keys.emplace_back(j);
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            total_key_slices.emplace_back((uint8_t*)(&total_keys[k]), sizeof(Key));
-            values.emplace_back(j * 2);
-            total_values.emplace_back(j * 2);
-            ++k;
-        }
-        index->set_publish_version(EditVersion(i, 0));
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        ASSERT_OK(index->flush_memtable(true));
-        // Wait for async flush to complete so every sstable is committed; otherwise a
-        // still-pending memtable would be dropped from the committed metadata and the
-        // compaction below would have nothing (or too few sstables) to merge.
-        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
-    }
-    ASSERT_TRUE(index->memory_usage() > 0);
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-    vector<IndexValue> get_values(M * N);
-    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
-
-    get_values.clear();
-    get_values.reserve(M * N);
-    auto txn_log = std::make_shared<TxnLogPB>();
-    // try to compact sst files.
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
-    ASSERT_TRUE(txn_log->op_compaction().input_sstables_size() > 0);
-    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
-    ASSERT_OK(index->apply_opcompaction(tablet_metadata_ptr, txn_log->op_compaction()));
-    ASSERT_OK(index->get(M * N, total_key_slices.data(), get_values.data()));
-    for (int i = 0; i < M * N; i++) {
-        ASSERT_EQ(total_values[i], get_values[i]);
-    }
-    config::l0_max_mem_usage = l0_max_mem_usage;
-}
-
-#if defined(USE_STAROS) && !defined(BUILD_FORMAT_LIB)
-// Overwrite the 1-byte compression-type trailer of the first data block with an
-// invalid value, reproducing the production "Corruption: bad block type" failure.
-// The block is located through the footer -> index block, so the injection is
-// deterministic no matter whether block checksum verification is enabled (with
-// checksums on, the same read fails as a checksum mismatch -- still Corruption).
-static void corrupt_first_data_block_type_byte(const std::string& path) {
-    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
-    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
-    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
-    std::string content(file_size, '\0');
-    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
-
-    sstable::Footer footer;
-    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
-    ASSERT_OK(footer.DecodeFrom(&footer_input));
-    sstable::BlockContents index_contents;
-    index_contents.data = Slice(content.data() + footer.index_handle().offset(), footer.index_handle().size());
-    index_contents.cachable = false;
-    index_contents.heap_allocated = false;
-    sstable::Block index_block(index_contents);
-    std::unique_ptr<sstable::Iterator> iter(index_block.NewIterator(sstable::BytewiseComparator()));
-    iter->SeekToFirst();
-    ASSERT_TRUE(iter->Valid());
-    Slice handle_value = iter->value();
-    sstable::BlockHandle first_block;
-    ASSERT_OK(first_block.DecodeFrom(&handle_value));
-    // The compression-type byte sits right after the block payload.
-    size_t type_offset = first_block.offset() + first_block.size();
-    ASSERT_LT(type_offset, content.size());
-    content[type_offset] = 0x7f;
-
-    WritableFileOptions wf_opts;
-    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
-    ASSERT_OK(wf->append(Slice(content)));
-    ASSERT_OK(wf->close());
-}
-
-// Regression test for compaction failing forever with "Corruption: bad block type":
-// a corrupted data block in an input sstable (usually a bad local cache copy) must
-// fail the merge as Corruption AND drop the input sstables' local cache, so the next
-// scheduled compaction round re-reads from remote storage instead of hitting the
-// same bad blocks again.
-TEST_F(LakePersistentIndexTest, test_major_compaction_drops_corrupted_cache) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    config::l0_max_mem_usage = 10;
-    using Key = uint64_t;
-    const int M = 5;
-    const int N = 100;
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            keys.emplace_back(j);
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            values.emplace_back(j * 2);
-        }
-        index->set_publish_version(EditVersion(i, 0));
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        ASSERT_OK(index->flush_memtable(true));
-        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
-    }
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-
-    // Corrupt the first data block of every committed sstable (the index block and
-    // footer near the file tail stay intact so opening still succeeds), so whichever
-    // subset the merge picks hits the corruption.
-    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
-    for (const auto& sst_pb : tablet_metadata_ptr->sstable_meta().sstables()) {
-        corrupt_first_data_block_type_byte(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()));
-    }
-
-    bool old_cfg = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = true;
-    int drop_cnt = 0;
-    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    auto txn_log = std::make_shared<TxnLogPB>();
-    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
-
-    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::lake_clear_corrupted_cache_data = old_cfg;
-
-    ASSERT_TRUE(st.is_corruption()) << st;
-    // The local cache of every picked input sstable must have been dropped.
-    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
-    ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
-    config::l0_max_mem_usage = l0_max_mem_usage;
-}
-
-// Overwrite the 1-byte compression-type trailer of the index block, so Table::Open
-// itself fails with Corruption before any data block is read.
-static void corrupt_index_block_type_byte(const std::string& path) {
-    ASSIGN_OR_ABORT(auto rf, fs::new_random_access_file(path));
-    ASSIGN_OR_ABORT(auto file_size, rf->get_size());
-    ASSERT_GT(file_size, sstable::Footer::kEncodedLength);
-    std::string content(file_size, '\0');
-    ASSERT_OK(rf->read_at_fully(0, content.data(), file_size));
-
-    sstable::Footer footer;
-    Slice footer_input(content.data() + file_size - sstable::Footer::kEncodedLength, sstable::Footer::kEncodedLength);
-    ASSERT_OK(footer.DecodeFrom(&footer_input));
-    // The compression-type byte sits right after the block payload.
-    size_t type_offset = footer.index_handle().offset() + footer.index_handle().size();
-    ASSERT_LT(type_offset, content.size());
-    content[type_offset] = 0x7f;
-
-    WritableFileOptions wf_opts;
-    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
-    ASSERT_OK(wf->append(Slice(content)));
-    ASSERT_OK(wf->close());
-}
-
-TEST_F(LakePersistentIndexTest, test_major_compaction_open_corruption_drops_cache) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    config::l0_max_mem_usage = 10;
-    using Key = uint64_t;
-    const int M = 5;
-    const int N = 100;
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            keys.emplace_back(j);
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            values.emplace_back(j * 2);
-        }
-        index->set_publish_version(EditVersion(i, 0));
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        ASSERT_OK(index->flush_memtable(true));
-        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
-    }
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-
-    // Corrupt the index block of every committed sstable so that opening the first
-    // picked input already fails with Corruption.
-    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
-    for (const auto& sst_pb : tablet_metadata_ptr->sstable_meta().sstables()) {
-        corrupt_index_block_type_byte(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()));
-    }
-
-    bool old_cfg = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = true;
-    int drop_cnt = 0;
-    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    auto txn_log = std::make_shared<TxnLogPB>();
-    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
-
-    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::lake_clear_corrupted_cache_data = old_cfg;
-
-    ASSERT_TRUE(st.is_corruption()) << st;
-    // prepare_merging_iterator records the full picked input set in txn_log before
-    // opening anything, and the cleanup handler must drop every one of them. On top
-    // of that, PersistentIndexSstable::init drops the failing file once on its own
-    // (it drops and retries before giving up); without the caller-side handling that
-    // single drop would be all we see.
-    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
-    ASSERT_EQ(txn_log->op_compaction().input_sstables_size() + 1, drop_cnt);
-    config::l0_max_mem_usage = l0_max_mem_usage;
-}
-
-// Replace the sstable at `path` with a freshly built, uncompressed sstable whose
-// single entry carries value bytes that cannot be parsed as IndexValuesWithVerPB
-// (0x00 is an invalid protobuf tag). Block structure, checksum and the
-// compression-type byte are all valid, so reading the block succeeds and the
-// corruption only surfaces when KeyValueMerger::merge parses the value. The new
-// file size is returned through `new_size` so the caller can patch the sstable
-// meta accordingly.
-static void rewrite_sstable_with_garbage_value(const std::string& path, uint64_t* new_size) {
-    WritableFileOptions wf_opts;
-    wf_opts.mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE;
-    ASSIGN_OR_ABORT(auto wf, FileSystem::Default()->new_writable_file(wf_opts, path));
-    sstable::Options options;
-    options.compression = sstable::kNoCompression;
-    sstable::TableBuilder builder(options, wf.get());
-    ASSERT_OK(builder.Add(Slice("garbage_key"), Slice("\x00garbage", 8)));
-    ASSERT_OK(builder.Finish());
-    *new_size = builder.FileSize();
-    ASSERT_OK(wf->close());
-}
-
-// Regression test for corrupted value bytes that survive block reading: with
-// checksum verification off on the compaction read path, garbage inside a value
-// only fails when KeyValueMerger::merge parses it. That parse failure must be
-// classified as Corruption so the input sstables' local cache still gets dropped.
-TEST_F(LakePersistentIndexTest, test_major_compaction_value_parse_corruption_drops_cache) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    config::l0_max_mem_usage = 10;
-    using Key = uint64_t;
-    const int M = 5;
-    const int N = 100;
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-    for (int i = 0; i < M; ++i) {
-        vector<Key> keys;
-        keys.reserve(N);
-        vector<Slice> key_slices;
-        key_slices.reserve(N);
-        vector<IndexValue> values;
-        values.reserve(N);
-        for (int j = 0; j < N; j++) {
-            keys.emplace_back(j);
-            key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
-            values.emplace_back(j * 2);
-        }
-        index->set_publish_version(EditVersion(i, 0));
-        vector<IndexValue> upsert_old_values(keys.size());
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        // generate sst files.
-        ASSERT_OK(index->flush_memtable(true));
-        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
-    }
-
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    // commit sst files
-    ASSERT_OK(index->commit(&builder));
-
-    // Replace every committed sstable with one whose value bytes cannot be parsed,
-    // patching the recorded file sizes so opening them still succeeds. The merge then
-    // hits the parse failure on its very first key no matter which inputs are picked.
-    ASSERT_GT(tablet_metadata_ptr->sstable_meta().sstables_size(), 0);
-    for (auto& sst_pb : *tablet_metadata_ptr->mutable_sstable_meta()->mutable_sstables()) {
-        uint64_t new_size = 0;
-        rewrite_sstable_with_garbage_value(_tablet_mgr->sst_location(tablet_id, sst_pb.filename()), &new_size);
-        ASSERT_GT(new_size, 0);
-        sst_pb.set_filesize(new_size);
-    }
-
-    bool old_cfg = config::lake_clear_corrupted_cache_data;
-    config::lake_clear_corrupted_cache_data = true;
-    int drop_cnt = 0;
-    SyncPoint::GetInstance()->SetCallBack("PersistentIndexSstable::drop_corrupted_cache", [&](void*) { ++drop_cnt; });
-    SyncPoint::GetInstance()->EnableProcessing();
-
-    auto txn_log = std::make_shared<TxnLogPB>();
-    auto st = LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get());
-
-    SyncPoint::GetInstance()->ClearCallBack("PersistentIndexSstable::drop_corrupted_cache");
-    SyncPoint::GetInstance()->DisableProcessing();
-    config::lake_clear_corrupted_cache_data = old_cfg;
-
-    ASSERT_TRUE(st.is_corruption()) << st;
-    // Opening the inputs succeeds, so the merge-phase handler must drop the local
-    // cache of every picked input sstable.
-    ASSERT_GT(txn_log->op_compaction().input_sstables_size(), 0);
-    ASSERT_EQ(txn_log->op_compaction().input_sstables_size(), drop_cnt);
-    config::l0_max_mem_usage = l0_max_mem_usage;
-}
-
-#endif // USE_STAROS && !BUILD_FORMAT_LIB
-
 TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delvec) {
     auto saved_l0_max_mem_usage = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 10; // force a flush so the upsert produces an on-disk sstable
@@ -1566,7 +1365,7 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
         key_slices[i] = Slice((uint8_t*)(&keys[i]), sizeof(Key));
         values[i] = i * 2;
     }
-    index->set_publish_version(EditVersion(1, 0));
+    index->set_publish_version(1);
     std::vector<IndexValue> old_values(kNumKeys);
     ASSERT_OK(index->upsert(kNumKeys, key_slices.data(), values.data(), old_values.data()));
     ASSERT_OK(index->flush_memtable(true));
@@ -1610,119 +1409,6 @@ TEST_F(LakePersistentIndexTest, test_apply_opcompaction_output_sstable_with_delv
     // Before the fix this returned InvalidArgument:
     //   "metadata is null when loading delvec from file".
     ASSERT_OK(reloaded_index->apply_opcompaction(committed_metadata, txn_log.op_compaction()));
-}
-
-TEST_F(LakePersistentIndexTest, test_major_compaction_with_tablet_range) {
-    auto l0_max_mem_usage = config::l0_max_mem_usage;
-    config::l0_max_mem_usage = 10;
-    const int N = 100;
-
-    // Use single column VARCHAR primary key
-    _tablet_metadata->mutable_schema()->mutable_column(0)->set_type("VARCHAR");
-    _tablet_metadata->mutable_schema()->mutable_column(0)->set_length(65535);
-
-    auto tablet_schema = TabletSchema::create(_tablet_metadata->schema());
-    std::vector<ColumnId> pk_columns = {0};
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
-    auto encode_key = [&](const std::string& v) {
-        auto chunk = std::make_unique<Chunk>();
-        auto col = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), false);
-        col->append_datum(Datum(Slice(v)));
-        chunk->append_column(std::move(col), (SlotId)0);
-
-        MutableColumnPtr pk_column;
-        EXPECT_OK(
-                PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
-        PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, 1, pk_column.get(),
-                                  PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
-        if (pk_column->is_binary()) {
-            return down_cast<BinaryColumn*>(pk_column.get())->get_slice(0).to_string();
-        } else {
-            RawDataVisitor visitor;
-            EXPECT_OK(pk_column->accept(&visitor));
-            return std::string(reinterpret_cast<const char*>(visitor.result()), pk_column->type_size());
-        }
-    };
-
-    auto tablet_id = _tablet_metadata->id();
-    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
-    ASSERT_OK(index->init(_tablet_metadata));
-
-    // Build multiple levels of sstables to trigger merge.
-    std::vector<std::string> keys;
-    std::vector<Slice> key_slices;
-    std::vector<IndexValue> values;
-    std::vector<IndexValue> upsert_old_values(N);
-    for (int i = 0; i < 3; ++i) {
-        keys.clear();
-        key_slices.clear();
-        values.clear();
-        keys.reserve(N);
-        key_slices.reserve(N);
-        values.reserve(N);
-        for (int j = 0; j < N; ++j) {
-            // Use keys like "key_00", "key_01", ..., "key_99"
-            char buf[16];
-            snprintf(buf, sizeof(buf), "key_%02d", j);
-            keys.emplace_back(encode_key(buf));
-            key_slices.emplace_back(keys.back());
-            values.emplace_back(j * 2 + i);
-        }
-        index->set_publish_version(EditVersion(i, 0));
-        ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
-        ASSERT_OK(index->flush_memtable(true));
-        // Wait for async flush to complete if any
-        ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
-    }
-    ASSERT_TRUE(index->memory_usage() > 0);
-
-    // Build tablet metadata with a tablet range so that major_compact will honor it.
-    Tablet tablet(_tablet_mgr.get(), tablet_id);
-    auto tablet_metadata_ptr = std::make_shared<TabletMetadata>();
-    tablet_metadata_ptr->CopyFrom(*_tablet_metadata);
-
-    // Ensure sort key is the primary key column so that TabletRangeHelper can build SstSeekRange.
-    auto* schema_pb = tablet_metadata_ptr->mutable_schema();
-    schema_pb->clear_sort_key_idxes();
-    schema_pb->add_sort_key_idxes(0);
-    schema_pb->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
-
-    // Configure a tablet range ["key_10", "key_30").
-    TabletRangePB* range_pb = tablet_metadata_ptr->mutable_range();
-    range_pb->Clear();
-    auto* lower = range_pb->mutable_lower_bound();
-    auto* lower_v = lower->add_values();
-    TypeDescriptor type_varchar(TYPE_VARCHAR);
-    lower_v->mutable_type()->CopyFrom(type_varchar.to_protobuf());
-    lower_v->set_value("key_10");
-    range_pb->set_lower_bound_included(true);
-    auto* upper = range_pb->mutable_upper_bound();
-    auto* upper_v = upper->add_values();
-    upper_v->mutable_type()->CopyFrom(type_varchar.to_protobuf());
-    upper_v->set_value("key_30");
-    range_pb->set_upper_bound_included(false);
-
-    MetaFileBuilder builder(tablet, tablet_metadata_ptr);
-    ASSERT_OK(index->commit(&builder));
-
-    // Mark all sstables as shared so that range pruning path is exercised.
-    auto* sstable_meta = tablet_metadata_ptr->mutable_sstable_meta();
-    for (auto& sst_pb : *sstable_meta->mutable_sstables()) {
-        sst_pb.set_shared(true);
-    }
-
-    auto txn_log = std::make_shared<TxnLogPB>();
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
-    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
-
-    const auto& out_sst = txn_log->op_compaction().output_sstable();
-
-    // The compacted output sstable should only cover keys in ["key_10", "key_30").
-    ASSERT_EQ(encode_key("key_10"), out_sst.range().start_key());
-    // end_key is inclusive, so for ["key_10", "key_30") we expect the last key to be "key_29".
-    ASSERT_EQ(encode_key("key_29"), out_sst.range().end_key());
-
-    config::l0_max_mem_usage = l0_max_mem_usage;
 }
 
 TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
@@ -1771,7 +1457,7 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
             key_slices.emplace_back(keys.back());
             values.emplace_back(key * 10);
         }
-        index->set_publish_version(EditVersion(batch, 0));
+        index->set_publish_version(batch);
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
         ASSERT_OK(index->sync_flush_all_memtables(10000000)); // 10 seconds timeout
@@ -1797,10 +1483,12 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
     }
 
     auto txn_log = std::make_shared<TxnLogPB>();
-    ASSERT_OK(LakePersistentIndex::major_compact(_tablet_mgr.get(), tablet_metadata_ptr, txn_log.get()));
-    ASSERT_TRUE(txn_log->op_compaction().has_output_sstable());
+    ASSERT_OK(parallel_compact_into_txn_log(tablet_metadata_ptr,
+                                            sstables_as_candidate_filesets(tablet_metadata_ptr->sstable_meta()),
+                                            /*merge_base_level=*/true, txn_log.get()));
+    ASSERT_EQ(1, txn_log->op_compaction().output_sstables_size());
 
-    const auto& out_sst = txn_log->op_compaction().output_sstable();
+    const auto& out_sst = txn_log->op_compaction().output_sstables(0);
     ASSERT_EQ(encode_key(100), out_sst.range().start_key());
     ASSERT_EQ(encode_key(100 + 3 * N - 1), out_sst.range().end_key());
 
@@ -1823,55 +1511,6 @@ TEST_F(LakePersistentIndexTest, test_range_single_int_pk_end_to_end) {
     ASSERT_EQ(NullIndexValue, get_values[4].get_value());
 
     config::l0_max_mem_usage = l0_max_mem_usage;
-}
-
-TEST_F(LakePersistentIndexTest, test_compaction_strategy) {
-    PersistentIndexSstableMetaPB sstable_meta;
-    std::vector<PersistentIndexSstablePB> sstables;
-    bool merge_base_level = false;
-    auto test_fn = [&](size_t sub_size, size_t N, bool is_base) {
-        sstable_meta.Clear();
-        sstables.clear();
-        auto* sstable_pb = sstable_meta.add_sstables();
-        sstable_pb->set_filesize(1000000);
-        sstable_pb->set_filename("aaa.sst");
-        sstable_pb->set_max_rss_rowid(0);
-        for (int i = 0; i < N; i++) {
-            sstable_pb = sstable_meta.add_sstables();
-            sstable_pb->set_filesize(sub_size);
-            sstable_pb->set_max_rss_rowid(i + 1);
-        }
-        LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
-        if (is_base) {
-            ASSERT_TRUE(merge_base_level);
-            ASSERT_TRUE(sstables.size() == std::min(1 + N, (size_t)config::lake_pk_index_sst_max_compaction_versions));
-            ASSERT_TRUE(sstables[0].filename() == "aaa.sst");
-            for (int i = 1; i < N; i++) {
-                ASSERT_TRUE(sstables[i].filesize() == sub_size);
-            }
-        } else {
-            ASSERT_TRUE(!merge_base_level);
-            ASSERT_TRUE(sstables.size() == std::min(N, (size_t)config::lake_pk_index_sst_max_compaction_versions));
-            for (int i = 0; i < N; i++) {
-                ASSERT_TRUE(sstables[i].filesize() == sub_size);
-            }
-        }
-    };
-    // 1. <1000000, 100>
-    test_fn(100, 1, false);
-    // 2. <1000000>
-    test_fn(100, 0, false);
-    // 3. <1000000, 10000, 10000, 10000, ...(9 items)>
-    test_fn(10000, 9, false);
-    // 4. <1000000, 10000, 10000, 10000, ...(10 items)>
-    test_fn(10000, 10, true);
-    // 4. <1000000, 10000, 10000, 10000, ...(11 items)>
-    test_fn(10000, 11, true);
-    int32_t old = config::lake_pk_index_sst_max_compaction_versions;
-    config::lake_pk_index_sst_max_compaction_versions = 3;
-    // 5. <1000000, 10000, 10000, 10000, ...(11 items)>
-    test_fn(10000, 11, true);
-    config::lake_pk_index_sst_max_compaction_versions = old;
 }
 
 TEST_F(LakePersistentIndexTest, test_insert_delete) {
@@ -1952,82 +1591,6 @@ TEST_F(LakePersistentIndexTest, test_memtable_full) {
     config::l0_max_mem_usage = index->memory_usage();
     ASSERT_TRUE(index->is_memtable_full());
     config::l0_max_mem_usage = old_l0_max_mem_usage;
-}
-
-TEST_F(LakePersistentIndexTest, test_compaction_strategy_same_max_rss_rowid) {
-    // Test case for the fix: when base sstable's max_rss_rowid is same as cumulative sstable's max_rss_rowid,
-    // we should force to do base merge instead of cumulative merge.
-
-    PersistentIndexSstableMetaPB sstable_meta;
-    std::vector<PersistentIndexSstablePB> sstables;
-    bool merge_base_level = false;
-
-    // Setup: create a scenario where cumulative merge would normally be preferred
-    // but base and cumulative sstables have the same max_rss_rowid
-    sstable_meta.Clear();
-    sstables.clear();
-
-    // Add base sstable (index 0) with large size
-    auto* base_sstable = sstable_meta.add_sstables();
-    base_sstable->set_filesize(1000000); // 1MB
-    base_sstable->set_filename("base.sst");
-    base_sstable->set_max_rss_rowid(100); // Same max_rss_rowid
-
-    // Add cumulative sstables with small total size (would trigger cumulative merge normally)
-    auto* cumulative_sstable = sstable_meta.add_sstables();
-    cumulative_sstable->set_filesize(50000); // 50KB - much smaller than base
-    cumulative_sstable->set_filename("cumulative1.sst");
-    cumulative_sstable->set_max_rss_rowid(100); // Same max_rss_rowid as base
-
-    // Without the fix, this would choose cumulative merge because:
-    // base_level_bytes * ratio (1000000 * 0.1 = 100000) > cumulative_level_bytes (50000)
-    // But with the fix, it should choose base merge due to same max_rss_rowid
-
-    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
-
-    // Verify that base merge is chosen (merge_base_level = true)
-    ASSERT_TRUE(merge_base_level) << "Should force base merge when max_rss_rowid is same";
-    ASSERT_EQ(2, sstables.size()) << "Should include both base and cumulative sstables";
-    ASSERT_EQ("base.sst", sstables[0].filename()) << "Base sstable should be first";
-    ASSERT_EQ("cumulative1.sst", sstables[1].filename()) << "Cumulative sstable should be second";
-
-    // Test the normal case where max_rss_rowid is different
-    sstable_meta.Clear();
-    sstables.clear();
-
-    base_sstable = sstable_meta.add_sstables();
-    base_sstable->set_filesize(1000000);
-    base_sstable->set_filename("base2.sst");
-    base_sstable->set_max_rss_rowid(100); // Different max_rss_rowid
-
-    cumulative_sstable = sstable_meta.add_sstables();
-    cumulative_sstable->set_filesize(50000);
-    cumulative_sstable->set_filename("cumulative2.sst");
-    cumulative_sstable->set_max_rss_rowid(200); // Different max_rss_rowid
-
-    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
-
-    // This should choose cumulative merge since max_rss_rowid is different
-    ASSERT_FALSE(merge_base_level) << "Should choose cumulative merge when max_rss_rowid is different";
-    ASSERT_EQ(1, sstables.size()) << "Should only include cumulative sstables";
-    ASSERT_EQ("cumulative2.sst", sstables[0].filename()) << "Only cumulative sstable should be included";
-
-    // Test edge case: empty cumulative sstables
-    sstable_meta.Clear();
-    sstables.clear();
-
-    base_sstable = sstable_meta.add_sstables();
-    base_sstable->set_filesize(1000000);
-    base_sstable->set_filename("base3.sst");
-    base_sstable->set_max_rss_rowid(100);
-
-    // No cumulative sstables added
-
-    LakePersistentIndex::pick_sstables_for_merge(sstable_meta, &sstables, &merge_base_level);
-
-    // Should choose base merge since there are no cumulative sstables
-    ASSERT_TRUE(!merge_base_level) << "Should choose cumulative merge when no cumulative sstables exist";
-    ASSERT_EQ(0, sstables.size()) << "Should be empty since no cumulative sstables exist";
 }
 
 TEST_F(LakePersistentIndexTest, test_tablet_range_single_column_pk) {
@@ -2315,7 +1878,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     ASSERT_OK(index->init(_tablet_metadata));
 
-    // Write data in multiple batches to create SST files (same pattern as test_major_compaction)
+    // Write data in multiple batches to create SST files
     for (int i = 0; i < M; ++i) {
         vector<Key> keys;
         vector<Slice> key_slices;
@@ -2328,7 +1891,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_skip_duplicate) {
             key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
             values.emplace_back(j * 2);
         }
-        index->set_publish_version(EditVersion(i, 0));
+        index->set_publish_version(i);
         vector<IndexValue> upsert_old_values(keys.size());
         ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
         ASSERT_OK(index->flush_memtable(true));
@@ -2422,7 +1985,7 @@ TEST_F(LakePersistentIndexTest, test_ingest_sst_preserves_shared_flag_for_new_ss
                 key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
                 values.emplace_back(j * 2);
             }
-            index->set_publish_version(EditVersion(i, 0));
+            index->set_publish_version(i);
             vector<IndexValue> upsert_old_values(keys.size());
             ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), upsert_old_values.data()));
             ASSERT_OK(index->flush_memtable(true));
@@ -2502,9 +2065,6 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_propagates_io_error) {
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    // Force the parallel path on so the test can't be silently weakened by a future flag flip.
-    ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, true);
-
     auto st = index->load_dels(rowset, pkey_schema, /*rowset_version=*/1);
     EXPECT_FALSE(st.ok()) << "expected error from missing del files; got OK";
 }
@@ -2537,7 +2097,10 @@ TEST_F(LakePersistentIndexTest, test_load_from_lake_tablet_parallel_matches_seri
     // Run a cold rebuild with the given flag value and return the per-key values.
     auto rebuild_and_dump = [&](bool parallel, const std::shared_ptr<TabletMetadata>& md,
                                 const std::vector<std::string>& keys) {
-        ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, parallel);
+        std::optional<RebuildMemPressureGuard> serial_guard;
+        if (!parallel) {
+            serial_guard.emplace();
+        }
         auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
         CHECK_OK(index->init(md));
         Tablet tablet(_tablet_mgr.get(), md->id());
@@ -2666,7 +2229,7 @@ TEST_F(LakePersistentIndexTest, test_complete_checkpoint_drains_inactive_and_act
     }
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
 
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    RebuildMemPressureGuard serial_rebuild_guard;
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(index->init(md));
@@ -2706,7 +2269,7 @@ TEST_F(LakePersistentIndexTest, test_complete_checkpoint_drains_completed_inacti
     md->mutable_rowsets(1)->set_version(3);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
 
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    RebuildMemPressureGuard serial_rebuild_guard;
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(index->init(md));
@@ -2742,7 +2305,7 @@ TEST_F(LakePersistentIndexTest, test_complete_checkpoint_gate_runs_after_rebuild
     md->mutable_rowsets(1)->set_version(3);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
 
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    RebuildMemPressureGuard serial_rebuild_guard;
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     ConfigResetGuard<int32_t> files_guard(&config::cloud_native_pk_index_rebuild_files_threshold, 0);
     ConfigResetGuard<int64_t> rows_guard(&config::cloud_native_pk_index_rebuild_rows_threshold, 0);
@@ -2815,7 +2378,7 @@ TEST_F(LakePersistentIndexTest, test_existing_sst_does_not_force_safe_later_acti
     md->mutable_rowsets(0)->set_version(2);
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
 
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    RebuildMemPressureGuard serial_rebuild_guard;
     ConfigResetGuard<int64_t> l0_guard(&config::l0_max_mem_usage, std::numeric_limits<int64_t>::max());
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), md->id());
     ASSERT_OK(index->init(md));
@@ -2889,7 +2452,7 @@ TEST_F(LakePersistentIndexTest, test_cold_rebuild_rejects_unmasked_duplicate_pri
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*md));
 
     ConfigResetGuard<bool> consistency_guard(&config::experimental_lake_ignore_pk_consistency_check, false);
-    ConfigResetGuard<bool> parallel_guard(&config::enable_pk_index_parallel_execution, false);
+    RebuildMemPressureGuard serial_rebuild_guard;
     Tablet tablet(_tablet_mgr.get(), md->id());
     auto reload_metadata = std::make_shared<TabletMetadata>(*md);
     MetaFileBuilder builder(tablet, reload_metadata);
@@ -2992,7 +2555,10 @@ TEST_F(LakePersistentIndexTest, test_load_dels_parallel_matches_single_pass) {
     std::vector<uint32_t> rssids = {5, 50, 5, 50, 5, 50};
 
     auto run = [&](bool parallel) {
-        ConfigResetGuard<bool> g(&config::enable_pk_index_parallel_execution, parallel);
+        std::optional<RebuildMemPressureGuard> serial_guard;
+        if (!parallel) {
+            serial_guard.emplace();
+        }
         auto tablet_id = _tablet_metadata->id();
         auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
         CHECK_OK(index->init(_tablet_metadata));
@@ -3099,7 +2665,7 @@ TEST_F(LakePersistentIndexTest, test_commit_stamps_version) {
         key_slices.emplace_back((uint8_t*)(&keys[j]), sizeof(Key));
         values.emplace_back(j * 2);
     }
-    index->set_publish_version(EditVersion(publish_version, 0));
+    index->set_publish_version(publish_version);
     std::vector<IndexValue> old_values(N);
     ASSERT_OK(index->upsert(N, key_slices.data(), values.data(), old_values.data()));
     ASSERT_OK(index->flush_memtable(true));

@@ -75,11 +75,16 @@ public enum PrimitiveType {
 
     JSON("JSON", 16),
     VARIANT("VARIANT", 16),
+    FILE("FILE", 16),
 
     FUNCTION("FUNCTION", 8),
 
     BINARY("BINARY", -1),
     VARBINARY("VARBINARY", 16),
+
+    // Reserved native identities; SQL activation requires separate capabilities.
+    GEOGRAPHY("GEOGRAPHY", 16),
+    GEOMETRY("GEOMETRY", 16),
 
     // If external table column type is unsupported, it will be converted to UNKNOWN_TYPE
     UNKNOWN_TYPE("UNKNOWN_TYPE", -1);
@@ -380,7 +385,9 @@ public enum PrimitiveType {
             case CHAR:
             case VARCHAR:
             case VARBINARY:
-                // use 16 as char type estimate size
+            case GEOGRAPHY:
+            case GEOMETRY:
+                // Use 16 as the variable-width slot size estimate.
                 typeSize = 16;
                 break;
             case HLL:
@@ -394,6 +401,7 @@ public enum PrimitiveType {
                 break;
             case JSON:
             case VARIANT:
+            case FILE:
                 typeSize = 1024;
                 break;
             default:
@@ -463,6 +471,10 @@ public enum PrimitiveType {
 
     public boolean isVariantType() {
         return this == VARIANT;
+    }
+
+    public boolean isFileType() {
+        return this == FILE;
     }
 
     public boolean isFunctionType() {

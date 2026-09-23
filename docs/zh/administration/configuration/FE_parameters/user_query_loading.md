@@ -54,6 +54,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ## 用户、角色和权限
 
+### `authorization_enable_query_profile_access_check`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否限制缓存的 Query Profile 的读取权限。设置为 `true` 时，SHOW PROFILELIST、ANALYZE PROFILE、`get_query_profile` 函数、`/api/profile` 和 `/api/query/progress` HTTP 接口，以及 `/query` 和 `/query_profile` Web 页面只向执行该查询的用户，或拥有 SYSTEM 级 OPERATE 权限的用户返回 Profile；未记录用户的 Profile（例如 EXPORT 作业和 Stream Load 导入）只有拥有 OPERATE 权限的用户才能读取。`/api/query_detail` 和 `/api/v2/query_detail` 接口仍会列出所有查询，但按同样的规则省略 `profile` 字段，以及由该 Profile 渲染而来的 `explain` 字段。若同时开启 `authorization_enable_admin_user_protection`，`root` 执行的查询的 Profile 仅 `root` 自己可以读取。设置为 `false`（默认值）时，任何已登录用户都可以读取所有 Profile，与此前版本的行为一致。每个 FE 只对自身持有的 Profile 执行此检查。若要在整个集群范围内限制访问，请在所有 FE 升级到支持该配置项的版本后，在每个 FE 的 `fe.conf` 中设置该项。开启前还需注意两点影响：一是 `/api/query/progress` 不再接受匿名请求，因为权限判断需要调用方身份，原先匿名轮询该接口的程序会收到 `401`；二是如果 `query_id` 对应的 Profile 未缓存在当前会话连接的 FE 上，`get_query_profile()` 需要 OPERATE 权限——跨 FE 获取 Profile 的 RPC 不携带调用方身份，无法在对端完成鉴权，因此开启该检查期间，跨 FE 获取 Profile 仅限拥有 OPERATE 权限的用户。
+- 引入版本: v4.1
+
 ### `enable_task_info_mask_credential`
 
 - 默认值: true
@@ -89,7 +98,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
+- 描述: SYSTEM `ai_complete` 调用使用的完整 HTTPS POST URL。URL 必须包含主机，且不能包含用户信息、查询串、片段或控制字符。未显式指定端口时使用 HTTPS 默认端口；显式指定的端口必须在 1 至 65535 范围内。该值为空时，必须先配置 endpoint，SYSTEM `ai_complete` 才能通过分析。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。API key 不属于 FE 配置项；每个 BE 在本地读取 `AI_FUNCTION_MODEL_API_KEY`，FE 不会通过查询计划下发该密钥。所有执行 AI 查询的 BE 都必须将 `AI_FUNCTION_MODEL_ENDPOINT` 设置为与此处完全相同的 URL，以便 BE 将本地凭证绑定到管理员批准的 endpoint。因此，修改 FE endpoint 后，还必须更新该环境变量并重启相关 BE，之后才能在这些 BE 上运行新的 AI 查询。
 - 引入版本: -
 
 ### `ai_default_chat_model`
@@ -109,6 +118,34 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 有效值: `openai_compatible`
 - 是否可变: Yes
 - 描述: SYSTEM `ai_complete` 使用的 provider 协议。该值必须严格为 `openai_compatible`；空值或任何额外字符（包括控制字符）都会导致分析失败。修改可动态生效，无需重启 FE，但仅对修改后新分析和新规划的查询生效。已经构造的计划会保留规划时捕获的 endpoint、model 和 provider 快照。
+- 引入版本: -
+
+### `ai_default_embedding_endpoint`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 调用使用的完整 HTTPS POST URL，独立于聊天端点，必须单独配置。必须含主机，不得含用户信息、查询串、片段或控制字符；显式端口须在 1 至 65535 范围内。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。每个执行查询的 BE 必须将 `AI_FUNCTION_EMBEDDING_ENDPOINT` 绑定到完全相同的 URL，并在本地配置 `AI_FUNCTION_EMBEDDING_API_KEY`。修改任一 BE 环境变量后需重启该 BE。凭证不是 FE 配置，不会随计划下发。参见 [ai_embed](../../../sql-reference/sql-functions/ai-functions/ai_embed.md)。
+- 引入版本: -
+
+### `ai_default_embedding_model`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 未显式指定模型时使用的默认模型。此类调用要求该值非空白，且不能含 C0 控制字符或 DEL。如果所有向量调用均显式指定模型，则可为空。不会回退到聊天默认模型。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
+- 引入版本: -
+
+### `ai_default_embedding_provider`
+
+- 默认值: 空字符串
+- 类型: String
+- 单位: -
+- 有效值: `openai_compatible`
+- 是否可变: Yes
+- 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
 ### `brpc_send_plan_fragment_timeout_ms`
@@ -154,6 +191,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
+- 引入版本: v4.1
+
+### `connector_table_analyze_query_timeout`
+
+- 默认值: 360
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条外部表统计信息收集查询允许运行的最长时间。统计收集会按 (分区, 列组) 拆分成多条查询，每条只读取一个分区、受上述扫描预算限制并产出固定大小的 sketch，正常情况下远小于一秒即可返回。若没有该上限，每条查询都会继承 `statistic_collect_query_timeout` 的剩余时间——而后者是整个收集任务的预算，因此一条被过载 BE 卡住的查询就可能耗尽全部预算，导致其后的所有分区都来不及采集。对于冷存储或远端对象存储，受限扫描确实可能更慢，可调大该值。取值 `0` 或更小表示不设置独立上限，查询可再次使用任务的全部剩余预算。实际生效的超时始终取该值与任务剩余预算中的较小者。
 - 引入版本: v4.1
 
 ### `connector_table_query_trigger_analyze_large_table_interval`
@@ -1160,8 +1206,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值: 4 * 3600
 - 类型: Int
 - 单位: 秒
-- 是否可变: No
-- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。
+- 是否可变: Yes
+- 描述: 标签清理的时间间隔。单位：秒。建议您指定较短的时间间隔，以确保可以及时清理历史标签。该值必须大于 0。小于等于 0 的值将被拒绝，`ADMIN SET FRONTEND CONFIG` 和 FE 启动时加载 `fe.conf` 均会拒绝。
 - 引入版本: -
 
 ### `label_keep_max_num`
@@ -1235,6 +1281,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: Yes
 - 描述: StarRocks 集群中允许的最大并发 Broker Load 作业数。此参数仅对 Broker Load 有效。此参数的值必须小于 `max_running_txn_num_per_db` 的值。从 v2.5 开始，默认值从 `10` 更改为 `5`。
+- 引入版本: -
+
+### `max_get_loads_result_count`
+
+- 默认值: 10000
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: BE 或 CN 扫描 `information_schema.loads` 时，FE 单次响应返回的最大导入记录数。当匹配的记录数超过此值时，FE 返回一页数据和一个游标，BE 或 CN 继续请求下一页直至读完所有记录；查询结果不受影响，仅改变一次扫描背后的 RPC 往返次数。分页在作业边界处切分，因此同一个导入作业的多行不会被拆到两页中，单页行数可能略微超过此值。增大此值可减少往返次数，但会增大单次响应，有超出 BE 侧 RPC 客户端消息大小上限的风险；减小此值可限制单次响应大小，代价是往返次数增多。分页仅在 BE 或 CN 版本足够新、会发送游标时生效；较旧的 BE 或 CN 仍会在单次响应中收到全部结果。
 - 引入版本: -
 
 ### `max_load_initial_open_partition_number`

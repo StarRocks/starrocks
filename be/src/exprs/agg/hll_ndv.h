@@ -35,6 +35,11 @@ template <LogicalType LT, bool IsOutputHLL, typename T = RunTimeCppType<LT>>
 class HllNdvAggregateFunction final
         : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<LT, IsOutputHLL, T>> {
 public:
+    // ndv/approx_count_distinct (cardinality output) return 0, never NULL, even over a nullable input or an
+    // empty window frame. The IsOutputHLL variant (hll_raw) is NOT in alwaysReturnNonNullableFunctions, so
+    // don't claim it here.
+    bool is_result_non_nullable() const override { return !IsOutputHLL; }
+
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {

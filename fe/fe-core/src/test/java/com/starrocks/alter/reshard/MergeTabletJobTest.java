@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard;
 import com.google.common.base.Preconditions;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
+import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -24,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -33,11 +35,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Range;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.lock.LockTestUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric.MetricUnit;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.AggregatePublishVersionRequest;
 import com.starrocks.proto.PublishVersionRequest;
 import com.starrocks.proto.PublishVersionResponse;
@@ -54,6 +60,7 @@ import com.starrocks.sql.ast.SplitTabletClause;
 import com.starrocks.sql.ast.TabletGroupList;
 import com.starrocks.sql.ast.TabletList;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.MockedBackend.MockLakeService;
@@ -72,10 +79,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -84,6 +89,9 @@ public class MergeTabletJobTest {
     protected static StarRocksAssert starRocksAssert;
     private static Database db;
     private static OlapTable table;
+    // Names the isolated tables newMergeCandidateFixture creates, one per call, so concurrent fixtures
+    // never collide.
+    private static int mergeCandidateFixtureSeq = 0;
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -102,12 +110,7 @@ public class MergeTabletJobTest {
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "merge_test_table");
 
-        new MockUp<ThreadPoolExecutor>() {
-            @Mock
-            public <T> Future<T> submit(Callable<T> task) throws Exception {
-                return CompletableFuture.completedFuture(task.call());
-            }
-        };
+        LockTestUtils.fakeSynchronousExecutorOffTheCallersThread();
 
         new MockUp<MockLakeService>() {
             @Mock
@@ -393,7 +396,8 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 return false;
             }
@@ -415,7 +419,8 @@ public class MergeTabletJobTest {
 
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) throws AnalysisException {
                 throw new AnalysisException("mock");
             }
@@ -457,7 +462,8 @@ public class MergeTabletJobTest {
         };
         new MockUp<GlobalTransactionMgr>() {
             @Mock
-            public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId, List<Long> tableIds,
+            public boolean isPreviousTransactionsFinishedForReshard(
+                    long endTransactionId, long dbId, List<Long> tableIds,
                     Set<Long> excludeTransactionIds) {
                 excludeTxnIdsArg.set(excludeTransactionIds);
                 return waitFinished[0];
@@ -573,14 +579,15 @@ public class MergeTabletJobTest {
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) throws Exception {
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) throws Exception {
                 throw new RuntimeException("mock");
             }
         };
 
         Assertions.assertThrows(TabletReshardException.class,
                 () -> Deencapsulation.invoke(mergeJob, "publishVersion", List.of(), 2L, false,
-                        WarehouseManager.DEFAULT_RESOURCE));
+                        WarehouseManager.DEFAULT_RESOURCE, false));
     }
 
     @Test
@@ -599,6 +606,7 @@ public class MergeTabletJobTest {
             }
         };
 
+        AtomicReference<Boolean> actualPreferSharedInitialMetadata = new AtomicReference<>();
         new MockUp<Utils>() {
             @Mock
             public void publishVersion(List<Tablet> tablets, TxnInfoPB txnInfo,
@@ -607,8 +615,10 @@ public class MergeTabletJobTest {
                                        ComputeResource computeResource,
                                        Map<Long, com.starrocks.proto.TabletStatPB> tabletStats,
                                        boolean useAggregatePublish,
-                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                                       List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                       boolean preferSharedInitialMetadata) {
                 actualResource.set(computeResource);
+                actualPreferSharedInitialMetadata.set(preferSharedInitialMetadata);
             }
         };
 
@@ -627,6 +637,14 @@ public class MergeTabletJobTest {
             mergeJob.run();
             Assertions.assertEquals(TabletReshardJob.JobState.RUNNING, mergeJob.getJobState());
             Assertions.assertSame(expectedResource, actualResource.get());
+            // The job must forward exactly what the predicate says for THIS partition at the publish's base
+            // version (visibleVersion == commitVersion - 1). The shared test table may already be past
+            // version 1 here; the positive case, on a fresh partition still at version 1, is
+            // SplitTabletJobTest.testRunRunningHintsSharedInitialMetadataAtVersionOne -- the merge job
+            // runs the identical wiring.
+            Assertions.assertEquals(
+                    Utils.preferSharedInitialMetadata(table, physicalPartition, physicalPartition.getVisibleVersion()),
+                    actualPreferSharedInitialMetadata.get());
         } finally {
             mergeJob.replayAbortedJob();
             physicalPartition.setNextVersion(physicalPartition.getVisibleVersion() + 1);
@@ -794,7 +812,7 @@ public class MergeTabletJobTest {
             };
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public boolean isPreviousTransactionsFinished(long endTransactionId, long dbId,
+                public boolean isPreviousTransactionsFinishedForReshard(long endTransactionId, long dbId,
                         List<Long> tableIds, Set<Long> excludeTransactionIds) {
                     return true;
                 }
@@ -1119,6 +1137,246 @@ public class MergeTabletJobTest {
         Assertions.assertNotNull(mergeJob.getReshardingPhysicalPartitions().get(physicalPartition.getId()));
     }
 
+    @Test
+    public void testTabletHoldingSharedFilesSeparatesItsNeighbours() throws Exception {
+        // Fixture: three small, fresh, adjacent tablets on an isolated table -- each independently a
+        // merge candidate, so only the shared-file state under test decides whether the middle one is
+        // admitted.
+        MergeCandidateFixture fx = newMergeCandidateFixture(3);
+        List<Tablet> tablets = fx.index().getTablets();
+        ((LakeTablet) tablets.get(1)).setHasSharedFiles(true);
+        ((LakeTablet) tablets.get(0)).setHasSharedFiles(false);
+        ((LakeTablet) tablets.get(2)).setHasSharedFiles(false);
+
+        List<List<Long>> groups = Deencapsulation.invoke(
+                fx.factory(), "createMergeTabletGroups", fx.physicalPartition(), fx.index(), fx.targetSize(),
+                fx.parallelismFloor(), ColocateRangeUtils.Classifier.class);
+
+        // The blocked tablet must not just be absent from every group -- its two neighbours, which are
+        // NOT adjacent to each other once the blocked tablet sits between them, must never end up
+        // bridged into the same group either. A regression that dropped the group flush on the blocked
+        // branch would still pass a check for "group excludes tablets.get(1)" while doing exactly that.
+        long firstNeighbourId = tablets.get(0).getId();
+        long secondNeighbourId = tablets.get(2).getId();
+        for (List<Long> group : groups) {
+            Assertions.assertFalse(group.contains(tablets.get(1).getId()));
+            Assertions.assertFalse(group.contains(firstNeighbourId) && group.contains(secondNeighbourId),
+                    "group must not bridge the blocked tablet's two neighbours: " + group);
+        }
+        // For this fixture the flush leaves both neighbours as singleton runs, and
+        // flushMergeTabletGroup drops any group under two members, so the correct result here is no
+        // groups at all.
+        Assertions.assertTrue(groups.isEmpty());
+    }
+
+    @Test
+    public void testUnknownSharedFileStateIsNotAMergeCandidate() throws Exception {
+        // No collection has reported yet. Missing evidence must fail closed: a planned merge job's
+        // transaction is already committed by publish time, so an admitted bad merge has no fallback.
+        MergeCandidateFixture fx = newMergeCandidateFixture(3);
+
+        List<List<Long>> groups = Deencapsulation.invoke(
+                fx.factory(), "createMergeTabletGroups", fx.physicalPartition(), fx.index(), fx.targetSize(),
+                fx.parallelismFloor(), ColocateRangeUtils.Classifier.class);
+
+        Assertions.assertTrue(groups.isEmpty());
+    }
+
+    @Test
+    public void testCleanTabletsStillFormAGroup() throws Exception {
+        // Guard against the filter being too aggressive.
+        MergeCandidateFixture fx = newMergeCandidateFixture(3);
+        for (Tablet t : fx.index().getTablets()) {
+            ((LakeTablet) t).setHasSharedFiles(false);
+        }
+
+        List<List<Long>> groups = Deencapsulation.invoke(
+                fx.factory(), "createMergeTabletGroups", fx.physicalPartition(), fx.index(), fx.targetSize(),
+                fx.parallelismFloor(), ColocateRangeUtils.Classifier.class);
+
+        Assertions.assertFalse(groups.isEmpty());
+    }
+
+    @Test
+    public void testExplicitMergeRejectsTabletHoldingSharedFiles() throws Exception {
+        // ALTER ... MERGE TABLETS takes the tabletGroupList branch and never reaches
+        // createMergeTabletGroups. Silently dropping the group would be worse than an error: the user
+        // asked for this specific merge.
+        MergeCandidateFixture fx = newMergeCandidateFixture(2);
+        List<Tablet> tablets = fx.index().getTablets();
+        ((LakeTablet) tablets.get(0)).setHasSharedFiles(true);
+        ((LakeTablet) tablets.get(1)).setHasSharedFiles(false);
+
+        MergeTabletClause clause = newExplicitMergeClause(
+                List.of(List.of(tablets.get(0).getId(), tablets.get(1).getId())));
+        MergeTabletJobFactory explicitFactory = new MergeTabletJobFactory(db, fx.table(), clause);
+
+        StarRocksException e = Assertions.assertThrows(StarRocksException.class,
+                explicitFactory::createTabletReshardJob);
+        Assertions.assertTrue(e.getMessage().contains(String.valueOf(tablets.get(0).getId())));
+    }
+
+    @Test
+    public void testExplicitMergeRejectsUnknownSharedFileState() throws Exception {
+        MergeCandidateFixture fx = newMergeCandidateFixture(2);
+        List<Tablet> tablets = fx.index().getTablets();
+        // Leave both at UNKNOWN.
+        MergeTabletClause clause = newExplicitMergeClause(
+                List.of(List.of(tablets.get(0).getId(), tablets.get(1).getId())));
+        MergeTabletJobFactory explicitFactory = new MergeTabletJobFactory(db, fx.table(), clause);
+
+        Assertions.assertThrows(StarRocksException.class, explicitFactory::createTabletReshardJob);
+    }
+
+    @Test
+    public void testInitRejectsSourceThatRegainedSharedFilesAfterSelection() throws Exception {
+        // MergeTabletJobFactory proves each source clean while holding only a READ lock, and
+        // releases it before init() takes the WRITE lock that reserves the table. Simulate
+        // something setting a source's shared-file flag in that window: the job must not be
+        // admitted, and the table must not be left in TABLET_RESHARD, because this merge's
+        // transaction is already committed by publish time and a wrongly admitted group has no
+        // fallback.
+        MergeCandidateFixture fx = newMergeCandidateFixture(2);
+        List<Tablet> tablets = fx.index().getTablets();
+        for (Tablet t : tablets) {
+            ((LakeTablet) t).setHasSharedFiles(false);
+        }
+
+        MergeTabletClause clause = newExplicitMergeClause(
+                List.of(List.of(tablets.get(0).getId(), tablets.get(1).getId())));
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, fx.table(), clause);
+        MergeTabletJob mergeJob = (MergeTabletJob) factory.createTabletReshardJob();
+
+        ((LakeTablet) tablets.get(0)).setHasSharedFiles(true);
+
+        Assertions.assertThrows(StarRocksException.class, mergeJob::init);
+        Assertions.assertEquals(OlapTable.OlapTableState.NORMAL, fx.table().getState());
+    }
+
+    @Test
+    public void testSharedFilesEmptyPlanStaysRetriable() throws Exception {
+        // Compaction clears shared flags without changing layout or dataVersion, so an empty plan
+        // caused by shared/unknown state must NOT be latched as deterministic -- otherwise merge is
+        // never re-armed after compaction.
+        MergeCandidateFixture fx = newMergeCandidateFixture(3);
+        for (Tablet t : fx.index().getTablets()) {
+            ((LakeTablet) t).setHasSharedFiles(true);
+        }
+
+        Exception e = Assertions.assertThrows(Exception.class, fx.factory()::createTabletReshardJob);
+        Assertions.assertFalse(e instanceof EmptyReshardPlanException);
+        Assertions.assertInstanceOf(StarRocksException.class, e);
+    }
+
+    @Test
+    public void testMetricCountsOnlyOtherwiseEligibleTablets() throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        LongCounterMetric savedCounter = MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED;
+        MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = new LongCounterMetric(
+                "tablet_reshard_merge_candidate_blocked", MetricUnit.NOUNIT, "test");
+        MetricRepo.hasInit = true;
+        try {
+            // The counter means "otherwise-eligible tablets blocked by merge-blocking shared files or
+            // a missing observation". Without this test, moving the increment above the size/staleness
+            // gates would go undetected and the number would silently become uninterpretable.
+            MergeCandidateFixture fx = newMergeCandidateFixture(3);
+            List<Tablet> tablets = fx.index().getTablets();
+            ((LakeTablet) tablets.get(0)).setHasSharedFiles(true);   // blocked, otherwise eligible
+            ((LakeTablet) tablets.get(1)).setHasSharedFiles(true);
+            ((LakeTablet) tablets.get(1)).setDataSizeUpdateTime(0L);  // ALSO stale -> must not count
+            ((LakeTablet) tablets.get(2)).setHasSharedFiles(false);
+
+            Deencapsulation.invoke(fx.factory(), "createMergeTabletGroups", fx.physicalPartition(), fx.index(),
+                    fx.targetSize(), fx.parallelismFloor(), ColocateRangeUtils.Classifier.class);
+
+            Assertions.assertEquals(1L,
+                    MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED.getValue().longValue());
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = savedCounter;
+        }
+    }
+
+    @Test
+    public void testMetricSkipsDirtyTabletAfterBudgetExhausted() throws Exception {
+        boolean savedHasInit = MetricRepo.hasInit;
+        LongCounterMetric savedCounter = MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED;
+        MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = new LongCounterMetric(
+                "tablet_reshard_merge_candidate_blocked", MetricUnit.NOUNIT, "test");
+        MetricRepo.hasInit = true;
+        try {
+            // 5 tablets with a parallelism floor of 3 => mergeBudget = 5 - 3 = 2. The first clean
+            // tablet is a free first member; the second and third each cost one unit of budget, which
+            // exhausts it exactly when the group [t0, t1, t2] reaches 3 members. Tablet 3 (dirty) then
+            // hits the group non-empty, budget-exhausted case and flushes that group. Tablet 4 (dirty)
+            // is reached with the group reset to empty and the budget still exhausted -- the case the
+            // old (currentTabletGroup.isEmpty() || mergeBudget > 0) guard got wrong, since an empty
+            // group made it count a tablet that could never have joined an emitted (>=2) group. Neither
+            // tablet may inflate the counter.
+            MergeCandidateFixture fx = newMergeCandidateFixture(5);
+            List<Tablet> tablets = fx.index().getTablets();
+            ((LakeTablet) tablets.get(0)).setHasSharedFiles(false);
+            ((LakeTablet) tablets.get(1)).setHasSharedFiles(false);
+            ((LakeTablet) tablets.get(2)).setHasSharedFiles(false);
+            ((LakeTablet) tablets.get(3)).setHasSharedFiles(true);
+            ((LakeTablet) tablets.get(4)).setHasSharedFiles(true);
+
+            Deencapsulation.invoke(fx.factory(), "createMergeTabletGroups", fx.physicalPartition(), fx.index(),
+                    fx.targetSize(), 3, ColocateRangeUtils.Classifier.class);
+
+            Assertions.assertEquals(0L,
+                    MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED.getValue().longValue());
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+            MetricRepo.COUNTER_TABLET_RESHARD_MERGE_CANDIDATE_BLOCKED = savedCounter;
+        }
+    }
+
+    /**
+     * A fresh, isolated table with {@code tabletCount} small, fresh LakeTablet objects: independent of
+     * the class's shared merge_test_table fixture, so one test's shared-file observations can never
+     * leak into another (this class's db/table fields are static with no per-test reset, so a shared
+     * fixture's observations would otherwise persist across tests).
+     */
+    private record MergeCandidateFixture(OlapTable table, PhysicalPartition physicalPartition,
+            MaterializedIndex index, MergeTabletJobFactory factory, long targetSize, int parallelismFloor) {
+    }
+
+    private MergeCandidateFixture newMergeCandidateFixture(int tabletCount) throws Exception {
+        String tableName = "merge_shared_file_test_" + (++mergeCandidateFixtureSeq);
+        starRocksAssert.withTable("create table " + tableName + " (key1 int, key2 varchar(10))\n"
+                + "order by(key1)\n"
+                + "properties('replication_num' = '1'); ");
+        OlapTable freshTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), tableName);
+        PhysicalPartition physicalPartition = freshTable.getAllPhysicalPartitions().iterator().next();
+        MaterializedIndex index = physicalPartition.getLatestBaseIndex();
+        for (long tabletId : new ArrayList<>(index.getTabletIdsInOrder())) {
+            index.removeTablet(tabletId);
+        }
+
+        long visibleVersionTime = physicalPartition.getVisibleVersionTime();
+        for (int i = 0; i < tabletCount; i++) {
+            LakeTablet tablet = new LakeTablet(GlobalStateMgr.getCurrentState().getNextId());
+            tablet.setDataSize(10L);
+            tablet.setDataSizeUpdateTime(visibleVersionTime);
+            index.addTablet(tablet, new TabletMeta(db.getId(), freshTable.getId(), physicalPartition.getId(),
+                    index.getId(), TStorageMedium.HDD, true));
+        }
+
+        long targetSize = 100L;
+        MergeTabletClause clause = new MergeTabletClause();
+        clause.setTabletReshardTargetSize(targetSize);
+        MergeTabletJobFactory factory = new MergeTabletJobFactory(db, freshTable, clause);
+        // Direct createMergeTabletGroups calls pass this floor explicitly, so it need not match what
+        // createTabletReshardJob would compute from the (unrelated) cluster CN count.
+        return new MergeCandidateFixture(freshTable, physicalPartition, index, factory, targetSize, 0);
+    }
+
+    private static MergeTabletClause newExplicitMergeClause(List<List<Long>> tabletIdGroups) {
+        return new MergeTabletClause(null, new TabletGroupList(tabletIdGroups), null);
+    }
+
     private TabletReshardJob createSplitTabletReshardJob() throws Exception {
         PhysicalPartition physicalPartition = table.getAllPhysicalPartitions().iterator().next();
         MaterializedIndex materializedIndex = physicalPartition.getLatestBaseIndex();
@@ -1241,6 +1499,12 @@ public class MergeTabletJobTest {
         }
         Preconditions.checkState(materializedIndex.getTablets().size() >= count,
                 "Not enough tablets for merge");
+        // These legacy fixtures predate the shared-file filter and assert merge behaviour that
+        // has nothing to do with shared files. Mark them observed-clean so the filter admits
+        // them; the shared-file tests build their own tablets and are unaffected.
+        for (Tablet tablet : materializedIndex.getTablets()) {
+            ((LakeTablet) tablet).setHasSharedFiles(false);
+        }
     }
 
     private MergeTabletJob createMergeTabletReshardJob() throws Exception {

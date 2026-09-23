@@ -660,6 +660,40 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
+    public void prepareAcceptsPartialTargetColumnList() throws Exception {
+        // target base (k, v, extra); INSERT INTO t (k, v) SELECT * FROM src(k, v). This path used
+        // to decline every non-identity list; the shared targetColumnListIsPreSplitSafe gate (see
+        // InsertPreSplitHookColumnListTest) is now the only column-list gate, and the omitted
+        // "extra" -- defaulted by the load -- simply never enters the map.
+        try (SourceFixture fixture = sourceFixture(List.of("k", "v", "extra"), List.of("k", "v"))) {
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("k", "v"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a partial target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareAcceptsReorderedTargetColumnList() throws Exception {
+        // INSERT INTO t (v, k) SELECT k, v FROM src -- outputs pair against the list as written,
+        // so the target sort key k is sampled from source column v, not from source column k.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectList projection = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
+            when(selectRelation.getSelectList()).thenReturn(projection);
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a reordered target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "v", "v", "k"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
     public void prepareThreadsWherePredicateSqlIntoScanContext() throws Exception {
         // A deterministic, safe WHERE clause must be rendered by SamplingPredicateGate.toSql
         // and threaded verbatim into the scan context. Mock the WHERE Expr so the gate's
@@ -680,6 +714,47 @@ public class InsertPreSplitHookTableTest {
                 Assertions.assertNotNull(scanContext, "prepare must build a scan context");
                 Assertions.assertEquals("`a` > 10", scanContext.wherePredicateSql(),
                         "the rendered WHERE predicate SQL must be threaded into the scan context");
+            }
+        }
+    }
+
+    @Test
+    public void prepareRendersTheFoldedWherePredicate() throws Exception {
+        // prepare must hand the sampler the predicate folded in the caller's context, not the
+        // parsed one: the parsed date_sub(current_date(), 7) would be evaluated as ROOT.
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            Expr folded = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(folded);
+                gate.when(() -> SamplingPredicateGate.toSql(folded)).thenReturn("`dt` >= '2026-09-16'");
+
+                InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+                Assertions.assertNotNull(scanContext);
+                Assertions.assertEquals("`dt` >= '2026-09-16'", scanContext.wherePredicateSql());
+            }
+        }
+    }
+
+    @Test
+    public void prepareSkipsWhenTheWherePredicateDoesNotFold() throws Exception {
+        try (SourceFixture fixture = sourceFixture()) {
+            Expr parsed = mock(Expr.class);
+            QueryRelation queryRelation = fixture.insertStmt.getQueryStatement().getQueryRelation();
+            when(((SelectRelation) queryRelation).getWhereClause()).thenReturn(parsed);
+
+            try (MockedStatic<SamplingPredicateGate> gate =
+                         Mockito.mockStatic(SamplingPredicateGate.class, Mockito.CALLS_REAL_METHODS)) {
+                gate.when(() -> SamplingPredicateGate.foldPlanTimeConstants(eq(parsed), any()))
+                        .thenReturn(null);
+
+                Assertions.assertNull(fixture.prepareScanContext());
             }
         }
     }
@@ -1032,7 +1107,7 @@ public class InsertPreSplitHookTableTest {
         private void assertNoSubmit() {
             InsertPreSplitHook.maybeRunPreSplit(insertStmt, context);
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }

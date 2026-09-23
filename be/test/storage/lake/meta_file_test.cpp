@@ -22,6 +22,7 @@
 #include <set>
 #include <unordered_map>
 
+#include "base/debug/trace.h"
 #include "base/hash/crc32c.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
@@ -42,6 +43,7 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/storage_metrics.h"
+#include "types/type_descriptor.h"
 
 namespace starrocks::lake {
 
@@ -194,13 +196,23 @@ protected:
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(fmt::format("atomic_shared_{}.dat", i));
             segment->set_size(100);
+            segment->set_num_rows(10);
+            segment->set_segment_idx(i);
             segment->set_shared(true);
         }
         return metadata;
     }
 
-    Status publish_delvec_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet, int64_t txn_id,
-                                std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+    Status publish_delvec_merge(const std::vector<std::shared_ptr<TabletMetadataPB>>& sources, int64_t merged_tablet,
+                                int64_t txn_id, std::unordered_map<int64_t, TabletMetadataPtr>* published_metadatas) {
+        CHECK_EQ(2, sources.size());
+        auto* split_key = sources[0]->mutable_range()->mutable_upper_bound()->add_values();
+        split_key->mutable_type()->CopyFrom(TypeDescriptor(TYPE_INT).to_protobuf());
+        split_key->set_value("0");
+        split_key->set_variant_type(VariantTypePB::NORMAL_VALUE);
+        sources[0]->mutable_range()->set_upper_bound_included(false);
+        sources[1]->mutable_range()->mutable_lower_bound()->CopyFrom(sources[0]->range().upper_bound());
+        sources[1]->mutable_range()->set_lower_bound_included(true);
         for (const auto& source : sources) {
             RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
         }
@@ -466,6 +478,36 @@ TEST_F(MetaFileTest, test_compacted_delvec_absent_size_cache_and_reader_lifecycl
                                      configure_resolved_size(0));
 }
 
+TEST_F(MetaFileTest, test_compacted_delvec_absent_size_preflight_is_traced) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "absent-size-traced.delvec";
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), "a");
+    const auto raw = raw_output_page(source_tablet, source_name, 0, 1);
+
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:source_size_override", [](void* arg) {
+        *static_cast<std::optional<StatusOr<int64_t>>*>(arg) = Status::InternalError("injected size failure");
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    scoped_refptr<Trace> trace(new Trace);
+    Status status;
+    {
+        ADOPT_TRACE(trace.get());
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        status = write_compacted_delvec_pages(_tablet_manager.get(), {raw}, next_id(), next_id(), &output, &offsets);
+    }
+    EXPECT_EQ("injected size failure", status.message()) << status;
+    EXPECT_NE(std::string::npos, trace->MetricsAsJSON().find("delvec_file_read_latency_us"));
+}
+
 TEST_F(MetaFileTest, test_compacted_delvec_reader_lifecycle_resets_across_serialized_page) {
     const int64_t source_tablet = next_id();
     const int64_t target_tablet = next_id();
@@ -697,6 +739,98 @@ TEST_F(MetaFileTest, test_compacted_delvec_serialized_page_writes_plaintext) {
                                            &output, &offsets));
     EXPECT_TRUE(output.encryption_meta().empty());
     EXPECT_EQ(std::vector<uint64_t>({0}), offsets);
+}
+
+// A page copied byte for byte never reaches get_del_vec, so the checksum verification there never sees
+// these bytes. The copy verifies them itself, under the same condition -- a checksum is live only while
+// its gen version is the page's own version -- and under the same enable_strict_delvec_crc_check knob.
+TEST_F(MetaFileTest, test_compacted_delvec_verifies_copied_page_crc32c) {
+    const int64_t source_tablet = next_id();
+    const std::string source_name = "copied-crc-source.delvec";
+    // More than one copy chunk, and its tail differs, so a check that folded in only the first chunk
+    // would still accept first_chunk_crc below.
+    std::string source_bytes((1UL << 20) + 17, 'c');
+    source_bytes.back() = 'z';
+    write_file(_tablet_manager->delvec_location(source_tablet, source_name), source_bytes);
+    const uint32_t whole_page_crc = crc32c::Value(source_bytes.data(), source_bytes.size());
+    const uint32_t first_chunk_crc = crc32c::Value(source_bytes.data(), 1UL << 20);
+
+    auto page_claiming = [&](uint32_t crc, int64_t gen_version) {
+        auto page = raw_output_page(source_tablet, source_name, 0, source_bytes.size(), source_bytes.size());
+        page.raw_page->page.set_crc32c(crc32c::Mask(crc));
+        page.raw_page->page.set_crc32c_gen_version(gen_version);
+        return page;
+    };
+    auto copy = [&](const DelvecOutputPage& page) -> std::pair<Status, std::string> {
+        const int64_t target_tablet = next_id();
+        FileMetaPB output;
+        std::vector<uint64_t> offsets;
+        auto status = write_compacted_delvec_pages(_tablet_manager.get(), {page}, target_tablet, next_id(), &output,
+                                                   &offsets);
+        if (!status.ok()) return {status, ""};
+        ASSIGN_OR_ABORT(auto reader,
+                        fs::new_random_access_file(_tablet_manager->delvec_location(target_tablet, output.name())));
+        ASSIGN_OR_ABORT(auto copied, reader->read_all());
+        return {Status::OK(), copied};
+    };
+
+    int drop_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("lake::drop_corrupted_delvec_file_cache", [&](void* arg) {
+        ++drop_calls;
+        *static_cast<Status*>(arg) = Status::OK();
+    });
+    sync->EnableProcessing();
+    const bool old_strict = config::enable_strict_delvec_crc_check;
+    DeferOp cleanup([&] {
+        config::enable_strict_delvec_crc_check = old_strict;
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    config::enable_strict_delvec_crc_check = true;
+
+    // The page the source actually holds goes through untouched, and nothing is reported corrupt.
+    {
+        auto [status, copied] = copy(page_claiming(whole_page_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(0, drop_calls);
+    }
+
+    // A page whose bytes do not match its live checksum fails the copy, and the source's local cache is
+    // dropped first so the caller's retry reads through to remote storage.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        EXPECT_TRUE(status.is_corruption()) << status;
+        EXPECT_EQ(fmt::format("delvec crc32c mismatch while copying page. expect crc32c {}, actual {}", first_chunk_crc,
+                              whole_page_crc),
+                  status.message())
+                << status;
+        EXPECT_TRUE(copied.empty());
+        EXPECT_EQ(1, drop_calls);
+    }
+
+    // Without strict checking the copy goes through, exactly as get_del_vec tolerates a mismatch it
+    // decodes. The output keeps the source's own crc32c, so the mismatch stays visible to its reader.
+    {
+        config::enable_strict_delvec_crc_check = false;
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/1));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls) << "a tolerated mismatch must not drop the source's cache";
+        config::enable_strict_delvec_crc_check = true;
+    }
+
+    // A checksum whose gen version is not the page's version is no checksum at all -- meta_file reads it
+    // that way everywhere else, and there is nothing here to verify against.
+    {
+        auto [status, copied] = copy(page_claiming(first_chunk_crc, /*gen_version=*/2));
+        ASSERT_OK(status);
+        EXPECT_EQ(source_bytes, copied);
+        EXPECT_EQ(1, drop_calls);
+    }
 }
 
 TEST_F(MetaFileTest, test_compacted_delvec_failure_atomic_by_phase) {
@@ -1480,6 +1614,56 @@ TEST_F(MetaFileTest, test_unpersistent_del_files_when_compact) {
         EXPECT_TRUE(metadata->compaction_inputs(0).del_files_size() == 0);
         EXPECT_TRUE(metadata->compaction_inputs(1).del_files_size() == 0);
     }
+}
+
+TEST_F(MetaFileTest, test_clear_delete_predicate_when_compact) {
+    // Regression for the metadata-reclaim change: when compaction archives its input
+    // rowsets into compaction_inputs, the (potentially large) delete_predicate must be
+    // dropped from the archived copy. compaction_inputs is consumed only by vacuum/file
+    // cleanup, never by readers, so the predicate is pure metadata bloat once moved.
+    const int64_t tablet_id = 10007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(112);
+
+    // Two live rowsets, each carrying a delete_predicate.
+    auto* r0 = metadata->add_rowsets();
+    r0->set_id(110);
+    r0->set_overlapped(false);
+    r0->set_num_rows(10);
+    r0->set_data_size(100);
+    r0->add_segment_metas()->set_filename("aaa.dat");
+    r0->mutable_delete_predicate()->set_version(1);
+    auto* r1 = metadata->add_rowsets();
+    r1->set_id(111);
+    r1->set_overlapped(false);
+    r1->set_num_rows(20);
+    r1->set_data_size(200);
+    r1->add_segment_metas()->set_filename("bbb.dat");
+    r1->mutable_delete_predicate()->set_version(2);
+
+    // Pre-condition: both live rowsets currently carry the predicate.
+    ASSERT_TRUE(metadata->rowsets(0).has_delete_predicate());
+    ASSERT_TRUE(metadata->rowsets(1).has_delete_predicate());
+
+    // Compact 110 + 111 -> archived into compaction_inputs.
+    metadata->set_version(11);
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpCompaction op_compaction;
+    op_compaction.add_input_rowsets(110);
+    op_compaction.add_input_rowsets(111);
+    RowsetMetadataPB output_rowset;
+    output_rowset.add_segment_metas()->set_filename("ccc.dat");
+    op_compaction.mutable_output_rowset()->CopyFrom(output_rowset);
+    op_compaction.set_compact_version(11);
+    builder.apply_opcompaction(op_compaction, 111, 0);
+
+    // The archived compaction_inputs must NOT retain the delete_predicate.
+    ASSERT_EQ(2, metadata->compaction_inputs_size());
+    EXPECT_FALSE(metadata->compaction_inputs(0).has_delete_predicate());
+    EXPECT_FALSE(metadata->compaction_inputs(1).has_delete_predicate());
 }
 
 TEST_F(MetaFileTest, test_compaction_conflict_checker_with_sparse_segment_id) {
@@ -2318,7 +2502,8 @@ TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst) {
     EXPECT_TRUE(orphan_names.count("reused.sst") == 0);
 }
 
-// Test that remove_compacted_sst also handles output_sstable (singular, from major_compact)
+// Test that remove_compacted_sst also handles output_sstable (singular), which only appears in
+// txn logs written before index compaction moved to the plural output_sstables field.
 TEST_F(MetaFileTest, test_remove_compacted_sst_skip_reused_sst_singular_output) {
     const int64_t tablet_id = 10011;
     auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
@@ -2996,7 +3181,7 @@ TEST_F(MetaFileTest, test_apply_add_index_happy_path) {
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(100);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_TRUE(metadata->has_idg_meta());
     const auto& idgs = metadata->idg_meta().idgs();
@@ -3022,7 +3207,7 @@ TEST_F(MetaFileTest, test_apply_add_index_missing_segment_id_skipped) {
     // well-formed — should land
     push_segment_entry(&op, /*seg_id=*/3, /*version=*/1, "good.idx", 1, BITMAP);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     const auto& idgs = metadata->idg_meta().idgs();
     ASSERT_EQ(1u, idgs.size());
@@ -3041,11 +3226,11 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first) {
 
     TxnLogPB_OpAddIndex op1;
     push_segment_entry(&op1, 5, /*version=*/10, "old.idx", 1, BITMAP);
-    builder.apply_add_index(op1);
+    ASSERT_OK(builder.apply_add_index(op1));
 
     TxnLogPB_OpAddIndex op2;
     push_segment_entry(&op2, 5, /*version=*/11, "new.idx", 1, BITMAP);
-    builder.apply_add_index(op2);
+    ASSERT_OK(builder.apply_add_index(op2));
 
     const auto& v = metadata->idg_meta().idgs().at(5);
     ASSERT_EQ(2, v.entries_size());
@@ -3065,19 +3250,19 @@ TEST_F(MetaFileTest, test_apply_add_index_merges_newest_first_multi) {
 
     TxnLogPB_OpAddIndex op1;
     push_segment_entry(&op1, /*seg_id=*/7, /*version=*/10, "v1.idx", /*index_id=*/100, BITMAP);
-    builder.apply_add_index(op1);
+    ASSERT_OK(builder.apply_add_index(op1));
 
     TxnLogPB_OpAddIndex op2;
     push_segment_entry(&op2, /*seg_id=*/7, /*version=*/11, "v2.idx", /*index_id=*/101, BITMAP);
-    builder.apply_add_index(op2);
+    ASSERT_OK(builder.apply_add_index(op2));
 
     TxnLogPB_OpAddIndex op3;
     push_segment_entry(&op3, /*seg_id=*/7, /*version=*/12, "v3.idx", /*index_id=*/102, BITMAP);
-    builder.apply_add_index(op3);
+    ASSERT_OK(builder.apply_add_index(op3));
 
     TxnLogPB_OpAddIndex op4;
     push_segment_entry(&op4, /*seg_id=*/7, /*version=*/13, "v4.idx", /*index_id=*/103, BITMAP);
-    builder.apply_add_index(op4);
+    ASSERT_OK(builder.apply_add_index(op4));
 
     const auto& v = metadata->idg_meta().idgs().at(7);
     ASSERT_EQ(4, v.entries_size());
@@ -3109,7 +3294,7 @@ TEST_F(MetaFileTest, test_apply_add_index_empty_op_is_pure_noop) {
 
     TxnLogPB_OpAddIndex op;
     op.set_alter_version(7);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(metadata->has_idg_meta());
     EXPECT_EQ(300, metadata->schema().id());
@@ -3141,7 +3326,7 @@ TEST_F(MetaFileTest, test_apply_add_index_stamps_new_schema_id) {
     op.set_new_schema_id(200);
     op.set_new_schema_version(6);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(200, metadata->schema().id());
     EXPECT_EQ(6, metadata->schema().schema_version());
@@ -3182,7 +3367,7 @@ TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
     op.set_new_schema_id(200);
     op.set_new_schema_version(6);
 
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(200, metadata->schema().id());
     // Indexed schema archived under the new id (pins to it must resolve).
@@ -3196,7 +3381,7 @@ TEST_F(MetaFileTest, test_apply_add_index_evolved_table_archives_and_repoints) {
 
     // Idempotent replay: re-applying the same op is a no-op (guarded on
     // historical_schemas already containing the new id).
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
     EXPECT_EQ(200, metadata->schema().id());
     EXPECT_EQ(200, metadata->rowset_to_schema().at(1));
     EXPECT_EQ(50, metadata->rowset_to_schema().at(3));
@@ -3310,7 +3495,7 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_has_bitmap_index_flag) {
     new_ix->set_index_id(7777);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(42);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_EQ(1, schema->table_indices_size());
     EXPECT_TRUE(schema->column(0).has_bitmap_index());
@@ -3330,7 +3515,7 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_ngrambf) {
     new_ix->set_index_id(8888);
     new_ix->set_index_type(NGRAMBF);
     new_ix->add_col_unique_id(55);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_TRUE(schema->column(0).is_bf_column());
@@ -3350,9 +3535,586 @@ TEST_F(MetaFileTest, test_apply_add_index_flips_is_bf_column_for_bloom_filter) {
     auto* new_ix = op.add_new_indexes();
     new_ix->set_index_type(BLOOM_FILTER);
     new_ix->add_col_unique_id(77);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_TRUE(schema->column(0).is_bf_column());
+}
+
+// ---------------------------------------------------------------------------
+// Installing the authoritative schema content (StarRocksTest#12090).
+//
+// Under fast schema evolution v2 a metadata-only ADD COLUMN updates only the FE
+// catalog; tablet metadata catches up on the next write naming a newer schema.
+// A fast-path ADD INDEX dispatched inside that window carries the full column
+// definitions so publish does not bind FE's new schema id to content that is
+// still missing the added column.
+// ---------------------------------------------------------------------------
+
+TEST_F(MetaFileTest, test_apply_add_index_installs_new_schema_content_with_new_id) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20110);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20110);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    // The schema this alter publishes: c1 plus the ALTER-added c5, carrying the
+    // FE-allocated target id/version inside it (the writer emits no standalone
+    // new_schema_id, so a pre-new_schema worker finds nothing to stamp).
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Content: the added column is present...
+    ASSERT_EQ(2, schema->column_size());
+    EXPECT_EQ(105, schema->column(1).unique_id());
+    // ...and the per-column index flag actually landed on it. Without installing
+    // the content first, bump_flag() would have had no column 105 to find, and
+    // compaction output would carry no bloom filter for c5.
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+    ASSERT_EQ(1, schema->table_indices_size());
+    // Id/version: this alter's, not FE's catalog id.
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_version_regression) {
+    // op.new_schema() is the snapshot FE took at dispatch; publish happens later.
+    // If tablet metadata advanced in between, installing the snapshot would DROP
+    // the columns that arrived meanwhile, so the apply must fail instead.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20111);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20111);
+    metadata->set_version(9);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(10);
+    push_column(schema, /*col_uid=*/42, "c1");
+    push_column(schema, /*col_uid=*/43, "c2_added_later");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4); // older than the metadata's 10
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(42);
+
+    EXPECT_FALSE(builder.apply_add_index(op).ok());
+    // The later column survived and the id was not stamped.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_EQ(500, schema->id());
+    EXPECT_EQ(10, schema->schema_version());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_new_schema_replay_is_idempotent) {
+    // Publish can replay (retry, or metadata replay after a restart). By then the
+    // metadata already carries the TARGET schema version, which is newer than the
+    // FE catalog snapshot in the log -- so the no-regression check must be made
+    // against the target version, not the snapshot's, or every replay would fail.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20113);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20113);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4); // catalog snapshot; target below is 4
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.apply_add_index(op));
+    }
+    ASSERT_EQ(777, schema->id());
+    ASSERT_EQ(4, schema->schema_version());
+
+    // Replay the very same op against the already-applied metadata.
+    {
+        MetaFileBuilder builder(*tablet, metadata);
+        ASSERT_OK(builder.apply_add_index(op));
+    }
+    // Same end state: no duplicated column, no duplicated index, id intact.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+    EXPECT_EQ(1, schema->table_indices_size());
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+}
+
+// Installing the authoritative schema must not clobber the BE-only parts of the
+// tablet schema that FE's converted schema cannot express.
+//
+// The dangerous one is dropped_table_indices: a metadata-only DROP INDEX records
+// a tombstone there so readers do not reinterpret the footer payload the drop
+// left behind. convert_t_schema_to_pb_schema() never emits that field, so copying
+// FE's schema wholesale erased it -- and then
+// ColumnReader::has_original_bloom_filter_index() would accept a footer holding an
+// NGRAM bloom as if it were a plain one, pruning away matching rows. A later
+// ADD INDEX on an unrelated column was enough to trigger it.
+TEST_F(MetaFileTest, test_apply_add_index_preserves_be_only_schema_fields) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20116);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20116);
+    metadata->set_version(6);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(600);
+    schema->set_schema_version(4);
+    // BE-only bookkeeping FE's converted schema does not reproduce faithfully.
+    schema->set_next_column_unique_id(9000);
+    schema->set_num_rows_per_row_block(1234);
+    schema->set_bf_fpp(0.02);
+    // A stale sort key, matching the metadata's own (pre-ADD-COLUMN) column order.
+    schema->add_sort_key_idxes(0);
+    schema->set_num_short_key_columns(2);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* prev = push_column(schema, /*col_uid=*/105, "v2");
+    // A flag bumped by an earlier fast-path ADD INDEX whose FE catalog mutation
+    // has not landed yet, so FE's schema below does NOT carry it.
+    prev->set_is_bf_column(true);
+    // Tombstone from a metadata-only DROP INDEX of an NGRAMBF on v2.
+    auto* tomb = schema->add_dropped_table_indices();
+    tomb->set_index_id(-1);
+    tomb->set_index_name("ngram_v2");
+    tomb->set_index_type(NGRAMBF);
+    tomb->add_col_unique_id(105);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
+    // FE recomputes these from what it knows, and cannot express the tombstone.
+    fe_schema->set_next_column_unique_id(107);
+    fe_schema->set_num_rows_per_row_block(65535);
+    // FE's sort key reflects the post-ADD-COLUMN column order and must win.
+    fe_schema->add_sort_key_idxes(2);
+    fe_schema->set_num_short_key_columns(1);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    push_column(fe_schema, /*col_uid=*/105, "v2");
+    auto* fe_new = push_column(fe_schema, /*col_uid=*/106, "bfc");
+    fe_new->set_is_nullable(true);
+    fe_new->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("bf_bfc");
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(106);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // The tombstone survived -- otherwise v2's stale footer bloom becomes live again.
+    ASSERT_EQ(1, schema->dropped_table_indices_size());
+    EXPECT_EQ("ngram_v2", schema->dropped_table_indices(0).index_name());
+    EXPECT_EQ(NGRAMBF, schema->dropped_table_indices(0).index_type());
+
+    // Other BE-only bookkeeping kept its value instead of FE's recomputation.
+    // next_column_unique_id is a monotonic mark, so it takes the max: FE recomputed
+    // a LOWER 107 from its current columns, which must not move the mark backwards.
+    EXPECT_EQ(9000, schema->next_column_unique_id());
+    EXPECT_EQ(1234, schema->num_rows_per_row_block());
+    EXPECT_DOUBLE_EQ(0.02, schema->bf_fpp());
+
+    // The columns came from FE (the added one is present)...
+    ASSERT_EQ(3, schema->column_size());
+    EXPECT_EQ(106, schema->column(2).unique_id());
+    EXPECT_TRUE(schema->column(2).is_bf_column());
+    // ...while a flag FE did not know about was merged, not cleared. Losing it
+    // would make later writes stop building that column's index.
+    EXPECT_EQ(105, schema->column(1).unique_id());
+    EXPECT_TRUE(schema->column(1).is_bf_column()) << "pre-existing index flag was dropped";
+    EXPECT_EQ(888, schema->id());
+
+    // Fields that index INTO the column list must move together with it. FE's
+    // schema declared a different sort key than the metadata's, and since ADD
+    // COLUMN does not always append (... AFTER c / FIRST, or a new KEY column),
+    // keeping the old ordinals alongside new columns would misalign the sort key.
+    ASSERT_EQ(1, schema->sort_key_idxes_size());
+    EXPECT_EQ(2, schema->sort_key_idxes(0));
+    EXPECT_EQ(1, schema->num_short_key_columns());
+}
+
+// The other direction of the monotonic mark: right after an ADD COLUMN, FE has
+// just allocated the new column's unique id, so ITS next_column_unique_id is the
+// higher one and must win. Restoring the metadata value outright would hand the
+// same id out twice on a later add.
+TEST_F(MetaFileTest, test_apply_add_index_next_unique_id_takes_the_higher_mark) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20117);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20117);
+    metadata->set_version(3);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(700);
+    schema->set_schema_version(2);
+    schema->set_next_column_unique_id(43);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(701);
+    fe_schema->set_schema_version(3);
+    fe_schema->set_next_column_unique_id(44); // FE just allocated uid 43
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* added = push_column(fe_schema, /*col_uid=*/43, "bfc");
+    added->set_is_nullable(true);
+    added->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(43);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    EXPECT_EQ(44, schema->next_column_unique_id()) << "allocation mark must not lag FE";
+    ASSERT_EQ(2, schema->column_size());
+    EXPECT_TRUE(schema->column(1).is_bf_column());
+}
+
+// The id may arrive either inside new_schema (what this version writes) or in the
+// standalone new_schema_id field (logs written before new_schema existed). Both
+// must reach the same end state for the id, and the legacy encoding must keep
+// working -- an upgraded BE still has to apply logs an older one left behind.
+// Installing the column set means replacing it, so an empty one would wipe the
+// tablet's column definitions and leave it unreadable. FE always sends the full
+// set, so an empty one means the log cannot be trusted -- reject it instead of
+// applying it, and leave the existing schema untouched.
+TEST_F(MetaFileTest, test_apply_add_index_rejects_schema_with_no_columns) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20119);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20119);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+    push_column(schema, /*col_uid=*/43, "c2");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    // Deliberately no columns.
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(42);
+
+    EXPECT_FALSE(builder.apply_add_index(op).ok());
+    // The tablet keeps its columns and its id.
+    EXPECT_EQ(2, schema->column_size());
+    EXPECT_EQ(500, schema->id());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_accepts_legacy_standalone_schema_id) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20118);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20118);
+    metadata->set_version(4);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // Legacy shape: no new_schema at all, id/version in the standalone fields.
+    TxnLogPB_OpAddIndex op;
+    op.set_new_schema_id(777);
+    op.set_new_schema_version(4);
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BITMAP);
+    new_ix->add_col_unique_id(42);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Old behaviour preserved: id/version stamped, index appended, flag bumped,
+    // and the column set untouched (no content to install).
+    EXPECT_EQ(777, schema->id());
+    EXPECT_EQ(4, schema->schema_version());
+    ASSERT_EQ(1, schema->table_indices_size());
+    ASSERT_EQ(1, schema->column_size());
+    EXPECT_TRUE(schema->column(0).has_bitmap_index());
+}
+
+// Guard: apply_add_index() replaces only the column-layout fields of
+// TabletSchemaPB (columns plus what indexes into them by ordinal) and preserves
+// everything else. A newly added field is therefore preserved by default, which is
+// the safe direction -- but if the new field belongs to the column-layout set it
+// must be added to the replace list, or it will drift out of sync with the columns
+// exactly the way sort_key_idxes would. If this trips, classify the new field,
+// update the install block in apply_add_index if needed, then bump the count.
+TEST_F(MetaFileTest, test_tablet_schema_pb_field_count_guard) {
+    EXPECT_EQ(17, TabletSchemaPB::descriptor()->field_count())
+            << "TabletSchemaPB gained or lost a field. Decide whether apply_add_index must preserve it "
+               "from tablet metadata (BE-only bookkeeping) or take it from FE's schema (logical schema), "
+               "then update the expected count.";
+}
+
+// A second fast-path ADD INDEX must not drop the first one's table_indices entry.
+//
+// A plain bloom filter is not an Index object in the FE catalog -- it lives in the
+// table-level bloom_filter_columns property -- so the schema FE attaches to the
+// request carries NO table_indices entry for it, and op.new_indexes() names only
+// the columns THIS alter adds. An earlier version of this fix CopyFrom'd FE's
+// whole schema, which left previously-indexed columns without their entry;
+// installing only the columns leaves table_indices intact.
+//
+// Metadata fidelity rather than a read-path bug: the plain-BF read path keys off
+// the per-column is_bf_column flag and `!has_index(uid, NGRAMBF)`, and has_index()
+// is never queried for BLOOM_FILTER. Pinned anyway so the accumulated index set
+// stays truthful for DROP INDEX, tooling, and any future consumer.
+TEST_F(MetaFileTest, test_apply_add_index_keeps_earlier_bloom_filter_entry) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20115);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20115);
+    metadata->set_version(6);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(600);
+    schema->set_schema_version(4);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* prev_bf_col = push_column(schema, /*col_uid=*/105, "bfc");
+    prev_bf_col->set_is_nullable(true);
+    prev_bf_col->set_is_bf_column(true);
+    auto* dropped_col = push_column(schema, /*col_uid=*/106, "gone");
+    dropped_col->set_is_bf_column(true);
+    // What a previous fast-path ADD INDEX left behind: one entry for a column that
+    // still exists, one for a column the target schema no longer has.
+    auto* prev_ix = schema->add_table_indices();
+    prev_ix->set_index_id(-1);
+    prev_ix->set_index_name("bf_bfc");
+    prev_ix->set_index_type(BLOOM_FILTER);
+    prev_ix->add_col_unique_id(105);
+    auto* dead_ix = schema->add_table_indices();
+    dead_ix->set_index_id(-1);
+    dead_ix->set_index_name("bf_gone");
+    dead_ix->set_index_type(BLOOM_FILTER);
+    dead_ix->add_col_unique_id(106);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    // FE's schema: c1 + bfc + the newly added bfc2. Column 106 was dropped, and
+    // no table_indices entry for any bloom filter (FE cannot express them).
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(888);
+    fe_schema->set_schema_version(5);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* fe_bfc = push_column(fe_schema, /*col_uid=*/105, "bfc");
+    fe_bfc->set_is_nullable(true);
+    auto* fe_bfc2 = push_column(fe_schema, /*col_uid=*/107, "bfc2");
+    fe_bfc2->set_is_nullable(true);
+    fe_bfc2->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_id(-1);
+    new_ix->set_index_name("bf_bfc2");
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(107);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // Both the earlier BF column and the new one are represented...
+    std::set<std::string> names;
+    for (const auto& ix : schema->table_indices()) {
+        names.insert(ix.index_name());
+    }
+    EXPECT_EQ(1u, names.count("bf_bfc")) << "earlier bloom filter entry was dropped";
+    EXPECT_EQ(1u, names.count("bf_bfc2"));
+    // The entry left behind by a DROP COLUMN stays too. Pruning dead index entries
+    // is the DROP COLUMN path's job, not this alter's -- installing the schema
+    // leaves table_indices alone, so it neither loses live entries nor takes on
+    // cleanup it has no business doing.
+    EXPECT_EQ(1u, names.count("bf_gone"));
+    EXPECT_EQ(3, schema->table_indices_size());
+
+    // Per-column flags: both indexed columns carry it, and neither is lost by the
+    // install (FE's schema arrives with the flags unset for the new column).
+    for (const auto& col : schema->column()) {
+        if (col.unique_id() == 105 || col.unique_id() == 107) {
+            EXPECT_TRUE(col.is_bf_column()) << "column " << col.unique_id();
+        }
+    }
+    EXPECT_EQ(888, schema->id());
+}
+
+// Pins the LIMIT of coverage convergence, so no comment or doc can claim more
+// than this.
+//
+// On a table that has already fast-evolved, a metadata-only ADD COLUMN makes the
+// next write archive the current schema and pin every existing rowset to it
+// (archive_current_schema_into_history in txn_log_applier.cpp). Those pins point
+// at a schema that predates the added column. apply_add_index repoints only the
+// pins that referenced the PRE-APPLY schema, by design -- rowsets pinned to older,
+// fewer-column schemas keep their pin.
+//
+// Compacting such a rowset ALONE resolves the OLD schema, which has neither the
+// added column nor its index flag. The output rowset is then pinned to that same
+// resolved schema (txn_log_applier.cpp passes it as output_rowset_schema_id and
+// meta_file.cpp records it), so compacting again resolves the same thing: a fixed
+// point that does not advance on its own.
+//
+// It is NOT permanent, though. get_output_rowset_schema takes the highest
+// schema_version among its inputs, so as soon as such a rowset is compacted
+// TOGETHER with one pinned to the indexed schema -- which any write after this
+// alter produces -- the output picks up the index. Block 3 asserts that recovery.
+// What is unbounded is the timing: size-tiered compaction picks rowsets by level,
+// so a partition that stops receiving writes can sit at the fixed point
+// indefinitely. Queries stay correct throughout (the column reads as its default);
+// only pruning is missing.
+TEST_F(MetaFileTest, test_apply_add_index_old_pin_is_a_compaction_fixed_point) {
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20114);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20114);
+    metadata->set_version(7);
+
+    // The schema in effect before the ADD COLUMN: no c5. Archived, with rowset 1
+    // pinned to it -- exactly what the next write after ADD COLUMN produces.
+    const int64_t kPreAddColumnSchemaId = 400;
+    auto& archived = (*metadata->mutable_historical_schemas())[kPreAddColumnSchemaId];
+    archived.set_id(kPreAddColumnSchemaId);
+    archived.set_schema_version(2);
+    archived.set_keys_type(DUP_KEYS);
+    push_column(&archived, /*col_uid=*/42, "c1");
+    (*metadata->mutable_rowset_to_schema())[1] = kPreAddColumnSchemaId;
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+
+    // Current schema, post-ADD-COLUMN: carries c5, still no index.
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    schema->set_keys_type(DUP_KEYS);
+    push_column(schema, /*col_uid=*/42, "c1");
+    auto* cur_c5 = push_column(schema, /*col_uid=*/105, "c5");
+    cur_c5->set_is_nullable(true);
+    cur_c5->set_default_value("0");
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777);
+    fe_schema->set_schema_version(4);
+    fe_schema->set_keys_type(DUP_KEYS);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    // The pin to the pre-ADD-COLUMN schema is deliberately left alone.
+    EXPECT_EQ(kPreAddColumnSchemaId, metadata->rowset_to_schema().at(1));
+    // And that archived schema still has neither the column nor the index flag.
+    const auto& still_archived = metadata->historical_schemas().at(kPreAddColumnSchemaId);
+    EXPECT_EQ(1, still_archived.column_size());
+    EXPECT_FALSE(still_archived.column(0).is_bf_column());
+
+    // 1. Compacting rowset 1 alone resolves the old schema, so its output segment
+    //    is written without the index -- and the output rowset would be pinned to
+    //    this same schema, which is what makes it a fixed point.
+    std::vector<uint32_t> input_rowsets{1};
+    ASSIGN_OR_ABORT(auto compaction_schema, _tablet_manager->get_output_rowset_schema(input_rowsets, metadata.get()));
+    EXPECT_EQ(kPreAddColumnSchemaId, compaction_schema->id());
+    EXPECT_EQ(1u, compaction_schema->num_columns());
+
+    // 2. Contrast: with no pins at all (a table that never fast-evolved, or one
+    //    where no write followed the ADD COLUMN), compaction resolves the CURRENT
+    //    schema and the index flag reaches the output segment.
+    auto fresh = std::make_shared<TabletMetadata>(*metadata);
+    fresh->mutable_rowset_to_schema()->clear();
+    ASSIGN_OR_ABORT(auto fresh_schema, _tablet_manager->get_output_rowset_schema(input_rowsets, fresh.get()));
+    EXPECT_EQ(777, fresh_schema->id());
+    ASSERT_EQ(2u, fresh_schema->num_columns());
+    EXPECT_TRUE(fresh_schema->column(1).is_bf_column());
+
+    // 3. Recovery: add a rowset pinned to the indexed schema -- what any write
+    //    after this alter produces -- and compact the two together. The highest
+    //    input schema_version wins, so the output picks up the indexed schema and
+    //    the old rowset's data gets rewritten with the index. The gap is bounded by
+    //    when compaction happens to batch them, not permanent.
+    auto mixed = std::make_shared<TabletMetadata>(*metadata);
+    (*mixed->mutable_historical_schemas())[777].CopyFrom(mixed->schema());
+    (*mixed->mutable_rowset_to_schema())[2] = 777;
+    auto* new_rowset = mixed->add_rowsets();
+    new_rowset->set_id(2);
+    std::vector<uint32_t> mixed_inputs{1, 2};
+    ASSIGN_OR_ABORT(auto mixed_schema, _tablet_manager->get_output_rowset_schema(mixed_inputs, mixed.get()));
+    EXPECT_EQ(777, mixed_schema->id()) << "a co-compacted indexed rowset must pull the old one up";
+    ASSERT_EQ(2u, mixed_schema->num_columns());
+    EXPECT_TRUE(mixed_schema->column(1).is_bf_column());
+}
+
+TEST_F(MetaFileTest, test_apply_add_index_repoints_rowset_pins_from_pre_apply_id) {
+    // On a table that already fast-evolved, rowsets are PINNED to a schema id and
+    // both the read path and compaction resolve through historical_schemas. The
+    // pins that referenced the schema this apply replaces must move to the new
+    // id -- matched against the PRE-APPLY id, not schema->id(), which installing
+    // op.new_schema() overwrites with FE's catalog id.
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), 20112);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(20112);
+    metadata->set_version(7);
+    auto* schema = metadata->mutable_schema();
+    schema->set_id(500);
+    schema->set_schema_version(3);
+    push_column(schema, /*col_uid=*/42, "c1");
+    (*metadata->mutable_rowset_to_schema())[1] = 500;
+    (*metadata->mutable_historical_schemas())[500].CopyFrom(*schema);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpAddIndex op;
+    auto* fe_schema = op.mutable_new_schema();
+    fe_schema->set_id(777); // FE catalog id, deliberately != 500
+    fe_schema->set_schema_version(4);
+    push_column(fe_schema, /*col_uid=*/42, "c1");
+    auto* c5 = push_column(fe_schema, /*col_uid=*/105, "c5");
+    c5->set_is_nullable(true);
+    c5->set_default_value("0");
+    auto* new_ix = op.add_new_indexes();
+    new_ix->set_index_type(BLOOM_FILTER);
+    new_ix->add_col_unique_id(105);
+
+    ASSERT_OK(builder.apply_add_index(op));
+
+    ASSERT_EQ(1u, metadata->rowset_to_schema().count(1));
+    EXPECT_EQ(777, metadata->rowset_to_schema().at(1));
+    ASSERT_EQ(1u, metadata->historical_schemas().count(777));
+    EXPECT_EQ(2, metadata->historical_schemas().at(777).column_size());
 }
 
 TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_columns) {
@@ -3371,7 +4133,7 @@ TEST_F(MetaFileTest, test_apply_add_index_unknown_col_unique_id_is_noop_on_colum
     new_ix->set_index_id(9001);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(/*ghost=*/999);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_FALSE(schema->column(0).is_bf_column());
@@ -3402,7 +4164,7 @@ TEST_F(MetaFileTest, test_apply_add_index_self_heals_existing_index_id) {
     new_ix->set_index_id(123);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(12);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(1, schema->table_indices_size());        // not duplicated
     EXPECT_TRUE(schema->column(0).has_bitmap_index()); // self-healed
@@ -3423,7 +4185,7 @@ TEST_F(MetaFileTest, test_apply_add_index_no_segment_entries_only_index_pb) {
     new_ix->set_index_id(42);
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(1);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     // mutable_idg_meta() lazy-allocates so has_idg_meta() is true; the
     // contract-relevant check is that the idgs map stayed empty.
@@ -3446,7 +4208,7 @@ TEST_F(MetaFileTest, test_apply_add_index_index_without_type_skips_flag_bump) {
     new_ix->set_index_id(99);
     // intentionally omit set_index_type
     new_ix->add_col_unique_id(3);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_FALSE(schema->column(0).has_bitmap_index());
     EXPECT_FALSE(schema->column(0).is_bf_column());
@@ -3529,7 +4291,7 @@ TEST_F(MetaFileTest, test_apply_add_index_second_bitmap_with_sentinel_id_lands) 
     new_ix->set_index_name("idx_b");
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(102);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     ASSERT_EQ(2, schema->table_indices_size());
     EXPECT_EQ("idx_a", schema->table_indices(0).index_name());
@@ -3557,7 +4319,7 @@ TEST_F(MetaFileTest, test_apply_add_index_same_name_with_sentinel_id_dedups) {
     new_ix->set_index_name("idx_a"); // same name
     new_ix->set_index_type(BITMAP);
     new_ix->add_col_unique_id(101);
-    builder.apply_add_index(op);
+    ASSERT_OK(builder.apply_add_index(op));
 
     EXPECT_EQ(1, schema->table_indices_size());
 }

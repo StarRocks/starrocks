@@ -14,8 +14,13 @@
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
+import com.starrocks.type.Type;
 
 import java.util.function.Predicate;
 
@@ -23,11 +28,30 @@ import java.util.function.Predicate;
  * FunctionChecker is used to check whether a ScalarOperator only contains a specific type of functions.
  */
 public class OperatorFunctionChecker {
+    /**
+     * Functions that render an instant as canonical text: their result sorts the way the instant does,
+     * so a cast back to a datetime keeps the order even though the same cast reorders an arbitrary
+     * varchar column.
+     * <p>
+     * These two are the whole family that matters: ColumnFilterConverter.ExprRewriter substitutes the
+     * constant into the partition expression from a fixed whitelist, and from_unixtime/from_unixtime_ms
+     * are its only entries that render an instant as text. date_format() belongs to the family by
+     * shape, but the rewriter does not know it, so listing it here would license a cast on an
+     * expression that never reaches the rewrite.
+     */
+    private static final ImmutableSet<String> DATETIME_TEXT_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.FROM_UNIXTIME,
+            FunctionSet.FROM_UNIXTIME_MS);
+
     static class FunctionCheckerVisitor extends ScalarOperatorVisitor<Pair<Boolean, String>, Void> {
         private final Predicate<CallOperator> predicate;
+        // A cast is checked separately from the call predicate: whether a cast is acceptable depends
+        // on what the caller is asking. Every cast is FE-evaluable, but only some keep the order.
+        private final Predicate<CastOperator> castPredicate;
 
-        public FunctionCheckerVisitor(Predicate<CallOperator> predicate) {
+        public FunctionCheckerVisitor(Predicate<CallOperator> predicate, Predicate<CastOperator> castPredicate) {
             this.predicate = predicate;
+            this.castPredicate = castPredicate;
         }
 
         @Override
@@ -37,6 +61,18 @@ public class OperatorFunctionChecker {
                 if (!result.first) {
                     return result;
                 }
+            }
+            return Pair.create(true, "");
+        }
+
+        @Override
+        public Pair<Boolean, String> visitCastOperator(CastOperator cast, Void context) {
+            Pair<Boolean, String> result = cast.getChild(0).accept(this, null);
+            if (!result.first) {
+                return result;
+            }
+            if (!castPredicate.test(cast)) {
+                return Pair.create(false, cast.toString());
             }
             return Pair.create(true, "");
         }
@@ -56,13 +92,211 @@ public class OperatorFunctionChecker {
         }
     }
 
+    private static final ImmutableSet<Integer> FIRST_ARGUMENT = ImmutableSet.of(0);
+    private static final ImmutableSet<Integer> SECOND_ARGUMENT = ImmutableSet.of(1);
+    private static final ImmutableSet<Integer> EITHER_ARGUMENT = ImmutableSet.of(0, 1);
+
+    /**
+     * Which argument of a monotonic function may hold a column, for the callers that need the
+     * expression to INCREASE with its column rather than merely preserve order.
+     * <p>
+     * isMonotonicFunction() answers one question -- does this function preserve order -- and callers
+     * such as ListPartitionPruner.deduceExtraConjuncts read the answer as the stronger claim that the
+     * expression grows with the column, because they keep the comparison operator when they rewrite
+     * `col OP c` onto the partition column. An expression running the other way then deduces a bound
+     * pointing the wrong way: `c2 AS (100 - c1)` turns `c1 < 20` into `c2 <= 80` while the matching
+     * row carries c2 = 90, and the query comes back empty.
+     * <p>
+     * A name alone cannot answer this, because the answer differs per argument. Subtraction and the
+     * differences decrease in their second argument while growing in the first. to_datetime(unixtime,
+     * scale) divides the epoch by 10^scale, so a larger scale renders an EARLIER instant -- and only
+     * 0, 3 and 6 render at all, the rest being NULL. time_slice(dt, interval, unit) is not even signed
+     * in its interval: the bucket floor jumps around as the interval grows (100 with interval 6 gives
+     * 96, with 7 gives 98, with 101 gives 0). The format, unit and day-of-week arguments of
+     * date_format, last_day, next_day and friends order their results arbitrarily -- 'Friday' sorts
+     * before 'Monday' while next_day() sends them the other way round. And date_trunc() takes its unit
+     * FIRST, so for that one the ordered argument is the second.
+     * <p>
+     * Only a COLUMN in an unlisted position is a problem: a constant there is fixed, so `c1 - 7` and
+     * `to_datetime(ts, 3)` still grow with their column and stay prunable. An unmapped function is
+     * assumed to carry its order in the leading argument, which is the shape of every multi-argument
+     * monotonic function registered today; a future one shaped like date_trunc loses pruning until it
+     * is listed, which is the safe direction to be wrong in.
+     */
+    private static final ImmutableMap<String, ImmutableSet<Integer>> COLUMN_SAFE_ARGUMENTS =
+            ImmutableMap.<String, ImmutableSet<Integer>>builder()
+                    // a + b grows with both, and so does date + n
+                    .put(FunctionSet.ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.ADD_MONTHS, EITHER_ARGUMENT)
+                    .put(FunctionSet.ADDDATE, EITHER_ARGUMENT)
+                    .put(FunctionSet.DATE_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.DAYS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.HOURS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.MILLISECONDS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.MINUTES_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.MONTHS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.QUARTERS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.SECONDS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.WEEKS_ADD, EITHER_ARGUMENT)
+                    .put(FunctionSet.YEARS_ADD, EITHER_ARGUMENT)
+                    // date_trunc(unit, value): the ordered argument is the second one
+                    .put(FunctionSet.DATE_TRUNC, SECOND_ARGUMENT)
+                    // everything below carries its order in the leading argument alone
+                    .put(FunctionSet.SUBTRACT, FIRST_ARGUMENT)
+                    .put(FunctionSet.DATEDIFF, FIRST_ARGUMENT)
+                    .put(FunctionSet.TIMEDIFF, FIRST_ARGUMENT)
+                    .put(FunctionSet.DATE_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.SUBDATE, FIRST_ARGUMENT)
+                    .put(FunctionSet.DAYS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.HOURS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.MILLISECONDS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.MINUTES_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.MONTHS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.QUARTERS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.SECONDS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.WEEKS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.YEARS_SUB, FIRST_ARGUMENT)
+                    .put(FunctionSet.TO_DATETIME, FIRST_ARGUMENT)
+                    .put(FunctionSet.TIME_SLICE, FIRST_ARGUMENT)
+                    .put(FunctionSet.FROM_UNIXTIME, FIRST_ARGUMENT)
+                    .put(FunctionSet.STR2DATE, FIRST_ARGUMENT)
+                    .put(FunctionSet.STR_TO_DATE, FIRST_ARGUMENT)
+                    .put(FunctionSet.DATE_FORMAT, FIRST_ARGUMENT)
+                    .put("jodatime_format", FIRST_ARGUMENT)
+                    .put(FunctionSet.LAST_DAY, FIRST_ARGUMENT)
+                    .put(FunctionSet.NEXT_DAY, FIRST_ARGUMENT)
+                    .put(FunctionSet.PREVIOUS_DAY, FIRST_ARGUMENT)
+                    .build();
+
+    /**
+     * Whether every column this call reads sits in an argument the result increases with. Callers that
+     * keep the comparison operator need this; callers that map both endpoints of a range and re-sort
+     * them do not, and must keep using onlyContainMonotonicFunctions().
+     */
+    private static boolean columnOnlyInIncreasingArguments(CallOperator call) {
+        if (call.getChildren().size() < 2) {
+            return true;
+        }
+        ImmutableSet<Integer> safe =
+                COLUMN_SAFE_ARGUMENTS.getOrDefault(call.getFnName().toLowerCase(), FIRST_ARGUMENT);
+        for (int i = 0; i < call.getChildren().size(); i++) {
+            if (!safe.contains(i) && !Utils.extractColumnRef(call.getChild(i)).isEmpty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int integerRank(Type type) {
+        if (type.isTinyint()) {
+            return 1;
+        } else if (type.isSmallint()) {
+            return 2;
+        } else if (type.isInt()) {
+            return 3;
+        } else if (type.isBigint()) {
+            return 4;
+        } else if (type.isLargeIntType()) {
+            return 5;
+        }
+        return -1;
+    }
+
+    /**
+     * Only some type pairs keep the order. Crossing between strings and numbers or dates does not:
+     * '99845' sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate
+     * mapped through such a cast prunes partitions that hold matching rows. A narrowing numeric cast
+     * wraps or saturates and breaks the order the same way.
+     * <p>
+     * This is a question about monotonicity alone. Equality maps soundly through any deterministic
+     * function -- a = c implies f(a) = f(c) whatever f does to the order -- so the FE-constant check,
+     * which is what the callers use to license the equality rewrite, must not apply it. See
+     * ListPartitionPruner.deduceExtraConjuncts, which gates on FE-constant-ness first and only
+     * demands monotonicity for the non-equality case.
+     */
+    private static boolean isOrderPreservingCast(Type from, Type to) {
+        if (from.equals(to)) {
+            return true;
+        }
+        int fromRank = integerRank(from);
+        int toRank = integerRank(to);
+        if (fromRank > 0 && toRank > 0) {
+            // widening within the integer family keeps every value and its order
+            return toRank >= fromRank;
+        }
+        // DATE and DATETIME order the same way; DATETIME -> DATE truncates, which is non-decreasing
+        return (from.isDate() && to.isDatetime()) || (from.isDatetime() && to.isDate());
+    }
+
+    /**
+     * Whether a cast keeps the order depends on the values reaching it, not on the type pair alone.
+     * A string-to-datetime cast reorders an arbitrary varchar column -- '2021-1-2' sorts before
+     * '2021-01-03' as text but after it as an instant -- yet it is order-preserving over the canonical
+     * text a from_unixtime()/date_format() produces, which is how an expression partition on a unix
+     * timestamp is spelled: RANGE(from_unixtime(ts)) translates to cast(from_unixtime(ts) as datetime).
+     * Refusing that cast costs those tables their range pruning.
+     * <p>
+     * The format is not re-checked here: only a call the monotonicity predicate already accepted can
+     * get this far, and for these names that predicate is the format check. A three-argument
+     * from_unixtime() escapes it (the check only looks at the two-argument form), so it is not
+     * accepted.
+     */
+    private static boolean producesOrderedDatetimeText(ScalarOperator operator) {
+        if (!(operator instanceof CallOperator call)) {
+            return false;
+        }
+        // These render the epoch in the session time zone, so the text they produce is ordered only
+        // away from a clock rollback -- across one, an increasing epoch yields a DECREASING local
+        // datetime. That is a question about the predicate's constant rather than about the
+        // expression, so it is asked where the constant is known:
+        // ColumnFilterConverter.constantInsideClockRollback().
+        // from_unixtime() takes up to three arguments: the epoch, the format, and the time zone.
+        // ScalarOperatorEvaluator.isMonotonicFunction has already vetted the format for all of them.
+        return DATETIME_TEXT_FUNCTIONS.contains(call.getFnName().toLowerCase())
+                && call.getChildren().size() <= 3;
+    }
+
+    private static boolean isOrderPreservingCast(CastOperator cast) {
+        Type from = cast.fromType();
+        Type to = cast.getType();
+        if (isOrderPreservingCast(from, to)) {
+            return true;
+        }
+        if (from.isStringType() && (to.isDate() || to.isDatetime())) {
+            return producesOrderedDatetimeText(cast.getChild(0));
+        }
+        return false;
+    }
+
+    /**
+     * Checks the calls only. Casts are accepted whatever the predicate says, so a caller that cares
+     * about the order values come out in - anything driving partition pruning off a range predicate -
+     * wants onlyContainMonotonicFunctions instead of passing a monotonicity predicate through here.
+     */
     public static Pair<Boolean, String> onlyContainPredicates(ScalarOperator scalarOperator,
                                                               Predicate<CallOperator> predicate) {
-        return scalarOperator.accept(new FunctionCheckerVisitor(predicate), null);
+        return scalarOperator.accept(new FunctionCheckerVisitor(predicate, cast -> true), null);
     }
 
     public static Pair<Boolean, String> onlyContainMonotonicFunctions(ScalarOperator scalarOperator) {
-        return onlyContainPredicates(scalarOperator, call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call));
+        return scalarOperator.accept(
+                new FunctionCheckerVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
+                        OperatorFunctionChecker::isOrderPreservingCast), null);
+    }
+
+    /**
+     * Stricter than onlyContainMonotonicFunctions(): every function must also INCREASE with the
+     * columns it reads, not merely preserve their order. Use this wherever a rewrite carries a
+     * comparison operator across the expression -- deducing `partCol OP f(c)` from `col OP c` is only
+     * sound while f grows with col. A consumer that maps both endpoints of a range and re-sorts them
+     * does not need the direction and should keep using onlyContainMonotonicFunctions().
+     */
+    public static Pair<Boolean, String> onlyContainIncreasingFunctions(ScalarOperator scalarOperator) {
+        return scalarOperator.accept(
+                new FunctionCheckerVisitor(
+                        call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call)
+                                && columnOnlyInIncreasingArguments(call),
+                        OperatorFunctionChecker::isOrderPreservingCast), null);
     }
 
     public static Pair<Boolean, String> onlyContainFEConstantFunctions(ScalarOperator scalarOperator) {

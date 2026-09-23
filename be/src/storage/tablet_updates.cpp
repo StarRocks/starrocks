@@ -51,7 +51,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
-#include "storage/full_sort_key_codec.h"
 #include "storage/local_primary_key_compaction_conflict_resolver.h"
 #include "storage/local_primary_key_recover.h"
 #include "storage/persistent_index.h"
@@ -1769,14 +1768,19 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 }
                 rowset->rowset_meta()->set_total_row_size(full_row_size);
                 const auto index_disk_size = rowset->rowset_meta()->index_disk_size();
-                // full_rowset_size is the segment file bytes (column data + embedded indexes).
-                // index_disk_size tracks additional index bytes recorded in RowsetMeta; these may
-                // be separately persisted (e.g. primary-key SSTable indexes) or otherwise accounted
-                // for outside the segment file.
-                // Canonical invariant: data_disk_size = segment_size - index_size,
-                //                      total_disk_size = segment_size (== data + index).
-                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - index_disk_size));
-                rowset->rowset_meta()->set_total_disk_size(full_rowset_size);
+                // full_rowset_size is the segment (.dat) file bytes: column data + embedded indexes.
+                // index_disk_size counts all index bytes, including standalone index files (the
+                // vector index .vi) that live outside the segment files. Subtracting the full
+                // index_disk_size from the segment-file size would remove the standalone bytes that
+                // were never part of full_rowset_size and drive data_disk_size to zero for
+                // vector-index rowsets, so subtract only the embedded portion.
+                const auto standalone_index_size = rowset->rowset_meta()->standalone_index_size();
+                const auto embedded_index_size =
+                        index_disk_size - std::min<int64_t>(standalone_index_size, index_disk_size);
+                // Invariant: data_disk_size = segment_size - embedded_index_size,
+                //            total_disk_size = segment_size + standalone_index_size (== data + index).
+                rowset->rowset_meta()->set_data_disk_size(std::max<int64_t>(0, full_rowset_size - embedded_index_size));
+                rowset->rowset_meta()->set_total_disk_size(full_rowset_size + standalone_index_size);
                 rowset->set_schema(apply_tschema);
                 rowset->rowset_meta()->set_tablet_schema(apply_tschema);
                 (void)rowset->reload();
@@ -3848,6 +3852,10 @@ void TabletUpdates::_print_rowsets(std::vector<uint32_t>& rowsets, std::string* 
 
 void TabletUpdates::_set_error(const string& msg) {
     StorageMetrics::instance()->primary_key_table_error_state_total.increment(1);
+    _mark_unusable(msg);
+}
+
+void TabletUpdates::_mark_unusable(const string& msg) {
     _error_msg = msg;
     _error = true;
     _apply_version_changed.notify_all();
@@ -4450,12 +4458,6 @@ Status TabletUpdates::_convert_from_base_rowset(const Schema& base_schema, const
             }
             ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(), new_chunk.get());
 
-            // Primary key tables never take the MemTable schema change path: convert_from and
-            // reorder_from build a RowsetWriter directly, so both re-encode the sort key unchecked
-            // unless the guard runs here.
-            RETURN_IF_ERROR(check_sort_key_size(new_schema, _tablet.tablet_schema()->sort_key_idxes(), *new_chunk, 0,
-                                                new_chunk->num_rows()));
-
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
@@ -4605,11 +4607,6 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                 chunk_arr.push_back(new_chunk);
                 ChunkHelper::padding_char_columns(char_field_indexes, new_schema, _tablet.tablet_schema(),
                                                   new_chunk.get());
-                // ALTER ... ORDER BY on a primary key table lands here, and can promote a wide value
-                // column into the sort key. Checked after padding, since padding mutates the chunk
-                // that chunk_arr already holds.
-                RETURN_IF_ERROR(check_sort_key_size(new_schema, tschema->sort_key_idxes(), *new_chunk, 0,
-                                                    new_chunk->num_rows()));
             }
         }
 
@@ -5225,7 +5222,9 @@ Status TabletUpdates::clear_meta() {
     auto data_store = _tablet.data_dir();
     auto meta_store = data_store->get_meta();
 
-    _set_error("clear_meta inprogress"); // Mark this tablet unusable first.
+    // This is an expected part of dropping a tablet, not a storage error. Keep the tablet unusable while its
+    // metadata is being cleared without incrementing primary_key_table_error_state_total.
+    _mark_unusable("clear_meta inprogress");
 
     // Clear permanently stored meta.
     RETURN_IF_ERROR(TabletMetaManager::clear_pending_rowset(data_store, &wb, _tablet.tablet_id()));

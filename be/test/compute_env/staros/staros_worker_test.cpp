@@ -18,6 +18,7 @@
 #include <aws/core/Aws.h>
 #include <fslib/configuration.h>
 #include <fslib/fslib_all_initializer.h>
+#include <gflags/gflags.h>
 #include <grpcpp/grpcpp.h>
 #include <gtest/gtest.h>
 #include <manager.grpc.pb.h>
@@ -26,19 +27,30 @@
 #include <algorithm>
 #include <condition_variable>
 #include <functional>
+#include <iterator>
 #include <limits>
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
 
+#include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/scoped_updater.h"
 #include "base/utility/defer_op.h"
 #include "common/config_metrics_fwd.h"
+#include "common/config_staros_worker_fwd.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "common/util/table_metrics.h"
 #include "compute_env/staros/staros_worker_metrics.h"
 #include "compute_env/staros/staros_worker_runtime.h"
+
+DECLARE_int64(fslib_s3_max_single_part_size);
+DECLARE_int64(fslib_s3_min_upload_part_size);
+DECLARE_int64(fslib_gs_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_max_single_part_size);
+DECLARE_int64(fslib_azure_storage_min_upload_part_size);
 
 namespace starrocks {
 
@@ -451,7 +463,7 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     });
 
     auto worker = std::make_shared<StarOSWorker>();
-    auto starlet = std::make_unique<staros::starlet::Starlet>(worker);
+    auto starlet = std::make_shared<staros::starlet::Starlet>(worker);
     auto* starlet_ptr = starlet.get();
     (void)swap_starlet_for_test(std::move(starlet));
     staros::starlet::StarletConfig config;
@@ -472,6 +484,141 @@ TEST_F(StarOSWorkerTest, test_fallback_metric_increments_on_cache_miss_failure) 
     ASSERT_FALSE(got.ok());
     EXPECT_EQ(before_total + 1, metrics->staros_shard_info_fallback_total.value());
     EXPECT_EQ(before_failed + 1, metrics->staros_shard_info_fallback_failed_total.value());
+}
+
+namespace {
+
+struct UploadThresholdMapping {
+    const char* be_config;
+    const char* starlet_flag;
+};
+
+const UploadThresholdMapping kUploadThresholdMappings[] = {
+        {"starlet_fslib_s3_max_single_part_size", "fslib_s3_max_single_part_size"},
+        {"starlet_fslib_s3_min_upload_part_size", "fslib_s3_min_upload_part_size"},
+        {"starlet_fslib_gcs_max_single_part_size", "fslib_gs_max_single_part_size"},
+        {"starlet_fslib_azure_storage_max_single_part_size", "fslib_azure_storage_max_single_part_size"},
+        {"starlet_fslib_azure_storage_min_upload_part_size", "fslib_azure_storage_min_upload_part_size"},
+};
+
+} // namespace
+
+// The BE config default must equal the starlet gflag's registered default, so that merging this
+// feature changes no behavior. Both sides read declared defaults, never mutable current values.
+TEST_F(StarOSWorkerTest, upload_threshold_config_defaults_match_starlet) {
+    auto configs = config::list_configs();
+    for (const auto& mapping : kUploadThresholdMappings) {
+        auto it = std::find_if(configs.begin(), configs.end(),
+                               [&](const config::ConfigInfo& info) { return info.name == mapping.be_config; });
+        ASSERT_NE(configs.end(), it) << "missing BE config " << mapping.be_config;
+
+        gflags::CommandLineFlagInfo flag_info;
+        ASSERT_TRUE(gflags::GetCommandLineFlagInfo(mapping.starlet_flag, &flag_info))
+                << "missing starlet gflag " << mapping.starlet_flag;
+
+        EXPECT_EQ(flag_info.default_value, it->defval)
+                << mapping.be_config << " default drifted from " << mapping.starlet_flag;
+    }
+
+    // Direct typed references: a wrong DECLARE_ type or a misspelled flag name fails to build.
+    // Binding to `const int64_t*` is the whole check; no current value is read.
+    [[maybe_unused]] const int64_t* const typed_flags[] = {
+            &FLAGS_fslib_s3_max_single_part_size, &FLAGS_fslib_s3_min_upload_part_size,
+            &FLAGS_fslib_gs_max_single_part_size, &FLAGS_fslib_azure_storage_max_single_part_size,
+            &FLAGS_fslib_azure_storage_min_upload_part_size};
+    static_assert(std::size(kUploadThresholdMappings) == std::size(typed_flags),
+                  "every mapped config needs a typed flag reference above");
+}
+
+// Distinct values per flag, so deleting one assignment or swapping two fails.
+TEST_F(StarOSWorkerTest, upload_threshold_configs_applied_at_startup) {
+    gflags::FlagSaver flag_saver;
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 11L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, 12L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_gcs_max_single_part_size, 13L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, 14L << 20);
+    SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 15L << 20);
+
+    apply_starlet_upload_threshold_configs();
+
+    EXPECT_EQ(11L << 20, FLAGS_fslib_s3_max_single_part_size);
+    EXPECT_EQ(12L << 20, FLAGS_fslib_s3_min_upload_part_size);
+    EXPECT_EQ(13L << 20, FLAGS_fslib_gs_max_single_part_size);
+    EXPECT_EQ(14L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
+    EXPECT_EQ(15L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
+}
+
+// A non-positive config value must not be applied; whatever was already effective stays.
+// Covers all five mappings, with a distinct sentinel prior value per flag, so a crossed pair fails.
+TEST_F(StarOSWorkerTest, upload_threshold_configs_reject_non_positive_at_startup) {
+    gflags::FlagSaver flag_saver;
+    FLAGS_fslib_s3_max_single_part_size = 7L << 20;
+    FLAGS_fslib_s3_min_upload_part_size = 8L << 20;
+    FLAGS_fslib_gs_max_single_part_size = 9L << 20;
+    FLAGS_fslib_azure_storage_max_single_part_size = 10L << 20;
+    FLAGS_fslib_azure_storage_min_upload_part_size = 11L << 20;
+
+    {
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_max_single_part_size, 0);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_s3_min_upload_part_size, -1);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_gcs_max_single_part_size, 0);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_max_single_part_size, -1);
+        SCOPED_UPDATE(int64_t, config::starlet_fslib_azure_storage_min_upload_part_size, 0);
+        apply_starlet_upload_threshold_configs();
+    }
+
+    EXPECT_EQ(7L << 20, FLAGS_fslib_s3_max_single_part_size);
+    EXPECT_EQ(8L << 20, FLAGS_fslib_s3_min_upload_part_size);
+    EXPECT_EQ(9L << 20, FLAGS_fslib_gs_max_single_part_size);
+    EXPECT_EQ(10L << 20, FLAGS_fslib_azure_storage_max_single_part_size);
+    EXPECT_EQ(11L << 20, FLAGS_fslib_azure_storage_min_upload_part_size);
+}
+
+// `shutdown_staros_worker()` releases the starlet runtime while an in-flight load may still be
+// walking a StarOS-backed path. Every call that reaches starlet after that must report a status
+// instead of dereferencing the released runtime. See issue #78883.
+TEST_F(StarOSWorkerTest, starlet_calls_fail_after_runtime_release) {
+    auto orig_starlet = swap_starlet_for_test(nullptr);
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+    ASSERT_EQ(nullptr, get_starlet());
+
+    StarOSWorker worker;
+
+    // A cache miss falls back to the remote fetch, which waits for starlet readiness. With no
+    // starlet there is nothing to wait for, so the call must give up right away rather than burn
+    // the full 5s readiness timeout.
+    MonotonicStopWatch watch;
+    watch.start();
+    EXPECT_FALSE(worker.retrieve_shard_info(987654321).ok());
+    EXPECT_LT(watch.elapsed_time(), 3L * 1000 * 1000 * 1000);
+}
+
+// `shutdown_staros_worker()` drops the process-wide starlet reference while an in-flight operation
+// may still be using it. The reference that operation already holds must keep the runtime alive: a
+// raw pointer would dangle across the blocking starmgr RPC behind `get_shard_info()`, and the
+// use-after-free lands in the same `Starlet::_mutex` that a point-in-time null check cannot
+// protect. See issue #78883.
+TEST_F(StarOSWorkerTest, retained_starlet_outlives_shutdown_release) {
+    auto worker = std::make_shared<StarOSWorker>();
+    auto orig_starlet = swap_starlet_for_test(std::make_shared<staros::starlet::Starlet>(worker));
+    DeferOp restore_starlet([&orig_starlet] { (void)swap_starlet_for_test(std::move(orig_starlet)); });
+
+    // An in-flight operation resolves the runtime before shutdown retires it.
+    auto held = get_starlet();
+    ASSERT_NE(nullptr, held);
+
+    {
+        // Stands in for shutdown: stop the runtime and drop the process-wide reference. `held` is
+        // the only remaining owner, so the object must survive this scope.
+        auto retired = swap_starlet_for_test(nullptr);
+        ASSERT_EQ(held.get(), retired.get());
+        retired->stop();
+    }
+    ASSERT_EQ(nullptr, get_starlet());
+
+    // Touches Starlet::_mutex, the member a use-after-free would have corrupted. Under ASAN this
+    // is what fails if the retained reference stops keeping the runtime alive.
+    EXPECT_FALSE(held->is_ready());
 }
 
 } // namespace starrocks

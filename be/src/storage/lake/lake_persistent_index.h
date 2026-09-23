@@ -15,8 +15,12 @@
 #pragma once
 
 #include <functional>
+#include <mutex>
+#include <ostream>
+#include <shared_mutex>
+#include <string>
 
-#include "storage/lake/lake_persistent_index_key_value_merger.h"
+#include "column/vectorized_fwd.h"
 #include "storage/lake/lake_persistent_index_parallel_compact_mgr.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
@@ -28,37 +32,111 @@ namespace starrocks {
 class TxnLogPB;
 class TxnLogPB_OpCompaction;
 class ParallelUpsertContext;
-
-namespace sstable {
-class Iterator;
-} // namespace sstable
+class ThreadPoolToken;
+struct ParallelPublishSlot;
 
 namespace lake {
 
 class MetaFileBuilder;
+class SegmentPKIterator;
+struct SegmentPKChunkRef;
+
+// Absolute source-segment rowids of the rows SegmentPKChunkRef::owned marks as this tablet's, in
+// chunk order. Read it off the mask BEFORE filtering the column; filtering renumbers the survivors
+// and the correspondence is lost. Empty mask -- an ordinary, non-cross publish -- yields nothing,
+// because every row already belongs here.
+std::vector<uint32_t> owned_rowids_of(const SegmentPKChunkRef& current);
 class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 class PersistentIndexSstableFileset;
 
-// The one primary-key index implementation a shared-data tablet has: a write-ahead memtable in front
-// of a stack of sstable filesets on shared storage.
+// A shared-data tablet's primary-key index: a write-ahead memtable in front of a stack of sstable
+// filesets on shared storage, plus the load state and the lock the publish path serialises on.
+// UpdateManager's index cache holds one of these per tablet, by value.
 //
 // Standalone on purpose. It used to derive from PersistentIndex, the local-disk implementation, but
 // took nothing from it except two scalar members and the vtable -- it overrode 7 of that class's 39
 // virtuals and inherited an l0/l1/l2 file layout, a DataDir and a PersistentIndexMetaPB it never
-// touched. Nothing holds a lake index polymorphically either (UpdateManager's index cache stores
-// LakePrimaryIndex by value), so the base bought no dispatch. It still shares the value types --
-// IndexValue, KeyIndexSet -- which is a dependency on persistent_index.h, not on its implementation.
+// touched. Nothing holds a lake index polymorphically either, so the base bought no dispatch. It
+// still shares the value types -- IndexValue, KeyIndexSet -- which is a dependency on
+// persistent_index.h, not on its implementation.
 //
-// Not thread-safe. Callers serialize through LakePrimaryIndex's lock.
+// It also used to sit behind LakePrimaryIndex, a second class that held the load state, this class
+// behind a shared_ptr, and a null-checking forward for each of nineteen methods. Every one of those
+// names existed twice. What the facade actually owned is now here: lake_load()/unload(), _mutex, and
+// _ensure_initialized() in place of the null checks.
+//
+// Two locks, and they cover different things. _load_lock guards the load bookkeeping; _mutex admits
+// one reader or writer to the index proper and is what fetch_guard() hands out. Neither is taken by
+// the methods that read or write the index -- callers hold _mutex across a whole publish.
 class LakePersistentIndex {
 public:
     explicit LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
 
+    // UpdateManager's index cache stores this class by value and creates an entry from a tablet id
+    // alone, so it needs a default-constructible type. lake_load() supplies the tablet.
+    //
+    // Defined in the .cpp, not defaulted here: a constructor needs its members' destructors for
+    // unwinding, and _sstable_filesets holds unique_ptrs to a type this header only forward-declares.
+    LakePersistentIndex();
+
     ~LakePersistentIndex();
 
     DISALLOW_COPY(LakePersistentIndex);
+
+    // ---- Lifecycle as a tablet's cached primary-key index ---------------------------------------
+    //
+    // Two ways in, and they are not interchangeable:
+    //
+    //  * init() + load_from_lake_tablet() is the raw pair: open the sstables, then rebuild whatever
+    //    rowsets the metadata says are not in them yet.
+    //  * lake_load() is what the publish path calls. It serialises on _load_lock, records the outcome
+    //    in _status and the version in _data_version, and is idempotent -- called again on a loaded
+    //    index it returns the first call's status instead of rebuilding.
+    //
+    // Everything that touches the index proper refuses to run before init() has built it; see
+    // _ensure_initialized(). That is not belt-and-braces -- flush_memtable() dereferences _memtable,
+    // and an uninitialised index has none.
+    //
+    // Note the guard is init(), not lake_load(): it stands in for the null check LakePrimaryIndex did
+    // on its pointer to this class, and that pointer became non-null as soon as the object existed.
+    // Most tests drive init() alone, so a stricter guard would reject them -- and would be a change
+    // in behaviour, not just in strictness.
+    Status lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+                     const MetaFileBuilder* builder);
+
+    // Put this back to its just-constructed shape, so the next lake_load() rebuilds from scratch.
+    // [thread-safe]
+    void unload();
+
+    bool is_load(int64_t base_version);
+    bool is_loaded() const;
+    Status get_load_status() const;
+
+    // We don't support multi version yet, but we record the latest data version for some checking.
+    // This is the version the index was loaded AT; the version being written is _publish_version.
+    int64_t data_version() const { return _data_version; }
+    void update_data_version(int64_t version) { _data_version = version; }
+
+    // At most one thread reads or writes the index proper. The publish path holds this across a whole
+    // apply. It is not merely publish-internal bookkeeping: a point lookup from the load path
+    // (DeltaWriterImpl::fill_auto_increment_id, via get_rowids_from_pkindex(need_lock=true)) contends
+    // for it, which is the reason it exists.
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> fetch_guard() {
+        return std::make_unique<std::lock_guard<std::shared_timed_mutex>>(_mutex);
+    }
+
+    std::unique_ptr<std::lock_guard<std::shared_timed_mutex>> try_fetch_guard() {
+        if (_mutex.try_lock()) {
+            return std::make_unique<std::lock_guard<std::shared_timed_mutex>>(_mutex, std::adopt_lock);
+        }
+        return nullptr;
+    }
+
+    std::shared_timed_mutex* get_index_lock() { return &_mutex; }
+
+    std::string to_string() const;
 
     Status init(const TabletMetadataPtr& metadata);
 
@@ -134,8 +212,6 @@ public:
     Status ingest_sst(const FileMetaPB& sst_meta, const PersistentIndexSstableRangePB& sst_range, uint32_t rssid,
                       int64_t version, const DelvecPagePB& delvec_page, DelVectorPtr delvec);
 
-    static Status major_compact(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
-
     static Status parallel_major_compact(LakePersistentIndexParallelCompactMgr* compact_mgr, TabletManager* tablet_mgr,
                                          const TabletMetadataPtr& metadata, TxnLogPB* txn_log);
 
@@ -150,13 +226,14 @@ public:
 
     int32_t current_fileset_index() const { return (int32_t)_sstable_filesets.size() - 1; }
 
+    // Fixed encoded key size, or 0 for variable-length keys. Set from the tablet's primary-key
+    // schema and encoding type in load_from_lake_tablet(), so it is only meaningful once loaded.
+    size_t key_size() const { return _key_size; }
+
     // During large import, we may have many sst files to ingest and get, so we do parallel compaction to speedup the process.
     StatusOr<AsyncCompactCBPtr> early_sst_compact(lake::LakePersistentIndexParallelCompactMgr* compact_mgr,
                                                   TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int32_t fileset_start_idx);
-
-    static void pick_sstables_for_merge(const PersistentIndexSstableMetaPB& sstable_meta,
-                                        std::vector<PersistentIndexSstablePB>* sstables, bool* merge_base_level);
 
     // Assign the generation version (PersistentIndexSstablePB.generation_version) to each
     // sstable in |new_meta|: a sstable that already carries a non-zero value is left
@@ -176,12 +253,12 @@ public:
     // Stamp the version that every subsequent memtable entry carries. Called once per publish,
     // before any upsert/erase/replace.
     //
-    // This replaces the inherited PersistentIndex::prepare(version, n), which set the same _version
-    // and then flipped four flags -- _dump_snapshot, _flushed, _need_bloom_filter and the error state
-    // -- that only the local-disk implementation reads. The version was the only part that reached
-    // this class, via `_version.major_number()` in upsert/erase/replace, which made the publish
-    // version's route into the memtable considerably harder to follow than it needed to be.
-    void set_publish_version(const EditVersion& version) { _version = version; }
+    // A plain version number, not an EditVersion: only the major number ever reached the memtable,
+    // so holding both halves meant callers built an `EditVersion(v, 0)` for the minor to be dropped
+    // again on the way in. (Before #78570 this arrived through the inherited
+    // PersistentIndex::prepare(version, n), which also flipped four flags only the local-disk
+    // implementation reads.)
+    void set_publish_version(int64_t version) { _publish_version = version; }
 
     Status flush_memtable(bool force = false);
 
@@ -195,7 +272,88 @@ public:
     int32_t publish_sst_flush_count() const { return _publish_sst_flush_count; }
     int64_t publish_sst_flush_bytes() const { return _publish_sst_flush_bytes; }
 
+    // ---- Row-oriented publish API --------------------------------------------------------------
+    //
+    // The batch methods above take encoded keys as a Slice array; these take a rowset's primary-key
+    // Column plus the (rssid, rowid) coordinates its rows occupy, and encode the keys themselves.
+    // Overloading is safe -- no Column-based signature is convertible to a Slice-based one -- and
+    // keeps one name per operation regardless of how the caller holds its keys.
+
+    Status get(const Column& pks, std::vector<uint64_t>* rowids);
+
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                  DeletesMap* deletes);
+
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+
+    // Each key keyed to its own rowid rather than to rowid_start + position. Cross publish only:
+    // the rows a child owns are scattered through the source segment, so they are not contiguous.
+    Status upsert(uint32_t rssid, const std::vector<uint32_t>& rowids, const Column& pks, ParallelPublishSlot* slot,
+                  ParallelUpsertContext* ctx);
+
+    Status erase(const Column& pks, DeletesMap* deletes, uint32_t del_rssid);
+
+    Status bulk_erase(const Column& pks, DeletesMap* deletes, uint32_t del_rssid, const FileMetaPB& del_sst_meta,
+                      const PersistentIndexSstableRangePB& del_sst_range, int64_t version);
+
+    Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                   const Column& pks);
+
+    Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t max_src_rssid,
+                       std::vector<uint32_t>* failed);
+
+    // ---- Parallel publish, across chunks ---------------------------------------------------------
+    //
+    // Spread a rowset's chunks over |token|, which the publish supplies. This is the caller-driven
+    // fan-out axis; the internal one (parallel_reverse_lookup, _open_sstables_parallel) splits a
+    // single batch across key subsets and sstable files on pk_index_execution_thread_pool. A task
+    // running on |token| must not enter the internal axis, or the two pools wait on each other.
+
+    Status parallel_get(ThreadPoolToken* token, SegmentPKIterator* segment_pk_iterator, DeletesMap* new_deletes);
+
+    // Retrieve rss_rowids for all segments at once, submitting every segment's chunks to one shared
+    // token so the fan-out crosses segments rather than restarting per segment.
+    Status batch_parallel_get_rss_rowids(ThreadPoolToken* token,
+                                         std::vector<std::unique_ptr<SegmentPKIterator>>& pk_iters,
+                                         std::vector<std::vector<uint64_t>>* rss_rowids_per_segment,
+                                         std::vector<Filter>* owned_per_segment);
+
+    Status parallel_upsert(ThreadPoolToken* token, uint32_t rssid, SegmentPKIterator* segment_pk_iterator,
+                           DeletesMap* new_deletes);
+
+    // Upsert only the rows |current.owned| marks as this tablet's, each keyed to the rowid it has in
+    // the SOURCE segment rather than its position among the survivors. |slot->pk_column| holds the
+    // encoded keys and is filtered in place. Cross publish only: an ordinary publish carries an empty
+    // mask and keeps the plain overload, which needs no per-row rowid vector.
+    //
+    // Parallel upsert runs in three steps, and this is step 1:
+    // 1. upsert into the memtable                                      (serial)
+    // 2. resolve the replaced rowids from inactive memtables and ssts  (parallel)
+    // 3. flush_memtable(), which writes an sst once the memtable fills  (serial)
+    //
+    // The slot belongs to the caller: it also carries the encoded column, whose bytes the index keeps
+    // referencing after this returns when the lookup is deferred. Every call site hands over a fresh
+    // slot, so the append-only scratch inside it always starts empty.
+    Status upsert_owned(uint32_t rssid, const SegmentPKChunkRef& current, ParallelPublishSlot* slot,
+                        ParallelUpsertContext* ctx);
+
 private:
+    // Refuse an operation on an index init() has not built. LakePrimaryIndex used to express this by
+    // holding a possibly-null pointer to this class and checking it in each of its nineteen
+    // delegating methods; what those checks actually guarded is that _memtable exists.
+    Status _ensure_initialized(const char* op) const;
+
+    // Restore the just-constructed shape. unload() used to get this for free by destroying the
+    // object -- the cache reached it through a shared_ptr -- so the destructor is the specification:
+    // cancel the flushes still in flight, THEN drop everything. Missing the cancel would leave an
+    // async flush writing through a memtable the next load is about to reuse.
+    void _reset_index_state();
+
+    void _unload_without_lock();
+
+    Status _do_lake_load(const TabletMetadataPtr& metadata, int64_t base_version, const MetaFileBuilder* builder);
+
     // Open all SSTables in parallel using thread pool.
     // Returns opened SSTables in the same order as sstable_meta.sstables().
     static StatusOr<std::vector<PersistentIndexSstableUniquePtr>> _open_sstables_parallel(
@@ -232,17 +390,6 @@ private:
 
     static void set_difference(KeyIndexSet* key_indexes, const KeyIndexSet& found_key_indexes);
 
-    // get sstable's iterator that need to compact and modify txn_log
-    static Status prepare_merging_iterator(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
-                                           TxnLogPB* txn_log,
-                                           std::vector<std::shared_ptr<PersistentIndexSstable>>* merging_sstables,
-                                           std::unique_ptr<sstable::Iterator>* merging_iter_ptr, bool* merge_base_level,
-                                           bool* contain_shared_sstables);
-
-    static StatusOr<std::vector<KeyValueMerger::KeyValueMergerOutput>> merge_sstables(
-            std::unique_ptr<sstable::Iterator> iter_ptr, bool base_level_merge, TabletManager* tablet_mgr,
-            const TabletMetadataPtr& metadata, bool contain_shared_sstables);
-
     Status merge_sstable_into_fileset(std::unique_ptr<PersistentIndexSstable>& sstable);
 
 private:
@@ -263,8 +410,22 @@ private:
     // load_from_lake_tablet(), which is also where it was set while this derived from PersistentIndex.
     size_t _key_size{0};
     // The version stamped on memtable entries; see set_publish_version().
-    EditVersion _version;
+    int64_t _publish_version{0};
+
+    // Guards the load bookkeeping below, not the index contents -- those are under _mutex.
+    mutable std::mutex _load_lock;
+    bool _loaded{false};
+    Status _status;
+    int64_t _data_version{0};
+    // make sure at most 1 thread is read or write primary index
+    std::shared_timed_mutex _mutex;
 };
+
+// DynamicCache logs its values (see dynamic_cache.h), so the cached type has to be streamable.
+inline std::ostream& operator<<(std::ostream& os, const LakePersistentIndex& o) {
+    os << o.to_string();
+    return os;
+}
 
 } // namespace lake
 } // namespace starrocks

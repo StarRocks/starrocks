@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -384,6 +385,17 @@ public class PartitionSelector {
                     if (pair != null) {
                         ColumnRefOperator generatedColumn = pair.first;
                         ScalarOperator generatedExpr = pair.second;
+                        // buildDeducedConjunct keeps the comparison operator, which only maps soundly
+                        // through an expression that grows with its column. Equality is exempt -- a = c
+                        // implies f(a) = f(c) whichever way f runs -- so the restriction has to wait
+                        // until the predicate is known rather than being applied when the generated
+                        // column map is built.
+                        if (scalarOperator instanceof BinaryPredicateOperator
+                                && !((BinaryPredicateOperator) scalarOperator).getBinaryType().isEqual()
+                                && !OperatorFunctionChecker.onlyContainIncreasingFunctions(
+                                        (CallOperator) generatedExpr).first) {
+                            return scalarOperator;
+                        }
                         ScalarOperator result = buildDeducedConjunct(scalarOperator, generatedExpr, generatedColumn);
                         return result;
                     }

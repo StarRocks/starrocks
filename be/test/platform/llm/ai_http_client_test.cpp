@@ -866,6 +866,9 @@ TEST_F(AIHttpClientTest, RejectsInvalidLimitsSynchronously) {
     request.request_deadline_ns = -1;
     invalid_requests.emplace_back(std::move(request));
     request = valid_request();
+    request.attempt_timeout_ms = -1;
+    invalid_requests.emplace_back(std::move(request));
+    request = valid_request();
     request.connect_timeout_ms = -1;
     invalid_requests.emplace_back(std::move(request));
     request = valid_request();
@@ -1897,6 +1900,30 @@ TEST_F(AIHttpClientTest, RunsMultipleRequestsConcurrentlyOnOneClient) {
     std::unique_lock lock(result_mutex);
     EXPECT_TRUE(result_cv.wait_for(lock, 2s, [&] { return callbacks == request_count; }));
     EXPECT_EQ(request_count, callbacks);
+}
+
+TEST_F(AIHttpClientTest, AttemptTimeoutDoesNotExpireLogicalRequestOrQuery) {
+    CountDownLatch release_server(1);
+    LoopbackHttpServer server([&](int, const CapturedHttpRequest&) { release_server.wait(); });
+    DeferOp release_server_on_exit([&] { release_server.count_down(); });
+    auto client = create_client();
+    ASSERT_NE(nullptr, client);
+    auto request = valid_request();
+    request.url = server.url("/attempt-timeout");
+    request.attempt_timeout_ms = 30;
+    request.request_deadline_ns = MonotonicNanos() + 10'000'000'000L;
+    request.lifecycle = [] {
+        return AIQueryLifecycleSnapshot{.monotonic_deadline_ns = MonotonicNanos() + 10'000'000'000L};
+    };
+    auto promise = std::make_shared<std::promise<AIHttpResult>>();
+    auto result = promise->get_future();
+    ASSERT_TRUE(client->submit(std::move(request), [promise](AIHttpResult value) {
+                          promise->set_value(std::move(value));
+                      }).ok());
+    ASSERT_EQ(std::future_status::ready, result.wait_for(2s));
+    auto value = result.get();
+    ASSERT_TRUE(std::holds_alternative<AIHttpNoResponse>(value));
+    EXPECT_EQ(AIHttpNoResponseCode::TIMEOUT, std::get<AIHttpNoResponse>(value).code);
 }
 
 TEST_F(AIHttpClientTest, ActiveCancellationIsObservedWithinPollQuantum) {

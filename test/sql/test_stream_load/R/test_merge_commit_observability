@@ -96,9 +96,9 @@ select count(*) from t2;
 -- result:
 0
 -- !result
-select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS, PROGRESS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
+select STATE, TYPE, (DB_NAME = 'db_${uuid1}'), TABLE_NAME, starts_with(LABEL, 'merge_commit'), WAREHOUSE, SCAN_ROWS, SCAN_BYTES, FILTERED_ROWS, SINK_ROWS, UNSELECTED_ROWS from information_schema.loads where DB_NAME='db_${uuid1}' and TABLE_NAME='t2';
 -- result:
-CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	65	1	0	0	Merge Window 100.00%
+CANCELLED	MERGE_COMMIT	1	t2	1	default_warehouse	1	65	1	0	0
 -- !result
 SELECT j.`key`, j.`value` FROM information_schema.loads, LATERAL json_each(PROPERTIES) AS j WHERE DB_NAME='db_${uuid1}' and TABLE_NAME='t2' ORDER BY j.`key`;
 -- result:

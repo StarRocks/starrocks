@@ -16,12 +16,14 @@ package com.starrocks.replication;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.BaseProcResult;
@@ -393,5 +395,33 @@ public class ReplicationJobTest {
                         "FinishedTime", "State", "Progress", "Error"),
                 result.getColumnNames());
         GlobalStateMgr.getCurrentState().getReplicationMgr().removeRunningJob(jobProc);
+    }
+
+    /**
+     * A tablet can legitimately report zero replicas: for a lake tablet, a failed StarOS lookup makes
+     * WarehouseManager.getAllComputeNodeIdsAssignToTablet return null and LakeTablet.getAllReplicas
+     * yields an empty list. Dividing the source replica count by it turned that into an opaque
+     * "/ by zero", so the replication request was rejected without naming the cause.
+     */
+    @Test
+    public void testTabletWithoutReplicaIsReportedFromThriftRequest() {
+        TTabletReplicationInfo tTabletInfo = new TTabletReplicationInfo();
+        tTabletInfo.tablet_id = 10086L;
+        tTabletInfo.replica_replication_infos = Lists.newArrayList(new TReplicaReplicationInfo());
+
+        Tablet tabletWithoutReplica = new LocalTablet(tTabletInfo.tablet_id);
+        MetaNotFoundException e = Assertions.assertThrows(MetaNotFoundException.class, () ->
+                Deencapsulation.invoke(ReplicationJob.class, "initTabletInfo", tTabletInfo, tabletWithoutReplica));
+        Assertions.assertTrue(e.getMessage().contains(String.valueOf(tTabletInfo.tablet_id)), e.getMessage());
+    }
+
+    @Test
+    public void testTabletWithoutReplicaIsReportedFromTablePair() {
+        Tablet tabletWithoutReplica = new LocalTablet(10087L);
+        Tablet srcTabletWithoutReplica = new LocalTablet(10088L);
+        Assertions.assertThrows(IllegalStateException.class, () ->
+                Deencapsulation.invoke(ReplicationJob.class, "initTabletInfo",
+                        tabletWithoutReplica, srcTabletWithoutReplica,
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()));
     }
 }

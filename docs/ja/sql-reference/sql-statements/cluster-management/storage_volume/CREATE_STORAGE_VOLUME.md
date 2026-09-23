@@ -64,7 +64,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.oauth2_use_managed_identity | Azure Data Lake Storage Gen2 へのリクエストを認証するために Managed Identity を使用するかどうか。デフォルト: `false`。|
 | azure.adls2.oauth2_tenant_id        | Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Tenant ID。 |
 | azure.adls2.oauth2_client_id        | <ul><li>マネージド ID 認証の場合：Azure Data Lake Storage Gen2 へのリクエストを認証するために使用される Managed Identity の Client ID。</li><li>ワークロード ID 認証の場合：ワークロード ID に関連付けられている Azure AD アプリケーション（ユーザー割り当ての マネージド ID またはアプリ登録）のクライアント ID（アプリケーション ID）。</li></ul> |
-| azure.adls2.oauth2_token_file       | Azure ワークロード ID ウェブフックによってポッドにマッピングされた、OAuth2 トークンファイルへの絶対ファイルパス。 |
+| azure.adls2.oauth2_token_file | ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。すべての FE と CN で同じパスにマウントし、プロセスが読み取れるようにしてください。 |
 | gcp.gcs.service_account_email	      | Service Account 作成時に生成された JSON ファイル内のメールアドレスです。例：`user@hello.iam.gserviceaccount.com`。 |
 | gcp.gcs.service_account_private_key_id | Service Account 作成時に生成された JSON ファイル内の秘密鍵 ID です。 |
 | gcp.gcs.service_account_private_key | Service Account 作成時に生成された JSON ファイル内の秘密鍵です。例：`-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`。 |
@@ -240,10 +240,13 @@ Azure Data Lake Storage Gen2 でのストレージボリュームの作成は v3
   ```SQL
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
-  "azure.adls2.oauth2_token_file" = "<path_to_token>",
   "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+  "azure.adls2.oauth2_use_managed_identity" = "false"
   ```
+
+  ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。すべての FE と CN で同じパスにマウントし、プロセスが読み取れるようにしてください。 ワークロード ID の場合、`azure.adls2.oauth2_use_managed_identity` を `false` に設定します。すべての FE と CN が ADLS2 ストレージボリュームのワークロード ID 認証をサポートする必要があります。既存のボリュームを移行する場合、同じ `ALTER STORAGE VOLUME` 文で `azure.adls2.shared_key`、`azure.adls2.sas_token`、`azure.adls2.oauth2_client_secret` を空文字列に設定してください。ALTER は指定されていないプロパティを保持します。
 
 :::note
 Azure Data Lake Storage Gen1 はサポートされていません。

@@ -16,8 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.LdapGroupSource;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.SecurityIntegrationFactory;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
@@ -74,6 +76,15 @@ public class SecurityIntegrationStatementAnalyzer {
 
             if (statement.getProperties().containsKey(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY)) {
                 throw new SemanticException("'type' property cannot be changed");
+            }
+
+            // ALTER does not go through SecurityIntegration#checkProperty(), so the values it sets are
+            // validated here. Only the properties present in this statement are checked, so an
+            // integration created before a validation existed can still be altered.
+            String groupSource = statement.getProperties()
+                    .get(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_GROUP_SOURCE);
+            if (groupSource != null) {
+                LdapGroupSource.parseOrThrow(groupSource);
             }
 
             return null;

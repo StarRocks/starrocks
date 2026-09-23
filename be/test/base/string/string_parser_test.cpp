@@ -584,6 +584,222 @@ TEST(StringToFloat, Basic) {
     test_all_float_variants("10.1 max", StringParser::PARSE_FAILURE);
 }
 
+// Explicit verification of changed overflow behaviour under fast_float v4.0.0+
+TEST(StringToFloat, OverflowBehaviour) {
+    // Single precision float overflow (> FLT_MAX ~3.40282e+38)
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("3.5e+38", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("-3.5e+38", 8, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_TRUE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e39", 4, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("-1e39", 5, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Double precision float overflow (> DBL_MAX ~1.79769e+308)
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1.8e+308", 8, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1.8e+308", 9, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_TRUE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e309", 5, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1e309", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Large exponent overflow
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e10000", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1e10000", 8, &res);
+        EXPECT_EQ(StringParser::PARSE_OVERFLOW, res);
+        EXPECT_TRUE(std::isinf(val));
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Out-of-range overflow with unparsed trailing characters must fail
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e309.5", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_FAILURE, res);
+        EXPECT_EQ(0.0, val);
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e39.5", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_FAILURE, res);
+        EXPECT_EQ(0.0f, val);
+    }
+
+    // Boundary check: exact maximum representable values must succeed without overflow
+    auto float_max_str = boost::lexical_cast<std::string>(std::numeric_limits<float>::max());
+    test_float_value<float>(float_max_str, StringParser::PARSE_SUCCESS);
+
+    auto double_max_str = boost::lexical_cast<std::string>(std::numeric_limits<double>::max());
+    test_float_value<double>(double_max_str, StringParser::PARSE_SUCCESS);
+}
+
+// A value below the smallest subnormal rounds to +-0. That is the correctly rounded result,
+// not a parse error, so it must stay PARSE_SUCCESS: every caller treats a non-success result
+// as unparseable input and would turn such a value into a NULL or a rejected row.
+TEST(StringToFloat, UnderflowBehaviour) {
+    // Single precision underflow (< FLT_TRUE_MIN ~1.4e-45)
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e-46", 5, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("-1e-46", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e-100", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("-1e-100", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Double precision underflow (< DBL_TRUE_MIN ~4.9e-324)
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e-325", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1e-325", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e-999", 6, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1e-999", 7, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Extreme exponent underflow
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e-10000", 8, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("-1e-10000", 9, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0f, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e-10000", 8, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_FALSE(std::signbit(val));
+    }
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("-1e-10000", 9, &res);
+        EXPECT_EQ(StringParser::PARSE_SUCCESS, res);
+        EXPECT_EQ(0.0, val);
+        EXPECT_TRUE(std::signbit(val));
+    }
+
+    // Out-of-range underflow with unparsed trailing characters must fail
+    {
+        StringParser::ParseResult res;
+        double val = StringParser::string_to_float<double>("1e-10000.5", 10, &res);
+        EXPECT_EQ(StringParser::PARSE_FAILURE, res);
+        EXPECT_EQ(0.0, val);
+    }
+    {
+        StringParser::ParseResult res;
+        float val = StringParser::string_to_float<float>("1e-10000.5", 10, &res);
+        EXPECT_EQ(StringParser::PARSE_FAILURE, res);
+        EXPECT_EQ(0.0f, val);
+    }
+
+    // Boundary check: positive minimum normal values must succeed without underflow
+    auto float_min_str = boost::lexical_cast<std::string>(std::numeric_limits<float>::min());
+    test_float_value<float>(float_min_str, StringParser::PARSE_SUCCESS);
+
+    auto double_min_str = boost::lexical_cast<std::string>(std::numeric_limits<double>::min());
+    test_float_value<double>(double_min_str, StringParser::PARSE_SUCCESS);
+}
+
 TEST(StringToFloat, InvalidLeadingTrailing) {
     // Test that trailing garbage is not allowed.
     test_float_value<double>("123xyz   ", StringParser::PARSE_FAILURE);

@@ -29,6 +29,9 @@ CONF_mInt64(lake_replication_read_buffer_size, "16777216"); // 16MB
 // Maximum retry count for non-segment file copy during lake-to-lake replication
 CONF_mInt32(lake_replication_max_file_copy_retry, "3");
 
+// Maximum number of files copied concurrently for one tablet during lake-to-lake replication.
+CONF_mInt32(lake_replication_max_parallel_files_per_tablet, "4");
+
 // Minimum number of files required to enable parallel copy in lake-to-lake replication.
 // Set to 0 to force disable parallel copy.
 CONF_mInt32(lake_replication_parallel_copy_min_file_count, "2");
@@ -69,6 +72,18 @@ CONF_mDouble(lake_tablet_rows_splitted_ratio, "1.5");
 CONF_mBool(lake_tablet_ignore_invalid_delete_predicate, "false");
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+
+// Tracked memory budget for synchronously processing one dump_tablet_metadata request. It uses the standard
+// MemTracker accounting granularity. New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_memory_limit_bytes, "268435456");
+
+// Maximum bytes in the complete JSON response for one dump_tablet_metadata request.
+// New requests fail closed when the value is non-positive.
+CONF_mInt64(lake_dump_tablet_metadata_per_request_json_size_limit_bytes, "33554432");
+
+// Maximum number of admitted dump_tablet_metadata requests. A lower value does not cancel requests already admitted.
+// New requests fail closed when the value is non-positive.
+CONF_mInt32(lake_dump_tablet_metadata_max_concurrency, "1");
 
 CONF_mBool(lake_print_delete_log, "false");
 

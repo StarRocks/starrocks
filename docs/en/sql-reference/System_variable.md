@@ -190,6 +190,16 @@ The variables are described **in alphabetical order**. Variables with the `globa
 
 If you want to activate the roles assigned to you in a session, use the [SET ROLE](sql-statements/account-management/SET_DEFAULT_ROLE.md) command.
 
+### ai_topn_pushdown_max_global_limit
+
+* **Description**: The largest SQL `LIMIT` that uses a global candidate TopN below an eligible AI projection. Larger limits use local candidate TopN pruning per fragment instance. `0` selects local-only pruning; it does not disable the optimization.
+* **Default**: 1000
+* **Data type**: long
+* **Range**: [0, 9223372036854775807]
+* **Scope**: Session, Global
+
+Supports `SET`, `SET GLOBAL`, and statement-level `SET_VAR` hints without restarting. For strategy details and examples, see [Reducing AI input rows](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows).
+
 ### ann_params
 
 * **Description**: Specifies query-time parameters for approximate nearest neighbor (ANN) vector index searches. The value is a JSON object string whose keys and values are strings. HNSW supports `efsearch`; IVFPQ supports `nprobe`, `max_codes`, `scan_table_threshold`, `polysemous_ht`, and `range_search_confidence`. You can set the variable for a session or a single statement, for example `SET ann_params = '{"efsearch":"256"}'` or `SET_VAR (ann_params='{"efsearch":"256"}')`.
@@ -1947,6 +1957,36 @@ Used to specify the preaggregation mode for the first phase of GROUP BY. If the 
 ### system_time_zone
 
 Used to display the time zone of the current system. Cannot be changed.
+
+### lake_multi_node_tablet_write_mode
+
+* **Description**: Only applies in shared-data mode. Controls whether a load may spread one tablet's write across several compute nodes instead of sending every row to the single node the tablet is assigned to. Three values:
+  * `off` -- never spreads; the behavior that existed before this feature.
+  * `auto` (default) -- spreads for a table on a **range-bucket** distribution whose partition still holds fewer tablets than the number of writers this load is worth (see `lake_multi_node_write_bytes_per_node`). Pre-split runs and is waited on before the statement is planned, so that tablet count is pre-split's result: if it split the partition wide enough, `auto` declines; if it was skipped, or its wait timed out and the load fell back to the layout it can see, `auto` engages. Applies to every key type -- rows sharing a key are routed by a hash of the key columns and therefore all reach one node, so the result does not depend on which node wrote which row and nothing has to be asked of the user first. Hash-bucket tables are excluded because they can simply be given more buckets to fill the cluster.
+  * `force` -- spreads whenever the remaining preconditions allow, including hash-bucket distributions. Use it when you want the spread on a table `auto` declines to take.
+* Regardless of the mode, the feature also requires a cloud-native table with `file_bundling` enabled, a transaction on combined txn logs, and a partition with fewer tablets than the number of nodes this load is actually spread over. That width is the smallest of three: the node count derived from the load's size (`lake_multi_node_write_bytes_per_node`), `lake_multi_node_write_max_nodes`, and the alive compute nodes. A partition that already holds that many tablets stays on the single-node path even under `force` -- five tablets on a six-node warehouse do not spread if the load's size is only worth three writers. Stream load and routine load are excluded outright: neither can be sized at planning time, and treating an unknown size as a large one there would give the smallest and most frequent batches the widest spread. Partial updates (row and column mode), condition updates, loads omitting an auto-increment column, and loads during a schema change are all supported.
+* A partition that automatic partitioning creates during the load itself is spread too. It is not in the plan, so its tablets are handed to the load afterwards, over the create-partition RPC: they are spread over the same number of nodes the load resolved when it was planned, picked from the compute nodes alive at the moment the partition is created -- a long load can outlive the node list it was planned against. Such a partition normally starts with a single tablet, because the data boundaries that would have split it have not been seen yet, so it is exactly the shape this setting exists for.
+* **Default**: auto
+* **Type**: String
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **Description**: Upper bound on how many compute nodes may write **one tablet** in parallel. Every node in a tablet's node list opens its own delta writer and produces its own segments, so on a very wide warehouse an otherwise ordinary load would be cut into that many small segments. Nodes beyond this bound still run their sink instance -- their rows simply travel over the network to a node inside the list, which is the behavior that existed before this feature, so the bound costs locality but never correctness. This is an upper bound, not the parallelism itself: the number actually used is the smallest of this, the node count derived from the load's estimated size (`lake_multi_node_write_bytes_per_node`), and the number of alive compute nodes. Set to `0` or less for no bound.
+* **Default**: 6
+* **Type**: Int
+* **Scope**: Session
+* **Introduced in**: v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **Description**: Only applies in shared-data mode, and only when `lake_multi_node_tablet_write_mode` is enabled. How many bytes of a load one compute node is given before another node is added to a tablet's write set. The node count is the load's estimated size divided by this value (integer division, so a node joins only once there is a whole share for it), and the parallelism finally used is the smallest of that number, the session variable `lake_multi_node_write_max_nodes`, and the number of alive compute nodes. For example, a 10 GB load at the default 2 GB gives 5 nodes, which a 3-node warehouse then clamps to 3. Spreading a load is not free: every node in a tablet's node list writes its own segments and emits its own partial transaction log, and the open/close round trips reach every node in that list whether or not it ends up holding any rows -- so a small load spread wide pays an extra segment and an extra log per node for little gain. The size comes from the optimizer's estimate for an `INSERT`, and from the resolved file list for a Broker Load; when neither is available the node count is left to `lake_multi_node_write_max_nodes` alone, because for those two paths an unknown size is not a small size. Stream load and routine load are the exception and do not spread at all -- there an unknown size means a micro-batch, not an unmeasured bulk load. Set to 0 to disable size-based sizing.
+* **Default**: 2147483648 (2 GB)
+* **Unit**: Bytes
+* **Type**: Long
+* **Scope**: Session
+* **Introduced in**: v4.2
 
 ### time_zone
 

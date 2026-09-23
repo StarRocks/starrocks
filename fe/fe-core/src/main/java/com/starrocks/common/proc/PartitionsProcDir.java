@@ -275,18 +275,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) {
-        // set result
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(this.titleNames);
-        for (List<Comparable> info : partitionInfos) {
-            List<String> row = new ArrayList<String>(info.size());
-            for (Comparable comparable : info) {
-                row.add(comparable.toString());
-            }
-            result.addRow(row);
-        }
-
-        return result;
+        return ProcUtils.toProcResult(this.titleNames, partitionInfos);
     }
 
     public List<List<Comparable>> getPartitionInfos() {
@@ -509,12 +498,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public int analyzeColumn(String columnName) {
-        for (int i = 0; i < this.titleNames.size(); ++i) {
-            if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
+        // This one reports through ErrorReport instead of throwing, and its title list is built per
+        // table rather than being a constant, so only the lookup is shared.
+        try {
+            return ProcUtils.analyzeColumn(this.titleNames, columnName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+            return -1;
         }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        return -1;
     }
 }

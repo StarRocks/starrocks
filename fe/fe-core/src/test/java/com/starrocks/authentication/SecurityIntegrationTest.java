@@ -87,6 +87,36 @@ public class SecurityIntegrationTest {
     }
 
     /**
+     * ALTER SECURITY INTEGRATION does not go through {@link SecurityIntegration#checkProperty()}, so an
+     * invalid `authentication_ldap_simple_group_source` has to be rejected by the analyzer. If it were
+     * not, the bad value would sit in the metadata until the next login, where the runtime parse falls
+     * back to `group_provider` and only logs - the admin would see the ALTER succeed and the setting
+     * silently not take effect.
+     */
+    @Test
+    public void testAlterRejectsInvalidGroupSource() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("type", "authentication_ldap_simple");
+        properties.put("authentication_ldap_simple_group_source", "memberof");
+        authenticationMgr.replayCreateSecurityIntegration("ldap_si", properties);
+
+        SemanticException e = Assertions.assertThrows(SemanticException.class,
+                () -> Analyzer.analyze(parseAlter("\"authentication_ldap_simple_group_source\" = \"member_of\""), ctx));
+        Assertions.assertTrue(e.getMessage().contains("member_of"), e.getMessage());
+
+        // A legal value passes, in any case ...
+        Analyzer.analyze(parseAlter("\"authentication_ldap_simple_group_source\" = \"BOTH\""), ctx);
+        // ... and an ALTER that does not mention the property is not affected by the check.
+        Analyzer.analyze(parseAlter("\"authentication_ldap_simple_server_host\" = \"ldap.example.com\""), ctx);
+    }
+
+    private AlterSecurityIntegrationStatement parseAlter(String setClause) {
+        return (AlterSecurityIntegrationStatement) SqlParser.parseSingleStatement(
+                "ALTER SECURITY INTEGRATION ldap_si SET (" + setClause + ")",
+                ctx.getSessionVariable().getSqlMode());
+    }
+
+    /**
      * Test case: JWT Security Integration property validation
      * Test point: Validate JWT-specific properties and their processing
      */

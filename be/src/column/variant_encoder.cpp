@@ -814,8 +814,14 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_text_to_variant(std::strin
     if (json_text.empty()) {
         return encode_json_to_variant(JsonValue::from_string(Slice("", 0)));
     }
+    // Plain scalar text (for example "abc") is accepted as a string value. Detect it through the parser's
+    // error-code API: a throw per non-JSON row would be far too expensive. The catch only remains as a safety
+    // net for exceptions that are not caused by the input, so it costs nothing on the hot path.
     try {
-        auto builder = vpack::Parser::fromJson(json_text.data(), json_text.size());
+        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr);
+        if (builder == nullptr) {
+            return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
+        }
         JsonValue parsed;
         parsed.assign(*builder);
         return encode_json_to_variant(parsed);

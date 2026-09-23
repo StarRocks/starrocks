@@ -1123,6 +1123,7 @@ RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector
     int64_t merged_value = 0;
     int64_t min_value = std::numeric_limits<int64_t>::max();
     int64_t max_value = std::numeric_limits<int64_t>::min();
+    const bool saturating_sum = counters[0]->is_sum() && counters[0]->strategy().saturating_sum;
 
     for (auto& counter : counters) {
         if (counter->value() < min_value) {
@@ -1133,7 +1134,14 @@ RuntimeProfile::MergedInfo RuntimeProfile::merge_isomorphic_counters(std::vector
             max_value = counter->value();
         }
 
-        merged_value += counter->value();
+        if (saturating_sum) {
+            const int64_t value = counter->value();
+            if (__builtin_add_overflow(merged_value, value, &merged_value)) {
+                merged_value = value > 0 ? std::numeric_limits<int64_t>::max() : std::numeric_limits<int64_t>::min();
+            }
+        } else {
+            merged_value += counter->value();
+        }
     }
 
     if (counters[0]->is_avg()) {

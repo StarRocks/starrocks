@@ -102,6 +102,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 
     private static final long RETRY_INTERVAL_MS = 1000;
+    // At most one "fail to publish" line per partition per interval, on either publish path.
+    private static final long PUBLISH_ERROR_LOG_INTERVAL_MS = 10000;
     private static final int PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE = 512;
     public static final int PUBLISH_THREAD_POOL_HARD_LIMIT_SIZE = 4096;
     // about 16 (2 * PUBLISH_MAX_QUEUE_SIZE/PUBLISH_THREAD_POOL_DEFAULT_MAX_SIZE ) tasks pending for
@@ -549,6 +551,15 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     if (needWait) {
                         continue;
                     }
+                    // Every partition in the batch is either already published or still inside the
+                    // back-off that follows a failed attempt. Skip before claiming the tables:
+                    // publishLakeTransactionBatchAsync would otherwise rebuild the partition map,
+                    // build a TxnInfoPB per transaction and partition, restamp task state and log a
+                    // start line, once per daemon tick, for a table that cannot publish anything.
+                    if (!batchHasPublishablePartition(txnStateBatch.transactionStates,
+                            System.currentTimeMillis())) {
+                        continue;
+                    }
                     publishingLakeTransactionsBatchTableId.addAll(batchTableIdList);
 
                     CompletableFuture<Void> future = publishLakeTransactionBatchAsync(txnStateBatch);
@@ -609,8 +620,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
         });
     }
 
-    public boolean publishPartitionBatch(Database db, long tableId, PartitionPublishVersionData publishVersionData,
-                                         TransactionStateBatch stateBatch) {
+    public BatchPublishResult publishPartitionBatch(Database db, long tableId,
+                                                    PartitionPublishVersionData publishVersionData,
+                                                    TransactionStateBatch stateBatch) {
         final Long partitionId = publishVersionData.getPartitionId();
         final List<TransactionState> transactionStates = publishVersionData.getTransactionStates();
         final List<Long> versions = publishVersionData.getCommitVersions();
@@ -626,19 +638,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         boolean useAggregatePublish = Config.enable_file_bundling;
+        // Resolved under the lock below, where the physical partition is in scope.
+        boolean preferSharedInitialMetadata = false;
         ComputeResource computeResource =  WarehouseManager.DEFAULT_RESOURCE;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
-                return true;
+                return BatchPublishResult.SUCCESS;
             }
 
             PhysicalPartition partition = table.getPhysicalPartition(publishVersionData.getPartitionId());
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
-                return true;
+                return BatchPublishResult.SUCCESS;
             }
 
             // this can happen when the table is doing schema change
@@ -646,10 +660,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     getSourceType() != TransactionState.LoadJobSourceType.REPLICATION) {
                 LOG.debug("publish partition batch partition.getVisibleVersion() + 1 != version.get(0)" + " "
                         + partition.getId() + " " + partition.getVisibleVersion() + " " + versions.get(0));
-                return false;
+                return BatchPublishResult.NOT_READY;
             }
 
             useAggregatePublish = table.isFileBundling();
+            preferSharedInitialMetadata = Utils.preferSharedInitialMetadata(table, partition, versions.get(0) - 1);
             Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (int i = 0; i < transactionStates.size(); i++) {
                 TransactionState txnState = transactionStates.get(i);
@@ -743,10 +758,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 } else if (CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(publishTablets, txnInfos, carryForwardTablets,
                             startVersion - 1, endVersion, nodeToTablets, computeResource, compactionScores,
-                            tabletStats, vectorIndexBuildInfos);
+                            tabletStats, vectorIndexBuildInfos, preferSharedInitialMetadata);
                 } else {
                     Utils.aggregatePublishVersion(publishTablets, txnInfos, startVersion - 1, endVersion,
-                            compactionScores, nodeToTablets, computeResource, tabletStats, vectorIndexBuildInfos);
+                            compactionScores, null, nodeToTablets, computeResource, tabletStats,
+                            vectorIndexBuildInfos, preferSharedInitialMetadata);
                 }
 
                 // Mixed batches (rare) fall back to false so the load-tail delay protects
@@ -767,12 +783,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
                 txnState.setErrorMsg("Fail to publish partition " + partitionId + " error " + e.getMessage());
             }
-            LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
-                    txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
-            return false;
+            List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
+            if (commitInfos.isEmpty() || commitInfos.get(0)
+                    .shouldLogPublishError(System.currentTimeMillis(), PUBLISH_ERROR_LOG_INTERVAL_MS)) {
+                LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
+                        txnInfos.stream().map(i -> i.txnId).collect(Collectors.toList()), e);
+            }
+            return BatchPublishResult.FAILED;
         }
 
-        return true;
+        return BatchPublishResult.SUCCESS;
     }
 
     private void deleteTxnLogIgnoreError(ComputeNode node, DeleteTxnLogRequest request) {
@@ -957,6 +977,86 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return txnStateBatch; // gap partitions not touched by any txn (shouldn't happen)
     }
 
+    // What one attempt at publishing a partition of a batch did.
+    @VisibleForTesting
+    enum BatchPublishResult {
+        SUCCESS,
+        // Waiting for an earlier version of this partition to become visible. Detected before any
+        // RPC, clears as soon as the predecessor publishes, and happens during ordinary operation,
+        // so it must not start the back-off that a real failure does.
+        NOT_READY,
+        FAILED
+    }
+
+    // Cheap pre-pass over a batch's commit infos: can any partition publish this round? A
+    // partition cannot if every transaction's commit info for it is already published, or if its
+    // most recent attempt failed less than RETRY_INTERVAL_MS ago.
+    @VisibleForTesting
+    static boolean batchHasPublishablePartition(List<TransactionState> states, long now) {
+        Map<Long, Long> lastFailureByPartition = new HashMap<>();
+        Set<Long> unpublished = new HashSet<>();
+        for (TransactionState state : states) {
+            for (TableCommitInfo tableCommitInfo : state.getIdToTableCommitInfos().values()) {
+                for (Map.Entry<Long, PartitionCommitInfo> entry :
+                        tableCommitInfo.getIdToPartitionCommitInfo().entrySet()) {
+                    PartitionCommitInfo commitInfo = entry.getValue();
+                    // A partition that published on an earlier cycle but then failed its republish
+                    // keeps that positive versionTime, so the failure stamp is what says where it
+                    // actually stands. Trusting versionTime alone would drop it from the unpublished
+                    // set, leave that set empty, and send the batch round every tick.
+                    if (commitInfo.getLastPublishFailureTime() == 0 && commitInfo.getVersionTime() > 0) {
+                        continue;
+                    }
+                    unpublished.add(entry.getKey());
+                    long failedAt = commitInfo.getLastPublishFailureTime();
+                    if (failedAt > 0) {
+                        lastFailureByPartition.merge(entry.getKey(), failedAt, Math::max);
+                    }
+                }
+            }
+        }
+        if (unpublished.isEmpty()) {
+            // Everything published but the batch is still here, so a previous cycle failed to
+            // finish it. Let it run: every partition short-circuits and the finish step is retried.
+            // Skipping would strand the transactions in COMMITTED forever.
+            return true;
+        }
+        for (Long partitionId : unpublished) {
+            Long failedAt = lastFailureByPartition.get(partitionId);
+            if (failedAt == null || now >= failedAt + RETRY_INTERVAL_MS) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Both publish paths' exceptionally handlers do the same two things: arm the back-off for
+    // every partition the attempt covered, and report it. The report is throttled because the
+    // executor rejecting tasks is precisely what happens once the publish queue backs up, so this
+    // path floods under the same conditions the back-off itself addresses.
+    @VisibleForTesting
+    static void recordPublishFailure(List<PartitionCommitInfo> commitInfos, String message, Throwable ex) {
+        long now = System.currentTimeMillis();
+        if (commitInfos.isEmpty() || commitInfos.get(0).shouldLogPublishError(now, PUBLISH_ERROR_LOG_INTERVAL_MS)) {
+            LOG.error(message, ex);
+        }
+        for (PartitionCommitInfo commitInfo : commitInfos) {
+            commitInfo.markPublishFailed(now);
+        }
+    }
+
+    // True while the partition is inside the back-off window that follows a failed publish
+    // attempt. The batch keeps one PartitionCommitInfo per transaction, all stamped together,
+    // so the most recent failure among them is the one that matters.
+    @VisibleForTesting
+    static boolean retryTooSoon(List<PartitionCommitInfo> commitInfos, long now) {
+        long lastFailure = 0;
+        for (PartitionCommitInfo commitInfo : commitInfos) {
+            lastFailure = Math.max(lastFailure, commitInfo.getLastPublishFailureTime());
+        }
+        return lastFailure > 0 && now < lastFailure + RETRY_INTERVAL_MS;
+    }
+
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         assert txnStateBatch.size() > 1;
@@ -1003,21 +1103,42 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         List<CompletableFuture<Boolean>> futureList = new ArrayList<>();
 
+        long submitTime = System.currentTimeMillis();
         for (PartitionPublishVersionData publishVersionData : publishVersionDataMap.values()) {
+            // The batch path records the attempt time on every PartitionCommitInfo below but never
+            // consulted it, unlike publishLakePartitionAsync. A partition whose publish keeps failing
+            // was therefore resubmitted on every PublishVersionDaemon tick, so a stalled object store
+            // turned into a full-rate retry loop on the leader. Back off the same way the
+            // single-transaction path does.
+            // A partition that already published is deliberately NOT skipped here. Skipping it
+            // would also skip publishPartitionBatch, the only place that records this partition's
+            // txn logs on the batch for deletion once the batch finishes, and the batch is rebuilt
+            // from scratch every cycle. Its republish is bounded to once per RETRY_INTERVAL_MS by
+            // the check above, which is the amplification that actually mattered.
+            List<PartitionCommitInfo> commitInfos = publishVersionData.getPartitionCommitInfos();
+            if (retryTooSoon(commitInfos, submitTime)) {
+                futureList.add(CompletableFuture.completedFuture(false));
+                continue;
+            }
             CompletableFuture<Boolean> future = CompletableFuture.supplyAsync(() -> {
-                boolean success = publishPartitionBatch(db, publishVersionData.getTableId(),
+                BatchPublishResult result = publishPartitionBatch(db, publishVersionData.getTableId(),
                         publishVersionData, txnStateBatch);
-                long versionTime = success ? System.currentTimeMillis() : -System.currentTimeMillis();
-                for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
-                    commitInfo.setVersionTime(versionTime);
+                // A partition merely waiting for its predecessor keeps its previous stamp, so the
+                // back-off does not add up to RETRY_INTERVAL_MS to every ordinary version-ordering
+                // wait; only a real failure arms it.
+                if (result != BatchPublishResult.NOT_READY) {
+                    long now = System.currentTimeMillis();
+                    for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
+                        if (result == BatchPublishResult.SUCCESS) {
+                            commitInfo.markPublishSucceeded(now);
+                        } else {
+                            commitInfo.markPublishFailed(now);
+                        }
+                    }
                 }
-                return success;
+                return result == BatchPublishResult.SUCCESS;
             }, getTaskExecutor()).exceptionally(ex -> {
-                LOG.error("Fail to publish txn batch", ex);
-                long versionTime = -System.currentTimeMillis();
-                for (PartitionCommitInfo commitInfo : publishVersionData.getPartitionCommitInfos()) {
-                    commitInfo.setVersionTime(versionTime);
-                }
+                recordPublishFailure(commitInfos, "Fail to publish txn batch", ex);
                 return false;
             });
             futureList.add(future);
@@ -1071,11 +1192,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                                  @NotNull TableCommitInfo tableCommitInfo,
                                                                  @NotNull PartitionCommitInfo partitionCommitInfo,
                                                                  @NotNull TransactionState txnState) {
-        long versionTime = partitionCommitInfo.getVersionTime();
-        if (versionTime > 0) {
+        if (partitionCommitInfo.getVersionTime() > 0) {
             return CompletableFuture.completedFuture(true);
         }
-        if (versionTime < 0 && System.currentTimeMillis() < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+        long lastFailure = partitionCommitInfo.getLastPublishFailureTime();
+        if (lastFailure > 0 && System.currentTimeMillis() < lastFailure + RETRY_INTERVAL_MS) {
             return CompletableFuture.completedFuture(false);
         }
 
@@ -1084,11 +1205,16 @@ public class PublishVersionDaemon extends LeaderDaemon {
             long lambdaEntryMs = System.currentTimeMillis();
             boolean success = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState,
                     submitTimeMs, lambdaEntryMs);
-            partitionCommitInfo.setVersionTime(success ? System.currentTimeMillis() : -System.currentTimeMillis());
+            long now = System.currentTimeMillis();
+            if (success) {
+                partitionCommitInfo.markPublishSucceeded(now);
+            } else {
+                partitionCommitInfo.markPublishFailed(now);
+            }
             return success;
         }, getTaskExecutor()).exceptionally(ex -> {
-            LOG.error("Fail to publish txn " + txnState.getTransactionId(), ex);
-            partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
+            recordPublishFailure(Lists.newArrayList(partitionCommitInfo),
+                    "Fail to publish txn " + txnState.getTransactionId(), ex);
             return false;
         });
     }
@@ -1111,6 +1237,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         long lockAcquiredMs = System.currentTimeMillis();
         boolean useAggregatePublish = Config.enable_file_bundling;
+        // Resolved under the lock below, where the physical partition is in scope.
+        boolean preferSharedInitialMetadata = false;
         try {
             OlapTable table =
                     (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
@@ -1134,6 +1262,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 return false;
             }
             baseVersion = partition.getVisibleVersion();
+            preferSharedInitialMetadata = Utils.preferSharedInitialMetadata(table, partition, baseVersion);
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedIndexes(table.getId(), partition);
             Set<Long> publishedNormalIndexMetaIds = Sets.newHashSet();
             for (MaterializedIndex index : indexes) {
@@ -1191,10 +1320,11 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 if (useAggregatePublish && CollectionUtils.isNotEmpty(carryForwardTablets)) {
                     aggregatePublishWithCarryForward(normalTablets, Lists.newArrayList(txnInfo), carryForwardTablets,
                             baseVersion, txnVersion, null, computeResource, compactionScores, tabletStats,
-                            vectorIndexBuildInfos);
+                            vectorIndexBuildInfos, preferSharedInitialMetadata);
                 } else {
                     Utils.publishVersion(normalTablets, txnInfo, baseVersion, txnVersion, compactionScores,
-                            computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos);
+                            null, computeResource, tabletStats, useAggregatePublish, vectorIndexBuildInfos,
+                            preferSharedInitialMetadata);
                 }
 
                 VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, txnState.isFromLakeCompaction());
@@ -1209,13 +1339,14 @@ public class PublishVersionDaemon extends LeaderDaemon {
             // Avoid holding txn write lock here; setting errMsg is best-effort for diagnostics
             txnState.setErrorMsg("Fail to publish partition " + partitionCommitInfo.getPhysicalPartitionId()
                     + " error " + e.getMessage());
-            // prevent excessive logging
-            if (partitionCommitInfo.getVersionTime() < 0 &&
-                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
-                return false;
+            // Prevent excessive logging. The previous form compared the wrong way round: it skipped
+            // the log when the last failure was more than 10s ago and kept logging while the partition
+            // failed continuously, which is exactly backwards for a path that retries every
+            // RETRY_INTERVAL_MS.
+            if (partitionCommitInfo.shouldLogPublishError(System.currentTimeMillis(), PUBLISH_ERROR_LOG_INTERVAL_MS)) {
+                LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
+                        txnId, e.getMessage());
             }
-            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
-                    txnId, e.getMessage());
             return false;
         } finally {
             maybeLogSlowPublishPartition(txnId, partitionCommitInfo.getPhysicalPartitionId(), tableId,
@@ -1261,11 +1392,12 @@ public class PublishVersionDaemon extends LeaderDaemon {
                                                  ComputeResource computeResource,
                                                  Map<Long, Double> compactionScores,
                                                  Map<Long, TabletStatPB> tabletStats,
-                                                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos)
+                                                 List<VectorIndexBuildInfoPB> vectorIndexBuildInfos,
+                                                 boolean preferSharedInitialMetadata)
             throws NoAliveBackendException, RpcException {
         AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
         Utils.createSubRequestForAggregatePublish(touchedTablets, txnInfos, baseVersion, newVersion,
-                nodeToTablets, computeResource, request);
+                nodeToTablets, computeResource, request, preferSharedInitialMetadata);
 
         List<TxnInfoPB> carryForwardTxnInfos = Lists.newArrayListWithCapacity(txnInfos.size());
         for (TxnInfoPB txnInfo : txnInfos) {
@@ -1279,8 +1411,10 @@ public class PublishVersionDaemon extends LeaderDaemon {
             carryForwardTxnInfos.add(emptyTxnInfo);
         }
         // The carry-forward tablets have no txn log to delete on success, so do not thread nodeToTablets here.
+        // They belong to the same physical partition as |touchedTablets|, so the version-1 layout hint applies
+        // to them identically.
         Utils.createSubRequestForAggregatePublish(carryForwardTablets, carryForwardTxnInfos, baseVersion, newVersion,
-                null, computeResource, request);
+                null, computeResource, request, preferSharedInitialMetadata);
         Utils.sendAggregatePublishVersionRequest(request, baseVersion, computeResource, compactionScores, null,
                 tabletStats, vectorIndexBuildInfos);
     }

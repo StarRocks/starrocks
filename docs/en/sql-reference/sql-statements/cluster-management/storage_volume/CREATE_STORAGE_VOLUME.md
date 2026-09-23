@@ -64,7 +64,7 @@ import Beta from '../../../../_assets/commonMarkdown/_beta.mdx'
 | azure.adls2.oauth2_use_managed_identity | Whether to use Managed Identity to authorize requests for your Azure Data Lake Storage Gen2. Default: `false`. |
 | azure.adls2.oauth2_tenant_id        | The Tenant ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2. |
 | azure.adls2.oauth2_client_id        | <ul><li>For Managed Identity Authentication: The Client ID of the Managed Identity used to authorize requests for your Azure Data Lake Storage Gen2.</li><li>For Workload Identity: The client ID (application ID) of the Azure AD application (user-assigned managed identity or app registration) associated with the workload identity.</li></ul> |
-| azure.adls2.oauth2_token_file       | The absolute file path to the OAuth2 token file projected into the pod by the Azure Workload Identity webhook. |
+| azure.adls2.oauth2_token_file | Path to the federated token file for Workload Identity authentication. Mount the token file at the same path and make it readable on every FE and CN. |
 | gcp.gcs.service_account_email	      | The email address in the JSON file generated at the creation of the Service Account, for example, `user@hello.iam.gserviceaccount.com`. |
 | gcp.gcs.service_account_private_key_id | The Private Key ID in the JSON file generated at the creation of the Service Account. |
 | gcp.gcs.service_account_private_key | The Private Key in the JSON file generated at the creation of the Service Account, for example, `-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n`. |
@@ -239,10 +239,13 @@ Creating a storage volume on Azure Data Lake Storage Gen2 is supported from v3.4
   ```SQL
   "enabled" = "{ true | false }",
   "azure.adls2.endpoint" = "<endpoint_url>",
-  "azure.adls2.oauth2_token_file" = "<path_to_token>",
   "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_token_file" = "/var/run/secrets/azure/tokens/azure-identity-token",
+  "azure.adls2.oauth2_use_managed_identity" = "false"
   ```
+
+  Path to the federated token file for Workload Identity authentication. Mount the token file at the same path and make it readable on every FE and CN. For Workload Identity, set `azure.adls2.oauth2_use_managed_identity` to `false`. All FEs and CNs must support Workload Identity for ADLS2 storage volumes. When migrating an existing volume, clear `azure.adls2.shared_key`, `azure.adls2.sas_token`, and `azure.adls2.oauth2_client_secret` in the same `ALTER STORAGE VOLUME` statement because ALTER retains properties that you do not specify.
 
 :::note
 Azure Data Lake Storage Gen1 is not supported.

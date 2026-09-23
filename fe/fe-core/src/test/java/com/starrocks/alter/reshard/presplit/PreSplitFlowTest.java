@@ -98,14 +98,14 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
@@ -161,7 +161,7 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
 
             PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_TABLE,
@@ -169,7 +169,7 @@ public class PreSplitFlowTest {
                     PreSplitPartitionScope.fromInsert(insertStmt));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
         }
     }
 
@@ -203,7 +203,7 @@ public class PreSplitFlowTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), times(1));
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -372,7 +372,7 @@ public class PreSplitFlowTest {
                     () -> false, mock(ConnectContext.class));
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }
@@ -432,7 +432,7 @@ public class PreSplitFlowTest {
             stubEligibleTarget(targets, database, table);
             DefaultPreSplitPipeline pipeline = stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Submitted(preparedJob));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
@@ -461,7 +461,7 @@ public class PreSplitFlowTest {
                     LoadKind.INSERT_FROM_FILES, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.awaitFinishedAllowingFallback(
                     any(), any(), any(), any(), any()), never());
         }
@@ -484,14 +484,14 @@ public class PreSplitFlowTest {
             stubEligibleTargetWithRollup(targets, database, table);
             stubPipelineFactory(pipelineStatic);
             coordinator.when(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                            any(), any(), anyLong(), any(), any(), any(), anyInt()))
+                            any(), any(), anyLong(), any(), any(), any(), anyInt(), any()))
                     .thenReturn(new PreSplitOutcome.Skipped(SkipReason.SAMPLE_FAILED));
 
             PreSplitFlow.runSinglePartitionFlow(database, table, prepared,
                     LoadKind.INSERT_FROM_TABLE, () -> false);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), times(1));
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
         }
     }
 
@@ -741,14 +741,69 @@ public class PreSplitFlowTest {
     }
 
     @Test
-    public void metaTierMultiPartitionSkipsNonInsertFromFiles() {
-        // The meta-tier multi-partition path is INSERT-from-FILES only; other load kinds return null
-        // immediately (no provider construction, no footer read).
+    public void metaTierMultiPartitionSkipsNonFileBackedLoadKinds() {
+        // The meta-tier multi-partition path serves the two file-backed load kinds only.
+        // INSERT-from-table has no footers to read, so it returns null immediately (no provider
+        // construction, no footer read) and the caller uses the data tier.
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
         PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
         Assertions.assertNull(
                 PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.INSERT_FROM_TABLE),
-                "non-INSERT_FROM_FILES load kinds must not use the meta tier");
+                "a load kind without file footers must not use the meta tier");
+    }
+
+    @Test
+    public void metaTierMultiPartitionServesBrokerLoad() {
+        // A Broker Load into a partitioned range-bucket table must plan its cuts from footers just
+        // as the equivalent INSERT INTO ... SELECT FROM FILES() does, reading the Broker Load
+        // provider (not the FILES one) and emitting the same paired min/max endpoints.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        List<RowGroupStatistics> ordered = List.of(
+                new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
+                new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false));
+        PreSplitProfile profile = new PreSplitProfile();
+
+        try (MockedConstruction<BrokerLoadRowGroupStatisticsProvider> brokerProvider =
+                     Mockito.mockConstruction(BrokerLoadRowGroupStatisticsProvider.class,
+                             (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(ordered));
+                MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> filesProvider =
+                        Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class)) {
+            SampleSet result;
+            try (PreSplitProfile.Scope attempt = PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+                result = PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD);
+            }
+
+            Assertions.assertNotNull(result, "an ordered Broker Load source must stay on the meta tier");
+            Assertions.assertFalse(result.getTuples().isEmpty(), "ordered row groups must emit endpoints");
+            Assertions.assertEquals(result.getTuples().size(), result.getPartitionSourceTuples().size(),
+                    "sort-key and partition-source tuples must stay parallel");
+            Assertions.assertEquals(1, brokerProvider.constructed().size(),
+                    "Broker Load must read footers through its own provider");
+            Assertions.assertTrue(filesProvider.constructed().isEmpty(),
+                    "the INSERT-from-FILES provider must not be used for a Broker Load");
+        }
+        Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_META_TIER,
+                profile.toRuntimeProfile().getInfoString("SourceTiers"),
+                "a Broker Load served by footers must report the meta tier");
+    }
+
+    @Test
+    public void metaTierMultiPartitionBrokerLoadFallsBackWhenSourceUnsupported() {
+        // The Broker Load provider raises MetaTierUnavailableException for a source FE-local footer
+        // reads cannot serve (broker-backed, non-identity file group, non-Parquet/ORC format). That
+        // must degrade to the data tier, never abort the flow.
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+        PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+
+        try (MockedConstruction<BrokerLoadRowGroupStatisticsProvider> ignored =
+                Mockito.mockConstruction(BrokerLoadRowGroupStatisticsProvider.class,
+                        (provider, ctx) -> when(provider.fetch(any(SampleRequest.class)))
+                                .thenThrow(new MetaTierUnavailableException("broker-backed source")))) {
+            Assertions.assertNull(
+                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD),
+                    "a meta-tier-unavailable Broker Load source must fall back to the data tier");
+        }
     }
 
     // ---------- helpers ----------

@@ -732,6 +732,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
     cd $TP_SOURCE_DIR/$VPACK_SOURCE
     if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
         touch $PATCHED_MARK
     fi
     cd -
@@ -873,6 +875,10 @@ if [[ -d $TP_SOURCE_DIR/$POCO_SOURCE ]] ; then
         apply_patch -p1 "$TP_PATCH_DIR/poco-1.12.5-keep-alive.patch"
         touch "$PATCHED_MARK"
     fi
+    if [ ! -f "$PATCHED_MARK.blocking_timeout" ] && [[ $POCO_SOURCE == "poco-1.12.5-release" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/poco-1.12.5-blocking-timeout.patch"
+        touch "$PATCHED_MARK.blocking_timeout"
+    fi
     cd -
     echo "Finished patching $POCO_SOURCE"
 fi
@@ -928,4 +934,28 @@ if [[ -d $TP_SOURCE_DIR/$HADOOPSRC_SOURCE ]] ; then
     fi
     cd -
     echo "Finished patching $HADOOPSRC_SOURCE"
+fi
+
+# libdeflate patch fixing the aarch64 assembler probe in its CMakeLists.txt, which tests a
+# different .arch than the compiler emits and so misses assemblers that cannot build the
+# dotprod/sha3 code paths (gcc >= 14 paired with binutils < 2.41, as on rocky9).
+if [[ -d $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$LIBDEFLATE_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $LIBDEFLATE_SOURCE == "libdeflate-1.26" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/libdeflate-1.26.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $LIBDEFLATE_SOURCE"
+fi
+
+# snappy patch to prevent CMake from forcibly disabling RTTI (-fno-rtti), maintaining compiler flag and ABI consistency with StarRocks
+if [[ -d $TP_SOURCE_DIR/$SNAPPY_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$SNAPPY_SOURCE
+    if [ ! -f "$PATCHED_MARK" ] && [[ $SNAPPY_SOURCE == "snappy-1.2.1" ]] ; then
+        apply_patch -p1 "$TP_PATCH_DIR/snappy-1.2.1-rtti.patch"
+        touch "$PATCHED_MARK"
+    fi
+    cd -
+    echo "Finished patching $SNAPPY_SOURCE"
 fi

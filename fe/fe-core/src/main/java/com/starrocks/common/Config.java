@@ -205,6 +205,9 @@ public class Config extends ConfigBase {
     public static int audit_log_delete_count = -1;
     @ConfField(mutable = true)
     public static boolean audit_log_json_format = false;
+    @ConfField(mutable = true, comment = "Max length of the error message recorded in the audit log, truncate " +
+            "messages longer than this specified limit. Set to 0 to stop recording error messages. Default: 1024")
+    public static int audit_log_error_message_max_length = 1024;
     @ConfField
     public static boolean audit_log_enable_compress = false;
 
@@ -634,7 +637,7 @@ public class Config extends ConfigBase {
     /**
      * Load label cleaner will run every *label_clean_interval_second* to clean the outdated jobs.
      */
-    @ConfField
+    @ConfField(mutable = true)
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
     /////////////////////////////////////////////////    Task   ///////////////////////////////////////////////////
@@ -761,6 +764,36 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int meta_delay_toleration_second = 300;    // 5 min
+
+    /**
+     * Interval, in milliseconds, at which a non-leader FE re-evaluates whether its metadata is still
+     * fresh enough to serve reads (see *meta_delay_toleration_second*). Values outside [10, 5000] are
+     * clamped, because a check that runs less often than every few seconds defeats its own purpose and
+     * would also slow down leader activation, which stops this thread.
+     * <p>
+     * The evaluation runs on a thread of its own rather than at the end of every replay cycle, because
+     * a single journal entry can keep the replayer busy for an unbounded time (an applier waiting on a
+     * database lock, a create/drop covering a very large number of tablets). While that lasts, the
+     * replayer cannot report that the metadata went stale, so the node would keep serving a frozen
+     * snapshot instead of forwarding its queries to the leader.
+     * <p>
+     * Mutable: snapshotted once per evaluation and used only to pace the checker thread, so a runtime
+     * change takes effect from the next check on.
+     */
+    @ConfField(mutable = true, comment = "Interval at which a Follower or Observer FE re-checks whether " +
+            "its metadata is fresh enough to serve reads. Clamped to [10, 5000].")
+    public static long meta_freshness_check_interval_ms = 1000L;
+
+    /**
+     * A journal entry that has been applying for longer than this many seconds is reported in the FE log
+     * as a stuck replay, together with the stack of the replayer thread, so the blocking applier can be
+     * identified without attaching a debugger. Set to 0 to disable the report.
+     * <p>
+     * Mutable: read once per check and only controls logging.
+     */
+    @ConfField(mutable = true, comment = "Report a journal entry that has been applying for longer than " +
+            "this in fe.log, with the replayer stack. Set to 0 to disable.")
+    public static long metadata_replay_stuck_warn_threshold_second = 30;
 
     /**
      * Leader FE sync policy of bdbje.
@@ -974,6 +1007,11 @@ public class Config extends ConfigBase {
      * <p>
      * This is helpful when you try to stop the Leader FE for a relatively long time for some reason,
      * but still wish the non-leader FE can offer read service.
+     * <p>
+     * Scope: this only overrides the *delay* verdict, never a replay *failure*. If metadata replay
+     * threw, the node has an incomplete and possibly inconsistent metadata image rather than a merely
+     * old one, so canRead and isReady are both false regardless of this flag, and stay false until a
+     * later replay cycle succeeds. Setting this to true cannot bring such a node back into service.
      */
     @ConfField(mutable = true)
     public static boolean ignore_meta_check = false;
@@ -1377,11 +1415,44 @@ public class Config extends ConfigBase {
     public static int thrift_server_max_worker_threads = 4096;
 
     /**
-     * If there is no thread to handle new request, the request will be pend to a queue,
-     * the pending queue size is thrift_server_queue_size
+     * How many connections may wait for a worker while all thrift_server_max_worker_threads workers
+     * are busy. This bounds what the queue can hold, not what it will serve: a connection arriving
+     * once the queue is full is closed immediately rather than retried, and a queued connection that
+     * waits past thrift_server_queue_timeout_ms is closed unserved when a worker reaches it. The two
+     * cases are counted apart, by thrift_server_rejected_connections_total and
+     * thrift_server_expired_connections_total.
      */
     @ConfField
     public static int thrift_server_queue_size = 4096;
+
+    /**
+     * How long a connection may wait in the thrift server pending queue before a worker picks it up.
+     * A connection that has waited longer is closed unserved, on the assumption that its caller has
+     * abandoned it and serving it only holds a worker away from work someone is still waiting for.
+     * With the check armed the queue can only ever hold fresh work, so it drains in O(timeout) after
+     * a spike however deep it grew.
+     * <p>
+     * Off by default, because that assumption does not hold for every caller and the server cannot
+     * tell which it is serving. A queued connection carries no deadline the acceptor can read, and
+     * the deadlines callers actually use span four orders of magnitude: plain FE-internal RPCs give
+     * up after thrift_rpc_timeout_ms (10s), but a statement forwarded from a follower waits
+     * getExecTimeout() + thrift_rpc_timeout_ms -- 310s for a query at the default query_timeout, and
+     * about four hours for an INSERT at the default insert_timeout -- and BE stream-load and
+     * txn-commit RPCs wait stream_load_thrift_rpc_timeout_ms (60s) or a quarter of a load's own
+     * timeout_second, whichever is larger. query_timeout, insert_timeout and timeout_second are all
+     * user-settable and unbounded, so no fixed value is safe for every cluster: any timeout short
+     * enough to help recovery can cut off a forwarded statement whose client is still waiting, during
+     * exactly the saturation this is meant to shorten. Serving work whose caller has gone is the
+     * lesser evil, so the default keeps it.
+     * <p>
+     * Arm it per cluster, above the largest deadline that cluster's clients actually rely on -- start
+     * from its query_timeout and insert_timeout rather than from this file. Mutable, so it can be
+     * armed, retuned, or switched back off without a restart. Every drop is counted in
+     * thrift_server_expired_connections_total, and thrift_server_queue_wait_ms shows what the queue
+     * waits look like before anything is armed at all.
+     */
+    @ConfField(mutable = true)
+    public static long thrift_server_queue_timeout_ms = 0;
 
     /**
      * Maximal wait seconds for straggler node in load
@@ -1593,6 +1664,16 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int alter_table_timeout_second = 86400; // 1day
+
+    /**
+     * On an aggregate table, ALTER TABLE ... ADD COLUMN with neither an aggregate function nor the
+     * KEY keyword is ambiguous, and treating it as a key column changes the table's aggregation key
+     * and rewrites existing data. When false, such a statement is rejected and the error names both
+     * options. When true, the column becomes a key column, which is the behavior before this was
+     * introduced. Mutable, but not persisted across a restart unless set WITH PERSISTENT.
+     */
+    @ConfField(mutable = true)
+    public static boolean allow_implicit_key_column_in_agg_add_column = false;
 
     /**
      * The alter handler max worker threads
@@ -1824,8 +1905,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2460,6 +2547,26 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
+     * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
+     * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
+     * A security integration property of the same name overrides this value.
+     * This is a policy switch rather than a per-server setting, so a cluster-wide default is useful:
+     * turning memberOf on everywhere is a single ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true, comment = "where the groups of an LDAP authenticated user come from: " +
+            "group_provider (default) | memberof | both")
+    public static String authentication_ldap_simple_group_source = "group_provider";
+
+    /**
+     * Name of the attribute on the user entry that carries its group membership.
+     * "memberOf" fits Active Directory and OpenLDAP with the memberof overlay;
+     * Sun/Oracle Directory Server and 389-DS use "isMemberOf".
+     */
+    @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
+            "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
+    public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -2478,6 +2585,29 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, a cached query profile can be read only by the user who ran the query or by a holder of
+     * SYSTEM OPERATE. This gates SHOW PROFILELIST, ANALYZE PROFILE, get_query_profile(), the /api/profile,
+     * /api/query/progress and /api/query_detail endpoints (the last keeps listing every query but drops the
+     * profile text and the plan rendered from it), and the /query and /query_profile web pages; the OPERATE
+     * requirement that enable_http_auth already places on the endpoints is unchanged.
+     * Off by default so an upgrade keeps the earlier behavior, in which every authenticated user can read every
+     * profile; turn it on to restrict profile visibility.
+     *
+     * Turning it on has two visible consequences beyond the rule itself, both deliberate. /api/query/progress
+     * stops accepting anonymous requests, because the rule needs a caller identity -- an existing anonymous
+     * poller of it starts getting 401. And get_query_profile() requires SYSTEM OPERATE for an id whose profile
+     * is not cached on the connected frontend, since the RPC that fetches it from the other frontends carries
+     * no caller identity to authorize there; that narrows the cross-frontend lookup to OPERATE holders while
+     * the check is on.
+     *
+     * Mutable so the check can be toggled without a restart. Changing it needs SYSTEM OPERATE, which already grants
+     * full profile visibility, so the knob opens no path its holder lacks. Callers that apply it across several
+     * rows snapshot it once so a flip mid-operation cannot produce a half-filtered result.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_query_profile_access_check = false;
 
     /**
      * When set to true, guava cache is used to cache the privilege collection
@@ -2970,6 +3100,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Per statistics-scan estimated-row budget for external-table analyze; " +
             "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
     public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
+
+    // A collection query reads one partition under the scan caps above into constant-size sketches and in
+    // practice returns in well under a second. Without a ceiling of its own each one inherits whatever is
+    // left of statistic_collect_query_timeout - the budget for the entire job - so a single stuck query can
+    // spend it all and leave every partition after it uncollected. The default is a tenth of the default job
+    // budget: far above anything the scan caps can produce, while still bounding one query's share of the
+    // job. Mutable so a cold or distant object store can be given more room without a restart.
+    @ConfField(mutable = true, comment = "Per-query timeout for external-table analyze collection queries; " +
+            "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
+            "additionally bounded by statistic_collect_query_timeout.")
+    public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -3611,6 +3752,9 @@ public class Config extends ConfigBase {
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
 
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
+
     // gcp gs
     @ConfField
     public static String gcp_gcs_endpoint = "";
@@ -3820,6 +3964,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
@@ -3872,6 +4022,35 @@ public class Config extends ConfigBase {
                     "placed for the sample to be representative, so the scheduler discards it and " +
                     "falls back to a full scan. Lower is more conservative. Default: 40")
     public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
+    @ConfField(mutable = true, comment =
+            "Whether StarMgr journals a replica-only shard change as a replica delta instead of a full " +
+                    "shard snapshot. Enable only once every FE in the cluster runs a build that carries " +
+                    "this item, otherwise an older FE silently skips all replica updates. Default: false")
+    public static boolean lake_enable_incremental_shard_replica_journal = false;
+
+    @ConfField(mutable = false, comment =
+            "Whether StarMgr maintains a compute node -> shards reverse index, so that per-node shard " +
+                    "lookups cost the node's own fan-out instead of a full shard-map scan. Read once at " +
+                    "FE startup. Default: false")
+    public static boolean lake_enable_worker_shard_reverse_index = false;
+
+    @ConfField(mutable = true, comment =
+            "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +
+                    "it fails, before cancelling the whole job. An online rewrite - a range sort-key " +
+                    "schema change, a range rollup, or a materialized view sort-key rewrite - rebuilds " +
+                    "data one partition per alter-scheduler tick, so a compute node restarting or " +
+                    "crashing mid-INSERT fails that one partition; retrying lets the job resume it " +
+                    "instead of discarding every partition it has already rewritten. Should exceed the " +
+                    "time a node takes to come back, and stays far below alter_table_timeout_second " +
+                    "because compaction on the table is deferred for as long as the rewrite runs. It " +
+                    "is spent only by that partition's own failed attempts, each charged for how long " +
+                    "it ran plus one alter_scheduler_interval_millisecond, so waiting on a different " +
+                    "partition does not consume it. A partition always gets at least one retry, even " +
+                    "when that attempt alone costs more than the window. Set to 0 to cancel the job on " +
+                    "the first failure. " +
+                    "Default: 600")
+    public static int lake_online_rewrite_partition_retry_timeout_second = 600;
 
     /**
      * Default lake compaction txn timeout
@@ -4813,6 +4992,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
 
+    /**
+     *  max load record count will be returned when BE/CN call GetLoads
+     *  a page is cut at a job boundary, so a single job's rows are never split across pages.
+     */
+    @ConfField(mutable = true)
+    public static int max_get_loads_result_count = 10000;
+
     @ConfField(mutable = true, comment = "Whether to collect and expose the per-partition LAST_ACCESS_TIME " +
             "(the last time a partition was scanned by a user query) in SHOW PARTITIONS and " +
             "information_schema.partitions_meta. When disabled, the access time is neither recorded nor aggregated " +
@@ -5043,11 +5229,11 @@ public class Config extends ConfigBase {
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
     @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
-            + "Pre-Split meta tier reads concurrently from a FILES() source. Footer reads are "
-            + "independent per file and the sampler sorts the aggregated stats, so concurrency only "
-            + "cuts the wall time of the pre-split hook (each footer is a remote round-trip; a "
-            + "many-file source otherwise serializes hundreds of round-trips). 1 disables "
-            + "concurrency.")
+            + "Pre-Split meta tier reads concurrently from a file-backed load source (FILES() or "
+            + "Broker Load). Footer reads are independent per file and the sampler sorts the "
+            + "aggregated stats, so concurrency only cuts the wall time of the pre-split hook "
+            + "(each footer is a remote round-trip; a many-file source otherwise serializes "
+            + "hundreds of round-trips). 1 disables concurrency.")
     public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
 
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
@@ -5169,4 +5355,60 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
+    public static String ai_default_embedding_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    public static String ai_default_embedding_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    public static String ai_default_embedding_provider = "";
+
+    /**
+     * How the FE reacts when a metadata lock is requested on an object the internal catalog does
+     * not own -- a database from an external catalog, or a placeholder table id such as the
+     * {@code -1} BaseTableInfo default. Such an id names nothing the lock manager can protect: it
+     * either never collides (a lock nobody else can take) or collides with everything (every
+     * external base table on one lock).
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with a stack and lets the
+     * operation proceed, {@code error} refuses it. Mutable, so a deployment can start at
+     * {@code warn}, confirm its logs are clean and tighten to {@code error} without a restart.
+     * Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_target_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when it contacts an external system -- a Hive metastore, a JDBC source, an
+     * Iceberg REST catalog, a thrift peer -- while holding an FE metadata lock. The lock's hold
+     * time then becomes that system's round-trip time, and every waiter pays it: transaction
+     * publish takes the table lock with a 1000ms {@code tryLock}, so one slow call inside a
+     * critical section fails a load rather than merely delaying a query.
+     *
+     * The check sits at the last layer the FE owns before a socket is used, so a cache hit never
+     * reaches it: every violation reported is a request that really went out.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the offending caller's
+     * stack and lets the call proceed, {@code error} refuses it. Unlike
+     * {@link #lock_target_validation_mode} this rule ships knowing its violation set is not yet
+     * empty, so {@code warn} is the only sane default: it turns those sites from a reviewer's
+     * memory into a log you can aggregate by transport. Mutable, so a deployment can tighten to
+     * {@code error} without a restart once its logs are clean. Unrecognized values behave as
+     * {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
+     * call site</b>. Throttling per site rather than globally keeps a busy violating site from
+     * crowding out every other one, and a site that has not been seen before always logs its first
+     * occurrence. Violation counts stay exact regardless of what the throttle drops.
+     *
+     * Set to 0 to log every violation while investigating.
+     */
+    @ConfField(mutable = true)
+    public static long lock_invariant_violation_log_interval_ms = 10000;
+
 }

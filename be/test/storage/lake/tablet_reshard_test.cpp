@@ -21,6 +21,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdlib>
 #include <ctime>
 #include <functional>
@@ -41,6 +42,7 @@
 #include "column/datum_tuple.h"
 #include "column/serde/column_array_serde.h"
 #include "common/config_compaction_fwd.h"
+#include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
@@ -66,12 +68,15 @@
 #include "storage/lake/lake_persistent_index.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_merger.h"
 #include "storage/lake/tablet_range_helper.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_reshard_helper.h"
+#include "storage/lake/tablet_splitter.h"
+#include "storage/lake/tablet_virtual_merge.h"
 #include "storage/lake/test_util.h"
 #include "storage/lake/transactions.h"
 #include "storage/lake/update_manager.h"
@@ -82,6 +87,7 @@
 #include "storage/rowset/segment_options.h"
 #include "storage/rowset/segment_writer.h"
 #include "storage/seek_range.h"
+#include "storage/sort_key_sampler.h"
 #include "storage/sstable/block.h"
 #include "storage/sstable/comparator.h"
 #include "storage/sstable/format.h"
@@ -109,10 +115,41 @@ inline void stamp_physical_identity_uid(RowsetMetadataPB* rowset, const std::str
     rowset->mutable_uid()->set_lo(static_cast<int64_t>(std::hash<std::string>{}(seed)));
 }
 
+// Mirror reality for tests that build child metadata directly: cross-published / split
+// siblings carry a uid that is IDENTICAL across siblings (set at write time in the
+// shared txn log, or backfilled once at split). Derive a deterministic uid from a
+// physical-identity seed (a shared segment filename, or a shared del-file name) so two
+// siblings modeling "the same logical rowset" (same shared file) dedup at merge,
+// exactly as the pre-uid physical-identity rule did. A private (per-child) file name is
+// unique, so it yields a distinct uid and never falsely dedups. No-op if the rowset
+// already carries an explicit uid (pruned-sibling tests set their own matching uid).
+// Routes by purpose the way the two production callers do: a real MERGE goes through merge_tablet, the
+// split's read alias through virtual_merge_for_read. Tests that must hold for both stay parameterized.
+inline StatusOr<MutableTabletMetadataPtr> merge_tablet_or_read_alias(lake::TabletManager* tablet_manager,
+                                                                     const std::vector<TabletMetadataPtr>& sources,
+                                                                     const MergingTabletInfoPB& merging,
+                                                                     int64_t new_version, const TxnInfoPB& txn_info,
+                                                                     bool read_alias) {
+    return read_alias ? lake::virtual_merge_for_read(tablet_manager, sources, merging, new_version, txn_info)
+                      : lake::merge_tablet(tablet_manager, sources, merging, new_version, txn_info);
+}
+
 class LakeTabletReshardTest : public testing::Test {
 public:
     static TuplePB generate_sort_key(int value) {
         DatumVariant variant(get_type_info(LogicalType::TYPE_INT), Datum(value));
+        VariantTuple tuple;
+        tuple.append(variant);
+        TuplePB tuple_pb;
+        tuple.to_proto(&tuple_pb);
+        return tuple_pb;
+    }
+
+    // Zero-padded so byte order == numeric order, matching write_varchar_key_segment's encoding.
+    static TuplePB generate_varchar_sort_key(int value) {
+        // DatumVariant holds a CopiedDatum, which deep-copies the Slice, so the temporary
+        // std::string fmt::format returns may die at the end of this statement.
+        DatumVariant variant(get_type_info(LogicalType::TYPE_VARCHAR), Datum(Slice(fmt::format("{:06d}", value))));
         VariantTuple tuple;
         tuple.append(variant);
         TuplePB tuple_pb;
@@ -131,6 +168,13 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(1024 * 1024);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider, _mem_tracker.get());
         _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
+        // PK index major compaction always runs on the parallel manager, so wire in the process-wide
+        // one and point it at this fixture's tablet manager, the same way TestBase does.
+        if (auto* parallel_compact_mgr = StorageEnv::GetInstance()->parallel_compact_mgr();
+            parallel_compact_mgr != nullptr) {
+            _update_manager->set_parallel_compact_mgr(parallel_compact_mgr);
+            parallel_compact_mgr->TEST_set_tablet_mgr(_tablet_manager.get());
+        }
 
         // These reshard tests use hand-crafted metadata with no real in-memory PK memtable, so
         // the cloud-native index flush that split/merge trigger has nothing to flush. Skip it so
@@ -160,6 +204,103 @@ public:
     }
 
 protected:
+    std::shared_ptr<TabletMetadataPB> split_source(bool separate_sort = false) {
+        auto m = std::make_shared<TabletMetadataPB>();
+        m->set_id(next_id());
+        m->set_version(1);
+        m->set_next_rowset_id(30);
+        set_int_primary_key_schema(m.get(), next_id());
+        if (separate_sort) {
+            auto* c = m->mutable_schema()->add_column();
+            c->set_unique_id(1);
+            c->set_name("v");
+            c->set_type("INT");
+            c->set_is_key(false);
+            c->set_is_nullable(false);
+            m->mutable_schema()->add_sort_key_idxes(1);
+        }
+        auto* r = m->add_rowsets();
+        r->set_id(2);
+        lake::tablet_reshard_helper::set_rowset_uid(r);
+        r->set_num_rows(100);
+        r->set_data_size(1000);
+        r->set_num_dels(10);
+        for (int i = 0; i < 2; ++i) {
+            auto* sm = r->add_segment_metas();
+            sm->set_filename(fmt::format("split-{}.dat", i));
+            sm->set_segment_idx(i == 0 ? 0 : 7);
+            sm->set_num_rows(50);
+            sm->set_size(500);
+            *sm->mutable_sort_key_min() = generate_sort_key(i * 50);
+            *sm->mutable_sort_key_max() = generate_sort_key(i * 50 + 49);
+        }
+        return m;
+    }
+
+    auto split_source_into_children(const TabletMetadataPtr& m, bool external = true) {
+        // Deliberately bypass the current-producer stamping wrapper: malformed
+        // rejection fixtures must reach SPLIT exactly as declared by each test.
+        CHECK_OK(_tablet_manager->put_tablet_metadata(m));
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(m->id());
+        splitting.add_new_tablet_ids(m->id() + 100000);
+        splitting.add_new_tablet_ids(m->id() + 200000);
+        if (external) {
+            *splitting.add_new_tablet_ranges()->mutable_upper_bound() = generate_sort_key(50);
+            splitting.mutable_new_tablet_ranges(0)->set_upper_bound_included(false);
+            *splitting.add_new_tablet_ranges()->mutable_lower_bound() = generate_sort_key(50);
+            splitting.mutable_new_tablet_ranges(1)->set_lower_bound_included(true);
+        }
+        return lake::split_tablet(_tablet_manager.get(), m, splitting, 2, TxnInfoPB());
+    }
+
+    TabletMetadataPtr cache_reshard_metadata(int64_t key_id, int64_t metadata_id, int64_t version, int64_t gtid,
+                                             const TabletRangePB* range = nullptr) {
+        _tablet_manager->metacache()->update_capacity(1024 * 1024);
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(metadata_id);
+        metadata->set_version(version);
+        metadata->set_gtid(gtid);
+        if (range != nullptr) *metadata->mutable_range() = *range;
+        _tablet_manager->metacache()->cache_tablet_metadata(_tablet_manager->tablet_metadata_location(key_id, version),
+                                                            metadata);
+        return metadata;
+    }
+
+    ReshardingTabletInfoPB make_split_retry_request(const TabletMetadataPtr& source,
+                                                    const std::vector<int64_t>& children, bool external) {
+        CHECK_OK(put_tablet_metadata(source));
+        ReshardingTabletInfoPB request;
+        auto* split = request.mutable_splitting_tablet_info();
+        split->set_old_tablet_id(source->id());
+        for (auto child : children) {
+            prepare_tablet_dirs(child);
+            split->add_new_tablet_ids(child);
+        }
+        if (external) {
+            *split->add_new_tablet_ranges()->mutable_upper_bound() = generate_sort_key(50);
+            split->mutable_new_tablet_ranges(0)->set_upper_bound_included(false);
+            *split->add_new_tablet_ranges()->mutable_lower_bound() = generate_sort_key(50);
+            split->mutable_new_tablet_ranges(1)->set_lower_bound_included(true);
+        }
+        return request;
+    }
+
+    void expect_split_fallback_after_flush(const std::shared_ptr<TabletMetadataPB>& m) {
+        auto* sync = SyncPoint::GetInstance();
+        int flushes = 0;
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+        ASSERT_EQ(1, children.size());
+        EXPECT_EQ(1, flushes);
+        EXPECT_EQ(m->rowsets(0).SerializeAsString(), children.begin()->second->rowsets(0).SerializeAsString());
+    }
+
     void prepare_tablet_dirs(int64_t tablet_id) {
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(tablet_id)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(tablet_id)));
@@ -267,6 +408,9 @@ protected:
     Status put_tablet_metadata(TabletMetadataPB metadata) {
         for (auto& rowset : *metadata.mutable_rowsets()) {
             lake::tablet_reshard_helper::ensure_rowset_uid(&rowset);
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                if (!rowset.segment_metas(i).has_segment_idx()) rowset.mutable_segment_metas(i)->set_segment_idx(i);
+            }
         }
         return _tablet_manager->put_tablet_metadata(metadata);
     }
@@ -275,6 +419,9 @@ protected:
         auto mutable_meta = std::make_shared<TabletMetadataPB>(*metadata);
         for (auto& rowset : *mutable_meta->mutable_rowsets()) {
             lake::tablet_reshard_helper::ensure_rowset_uid(&rowset);
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                if (!rowset.segment_metas(i).has_segment_idx()) rowset.mutable_segment_metas(i)->set_segment_idx(i);
+            }
         }
         return _tablet_manager->put_tablet_metadata(mutable_meta);
     }
@@ -286,8 +433,9 @@ protected:
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         {
             auto* sm = rowset->add_segment_metas();
-            sm->set_filename("segment.dat");
+            sm->set_filename(fmt::format("segment-{}-{}.dat", metadata->id(), rowset_id));
             sm->set_size(128);
+            sm->set_num_rows(1);
         }
         auto* del_file = rowset->add_del_files();
         del_file->set_name("del.dat");
@@ -309,12 +457,14 @@ protected:
                 auto* sm = rowset->add_segment_metas();
                 sm->set_filename(fmt::format("segment_{}.dat", rowset_id));
                 sm->set_size(128);
+                sm->set_num_rows(1);
             }
             rowset->set_num_rows(1);
             rowset->set_data_size(128);
-            // Match production: every lake writer mints a unique uid, so distinct
-            // per-tablet data rowsets never alias across tablets at merge.
-            lake::tablet_reshard_helper::set_rowset_uid(rowset);
+            // Stable, distinct producer UIDs make order assertions follow the
+            // canonical UID key instead of the order of the source list.
+            rowset->mutable_uid()->set_hi(metadata->id());
+            rowset->mutable_uid()->set_lo(rowset_id);
             return rowset;
         }
 
@@ -333,13 +483,60 @@ protected:
         return rowset;
     }
 
+    std::vector<TabletMetadataPtr> merge_fixture_sources(const std::vector<TabletMetadataPtr>& sources) {
+        const bool assign_ranges =
+                std::all_of(sources.begin(), sources.end(), [](const auto& source) { return !source->has_range(); });
+        std::vector<int64_t> ids;
+        for (const auto& source : sources) ids.push_back(source->id());
+        std::sort(ids.begin(), ids.end());
+        std::vector<TabletMetadataPtr> result;
+        for (const auto& source : sources) {
+            auto copy = std::make_shared<TabletMetadataPB>(*source);
+            if (assign_ranges) {
+                if (copy->has_schema() && copy->schema().column_size() == 0) {
+                    auto* column = copy->mutable_schema()->add_column();
+                    column->set_unique_id(1);
+                    column->set_name("c0");
+                    column->set_type("INT");
+                    column->set_is_key(true);
+                    column->set_is_nullable(false);
+                }
+                const int position = std::lower_bound(ids.begin(), ids.end(), source->id()) - ids.begin();
+                auto* range = copy->mutable_range();
+                if (position > 0) {
+                    *range->mutable_lower_bound() = generate_sort_key(position);
+                    range->set_lower_bound_included(true);
+                }
+                if (position + 1 < ids.size()) {
+                    *range->mutable_upper_bound() = generate_sort_key(position + 1);
+                    range->set_upper_bound_included(false);
+                }
+            } else if (!source->has_range()) {
+                CHECK(source->has_range()) << "explicit merge fixtures must provide every source range";
+            }
+            result.emplace_back(std::move(copy));
+        }
+        return result;
+    }
+
+    static TabletMetadataPtr merge_fixture_copy(const TabletMetadataPB& source) {
+        return std::make_shared<TabletMetadataPB>(source);
+    }
+    static TabletMetadataPtr merge_fixture_copy(const TabletMetadataPtr& source) { return source; }
+
+    template <typename... Sources>
+    Status put_merge_sources(const Sources&... sources) {
+        for (const auto& source : merge_fixture_sources({merge_fixture_copy(sources)...})) {
+            RETURN_IF_ERROR(put_tablet_metadata(source));
+        }
+        return Status::OK();
+    }
+
     Status publish_resharding_merge(const std::vector<TabletMetadataPtr>& sources, int64_t merged_tablet,
                                     int64_t base_version, int64_t new_version, int64_t txn_id,
                                     std::unordered_map<int64_t, TabletMetadataPtr>& tablet_metadatas,
                                     const std::function<void()>& before_merge = {}) {
-        for (const auto& source : sources) {
-            RETURN_IF_ERROR(put_tablet_metadata(source));
-        }
+        for (const auto& source : merge_fixture_sources(sources)) RETURN_IF_ERROR(put_tablet_metadata(source));
         if (before_merge) before_merge();
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -611,6 +808,7 @@ protected:
         int dcg_writes = 0;
         int delvec_writes = 0;
         int source_flushes = 0;
+        int sstable_opens = 0;
     };
 
     StatusOr<MutableTabletMetadataPtr> merge_with_phase_counts(const std::vector<TabletMetadataPtr>& sources,
@@ -622,24 +820,134 @@ protected:
         sync->SetCallBack("merge_delvecs:writer_invocations",
                           [&](void* arg) { counts->delvec_writes += *static_cast<int*>(arg); });
         sync->SetCallBack("merge_sstables:source_pk_flush", [&](void*) { ++counts->source_flushes; });
+        sync->SetCallBack("PersistentIndexSstable::init:table_open_error", [&](void*) { ++counts->sstable_opens; });
         sync->EnableProcessing();
         DeferOp cleanup_sync_points([&] {
             sync->ClearCallBack("materialize_planned_rowsets:entry");
             sync->ClearCallBack("merge_dcg_meta:after_write_cols");
             sync->ClearCallBack("merge_delvecs:writer_invocations");
             sync->ClearCallBack("merge_sstables:source_pk_flush");
+            sync->ClearCallBack("PersistentIndexSstable::init:table_open_error");
             sync->DisableProcessing();
         });
 
+        ReshardingTabletInfoPB resharding;
+        auto* merging = resharding.mutable_merging_tablet_info();
+        for (const auto& source : merge_fixture_sources(sources)) {
+            RETURN_IF_ERROR(_tablet_manager->put_tablet_metadata(source));
+            merging->add_old_tablet_ids(source->id());
+        }
+        merging->set_new_tablet_id(target_tablet_id);
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(next_id());
+        txn_info.set_commit_time(1);
+        txn_info.set_gtid(1);
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        std::unordered_map<int64_t, TabletRangePB> ranges;
+        RETURN_IF_ERROR(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, sources.front()->version(),
+                                                        target_version, txn_info, false, published, ranges));
+        return std::make_shared<TabletMetadataPB>(*published.at(target_tablet_id));
+    }
+
+    StatusOr<MutableTabletMetadataPtr> merge_tablet_directly(const std::vector<TabletMetadataPtr>& sources,
+                                                             int64_t target_tablet_id, int64_t new_version,
+                                                             bool read_alias) {
         MergingTabletInfoPB merging;
-        for (const auto& source : sources) merging.add_old_tablet_ids(source->id());
+        for (const auto& source : sources) {
+            merging.add_old_tablet_ids(source->id());
+        }
         merging.set_new_tablet_id(target_tablet_id);
         TxnInfoPB txn_info;
         txn_info.set_txn_id(next_id());
         txn_info.set_commit_time(1);
         txn_info.set_gtid(1);
-        return lake::merge_tablet(_tablet_manager.get(), sources, merging, target_version, txn_info,
-                                  /*skip_sstable_merge=*/false);
+        return merge_tablet_or_read_alias(_tablet_manager.get(), sources, merging, new_version, txn_info, read_alias);
+    }
+
+    // Two children of a primary-key-range split, in the layout the production stall was found in: both
+    // inherit the SAME rowset (same uid) over the same shared segment, their tablet ranges partition the
+    // parent's, and each rowset carries its own effective range -- child A's narrower than its tablet range,
+    // because update_rowset_range intersects at every reshard while a merge unions the tablet range. The
+    // union of the two rowset ranges therefore covers only [rowset_lower_key, +inf) of the merged parent's
+    // (-inf, +inf), which is what makes a gap the alias build used to try to convert into a rowid window.
+    // A range-distributed primary-key tablet whose ORDER BY is (c1, c0): the shape whose tablet range lives
+    // in PRIMARY-KEY space (one value) while its segments are laid out in sort-key order (two columns), so
+    // no rowid interval of a segment corresponds to the range. Column unique ids and types match
+    // write_two_column_segment's, so a segment written by that helper opens with this schema.
+    void set_separate_sort_key_primary_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(PRIMARY_KEYS);
+        schema->set_id(schema_id);
+        schema->set_num_short_key_columns(1);
+        auto* c0 = schema->add_column();
+        c0->set_unique_id(1001);
+        c0->set_name("c0");
+        c0->set_type("INT");
+        c0->set_is_key(true);
+        c0->set_is_nullable(false);
+        auto* c1 = schema->add_column();
+        c1->set_unique_id(1002);
+        c1->set_name("c1");
+        c1->set_type("INT");
+        c1->set_is_key(false);
+        c1->set_is_nullable(false);
+        c1->set_aggregation("REPLACE");
+        // ORDER BY (c1, c0): a sort key that is not the primary key.
+        schema->add_sort_key_idxes(1);
+        schema->add_sort_key_idxes(0);
+    }
+
+    std::pair<MutableTabletMetadataPtr, MutableTabletMetadataPtr> make_primary_key_range_split_children(
+            int64_t child_a, int64_t child_b, const std::string& segment_name, int split_key,
+            std::optional<int> rowset_lower_key) {
+        auto make_child = [&](int64_t tablet_id, bool is_left) {
+            auto metadata = std::make_shared<TabletMetadataPB>();
+            metadata->set_id(tablet_id);
+            metadata->set_version(1);
+            metadata->set_next_rowset_id(2);
+            set_separate_sort_key_primary_key_schema(metadata.get(), /*schema_id=*/9001);
+
+            auto* range = metadata->mutable_range();
+            if (is_left) {
+                *range->mutable_upper_bound() = generate_sort_key(split_key);
+                range->set_upper_bound_included(false);
+            } else {
+                *range->mutable_lower_bound() = generate_sort_key(split_key);
+                range->set_lower_bound_included(true);
+            }
+
+            auto* rowset = metadata->add_rowsets();
+            rowset->set_id(1);
+            rowset->set_version(1);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(segment_name);
+            segment->set_size(100);
+            segment->set_num_rows(10);
+            // Stamped for the same reason a split stamps it: the rssid is rowset id + segment_idx, and
+            // a source without it is refused outright by a real merge.
+            segment->set_segment_idx(0);
+            segment->set_shared(true);
+            auto* rowset_range = rowset->mutable_range();
+            if (is_left) {
+                // No lower bound means this rowset claims everything below the split point, so the two
+                // contributions cover the merged range and no gap arises.
+                if (rowset_lower_key.has_value()) {
+                    *rowset_range->mutable_lower_bound() = generate_sort_key(*rowset_lower_key);
+                    rowset_range->set_lower_bound_included(true);
+                }
+                *rowset_range->mutable_upper_bound() = generate_sort_key(split_key);
+                rowset_range->set_upper_bound_included(false);
+            } else {
+                *rowset_range->mutable_lower_bound() = generate_sort_key(split_key);
+                rowset_range->set_lower_bound_included(true);
+            }
+            // Same uid on both children: one physical rowset handed to each by the split.
+            stamp_physical_identity_uid(rowset, segment_name);
+            return metadata;
+        };
+        return {make_child(child_a, /*is_left=*/true), make_child(child_b, /*is_left=*/false)};
     }
 
     Status expect_physical_preflight_rejection(const std::vector<TabletMetadataPtr>& sources, int64_t target_tablet_id,
@@ -647,6 +955,9 @@ protected:
         std::vector<std::string> source_pbs;
         std::map<int64_t, std::set<std::string>> segment_inventories;
         std::map<int64_t, std::set<std::string>> metadata_inventories;
+        for (const auto& source : merge_fixture_sources(sources)) {
+            CHECK_OK(_tablet_manager->put_tablet_metadata(source));
+        }
         for (const auto& source : sources) {
             prepare_tablet_dirs(source->id());
             source_pbs.emplace_back(source->SerializeAsString());
@@ -661,6 +972,9 @@ protected:
         ASSIGN_OR_ABORT(metadata_inventories[target_tablet_id],
                         directory_inventory(_location_provider->metadata_root_location(target_tablet_id)));
 
+        set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
+        DeferOp restore_delvec_failpoint(
+                [&] { set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE); });
         auto merged = merge_with_phase_counts(sources, target_tablet_id, target_version, counts);
 
         EXPECT_TRUE(merged.status().is_corruption()) << merged.status();
@@ -668,6 +982,7 @@ protected:
         EXPECT_EQ(0, counts->dcg_writes);
         EXPECT_EQ(0, counts->delvec_writes);
         EXPECT_EQ(0, counts->source_flushes);
+        EXPECT_EQ(0, counts->sstable_opens);
         for (size_t i = 0; i < sources.size(); ++i) {
             EXPECT_EQ(source_pbs[i], sources[i]->SerializeAsString());
         }
@@ -727,6 +1042,45 @@ protected:
         return {std::move(source_a), std::move(source_b)};
     }
 
+    std::vector<std::shared_ptr<TabletMetadataPB>> make_readable_preflight_sst_sources(const std::string& stem) {
+        auto sources = make_preflight_sst_sources(stem);
+        const std::string segment_name = stem + ".dat";
+        const uint64_t segment_size =
+                write_two_column_segment(sources[0]->id(), segment_name, 100, [](int key) { return key * 10; });
+        std::vector<std::pair<std::string, std::string>> entries;
+        entries.reserve(100);
+        for (uint32_t key = 0; key < 100; ++key) {
+            entries.emplace_back(encode_int_primary_key(key), serialize_index_values({{1, 1, key}}));
+        }
+        const auto sst_file = write_raw_pk_sstable(_tablet_manager->sst_location(sources[0]->id(), stem + ".sst"),
+                                                   std::move(entries), /*encrypted=*/false);
+        for (auto& source : sources) {
+            source->clear_schema();
+            set_two_column_pk_schema(source.get(), /*schema_id=*/4001);
+            source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+            auto* rowset = source->mutable_rowsets(0);
+            rowset->set_num_rows(50);
+            rowset->set_data_size(segment_size / 2);
+            rowset->set_num_dels(0);
+            auto* segment = rowset->mutable_segment_metas(0);
+            segment->set_size(segment_size);
+            segment->set_num_rows(100);
+            segment->set_segment_idx(0);
+            segment->set_shared(true);
+            *segment->mutable_sort_key_min() = generate_sort_key(0);
+            *segment->mutable_sort_key_max() = generate_sort_key(99);
+            auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+            sst->set_version(1);
+            sst->set_filesize(sst_file.filesize);
+            sst->set_max_rss_rowid((uint64_t{1} << 32) | 99);
+            *sst->mutable_range() = sst_file.range;
+            sst->mutable_fileset_id()->set_hi(1);
+            sst->mutable_fileset_id()->set_lo(1);
+        }
+        sources[1]->mutable_rowsets(0)->set_data_size(segment_size - segment_size / 2);
+        return sources;
+    }
+
     void add_delvec(TabletMetadataPB* metadata, int64_t tablet_id, int64_t version, uint32_t segment_id,
                     const std::string& file_name, const std::string& content) {
         FileMetaPB file_meta;
@@ -756,10 +1110,17 @@ protected:
         rowset->set_version(1);
         rowset->set_num_rows(10 * segment_filenames.size());
         rowset->set_data_size(100 * segment_filenames.size());
+        uint32_t segment_idx = 0;
         for (const auto& segment_filename : segment_filenames) {
             auto* segment = rowset->add_segment_metas();
             segment->set_filename(segment_filename);
             segment->set_size(100);
+            segment->set_num_rows(10);
+            // A split always stamps this -- apply_segment_ownership_to_new_tablet_rowset synthesizes a
+            // positional one when the source lacks it -- and a real merge now refuses a source segment
+            // without it. Setting it to the position it already had leaves every reader unchanged,
+            // since get_segment_idx falls back to exactly that when the field is absent.
+            segment->set_segment_idx(segment_idx++);
             segment->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, segment_filenames.front());
@@ -1166,6 +1527,8 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(4);
+        c0->set_index_length(4);
         auto* c1 = schema->add_column();
         const int32_t c1_uid = 1002;
         c1->set_unique_id(c1_uid);
@@ -1175,6 +1538,36 @@ protected:
         c1->set_is_nullable(false);
         c1->set_aggregation("REPLACE");
         return {c0_uid, c1_uid};
+    }
+
+    // Build a DUP_KEYS tablet schema whose sort key is a single, genuinely truncated VARCHAR
+    // column: `k0` is the key and the sort key, `v0` is a plain data column. index_length(4) is
+    // shorter than the 6-digit key width write_varchar_key_segment writes, so the legacy short key
+    // index this schema produces cannot decode back to the whole sort key
+    // (short_key_index_encodes_full_sort_key rejects it) and sampling must take path B, reading
+    // data pages instead (sort_key_sampler.h).
+    void set_varchar_sort_key_schema(TabletMetadataPB* metadata, int64_t schema_id) {
+        auto* schema = metadata->mutable_schema();
+        schema->set_keys_type(DUP_KEYS);
+        schema->set_id(schema_id);
+        schema->set_num_short_key_columns(1);
+        schema->set_num_rows_per_row_block(65535);
+        auto* k0 = schema->add_column();
+        k0->set_unique_id(1001);
+        k0->set_name("k0");
+        k0->set_type("VARCHAR");
+        k0->set_is_key(true);
+        k0->set_is_nullable(false);
+        k0->set_length(32);
+        k0->set_index_length(4);
+        auto* v0 = schema->add_column();
+        v0->set_unique_id(1002);
+        v0->set_name("v0");
+        v0->set_type("INT");
+        v0->set_is_key(false);
+        v0->set_is_nullable(false);
+        v0->set_aggregation("REPLACE");
+        schema->add_sort_key_idxes(0);
     }
 
     // Build a single-rowset PK tablet with one two-column segment and NO sstable_meta, so
@@ -1209,7 +1602,8 @@ protected:
     // Returns the segment file size on disk. The file is placed under
     // tablet_id's segment directory as |segment_name|.
     uint64_t write_two_column_segment(int64_t tablet_id, const std::string& segment_name, int num_rows,
-                                      const std::function<int(int)>& source_value_of, int key_start = 0) {
+                                      const std::function<int(int)>& source_value_of, int key_start = 0,
+                                      const std::function<int(int)>& key_of = {}) {
         TabletSchemaPB schema_pb;
         schema_pb.set_keys_type(PRIMARY_KEYS);
         schema_pb.set_id(2001);
@@ -1221,6 +1615,8 @@ protected:
         c0->set_type("INT");
         c0->set_is_key(true);
         c0->set_is_nullable(false);
+        c0->set_length(4);
+        c0->set_index_length(4);
         auto* c1 = schema_pb.add_column();
         c1->set_unique_id(1002);
         c1->set_name("c1");
@@ -1244,10 +1640,67 @@ protected:
         auto col1 = Int32Column::create();
         std::vector<int> v0(num_rows), v1(num_rows);
         for (int i = 0; i < num_rows; ++i) {
-            v0[i] = key_start + i;
+            v0[i] = key_of ? key_of(i) : key_start + i;
             v1[i] = source_value_of(v0[i]);
         }
         col0->append_numbers(v0.data(), v0.size() * sizeof(int));
+        col1->append_numbers(v1.data(), v1.size() * sizeof(int));
+        auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
+        CHECK_OK(writer.append_chunk(*chunk));
+
+        uint64_t segment_file_size = 0, index_size = 0, footer_position = 0;
+        CHECK_OK(writer.finalize(&segment_file_size, &index_size, &footer_position));
+        return segment_file_size;
+    }
+
+    // Write a real Segment file matching set_varchar_sort_key_schema: k0 = zero-padded [key_start,
+    // key_start+num_rows), v0 = k0's integer value. Returns the segment file size on disk. Zero
+    // padding keeps byte order == numeric order, which is what lets the sampler's monotonicity
+    // validation see a well-formed segment.
+    uint64_t write_varchar_key_segment(int64_t tablet_id, const std::string& segment_name, int num_rows,
+                                       int key_start = 0) {
+        TabletSchemaPB schema_pb;
+        schema_pb.set_keys_type(DUP_KEYS);
+        schema_pb.set_id(2101);
+        schema_pb.set_num_short_key_columns(1);
+        schema_pb.set_num_rows_per_row_block(65535);
+        auto* k0 = schema_pb.add_column();
+        k0->set_unique_id(1001);
+        k0->set_name("k0");
+        k0->set_type("VARCHAR");
+        k0->set_is_key(true);
+        k0->set_is_nullable(false);
+        k0->set_length(32);
+        k0->set_index_length(4);
+        auto* v0 = schema_pb.add_column();
+        v0->set_unique_id(1002);
+        v0->set_name("v0");
+        v0->set_type("INT");
+        v0->set_is_key(false);
+        v0->set_is_nullable(false);
+        v0->set_aggregation("REPLACE");
+        schema_pb.add_sort_key_idxes(0);
+
+        auto tablet_schema = TabletSchema::create(schema_pb);
+        auto segment_path = _tablet_manager->segment_location(tablet_id, segment_name);
+
+        WritableFileOptions fopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        auto wfile_or = fs::new_writable_file(fopts, segment_path);
+        CHECK_OK(wfile_or.status());
+
+        SegmentWriterOptions opts;
+        SegmentWriter writer(std::move(wfile_or.value()), 0, tablet_schema, opts);
+        CHECK_OK(writer.init());
+
+        auto col0 = BinaryColumn::create();
+        auto col1 = Int32Column::create();
+        std::vector<int> v1(num_rows);
+        for (int i = 0; i < num_rows; ++i) {
+            const int key = key_start + i;
+            col0->append(Slice(fmt::format("{:06d}", key)));
+            v1[i] = key;
+        }
         col1->append_numbers(v1.data(), v1.size() * sizeof(int));
         auto chunk_schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
         auto chunk = std::make_shared<Chunk>(Columns{std::move(col0), std::move(col1)}, chunk_schema);
@@ -1459,6 +1912,7 @@ protected:
                 auto* segment_meta = rowset->add_segment_metas();
                 segment_meta->set_filename(fmt::format("compacted_{}.dat", i));
                 segment_meta->set_size(100);
+                segment_meta->set_num_rows(upper - lower);
                 set_key_range(rowset->mutable_range(), lower, upper);
                 (*meta->mutable_rowset_to_schema())[2] = kSchemaId;
             } else {
@@ -1479,6 +1933,7 @@ protected:
                 auto* segment_meta = rowset->add_segment_metas();
                 segment_meta->set_filename(shared_segment_name);
                 segment_meta->set_size(base_segment_size);
+                segment_meta->set_num_rows(kNumRows);
                 segment_meta->set_shared(true);
                 stamp_physical_identity_uid(rowset, shared_segment_name); // same uid across siblings => dedup
                 set_key_range(rowset->mutable_range(), lower, upper);
@@ -1574,6 +2029,7 @@ protected:
         }
         std::vector<IndexValue> values(keys.size());
         RETURN_IF_ERROR(index->get(keys.size(), key_slices.data(), values.data()));
+        ++_cold_pk_lookup_batches;
         return values;
     }
 
@@ -1634,6 +2090,55 @@ protected:
     StatusOr<TabletMetadataPtr> publish_followup_delete(int64_t tablet_id, int64_t base_version, int32_t delete_key) {
         return publish_followup_upsert_delete(tablet_id, base_version, /*upsert_key=*/0, /*upsert_value=*/0, delete_key,
                                               /*include_delete=*/true, /*include_upsert=*/false);
+    }
+
+    StatusOr<TabletMetadataPtr> publish_followup_deletes(int64_t tablet_id, int64_t base_version,
+                                                         const std::vector<int32_t>& delete_keys) {
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+        std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
+        Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
+
+        std::vector<int32_t> values(delete_keys.size(), 0);
+        std::vector<uint8_t> operations(delete_keys.size(), TOpType::DELETE);
+        std::vector<uint32_t> indexes(delete_keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        auto key_column = Int32Column::create();
+        auto value_column = Int32Column::create();
+        auto operation_column = Int8Column::create();
+        key_column->append_numbers(delete_keys.data(), sizeof(delete_keys[0]) * delete_keys.size());
+        value_column->append_numbers(values.data(), sizeof(values[0]) * values.size());
+        operation_column->append_numbers(operations.data(), sizeof(operations[0]) * operations.size());
+        Chunk chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)}, slot_cid_map);
+
+        ASSIGN_OR_RETURN(auto metadata, _tablet_manager->get_tablet_metadata(tablet_id, base_version));
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        RuntimeProfile profile("tablet-merge-lifecycle-delete-batch");
+        const int64_t txn_id = next_id();
+        ASSIGN_OR_RETURN(auto delta_writer, lake::DeltaWriterBuilder()
+                                                    .set_tablet_manager(_tablet_manager.get())
+                                                    .set_tablet_id(tablet_id)
+                                                    .set_txn_id(txn_id)
+                                                    .set_partition_id(next_id())
+                                                    .set_mem_tracker(_mem_tracker.get())
+                                                    .set_schema_id(metadata->schema().id())
+                                                    .set_tablet_schema(std::move(tablet_schema))
+                                                    .set_slot_descriptors(&slot_pointers)
+                                                    .set_profile(&profile)
+                                                    .build());
+        RETURN_IF_ERROR(delta_writer->open());
+        RETURN_IF_ERROR(delta_writer->write(chunk, indexes.data(), indexes.size()));
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+
+        TxnInfoPB txn_info;
+        txn_info.set_txn_id(txn_id);
+        txn_info.set_txn_type(TXN_NORMAL);
+        txn_info.set_commit_time(1);
+        return lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), base_version,
+                                     base_version + 1, std::span<const TxnInfoPB>(&txn_info, 1), false);
     }
 
     StatusOr<TabletMetadataPtr> compact_tablet(int64_t tablet_id, int64_t base_version, bool force_base) {
@@ -1724,10 +2229,6 @@ protected:
                                             const std::vector<std::pair<int32_t, int32_t>>& initial_rows,
                                             const std::vector<std::pair<int32_t, int32_t>>& rows_after_dml,
                                             const std::vector<int32_t>& deleted_keys) {
-        const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-        config::enable_pk_index_parallel_compaction = false;
-        DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
-
         auto target = std::make_shared<TabletMetadataPB>(result.published.at(result.target_tablet_id));
         ASSERT_EQ(0, target->sstable_meta().sstables_size()) << "fallback must enter native index rebuild";
         _update_manager->unload_and_remove_primary_index(result.target_tablet_id);
@@ -1792,6 +2293,30 @@ protected:
     StatusOr<std::vector<std::pair<int32_t, int32_t>>> read_two_column_rows(const TabletMetadataPtr& metadata) {
         ASSIGN_OR_RETURN(auto rows, read_two_column_rows_in_storage_order(metadata));
         std::sort(rows.begin(), rows.end());
+        return rows;
+    }
+
+    // Total row count a real reader returns for |metadata|, column values ignored. Unlike the
+    // rowset stats a split computes for itself (which the boundary algorithm optimizes directly and
+    // would trivially agree with, see kEvennessTolerance's comment in tablet_splitter_test.cpp for
+    // the same point), this is independent ground truth: it opens the child's real segment files
+    // and counts what a query would actually see.
+    StatusOr<int64_t> count_rows(const TabletMetadataPtr& metadata) {
+        auto tablet_schema = TabletSchema::create(metadata->schema());
+        auto schema = std::make_shared<Schema>(ChunkHelper::convert_schema(tablet_schema));
+        auto reader = std::make_shared<lake::TabletReader>(_tablet_manager.get(), metadata, *schema);
+        RETURN_IF_ERROR(reader->prepare());
+        TabletReaderParams params;
+        RETURN_IF_ERROR(reader->open(params));
+
+        int64_t rows = 0;
+        while (true) {
+            auto chunk = ChunkFactory::new_chunk(*schema, 4096);
+            auto status = reader->get_next(chunk.get());
+            if (status.is_end_of_file()) break;
+            RETURN_IF_ERROR(status);
+            rows += chunk->num_rows();
+        }
         return rows;
     }
 
@@ -2047,14 +2572,11 @@ protected:
 
     StatusOr<RepeatedLifecycleResult> run_repeated_four_cycle_lifecycle(bool enable_tde) {
         const bool old_tde = config::enable_transparent_data_encryption;
-        const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
         const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
         config::enable_transparent_data_encryption = enable_tde;
-        config::enable_pk_index_parallel_compaction = false;
         config::lake_pk_compaction_min_input_segments = 1;
         DeferOp restore_config([&] {
             config::enable_transparent_data_encryption = old_tde;
-            config::enable_pk_index_parallel_compaction = old_parallel_compaction;
             config::lake_pk_compaction_min_input_segments = old_min_segments;
         });
         if (enable_tde) ensure_kek_in_key_cache();
@@ -2464,6 +2986,7 @@ protected:
         owner_segment->set_filename(segment_name);
         owner_segment->set_size(segment_size);
         owner_segment->set_num_rows(2);
+        owner_segment->set_segment_idx(0);
         stamp_physical_identity_uid(owner_rowset, segment_name);
 
         DelVector owner_delvec;
@@ -2495,12 +3018,701 @@ protected:
         return fixture;
     }
 
+    StatusOr<std::string> cold_fixed_point_pk_signature(const TabletMetadataPtr& metadata,
+                                                        const std::vector<std::pair<int32_t, int32_t>>& expected_rows) {
+        // Every fixed-point fixture covers keys [0, 100). Query the whole domain,
+        // including key 1 (delvec-deleted) and key 60 after the DML delete/compaction.
+        std::map<int32_t, int32_t> expected(expected_rows.begin(), expected_rows.end());
+        if (expected.empty() || expected.size() != expected_rows.size()) {
+            return Status::Corruption("fixed-point PK scan must contain distinct live keys");
+        }
+        std::vector<std::string> keys;
+        for (int32_t key = 0; key < 100; ++key) keys.push_back(encode_int_primary_key(key));
+        ASSIGN_OR_RETURN(auto values, load_index_values(metadata, metadata->id(), keys));
+        std::map<uint32_t, std::vector<uint32_t>> rowids_by_rssid;
+        std::map<uint32_t, std::vector<std::pair<int32_t, int32_t>>> expected_by_rssid;
+        std::map<uint32_t, uint64_t> segment_rows;
+        for (const auto& rowset : metadata->rowsets()) {
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment = rowset.segment_metas(i);
+                segment_rows.emplace(rowset.id() + (segment.has_segment_idx() ? segment.segment_idx() : i),
+                                     segment.num_rows());
+            }
+        }
+        std::string signature;
+        size_t deleted_keys = 0;
+        for (int32_t key = 0; key < 100; ++key) {
+            auto found = expected.find(key);
+            if (found == expected.end()) {
+                if (values[key] != IndexValue(NullIndexValue)) {
+                    return Status::Corruption(fmt::format("cold PK lookup resurrected deleted key {}", key));
+                }
+                ++deleted_keys;
+                signature += fmt::format("pk-deleted={};", key);
+                continue;
+            }
+            const auto& value = values[key];
+            if (value == IndexValue(NullIndexValue) || !segment_rows.contains(value.get_rssid()) ||
+                value.get_rowid() >= segment_rows.at(value.get_rssid())) {
+                return Status::Corruption(fmt::format("cold PK lookup has no valid physical row for key {}", key));
+            }
+            rowids_by_rssid[value.get_rssid()].push_back(value.get_rowid());
+            expected_by_rssid[value.get_rssid()].push_back(*found);
+            signature += fmt::format("pk-row={}:{};", key, found->second);
+        }
+        if (deleted_keys == 0) return Status::Corruption("fixed-point PK lookup must exercise deleted keys");
+
+        // Resolve each returned (RSSID,rowid) to physical column values through the
+        // fixture manager, including active DCG overrides. Compare logical rows,
+        // never the projected RSSID numbers across reshard cycles.
+        lake::RssidFileInfoContainer files;
+        files.add_rssid_to_file(*metadata);
+        auto schema = TabletSchema::create(metadata->schema());
+        lake::Tablet tablet(_tablet_manager.get(), metadata->id());
+        TxnLogPB_OpWrite read_context;
+        read_context.mutable_txn_meta(); // enable DCG-aware physical column reads
+        lake::RowsetUpdateStateParams params{read_context, schema, metadata, &tablet, files};
+        MutableColumns columns;
+        columns.push_back(Int32Column::create());
+        columns.push_back(Int32Column::create());
+        RETURN_IF_ERROR(_update_manager->get_column_values(params, {0, 1}, false, rowids_by_rssid, &columns));
+        if (columns[0]->size() != expected.size() || columns[1]->size() != expected.size()) {
+            return Status::Corruption("cold PK physical row resolution has the wrong cardinality");
+        }
+        size_t offset = 0;
+        for (const auto& [rssid, rows] : expected_by_rssid) {
+            for (const auto& [key, value] : rows) {
+                if (columns[0]->get(offset).get_int32() != key || columns[1]->get(offset).get_int32() != value) {
+                    return Status::Corruption(
+                            fmt::format("cold PK lookup resolves to the wrong logical row for key {}", key));
+                }
+                ++offset;
+            }
+        }
+        _cold_pk_deleted_keys_checked += deleted_keys;
+        LOG(INFO) << "fixed-point cold PK lookup: live=" << expected.size() << " deleted=" << deleted_keys;
+        return signature;
+    }
+
+    // Canonicalize logical state, not the protobuf's allocation/serialization choices.
+    // Segment filenames and bundle offsets remain physical identity; generated sidecar
+    // names, projected RSSIDs and the SST representation deliberately do not.
+    StatusOr<std::string> semantic_reshard_signature(const TabletMetadataPtr& metadata) {
+        _update_manager->unload_and_remove_primary_index(metadata->id());
+        _tablet_manager->prune_metacache();
+        ASSIGN_OR_RETURN(auto cold, _tablet_manager->get_tablet_metadata(metadata->id(), metadata->version()));
+        std::vector<std::string> records;
+        auto append = [](std::string* out, const std::string& value) {
+            *out += fmt::format("{}:", value.size()) + value;
+        };
+        // Rank effective recovery keys, preserving equality classes and strict order
+        // without comparing tablet-local projected integers across cycles.
+        std::map<uint32_t, size_t> recovery_order;
+        for (const auto& rowset : cold->rowsets()) {
+            recovery_order.emplace(
+                    rowset.has_max_compact_input_rowset_id() ? rowset.max_compact_input_rowset_id() : rowset.id(), 0);
+        }
+        size_t rank = 0;
+        for (auto& [key, ordinal] : recovery_order) ordinal = rank++;
+        for (const auto& rowset : cold->rowsets()) {
+            std::string record =
+                    fmt::format("uid={}:{};version={};", rowset.uid().hi(), rowset.uid().lo(), rowset.version());
+            RowsetMetadataPB stable(rowset);
+            stable.clear_id();
+            stable.clear_overlapped();
+            stable.clear_deprecated_segments();
+            stable.clear_deprecated_segment_size();
+            stable.clear_deprecated_segment_encryption_metas();
+            stable.clear_deprecated_bundle_file_offsets();
+            stable.clear_deprecated_shared_segments();
+            stable.clear_range();
+            stable.clear_max_compact_input_rowset_id();
+            // Stats are semantic values, including an absent zero on a predicate.
+            stable.set_num_rows(rowset.num_rows());
+            stable.set_data_size(rowset.data_size());
+            stable.set_num_dels(rowset.num_dels());
+            for (auto& segment : *stable.mutable_segment_metas()) segment.clear_shared();
+            for (auto& del : *stable.mutable_del_files()) {
+                del.clear_origin_rowset_id();
+                del.clear_shared();
+            }
+            if (rowset.has_delete_predicate()) {
+                record = fmt::format("predicate-version={};", rowset.version());
+                stable.clear_uid(); // Predicate identity is its version and payload, not its independently minted UID.
+            }
+            const auto& range = rowset.has_range() ? rowset.range() : cold->range();
+            append(&record, range.SerializeAsString());
+            append(&record, stable.SerializeAsString());
+            const uint32_t recovery_key =
+                    rowset.has_max_compact_input_rowset_id() ? rowset.max_compact_input_rowset_id() : rowset.id();
+            record += fmt::format("recovery-present={};recovery-order={};", rowset.has_max_compact_input_rowset_id(),
+                                  recovery_order.at(recovery_key));
+            for (int i = 0; i < rowset.segment_metas_size(); ++i) {
+                const auto& segment = rowset.segment_metas(i);
+                const uint32_t original_idx = segment.has_segment_idx() ? segment.segment_idx() : i;
+                const uint32_t rssid = rowset.id() + original_idx;
+                record += fmt::format("segment={};", original_idx);
+                if (cold->delvec_meta().delvecs().contains(rssid)) {
+                    DelVector delvec;
+                    RETURN_IF_ERROR(_update_manager->get_del_vec_in_meta(TabletSegmentId(cold->id(), rssid),
+                                                                         cold->version(), false, &delvec));
+                    record += "delvec={";
+                    if (delvec.roaring() != nullptr) {
+                        for (uint32_t rowid : *delvec.roaring()) record += fmt::format("{},", rowid);
+                    }
+                    record += "};";
+                }
+                if (auto dcg = cold->dcg_meta().dcgs().find(rssid); dcg != cold->dcg_meta().dcgs().end()) {
+                    std::set<uint32_t> active_columns;
+                    for (int j = 0; j < dcg->second.column_files_size(); ++j) {
+                        if (dcg->second.versions(j) > cold->version()) continue;
+                        for (auto uid : dcg->second.unique_column_ids(j).column_ids()) {
+                            if (!active_columns.insert(uid).second) continue;
+                            // These fixtures have one integer value column. Read the actual .cols
+                            // segment including rows masked by delvec, not merely the scan output.
+                            if (uid != 1002) return Status::InvalidArgument("unexpected fixed-point DCG column");
+                            record += fmt::format("dcg-column={};values=", uid);
+                            for (int32_t value : read_c1_only_cols_file(cold->id(), dcg->second.column_files(j))) {
+                                record += fmt::format("{},", value);
+                            }
+                        }
+                    }
+                }
+                lake::LakeIndexDeltaGroupLoader loader(cold);
+                lake::IndexDeltaGroupList active;
+                RETURN_IF_ERROR(loader.load(TabletSegmentId(cold->id(), rssid), cold->version(), &active));
+                std::set<std::pair<int32_t, int>> active_keys;
+                for (const auto& entry : active) {
+                    ASSIGN_OR_RETURN(auto payload, read_sidecar_payload(_tablet_manager->segment_location(
+                                                                                cold->id(), entry.index_file),
+                                                                        entry.encryption_meta));
+                    for (const auto& key : entry.keys) {
+                        active_keys.emplace(key.col_unique_id, key.index_type);
+                        record += fmt::format("idg-active={}:{};", key.col_unique_id, int(key.index_type));
+                        append(&record, payload);
+                    }
+                }
+                if (auto idg = cold->idg_meta().idgs().find(rssid); idg != cold->idg_meta().idgs().end()) {
+                    for (const auto& entry : idg->second.entries()) {
+                        for (const auto& key : entry.dropped_keys()) {
+                            if (active_keys.contains({key.col_unique_id(), key.index_type()})) {
+                                return Status::Corruption("cold IDG lookup returned a dropped key");
+                            }
+                            record += fmt::format("idg-dropped={}:{};", key.col_unique_id(), int(key.index_type()));
+                        }
+                    }
+                }
+            }
+            for (const auto& del : rowset.del_files()) {
+                record += del.origin_rowset_id() == rowset.id() ? "del-origin=self;" : "del-origin=inherited;";
+            }
+            records.emplace_back(std::move(record));
+        }
+        std::sort(records.begin(), records.end());
+        std::string result;
+        for (const auto& record : records) append(&result, record);
+        ASSIGN_OR_RETURN(auto rows, read_two_column_rows(cold));
+        for (const auto& [key, value] : rows) result += fmt::format("row={}:{};", key, value);
+        if (cold->schema().keys_type() == PRIMARY_KEYS) {
+            ASSIGN_OR_RETURN(auto pk_signature, cold_fixed_point_pk_signature(cold, rows));
+            append(&result, pk_signature);
+        }
+        return result;
+    }
+
+    struct ReshardInventory {
+        size_t rowsets;
+        size_t segments;
+        size_t dels;
+        size_t live_sidecars;
+        size_t live_files;
+        size_t raw_bytes;
+    };
+
+    ReshardInventory collect_reshard_inventory(const TabletMetadataPB& metadata) {
+        ReshardInventory result{.rowsets = static_cast<size_t>(metadata.rowsets_size()),
+                                .raw_bytes = metadata.ByteSizeLong()};
+        std::set<std::string> files;
+        std::set<std::string> sidecars;
+        for (const auto& rowset : metadata.rowsets()) {
+            result.segments += rowset.segment_metas_size();
+            result.dels += rowset.del_files_size();
+            for (const auto& segment : rowset.segment_metas()) files.insert(segment.filename());
+            for (const auto& del : rowset.del_files()) files.insert(del.name());
+        }
+        for (const auto& [rssid, page] : metadata.delvec_meta().delvecs()) {
+            sidecars.insert(metadata.delvec_meta().version_to_file().at(page.version()).name());
+        }
+        for (const auto& [rssid, dcg] : metadata.dcg_meta().dcgs()) {
+            for (const auto& name : dcg.column_files()) sidecars.insert(name);
+        }
+        for (const auto& [rssid, idg] : metadata.idg_meta().idgs()) {
+            for (const auto& entry : idg.entries()) {
+                if (entry.keys_size() > entry.dropped_keys_size()) sidecars.insert(entry.index_file());
+            }
+        }
+        result.live_sidecars = sidecars.size();
+        files.insert(sidecars.begin(), sidecars.end());
+        for (const auto& sst : metadata.sstable_meta().sstables()) files.insert(sst.filename());
+        result.live_files = files.size();
+        return result;
+    }
+
+    StatusOr<std::vector<TabletMetadataPtr>> try_split_fixed_point_source(const TabletMetadataPtr& source,
+                                                                          int child_count) {
+        RETURN_IF_ERROR(put_tablet_metadata(source));
+        SplittingTabletInfoPB split;
+        split.set_old_tablet_id(source->id());
+        for (int i = 0; i < child_count; ++i) {
+            split.add_new_tablet_ids(next_id());
+            auto* range = split.add_new_tablet_ranges();
+            range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 100 / child_count));
+            range->set_lower_bound_included(true);
+            range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 100 / child_count));
+            range->set_upper_bound_included(false);
+        }
+        TxnInfoPB txn;
+        txn.set_txn_id(next_id());
+        txn.set_commit_time(1);
+        ASSIGN_OR_RETURN(auto children,
+                         lake::split_tablet(_tablet_manager.get(), source, split, source->version() + 1, txn));
+        if (children.size() != child_count) {
+            return Status::InternalError("fixed-point split returned the wrong number of children");
+        }
+        std::vector<TabletMetadataPtr> sources;
+        for (auto id : split.new_tablet_ids()) sources.push_back(children.at(id));
+        return sources;
+    }
+
+    std::vector<TabletMetadataPtr> split_fixed_point_source(const TabletMetadataPtr& source, int child_count) {
+        ASSIGN_OR_ABORT(auto sources, try_split_fixed_point_source(source, child_count));
+        return sources;
+    }
+
+    StatusOr<TabletMetadataPtr> try_run_no_write_split_merge_cycle(const TabletMetadataPtr& source, int child_count) {
+        ASSIGN_OR_RETURN(auto sources, try_split_fixed_point_source(source, child_count));
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        const int64_t target = next_id();
+        RETURN_IF_ERROR(publish_resharding_merge(sources, target, source->version() + 1, source->version() + 2,
+                                                 next_id(), published));
+        return published.at(target);
+    }
+
+    TabletMetadataPtr run_no_write_split_merge_cycle(const TabletMetadataPtr& source, int child_count) {
+        ASSIGN_OR_ABORT(auto result, try_run_no_write_split_merge_cycle(source, child_count));
+        return result;
+    }
+
+    TabletMetadataPtr fixed_point_source(bool primary_key) {
+        auto metadata = std::make_shared<TabletMetadataPB>();
+        metadata->set_id(next_id());
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(10);
+        set_two_column_pk_schema(metadata.get(), 4001);
+        metadata->mutable_schema()->set_keys_type(primary_key ? PRIMARY_KEYS : UNIQUE_KEYS);
+        metadata->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+        metadata->set_enable_persistent_index(primary_key);
+        if (primary_key) metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+        metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+        metadata->mutable_range()->set_lower_bound_included(true);
+        metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+        metadata->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = metadata->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(100);
+        rowset->set_overlapped(false);
+        lake::tablet_reshard_helper::set_rowset_uid(rowset);
+        for (int i = 0; i < 2; ++i) {
+            const auto name = fmt::format("fixed_{}_{}.dat", metadata->id(), i);
+            const auto size = write_two_column_segment(
+                    metadata->id(), name, 50, [](int key) { return key * 10; }, i * 50);
+            auto* segment = rowset->add_segment_metas();
+            segment->set_filename(name);
+            segment->set_size(size);
+            segment->set_num_rows(50);
+            segment->set_segment_idx(i == 0 ? 0 : 7);
+            segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(i * 50));
+            segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(i * 50 + 49));
+            rowset->set_data_size(rowset->data_size() + size);
+        }
+        if (primary_key) {
+            const std::string stem = fmt::format("fixed_{}", metadata->id());
+            DelVector delvec;
+            const uint32_t deleted = 1;
+            delvec.init(1, &deleted, 1);
+            add_delvec(metadata.get(), metadata->id(), 1, 1, stem + ".delvec", delvec.save());
+            rowset->set_num_dels(1);
+            const auto size = write_c1_only_cols_file(metadata->id(), stem + ".cols", 50,
+                                                      [](int row) { return row * 10 + 1000; });
+            add_dcg_with_columns(metadata.get(), 1, stem + ".cols", {1002}, 1);
+            metadata->mutable_dcg_meta()->mutable_dcgs()->at(1).add_column_file_sizes(size);
+            auto file = write_sidecar_payload(_tablet_manager->segment_location(metadata->id(), stem + ".idx"),
+                                              "fixed-point-index-payload", false);
+            add_idg_with_key(metadata.get(), 1, stem + ".idx", 1002, BITMAP, 1);
+            add_idg_key(metadata.get(), 1, 1003, BITMAP);
+            add_idg_dropped_key(metadata.get(), 1, 1003, BITMAP);
+            metadata->mutable_idg_meta()->mutable_idgs()->at(1).mutable_entries(0)->set_file_size(file.filesize);
+            auto* del = rowset->add_del_files();
+            del->set_name(stem + ".del");
+            del->set_origin_rowset_id(0);
+            del->set_op_offset(7);
+            del->set_version(1);
+            del->set_num_rows(0);
+            write_binary_del_file(metadata->id(), del->name(), {});
+        } else {
+            metadata->set_version(2);
+            auto* predicate = add_rowset_with_predicate(metadata.get(), 9, 2, true);
+            predicate->mutable_delete_predicate()->mutable_binary_predicates(0)->set_value("98");
+        }
+        CHECK_OK(put_tablet_metadata(metadata));
+        return metadata;
+    }
+
+    void expect_ten_fixed_point_cycles(TabletMetadataPtr current) {
+        const bool primary_key = current->schema().keys_type() == PRIMARY_KEYS;
+        auto inherited_dels = [](const TabletMetadataPB& metadata) {
+            size_t count = 0;
+            for (const auto& rowset : metadata.rowsets()) {
+                for (const auto& del : rowset.del_files()) count += del.origin_rowset_id() != rowset.id();
+            }
+            return count;
+        };
+        const size_t baseline_inherited_dels = inherited_dels(*current);
+        if (primary_key) ASSERT_GT(baseline_inherited_dels, 0);
+        size_t prior_lookup_batches = _cold_pk_lookup_batches;
+        size_t prior_deleted_keys = _cold_pk_deleted_keys_checked;
+        ASSIGN_OR_ABORT(auto baseline_signature, semantic_reshard_signature(current));
+        ASSERT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
+                << "every PK baseline must exercise a cold PK lookup batch";
+        if (primary_key) ASSERT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+        const auto baseline = collect_reshard_inventory(*current);
+        // Conservative field census: tablet scalars plus per-rowset/segment/del,
+        // sidecar and SST integer slots. Each varint can grow by at most 10 bytes.
+        const size_t live_volatile_integer_fields =
+                16 + 8 * baseline.rowsets + 8 * baseline.segments + 8 * baseline.dels + 8 * baseline.live_sidecars;
+        const size_t live_generated_filenames = baseline.live_files;
+        const size_t raw_byte_limit =
+                baseline.raw_bytes + 10 * live_volatile_integer_fields + 64 * live_generated_filenames + 4096;
+        LOG(INFO) << "fixed-point baseline: rowsets=" << baseline.rowsets << " segments=" << baseline.segments
+                  << " dels=" << baseline.dels << " sidecars=" << baseline.live_sidecars
+                  << " files=" << baseline.live_files << " raw_bytes=" << baseline.raw_bytes
+                  << " raw_byte_limit=" << raw_byte_limit;
+        for (int cycle = 0; cycle < 10; ++cycle) {
+            SCOPED_TRACE(fmt::format("fixed-point cycle {} keys_type {}", cycle, int(current->schema().keys_type())));
+            current = run_no_write_split_merge_cycle(current, cycle % 2 == 0 ? 2 : 3);
+            prior_lookup_batches = _cold_pk_lookup_batches;
+            prior_deleted_keys = _cold_pk_deleted_keys_checked;
+            ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+            EXPECT_EQ(prior_lookup_batches + static_cast<size_t>(primary_key), _cold_pk_lookup_batches)
+                    << "every PK cycle must exercise a cold PK lookup batch";
+            if (primary_key) EXPECT_GT(_cold_pk_deleted_keys_checked, prior_deleted_keys);
+            const auto inventory = collect_reshard_inventory(*current);
+            EXPECT_EQ(baseline_inherited_dels, inherited_dels(*current));
+            EXPECT_EQ(baseline_signature, signature);
+            EXPECT_EQ(baseline.rowsets, inventory.rowsets);
+            EXPECT_EQ(baseline.segments, inventory.segments);
+            EXPECT_EQ(baseline.dels, inventory.dels);
+            EXPECT_EQ(baseline.live_sidecars, inventory.live_sidecars);
+            EXPECT_EQ(baseline.live_files, inventory.live_files);
+            EXPECT_LE(inventory.raw_bytes,
+                      baseline.raw_bytes + 10 * live_volatile_integer_fields + 64 * live_generated_filenames + 4096);
+            LOG(INFO) << "fixed-point cycle=" << cycle << " raw_bytes=" << inventory.raw_bytes;
+            if (HasFailure()) return;
+        }
+    }
+
+    size_t _cold_pk_lookup_batches = 0;
+    size_t _cold_pk_deleted_keys_checked = 0;
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
     std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_no_write_cycles_are_fixed_point) {
+    for (bool primary_key : {true, false}) {
+        expect_ten_fixed_point_cycles(fixed_point_source(primary_key));
+        if (HasFailure()) return;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_signature_detects_declaration_changes) {
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(source));
+    enum Mutation {
+        ROWS,
+        BYTES,
+        DELETES,
+        CURSOR,
+        RECOVERY_PRESENCE,
+        ROWSET_RESIDUAL,
+        SEGMENT_RESIDUAL,
+        DEL_ORIGIN,
+        DEL_RESIDUAL
+    };
+    for (auto mutation : {ROWS, BYTES, DELETES, CURSOR, RECOVERY_PRESENCE, ROWSET_RESIDUAL, SEGMENT_RESIDUAL,
+                          DEL_ORIGIN, DEL_RESIDUAL}) {
+        SCOPED_TRACE(mutation);
+        auto changed = std::make_shared<TabletMetadataPB>(*source);
+        auto* rowset = changed->mutable_rowsets(0);
+        auto add_unknown = [](auto* pb) {
+            std::string serialized = pb->SerializeAsString();
+            serialized.append("\xF8\x07\x01", 3);
+            CHECK(pb->ParseFromString(serialized));
+        };
+        switch (mutation) {
+        case ROWS:
+            rowset->set_num_rows(rowset->num_rows() + 1);
+            break;
+        case BYTES:
+            rowset->set_data_size(rowset->data_size() + 1);
+            break;
+        case DELETES:
+            rowset->set_num_dels(rowset->num_dels() + 1);
+            break;
+        case CURSOR:
+            rowset->set_next_compaction_offset(1);
+            break;
+        case RECOVERY_PRESENCE:
+            rowset->set_max_compact_input_rowset_id(0);
+            break;
+        case ROWSET_RESIDUAL:
+            add_unknown(rowset);
+            break;
+        case SEGMENT_RESIDUAL:
+            add_unknown(rowset->mutable_segment_metas(0));
+            break;
+        case DEL_ORIGIN:
+            rowset->mutable_del_files(0)->set_origin_rowset_id(rowset->id());
+            break;
+        case DEL_RESIDUAL:
+            add_unknown(rowset->mutable_del_files(0));
+            break;
+        }
+        ASSERT_OK(put_tablet_metadata(changed));
+        ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(changed));
+        EXPECT_NE(baseline, signature);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_compaction_partial_merge_rejoin) {
+    const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(source->id(), source->version(), 10, 7777, 60));
+    ASSIGN_OR_ABORT(auto compacted, compact_tablet(written->id(), written->version(), true));
+    ASSERT_EQ(1, compacted->rowsets_size());
+    ASSERT_TRUE(compacted->rowsets(0).has_max_compact_input_rowset_id());
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(compacted));
+    auto children = split_fixed_point_source(compacted, 3);
+    ASSERT_EQ(3, children.size());
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(reverse_sources);
+        std::vector<TabletMetadataPtr> pair{children[0], children[1]};
+        if (reverse_sources) std::reverse(pair.begin(), pair.end());
+        const int64_t partial_id = next_id();
+        std::unordered_map<int64_t, TabletMetadataPtr> published;
+        ASSERT_OK(publish_resharding_merge(pair, partial_id, children[0]->version(), children[0]->version() + 1,
+                                           next_id(), published));
+        auto partial = published.at(partial_id);
+        // Advance the untouched third child with an empty transaction: no rowset or recovery-coordinate rewrite.
+        ASSERT_OK(put_tablet_metadata(children[2]));
+        TxnLogPB empty_log;
+        empty_log.set_tablet_id(children[2]->id());
+        empty_log.set_txn_id(next_id());
+        ASSERT_OK(_tablet_manager->put_txn_log(empty_log));
+        TxnInfoPB empty_txn;
+        empty_txn.set_txn_id(empty_log.txn_id());
+        empty_txn.set_txn_type(TXN_NORMAL);
+        empty_txn.set_commit_time(1);
+        ASSIGN_OR_ABORT(auto untouched,
+                        lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(children[2]->id()),
+                                              children[2]->version(), partial->version(),
+                                              std::span<const TxnInfoPB>(&empty_txn, 1), false));
+        ASSERT_NE(partial->rowsets(0).max_compact_input_rowset_id(),
+                  untouched->rowsets(0).max_compact_input_rowset_id());
+        std::vector<TabletMetadataPtr> rejoin{partial, untouched};
+        if (reverse_sources) std::reverse(rejoin.begin(), rejoin.end());
+        const int64_t target = next_id();
+        published.clear();
+        ASSERT_OK(publish_resharding_merge(rejoin, target, partial->version(), partial->version() + 1, next_id(),
+                                           published));
+        ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(published.at(target)));
+        EXPECT_EQ(baseline, signature);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_signature_normalizes_recovery_equivalence_and_order) {
+    auto source = std::make_shared<TabletMetadataPB>(*fixed_point_source(false));
+    // The ordinary rowset's recovery key precedes the predicate's key (9).
+    source->mutable_rowsets(0)->set_max_compact_input_rowset_id(0);
+    ASSERT_OK(put_tablet_metadata(source));
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(source));
+    for (uint32_t key : {4, 9, 10}) {
+        auto changed = std::make_shared<TabletMetadataPB>(*source);
+        changed->mutable_rowsets(0)->set_max_compact_input_rowset_id(key);
+        ASSERT_OK(put_tablet_metadata(changed));
+        ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(changed));
+        if (key == 4) {
+            EXPECT_EQ(baseline, signature) << "raw coordinate changed, but equivalence and order did not";
+        } else {
+            EXPECT_NE(baseline, signature) << "key 9 joins an equivalence class; key 10 reverses the order";
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_post_dml_cycles_are_fixed_point) {
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto written, publish_followup_upsert_delete(source->id(), source->version(), 10, 7777, 60));
+    const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
+    ASSIGN_OR_ABORT(auto compacted, compact_tablet(written->id(), written->version(), true));
+    ASSIGN_OR_ABORT(auto rows, read_two_column_rows(compacted));
+    EXPECT_NE(rows.end(), std::find(rows.begin(), rows.end(), std::pair<int32_t, int32_t>{10, 7777}));
+    EXPECT_TRUE(std::none_of(rows.begin(), rows.end(), [](const auto& row) { return row.first == 60; }));
+    // DML and normal compaction are over: establish a fresh baseline here.
+    expect_ten_fixed_point_cycles(compacted);
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_sidecar_and_sst_cold_read_smoke) {
+    auto source = fixed_point_source(true);
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(source));
+    ASSIGN_OR_ABORT(auto expected_rows, read_two_column_rows(source));
+    auto current = run_no_write_split_merge_cycle(source, 3);
+    ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+    EXPECT_EQ(baseline, signature);
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+    ASSIGN_OR_ABORT(auto flushed, _update_manager->flush_pk_memtable(current, current->version()));
+    ASSERT_GT(flushed->sstable_meta().sstables_size(), 0);
+    ASSERT_OK(put_tablet_metadata(flushed));
+    _update_manager->unload_and_remove_primary_index(flushed->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(flushed->id(), flushed->version()));
+    assert_published_sstables_reopen(cold);
+    expect_lifecycle_oracle(cold, expected_rows, {1});
+    ASSIGN_OR_ABORT(auto cold_signature, semantic_reshard_signature(cold));
+    EXPECT_EQ(baseline, cold_signature);
+    // Carry persisted SST state through another SPLIT/MERGE. The merged index may
+    // retain SSTs or use the supported native rebuild representation; both must
+    // honor the same delvec/DCG/IDG and point-lookup oracle after a cold reopen.
+    auto resharded_sst = run_no_write_split_merge_cycle(cold, 2);
+    _update_manager->unload_and_remove_primary_index(resharded_sst->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(resharded_sst->id(), resharded_sst->version()));
+    assert_published_sstables_reopen(reopened);
+    expect_lifecycle_oracle(reopened, expected_rows, {1});
+    ASSIGN_OR_ABORT(auto final_signature, semantic_reshard_signature(reopened));
+    EXPECT_EQ(baseline, final_signature);
+}
+
+TEST_F(LakeTabletReshardTest, test_range_reshard_vacuum_eligible_attempt_objects_converge) {
+    auto source = fixed_point_source(true);
+    auto current = run_no_write_split_merge_cycle(source, 3);
+    ASSIGN_OR_ABORT(auto baseline, semantic_reshard_signature(current));
+    const auto live_inventory = collect_reshard_inventory(*current);
+    ASSERT_FALSE(current->delvec_meta().delvecs().empty());
+    const auto& live_page = current->delvec_meta().delvecs().begin()->second;
+    const auto& live_delvec = current->delvec_meta().version_to_file().at(live_page.version()).name();
+    const auto live_txn_id = lake::extract_txn_id_prefix(live_delvec).value_or(0);
+    ASSERT_GT(live_txn_id, 0) << "the live delvec must be transaction-aged, not txnless";
+    std::set<std::string> expected_live_files;
+    for (const auto& rowset : current->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) expected_live_files.insert(segment.filename());
+        for (const auto& del : rowset.del_files()) expected_live_files.insert(del.name());
+    }
+    for (const auto& [rssid, page] : current->delvec_meta().delvecs()) {
+        expected_live_files.insert(current->delvec_meta().version_to_file().at(page.version()).name());
+    }
+    for (const auto& [rssid, dcg] : current->dcg_meta().dcgs()) {
+        expected_live_files.insert(dcg.column_files().begin(), dcg.column_files().end());
+    }
+    lake::LakeIndexDeltaGroupLoader idg_loader(current);
+    for (const auto& [rssid, idg] : current->idg_meta().idgs()) {
+        lake::IndexDeltaGroupList active;
+        ASSERT_OK(idg_loader.load(TabletSegmentId(current->id(), rssid), current->version(), &active));
+        for (const auto& entry : active) expected_live_files.insert(entry.index_file);
+    }
+    for (const auto& sst : current->sstable_meta().sstables()) expected_live_files.insert(sst.filename());
+    ASSERT_EQ(live_inventory.live_files, expected_live_files.size());
+    auto expect_live_files_present = [&] {
+        for (const auto& name : expected_live_files) {
+            ASSERT_OK(FileSystem::Default()->path_exists(
+                    lake::join_path(_location_provider->segment_root_location(current->id()), name)));
+        }
+        ASSERT_OK(FileSystem::Default()->path_exists(_tablet_manager->delvec_location(current->id(), live_delvec)));
+    };
+    expect_live_files_present();
+    // Leave actual objects from two failed MERGE writer attempts. Transaction
+    // retention protects the second until min_active_txn_id explicitly advances.
+    auto failed_attempt = [&](int64_t txn_id) {
+        ASSIGN_OR_ABORT(auto before, delvec_inventory(current->id()));
+        set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::ENABLE);
+        DeferOp restore(
+                [&] { set_failpoint_mode("tablet_merge_after_write_delvec", FailPointTriggerModeType::DISABLE); });
+        std::unordered_map<int64_t, TabletMetadataPtr> unpublished;
+        const int64_t failed_target = next_id();
+        auto status = publish_resharding_merge({current}, failed_target, current->version(), current->version() + 1,
+                                               txn_id, unpublished);
+        EXPECT_FALSE(status.ok());
+        // The error path may return prepared source entries, but none is persisted
+        // and no completed target references the abandoned writer output.
+        EXPECT_FALSE(unpublished.contains(failed_target));
+        EXPECT_TRUE(
+                FileSystem::Default()
+                        ->path_exists(_tablet_manager->tablet_metadata_location(failed_target, current->version() + 1))
+                        .is_not_found());
+        EXPECT_TRUE(
+                FileSystem::Default()
+                        ->path_exists(_tablet_manager->tablet_metadata_location(current->id(), current->version() + 1))
+                        .is_not_found());
+        ASSIGN_OR_ABORT(auto after, delvec_inventory(current->id()));
+        std::set<std::string> attempts;
+        std::set_difference(after.begin(), after.end(), before.begin(), before.end(),
+                            std::inserter(attempts, attempts.end()));
+        EXPECT_EQ(1, attempts.size());
+        return attempts;
+    };
+    const auto eligible = failed_attempt(live_txn_id - 1);
+    const auto protected_attempt = failed_attempt(live_txn_id + 2);
+    ASSERT_EQ(1, eligible.size());
+    ASSERT_EQ(1, protected_attempt.size());
+    auto run_vacuum = [&](int64_t min_active_txn_id) {
+        EXPECT_LT(live_txn_id, min_active_txn_id)
+                << "live delvec protection must come from metadata references, not transaction retention";
+        VacuumFullRequest request;
+        request.set_partition_id(1);
+        request.set_tablet_id(current->id());
+        request.set_min_active_txn_id(min_active_txn_id);
+        request.set_grace_timestamp(time(nullptr) + 1);
+        request.set_min_check_version(0);
+        request.set_max_check_version(1);
+        VacuumFullResponse response;
+        lake::vacuum_full(_tablet_manager.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(0, response.status().status_code());
+        expect_live_files_present();
+        LOG(INFO) << "fixed-point vacuum: min_active_txn_id=" << min_active_txn_id
+                  << " live_delvec_txn_id=" << live_txn_id << " live_files_present=" << expected_live_files.size();
+    };
+    run_vacuum(live_txn_id + 1);
+    ASSIGN_OR_ABORT(auto retained, delvec_inventory(current->id()));
+    EXPECT_FALSE(retained.contains(*eligible.begin()));
+    EXPECT_TRUE(retained.contains(*protected_attempt.begin()));
+    run_vacuum(live_txn_id + 3);
+    ASSIGN_OR_ABORT(auto converged, delvec_inventory(current->id()));
+    EXPECT_FALSE(converged.contains(*eligible.begin()));
+    EXPECT_FALSE(converged.contains(*protected_attempt.begin()));
+    run_vacuum(live_txn_id + 3);
+    EXPECT_EQ(converged, delvec_inventory(current->id()).value());
+    ASSIGN_OR_ABORT(auto signature, semantic_reshard_signature(current));
+    EXPECT_EQ(baseline, signature);
+    EXPECT_EQ(live_inventory.live_files, collect_reshard_inventory(*current).live_files);
+}
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_four_cycle_lifecycle) {
     ASSIGN_OR_ABORT(auto result, run_repeated_four_cycle_lifecycle(/*enable_tde=*/false));
@@ -2513,13 +3725,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_repeated_t
     ASSERT_GE(result.final_sst_orphans.size(), 3);
 
     const bool old_tde = config::enable_transparent_data_encryption;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     config::enable_transparent_data_encryption = true;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_config([&] {
-        config::enable_transparent_data_encryption = old_tde;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-    });
+    DeferOp restore_config([&] { config::enable_transparent_data_encryption = old_tde; });
     ensure_kek_in_key_cache();
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
@@ -3316,12 +4523,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
         }
     };
     const std::vector<Case> cases = {
-            {"well-formed gap", Outcome::kFallback,
+            {"source gap", Outcome::kCorruption,
              [&](auto& sources) {
                  set_range(sources[0].get(), 0, 40);
                  set_range(sources[1].get(), 50, 100);
              }},
-            {"well-formed overlap", Outcome::kFallback,
+            {"source overlap", Outcome::kCorruption,
              [&](auto& sources) {
                  set_range(sources[0].get(), 0, 60);
                  set_range(sources[1].get(), 50, 100);
@@ -3455,23 +4662,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_metadata_only_source_range_par
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_segmentless_rowset_preservation_controls) {
-    struct Case {
-        const char* name;
-        bool primary_key;
-        bool skip_sstable_merge;
-    };
-    const std::vector<Case> cases = {
-            {"non-PK real merge", false, false},
-            {"read-only PK alias", true, true},
-    };
-    for (const auto& test_case : cases) {
-        SCOPED_TRACE(test_case.name);
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_ordinary_rowsets_before_io) {
+    for (bool primary_key : {false, true}) {
+        SCOPED_TRACE(primary_key);
         auto source = std::make_shared<TabletMetadataPB>();
         source->set_id(next_id());
         source->set_version(1);
         source->set_next_rowset_id(2);
-        if (test_case.primary_key) {
+        if (primary_key) {
             set_primary_key_schema(source.get(), 1001);
         } else {
             source->mutable_schema()->set_id(1001);
@@ -3484,27 +4682,46 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_segmentless_rowset_preservatio
         rowset->set_data_size(0);
         lake::tablet_reshard_helper::set_rowset_uid(rowset);
 
-        MergingTabletInfoPB merging_info;
-        merging_info.set_new_tablet_id(next_id());
-        TxnInfoPB txn_info;
-        txn_info.set_txn_id(next_id());
-        std::vector<TabletMetadataPtr> sources = {source};
-        ASSIGN_OR_ABORT(auto merged, lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2,
-                                                        txn_info, test_case.skip_sstable_merge));
-        EXPECT_EQ(1, merged->rowsets_size());
-        if (merged->rowsets_size() != 1) continue;
-        EXPECT_EQ(1, merged->rowsets(0).id());
-        EXPECT_EQ(0, merged->rowsets(0).segment_metas_size());
-        EXPECT_EQ(0, merged->rowsets(0).del_files_size());
+        MergePhaseCounts counts;
+        expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_invalid_segment_num_rows_rejected_before_io) {
+    struct Mutation {
+        const char* name;
+        std::function<void(SegmentMetadataPB*)> apply;
+    };
+    const std::vector<Mutation> mutations = {
+            {"missing", [](SegmentMetadataPB* segment) { segment->clear_num_rows(); }},
+            {"negative", [](SegmentMetadataPB* segment) { segment->set_num_rows(-1); }},
+    };
+
+    for (const auto& mutation : mutations) {
+        for (const bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("mutation={} reverse_sources={}", mutation.name, reverse_sources));
+            auto source_a = make_preflight_sidecar_source(next_id(), fmt::format("invalid_{}_a.dat", next_id()));
+            auto source_b = make_preflight_sidecar_source(next_id(), fmt::format("invalid_{}_b.dat", next_id()));
+            mutation.apply(source_a->mutable_rowsets(0)->mutable_segment_metas(0));
+            std::vector<TabletMetadataPtr> sources = {source_a, source_b};
+            if (reverse_sources) std::reverse(sources.begin(), sources.end());
+
+            MergePhaseCounts counts;
+            expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        }
     }
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pruned_delete_history) {
-    constexpr uint32_t kContainingRowset = 1;
+    constexpr uint32_t kContainingRowset = 10;
     constexpr uint32_t kOriginRowset = 1;
     constexpr uint32_t kOpOffset = 7;
     auto add_pruned_delete_history = [=](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
         auto* rowset = sources[0]->mutable_rowsets(0);
+        // Compaction transferred this del from rowset 1; its offset remains in
+        // the old origin's coordinate space after all current segments vanish.
+        rowset->set_id(kContainingRowset);
+        sources[0]->set_next_rowset_id(kContainingRowset + 1);
         rowset->clear_segment_metas();
         rowset->set_num_rows(0);
         rowset->set_data_size(0);
@@ -3520,9 +4737,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
     ASSERT_OK(result_or);
     auto result = std::move(result_or).value();
     const auto& target = result.published.at(result.target_tablet_id);
-    const uint64_t replay_ceiling = uint64_t{kContainingRowset} + kOpOffset;
     const uint64_t origin_ceiling = uint64_t{kOriginRowset} + kOpOffset;
-    EXPECT_GT(target.next_rowset_id(), replay_ceiling);
     EXPECT_GT(target.next_rowset_id(), origin_ceiling);
     EXPECT_EQ(0, target.sstable_meta().sstables_size());
 
@@ -3539,7 +4754,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
     ASSERT_NE(nullptr, write_rowset);
     const auto& write_segment = write_rowset->segment_metas(0);
     const uint64_t allocated_rssid = uint64_t{write_rowset->id()} + write_segment.segment_idx();
-    EXPECT_GT(allocated_rssid, replay_ceiling);
     EXPECT_GT(allocated_rssid, origin_ceiling);
     ASSIGN_OR_ABORT(auto rows, read_two_column_rows(after_dml));
     EXPECT_EQ((std::vector<std::pair<int32_t, int32_t>>{{10, 1010}}), rows);
@@ -3590,14 +4804,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
         sources[1]->clear_sstable_meta();
         sources[1]->set_next_rowset_id(1);
     };
-    ASSIGN_OR_ABORT(auto zero_control,
-                    publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
-                                                        /*with_del_file=*/false, /*skip_source_flush=*/true,
-                                                        zero_segment_no_del));
-    const auto& zero_target = zero_control.published.at(zero_control.target_tablet_id);
-    EXPECT_EQ(0, zero_target.rowsets_size());
-    EXPECT_EQ(0, zero_target.sstable_meta().sstables_size());
-    EXPECT_EQ(1, zero_target.next_rowset_id());
+    auto zero_control = publish_metadata_only_merge_fixture(MetadataOnlyMergeShape::kPrivate, /*enable_tde=*/false,
+                                                            /*with_del_file=*/false, /*skip_source_flush=*/true,
+                                                            zero_segment_no_del);
+    EXPECT_TRUE(zero_control.status().is_corruption()) << zero_control.status();
 
     auto one_sst_boundary = [](std::vector<std::shared_ptr<TabletMetadataPB>>& sources) {
         sources[0]->clear_rowsets();
@@ -3618,7 +4828,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
         rowset->clear_segment_metas();
         auto* del = rowset->add_del_files();
         del->set_name("metadata_only_exhausted_history.del");
-        del->set_origin_rowset_id(1);
+        del->set_origin_rowset_id(2);
         del->set_op_offset(std::numeric_limits<int32_t>::max());
         write_binary_del_file(sources[0]->id(), del->name(), {});
     };
@@ -3633,13 +4843,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_allocation_covers_pr
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml_is_exact) {
     const bool old_primary_key_recover = config::enable_primary_key_recover;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     config::enable_primary_key_recover = true;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_config([&] {
-        config::enable_primary_key_recover = old_primary_key_recover;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-    });
+    DeferOp restore_config([&] { config::enable_primary_key_recover = old_primary_key_recover; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -3701,9 +4906,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11935_falls_back_then_dml
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_issue11939_falls_back_then_dml_is_exact) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel_compaction([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     set_failpoint_mode("skip_lake_pk_index_merge_source_flush", FailPointTriggerModeType::ENABLE);
     DeferOp restore_flush_failpoints([&] {
@@ -3802,11 +5004,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
     };
 
     const bool old_tde = config::enable_transparent_data_encryption;
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
     DeferOp restore_config([&] {
         config::enable_transparent_data_encryption = old_tde;
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
         config::lake_pk_compaction_min_input_segments = old_min_segments;
     });
     DeferOp wait_flush_pool(
@@ -3814,7 +5014,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_lifecycle_m
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
     config::lake_pk_compaction_min_input_segments = 1;
-    config::enable_pk_index_parallel_compaction = false;
 
     for (const auto& test_case : cases) {
         SCOPED_TRACE(test_case.name);
@@ -4094,9 +5293,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_fallback_uses_native
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layout_falls_back_exact) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
@@ -4229,14 +5425,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_divergent_layo
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layout_reuses_sstables) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
     const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
-    config::enable_pk_index_parallel_compaction = false;
     config::lake_pk_compaction_min_input_segments = 1;
-    DeferOp restore_config([&] {
-        config::enable_pk_index_parallel_compaction = old_parallel_compaction;
-        config::lake_pk_compaction_min_input_segments = old_min_segments;
-    });
+    DeferOp restore_config([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
     set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
     DeferOp restore_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
 
@@ -4315,6 +5506,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_split_identical_layo
     EXPECT_TRUE(lake::tablet_reshard_helper::same_rowset_uid(first_rowset, second_rowset));
     EXPECT_EQ(first_rowset.id(), second_rowset.id());
     EXPECT_EQ(first_rowset.version(), second_rowset.version());
+    // Restored: the per-child statistics projection is fed the boundary planner's samples, so a
+    // shared segment's bytes are apportioned by sampled row positions rather than by an even split
+    // of its coarse [min, max]. If this ever reads equal again, that routing has been lost.
     EXPECT_NE(first_rowset.data_size(), second_rowset.data_size())
             << "the split fixture must exercise proportional child-local statistics";
     ASSERT_TRUE(first_rowset.has_range());
@@ -4390,9 +5584,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_read_only_skip_stays_indexless
     txn_info.set_txn_id(next_id());
     txn_info.set_commit_time(1);
     txn_info.set_gtid(1);
-    ASSIGN_OR_ABORT(auto read_only,
-                    lake::merge_tablet(_tablet_manager.get(), {left, right}, merging, left->version() + 1, txn_info,
-                                       /*skip_sstable_merge=*/true));
+    ASSIGN_OR_ABORT(auto read_only, lake::virtual_merge_for_read(_tablet_manager.get(), {left, right}, merging,
+                                                                 left->version() + 1, txn_info));
     EXPECT_EQ(0, read_only->sstable_meta().sstables_size());
     EXPECT_TRUE(read_only->orphan_files().empty());
 }
@@ -4461,6 +5654,289 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_indexless_tde_failure_retry_ma
                         _tablet_manager->get_tablet_metadata(result->target_tablet_id, recovered->version()));
         expect_lifecycle_oracle(restarted, {{20, 2000}, {60, 600}}, {10});
     }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_preserves_sparse_segment_indices) {
+    auto m = split_source();
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    EXPECT_EQ(0, children.at(m->id() + 100000)->rowsets(0).segment_metas(0).segment_idx());
+    EXPECT_EQ(7, children.at(m->id() + 200000)->rowsets(0).segment_metas(0).segment_idx());
+    for (const auto& [id, child] : children) {
+        ASSERT_EQ(1, child->rowsets(0).segment_metas_size());
+        EXPECT_EQ(m->rowsets(0).uid().SerializeAsString(), child->rowsets(0).uid().SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_omits_nonintersecting_rowset_and_sidecars) {
+    auto m = split_source();
+    for (uint32_t rssid : {2, 9}) {
+        auto& page = (*m->mutable_delvec_meta()->mutable_delvecs())[rssid];
+        page.set_version(rssid);
+        (*m->mutable_delvec_meta()->mutable_version_to_file())[rssid].set_name(fmt::format("{}.dv", rssid));
+        (*m->mutable_dcg_meta()->mutable_dcgs())[rssid].add_column_files(fmt::format("{}.dcg", rssid));
+        (*m->mutable_idg_meta()->mutable_idgs())[rssid];
+    }
+    auto* outside = m->add_rowsets();
+    *outside = m->rowsets(0);
+    outside->set_id(20);
+    lake::tablet_reshard_helper::set_rowset_uid(outside);
+    outside->clear_segment_metas();
+    *outside->add_segment_metas() = m->rowsets(0).segment_metas(1);
+    outside->mutable_segment_metas(0)->set_segment_idx(0);
+    *outside->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    outside->mutable_range()->set_lower_bound_included(true);
+    outside->set_next_compaction_offset(1); // opaque rowset still must be omitted by effective range
+    (*m->mutable_rowset_to_schema())[20] = 123;
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    auto left = children.at(m->id() + 100000);
+    auto right = children.at(m->id() + 200000);
+    EXPECT_EQ(1, left->rowsets_size());
+    EXPECT_EQ(0, left->rowset_to_schema().count(20));
+    for (auto [child, live, dead] : {std::tuple{left, 2, 9}, std::tuple{right, 9, 2}}) {
+        EXPECT_EQ(1, child->delvec_meta().delvecs().count(live));
+        EXPECT_EQ(1, child->dcg_meta().dcgs().count(live));
+        EXPECT_EQ(1, child->idg_meta().idgs().count(live));
+        EXPECT_EQ(0, child->delvec_meta().delvecs().count(dead));
+        EXPECT_EQ(0, child->delvec_meta().version_to_file().count(dead));
+        EXPECT_EQ(0, child->dcg_meta().dcgs().count(dead));
+        EXPECT_EQ(0, child->idg_meta().idgs().count(dead));
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_preserves_nonzero_compaction_cursor) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->set_next_compaction_offset(1);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    for (const auto& [id, child] : children) {
+        EXPECT_EQ(1, child->rowsets(0).next_compaction_offset());
+        EXPECT_EQ(2, child->rowsets(0).segment_metas_size());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_capacity_limit_uses_identical_fallback) {
+    auto m = split_source();
+    SyncPoint::GetInstance()->SetCallBack("tablet_splitter:set_metadata_visit_limit",
+                                          [](void* p) { *static_cast<size_t*>(p) = 0; });
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_corruption_does_not_use_identical_fallback) {
+    for (int malformed = 0; malformed < 7; ++malformed) {
+        auto m = split_source();
+        auto* rowset = m->mutable_rowsets(0);
+        switch (malformed) {
+        case 0:
+            rowset->mutable_segment_metas(0)->set_num_rows(-1);
+            break;
+        case 1:
+            rowset->set_num_rows(-1);
+            break;
+        case 2:
+            rowset->set_data_size(-1);
+            break;
+        case 3:
+            rowset->set_num_dels(-1);
+            break;
+        case 4:
+            rowset->mutable_delete_predicate()->set_version(1);
+            break;
+        case 5:
+            rowset->mutable_segment_metas(1)->set_segment_idx(UINT32_MAX);
+            break;
+        case 6:
+            auto* del = rowset->add_del_files();
+            del->set_name("overflow.del");
+            del->set_origin_rowset_id(UINT32_MAX);
+            del->set_op_offset(1);
+            break;
+        }
+        EXPECT_TRUE(split_source_into_children(m).status().is_corruption()) << malformed;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_corrupt_source_fails_before_pk_flush) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(0)->set_num_rows(-1);
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+    EXPECT_EQ(0, flushes);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_missing_uid_is_corruption) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->clear_uid();
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(m));
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_absent_segment_idx_falls_back_after_pk_flush) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(0)->clear_segment_idx();
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_missing_segment_num_rows_falls_back_after_pk_flush) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(0)->clear_num_rows();
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_source_fallback_does_not_mask_invalid_external_ranges) {
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    for (int malformed = 0; malformed < 3; ++malformed) {
+        auto metadata = split_source();
+        metadata->mutable_rowsets(0)->mutable_segment_metas(0)->clear_segment_idx();
+        ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(metadata->id());
+        splitting.add_new_tablet_ids(next_id());
+        splitting.add_new_tablet_ids(next_id());
+        auto* left = splitting.add_new_tablet_ranges();
+        *left->mutable_upper_bound() = generate_sort_key(50);
+        left->set_upper_bound_included(false);
+        auto* right = splitting.add_new_tablet_ranges();
+        right->set_lower_bound_included(true);
+        if (malformed == 0) {
+            *right->mutable_lower_bound() = generate_sort_key(60); // gap
+        } else {
+            VariantTuple boundary;
+            if (malformed == 1) {
+                boundary.append(DatumVariant(get_type_info(TYPE_BIGINT), Datum(int64_t{50})));
+            } else {
+                boundary.append(DatumVariant(get_type_info(TYPE_INT), Datum(50)));
+                boundary.append(DatumVariant(get_type_info(TYPE_INT), Datum(50)));
+            }
+            boundary.to_proto(left->mutable_upper_bound());
+            *right->mutable_lower_bound() = left->upper_bound();
+        }
+        auto result = lake::split_tablet(_tablet_manager.get(), metadata, splitting, 2, TxnInfoPB());
+        EXPECT_TRUE(result.status().is_invalid_argument()) << "malformed range case " << malformed;
+        EXPECT_EQ(0, flushes) << "malformed range case " << malformed;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_duplicate_segment_idx_is_corruption) {
+    auto m = split_source();
+    m->mutable_rowsets(0)->mutable_segment_metas(1)->set_segment_idx(0);
+    EXPECT_TRUE(split_source_into_children(m).status().is_corruption());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_logically_empty_range_falls_back_after_pk_flush) {
+    auto m = split_source();
+    auto* range = m->mutable_rowsets(0)->mutable_range();
+    *range->mutable_lower_bound() = generate_sort_key(50);
+    *range->mutable_upper_bound() = generate_sort_key(50);
+    range->set_lower_bound_included(true);
+    range->set_upper_bound_included(false);
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_self_del_offset_falls_back_after_pk_flush) {
+    auto m = split_source();
+    auto* del = m->mutable_rowsets(0)->add_del_files();
+    del->set_name("self.del");
+    del->set_origin_rowset_id(2);
+    del->set_op_offset(8);
+    expect_split_fallback_after_flush(m);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_inherited_del_offset_uses_origin_space) {
+    auto m = split_source();
+    auto* del = m->mutable_rowsets(0)->add_del_files();
+    del->set_name("inherited.del");
+    del->set_origin_rowset_id(1);
+    del->set_op_offset(19);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    for (const auto& [id, child] : children) {
+        EXPECT_EQ(2, child->rowsets(0).segment_metas_size());
+        EXPECT_EQ(19, child->rowsets(0).del_files(0).op_offset());
+        EXPECT_EQ(1, child->rowsets(0).del_files(0).origin_rowset_id());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_splitting_opaque_del_rowset_is_full_copy_or_omitted) {
+    auto m = split_source();
+    auto* rowset = m->mutable_rowsets(0);
+    *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    rowset->mutable_range()->set_lower_bound_included(true);
+    auto* del = rowset->add_del_files();
+    del->set_name("self.del");
+    del->set_origin_rowset_id(2);
+    del->set_op_offset(7);
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m));
+    ASSERT_EQ(2, children.size());
+    EXPECT_EQ(0, children.at(m->id() + 100000)->rowsets_size());
+    auto right = children.at(m->id() + 200000);
+    ASSERT_EQ(1, right->rowsets_size());
+    EXPECT_EQ(2, right->rowsets(0).segment_metas_size());
+    EXPECT_EQ(1, right->rowsets(0).del_files_size());
+    EXPECT_EQ(100, right->rowsets(0).num_rows());
+}
+
+TEST_F(LakeTabletReshardTest, test_separate_sort_pk_split_flushes_before_budgeted_sst_sampling) {
+    auto m = split_source(true);
+    const std::string name = "split-sampling.sst";
+    std::vector<std::tuple<std::string, uint32_t, uint32_t>> entries;
+    for (int i = 0; i < 100; ++i) entries.emplace_back(encode_int_primary_key(i), 2, i);
+    auto* sst = m->mutable_sstable_meta()->add_sstables();
+    sst->set_filename(name);
+    sst->set_filesize(write_legacy_pk_sstable(_tablet_manager->sst_location(m->id(), name), entries));
+    sst->mutable_range()->set_start_key(encode_int_primary_key(0));
+    sst->mutable_range()->set_end_key(encode_int_primary_key(99));
+    auto* sync = SyncPoint::GetInstance();
+    std::vector<std::string> order;
+    for (const auto& phase : {"pk_flush", "pk_sampler", "sst_open"}) {
+        sync->SetCallBack(std::string("tablet_splitter:") + phase, [&, phase](void*) { order.emplace_back(phase); });
+    }
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m, false));
+    EXPECT_EQ(2, children.size());
+    EXPECT_EQ((std::vector<std::string>{"pk_flush", "pk_sampler", "sst_open"}), order);
+}
+
+TEST_F(LakeTabletReshardTest, test_separate_sort_pk_budget_stops_before_sst_open_then_falls_back) {
+    auto m = split_source(true);
+    auto* sst = m->mutable_sstable_meta()->add_sstables();
+    sst->set_filename("must-not-open.sst");
+    sst->mutable_range()->set_start_key(encode_int_primary_key(0));
+    sst->mutable_range()->set_end_key(encode_int_primary_key(99));
+    auto* sync = SyncPoint::GetInstance();
+    std::vector<std::string> order;
+    // Enough for source preflight and the SST declaration, not its requested 64 samples.
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [](void* p) { *static_cast<size_t*>(p) = 10; });
+    for (const auto& phase : {"pk_flush", "pk_sampler", "sst_open"}) {
+        sync->SetCallBack(std::string("tablet_splitter:") + phase, [&, phase](void*) { order.emplace_back(phase); });
+    }
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    ASSIGN_OR_ABORT(auto children, split_source_into_children(m, false));
+    EXPECT_EQ(1, children.size());
+    EXPECT_EQ((std::vector<std::string>{"pk_flush"}), order);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_splitting) {
@@ -5221,7 +6697,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
                                               metadata.version() + 1, txn_info, false, tablet_metadatas,
                                               tablet_ranges));
 
-    int rs_a_fully_pruned_but_kept = 0;
+    int rs_a_full_copies = 0;
     int rs_b_present = 0;
     for (int64_t child : {child0, child1}) {
         auto c = tablet_metadatas.at(child);
@@ -5230,12 +6706,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_keeps_del_files_rowset) {
             if (r.id() == 2) rs_a_out = &r;
             if (r.id() == 10) ++rs_b_present;
         }
-        ASSERT_NE(rs_a_out, nullptr) << "rs_a must survive on every child (overlap or del_files guard)";
+        ASSERT_NE(rs_a_out, nullptr) << "the opaque rowset's unbounded effective range overlaps every child";
         EXPECT_GT(rs_a_out->del_files_size(), 0) << "rs_a keeps its del_files";
-        if (rs_a_out->segment_metas_size() == 0) ++rs_a_fully_pruned_but_kept; // kept purely by the del_files guard
+        ASSERT_EQ(1, rs_a_out->segment_metas_size());
+        EXPECT_EQ("a_seg.dat", rs_a_out->segment_metas(0).filename());
+        EXPECT_TRUE(rs_a_out->segment_metas(0).shared());
+        ++rs_a_full_copies;
     }
-    EXPECT_EQ(1, rs_a_fully_pruned_but_kept)
-            << "exactly one child fully prunes rs_a's segment yet keeps it for del_files";
+    EXPECT_EQ(2, rs_a_full_copies) << "opaque del-bearing rowsets retain the complete ordered file set";
     EXPECT_EQ(1, rs_b_present) << "rs_b (no del_files) is removed from the non-overlapping child";
 }
 
@@ -5408,89 +6886,17 @@ TEST_F(LakeTabletReshardTest, test_tablet_split_pruned_sst_full_merge_uses_live_
     EXPECT_NE(NullIndexValue, high_value.get_value());
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_filters_prechange_protected_rssid_delvecs) {
-    constexpr int64_t kBaseVersion = 1;
-    constexpr int64_t kMergeVersion = 2;
-
-    for (bool stale_first : {false, true}) {
-        SCOPED_TRACE(stale_first ? "partial stale-first" : "partial stale-last");
-        ASSIGN_OR_ABORT(auto fixture, make_prechange_protected_rssid_fixture());
-        const int64_t merged_tablet = next_id();
-        prepare_tablet_dirs(merged_tablet);
-        std::vector<TabletMetadataPtr> sources = {fixture.stale_child, fixture.empty_child};
-        if (!stale_first) std::reverse(sources.begin(), sources.end());
-        ASSIGN_OR_ABORT(auto files_before_merge, delvec_inventory(merged_tablet));
-        std::unordered_map<int64_t, TabletMetadataPtr> published;
-        ASSERT_OK(publish_resharding_merge(sources, merged_tablet, kBaseVersion, kMergeVersion, next_id(), published));
-        const auto& merged = published.at(merged_tablet);
-
-        // No source in this partial merge owns a segment at the protected rssid. The
-        // old zero-segment rowset is discarded, so neither its page nor its file may
-        // survive, independent of which child seeds the merge namespace.
-        EXPECT_EQ(0, merged->rowsets_size());
-        EXPECT_EQ(0, merged->delvec_meta().delvecs_size());
-        EXPECT_EQ(0, merged->delvec_meta().version_to_file_size());
-        ASSIGN_OR_ABORT(auto files_after_merge, delvec_inventory(merged_tablet));
-        EXPECT_EQ(files_before_merge, files_after_merge);
-
-        // Discarding the protected rowset makes rssid 1 the next real allocation.
-        // A stale page at rssid 1 masks this first writer's row even though the PK
-        // index points to it, which is the user-visible corruption this regression
-        // must prevent.
-        ASSERT_EQ(fixture.protected_rssid, merged->next_rowset_id());
-        _update_manager->unload_and_remove_primary_index(merged_tablet);
-        ASSIGN_OR_ABORT(auto after_write,
-                        publish_followup_upsert_delete(merged_tablet, merged->version(), /*upsert_key=*/60,
-                                                       /*upsert_value=*/600, /*delete_key=*/0,
-                                                       /*include_delete=*/false));
-        ASSERT_EQ(1, after_write->rowsets_size());
-        ASSERT_EQ(1, after_write->rowsets(0).segment_metas_size());
-        EXPECT_EQ(fixture.protected_rssid, lake::get_rssid(after_write->rowsets(0), 0));
-
-        _update_manager->unload_and_remove_primary_index(merged_tablet);
-        _tablet_manager->prune_metacache();
-        ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(merged_tablet, after_write->version()));
-        expect_lifecycle_oracle(reopened, {{60, 600}}, /*deleted_keys=*/{});
-    }
-
-    for (bool stale_first : {false, true}) {
-        SCOPED_TRACE(stale_first ? "full stale-first" : "full stale-last");
-        ASSIGN_OR_ABORT(auto fixture, make_prechange_protected_rssid_fixture());
-        const int64_t merged_tablet = next_id();
-        prepare_tablet_dirs(merged_tablet);
-        std::vector<TabletMetadataPtr> sources = {fixture.owner, fixture.stale_child};
-        if (stale_first) std::reverse(sources.begin(), sources.end());
-        ASSIGN_OR_ABORT(auto files_before_merge, delvec_inventory(merged_tablet));
-        std::unordered_map<int64_t, TabletMetadataPtr> published;
-        ASSERT_OK(publish_resharding_merge(sources, merged_tablet, kBaseVersion, kMergeVersion, next_id(), published));
-        const auto& merged = published.at(merged_tablet);
-
-        uint32_t owner_rssid = 0;
-        for (const auto& rowset : merged->rowsets()) {
-            for (int segment_pos = 0; segment_pos < rowset.segment_metas_size(); ++segment_pos) {
-                if (rowset.segment_metas(segment_pos).filename() == "prechange_protected_owner.dat") {
-                    owner_rssid = lake::get_rssid(rowset, segment_pos);
-                }
-            }
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_prechange_empty_protected_rowsets_before_io) {
+    for (bool include_owner : {false, true}) {
+        for (bool stale_first : {false, true}) {
+            SCOPED_TRACE(fmt::format("include_owner={}, stale_first={}", include_owner, stale_first));
+            ASSIGN_OR_ABORT(auto fixture, make_prechange_protected_rssid_fixture());
+            std::vector<TabletMetadataPtr> sources = {include_owner ? fixture.owner : fixture.empty_child,
+                                                      fixture.stale_child};
+            if (stale_first) std::reverse(sources.begin(), sources.end());
+            MergePhaseCounts counts;
+            expect_physical_preflight_rejection(sources, next_id(), 2, &counts);
         }
-        ASSERT_NE(0, owner_rssid);
-        EXPECT_EQ(1, merged->delvec_meta().delvecs_size());
-        EXPECT_TRUE(merged->delvec_meta().delvecs().contains(owner_rssid));
-        EXPECT_EQ(1, merged->delvec_meta().version_to_file_size());
-        ASSIGN_OR_ABORT(auto files_after_merge, delvec_inventory(merged_tablet));
-        EXPECT_EQ(files_before_merge.size() + 1, files_after_merge.size());
-
-        DelVector owner_delvec;
-        LakeIOOptions io_options;
-        ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *merged, owner_rssid, false, io_options, &owner_delvec));
-        ASSERT_NE(nullptr, owner_delvec.roaring());
-        EXPECT_FALSE(owner_delvec.roaring()->contains(0));
-        EXPECT_TRUE(owner_delvec.roaring()->contains(1));
-
-        _update_manager->unload_and_remove_primary_index(merged_tablet);
-        _tablet_manager->prune_metacache();
-        ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(merged_tablet, merged->version()));
-        expect_lifecycle_oracle(reopened, {{0, 0}}, /*deleted_keys=*/{1});
     }
 }
 
@@ -5569,8 +6975,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
     metadata.set_id(tablet_id);
     metadata.set_version(2);
 
-    // Single segment with 2 sort-key samples -> 4 boundary points -> 3
-    // candidate ranges. Requesting 8 splits cannot be satisfied.
+    // A single segment with no backing file on disk, so the sort key sampler cannot open it and
+    // every boundary candidate comes from the coarse [min, max] pair -> 1 candidate range.
+    // Requesting 8 splits cannot be satisfied.
     auto* rowset_meta_pb = metadata.add_rowsets();
     rowset_meta_pb->set_id(2);
     {
@@ -5580,9 +6987,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_splitting_fewer_ranges_than_requested_
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(300));
         sm->set_num_rows(300);
-        sm->set_deprecated_sort_key_sample_row_interval(100);
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
-        sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(200));
     }
     rowset_meta_pb->set_num_rows(300);
     rowset_meta_pb->set_data_size(1024);
@@ -5854,7 +7258,6 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
         ASSERT_EQ(1, it->second->rowsets_size());
         const auto& child_rowset = it->second->rowsets(0);
         EXPECT_TRUE(child_rowset.has_num_dels()) << "split must always write num_dels on PK children";
-        EXPECT_LE(child_rowset.num_dels(), child_rowset.num_rows()) << "num_dels must not exceed child num_rows";
         total_child_num_rows += child_rowset.num_rows();
         total_child_num_dels += child_rowset.num_dels();
     }
@@ -5864,11 +7267,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_scales_num_dels) {
     EXPECT_EQ(6, total_child_num_dels);
 }
 
-// Verify the fallback path: when the parent rowset predates num_dels (has_num_dels() ==
-// false), split derives D from the persisted delvec. A child rowset that cannot retrieve
-// D through either path must still carry an explicit num_dels (0) so that the Step 2
-// router in lake_service sees has_range() but has_num_dels() -> defaults to zero dels.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for_num_dels) {
+// Current producers record the rowset delete anchor explicitly. SPLIT conserves
+// that anchor without deriving historical missing statistics from the delvec.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_explicit_num_dels_conservation) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -5886,7 +7287,7 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
     rowset->set_overlapped(true);
     rowset->set_num_rows(8);
     rowset->set_data_size(800);
-    // num_dels intentionally not set -> exercises get_rowset_num_deletes fallback.
+    rowset->set_num_dels(4);
 
     {
         auto* sm = rowset->add_segment_metas();
@@ -5939,7 +7340,7 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_fallback_reads_delvec_for
         EXPECT_TRUE(child_rowset.has_num_dels());
         total_child_num_dels += child_rowset.num_dels();
     }
-    // Σ child.num_dels should equal the delvec cardinality recovered via fallback (4).
+    // Σ child.num_dels equals the explicit current-producer anchor.
     EXPECT_EQ(4, total_child_num_dels);
 }
 
@@ -6046,7 +7447,6 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
             t.num_rows += rs.num_rows();
             t.data_size += rs.data_size();
             t.num_dels += rs.num_dels();
-            EXPECT_LE(rs.num_dels(), rs.num_rows()) << "child cid=" << cid << " rs=" << rs.id();
         }
     }
 
@@ -6063,11 +7463,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_per_rowset_conserv
     EXPECT_EQ(11, totals[4].num_dels);
 }
 
-// Pathological metadata: parent rowset has num_dels > num_rows. The anchor
-// builder clamps num_dels up front (with WARNING) so cap-and-redistribute
-// has a feasible input. After split, Σ children.num_dels equals the clamped
-// parent.num_rows, and per-child num_dels stays within rows.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_parent_dels) {
+// A previously split child can have an approximate row count below its exact delete count while
+// retaining many more shared physical rows. The next split must conserve both estimates independently.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_accepts_dels_above_zero_estimated_rows) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -6083,9 +7481,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
     auto* rowset = metadata.add_rowsets();
     rowset->set_id(2);
     rowset->set_overlapped(true);
-    rowset->set_num_rows(10);
+    rowset->set_num_rows(0);
     rowset->set_data_size(1000);
-    rowset->set_num_dels(15); // pathological: > num_rows
+    rowset->set_num_dels(15);
 
     // Two segments so calculate_range_split_boundaries has enough key-space
     // boundaries to produce a 2-way split (single segment falls back to
@@ -6096,7 +7494,7 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
         sm->set_size(500);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(49));
-        sm->set_num_rows(5);
+        sm->set_num_rows(50);
     }
 
     {
@@ -6105,10 +7503,12 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
         sm->set_size(500);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(50));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
-        sm->set_num_rows(5);
+        sm->set_num_rows(50);
     }
 
-    EXPECT_OK(put_tablet_metadata(metadata));
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    for (int i = 0; i < rowset->segment_metas_size(); ++i) rowset->mutable_segment_metas(i)->set_segment_idx(i);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(metadata));
 
     ReshardingTabletInfoPB resharding;
     auto& splitting = *resharding.mutable_splitting_tablet_info();
@@ -6124,25 +7524,133 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_clamps_invalid_par
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    auto* sync = SyncPoint::GetInstance();
+    int flushes = 0;
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
     ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
                                               false, tablet_metadatas, tablet_ranges));
-
-    int64_t total_child_num_rows = 0;
-    int64_t total_child_num_dels = 0;
-    for (int64_t cid : {child_id_1, child_id_2}) {
-        auto it = tablet_metadatas.find(cid);
-        ASSERT_TRUE(it != tablet_metadatas.end());
-        ASSERT_EQ(1, it->second->rowsets_size());
-        const auto& child_rs = it->second->rowsets(0);
-        EXPECT_TRUE(child_rs.has_num_dels());
-        EXPECT_LE(child_rs.num_dels(), child_rs.num_rows());
-        total_child_num_rows += child_rs.num_rows();
-        total_child_num_dels += child_rs.num_dels();
+    EXPECT_EQ(1, flushes);
+    int64_t total_rows = 0;
+    int64_t total_dels = 0;
+    bool saw_dels_above_rows = false;
+    for (int64_t child_id : {child_id_1, child_id_2}) {
+        ASSERT_TRUE(tablet_metadatas.contains(child_id));
+        ASSERT_EQ(1, tablet_metadatas.at(child_id)->rowsets_size());
+        const auto& child = tablet_metadatas.at(child_id)->rowsets(0);
+        total_rows += child.num_rows();
+        total_dels += child.num_dels();
+        saw_dels_above_rows |= child.num_dels() > child.num_rows();
     }
-    // num_rows still conserves at parent.num_rows; num_dels conserves at the
-    // *clamped* parent value (= parent.num_rows = 10), not the bogus 15.
-    EXPECT_EQ(10, total_child_num_rows);
-    EXPECT_EQ(10, total_child_num_dels);
+    EXPECT_EQ(0, total_rows);
+    EXPECT_EQ(15, total_dels);
+    EXPECT_TRUE(saw_dels_above_rows);
+}
+
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_zero_active_weights_omit_child_conserves_deletes) {
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(lower));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key(upper));
+        range->set_upper_bound_included(false);
+    };
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(next_id());
+    source->set_version(1);
+    source->set_next_rowset_id(3);
+    set_two_column_pk_schema(source.get(), 4001);
+    set_range(source->mutable_range(), 0, 200);
+    prepare_tablet_dirs(source->id());
+
+    const std::string segment_name = "zero-active-delete-weight.dat";
+    write_two_column_segment(
+            source->id(), segment_name, /*num_rows=*/2, [](int key) { return key * 10; },
+            /*key_start=*/0, [](int index) { return index * 100; });
+
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(1000);
+    rowset->set_num_dels(1);
+    set_range(rowset->mutable_range(), 90, 200);
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(segment_name);
+    segment->set_size(1000);
+    segment->set_num_rows(2);
+    segment->set_segment_idx(0);
+    segment->set_shared(true);
+    segment->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    segment->mutable_sort_key_max()->CopyFrom(generate_sort_key(100));
+
+    auto split_once = [&](const TabletMetadataPtr& input) {
+        SplittingTabletInfoPB splitting;
+        splitting.set_old_tablet_id(input->id());
+        const std::array<std::pair<int, int>, 3> bounds = {{{0, 50}, {50, 95}, {95, 200}}};
+        std::vector<int64_t> child_ids;
+        for (const auto& [lower, upper] : bounds) {
+            const int64_t child_id = next_id();
+            child_ids.push_back(child_id);
+            prepare_tablet_dirs(child_id);
+            splitting.add_new_tablet_ids(child_id);
+            set_range(splitting.add_new_tablet_ranges(), lower, upper);
+        }
+        TxnInfoPB txn;
+        txn.set_txn_id(next_id());
+        txn.set_commit_time(1);
+        txn.set_gtid(1);
+        ASSIGN_OR_ABORT(auto mutable_children,
+                        lake::split_tablet(_tablet_manager.get(), input, splitting, input->version() + 1, txn));
+        std::vector<TabletMetadataPtr> children;
+        for (const int64_t child_id : child_ids) children.push_back(mutable_children.at(child_id));
+        return children;
+    };
+
+    auto expect_conserved_split = [&](const std::vector<TabletMetadataPtr>& children) {
+        ASSERT_EQ(3, children.size());
+        EXPECT_EQ(0, children[0]->rowsets_size());
+        ASSERT_EQ(1, children[1]->rowsets_size());
+        ASSERT_EQ(1, children[2]->rowsets_size());
+        const auto& middle = children[1]->rowsets(0);
+        const auto& right = children[2]->rowsets(0);
+        EXPECT_EQ(0, middle.num_rows() + right.num_rows());
+        EXPECT_EQ(1000, middle.data_size() + right.data_size());
+        EXPECT_EQ(1, middle.num_dels() + right.num_dels());
+        EXPECT_EQ(1, middle.num_dels());
+        EXPECT_EQ(0, right.num_dels());
+        EXPECT_EQ(rowset->uid().SerializeAsString(), middle.uid().SerializeAsString());
+        EXPECT_EQ(rowset->uid().SerializeAsString(), right.uid().SerializeAsString());
+    };
+
+    auto first = split_once(source);
+    expect_conserved_split(first);
+    const RowsetMetadataPB first_middle(first[1]->rowsets(0));
+    const RowsetMetadataPB first_right(first[2]->rowsets(0));
+    auto stable_rowset = [](RowsetMetadataPB rowset) {
+        rowset.clear_id();
+        return rowset.SerializeAsString();
+    };
+
+    const int64_t merged_id = next_id();
+    prepare_tablet_dirs(merged_id);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    ASSERT_OK(publish_resharding_merge(first, merged_id, first[0]->version(), first[0]->version() + 1, next_id(),
+                                       published));
+    const auto& merged = published.at(merged_id);
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(1, merged->rowsets(0).num_dels());
+    EXPECT_EQ(rowset->uid().SerializeAsString(), merged->rowsets(0).uid().SerializeAsString());
+
+    auto second = split_once(merged);
+    expect_conserved_split(second);
+    EXPECT_EQ(stable_rowset(first_middle), stable_rowset(second[1]->rowsets(0)));
+    EXPECT_EQ(stable_rowset(first_right), stable_rowset(second[2]->rowsets(0)));
 }
 
 // Anchor input fallback: legacy / incomplete metadata may omit
@@ -6230,12 +7738,17 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_falls_back_to_segm
 // level-3 == original parent — the property a multi-level reshard must
 // guarantee for downstream consumers (get_tablet_stats, planner, vacuum).
 //
-// Setup uses sampled segments (sort_key_samples populated) so segment-level
-// boundary candidates are dense enough for 3 successive splits to find
-// candidates inside ever-narrowing tablet ranges.
+// Setup writes REAL segments so the sort key sampler can derive boundary candidates from them,
+// dense enough for 3 successive splits to find candidates inside ever-narrowing tablet ranges. A
+// synthetic metadata-only rowset would leave every segment at its coarse [min, max] pair, which
+// cannot be subdivided at all.
 TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_conservation) {
-    auto add_sampled_rowset = [](TabletMetadataPB* md, int64_t rs_id, int min_v, int max_v, int num_rows, int data_size,
-                                 int num_dels, int interval) {
+    auto add_sampled_rowset = [this](TabletMetadataPB* md, int64_t tablet_id, int64_t rs_id, int min_v, int max_v,
+                                     int num_rows, int data_size, int num_dels) {
+        const std::string seg_name = fmt::format("rs_{}_0.dat", rs_id);
+        // Keys [min_v, min_v + num_rows), i.e. exactly the [min_v, max_v] the metadata declares.
+        write_two_column_segment(
+                tablet_id, seg_name, num_rows, [](int i) { return i; }, /*key_start=*/min_v);
         auto* rs = md->add_rowsets();
         rs->set_id(rs_id);
         rs->set_overlapped(true);
@@ -6243,15 +7756,14 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
         rs->set_data_size(data_size);
         rs->set_num_dels(num_dels);
         auto* sm = rs->add_segment_metas();
-        sm->set_filename(fmt::format("rs_{}_0.dat", rs_id));
+        sm->set_filename(seg_name);
+        // Deliberately the declared data_size, not the file's real size: these tests assert
+        // conservation of the numbers the parent metadata records, and keeping them makes the
+        // arithmetic below unchanged by this fixture switching to real segments.
         sm->set_size(data_size);
         sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(min_v));
         sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(max_v));
         sm->set_num_rows(num_rows);
-        sm->set_deprecated_sort_key_sample_row_interval(interval);
-        for (int v = min_v + interval; v < max_v; v += interval) {
-            sm->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(v));
-        }
     };
 
     auto verify_per_rowset_conservation = [](const TabletMetadataPB& parent_md, const std::vector<int64_t>& child_ids,
@@ -6271,8 +7783,6 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
                 t.num_rows += rs.num_rows();
                 t.data_size += rs.data_size();
                 t.num_dels += rs.num_dels();
-                EXPECT_LE(rs.num_dels(), rs.num_rows())
-                        << level << ": child " << cid << " rs " << rs.id() << " num_dels exceeds num_rows";
             }
         }
         for (const auto& rs : parent_md.rowsets()) {
@@ -6295,16 +7805,21 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_anchor_three_level_chain_
     TabletMetadataPB metadata;
     metadata.set_id(tablet_id);
     metadata.set_version(base_version_l0);
-    set_primary_key_schema(&metadata, 1);
+    // The two-column c0/c1 PK schema write_two_column_segment writes with, so the segments below
+    // open and decode with the tablet's own schema. A valid, non-zero schema id is also required:
+    // build_segments_from_rowsets only opens a rowset's segment files when its schema resolves to a
+    // valid registered id.
+    set_two_column_pk_schema(&metadata, /*schema_id=*/1);
     add_historical_schema(&metadata, 1);
 
-    // 2 rowsets covering [0,1499] with samples every 100 rows. Combined ~2000
-    // rows / 16000 bytes / 42 dels. Sample density gives every ~100 keys a
-    // boundary candidate, plenty to drive 3 levels of splitting.
-    add_sampled_rowset(&metadata, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
-                       /*data_size=*/10000, /*num_dels=*/30, /*interval=*/100);
-    add_sampled_rowset(&metadata, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
-                       /*data_size=*/6000, /*num_dels=*/12, /*interval=*/100);
+    // 2 rowsets covering [0,1499]. Combined ~2000 rows / 16000 bytes / 42 dels. At the writer's
+    // BE_TEST block size of 100 rows, each 1000-row segment offers 9 short-key-index entries, so
+    // the sampler places a boundary candidate every ~100 keys -- plenty to drive 3 levels of
+    // splitting.
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/2, /*min=*/0, /*max=*/999, /*num_rows=*/1000,
+                       /*data_size=*/10000, /*num_dels=*/30);
+    add_sampled_rowset(&metadata, tablet_id, /*rs_id=*/3, /*min=*/500, /*max=*/1499, /*num_rows=*/1000,
+                       /*data_size=*/6000, /*num_dels=*/12);
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -6412,7 +7927,6 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
     add_rowset_with_predicate(&meta_a, 1, 1, false);
     add_rowset_with_predicate(&meta_a, 2, 10, true);
     add_rowset_with_predicate(&meta_a, 3, 11, false);
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     TabletMetadataPB meta_b;
     meta_b.set_id(tablet_b);
@@ -6421,7 +7935,7 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_reorder_by_predicate_version) {
     add_rowset_with_predicate(&meta_b, 1, 1, false);
     add_rowset_with_predicate(&meta_b, 2, 10, true);
     add_rowset_with_predicate(&meta_b, 3, 11, false);
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6488,7 +8002,6 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_different_predicate_versions) {
     add_rowset_with_predicate(&meta_a, 1, 1, false);  // data
     add_rowset_with_predicate(&meta_a, 2, 10, true);  // predicate v10
     add_rowset_with_predicate(&meta_a, 3, 11, false); // data
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     // Tablet B: data(v1) -> predicate(v10) -> data(v11) -> predicate(v20) -> data(v21)
     TabletMetadataPB meta_b;
@@ -6500,7 +8013,7 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_different_predicate_versions) {
     add_rowset_with_predicate(&meta_b, 3, 11, false); // data
     add_rowset_with_predicate(&meta_b, 4, 20, true);  // predicate v20 (only in tablet_b)
     add_rowset_with_predicate(&meta_b, 5, 21, false); // data
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6570,7 +8083,6 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_no_predicates) {
     add_rowset_with_predicate(&meta_a, 1, 1, false);
     add_rowset_with_predicate(&meta_a, 2, 2, false);
     add_rowset_with_predicate(&meta_a, 3, 3, false);
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     TabletMetadataPB meta_b;
     meta_b.set_id(tablet_b);
@@ -6579,7 +8091,7 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_no_predicates) {
     add_rowset_with_predicate(&meta_b, 1, 1, false);
     add_rowset_with_predicate(&meta_b, 2, 2, false);
     add_rowset_with_predicate(&meta_b, 3, 3, false);
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6643,7 +8155,6 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_single_tablet_predicate) {
     add_rowset_with_predicate(&meta_a, 1, 1, false);  // data
     add_rowset_with_predicate(&meta_a, 2, 10, true);  // predicate v10
     add_rowset_with_predicate(&meta_a, 3, 11, false); // data
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     // Tablet B: data(v1) -> data(v2) -> data(v3) (no predicates)
     TabletMetadataPB meta_b;
@@ -6653,7 +8164,7 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_single_tablet_predicate) {
     add_rowset_with_predicate(&meta_b, 1, 1, false);
     add_rowset_with_predicate(&meta_b, 2, 2, false);
     add_rowset_with_predicate(&meta_b, 3, 3, false);
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6716,7 +8227,6 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_all_predicates) {
     meta_a.set_next_rowset_id(3);
     add_rowset_with_predicate(&meta_a, 1, 10, true); // predicate v10
     add_rowset_with_predicate(&meta_a, 2, 20, true); // predicate v20
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     // Tablet B: predicate(v10) -> predicate(v20) (same versions)
     TabletMetadataPB meta_b;
@@ -6725,7 +8235,7 @@ TEST_F(LakeTabletReshardTest, test_merge_rowsets_all_predicates) {
     meta_b.set_next_rowset_id(3);
     add_rowset_with_predicate(&meta_b, 1, 10, true); // predicate v10
     add_rowset_with_predicate(&meta_b, 2, 20, true); // predicate v20
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6803,8 +8313,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
     materialize_tombstone_sstables(meta1.get());
     materialize_tombstone_sstables(meta2.get());
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -6831,7 +8340,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
         if (rowset.id() == expected_rowset_id) {
             found_rowset = true;
             ASSERT_TRUE(rowset.has_range());
-            EXPECT_EQ(rowset.range().SerializeAsString(), meta2->range().SerializeAsString());
+            EXPECT_EQ(rowset.range().SerializeAsString(),
+                      tablet_metadatas.at(old_tablet_id_2)->range().SerializeAsString());
             ASSERT_TRUE(rowset.has_max_compact_input_rowset_id());
             EXPECT_EQ(4, rowset.max_compact_input_rowset_id());
             ASSERT_EQ(1, rowset.del_files_size());
@@ -6846,7 +8356,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
         if (rowset.id() == 2) {
             found_rowset_from_meta1 = true;
             ASSERT_TRUE(rowset.has_range());
-            EXPECT_EQ(rowset.range().SerializeAsString(), meta1->range().SerializeAsString());
+            EXPECT_EQ(rowset.range().SerializeAsString(),
+                      tablet_metadatas.at(old_tablet_id_1)->range().SerializeAsString());
             break;
         }
     }
@@ -6899,8 +8410,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_basic) {
 // rowset specifically so fixtures behave like production — which means this gate is
 // otherwise never exercised. Here we bypass the wrapper (persist via _tablet_manager
 // directly) AND clear the uid that add_rowset stamps, driving a genuinely uid-less
-// rowset into merge_rowsets. The gate is DCHECK-first (fail-fast abort in debug) with
-// a Status::InternalError fallback for release, so the assertion is build-conditional.
+// rowset into the global planner, which returns Corruption before allocation or I/O.
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rowset_without_uid_fails) {
     const int64_t base_version = 1;
     const int64_t new_version = 2;
@@ -6929,6 +8439,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rowset_without_uid_fails) {
     (*meta2->mutable_rowset_to_schema())[1] = 2002;
 
     // Persist directly, bypassing the uid-auto-stamping fixture wrapper.
+    meta1->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(0);
+    meta2->mutable_rowsets(0)->mutable_segment_metas(0)->set_segment_idx(0);
+    *meta1->mutable_range()->mutable_upper_bound() = generate_sort_key(1);
+    meta1->mutable_range()->set_upper_bound_included(false);
+    *meta2->mutable_range()->mutable_lower_bound() = generate_sort_key(1);
+    meta2->mutable_range()->set_lower_bound_included(true);
     ASSERT_OK(_tablet_manager->put_tablet_metadata(meta1));
     ASSERT_OK(_tablet_manager->put_tablet_metadata(meta2));
 
@@ -6947,13 +8463,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rowset_without_uid_fails) {
         return lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, base_version, new_version,
                                                txn_info, false, tablet_metadatas, tablet_ranges);
     };
-#if DCHECK_IS_ON()
-    ASSERT_DEATH({ (void)do_merge(); }, "rowset reaching reshard merge must carry a valid uid");
-#else
     auto st = do_merge();
-    EXPECT_TRUE(st.is_internal_error()) << st.to_string();
-    EXPECT_NE(std::string::npos, st.to_string().find("rowset reaching reshard merge has no uid")) << st.to_string();
-#endif
+    EXPECT_TRUE(st.is_corruption()) << st;
+    EXPECT_TRUE(st.message().contains("uid")) << st;
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_without_delvec) {
@@ -6981,8 +8493,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_without_delvec) {
     set_primary_key_schema(meta2.get(), 1002);
     add_rowset(meta2.get(), 2, 2, 2);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7027,8 +8538,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_missing_delvec_meta) {
     set_primary_key_schema(meta2.get(), 1002);
     add_rowset(meta2.get(), 2, 2, 2);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7079,8 +8589,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_version_missing) {
     page.set_size(1);
     (*delvec_meta->mutable_delvecs())[2] = page;
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7127,8 +8636,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_missing_tablet_offset) 
     add_rowset(meta2.get(), 2, 2, 2);
     add_delvec(meta2.get(), old_tablet_id_2, base_version, 2, "delvec-2", "bbb");
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7171,8 +8679,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cache_miss_fallback) {
     meta2->set_next_rowset_id(5);
     add_rowset(meta2.get(), 2, 2, 2);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     auto cached_meta1 = std::make_shared<TabletMetadataPB>(*meta1);
     cached_meta1->set_version(new_version);
@@ -7233,9 +8740,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_base_version_not_found) {
     meta_new->set_next_rowset_id(5);
     meta_new->set_gtid(100);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
-    EXPECT_OK(put_tablet_metadata(meta_new));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
+    ASSERT_OK(put_tablet_metadata(meta_new));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7308,8 +8814,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_segment_overflow) {
     add_rowset(meta2.get(), 90, 90, 90);
     add_dcg_with_columns(meta2.get(), std::numeric_limits<uint32_t>::max() - 5, "dcg-overflow", {301}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7546,6 +9051,723 @@ TEST_F(LakeTabletReshardTest, test_split_cross_publish_multi_stmt_batch_keeps_sc
     EXPECT_EQ(7777, child0_rowset.uid().lo());
 }
 
+// CORE-001: split cross-publish deliberately retains every shared physical segment and apportions
+// rowset stats. A child can therefore have positive approximate stats even when the shared segment
+// is wholly outside its range. A later SPLIT must take the typed identical fallback after its flush,
+// rather than treating current-producer metadata as corruption.
+TEST_F(LakeTabletReshardTest, test_cross_published_off_range_stats_split_falls_back_identical) {
+    constexpr int64_t kBaseVersion = 1;
+    constexpr int64_t kCrossVersion = 2;
+    constexpr int64_t kSplitVersion = 3;
+    const int64_t old_tablet = next_id();
+    const int64_t right_child = next_id();
+    const int64_t fallback_child = next_id();
+    const int64_t unused_child = next_id();
+    for (int64_t id : {old_tablet, right_child, fallback_child, unused_child}) prepare_tablet_dirs(id);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    };
+
+    auto right = std::make_shared<TabletMetadataPB>();
+    right->set_id(right_child);
+    right->set_version(kBaseVersion);
+    right->set_next_rowset_id(1);
+    set_two_column_pk_schema(right.get(), /*schema_id=*/4001);
+    right->mutable_schema()->set_keys_type(DUP_KEYS);
+    set_range(right->mutable_range(), 50, 100);
+    ASSERT_OK(put_tablet_metadata(right));
+
+    const std::string segment_name = fmt::format("cross_off_range_{}.dat", old_tablet);
+    const uint64_t segment_size =
+            write_two_column_segment(old_tablet, segment_name, 50, [](int key) { return key * 10; });
+    const int64_t cross_txn = next_id();
+    TxnLogPB cross_log;
+    cross_log.set_tablet_id(old_tablet);
+    cross_log.set_txn_id(cross_txn);
+    auto* cross_rowset = cross_log.mutable_op_write()->mutable_rowset();
+    cross_rowset->set_num_rows(50);
+    cross_rowset->set_data_size(segment_size);
+    lake::tablet_reshard_helper::set_rowset_uid(cross_rowset);
+    auto* segment = cross_rowset->add_segment_metas();
+    segment->set_filename(segment_name);
+    segment->set_size(segment_size);
+    segment->set_num_rows(50);
+    segment->set_segment_idx(0);
+    *segment->mutable_sort_key_min() = generate_sort_key(0);
+    *segment->mutable_sort_key_max() = generate_sort_key(49);
+    ASSERT_OK(_tablet_manager->put_txn_log(cross_log));
+
+    lake::PublishTabletInfo cross_info(lake::PublishTabletInfo::SPLITTING_TABLET, old_tablet, right_child,
+                                       /*split_count=*/2, /*split_index=*/1);
+    TxnInfoPB cross_txn_info;
+    cross_txn_info.set_txn_id(cross_txn);
+    cross_txn_info.set_txn_type(TXN_NORMAL);
+    cross_txn_info.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto cross_published,
+                    lake::publish_version(_tablet_manager.get(), cross_info, kBaseVersion, kCrossVersion,
+                                          std::span<const TxnInfoPB>(&cross_txn_info, 1), false));
+    ASSERT_EQ(1, cross_published->rowsets_size());
+    const auto& published_rowset = cross_published->rowsets(0);
+    EXPECT_EQ(25, published_rowset.num_rows());
+    EXPECT_EQ(cross_published->range().SerializeAsString(), published_rowset.range().SerializeAsString());
+    ASSERT_EQ(1, published_rowset.segment_metas_size());
+    EXPECT_TRUE(published_rowset.segment_metas(0).shared());
+    ASSIGN_OR_ABORT(auto before_rows, read_two_column_rows(cross_published));
+    EXPECT_TRUE(before_rows.empty());
+
+    ReshardingTabletInfoPB request;
+    auto* split = request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(right_child);
+    split->add_new_tablet_ids(fallback_child);
+    split->add_new_tablet_ids(unused_child);
+    set_range(split->add_new_tablet_ranges(), 50, 75);
+    set_range(split->add_new_tablet_ranges(), 75, 100);
+    TxnInfoPB split_txn;
+    split_txn.set_txn_id(next_id());
+    split_txn.set_commit_time(1);
+    split_txn.set_gtid(1);
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    std::unordered_map<int64_t, TabletRangePB> ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, kCrossVersion, kSplitVersion, split_txn,
+                                              false, published, ranges));
+    EXPECT_EQ(1, flushes);
+    ASSERT_TRUE(published.contains(right_child));
+    ASSERT_TRUE(published.contains(fallback_child));
+    EXPECT_FALSE(published.contains(unused_child));
+    EXPECT_EQ(cross_published->range().SerializeAsString(), published.at(fallback_child)->range().SerializeAsString());
+    EXPECT_EQ(cross_published->rowsets(0).SerializeAsString(),
+              published.at(fallback_child)->rowsets(0).SerializeAsString());
+    ASSIGN_OR_ABORT(auto after_rows, read_two_column_rows(published.at(fallback_child)));
+    EXPECT_EQ(before_rows, after_rows);
+}
+
+// CORE-002: MetaFileBuilder reserves a virtual operation slot for a pure DELETE statement in a
+// multi-statement batch. INSERT / DELETE / INSERT therefore produces physical segment indices
+// {0,2} with self-origin delete offset 1. Reshard must preserve that replay ordering even though
+// offset 1 does not name a physical segment.
+TEST_F(LakeTabletReshardTest, test_batch_virtual_self_del_offset_survives_split_merge_cold_load) {
+    constexpr int64_t kWriteVersion = 2;
+    constexpr int64_t kSplitVersion = 3;
+    constexpr int64_t kMergeVersion = 4;
+    const int64_t tablet_id = next_id();
+    const int64_t left_child = next_id();
+    const int64_t right_child = next_id();
+    const int64_t merged_tablet = next_id();
+    for (int64_t id : {tablet_id, left_child, right_child, merged_tablet}) prepare_tablet_dirs(id);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    };
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(tablet_id);
+    source->set_version(kWriteVersion);
+    source->set_next_rowset_id(1);
+    set_two_column_pk_schema(source.get(), /*schema_id=*/4001);
+    source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    source->set_enable_persistent_index(true);
+    source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    set_range(source->mutable_range(), 0, 100);
+
+    const std::string first_name = fmt::format("virtual_first_{}.dat", tablet_id);
+    const std::string second_name = fmt::format("virtual_second_{}.dat", tablet_id);
+    const uint64_t first_size = write_two_column_segment(
+            tablet_id, first_name, 1, [](int) { return 100; }, 10);
+    const uint64_t second_size = write_two_column_segment(
+            tablet_id, second_name, 1, [](int) { return 300; }, 10);
+
+    lake::Tablet tablet(_tablet_manager.get(), tablet_id);
+    lake::MetaFileBuilder builder(tablet, source);
+    auto make_upsert = [&](const std::string& name, uint64_t size) {
+        RowsetMetadataPB rowset;
+        rowset.set_num_rows(1);
+        rowset.set_data_size(size);
+        rowset.set_num_dels(0);
+        lake::tablet_reshard_helper::set_rowset_uid(&rowset);
+        auto* segment = rowset.add_segment_metas();
+        segment->set_filename(name);
+        segment->set_size(size);
+        segment->set_num_rows(1);
+        segment->set_segment_idx(0);
+        *segment->mutable_sort_key_min() = generate_sort_key(10);
+        *segment->mutable_sort_key_max() = generate_sort_key(10);
+        return rowset;
+    };
+    builder.add_rowset(make_upsert(first_name, first_size), {}, {}, {}, {}, {});
+
+    const std::string del_name = fmt::format("virtual_middle_{}.del", tablet_id);
+    write_binary_del_file(tablet_id, del_name, {encode_int_primary_key(10)});
+    RowsetMetadataPB pure_delete;
+    pure_delete.set_num_rows(0);
+    pure_delete.set_data_size(0);
+    pure_delete.set_num_dels(1);
+    FileMetaPB del_file;
+    del_file.set_name(del_name);
+    builder.add_rowset(pure_delete, {}, {}, std::vector<FileMetaPB>{del_file},
+                       /*del_op_offsets=*/{-1}, /*del_num_rows=*/{1});
+    builder.add_rowset(make_upsert(second_name, second_size), {}, {}, {}, {}, {});
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, source->rowsets_size());
+
+    const auto& built_batch = source->rowsets(0);
+    DelVector first_segment_delvec;
+    const uint32_t deleted_row = 0;
+    first_segment_delvec.init(kWriteVersion, &deleted_row, 1);
+    add_delvec(source.get(), tablet_id, kWriteVersion, built_batch.id(),
+               fmt::format("virtual_middle_{}.delvec", tablet_id), first_segment_delvec.save());
+    ASSERT_OK(put_tablet_metadata(source));
+    TabletMetadataPtr written = source;
+    ASSERT_EQ(1, written->rowsets_size());
+    const auto& batch = written->rowsets(0);
+    ASSERT_EQ(2, batch.segment_metas_size());
+    EXPECT_EQ(0, batch.segment_metas(0).segment_idx());
+    EXPECT_EQ(2, batch.segment_metas(1).segment_idx());
+    ASSERT_EQ(1, batch.del_files_size());
+    EXPECT_EQ(batch.id(), batch.del_files(0).origin_rowset_id());
+    EXPECT_EQ(1, batch.del_files(0).op_offset());
+    expect_lifecycle_oracle(written, {{10, 300}}, {});
+
+    ReshardingTabletInfoPB split_request;
+    auto* split = split_request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(tablet_id);
+    split->add_new_tablet_ids(left_child);
+    split->add_new_tablet_ids(right_child);
+    set_range(split->add_new_tablet_ranges(), 0, 50);
+    set_range(split->add_new_tablet_ranges(), 50, 100);
+    TxnInfoPB split_info;
+    split_info.set_txn_id(next_id());
+    split_info.set_commit_time(1);
+    split_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> split_published;
+    std::unordered_map<int64_t, TabletRangePB> split_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), split_request, kWriteVersion, kSplitVersion,
+                                              split_info, false, split_published, split_ranges));
+    ASSERT_TRUE(split_published.contains(left_child));
+    ASSERT_TRUE(split_published.contains(right_child));
+    for (int64_t child : {left_child, right_child}) {
+        ASSERT_EQ(1, split_published.at(child)->rowsets_size());
+        const auto& child_rowset = split_published.at(child)->rowsets(0);
+        ASSERT_EQ(2, child_rowset.segment_metas_size());
+        EXPECT_EQ(0, child_rowset.segment_metas(0).segment_idx());
+        EXPECT_EQ(2, child_rowset.segment_metas(1).segment_idx());
+        ASSERT_EQ(1, child_rowset.del_files_size());
+        EXPECT_EQ(1, child_rowset.del_files(0).op_offset());
+    }
+
+    std::unordered_map<int64_t, TabletMetadataPtr> merge_published;
+    ASSERT_OK(publish_resharding_merge({split_published.at(left_child), split_published.at(right_child)}, merged_tablet,
+                                       kSplitVersion, kMergeVersion, next_id(), merge_published));
+    auto merged = merge_published.at(merged_tablet);
+    ASSERT_EQ(1, merged->rowsets_size());
+    ASSERT_EQ(1, merged->rowsets(0).del_files_size());
+    EXPECT_EQ(1, merged->rowsets(0).del_files(0).op_offset());
+    expect_lifecycle_oracle(merged, {{10, 300}}, {});
+    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, kMergeVersion));
+    expect_lifecycle_oracle(cold, {{10, 300}}, {});
+}
+
+// CORE-003: a normal serial PK DELETE writes a zero-row physical segment whose footer has positive
+// size and whose sort-key bounds are empty. Split must conserve its physical bytes and replay order;
+// cold PK-index rebuild must skip the empty segment while still applying its del file.
+TEST_F(LakeTabletReshardTest, test_delete_only_zero_row_segment_survives_split_merge_cold_load) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+
+    ASSIGN_OR_ABORT(auto seeded,
+                    create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/10, /*value=*/100,
+                                            /*include_delete=*/false));
+    ASSIGN_OR_ABORT(auto deleted, publish_followup_delete(tablet_id, seeded->version(), /*delete_key=*/10));
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_pk_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+    const RowsetMetadataPB* delete_rowset = nullptr;
+    for (const auto& rowset : deleted->rowsets()) {
+        if (rowset.del_files_size() > 0) delete_rowset = &rowset;
+    }
+    ASSERT_NE(nullptr, delete_rowset);
+    EXPECT_EQ(0, delete_rowset->num_rows());
+    EXPECT_GT(delete_rowset->data_size(), 0);
+    ASSERT_EQ(1, delete_rowset->segment_metas_size());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).num_rows());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_min().values_size());
+    EXPECT_EQ(0, delete_rowset->segment_metas(0).sort_key_max().values_size());
+    ASSERT_EQ(1, delete_rowset->del_files_size());
+    EXPECT_GT(delete_rowset->del_files(0).num_rows(), 0);
+    const RowsetMetadataPB original_delete(*delete_rowset);
+    auto find_delete_rowset = [&](const TabletMetadataPtr& metadata) -> const RowsetMetadataPB* {
+        for (const auto& rowset : metadata->rowsets()) {
+            if (rowset.uid().SerializeAsString() == original_delete.uid().SerializeAsString()) return &rowset;
+        }
+        return nullptr;
+    };
+    auto expect_canonical_delete = [&](const TabletMetadataPtr& metadata) {
+        const auto* rowset = find_delete_rowset(metadata);
+        ASSERT_NE(nullptr, rowset);
+        EXPECT_EQ(0, rowset->num_rows());
+        EXPECT_EQ(0, rowset->num_dels());
+        EXPECT_EQ(original_delete.data_size(), rowset->data_size());
+        ASSERT_EQ(1, rowset->segment_metas_size());
+        SegmentMetadataPB expected_segment(original_delete.segment_metas(0));
+        SegmentMetadataPB actual_segment(rowset->segment_metas(0));
+        expected_segment.clear_shared();
+        actual_segment.clear_shared();
+        EXPECT_EQ(expected_segment.SerializeAsString(), actual_segment.SerializeAsString());
+        ASSERT_EQ(1, rowset->del_files_size());
+        DelfileWithRowsetId expected_del(original_delete.del_files(0));
+        DelfileWithRowsetId actual_del(rowset->del_files(0));
+        expected_del.clear_shared();
+        actual_del.clear_shared();
+        EXPECT_EQ(expected_del.SerializeAsString(), actual_del.SerializeAsString());
+    };
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp clear_sync([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    auto children = split_fixed_point_source(deleted, /*child_count=*/2);
+    int64_t projected_bytes = 0;
+    for (const auto& child : children) {
+        const auto* rowset = find_delete_rowset(child);
+        ASSERT_NE(nullptr, rowset);
+        ASSERT_EQ(1, rowset->segment_metas_size());
+        ASSERT_EQ(1, rowset->del_files_size());
+        EXPECT_EQ(0, rowset->num_rows());
+        EXPECT_EQ(0, rowset->num_dels());
+        EXPECT_GT(rowset->data_size(), 0);
+        projected_bytes += rowset->data_size();
+    }
+    EXPECT_EQ(original_delete.data_size(), projected_bytes);
+    EXPECT_EQ(1, flushes);
+
+    const int64_t merged_tablet = next_id();
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    ASSERT_OK(publish_resharding_merge(children, merged_tablet, deleted->version() + 1, deleted->version() + 2,
+                                       next_id(), published));
+    auto merged = published.at(merged_tablet);
+    expect_canonical_delete(merged);
+    expect_lifecycle_oracle(merged, {}, {10});
+    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, deleted->version() + 2));
+    expect_canonical_delete(cold);
+    expect_lifecycle_oracle(cold, {}, {10});
+
+    auto second_cycle = run_no_write_split_merge_cycle(cold, /*child_count=*/3);
+    expect_canonical_delete(second_cycle);
+    expect_lifecycle_oracle(second_cycle, {}, {10});
+    _update_manager->unload_and_remove_primary_index(second_cycle->id());
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto second_cold,
+                    _tablet_manager->get_tablet_metadata(second_cycle->id(), second_cycle->version()));
+    expect_canonical_delete(second_cold);
+    expect_lifecycle_oracle(second_cold, {}, {10});
+    EXPECT_EQ(2, flushes);
+}
+
+TEST_F(LakeTabletReshardTest, test_mixed_zero_row_delete_slot_survives_split_merge_cold_load) {
+    const int64_t tablet_id = next_id();
+    ASSIGN_OR_ABORT(auto seeded,
+                    create_lifecycle_source(tablet_id, /*lower=*/0, /*upper=*/100, /*key=*/10, /*value=*/100,
+                                            /*include_delete=*/false));
+
+    const int64_t old_write_buffer_size = config::write_buffer_size;
+    const bool old_enable_load_spill = config::enable_load_spill;
+    const bool old_preserve_delete_order = config::lake_enable_pk_preserve_txn_delete_order;
+    config::write_buffer_size = 1;
+    config::enable_load_spill = false;
+    config::lake_enable_pk_preserve_txn_delete_order = true;
+    DeferOp restore_config([&] {
+        config::write_buffer_size = old_write_buffer_size;
+        config::enable_load_spill = old_enable_load_spill;
+        config::lake_enable_pk_preserve_txn_delete_order = old_preserve_delete_order;
+    });
+
+    std::vector<SlotDescriptor> slots;
+    slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+    slots.emplace_back(2, "__op", TypeDescriptor{LogicalType::TYPE_INT});
+    std::vector<SlotDescriptor*> slot_pointers = {&slots[0], &slots[1], &slots[2]};
+    Chunk::SlotHashMap slot_cid_map = {{0, 0}, {1, 1}, {2, 2}};
+    auto make_chunk = [&](bool upsert) {
+        const int32_t key = 10;
+        const int32_t value = upsert ? 300 : 0;
+        const uint8_t operation = upsert ? TOpType::UPSERT : TOpType::DELETE;
+        auto key_column = Int32Column::create();
+        auto value_column = Int32Column::create();
+        auto operation_column = Int8Column::create();
+        key_column->append_numbers(&key, sizeof(key));
+        value_column->append_numbers(&value, sizeof(value));
+        operation_column->append_numbers(&operation, sizeof(operation));
+        return Chunk(Columns{std::move(key_column), std::move(value_column), std::move(operation_column)},
+                     slot_cid_map);
+    };
+    auto delete_chunk = make_chunk(false);
+    auto upsert_chunk = make_chunk(true);
+    const uint32_t index = 0;
+    const int64_t txn_id = next_id();
+    auto tablet_schema = TabletSchema::create(seeded->schema());
+    RuntimeProfile profile("mixed-zero-row-delete-slot");
+    ASSIGN_OR_ABORT(auto delta_writer, lake::DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(next_id())
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(seeded->schema().id())
+                                               .set_tablet_schema(std::move(tablet_schema))
+                                               .set_slot_descriptors(&slot_pointers)
+                                               .set_profile(&profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(delete_chunk, &index, 1));
+    ASSERT_OK(delta_writer->write(upsert_chunk, &index, 1));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    TxnInfoPB txn;
+    txn.set_txn_id(txn_id);
+    txn.set_txn_type(TXN_NORMAL);
+    txn.set_commit_time(1);
+    ASSIGN_OR_ABORT(auto written,
+                    lake::publish_version(_tablet_manager.get(), lake::PublishTabletInfo(tablet_id), seeded->version(),
+                                          seeded->version() + 1, std::span<const TxnInfoPB>(&txn, 1), false));
+
+    const RowsetMetadataPB* mixed = nullptr;
+    for (const auto& rowset : written->rowsets()) {
+        if (rowset.version() == written->version()) mixed = &rowset;
+    }
+    ASSERT_NE(nullptr, mixed);
+    ASSERT_EQ(2, mixed->segment_metas_size());
+    EXPECT_EQ((std::vector<int64_t>{0, 1}),
+              (std::vector<int64_t>{mixed->segment_metas(0).num_rows(), mixed->segment_metas(1).num_rows()}));
+    EXPECT_EQ((std::vector<uint32_t>{0, 1}),
+              (std::vector<uint32_t>{mixed->segment_metas(0).segment_idx(), mixed->segment_metas(1).segment_idx()}));
+    ASSERT_EQ(1, mixed->del_files_size());
+    EXPECT_EQ(mixed->id(), mixed->del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, mixed->del_files(0).op_offset());
+    const auto mixed_uid = mixed->uid().SerializeAsString();
+    const int64_t mixed_rows = mixed->num_rows();
+    const int64_t mixed_bytes = mixed->data_size();
+    const int64_t mixed_dels = mixed->num_dels();
+    auto canonical_mixed_signature = [&](const TabletMetadataPtr& metadata) {
+        for (const auto& rowset : metadata->rowsets()) {
+            if (rowset.uid().SerializeAsString() != mixed_uid) continue;
+            RowsetMetadataPB stable(rowset);
+            stable.clear_id();
+            stable.clear_range();
+            for (auto& segment : *stable.mutable_segment_metas()) segment.clear_shared();
+            for (auto& del : *stable.mutable_del_files()) {
+                del.clear_origin_rowset_id();
+                del.clear_shared();
+            }
+            return stable.SerializeAsString();
+        }
+        return std::string();
+    };
+    const auto baseline_signature = canonical_mixed_signature(written);
+    ASSERT_FALSE(baseline_signature.empty());
+
+    set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::DISABLE);
+    DeferOp restore_pk_flush([&] { set_failpoint_mode("skip_lake_pk_index_flush", FailPointTriggerModeType::ENABLE); });
+    auto children_or = try_split_fixed_point_source(written, /*child_count=*/2);
+    ASSERT_OK(children_or.status());
+    auto children = std::move(children_or).value();
+    for (const auto& child : children) {
+        auto it = std::find_if(child->rowsets().begin(), child->rowsets().end(),
+                               [&](const auto& rowset) { return rowset.uid().SerializeAsString() == mixed_uid; });
+        ASSERT_NE(child->rowsets().end(), it);
+        ASSERT_EQ(2, it->segment_metas_size());
+        EXPECT_EQ(0, it->segment_metas(0).segment_idx());
+        EXPECT_EQ(1, it->segment_metas(1).segment_idx());
+        ASSERT_EQ(1, it->del_files_size());
+        EXPECT_EQ(0, it->del_files(0).op_offset());
+    }
+
+    const int64_t merged_tablet = next_id();
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    ASSERT_OK(publish_resharding_merge(children, merged_tablet, written->version() + 1, written->version() + 2,
+                                       next_id(), published));
+    auto merged = published.at(merged_tablet);
+    auto merged_it = std::find_if(merged->rowsets().begin(), merged->rowsets().end(),
+                                  [&](const auto& rowset) { return rowset.uid().SerializeAsString() == mixed_uid; });
+    ASSERT_NE(merged->rowsets().end(), merged_it);
+    ASSERT_EQ(2, merged_it->segment_metas_size());
+    EXPECT_EQ(0, merged_it->segment_metas(0).segment_idx());
+    EXPECT_EQ(1, merged_it->segment_metas(1).segment_idx());
+    ASSERT_EQ(1, merged_it->del_files_size());
+    EXPECT_EQ(0, merged_it->del_files(0).op_offset());
+    EXPECT_EQ(mixed_rows, merged_it->num_rows());
+    EXPECT_EQ(mixed_bytes, merged_it->data_size());
+    EXPECT_EQ(mixed_dels, merged_it->num_dels());
+    expect_lifecycle_oracle(merged, {{10, 300}}, {});
+    _update_manager->unload_and_remove_primary_index(merged_tablet);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(merged_tablet, written->version() + 2));
+    expect_lifecycle_oracle(cold, {{10, 300}}, {});
+    EXPECT_EQ(baseline_signature, canonical_mixed_signature(cold));
+
+    auto three_way_or = try_run_no_write_split_merge_cycle(cold, /*child_count=*/3);
+    ASSERT_OK(three_way_or.status());
+    auto three_way = std::move(three_way_or).value();
+    expect_lifecycle_oracle(three_way, {{10, 300}}, {});
+    EXPECT_EQ(baseline_signature, canonical_mixed_signature(three_way));
+}
+
+TEST_F(LakeTabletReshardTest, test_all_zero_rowset_without_delete_survives_split_merge_fixed_point) {
+    for (const bool positive_anchor : {true, false}) {
+        SCOPED_TRACE(fmt::format("positive aggregate byte anchor: {}", positive_anchor));
+        const int64_t tablet_id = next_id();
+        prepare_tablet_dirs(tablet_id);
+        const std::string segment_name = fmt::format("all-zero-{}.dat", positive_anchor);
+        const uint64_t footer_size = write_two_column_segment(tablet_id, segment_name, 0, [](int key) { return key; });
+        ASSERT_GT(footer_size, 0);
+
+        auto source = std::make_shared<TabletMetadataPB>();
+        source->set_id(tablet_id);
+        source->set_version(1);
+        source->set_next_rowset_id(2);
+        set_two_column_pk_schema(source.get(), 4001);
+        source->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+        source->mutable_range()->set_lower_bound_included(true);
+        source->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+        source->mutable_range()->set_upper_bound_included(false);
+        auto* rowset = source->add_rowsets();
+        rowset->set_id(1);
+        rowset->set_version(1);
+        rowset->set_num_rows(0);
+        rowset->set_data_size(positive_anchor ? footer_size : 0);
+        rowset->set_num_dels(0);
+        lake::tablet_reshard_helper::set_rowset_uid(rowset);
+        auto* segment = rowset->add_segment_metas();
+        segment->set_filename(segment_name);
+        segment->set_segment_idx(0);
+        segment->set_num_rows(0);
+        segment->set_size(footer_size);
+        const auto original_uid = rowset->uid().SerializeAsString();
+        const SegmentMetadataPB original_segment(*segment);
+        const int64_t expected_bytes = rowset->data_size();
+        auto canonical_signature = [](const TabletMetadataPtr& metadata) {
+            RowsetMetadataPB stable(metadata->rowsets(0));
+            stable.clear_id();
+            stable.clear_range();
+            for (auto& stable_segment : *stable.mutable_segment_metas()) stable_segment.clear_shared();
+            return stable.SerializeAsString();
+        };
+        const auto baseline_signature = canonical_signature(source);
+        ASSERT_OK(put_tablet_metadata(source));
+
+        TabletMetadataPtr current = source;
+        for (const int child_count : {2, 3}) {
+            auto children_or = try_split_fixed_point_source(current, child_count);
+            ASSERT_OK(children_or.status());
+            auto children = std::move(children_or).value();
+            int64_t total_rows = 0;
+            int64_t total_bytes = 0;
+            int64_t total_dels = 0;
+            for (const auto& child : children) {
+                ASSERT_EQ(1, child->rowsets_size());
+                const auto& child_rowset = child->rowsets(0);
+                EXPECT_EQ(original_uid, child_rowset.uid().SerializeAsString());
+                ASSERT_EQ(1, child_rowset.segment_metas_size());
+                SegmentMetadataPB child_segment(child_rowset.segment_metas(0));
+                child_segment.clear_shared();
+                EXPECT_EQ(original_segment.SerializeAsString(), child_segment.SerializeAsString());
+                total_rows += child_rowset.num_rows();
+                total_bytes += child_rowset.data_size();
+                total_dels += child_rowset.num_dels();
+            }
+            EXPECT_EQ(0, total_rows);
+            EXPECT_EQ(expected_bytes, total_bytes);
+            EXPECT_EQ(0, total_dels);
+
+            const int64_t target = next_id();
+            std::unordered_map<int64_t, TabletMetadataPtr> published;
+            ASSERT_OK(publish_resharding_merge(children, target, current->version() + 1, current->version() + 2,
+                                               next_id(), published));
+            current = published.at(target);
+            ASSERT_EQ(1, current->rowsets_size());
+            const auto& merged_rowset = current->rowsets(0);
+            EXPECT_EQ(original_uid, merged_rowset.uid().SerializeAsString());
+            EXPECT_EQ(0, merged_rowset.num_rows());
+            EXPECT_EQ(expected_bytes, merged_rowset.data_size());
+            EXPECT_EQ(0, merged_rowset.num_dels());
+            ASSERT_EQ(1, merged_rowset.segment_metas_size());
+            EXPECT_EQ(0, merged_rowset.segment_metas(0).segment_idx());
+            SegmentMetadataPB merged_segment(merged_rowset.segment_metas(0));
+            merged_segment.clear_shared();
+            EXPECT_EQ(original_segment.SerializeAsString(), merged_segment.SerializeAsString());
+            EXPECT_EQ(baseline_signature, canonical_signature(current));
+        }
+    }
+}
+
+// CORE-005: split row counts are estimates, but later PK deletes are exact. A skewed shared segment
+// can therefore produce a valid child whose num_dels exceeds its estimated num_rows. Both re-split
+// and sibling merge must preserve that delete anchor instead of treating the estimate as a hard cap.
+TEST_F(LakeTabletReshardTest, test_skewed_child_exact_deletes_survive_resplit_merge_cold_load) {
+    constexpr int64_t kSourceVersion = 1;
+    constexpr int64_t kSplitVersion = 2;
+    constexpr int64_t kDmlVersion = 3;
+    constexpr int64_t kMergeVersion = 4;
+    const int64_t source_id = next_id();
+    const int64_t left_id = next_id();
+    const int64_t right_id = next_id();
+    const int64_t target_id = next_id();
+    for (int64_t id : {source_id, left_id, right_id, target_id}) prepare_tablet_dirs(id);
+
+    auto set_range = [&](TabletRangePB* range, int lower, int upper) {
+        *range->mutable_lower_bound() = generate_sort_key(lower);
+        range->set_lower_bound_included(true);
+        *range->mutable_upper_bound() = generate_sort_key(upper);
+        range->set_upper_bound_included(false);
+    };
+    const std::string segment_name = fmt::format("skewed_delete_{}.dat", source_id);
+    const uint64_t segment_size = write_two_column_segment(
+            source_id, segment_name, /*num_rows=*/100, [](int key) { return key * 10; }, /*key_start=*/0,
+            [](int ordinal) { return ordinal < 90 ? ordinal : 1000 + ordinal - 90; });
+
+    auto source = std::make_shared<TabletMetadataPB>();
+    source->set_id(source_id);
+    source->set_version(kSourceVersion);
+    source->set_next_rowset_id(2);
+    set_two_column_pk_schema(source.get(), /*schema_id=*/4001);
+    source->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
+    source->set_enable_persistent_index(true);
+    source->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+    set_range(source->mutable_range(), 0, 1010);
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_version(kSourceVersion);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(segment_size);
+    rowset->set_num_dels(0);
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    const auto source_uid = rowset->uid().SerializeAsString();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename(segment_name);
+    segment->set_size(segment_size);
+    segment->set_num_rows(100);
+    segment->set_segment_idx(0);
+    *segment->mutable_sort_key_min() = generate_sort_key(0);
+    *segment->mutable_sort_key_max() = generate_sort_key(1009);
+    ASSERT_EQ(0, segment->deprecated_sort_key_samples_size());
+    ASSERT_OK(put_tablet_metadata(source));
+
+    ReshardingTabletInfoPB split_request;
+    auto* split = split_request.mutable_splitting_tablet_info();
+    split->set_old_tablet_id(source_id);
+    split->add_new_tablet_ids(left_id);
+    split->add_new_tablet_ids(right_id);
+    set_range(split->add_new_tablet_ranges(), 0, 500);
+    set_range(split->add_new_tablet_ranges(), 500, 1010);
+    TxnInfoPB split_info;
+    split_info.set_txn_id(next_id());
+    split_info.set_commit_time(1);
+    split_info.set_gtid(1);
+    std::unordered_map<int64_t, TabletMetadataPtr> split_published;
+    std::unordered_map<int64_t, TabletRangePB> split_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), split_request, kSourceVersion, kSplitVersion,
+                                              split_info, false, split_published, split_ranges));
+    auto left = split_published.at(left_id);
+    auto right = split_published.at(right_id);
+    auto find_source_rowset = [&](const TabletMetadataPtr& metadata) -> const RowsetMetadataPB* {
+        for (const auto& candidate : metadata->rowsets()) {
+            if (candidate.uid().SerializeAsString() == source_uid) return &candidate;
+        }
+        return nullptr;
+    };
+    const auto* estimated_left = find_source_rowset(left);
+    ASSERT_NE(nullptr, estimated_left);
+    EXPECT_LT(estimated_left->num_rows(), 60);
+
+    std::vector<int32_t> deleted_keys(60);
+    std::iota(deleted_keys.begin(), deleted_keys.end(), 0);
+    ASSIGN_OR_ABORT(auto left_deleted, publish_followup_deletes(left_id, kSplitVersion, deleted_keys));
+    ASSIGN_OR_ABORT(auto right_aligned,
+                    publish_followup_upsert_delete(right_id, kSplitVersion, /*upsert_key=*/1000,
+                                                   /*upsert_value=*/10000, /*delete_key=*/0,
+                                                   /*include_delete=*/false, /*include_upsert=*/true));
+    ASSERT_EQ(kDmlVersion, left_deleted->version());
+    ASSERT_EQ(kDmlVersion, right_aligned->version());
+    const auto* deleted_source = find_source_rowset(left_deleted);
+    ASSERT_NE(nullptr, deleted_source);
+    EXPECT_EQ(60, deleted_source->num_dels());
+    EXPECT_GT(deleted_source->num_dels(), deleted_source->num_rows());
+
+    SplittingTabletInfoPB nested_split;
+    nested_split.set_old_tablet_id(left_id);
+    const int64_t nested_left = next_id();
+    const int64_t nested_right = next_id();
+    nested_split.add_new_tablet_ids(nested_left);
+    nested_split.add_new_tablet_ids(nested_right);
+    set_range(nested_split.add_new_tablet_ranges(), 0, 250);
+    set_range(nested_split.add_new_tablet_ranges(), 250, 500);
+    TxnInfoPB nested_info;
+    nested_info.set_txn_id(next_id());
+    nested_info.set_commit_time(1);
+    nested_info.set_gtid(2);
+    ASSIGN_OR_ABORT(auto nested_children,
+                    lake::split_tablet(_tablet_manager.get(), left_deleted, nested_split, kMergeVersion, nested_info));
+    int64_t nested_rows = 0;
+    int64_t nested_dels = 0;
+    bool saw_dels_above_rows = false;
+    for (int64_t child_id : {nested_left, nested_right}) {
+        const auto* child_rowset = find_source_rowset(nested_children.at(child_id));
+        ASSERT_NE(nullptr, child_rowset);
+        nested_rows += child_rowset->num_rows();
+        nested_dels += child_rowset->num_dels();
+        saw_dels_above_rows |= child_rowset->num_dels() > child_rowset->num_rows();
+    }
+    EXPECT_EQ(deleted_source->num_rows(), nested_rows);
+    EXPECT_EQ(60, nested_dels);
+    EXPECT_TRUE(saw_dels_above_rows);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> merged_published;
+    const auto* right_source = find_source_rowset(right_aligned);
+    ASSERT_NE(nullptr, right_source);
+    const int64_t expected_merged_rows = deleted_source->num_rows() + right_source->num_rows();
+    const int64_t expected_merged_bytes = deleted_source->data_size() + right_source->data_size();
+    const int64_t expected_merged_dels = deleted_source->num_dels() + right_source->num_dels();
+    ASSERT_OK(publish_resharding_merge({left_deleted, right_aligned}, target_id, kDmlVersion, kMergeVersion, next_id(),
+                                       merged_published));
+    auto merged = merged_published.at(target_id);
+    const auto* merged_source = find_source_rowset(merged);
+    ASSERT_NE(nullptr, merged_source);
+    EXPECT_EQ(expected_merged_rows, merged_source->num_rows());
+    EXPECT_EQ(expected_merged_bytes, merged_source->data_size());
+    EXPECT_EQ(expected_merged_dels, merged_source->num_dels());
+    std::vector<std::pair<int32_t, int32_t>> expected_rows;
+    for (int key = 60; key < 90; ++key) expected_rows.emplace_back(key, key * 10);
+    for (int key = 1000; key < 1010; ++key) expected_rows.emplace_back(key, key * 10);
+    expect_lifecycle_oracle(merged, expected_rows, deleted_keys);
+    _update_manager->unload_and_remove_primary_index(target_id);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto cold, _tablet_manager->get_tablet_metadata(target_id, kMergeVersion));
+    expect_lifecycle_oracle(cold, expected_rows, deleted_keys);
+}
+
 TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for_splitting) {
     auto base_metadata = std::make_shared<TabletMetadataPB>();
     base_metadata->set_id(next_id());
@@ -7574,6 +9796,7 @@ TEST_F(LakeTabletReshardTest, test_convert_txn_log_updates_all_rowset_ranges_for
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_name);
             sm->set_size(1);
+            sm->set_num_rows(1);
         }
         set_range(rowset->mutable_range(), lower, upper);
     };
@@ -7657,6 +9880,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -7675,8 +9899,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
     auto meta_a = make_child(child_a);
     auto meta_b = make_child(child_b);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7704,15 +9927,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_then_merge) {
     // num_rows/data_size should be accumulated from both children
     EXPECT_EQ(20, merged->rowsets(0).num_rows());
     EXPECT_EQ(200, merged->rowsets(0).data_size());
-    // These hand-built sources both claim the unbounded tablet range, so the partition proof is uncertain even
-    // though their rowsets deduplicate. The complete shared cohort is omitted and folded once; its future
-    // generation (7 > merge version 2) conservatively becomes unknown.
-    EXPECT_EQ(0, merged->sstable_meta().sstables_size());
-    ASSERT_EQ(1, merged->orphan_files_size());
-    EXPECT_EQ("shared_sst.sst", merged->orphan_files(0).name());
-    EXPECT_EQ(512, merged->orphan_files(0).size());
-    EXPECT_TRUE(merged->orphan_files(0).shared());
-    EXPECT_EQ(0, merged->orphan_files(0).version());
+    // The contiguous producer ranges prove the identical shared cohort reusable.
+    ASSERT_EQ(1, merged->sstable_meta().sstables_size());
+    EXPECT_EQ("shared_sst.sst", merged->sstable_meta().sstables(0).filename());
+    EXPECT_EQ(7, merged->sstable_meta().sstables(0).generation_version());
+    EXPECT_EQ(0, merged->orphan_files_size());
 }
 
 // The merged tablet's async vector-index build watermark must be the MIN over all
@@ -7746,6 +9965,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_min) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -7754,8 +9974,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_min) 
     // source[0] has the HIGHER watermark; buggy code would inherit 100 and skip child_b's unbuilt tail.
     auto meta_a = make_child(child_a, 100);
     auto meta_b = make_child(child_b, 50);
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7812,6 +10031,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_mixed
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -7819,8 +10039,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_mixed
 
     auto meta_a = make_child(child_a, /*set_built_version=*/true, 100);
     auto meta_b = make_child(child_b, /*set_built_version=*/false, 0);
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7872,6 +10091,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_none)
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         return meta;
@@ -7879,8 +10099,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_vector_index_built_version_none)
 
     auto meta_a = make_child(child_a);
     auto meta_b = make_child(child_b);
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -7938,6 +10157,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_segment_union_preserves_ownershi
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(0);
             sm->set_encryption_meta("enc_shared");
@@ -7946,6 +10166,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_segment_union_preserves_ownershi
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(private_seg);
             sm->set_size(50);
+            sm->set_num_rows(10);
             sm->set_shared(false);
             sm->set_segment_idx(private_idx);
             sm->set_encryption_meta("enc_" + private_seg);
@@ -7955,8 +10176,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_segment_union_preserves_ownershi
         rowset->mutable_uid()->set_lo(777);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, "a_private.dat", 1)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, "b_private.dat", 2)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, "a_private.dat", 1), make_child(child_b, "b_private.dat", 2)));
 
     ReshardingTabletInfoPB resharding;
     auto& merging = *resharding.mutable_merging_tablet_info();
@@ -8045,6 +10265,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_disjoint_all_shared_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_name);
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(segment_idx);
         }
@@ -8053,8 +10274,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_disjoint_all_shared_
         rowset->mutable_uid()->set_lo(2024);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, "ancestor_seg_0.dat", 0)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, "ancestor_seg_1.dat", 1)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, "ancestor_seg_0.dat", 0),
+                                make_child(child_b, "ancestor_seg_1.dat", 1)));
 
     ReshardingTabletInfoPB resharding;
     auto& merging = *resharding.mutable_merging_tablet_info();
@@ -8101,6 +10322,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_bundled_segments_union_offsets) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("bundle.dat"); // same physical file for every slice
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_bundle_file_offset(off);
         sm->set_shared(true);
         sm->set_segment_idx(idx);
@@ -8126,8 +10348,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_bundled_segments_union_offsets) 
         rowset->mutable_uid()->set_lo(2024);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, 0, 0, 1, 1024)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, 2, 2048, 3, 3072)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, 0, 0, 1, 1024), make_child(child_b, 2, 2048, 3, 3072)));
 
     ReshardingTabletInfoPB resharding;
     auto& merging = *resharding.mutable_merging_tablet_info();
@@ -8193,6 +10414,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_unequal_count_all_sh
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(segment_names[i]);
             sm->set_size(50);
+            sm->set_num_rows(10);
             sm->set_shared(true);
             sm->set_segment_idx(segment_indexes[i]);
         }
@@ -8200,8 +10422,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merge_multi_level_unequal_count_all_sh
         rowset->mutable_uid()->set_lo(2025);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, {"seg_0.dat", "seg_1.dat"}, {0, 1})));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, {"seg_2.dat"}, {2})));
+    ASSERT_OK(put_merge_sources(make_child(child_a, {"seg_0.dat", "seg_1.dat"}, {0, 1}),
+                                make_child(child_b, {"seg_2.dat"}, {2})));
 
     ReshardingTabletInfoPB resharding;
     auto& merging = *resharding.mutable_merging_tablet_info();
@@ -8258,6 +10480,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_num_dels) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -8268,8 +10491,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accumulates_num_dels) {
     auto meta_a = make_child(child_a, /*num_rows=*/4, /*data_size=*/40, /*num_dels=*/3);
     auto meta_b = make_child(child_b, /*num_rows=*/6, /*data_size=*/60, /*num_dels=*/3);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -8322,6 +10544,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = shared_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(shared_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -8335,6 +10558,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = local_a->add_segment_metas();
         sm->set_filename("local_a_seg.dat");
         sm->set_size(50);
+        sm->set_num_rows(10);
     }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -8352,6 +10576,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = shared_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(shared_b, "shared_seg.dat"); // same uid across siblings => dedup
@@ -8365,10 +10590,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_upsert_delete) {
         auto* sm = local_b->add_segment_metas();
         sm->set_filename("local_b_seg.dat");
         sm->set_size(30);
+        sm->set_num_rows(10);
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8430,6 +10655,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
         auto* sm = compacted_a->add_segment_metas();
         sm->set_filename("compacted_a.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // not shared - this is the compaction output
 
@@ -8448,11 +10674,16 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_split_with_compaction) {
         auto* sm = shared_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    set_two_column_pk_schema(meta_a.get(), 1001);
+    set_two_column_pk_schema(meta_b.get(), 1001);
+    const auto shared_size = write_two_column_segment(child_b, "shared_seg.dat", 100, [](int key) { return key; });
+    shared_b->mutable_segment_metas(0)->set_size(shared_size);
+    shared_b->mutable_segment_metas(0)->set_num_rows(100);
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8501,6 +10732,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("local_a.dat");
         sm->set_size(50);
+        sm->set_num_rows(5);
     }
 
     auto meta_b = std::make_shared<TabletMetadataPB>();
@@ -8516,11 +10748,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_rowset_on_non_first_chi
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8577,8 +10809,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delete_only_shared_rowset) {
     auto meta_a = make_del_only_child(child_a);
     auto meta_b = make_del_only_child(child_b);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8629,6 +10860,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
         auto* sm = rowset_c->add_segment_metas();
         sm->set_filename("family_a_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
@@ -8645,11 +10877,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_different_split_families) {
         auto* sm = rowset_d->add_segment_metas();
         sm->set_filename("family_e_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_c));
-    EXPECT_OK(put_tablet_metadata(meta_d));
+    ASSERT_OK(put_merge_sources(meta_c, meta_d));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8699,6 +10931,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("cross_pub.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     // Cross-publish: the same write txn log is applied to both children, so both
@@ -8718,12 +10951,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_publish_different_id) {
         auto* sm = rowset_b->add_segment_metas(); // Same segment
         sm->set_filename("cross_pub.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "cross_pub.dat"); // same uid as A (cross-publish)
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8773,6 +11006,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -8792,14 +11026,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_fail_fast) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
     // DCG from child B's different independent partial update
     add_dcg_with_columns(meta_b.get(), 1, "dcg_b.cols", {1}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8839,7 +11073,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_predicate_dedup) {
     meta_a.set_next_rowset_id(3);
     add_rowset_with_predicate(&meta_a, 1, 5, true);  // predicate v5
     add_rowset_with_predicate(&meta_a, 2, 6, false); // data v6
-    EXPECT_OK(put_tablet_metadata(meta_a));
 
     TabletMetadataPB meta_b;
     meta_b.set_id(child_b);
@@ -8847,7 +11080,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_predicate_dedup) {
     meta_b.set_next_rowset_id(3);
     add_rowset_with_predicate(&meta_b, 1, 5, true);  // same predicate v5
     add_rowset_with_predicate(&meta_b, 2, 6, false); // data v6
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    EXPECT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -8904,6 +11137,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_dcg_dedup) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -8915,8 +11149,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_dcg_dedup) {
     auto meta_a = make_child_with_dcg(child_a);
     auto meta_b = make_child_with_dcg(child_b);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -9051,6 +11284,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_compacts_only_live_page
     // second output must stay page-sized; a whole-object copy would reintroduce
     // the dead prefix/suffix on every remerge.
     auto split_parent = std::make_shared<TabletMetadataPB>(*merged);
+    split_parent->clear_schema();
     set_two_column_pk_schema(split_parent.get(), /*schema_id=*/1001);
     split_parent->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
     split_parent->mutable_range()->set_lower_bound_included(true);
@@ -9324,8 +11558,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_duplicate_source_metada
             auto* conflicting_file = &(*conflicting->mutable_delvec_meta()->mutable_version_to_file())[/*version=*/10];
             mismatch.apply(conflicting_file);
 
-            ASSERT_OK(put_tablet_metadata(baseline));
-            ASSERT_OK(put_tablet_metadata(conflicting));
+            ASSERT_OK(put_merge_sources(baseline, conflicting));
             ASSIGN_OR_ABORT(auto inventory_before, delvec_inventory(merged_tablet));
 
             ReshardingTabletInfoPB resharding;
@@ -9445,8 +11678,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_union_rejecte
         (*stale->mutable_delvec_meta()->mutable_version_to_file())[11].set_encryption_meta(
                 std::string(1, static_cast<char>(0xff)));
 
-        ASSERT_OK(put_tablet_metadata(plain));
-        ASSERT_OK(put_tablet_metadata(stale));
+        ASSERT_OK(put_merge_sources(plain, stale));
         ReshardingTabletInfoPB resharding;
         auto& merging = *resharding.mutable_merging_tablet_info();
         const std::vector<int64_t> sources = stale_first ? std::vector<int64_t>{stale_tablet, plain_tablet}
@@ -9647,9 +11879,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_merged_duplicate_source
             y_delvec.init(/*version=*/11, &y_deleted_rowid, 1);
             add_delvec(middle_y.get(), middle_y_tablet, /*version=*/11, /*segment_id=*/1, y_filename, y_delvec.save());
 
-            ASSERT_OK(put_tablet_metadata(baseline_x));
-            ASSERT_OK(put_tablet_metadata(middle_y));
-            ASSERT_OK(put_tablet_metadata(conflicting_x));
+            ASSERT_OK(put_merge_sources(baseline_x, middle_y, conflicting_x));
             ASSIGN_OR_ABORT(auto inventory_before, delvec_inventory(merged_tablet));
 
             ReshardingTabletInfoPB resharding;
@@ -9887,6 +12117,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -9907,14 +12138,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_independent_delete) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
     // Delvec from child_b's different independent delete
     add_delvec(meta_b.get(), child_b, 2, 1, "delvec_b.dv", dv_b_data);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -10007,12 +12238,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg1.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     {
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg2.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg1.dat"); // same uid across siblings => dedup
@@ -10054,12 +12287,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg1.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     {
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg2.dat");
         sm->set_size(100);
+        sm->set_num_rows(5);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg1.dat"); // same uid across siblings => dedup
@@ -10086,8 +12321,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_multi_target_union) {
         write_file(_tablet_manager->delvec_location(child_b, "delvec_b.dv"), combined_b);
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -10188,6 +12422,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_three_way_union) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10199,9 +12434,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_three_way_union) {
     auto meta_b = make_child_meta(child_b, 2, "delvec_b.dv", dv_b_data);
     auto meta_c = make_child_meta(child_c, 3, "delvec_c.dv", dv_c_data);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
-    EXPECT_OK(put_tablet_metadata(meta_c));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b, meta_c));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -10275,6 +12508,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
         auto* sm = rowset_a->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_a, "shared_seg.dat"); // same uid across siblings => dedup
@@ -10295,14 +12529,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delvec_no_independent_delete) 
         auto* sm = rowset_b->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset_b, "shared_seg.dat"); // same uid across siblings => dedup
     // Same file name, same offset/size -> page-ref dedup
     add_delvec(meta_b.get(), child_b, 1, 1, "shared_delvec.dv", dv_data);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -10700,8 +12934,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cross_target_same_base_sidecar
     TabletMetadataPB compacted(*reopened);
     compacted.set_version(reopened->version() + 1);
     ASSERT_EQ(2, compacted.rowsets_size());
-    RowsetMetadataPB retired(compacted.rowsets(0));
-    RowsetMetadataPB retained(compacted.rowsets(1));
+    const int retired_index =
+            compacted.rowsets(0).range().lower_bound().SerializeAsString() == generate_sort_key(0).SerializeAsString()
+                    ? 0
+                    : 1;
+    RowsetMetadataPB retired(compacted.rowsets(retired_index));
+    RowsetMetadataPB retained(compacted.rowsets(1 - retired_index));
     compacted.clear_rowsets();
     compacted.add_rowsets()->CopyFrom(retained);
     compacted.clear_compaction_inputs();
@@ -10852,7 +13090,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_invalid_physical_segme
                  left->set_size(128);
                  right->set_bundle_file_offset(-1);
              }},
-            {"negative size", true, "size",
+            {"negative size", true, "negative statistics",
              [](SegmentMetadataPB* left, SegmentMetadataPB* right) {
                  left->set_size(-1);
                  right->set_size(-1);
@@ -11036,7 +13274,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_segment_inde
 
         MergePhaseCounts counts;
         auto status = expect_physical_preflight_rejection({source}, next_id(), /*target_version=*/2, &counts);
-        EXPECT_TRUE(status.message().contains("duplicate effective segment index")) << status;
+        EXPECT_TRUE(status.message().contains("not strictly increasing")) << status;
     }
 }
 
@@ -11053,8 +13291,12 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_physical_sli
 
         MergePhaseCounts counts;
         auto status = expect_physical_preflight_rejection({source}, next_id(), /*target_version=*/2, &counts);
-        EXPECT_TRUE(status.message().contains(filename)) << status;
-        EXPECT_TRUE(status.message().contains("multiple segment indices")) << status;
+        if (reverse_segments) {
+            EXPECT_TRUE(status.message().contains("not strictly increasing")) << status;
+        } else {
+            EXPECT_TRUE(status.message().contains(filename)) << status;
+            EXPECT_TRUE(status.message().contains("multiple segment indices")) << status;
+        }
     }
 }
 
@@ -11097,7 +13339,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_adjacent_and_disjoint_
             EXPECT_EQ(1, counts.materialize);
             EXPECT_EQ(0, counts.dcg_writes);
             EXPECT_EQ(0, counts.delvec_writes);
-            EXPECT_EQ(0, counts.source_flushes);
+            EXPECT_EQ(2, counts.source_flushes);
         }
     }
 }
@@ -11133,7 +13375,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_uniform_bundle_presenc
             EXPECT_EQ(1, counts.materialize);
             EXPECT_EQ(0, counts.dcg_writes);
             EXPECT_EQ(0, counts.delvec_writes);
-            EXPECT_EQ(0, counts.source_flushes);
+            EXPECT_EQ(2, counts.source_flushes);
         }
     }
 }
@@ -11328,38 +13570,62 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_modern_sst_i
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_sst_same_file_form_or_range_conflict_before_io) {
-    struct DeclarationConflict {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_same_physical_sst_allows_logical_attachment_differences) {
+    struct LogicalAttachment {
         const char* name;
         std::function<void(PersistentIndexSstablePB*)> apply;
+        bool reuse_when_ranges_ordered = false;
     };
-    const std::vector<DeclarationConflict> conflicts = {
-            {"max rss rowid", [](PersistentIndexSstablePB* sst) { sst->set_max_rss_rowid(uint64_t{2} << 32); }},
+    const std::vector<LogicalAttachment> attachments = {
+            {"deprecated version", [](PersistentIndexSstablePB* sst) { sst->set_version(2); }},
+            {"max rss rowid", [](PersistentIndexSstablePB* sst) { sst->set_max_rss_rowid((uint64_t{2} << 32) | 99); }},
+            {"shared", [](PersistentIndexSstablePB* sst) { sst->set_shared(false); }},
             {"shared rssid", [](PersistentIndexSstablePB* sst) { sst->set_shared_rssid(2); }},
             {"shared version", [](PersistentIndexSstablePB* sst) { sst->set_shared_version(2); }},
-            {"shared version presence", [](PersistentIndexSstablePB* sst) { sst->clear_shared_version(); }},
-            {"rssid offset", [](PersistentIndexSstablePB* sst) { sst->set_rssid_offset(1); }},
             {"embedded delvec",
              [](PersistentIndexSstablePB* sst) {
                  sst->mutable_delvec()->set_version(1);
                  sst->mutable_delvec()->set_size(1);
              }},
-            {"range start",
-             [&](PersistentIndexSstablePB* sst) { sst->mutable_range()->set_start_key(encode_int_primary_key(11)); }},
-            {"range end",
-             [&](PersistentIndexSstablePB* sst) { sst->mutable_range()->set_end_key(encode_int_primary_key(89)); }},
-            {"range presence", [](PersistentIndexSstablePB* sst) { sst->clear_range(); }},
+            {"fileset",
+             [](PersistentIndexSstablePB* sst) {
+                 sst->mutable_fileset_id()->set_hi(2);
+                 sst->mutable_fileset_id()->set_lo(2);
+             },
+             true},
+            {"rssid offset", [](PersistentIndexSstablePB* sst) { sst->set_rssid_offset(1); }},
+            {"generation version", [](PersistentIndexSstablePB* sst) { sst->set_generation_version(2); }},
     };
 
-    for (const auto& conflict : conflicts) {
-        SCOPED_TRACE(conflict.name);
-        auto sources = make_preflight_sst_sources(fmt::format("sst_form_conflict_{}", next_id()));
-        conflict.apply(sources[1]->mutable_sstable_meta()->mutable_sstables(0));
-        std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
-        MergePhaseCounts counts;
-        auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
-        EXPECT_TRUE(status.message().contains("SST")) << status;
-        EXPECT_TRUE(status.message().contains("conflict")) << status;
+    std::vector<std::pair<int32_t, int32_t>> expected_rows;
+    for (int key = 0; key < 100; ++key) expected_rows.emplace_back(key, key * 10);
+    for (const auto& attachment : attachments) {
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; reverse={}", attachment.name, reverse_sources));
+            auto sources = make_readable_preflight_sst_sources(fmt::format("sst_attachment_{}", next_id()));
+            attachment.apply(sources[1]->mutable_sstable_meta()->mutable_sstables(0));
+            std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+            if (reverse_sources) std::swap(immutable_sources[0], immutable_sources[1]);
+            const int64_t target = next_id();
+            prepare_tablet_dirs(target);
+            int classifier_entries = 0;
+            auto* sync = SyncPoint::GetInstance();
+            sync->SetCallBack("merge_sstables:metadata_classifier_entry", [&](void*) { ++classifier_entries; });
+            sync->EnableProcessing();
+            DeferOp clear_classifier_callback([&] {
+                sync->ClearCallBack("merge_sstables:metadata_classifier_entry");
+                sync->DisableProcessing();
+            });
+            std::unordered_map<int64_t, TabletMetadataPtr> published;
+            ASSERT_OK(publish_resharding_merge(immutable_sources, target, /*base_version=*/1, /*new_version=*/2,
+                                               next_id(), published));
+            auto merged = published.at(target);
+            EXPECT_EQ(1, classifier_entries);
+            EXPECT_EQ(attachment.reuse_when_ranges_ordered && !reverse_sources ? 1 : 0,
+                      merged->sstable_meta().sstables_size());
+            _update_manager->unload_and_remove_primary_index(target);
+            expect_lifecycle_oracle(merged, expected_rows, {});
+        }
     }
 }
 
@@ -11386,6 +13652,18 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_sst_fil
              }},
             {"encryption presence",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->clear_encryption_meta(); }},
+            {"range presence",
+             [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->clear_range(); }},
+            {"range value",
+             [&](auto& sources) {
+                 sources[1]->mutable_sstable_meta()->mutable_sstables(0)->mutable_range()->set_start_key(
+                         encode_int_primary_key(11));
+             }},
+            {"unknown field",
+             [](auto& sources) {
+                 auto* sst = sources[1]->mutable_sstable_meta()->mutable_sstables(0);
+                 sst->GetReflection()->MutableUnknownFields(sst)->AddVarint(1000, 1);
+             }},
             {"empty filename",
              [](auto& sources) { sources[1]->mutable_sstable_meta()->mutable_sstables(0)->set_filename(""); }},
             {"negative size",
@@ -11398,19 +13676,25 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preflight_rejects_late_sst_fil
     };
 
     for (const auto& conflict : conflicts) {
-        SCOPED_TRACE(conflict.name);
-        auto sources = make_preflight_sst_sources(fmt::format("sst_preflight_{}", next_id()));
-        for (auto& source : sources) {
-            auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
-            sst->set_filename("repeated_physical.sst");
-            sst->set_encryption_meta(encryption_a.encryption_meta);
-        }
-        conflict.apply(sources);
-        std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+        for (bool reverse_sources : {false, true}) {
+            SCOPED_TRACE(fmt::format("{}; reverse={}", conflict.name, reverse_sources));
+            auto sources = make_preflight_sst_sources(fmt::format("sst_preflight_{}", next_id()));
+            for (auto& source : sources) {
+                auto* sst = source->mutable_sstable_meta()->mutable_sstables(0);
+                sst->set_filename("repeated_physical.sst");
+                sst->set_encryption_meta(encryption_a.encryption_meta);
+            }
+            conflict.apply(sources);
+            std::vector<TabletMetadataPtr> immutable_sources(sources.begin(), sources.end());
+            if (reverse_sources) std::swap(immutable_sources[0], immutable_sources[1]);
 
-        MergePhaseCounts counts;
-        auto status = expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
-        EXPECT_TRUE(status.message().contains("SST")) << status;
+            MergePhaseCounts counts;
+            auto status =
+                    expect_physical_preflight_rejection(immutable_sources, next_id(), /*target_version=*/2, &counts);
+            if (std::string_view(conflict.name) != "invalid range arity") {
+                EXPECT_TRUE(status.message().contains("SST")) << status;
+            }
+        }
     }
 }
 
@@ -11443,6 +13727,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11455,8 +13740,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns) {
     auto meta_b = make_child(child_b);
     add_dcg_with_columns(meta_b.get(), 1, "b.cols", {3, 4}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -11521,6 +13805,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         // Matching uid across siblings so the rowsets dedup at merge — without this
@@ -11534,8 +13819,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup) {
     auto meta_a = make_child(child_a);
     auto meta_b = make_child(child_b);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -11590,6 +13874,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_same_column_conflict) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11602,8 +13887,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_same_column_conflict) {
     auto meta_b = make_child(child_b);
     add_dcg_with_columns(meta_b.get(), 1, "b.cols", {1}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -11650,6 +13934,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_partial_overlap) {
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -11662,8 +13947,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_partial_overlap) {
     auto meta_b = make_child(child_b);
     add_dcg_with_columns(meta_b.get(), 1, "b.cols", {2, 3}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -11707,6 +13991,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_missing_shape) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Use legacy add_dcg (no unique_column_ids/versions)
     add_dcg(meta_a.get(), 1, "malformed.cols");
@@ -11754,6 +14039,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_duplicate_column_uid) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Build a malformed DCG with overlapping column UIDs across entries
     add_dcg_with_columns(meta_a.get(), 1, "first.cols", {1, 2}, 1);
@@ -12162,6 +14448,7 @@ RowsetMetadataPB* add_shared_rowset(TabletMetadataPB* metadata, uint32_t rowset_
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(segment_filename);
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, segment_filename);
@@ -12475,7 +14762,7 @@ TEST_F(LakeTabletReshardTest, test_collect_compaction_output_files_skips_passthr
 
 // Read-only aliasing discards the source SST cohort, so its uint32 RSSID high
 // half does not constrain the signed packed target cursor.
-TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sign_bit_source_watermark) {
+TEST_F(LakeTabletReshardTest, test_read_alias_accepts_sign_bit_source_watermark) {
     const int64_t source_tablet = next_id();
     const int64_t merged_tablet = next_id();
     auto source = std::make_shared<TabletMetadataPB>();
@@ -12488,6 +14775,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sig
     rowset->set_num_rows(1);
     rowset->set_data_size(1);
     rowset->add_segment_metas()->set_filename("skip_source_segment.dat");
+    rowset->mutable_segment_metas(0)->set_num_rows(1);
+    rowset->mutable_segment_metas(0)->set_segment_idx(0);
     lake::tablet_reshard_helper::set_rowset_uid(rowset);
     auto* sst = source->mutable_sstable_meta()->add_sstables();
     sst->set_filename("skip_sign_bit.sst");
@@ -12499,8 +14788,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_skip_sstable_merge_accepts_sig
     TxnInfoPB txn_info;
     txn_info.set_txn_id(1);
     std::vector<TabletMetadataPtr> sources = {source};
-    auto merged = lake::merge_tablet(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info,
-                                     /*skip_sstable_merge=*/true);
+    auto merged =
+            lake::virtual_merge_for_read(_tablet_manager.get(), sources, merging_info, /*new_version=*/2, txn_info);
 
     ASSERT_OK(merged.status());
     ASSERT_EQ(1, merged.value()->rowsets_size());
@@ -12527,9 +14816,9 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
         sync->DisableProcessing();
     });
 
-    auto run_case = [&](uint32_t rowset_id, bool primary_key, bool skip_sstable_merge, bool expect_rejection) {
-        SCOPED_TRACE(fmt::format("rowset_id={}, primary_key={}, skip_sstable_merge={}", rowset_id, primary_key,
-                                 skip_sstable_merge));
+    auto run_case = [&](uint32_t rowset_id, bool primary_key, bool read_alias, bool with_dcg, bool expect_rejection) {
+        SCOPED_TRACE(fmt::format("rowset_id={}, primary_key={}, read_alias={}, with_dcg={}", rowset_id, primary_key,
+                                 read_alias, with_dcg));
         constexpr int64_t kBaseVersion = 1;
         constexpr int64_t kNewVersion = 2;
         constexpr int kNumRows = 2;
@@ -12572,19 +14861,22 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             segment->set_filename(segment_name);
             segment->set_size(segment_size);
             segment->set_num_rows(kNumRows);
+            segment->set_segment_idx(0);
             segment->set_shared(true);
             stamp_physical_identity_uid(rowset, segment_name);
             (*metadata->mutable_rowset_to_schema())[rowset_id] = metadata->schema().id();
 
-            const std::string cols_name = lake::gen_cols_filename(txn_id + source_index + 1);
-            write_c1_only_cols_file(tablet_id, cols_name, kNumRows, [&](int row) {
-                return row >= lower_key && row < upper_key ? 1000 * (source_index + 1) + row : row * 10;
-            });
-            auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[rowset_id];
-            dcg.add_column_files(cols_name);
-            dcg.add_unique_column_ids()->add_column_ids(c1_uid);
-            dcg.add_versions(kBaseVersion);
-            dcg.add_shared_files(false);
+            if (with_dcg) {
+                const std::string cols_name = lake::gen_cols_filename(txn_id + source_index + 1);
+                write_c1_only_cols_file(tablet_id, cols_name, kNumRows, [&](int row) {
+                    return row >= lower_key && row < upper_key ? 1000 * (source_index + 1) + row : row * 10;
+                });
+                auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[rowset_id];
+                dcg.add_column_files(cols_name);
+                dcg.add_unique_column_ids()->add_column_ids(c1_uid);
+                dcg.add_versions(kBaseVersion);
+                dcg.add_shared_files(false);
+            }
 
             DelVector delvec;
             const uint32_t deleted_rowid = static_cast<uint32_t>(source_index);
@@ -12613,8 +14905,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
         source_flush_count = 0;
         delvec_writer_count = 0;
         dcg_output_count = 0;
-        auto merged = lake::merge_tablet(_tablet_manager.get(), {source_a, source_b}, merging_info, kNewVersion,
-                                         txn_info, skip_sstable_merge);
+        auto merged = merge_tablet_or_read_alias(_tablet_manager.get(), {source_a, source_b}, merging_info, kNewVersion,
+                                                 txn_info, /*read_alias=*/read_alias);
 
         EXPECT_EQ(source_pbs_before[0], source_a->SerializeAsString());
         EXPECT_EQ(source_pbs_before[1], source_b->SerializeAsString());
@@ -12630,6 +14922,21 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             EXPECT_EQ(0, delvec_writer_count);
             EXPECT_EQ(0, dcg_output_count);
             EXPECT_EQ(files_before, files_after);
+        } else if (read_alias) {
+            EXPECT_OK(merged.status());
+            // The alias comes from virtual_merge_for_read, which writes its own delete-vector file and
+            // projects no sidecar at all, so none of merge_tablet's sync points above fire. Assert what
+            // the alias itself produced instead.
+            EXPECT_EQ(0, source_flush_count);
+            EXPECT_EQ(0, delvec_writer_count);
+            EXPECT_EQ(0, dcg_output_count);
+            EXPECT_FALSE((*merged)->delvec_meta().delvecs().empty())
+                    << "the alias must carry the children's delete vectors";
+            EXPECT_TRUE((*merged)->sstable_meta().sstables().empty());
+            EXPECT_TRUE((*merged)->dcg_meta().dcgs().empty());
+            // Its one output is a delete-vector file, which location_provider puts under the segment
+            // root as well, so this directory does change -- by exactly that file.
+            EXPECT_NE(files_before, files_after);
         } else {
             EXPECT_OK(merged.status());
             if (primary_key) {
@@ -12639,14 +14946,20 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_zero_before_any
             }
             EXPECT_GT(dcg_output_count, 0);
             EXPECT_NE(files_before, files_after);
-            EXPECT_EQ(primary_key && !skip_sstable_merge ? 2 : 0, source_flush_count);
+            EXPECT_EQ(primary_key ? 2 : 0, source_flush_count);
         }
     };
 
-    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/true);
-    run_case(/*rowset_id=*/1, /*primary_key=*/true, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
-    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*skip_sstable_merge=*/true, /*expect_rejection=*/false);
-    run_case(/*rowset_id=*/0, /*primary_key=*/false, /*skip_sstable_merge=*/false, /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/true);
+    run_case(/*rowset_id=*/1, /*primary_key=*/true, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/false);
+    // The read alias allocates no rssid and rebuilds no index, so rowset 0 costs it nothing and is
+    // accepted -- the restriction above belongs to a real merge alone.
+    run_case(/*rowset_id=*/0, /*primary_key=*/true, /*read_alias=*/true, /*with_dcg=*/false,
+             /*expect_rejection=*/false);
+    run_case(/*rowset_id=*/0, /*primary_key=*/false, /*read_alias=*/false, /*with_dcg=*/true,
+             /*expect_rejection=*/false);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_packs_upper_half_live_rowset_without_sst) {
@@ -12666,6 +14979,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_packs_upper_half_live_rowset_w
     rowset->set_num_rows(1);
     rowset->set_data_size(1);
     rowset->add_segment_metas()->set_filename("last_live_segment.dat");
+    rowset->mutable_segment_metas(0)->set_num_rows(1);
     const std::string source_before = source->SerializeAsString();
     ASSERT_OK(put_tablet_metadata(source));
 
@@ -12787,8 +15101,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_hot_sibling_id_space_does_not_
     add_rowset(hot_meta.get(), /*rowset_id=*/860, /*max_compact_input_rowset_id=*/859,
                /*del_origin_rowset_id=*/860);
 
-    ASSERT_OK(put_tablet_metadata(cold_meta));
-    ASSERT_OK(put_tablet_metadata(hot_meta));
+    ASSERT_OK(put_merge_sources(cold_meta, hot_meta));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -12882,8 +15195,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dead_reference_does_not_collid
     add_rowset(later_meta.get(), /*rowset_id=*/803, /*max_compact_input_rowset_id=*/765,
                /*del_origin_rowset_id=*/766);
 
-    ASSERT_OK(put_tablet_metadata(earlier_meta));
-    ASSERT_OK(put_tablet_metadata(later_meta));
+    ASSERT_OK(put_merge_sources(earlier_meta, later_meta));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -12954,14 +15266,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_duplicate_does_not_l
     auto* duplicate = add_rowset(later_meta.get(), /*rowset_id=*/kBaseRowsetId,
                                  /*max_compact_input_rowset_id=*/0, /*del_origin_rowset_id=*/0);
     duplicate->mutable_uid()->CopyFrom(canonical->uid());
+    duplicate->mutable_segment_metas(0)->CopyFrom(canonical->segment_metas(0));
 
     constexpr uint32_t kHighRowsetId = std::numeric_limits<int32_t>::max() - 1;
     add_rowset(later_meta.get(), /*rowset_id=*/kHighRowsetId,
                /*max_compact_input_rowset_id=*/kHighRowsetId,
                /*del_origin_rowset_id=*/kHighRowsetId);
 
-    ASSERT_OK(put_tablet_metadata(earlier_meta));
-    ASSERT_OK(put_tablet_metadata(later_meta));
+    ASSERT_OK(put_merge_sources(earlier_meta, later_meta));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -13020,7 +15332,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     low_meta.set_next_rowset_id(3);
     add_rowset_with_predicate(&low_meta, /*rowset_id=*/1, /*version=*/1, /*has_predicate=*/false);
     add_rowset_with_predicate(&low_meta, /*rowset_id=*/2, /*version=*/10, /*has_predicate=*/true);
-    ASSERT_OK(put_tablet_metadata(low_meta));
 
     // ctx[1]: the same v10 delete predicate, cross-published onto a sibling whose id
     // counter ran far ahead. Predicates dedup by version, so this context contributes
@@ -13031,7 +15342,6 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     predicate_only_meta.set_version(base_version);
     predicate_only_meta.set_next_rowset_id(kFarAheadPredicateId + 1);
     add_rowset_with_predicate(&predicate_only_meta, kFarAheadPredicateId, /*version=*/10, /*has_predicate=*/true);
-    ASSERT_OK(put_tablet_metadata(predicate_only_meta));
 
     // ctx[2]: two live rowsets ~1e8 ids apart. They form two singleton runs, so the
     // numeric gap and ctx[1]'s unused raw predicate id do not consume target space.
@@ -13042,7 +15352,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     wide_meta.set_next_rowset_id(kWideSpanTopId + 1);
     add_rowset_with_predicate(&wide_meta, /*rowset_id=*/5, /*version=*/20, /*has_predicate=*/false);
     add_rowset_with_predicate(&wide_meta, kWideSpanTopId, /*version=*/21, /*has_predicate=*/false);
-    ASSERT_OK(put_tablet_metadata(wide_meta));
+    ASSERT_OK(put_merge_sources(low_meta, predicate_only_meta, wide_meta));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -13084,6 +15394,249 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_discarded_predicate_does_not_i
     // and 4, and the authoritative cursor advances to exactly 5.
     EXPECT_EQ((std::vector<uint32_t>{1, 2, 3, 4}), rowset_ids);
     EXPECT_EQ(5, merged->next_rowset_id());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_groups_same_uid_across_nonmonotonic_versions) {
+    auto first = make_allocator_source(next_id(), 40);
+    auto second = make_allocator_source(next_id(), 40);
+    for (auto* source : {first.get(), second.get()}) {
+        source->mutable_schema()->set_keys_type(DUP_KEYS);
+        const bool left = source == first.get();
+        auto* range = source->mutable_range();
+        *range->mutable_lower_bound() = generate_sort_key(left ? 0 : 10);
+        *range->mutable_upper_bound() = generate_sort_key(left ? 10 : 20);
+        range->set_lower_bound_included(true);
+        range->set_upper_bound_included(false);
+        const std::vector<int> versions = left ? std::vector<int>{1, 5, 3} : std::vector<int>{1, 4, 3};
+        for (int i = 0; i < 3; ++i) {
+            auto* r =
+                    add_allocator_rowset(source, 10 * (i + 1), versions[i], fmt::format("global-{}.dat", versions[i]));
+            r->mutable_uid()->set_hi(1);
+            r->mutable_uid()->set_lo(versions[i]);
+            r->set_num_rows(10 * versions[i]);
+            r->set_data_size(100 * versions[i]);
+            r->set_num_dels(versions[i]);
+        }
+    }
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({first, second}));
+    ASSERT_EQ(4, merged->rowsets_size());
+    for (int i = 0; i < 4; ++i) {
+        const int versions[] = {1, 3, 4, 5};
+        const int totals[] = {2, 6, 4, 5};
+        EXPECT_EQ(versions[i], merged->rowsets(i).version());
+        EXPECT_EQ(versions[i], merged->rowsets(i).uid().lo());
+        EXPECT_EQ(10 * totals[i], merged->rowsets(i).num_rows());
+        EXPECT_EQ(100 * totals[i], merged->rowsets(i).data_size());
+        EXPECT_EQ(totals[i], merged->rowsets(i).num_dels());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_same_range_exact_duplicate_counts_once) {
+    auto first = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(first.get(), 10, 1, "exact.dat", 7);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(100);
+    rowset->set_num_dels(3);
+    // Exact duplicates live inside one source; distinct source tablets must
+    // still form a nonoverlapping partition.
+    first->add_rowsets()->CopyFrom(*rowset);
+    first->mutable_rowsets(1)->set_id(20);
+    first->set_next_rowset_id(30);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({first}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(10, merged->rowsets(0).num_rows());
+    EXPECT_EQ(100, merged->rowsets(0).data_size());
+    EXPECT_EQ(3, merged->rowsets(0).num_dels());
+    EXPECT_EQ(7, merged->rowsets(0).segment_metas(0).segment_idx());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_equivalent_range_encodings_count_once) {
+    for (auto keys_type : {PRIMARY_KEYS, DUP_KEYS}) {
+        for (int encoding = 0; encoding < 3; ++encoding) {
+            SCOPED_TRACE(fmt::format("keys_type={}, encoding={}", static_cast<int>(keys_type), encoding));
+            auto first = make_allocator_source(next_id(), 20);
+            first->mutable_schema()->set_keys_type(keys_type);
+            auto* rowset = add_allocator_rowset(first.get(), 10, 1, "equivalent-range.dat", 7);
+            rowset->set_num_rows(10);
+            rowset->set_data_size(100);
+            rowset->set_num_dels(3);
+            first->mutable_range();
+            auto* range = rowset->mutable_range();
+            if (encoding == 2) {
+                *range->mutable_lower_bound() = generate_sort_key(0);
+                range->set_lower_bound_included(true);
+                *range->mutable_upper_bound() = generate_sort_key(20);
+                range->set_upper_bound_included(false);
+            }
+            auto* second = first->add_rowsets();
+            second->CopyFrom(*rowset);
+            second->set_id(20);
+            first->set_next_rowset_id(30);
+            if (encoding < 2) {
+                // Flags on absent endpoints do not change an unbounded range.
+                second->mutable_range()->set_upper_bound_included(encoding == 1);
+            } else {
+                // NORMAL_VALUE is the default, whether explicit or absent.
+                second->mutable_range()->mutable_lower_bound()->mutable_values(0)->clear_variant_type();
+                second->mutable_range()->mutable_upper_bound()->mutable_values(0)->clear_variant_type();
+            }
+            ASSERT_NE(rowset->range().SerializeAsString(), second->range().SerializeAsString());
+            auto forward = publish_allocator_merge({first});
+            first->mutable_rowsets()->SwapElements(0, 1);
+            auto reverse = publish_allocator_merge({first});
+            EXPECT_OK(forward.status());
+            EXPECT_OK(reverse.status());
+            if (!forward.ok() || !reverse.ok()) continue;
+            ASSERT_EQ(1, forward.value()->rowsets_size());
+            ASSERT_EQ(1, reverse.value()->rowsets_size());
+            const auto& output = forward.value()->rowsets(0);
+            EXPECT_EQ(10, output.num_rows());
+            EXPECT_EQ(100, output.data_size());
+            EXPECT_EQ(3, output.num_dels());
+            EXPECT_EQ(7, output.segment_metas(0).segment_idx());
+            EXPECT_EQ(rowset->uid().SerializeAsString(), output.uid().SerializeAsString());
+            EXPECT_EQ(output.SerializeAsString(), reverse.value()->rowsets(0).SerializeAsString());
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_distinct_ranges_contribute_once) {
+    auto first = make_allocator_source(next_id(), 20);
+    auto* r = add_allocator_rowset(first.get(), 10, 1, "contributor.dat", 7);
+    r->set_num_rows(10);
+    r->set_data_size(100);
+    r->set_num_dels(3);
+    auto second = std::make_shared<TabletMetadataPB>(*first);
+    second->set_id(next_id());
+    *first->mutable_range()->mutable_upper_bound() = generate_sort_key(10);
+    first->mutable_range()->set_upper_bound_included(false);
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(10);
+    second->mutable_range()->set_lower_bound_included(true);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({second, first}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(20, merged->rowsets(0).num_rows());
+    EXPECT_EQ(200, merged->rowsets(0).data_size());
+    EXPECT_EQ(6, merged->rowsets(0).num_dels());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_dels_above_zero_estimated_rows) {
+    auto first = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(first.get(), 10, 1, "zero-estimate.dat", 0);
+    rowset->set_num_rows(0);
+    rowset->set_num_dels(3);
+    rowset->mutable_segment_metas(0)->set_num_rows(10);
+    auto second = std::make_shared<TabletMetadataPB>(*first);
+    second->set_id(next_id());
+    *first->mutable_range()->mutable_upper_bound() = generate_sort_key(10);
+    first->mutable_range()->set_upper_bound_included(false);
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(10);
+    second->mutable_range()->set_lower_bound_included(true);
+
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({first, second}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(0, merged->rowsets(0).num_rows());
+    EXPECT_EQ(2, merged->rowsets(0).data_size());
+    EXPECT_EQ(6, merged->rowsets(0).num_dels());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_contributor_statistics_overflow_before_io) {
+    for (bool reverse_sources : {false, true}) {
+        SCOPED_TRACE(reverse_sources);
+        auto first = make_allocator_source(next_id(), 20);
+        auto* rowset = add_allocator_rowset(first.get(), 10, 1, "stats-overflow.dat", 0);
+        rowset->set_num_rows(std::numeric_limits<int64_t>::max());
+        rowset->set_data_size(std::numeric_limits<int64_t>::max());
+        rowset->set_num_dels(std::numeric_limits<int64_t>::max());
+        auto second = std::make_shared<TabletMetadataPB>(*first);
+        second->set_id(next_id());
+        second->mutable_rowsets(0)->set_num_rows(1);
+        second->mutable_rowsets(0)->set_data_size(1);
+        second->mutable_rowsets(0)->set_num_dels(1);
+        *first->mutable_range()->mutable_upper_bound() = generate_sort_key(10);
+        first->mutable_range()->set_upper_bound_included(false);
+        *second->mutable_range()->mutable_lower_bound() = generate_sort_key(10);
+        second->mutable_range()->set_lower_bound_included(true);
+        std::vector<TabletMetadataPtr> sources = {first, second};
+        if (reverse_sources) std::swap(sources[0], sources[1]);
+
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection(sources, next_id(), /*target_version=*/2, &counts);
+        EXPECT_TRUE(status.message().contains("statistics overflow")) << status;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_same_range_requires_complete_segment_set) {
+    auto first = make_allocator_source(next_id(), 20);
+    auto* r = add_allocator_rowset(first.get(), 10, 1, "complete-0.dat");
+    auto second = std::make_shared<TabletMetadataPB>(*first);
+    second->set_id(next_id());
+    add_allocator_segment(second->mutable_rowsets(0), "complete-7.dat", 7);
+    second->mutable_rowsets(0)->set_num_rows(r->num_rows());
+    second->mutable_rowsets(0)->set_data_size(r->data_size());
+    first->add_rowsets()->CopyFrom(second->rowsets(0));
+    first->mutable_rowsets(1)->set_id(20);
+    first->set_next_rowset_id(30);
+    auto result = publish_allocator_merge({first});
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_strictly_overlapping_uid_ranges) {
+    auto first = make_allocator_source(next_id(), 20);
+    add_allocator_rowset(first.get(), 10, 1, "overlapping.dat");
+    auto second = std::make_shared<TabletMetadataPB>(*first);
+    second->set_id(next_id());
+    *first->mutable_range()->mutable_upper_bound() = generate_sort_key(20);
+    first->mutable_range()->set_upper_bound_included(false);
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(10);
+    second->mutable_range()->set_lower_bound_included(true);
+    first->mutable_rowsets(0)->mutable_range()->CopyFrom(first->range());
+    auto* duplicate = first->add_rowsets();
+    duplicate->CopyFrom(second->rowsets(0));
+    duplicate->set_id(20);
+    duplicate->mutable_range()->CopyFrom(second->range());
+    first->clear_range();
+    first->set_next_rowset_id(30);
+    auto result = publish_allocator_merge({first});
+    EXPECT_TRUE(result.status().is_corruption()) << result.status();
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_source_permutation_is_canonical) {
+    auto first = make_allocator_source(next_id(), 20);
+    auto second = make_allocator_source(next_id(), 20);
+    for (auto* source : {first.get(), second.get()}) {
+        auto* r = add_allocator_rowset(source, 10, 1, source == first.get() ? "order-a.dat" : "order-b.dat");
+        r->mutable_uid()->set_hi(1);
+        r->mutable_uid()->set_lo(source == first.get() ? 2 : 1);
+    }
+    ASSIGN_OR_ABORT(auto forward, publish_allocator_merge({first, second}));
+    ASSIGN_OR_ABORT(auto reverse, publish_allocator_merge({second, first}));
+    ASSERT_EQ(2, forward->rowsets_size());
+    ASSERT_EQ(2, reverse->rowsets_size());
+    for (int i = 0; i < 2; ++i) {
+        EXPECT_EQ(i + 1, forward->rowsets(i).uid().lo());
+        EXPECT_EQ(forward->rowsets(i).SerializeAsString(), reverse->rowsets(i).SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_non_pk_true_gap_remains_distinct) {
+    auto first = make_allocator_source(next_id(), 20);
+    first->mutable_schema()->set_keys_type(DUP_KEYS);
+    add_allocator_rowset(first.get(), 10, 1, "gap.dat", 7);
+    auto second = std::make_shared<TabletMetadataPB>(*first);
+    second->set_id(next_id());
+    *first->mutable_range()->mutable_upper_bound() = generate_sort_key(10);
+    first->mutable_range()->set_upper_bound_included(false);
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(20);
+    second->mutable_range()->set_lower_bound_included(true);
+    // The rowset has a true gap, but source ownership is still contiguous.
+    second->mutable_rowsets(0)->mutable_range()->CopyFrom(second->range());
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(10);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({second, first}));
+    ASSERT_EQ(2, merged->rowsets_size());
+    for (const auto& r : merged->rowsets()) {
+        EXPECT_EQ(1, r.num_rows());
+        EXPECT_EQ(7, r.segment_metas(0).segment_idx());
+    }
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_packs_sparse_contexts) {
@@ -13198,13 +15751,15 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_interval_projection_missing_pr
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_selected_delete_uses_final_canonical_max) {
-    auto selected_source = make_allocator_source(next_id(), 101);
+    auto selected_source = make_allocator_source(next_id(), 201);
     auto* selected = add_allocator_rowset(selected_source.get(), 100, 1, "selected_del_low.dat", 0);
+    add_allocator_segment(selected, "selected_del_high.dat", 100);
     auto* selected_del = selected->add_del_files();
     selected_del->set_name("selected_final.del");
     selected_del->set_origin_rowset_id(80);
     auto duplicate_source = make_allocator_source(next_id(), 301);
-    auto* duplicate = add_allocator_rowset(duplicate_source.get(), 200, 1, "selected_del_high.dat", 100);
+    auto* duplicate = add_allocator_rowset(duplicate_source.get(), 200, 1, "selected_del_low.dat", 0);
+    add_allocator_segment(duplicate, "selected_del_high.dat", 100);
     duplicate->mutable_uid()->CopyFrom(selected->uid());
     auto* duplicate_del = duplicate->add_del_files();
     duplicate_del->set_name(selected_del->name());
@@ -13224,14 +15779,80 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_selected_delete_uses_final_can
     EXPECT_EQ(122, merged->next_rowset_id());
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_del_bearing_complementary_segment_sets_before_io) {
+    auto first = make_allocator_source(next_id(), 101);
+    auto* selected = add_allocator_rowset(first.get(), 100, 1, "opaque_low.dat", 0);
+    auto* del = selected->add_del_files();
+    del->set_name("opaque.del");
+    del->set_origin_rowset_id(80);
+    auto second = make_allocator_source(next_id(), 301);
+    auto* other = add_allocator_rowset(second.get(), 200, 1, "opaque_high.dat", 100);
+    other->mutable_uid()->CopyFrom(selected->uid());
+    other->add_del_files()->CopyFrom(*del);
+    other->mutable_del_files(0)->set_origin_rowset_id(180);
+    // Public MERGE fixture assigns distinct adjacent ranges, so this is not the equal-range duplicate check.
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({first, second}, next_id(), 2, &counts);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_different_uid_recovery_histories_remain_distinct) {
+    auto first = make_allocator_source(next_id(), 11);
+    auto* a = add_allocator_rowset(first.get(), 10, 1, "independent_compaction_a.dat", 0);
+    a->set_max_compact_input_rowset_id(9);
+    auto second = make_allocator_source(next_id(), 101);
+    auto* b = add_allocator_rowset(second.get(), 100, 1, "independent_compaction_b.dat", 0);
+    b->set_max_compact_input_rowset_id(99);
+    ASSERT_NE(a->uid().SerializeAsString(), b->uid().SerializeAsString());
+    for (bool reverse_sources : {false, true}) {
+        std::vector<std::shared_ptr<TabletMetadataPB>> sources{first, second};
+        if (reverse_sources) std::reverse(sources.begin(), sources.end());
+        ASSIGN_OR_ABORT(auto merged, publish_allocator_merge(sources));
+        ASSERT_EQ(2, merged->rowsets_size());
+        std::map<std::string, uint32_t> recovery_by_uid;
+        for (const auto& rowset : merged->rowsets()) {
+            recovery_by_uid.emplace(rowset.uid().SerializeAsString(), rowset.max_compact_input_rowset_id());
+        }
+        EXPECT_LT(recovery_by_uid.at(a->uid().SerializeAsString()), recovery_by_uid.at(b->uid().SerializeAsString()));
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_conflicting_or_divergent_recovery_aliases_before_io) {
+    for (bool divergent_primary : {false, true}) {
+        SCOPED_TRACE(divergent_primary);
+        auto first = make_allocator_source(next_id(), 101);
+        auto* a = add_allocator_rowset(first.get(), 100, 1, "recovery_alias_a.dat", 0);
+        a->set_max_compact_input_rowset_id(90);
+        auto second = make_allocator_source(next_id(), 201);
+        auto* b = add_allocator_rowset(second.get(), 200, 2, "recovery_alias_b.dat", 0);
+        b->set_max_compact_input_rowset_id(190);
+        auto third = make_allocator_source(next_id(), 601);
+        auto* copy_a = third->add_rowsets();
+        copy_a->CopyFrom(*a);
+        copy_a->set_id(300);
+        copy_a->set_max_compact_input_rowset_id(500);
+        if (divergent_primary) {
+            auto* independent = add_allocator_rowset(third.get(), 600, 3, "recovery_alias_independent.dat", 0);
+            independent->set_max_compact_input_rowset_id(500);
+        } else {
+            auto* copy_b = third->add_rowsets();
+            copy_b->CopyFrom(*b);
+            copy_b->set_id(400);
+            copy_b->set_max_compact_input_rowset_id(500);
+        }
+        MergePhaseCounts counts;
+        auto status = expect_physical_preflight_rejection({first, second, third}, next_id(), 2, &counts);
+        EXPECT_TRUE(status.message().contains(divergent_primary ? "recovery keys" : "conflicting aliases")) << status;
+    }
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_validation_only_delete_origin_allocates_no_slots) {
     auto selected_source = make_allocator_source(next_id(), 111);
     auto* selected = add_allocator_rowset(selected_source.get(), 10, 1, "validation_high.dat", 100);
     auto* selected_del = selected->add_del_files();
     selected_del->set_name("validation_only.del");
     selected_del->set_origin_rowset_id(5);
-    auto duplicate_source = make_allocator_source(next_id(), 21);
-    auto* duplicate = add_allocator_rowset(duplicate_source.get(), 20, 1, "validation_low.dat", 0);
+    auto duplicate_source = make_allocator_source(next_id(), 121);
+    auto* duplicate = add_allocator_rowset(duplicate_source.get(), 20, 1, "validation_high.dat", 100);
     duplicate->mutable_uid()->CopyFrom(selected->uid());
     auto* duplicate_del = duplicate->add_del_files();
     duplicate_del->set_name(selected_del->name());
@@ -13246,7 +15867,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_validation_only_delete_origin_
     EXPECT_EQ(107, merged->next_rowset_id());
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_validation_only_delete_uses_local_max) {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_del_bearing_local_max_complementarity) {
     auto selected_source = make_allocator_source(next_id(), 111);
     auto* selected = add_allocator_rowset(selected_source.get(), 10, 1, "validation_local_high.dat", 100);
     auto* selected_del = selected->add_del_files();
@@ -13259,15 +15880,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_validation_only_delete_uses_lo
     duplicate_del->set_name(selected_del->name());
     duplicate_del->set_origin_rowset_id(std::numeric_limits<int32_t>::max() - 50);
 
-    auto merged = publish_allocator_merge({selected_source, duplicate_source});
-    ASSERT_OK(merged.status());
-    EXPECT_EQ(107, merged.value()->next_rowset_id());
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({selected_source, duplicate_source}, next_id(), 2, &counts);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejoins_independently_remapped_delete_origins) {
-    const bool old_parallel_compaction = config::enable_pk_index_parallel_compaction;
-    config::enable_pk_index_parallel_compaction = false;
-    DeferOp restore_parallel([&] { config::enable_pk_index_parallel_compaction = old_parallel_compaction; });
     const int64_t selected_id = next_id();
     const int64_t duplicate_id = next_id();
     prepare_tablet_dirs(selected_id);
@@ -13335,6 +15952,199 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejoins_independently_remapped
     expect_lifecycle_oracle(reopened_compacted, {{10, 1010}}, {60});
 }
 
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_sparse_explicit_segment_indices) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_sparse_2.dat", 2);
+    add_allocator_segment(rowset, "canonical_sparse_7.dat", 7);
+    const auto uid = rowset->uid().SerializeAsString();
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({source}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(uid, merged->rowsets(0).uid().SerializeAsString());
+    ASSERT_EQ(2, merged->rowsets(0).segment_metas_size());
+    EXPECT_EQ(2, merged->rowsets(0).segment_metas(0).segment_idx());
+    EXPECT_EQ(7, merged->rowsets(0).segment_metas(1).segment_idx());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_nonzero_compaction_cursor) {
+    auto a = make_allocator_source(next_id(), 20);
+    auto* first = add_allocator_rowset(a.get(), 10, 1, "canonical_cursor.dat", 7);
+    first->set_overlapped(true);
+    first->set_next_compaction_offset(3);
+    auto b = make_allocator_source(next_id(), 30);
+    auto* second = b->add_rowsets();
+    second->CopyFrom(*first);
+    second->set_id(20);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({a, b}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(3, merged->rowsets(0).next_compaction_offset());
+    EXPECT_EQ(7, merged->rowsets(0).segment_metas(0).segment_idx());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_invalid_predicate_shape_before_io) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "predicate_payload.dat");
+    rowset->mutable_delete_predicate()->set_version(-1);
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_duplicate_segment_index_before_io) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_duplicate_a.dat", 2);
+    add_allocator_segment(rowset, "canonical_duplicate_b.dat", 2);
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_self_del_offset_outside_replay_span) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_self.dat", 7);
+    auto* del = rowset->add_del_files();
+    del->set_name("canonical_self.del");
+    del->set_origin_rowset_id(10);
+    del->set_op_offset(8);
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_segmentless_self_del_offset_zero) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(10);
+    rowset->set_version(1);
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* del = rowset->add_del_files();
+    del->set_name("canonical_segmentless.del");
+    del->set_origin_rowset_id(10);
+    del->set_op_offset(0);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({source}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(0, merged->rowsets(0).segment_metas_size());
+    ASSERT_EQ(1, merged->rowsets(0).del_files_size());
+    EXPECT_EQ(merged->rowsets(0).id(), merged->rowsets(0).del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, merged->rowsets(0).del_files(0).op_offset());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_accepts_inherited_del_offset_outside_current_segments) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_inherited.dat", 0);
+    auto* del = rowset->add_del_files();
+    del->set_name("canonical_inherited.del");
+    del->set_origin_rowset_id(2);
+    del->set_op_offset(5);
+    ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({source}));
+    ASSERT_EQ(1, merged->rowsets_size());
+    EXPECT_EQ(7, merged->rowsets(0).id());
+    EXPECT_EQ(1, merged->rowsets(0).del_files(0).origin_rowset_id());
+    EXPECT_EQ(5, merged->rowsets(0).del_files(0).op_offset());
+    EXPECT_EQ(8, merged->next_rowset_id());
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_transferred_inherited_del_survives_cold_load) {
+    const int32_t old_min_segments = config::lake_pk_compaction_min_input_segments;
+    config::lake_pk_compaction_min_input_segments = 1;
+    DeferOp restore([&] { config::lake_pk_compaction_min_input_segments = old_min_segments; });
+    ASSIGN_OR_ABORT(auto initial, create_lifecycle_source(next_id(), 0, 300, 10, 100, false));
+    ASSIGN_OR_ABORT(auto deleted, publish_followup_upsert_delete(initial->id(), initial->version(), 110, 1100, 10));
+    ASSERT_EQ(1, deleted->rowsets(deleted->rowsets_size() - 1).del_files_size());
+    const auto original_del = deleted->rowsets(deleted->rowsets_size() - 1).del_files(0);
+    ASSIGN_OR_ABORT(auto compacted, compact_tablet(deleted->id(), deleted->version(), true));
+    ASSERT_EQ(1, compacted->rowsets_size());
+    ASSERT_EQ(1, compacted->rowsets(0).del_files_size());
+    EXPECT_EQ(original_del.origin_rowset_id(), compacted->rowsets(0).del_files(0).origin_rowset_id());
+    ASSERT_NE(compacted->rowsets(0).id(), original_del.origin_rowset_id());
+    ASSIGN_OR_ABORT(auto children, repeated_split_three_way(compacted));
+    ASSERT_EQ(3, children.size());
+    const int64_t target = next_id();
+    prepare_tablet_dirs(target);
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    ASSERT_OK(publish_resharding_merge(children, target, children.front()->version(), children.front()->version() + 1,
+                                       next_id(), published));
+    auto merged = published.at(target);
+    ASSERT_EQ(1, merged->rowsets_size());
+    ASSERT_EQ(1, merged->rowsets(0).del_files_size());
+    EXPECT_EQ(original_del.name(), merged->rowsets(0).del_files(0).name());
+    EXPECT_NE(merged->rowsets(0).id(), merged->rowsets(0).del_files(0).origin_rowset_id());
+    _update_manager->unload_and_remove_primary_index(target);
+    _tablet_manager->prune_metacache();
+    ASSIGN_OR_ABORT(auto reopened, _tablet_manager->get_tablet_metadata(target, merged->version()));
+    expect_lifecycle_oracle(reopened, {{110, 1100}}, {10});
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_same_uid_canonical_conflicts_before_io) {
+    enum Mutation {
+        VERSION,
+        SCHEMA_MAPPING,
+        DEL_BEARING_MODE,
+        NEXT_COMPACTION_OFFSET,
+        RECOVERY_PRESENCE,
+        STABLE_RESIDUAL_FIELD
+    };
+    for (auto mutation : {VERSION, SCHEMA_MAPPING, DEL_BEARING_MODE, NEXT_COMPACTION_OFFSET, RECOVERY_PRESENCE,
+                          STABLE_RESIDUAL_FIELD}) {
+        SCOPED_TRACE(mutation);
+        auto a = make_allocator_source(next_id(), 20);
+        auto* first = add_allocator_rowset(a.get(), 10, 1, "canonical_conflict.dat", 7);
+        first->set_overlapped(true);
+        auto b = make_allocator_source(next_id(), 30);
+        auto* second = b->add_rowsets();
+        second->CopyFrom(*first);
+        second->set_id(20);
+        switch (mutation) {
+        case VERSION:
+            second->set_version(2);
+            break;
+        case SCHEMA_MAPPING:
+            (*b->mutable_rowset_to_schema())[20] = 4001;
+            break;
+        case DEL_BEARING_MODE: {
+            auto* del = second->add_del_files();
+            del->set_name("canonical_conflict.del");
+            del->set_origin_rowset_id(20);
+            del->set_op_offset(7);
+            break;
+        }
+        case NEXT_COMPACTION_OFFSET:
+            second->set_next_compaction_offset(3);
+            break;
+        case RECOVERY_PRESENCE:
+            first->set_max_compact_input_rowset_id(4);
+            break;
+        case STABLE_RESIDUAL_FIELD: {
+            std::string serialized = second->SerializeAsString();
+            serialized.append("\xF8\x07\x01", 3);
+            ASSERT_TRUE(second->ParseFromString(serialized));
+            break;
+        }
+        }
+        MergePhaseCounts counts;
+        expect_physical_preflight_rejection({a, b}, next_id(), 2, &counts);
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_empty_effective_rowset_range_before_io) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_empty_range.dat");
+    source->mutable_range();
+    *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(1);
+    *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(1);
+    rowset->mutable_range()->set_lower_bound_included(true);
+    rowset->mutable_range()->set_upper_bound_included(false);
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+}
+
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_rowset_range_outside_source_before_io) {
+    auto source = make_allocator_source(next_id(), 20);
+    auto* rowset = add_allocator_rowset(source.get(), 10, 1, "canonical_outside.dat");
+    *source->mutable_range()->mutable_upper_bound() = generate_sort_key(10);
+    source->mutable_range()->set_upper_bound_included(false);
+    *rowset->mutable_range()->mutable_upper_bound() = generate_sort_key(20);
+    rowset->mutable_range()->set_upper_bound_included(false);
+    MergePhaseCounts counts;
+    expect_physical_preflight_rejection({source}, next_id(), 2, &counts);
+}
+
 TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_mixed_self_inherited_del_class) {
     auto selected_source = make_allocator_source(next_id(), 11);
     auto* selected = add_allocator_rowset(selected_source.get(), 10, 1, "mixed_del.dat", 0);
@@ -13394,7 +16204,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_segment_declaration_co
     }
 }
 
-TEST_F(LakeTabletReshardTest, test_tablet_merging_reconciles_absent_and_explicit_zero_segment_idx) {
+TEST_F(LakeTabletReshardTest, test_tablet_merging_rejects_absent_segment_idx_before_io) {
     auto selected_source = make_allocator_source(next_id(), 11);
     auto* selected = add_allocator_rowset(selected_source.get(), 10, 1, "segment_presence.dat", 0, false);
     selected->mutable_segment_metas(0)->set_shared(false);
@@ -13402,17 +16212,25 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_reconciles_absent_and_explicit
     auto* duplicate = add_allocator_rowset(duplicate_source.get(), 20, 1, "segment_presence.dat", 0, true);
     duplicate->mutable_uid()->CopyFrom(selected->uid());
     duplicate->mutable_segment_metas(0)->set_shared(true);
+    *selected_source->mutable_range()->mutable_upper_bound() = generate_sort_key(1);
+    selected_source->mutable_range()->set_upper_bound_included(false);
+    *duplicate_source->mutable_range()->mutable_lower_bound() = generate_sort_key(1);
+    duplicate_source->mutable_range()->set_lower_bound_included(true);
 
-    auto merged_or = publish_allocator_merge({selected_source, duplicate_source});
-    ASSERT_OK(merged_or.status());
-    auto merged = std::move(merged_or).value();
-    ASSERT_EQ(1, merged->rowsets_size());
-    ASSERT_EQ(1, merged->rowsets(0).segment_metas_size());
-    EXPECT_TRUE(merged->rowsets(0).segment_metas(0).has_segment_idx());
-    EXPECT_EQ(0, merged->rowsets(0).segment_metas(0).segment_idx());
-    EXPECT_TRUE(merged->rowsets(0).segment_metas(0).shared());
-    EXPECT_EQ(1, merged->rowsets(0).id());
-    EXPECT_EQ(2, merged->next_rowset_id());
+    int materialized = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++materialized; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::unordered_map<int64_t, TabletMetadataPtr> published;
+    auto status = publish_resharding_merge({selected_source, duplicate_source}, next_id(), 1, 2, next_id(), published,
+                                           [&] { CHECK_OK(_tablet_manager->put_tablet_metadata(selected_source)); });
+    EXPECT_TRUE(status.is_corruption()) << status;
+    EXPECT_TRUE(status.message().contains("explicit segment_idx")) << status;
+    EXPECT_EQ(0, materialized);
 }
 
 TEST_F(LakeTabletReshardTest, test_tablet_merging_reconciles_segment_shared_flag) {
@@ -13571,6 +16389,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_unions_matching_predicate_rang
     right->mutable_range()->set_lower_bound_included(true);
     right->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
     right->mutable_range()->set_upper_bound_included(false);
+    first->mutable_range()->CopyFrom(left->range());
+    second->mutable_range()->CopyFrom(right->range());
 
     ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({first, second}));
     ASSERT_EQ(1, merged->rowsets_size());
@@ -13670,6 +16490,10 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_preserves_strict_recovery_orde
     first_rowset->mutable_segment_metas(0)->set_size(first_size);
     auto* second_rowset = add_allocator_rowset(second.get(), 20, 2, "recovery_strict_20.dat", 0);
     second_rowset->mutable_segment_metas(0)->set_size(second_size);
+    *first->mutable_range()->mutable_upper_bound() = generate_sort_key(50);
+    first->mutable_range()->set_upper_bound_included(false);
+    *second->mutable_range()->mutable_lower_bound() = generate_sort_key(50);
+    second->mutable_range()->set_lower_bound_included(true);
 
     ASSIGN_OR_ABORT(auto merged, publish_allocator_merge({first, second}));
     ASSERT_EQ(2, merged->rowsets_size());
@@ -14136,8 +16960,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_cloud_native_pk_flush_path) {
     auto meta_a = make_child(child_a);
     auto meta_b = make_child(child_b);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14353,8 +17176,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_preserves_pass
     (*meta2->mutable_rowset_to_schema())[1] = 1001;
     add_dcg_with_columns(meta2.get(), /*segment_id=*/1, "shared.cols", {101, 102}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14409,8 +17231,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_disjoint_columns_append) {
     (*meta2->mutable_rowset_to_schema())[1] = 2001;
     add_dcg_with_columns(meta2.get(), 1, "b.cols", {301, 302}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14472,8 +17293,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_conflict_triggers_rebuild_
     // Column 401 overlaps with child1.cols => rebuild triggered.
     add_dcg_with_columns(meta2.get(), 1, "child2.cols", {401, 403}, 1);
 
-    EXPECT_OK(put_tablet_metadata(meta1));
-    EXPECT_OK(put_tablet_metadata(meta2));
+    ASSERT_OK(put_merge_sources(meta1, meta2));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14527,6 +17347,8 @@ TEST_F(LakeTabletReshardTest, test_segment_seek_range_to_rowid_range_real_bounde
     c0->set_type("INT");
     c0->set_is_key(true);
     c0->set_is_nullable(false);
+    c0->set_length(4);
+    c0->set_index_length(4);
     auto* c1 = schema_pb.add_column();
     c1->set_unique_id(1002);
     c1->set_name("c1");
@@ -14634,6 +17456,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(shared_segment_name);
             sm->set_size(base_segment_size);
+            sm->set_num_rows(kNumRows);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset,
@@ -14656,8 +17479,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_two_children_same_
     auto meta_a = build_child(child_a, 0, kBoundary, cols_a_name);
     auto meta_b = build_child(child_b, kBoundary, kNumRows, cols_b_name);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     // 4. Run merge.
     ReshardingTabletInfoPB resharding_tablet;
@@ -14749,6 +17571,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_consistency_fa
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same UID across siblings => one canonical rowset
@@ -14761,8 +17584,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_exact_dedup_consistency_fa
     auto meta_a = make_child(tablet_a, {601, 602});
     auto meta_b = make_child(tablet_b, {603}); // differs from A
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14813,6 +17635,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_missing_uid_falls_
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same UID across siblings => one canonical rowset
@@ -14827,8 +17650,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_missing_uid_falls_
     auto meta_a = make_child(child_a, "a_missing.cols");
     auto meta_b = make_child(child_b, "b_missing.cols");
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -14908,6 +17730,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
             auto* sm = rowset->add_segment_metas();
             sm->set_filename(good_segment);
             sm->set_size(good_seg_size);
+            sm->set_num_rows(kNumRows);
             sm->set_shared(true);
         }
         *rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
@@ -14925,6 +17748,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
             auto* sm = bad_rowset->add_segment_metas();
             sm->set_filename(bad_segment);
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         *bad_rowset->mutable_range()->mutable_lower_bound() = generate_sort_key(lower_key);
@@ -14949,8 +17773,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dcg_rebuild_cleanup_on_failure
     auto meta_a = build_child(child_a, 0, kBoundary, cols_a, "bad_a.cols");
     auto meta_b = build_child(child_b, kBoundary, kNumRows, cols_b, "bad_b.cols");
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     // Snapshot merged tablet's segment dir so we can detect leftover files.
     const std::string merged_segment_dir = _location_provider->segment_root_location(merged_tablet);
@@ -15032,6 +17855,7 @@ inline std::shared_ptr<TabletMetadataPB> make_shared_child(int64_t tablet_id, in
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across shared siblings => dedup
@@ -15063,6 +17887,7 @@ inline std::shared_ptr<TabletMetadataPB> make_compacted_child(int64_t tablet_id,
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(compacted_seg_name);
         sm->set_size(100);
+        sm->set_num_rows(10);
     }
     // Not shared: this is the local compaction output.
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
@@ -15085,6 +17910,8 @@ inline void set_pk_int_key_schema(TabletMetadataPB* metadata, int64_t schema_id)
     c0->set_type("INT");
     c0->set_is_key(true);
     c0->set_is_nullable(false);
+    c0->set_length(4);
+    c0->set_index_length(4);
     auto* c1 = schema->add_column();
     c1->set_unique_id(1002);
     c1->set_name("c1");
@@ -15096,8 +17923,8 @@ inline void set_pk_int_key_schema(TabletMetadataPB* metadata, int64_t schema_id)
 
 inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(int64_t tablet_id, int64_t base_version,
                                                                                 uint32_t shared_id, int tablet_lower,
-                                                                                int tablet_upper,
-                                                                                uint64_t segment_size) {
+                                                                                int tablet_upper, uint64_t segment_size,
+                                                                                int physical_num_rows) {
     auto meta = std::make_shared<TabletMetadataPB>();
     meta->set_id(tablet_id);
     meta->set_version(base_version);
@@ -15114,6 +17941,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_shared_child_with_real_segment(
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(segment_size);
+        sm->set_num_rows(physical_num_rows);
         sm->set_shared(true);
     }
     stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across shared siblings => dedup
@@ -15141,6 +17969,7 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(compacted_seg_name);
         sm->set_size(100);
+        sm->set_num_rows(tablet_upper - tablet_lower);
     }
     set_int_range(rowset->mutable_range(), tablet_lower, tablet_upper);
     return meta;
@@ -15181,8 +18010,9 @@ inline std::shared_ptr<TabletMetadataPB> make_pk_compacted_child(int64_t tablet_
                 metas[i] = make_pk_compacted_child(child_ids[i], base_version, /*compacted_id=*/11, lower, upper,      \
                                                    fmt::format("compacted_{}.dat", i));                                \
             } else {                                                                                                   \
-                metas[i] = make_pk_shared_child_with_real_segment(child_ids[i], base_version, /*shared_id=*/10, lower, \
-                                                                  upper, segment_size);                                \
+                metas[i] =                                                                                             \
+                        make_pk_shared_child_with_real_segment(child_ids[i], base_version, /*shared_id=*/10, lower,    \
+                                                               upper, segment_size, /*physical_num_rows=*/kNumRows);   \
             }                                                                                                          \
             EXPECT_OK(put_tablet_metadata(metas[i]));                                                                  \
         }                                                                                                              \
@@ -15244,11 +18074,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_encrypted_delvec_gap_promotion
         }
         const uint64_t segment_size =
                 write_two_column_segment(merged_tablet, "shared_seg.dat", 30, [](int value) { return value * 10; });
-        auto left = make_pk_shared_child_with_real_segment(child_left, kBaseVersion, kSharedRssid, 0, 10, segment_size);
+        auto left = make_pk_shared_child_with_real_segment(child_left, kBaseVersion, kSharedRssid, 0, 10, segment_size,
+                                                           /*physical_num_rows=*/30);
         auto compacted =
                 make_pk_compacted_child(child_gap, kBaseVersion, /*compacted_id=*/11, 10, 20, "compacted_gap.dat");
         auto right =
-                make_pk_shared_child_with_real_segment(child_right, kBaseVersion, kSharedRssid, 20, 30, segment_size);
+                make_pk_shared_child_with_real_segment(child_right, kBaseVersion, kSharedRssid, 20, 30, segment_size,
+                                                       /*physical_num_rows=*/30);
         DelVector source_delvec;
         const uint32_t deleted = 0;
         source_delvec.init(/*version=*/10, &deleted, 1);
@@ -15337,7 +18169,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_synthesized_delvec_survives_la
     // sstable_meta carries a shared sstable with shared_rssid=10 (A's R0
     // namespace) and NO has_delvec on source — exercising the §5.2.4 path.
     auto meta_a = make_pk_shared_child_with_real_segment(child_a, base_version, /*shared_id=*/10, /*lower=*/0,
-                                                         /*upper=*/10, segment_size);
+                                                         /*upper=*/10, segment_size, /*physical_num_rows=*/20);
     meta_a->mutable_schema()->set_primary_key_encoding_type(PrimaryKeyEncodingTypePB::PK_ENCODING_TYPE_V2);
     auto* sst_a = meta_a->mutable_sstable_meta()->add_sstables();
     sst_a->set_filename("shared.sst");
@@ -15360,8 +18192,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_synthesized_delvec_survives_la
     meta_b->mutable_rowsets(0)->set_data_size(compacted_size);
     meta_b->mutable_rowsets(0)->mutable_segment_metas(0)->set_size(compacted_size);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15504,9 +18335,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_pk_no_gap_passthrough) {
     auto meta_b = make_shared_child(child_b, base_version, 10, PRIMARY_KEYS, 10, 20);
     auto meta_c = make_shared_child(child_c, base_version, 10, PRIMARY_KEYS, 20, 30);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
-    EXPECT_OK(put_tablet_metadata(meta_c));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b, meta_c));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15550,9 +18379,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_dup_keys_skip_dedup_on_gap) {
     auto meta_b = make_compacted_child(child_b, base_version, 11, DUP_KEYS, 10, 20, "cb.dat");
     auto meta_c = make_shared_child(child_c, base_version, 10, DUP_KEYS, 20, 30);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
-    EXPECT_OK(put_tablet_metadata(meta_c));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b, meta_c));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15609,9 +18436,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_agg_keys_skip_dedup_on_gap) {
     auto meta_b = make_compacted_child(child_b, base_version, 11, AGG_KEYS, 10, 20, "cb.dat");
     auto meta_c = make_shared_child(child_c, base_version, 10, AGG_KEYS, 20, 30);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
-    EXPECT_OK(put_tablet_metadata(meta_c));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b, meta_c));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15648,9 +18473,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_unique_keys_skip_dedup_on_gap)
     auto meta_b = make_compacted_child(child_b, base_version, 11, UNIQUE_KEYS, 10, 20, "cb.dat");
     auto meta_c = make_shared_child(child_c, base_version, 10, UNIQUE_KEYS, 20, 30);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
-    EXPECT_OK(put_tablet_metadata(meta_c));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b, meta_c));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15686,8 +18509,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_pk_contiguous_still_dedups
     auto meta_a = make_shared_child(child_a, base_version, 10, DUP_KEYS, 0, 10);
     auto meta_b = make_shared_child(child_b, base_version, 10, DUP_KEYS, 10, 20);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15716,8 +18538,8 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_non_pk_skips_pk_sstable_pipeli
     prepare_tablet_dirs(child_a);
     prepare_tablet_dirs(child_b);
     prepare_tablet_dirs(merged_tablet);
-    ASSERT_OK(put_tablet_metadata(make_shared_child(child_a, base_version, 10, DUP_KEYS, 0, 10)));
-    ASSERT_OK(put_tablet_metadata(make_shared_child(child_b, base_version, 10, DUP_KEYS, 10, 20)));
+    ASSERT_OK(put_merge_sources(make_shared_child(child_a, base_version, 10, DUP_KEYS, 0, 10),
+                                make_shared_child(child_b, base_version, 10, DUP_KEYS, 10, 20)));
 
     int source_flush_count = 0;
     int classifier_count = 0;
@@ -15789,6 +18611,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_canonical_range_extends_for_du
             auto* sm = rowset->add_segment_metas();
             sm->set_filename("shared_seg.dat");
             sm->set_size(100);
+            sm->set_num_rows(10);
             sm->set_shared(true);
         }
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
@@ -15799,8 +18622,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_canonical_range_extends_for_du
     auto meta_a = make_no_rowset_range_child(child_a, 0, 10);
     auto meta_b = make_no_rowset_range_child(child_b, 10, 20);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -15870,8 +18692,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_delete_predicate_dedup_unchang
     auto meta_a = make_pred_child(child_a, 0, 10);
     auto meta_b = make_pred_child(child_b, 10, 20);
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16021,13 +18842,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_shared_idg_dedup) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat"); // same uid across siblings => dedup
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child_with_idg(child_a)));
-    EXPECT_OK(put_tablet_metadata(make_child_with_idg(child_b)));
+    ASSERT_OK(put_merge_sources(make_child_with_idg(child_a), make_child_with_idg(child_b)));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16078,6 +18899,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_unions_divergent_tombstone
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
@@ -16085,8 +18907,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_unions_divergent_tombstone
         if (drop_col5) add_idg_dropped_key(meta.get(), 1, /*col_uid=*/5, BITMAP);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, /*drop_col5=*/false)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, /*drop_col5=*/true)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, /*drop_col5=*/false), make_child(child_b, /*drop_col5=*/true)));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16134,14 +18955,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_drops_fully_tombstoned) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("shared_seg.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true);
         stamp_physical_identity_uid(rowset, "shared_seg.dat");
         add_idg_with_key(meta.get(), 1, "shared.idx", /*col_uid=*/5, BITMAP, 1);
         if (drop_col5) add_idg_dropped_key(meta.get(), 1, /*col_uid=*/5, BITMAP);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, /*drop_col5=*/false)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, /*drop_col5=*/true)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, /*drop_col5=*/false), make_child(child_b, /*drop_col5=*/true)));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16192,13 +19013,13 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_global_tombstone_orphans_w
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("same_base.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         lake::tablet_reshard_helper::set_rowset_uid(rowset); // distinct uid per child => both kept
         add_idg_with_key(meta.get(), 1, "same.idx", /*col_uid=*/5, BITMAP, 1);
         if (tombstone) add_idg_dropped_key(meta.get(), 1, /*col_uid=*/5, BITMAP);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, /*tombstone=*/false)));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, /*tombstone=*/true)));
+    ASSERT_OK(put_merge_sources(make_child(child_a, /*tombstone=*/false), make_child(child_b, /*tombstone=*/true)));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16254,6 +19075,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_derives_shared_from_segmen
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_shared.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         sm->set_shared(true); // shared segment
         stamp_physical_identity_uid(rowset, "seg_shared.dat");
     }
@@ -16273,11 +19095,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_derives_shared_from_segmen
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_b.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_b.dat");
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16332,6 +19154,7 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_skips_stale_source_entry) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_a.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_a.dat");
     }
     // Stale idg keyed at rssid 2 -- child_a has NO segment there.
@@ -16350,11 +19173,11 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_skips_stale_source_entry) 
         auto* sm = rowset->add_segment_metas();
         sm->set_filename("seg_b.dat");
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, "seg_b.dat"); // distinct uid => not deduped
     }
 
-    EXPECT_OK(put_tablet_metadata(meta_a));
-    EXPECT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16402,14 +19225,14 @@ TEST_F(LakeTabletReshardTest, test_tablet_merging_idg_remaps_private_segments) {
         auto* sm = rowset->add_segment_metas();
         sm->set_filename(seg);
         sm->set_size(100);
+        sm->set_num_rows(10);
         stamp_physical_identity_uid(rowset, seg); // distinct seed per child => distinct uid
         // Exclusive (private) segment => its .idx is shared_file=false, as split's
         // propagate_pruned would have marked it. merge must PRESERVE this (not force true).
         add_idg_with_key(meta.get(), 1, idx, /*col_uid=*/5, BITMAP, 1, /*shared_file=*/false);
         return meta;
     };
-    EXPECT_OK(put_tablet_metadata(make_child(child_a, "seg_a.dat", "a.idx")));
-    EXPECT_OK(put_tablet_metadata(make_child(child_b, "seg_b.dat", "b.idx")));
+    ASSERT_OK(put_merge_sources(make_child(child_a, "seg_a.dat", "a.idx"), make_child(child_b, "seg_b.dat", "b.idx")));
 
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_info = *resharding_tablet.mutable_merging_tablet_info();
@@ -16554,7 +19377,7 @@ TEST_F(LakeTabletReshardTest, test_split_publish_stamps_fresh_sstable_with_new_v
     EXPECT_TRUE(saw_sstable) << "split should have produced a flushed PK sstable from the rebuilt index";
 }
 
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conservation) {
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_conserves_stats_and_tiles_child_ranges) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -16571,25 +19394,9 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     set_two_column_pk_schema(&metadata, /*schema_id=*/1);
 
     constexpr int kNumRows = 300;
-    const std::string seg_name = "full_key_seg.dat";
+    const std::string seg_name = "split_seg.dat";
 
-    const bool old_enable = config::enable_full_sort_key_index;
-    config::enable_full_sort_key_index = true;
-    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
     const uint64_t seg_size = write_two_column_segment(tablet_id, seg_name, kNumRows, [](int i) { return i; });
-
-    // Confirm the written segment genuinely carries the full, untruncated sort-key
-    // index -- not silently a legacy/truncated one.
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        auto tablet_schema = TabletSchema::create(metadata.schema());
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_TRUE(segment->has_full_sort_key_index_page())
-                << "test setup bug: segment must carry the full sort-key short key index";
-    }
 
     auto* rowset = metadata.add_rowsets();
     rowset->set_id(2);
@@ -16603,8 +19410,10 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     sm->set_num_rows(kNumRows);
     sm->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
     sm->mutable_sort_key_max()->CopyFrom(generate_sort_key(kNumRows - 1));
-    // Deliberately no deprecated_sort_key_samples: the only source of split-boundary
-    // precision beyond the coarse [min, max] pair is the full-key index loader.
+    // The only source of split-boundary precision beyond the coarse [min, max] pair is the sort
+    // key sampler reading this segment. This fixture's schema (set_two_column_pk_schema) carries
+    // index_length, so it samples the free short key index path (A), not the data pages; see the
+    // sibling multi-rowset case.
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -16627,11 +19436,8 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
                                               false, tablet_metadatas, tablet_ranges));
 
-    // The full-key index carries 2 samples (rows 100 and 200 of 300, at the BE_TEST
-    // default num_rows_per_block == 100), giving exactly 3 balanced sub-segments -- a
-    // real 3-way split. tablet_metadatas also carries the old tablet id's own
-    // new-version entry (a tombstone at the old location), so the map holds
-    // new_tablet_ids_size() + 1 entries.
+    // One metadata entry per child, plus the old tablet id's own new-version entry (a
+    // tombstone at the old location), so the map holds new_tablet_ids_size() + 1 entries.
     ASSERT_EQ(4U, tablet_metadatas.size());
 
     int64_t total_num_rows = 0;
@@ -16680,13 +19486,27 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_full_sort_key_index_conse
     }
 }
 
-// Mixed-segment split: one rowset carries a legacy segment (a real, truncated-short-key
-// segment whose metadata still records deprecated_sort_key_samples) and a second rowset
-// carries a real full-key-index segment. build_segments_from_rowsets must select the
-// correct per-segment source for each (metadata samples for the legacy one, the short key
-// index loader for the full-key one), and the split must still conserve Σ
-// children.rowset.{num_rows,data_size,num_dels} == parent for both rowsets.
-TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key_segments) {
+// Multi-rowset split: the tablet carries two rowsets whose segments cover different key ranges.
+// Every rowset's segment must be sampled, and the split must still conserve
+// Σ children.rowset.{num_rows,data_size,num_dels} == parent for both rowsets.
+//
+// This fixture's PK schema (set_two_column_pk_schema / write_two_column_segment) carries
+// index_length, matching every production schema, so both segments sample via the free short key
+// index path (A). See the comment below the sample-count assertion for why this test does NOT
+// also assert the sampled boundary beats the coarse fallback's candidate -- at this fixture's
+// small rowset sizes path A's block-granularity resolution is not enough to guarantee that; see
+// test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio for that
+// property at a realistic scale.
+// Same overlapping two-rowset shape as test_pk_tablet_splitting_samples_every_rowset_segment
+// (rowset A nested inside rowset B's key range), but scaled 100x -- kRowsA=15,000/kRowsB=30,000
+// rather than 150/300 -- so each segment spans many more of BE_TEST's 100-row short-key-index
+// blocks. That is the ratio path A actually sees in production: a real segment is many blocks
+// deep, not the 2-3 blocks the small fixture next to this test gives it. At that ratio the
+// greedy boundary-selection algorithm's per-step overshoot (see the sibling test's comment) is a
+// small fraction of the target instead of a large one, so the chosen boundary lands well inside
+// rowset A's range and the two children come out close to even -- proving path A's sampling
+// genuinely improves split quality once it has a realistic amount of index to sample from.
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio) {
     const int64_t base_version = 2;
     const int64_t new_version = 3;
     const int64_t tablet_id = next_id();
@@ -16698,76 +19518,39 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
     metadata.set_version(base_version);
     set_two_column_pk_schema(&metadata, /*schema_id=*/1);
 
-    constexpr int kLegacyRows = 150;
-    constexpr int kFullKeyRows = 300;
-    const std::string legacy_seg_name = "legacy_seg.dat";
-    const std::string full_key_seg_name = "full_key_seg.dat";
+    constexpr int kRowsA = 15000;
+    constexpr int kRowsB = 30000;
+    const std::string seg_name_a = "seg_a.dat";
+    const std::string seg_name_b = "seg_b.dat";
 
-    const bool old_enable = config::enable_full_sort_key_index;
-    DeferOp restore_config([&] { config::enable_full_sort_key_index = old_enable; });
+    const uint64_t seg_size_a = write_two_column_segment(tablet_id, seg_name_a, kRowsA, [](int i) { return i; });
+    const uint64_t seg_size_b = write_two_column_segment(tablet_id, seg_name_b, kRowsB, [](int i) { return i; });
 
-    config::enable_full_sort_key_index = false;
-    const uint64_t legacy_seg_size =
-            write_two_column_segment(tablet_id, legacy_seg_name, kLegacyRows, [](int i) { return i; });
-
-    config::enable_full_sort_key_index = true;
-    const uint64_t full_key_seg_size =
-            write_two_column_segment(tablet_id, full_key_seg_name, kFullKeyRows, [](int i) { return i; });
-
-    // Confirm each written segment genuinely carries the index format the test assumes --
-    // not silently the other one.
-    auto tablet_schema = TabletSchema::create(metadata.schema());
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, legacy_seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_FALSE(segment->has_full_sort_key_index_page())
-                << "test setup bug: the legacy segment must NOT carry the full sort-key index";
-    }
-    {
-        FileInfo file_info;
-        file_info.path = _tablet_manager->segment_location(tablet_id, full_key_seg_name);
-        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(file_info.path));
-        ASSIGN_OR_ABORT(auto segment, Segment::open(fs, file_info, 0, tablet_schema));
-        ASSERT_OK(segment->load_index());
-        ASSERT_TRUE(segment->has_full_sort_key_index_page())
-                << "test setup bug: this segment must carry the full sort-key index";
-    }
-
-    // Rowset A: the legacy segment. Real key range [0, 149], with
-    // deprecated_sort_key_samples matching its real content.
     auto* rowset_a = metadata.add_rowsets();
     rowset_a->set_id(2);
     rowset_a->set_overlapped(false);
-    rowset_a->set_num_rows(kLegacyRows);
-    rowset_a->set_data_size(legacy_seg_size);
+    rowset_a->set_num_rows(kRowsA);
+    rowset_a->set_data_size(seg_size_a);
     rowset_a->set_num_dels(0);
     auto* sm_a = rowset_a->add_segment_metas();
-    sm_a->set_filename(legacy_seg_name);
-    sm_a->set_size(legacy_seg_size);
-    sm_a->set_num_rows(kLegacyRows);
+    sm_a->set_filename(seg_name_a);
+    sm_a->set_size(seg_size_a);
+    sm_a->set_num_rows(kRowsA);
     sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kLegacyRows - 1));
-    sm_a->set_deprecated_sort_key_sample_row_interval(50);
-    sm_a->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(50));
-    sm_a->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(100));
+    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsA - 1));
 
-    // Rowset B: the full-key-index segment. Real key range [0, 299], deliberately no
-    // deprecated_sort_key_samples -- its only source of split precision is the loader.
     auto* rowset_b = metadata.add_rowsets();
     rowset_b->set_id(3);
     rowset_b->set_overlapped(false);
-    rowset_b->set_num_rows(kFullKeyRows);
-    rowset_b->set_data_size(full_key_seg_size);
+    rowset_b->set_num_rows(kRowsB);
+    rowset_b->set_data_size(seg_size_b);
     rowset_b->set_num_dels(0);
     auto* sm_b = rowset_b->add_segment_metas();
-    sm_b->set_filename(full_key_seg_name);
-    sm_b->set_size(full_key_seg_size);
-    sm_b->set_num_rows(kFullKeyRows);
+    sm_b->set_filename(seg_name_b);
+    sm_b->set_size(seg_size_b);
+    sm_b->set_num_rows(kRowsB);
     sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
-    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kFullKeyRows - 1));
+    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsB - 1));
 
     EXPECT_OK(put_tablet_metadata(metadata));
 
@@ -16785,10 +19568,157 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
 
     std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
     std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+    ASSERT_EQ(3U, tablet_metadatas.size());
+
+    // Both segments carry index_length, so this must sample via the short key index (path A),
+    // never the data-page path (path B).
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0);
+    EXPECT_EQ(0, sort_key_sampling_data_page_segments_count() - data_page_segments_before)
+            << "a full short key index must be sampled via path A, not path B";
+
+    // Ground truth computed directly from the two known, disjoint-schema segments (never from the
+    // rowset stats the split computed for itself -- see written_rows_in()'s comment in
+    // tablet_splitter_test.cpp for why that comparison would be circular). Both segments hold keys
+    // [0, num_rows), so the row count below a boundary b is min(b, kRowsA) + min(b, kRowsB).
+    auto rows_below = [&](int64_t b) { return std::min<int64_t>(b, kRowsA) + std::min<int64_t>(b, kRowsB); };
+
+    int64_t interior_boundaries = 0;
+    int64_t total = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = tablet_metadatas.at(child)->range();
+        int64_t lower = 0, upper = kRowsB;
+        if (range.has_lower_bound()) {
+            ++interior_boundaries;
+            VariantTuple bound;
+            ASSERT_OK(bound.from_proto(range.lower_bound()));
+            lower = bound[0].value().get_int32();
+            EXPECT_GT(lower, 0) << "boundary must be interior to the key range";
+            EXPECT_LT(lower, kRowsA - 1)
+                    << "at a realistic block ratio the sampled boundary must beat the coarse fallback's only "
+                       "candidate (key "
+                    << (kRowsA - 1) << "), got " << lower;
+        }
+        if (range.has_upper_bound()) {
+            VariantTuple bound;
+            ASSERT_OK(bound.from_proto(range.upper_bound()));
+            upper = bound[0].value().get_int32();
+        }
+        const int64_t rows = rows_below(upper) - rows_below(lower);
+        total += rows;
+        const double ideal = (kRowsA + kRowsB) / 2.0;
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * 0.20)
+                << "child " << child << " holds a disproportionate share of the rows";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
+    EXPECT_EQ(kRowsA + kRowsB, total) << "the split must conserve every row across its children";
+}
+
+TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_samples_every_rowset_segment) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_two_column_pk_schema(&metadata, /*schema_id=*/1);
+
+    constexpr int kRowsA = 150;
+    constexpr int kRowsB = 300;
+    const std::string seg_name_a = "seg_a.dat";
+    const std::string seg_name_b = "seg_b.dat";
+
+    const uint64_t seg_size_a = write_two_column_segment(tablet_id, seg_name_a, kRowsA, [](int i) { return i; });
+    const uint64_t seg_size_b = write_two_column_segment(tablet_id, seg_name_b, kRowsB, [](int i) { return i; });
+
+    // Rowset A: real key range [0, 149]; its only source of split precision beyond the coarse
+    // [min, max] pair is the sort key sampler reading this segment.
+    auto* rowset_a = metadata.add_rowsets();
+    rowset_a->set_id(2);
+    rowset_a->set_overlapped(false);
+    rowset_a->set_num_rows(kRowsA);
+    rowset_a->set_data_size(seg_size_a);
+    rowset_a->set_num_dels(0);
+    auto* sm_a = rowset_a->add_segment_metas();
+    sm_a->set_filename(seg_name_a);
+    sm_a->set_size(seg_size_a);
+    sm_a->set_num_rows(kRowsA);
+    sm_a->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm_a->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsA - 1));
+
+    // Rowset B: real key range [0, 299], sampled the same way as rowset A.
+    auto* rowset_b = metadata.add_rowsets();
+    rowset_b->set_id(3);
+    rowset_b->set_overlapped(false);
+    rowset_b->set_num_rows(kRowsB);
+    rowset_b->set_data_size(seg_size_b);
+    rowset_b->set_num_dels(0);
+    auto* sm_b = rowset_b->add_segment_metas();
+    sm_b->set_filename(seg_name_b);
+    sm_b->set_size(seg_size_b);
+    sm_b->set_num_rows(kRowsB);
+    sm_b->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    sm_b->mutable_sort_key_max()->CopyFrom(generate_sort_key(kRowsB - 1));
+
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    const int64_t child_id_1 = next_id();
+    const int64_t child_id_2 = next_id();
+    splitting.add_new_tablet_ids(child_id_1);
+    splitting.add_new_tablet_ids(child_id_2);
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t samples_before = sort_key_sampling_samples_count();
     ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
                                               false, tablet_metadatas, tablet_ranges));
     // 2 children + the old tablet id's own new-version tombstone entry.
     ASSERT_EQ(3U, tablet_metadatas.size());
+
+    // The map size and the conservation totals below both hold with ZERO samples -- three coarse
+    // boundary keys already suffice for a 2-way split, and conservation comes from
+    // apply_rowset_anchor -- so neither says anything about sampling. These two do.
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0) << "both segments must be sampled";
+
+    // Rowset A holds keys [0, 149] (150 rows) and rowset B holds [0, 299] (300 rows). This does NOT
+    // also assert the sampled boundary beats the coarse fallback's only interior candidate (key
+    // 149, segment A's max): at BE_TEST's 100-row short-key-index blocks, a 150/300-row rowset
+    // gives path A only 2-3 candidates, and the greedy boundary-selection algorithm in
+    // calculate_range_split_boundaries commits as soon as its running total reaches the target
+    // rather than picking whichever candidate is closest to it -- so it can overshoot onto exactly
+    // this coarse candidate (confirmed: candidates here are 200/84/33/133 rows against a 225
+    // target, and accumulating 200+84=284 triggers the commit at the 84-row candidate's own upper
+    // edge, key 149). That overshoot is bounded by one candidate's row count, which is a large
+    // fraction of the target only because this fixture's rowsets are tiny; at a realistic
+    // block-count-to-segment-size ratio the same algorithm produces an interior, balanced boundary
+    // -- see test_pk_tablet_splitting_boundary_is_interior_and_balanced_at_realistic_block_ratio.
+    // What this test still legitimately pins is that BOTH rowset segments get sampled at all
+    // (asserted above) and that a 2-way split emits exactly one boundary.
+    int64_t interior_boundaries = 0;
+    for (int64_t child : {child_id_1, child_id_2}) {
+        const auto& range = tablet_metadatas.at(child)->range();
+        if (!range.has_lower_bound()) continue;
+        ++interior_boundaries;
+        VariantTuple bound;
+        ASSERT_OK(bound.from_proto(range.lower_bound()));
+        ASSERT_EQ(1U, bound.size());
+        const int32_t boundary = bound[0].value().get_int32();
+        EXPECT_GT(boundary, 0) << "boundary must be interior to the key range";
+    }
+    EXPECT_EQ(1, interior_boundaries) << "a 2-way split must emit exactly one interior boundary";
 
     struct RsTotals {
         int64_t num_rows = 0;
@@ -16807,12 +19737,12 @@ TEST_F(LakeTabletReshardTest, test_pk_tablet_splitting_mixed_legacy_and_full_key
         }
     }
 
-    EXPECT_EQ(kLegacyRows, totals[2].num_rows);
-    EXPECT_EQ(static_cast<int64_t>(legacy_seg_size), totals[2].data_size);
+    EXPECT_EQ(kRowsA, totals[2].num_rows);
+    EXPECT_EQ(static_cast<int64_t>(seg_size_a), totals[2].data_size);
     EXPECT_EQ(0, totals[2].num_dels);
 
-    EXPECT_EQ(kFullKeyRows, totals[3].num_rows);
-    EXPECT_EQ(static_cast<int64_t>(full_key_seg_size), totals[3].data_size);
+    EXPECT_EQ(kRowsB, totals[3].num_rows);
+    EXPECT_EQ(static_cast<int64_t>(seg_size_b), totals[3].data_size);
     EXPECT_EQ(0, totals[3].num_dels);
 }
 
@@ -16841,14 +19771,13 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_rssid_reassign) {
         meta_a.set_next_rowset_id(3);
         add_rowset_with_predicate(&meta_a, 1, 1, false);
         add_rowset_with_predicate(&meta_a, 2, 2, false);
-        CHECK_OK(put_tablet_metadata(meta_a));
 
         TabletMetadataPB meta_b;
         meta_b.set_id(tablet_b);
         meta_b.set_version(base_version);
         meta_b.set_next_rowset_id(2);
         add_rowset_with_predicate(&meta_b, 1, 1, false);
-        CHECK_OK(put_tablet_metadata(meta_b));
+        CHECK_OK(put_merge_sources(meta_a, meta_b));
 
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -16897,7 +19826,6 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_before_delete_predicate_range
         meta_a.set_next_rowset_id(3);
         add_rowset_with_predicate(&meta_a, 1, 1, false); // data
         add_rowset_with_predicate(&meta_a, 2, 2, true);  // delete predicate
-        CHECK_OK(put_tablet_metadata(meta_a));
 
         TabletMetadataPB meta_b;
         meta_b.set_id(tablet_b);
@@ -16905,7 +19833,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_before_delete_predicate_range
         meta_b.set_next_rowset_id(3);
         add_rowset_with_predicate(&meta_b, 1, 1, false); // data
         add_rowset_with_predicate(&meta_b, 2, 2, true);  // delete predicate
-        CHECK_OK(put_tablet_metadata(meta_b));
+        CHECK_OK(put_merge_sources(meta_a, meta_b));
 
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -17072,8 +20000,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     expected_merged_delvec.init(/*version=*/kNewVersion, expected_deleted, std::size(expected_deleted));
     auto meta_a = build(tablet_a, 10, 1001, "delvec-a", delvec_a.save());
     auto meta_b = build(tablet_b, 1, 2002, "delvec-b", delvec_b.save());
-    ASSERT_OK(put_tablet_metadata(meta_a));
-    ASSERT_OK(put_tablet_metadata(meta_b));
+    ASSERT_OK(put_merge_sources(meta_a, meta_b));
     ReshardingTabletInfoPB resharding_tablet;
     auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
     merging_tablet.add_old_tablet_ids(tablet_a);
@@ -17117,10 +20044,15 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     EXPECT_TRUE(retry_file.name().starts_with("0000000000000003_"));
     const auto retry_files = txn_files(/*txn_id=*/3);
     ASSERT_EQ(1, retry_files.size());
+    const auto source_a_output =
+            std::find_if(retry_metadata->rowsets().begin(), retry_metadata->rowsets().end(), [&](const auto& rowset) {
+                return lake::tablet_reshard_helper::same_rowset_uid(rowset, meta_a->rowsets(0));
+            });
+    ASSERT_NE(retry_metadata->rowsets().end(), source_a_output);
+    const uint32_t source_a_rssid = source_a_output->id();
     DelVector loaded;
     LakeIOOptions options;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, retry_metadata->rowsets(0).id(), false, options,
-                          &loaded));
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *retry_metadata, source_a_rssid, false, options, &loaded));
     EXPECT_EQ(expected_merged_delvec.save(), loaded.save());
 
     VacuumFullRequest request;
@@ -17143,8 +20075,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_delvec) {
     EXPECT_TRUE(post_vacuum_file.name().starts_with("0000000000000003_"));
     for (const auto& failed : failed_files) EXPECT_NE(failed, post_vacuum_file.name());
     DelVector reloaded;
-    ASSERT_OK(get_del_vec(_tablet_manager.get(), *post_vacuum_metadata, post_vacuum_metadata->rowsets(0).id(), false,
-                          options, &reloaded));
+    ASSERT_OK(get_del_vec(_tablet_manager.get(), *post_vacuum_metadata, source_a_rssid, false, options, &reloaded));
     EXPECT_EQ(expected_merged_delvec.save(), reloaded.save());
 }
 
@@ -17205,6 +20136,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
                 auto* sm = rowset->add_segment_metas();
                 sm->set_filename(shared_segment_name);
                 sm->set_size(base_segment_size);
+                sm->set_num_rows(kNumRows);
                 sm->set_shared(true);
             }
             stamp_physical_identity_uid(rowset, shared_segment_name);
@@ -17224,8 +20156,7 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
 
         auto meta_a = build_child(child_a, 0, kBoundary, cols_a_name);
         auto meta_b = build_child(child_b, kBoundary, kNumRows, cols_b_name);
-        CHECK_OK(put_tablet_metadata(meta_a));
-        CHECK_OK(put_tablet_metadata(meta_b));
+        CHECK_OK(put_merge_sources(meta_a, meta_b));
 
         ReshardingTabletInfoPB resharding_tablet;
         auto& merging_tablet = *resharding_tablet.mutable_merging_tablet_info();
@@ -17249,4 +20180,891 @@ TEST_F(LakeTabletReshardTest, test_merge_failpoint_after_write_dcg_cols) {
     EXPECT_OK(run_merge());
 }
 
+// A reshard of a partition still at version 1 -- an empty `file_bundling` partition pre-split ahead
+// of its first load -- reads old-tablet metadata that exists only in the partition-shared version-1
+// object. With FE's hint threaded through publish_resharding_tablet(), that read goes straight to the
+// shared object instead of first 404ing on a per-tablet key that was never written.
+TEST_F(LakeTabletReshardTest, publish_resharding_tablet_shared_first_skips_per_tablet_probe) {
+    auto old_tablet_id = next_id();
+    auto new_tablet_id = next_id();
+
+    // Only the shared object exists, as DDL leaves a file_bundling partition.
+    const auto shared_location = _tablet_manager->tablet_initial_metadata_location(old_tablet_id);
+    auto shared = std::make_shared<TabletMetadata>();
+    shared->set_id(old_tablet_id);
+    shared->set_version(1);
+    ASSERT_OK(_tablet_manager->put_tablet_metadata(shared, shared_location));
+    _tablet_manager->metacache()->erase(shared_location);
+
+    std::vector<std::string> read_paths;
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::load_tablet_metadata:path",
+                                          [&](void* arg) { read_paths.emplace_back(*static_cast<std::string*>(arg)); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp cleanup([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::load_tablet_metadata:path");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    ReshardingTabletInfoPB resharding_tablet;
+    auto& identical_tablet = *resharding_tablet.mutable_identical_tablet_info();
+    identical_tablet.set_old_tablet_id(old_tablet_id);
+    identical_tablet.set_new_tablet_id(new_tablet_id);
+
+    TxnInfoPB txn_info;
+    txn_info.set_txn_id(next_id());
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding_tablet, /*base_version=*/1,
+                                              /*new_version=*/2, txn_info, false, tablet_metadatas, tablet_ranges,
+                                              lake::InitialMetadataOrder::kSharedFirst));
+    ASSERT_EQ(2, tablet_metadatas.size());
+    EXPECT_EQ(old_tablet_id, tablet_metadatas.at(old_tablet_id)->id());
+    EXPECT_EQ(new_tablet_id, tablet_metadatas.at(new_tablet_id)->id());
+    EXPECT_EQ(2, tablet_metadatas.at(new_tablet_id)->version());
+
+    auto count_ending_with = [&](const std::string& suffix) {
+        return std::count_if(read_paths.begin(), read_paths.end(), [&](const std::string& path) {
+            return path.size() >= suffix.size() &&
+                   path.compare(path.size() - suffix.size(), suffix.size(), suffix) == 0;
+        });
+    };
+    // The old tablet's own version-1 key was never probed; the shared object was read exactly once.
+    EXPECT_EQ(0, count_ending_with(lake::tablet_metadata_filename(old_tablet_id, 1)));
+    EXPECT_EQ(1, count_ending_with(lake::tablet_initial_metadata_filename()));
+}
+
+// A truncated (VARCHAR) sort key exercises path B (sort_key_sampler.h's data-page sampler) end to
+// end: a real split-publish over a real segment, then reading the real children back out with a
+// real reader -- not just the rowset stats the split computed for itself, which the boundary
+// algorithm optimizes directly and would trivially agree with (see kEvennessTolerance's comment in
+// tablet_splitter_test.cpp for the same point).
+TEST_F(LakeTabletReshardTest, split_a_varchar_sort_key_tablet_end_to_end) {
+    const int64_t base_version = 2;
+    const int64_t new_version = 3;
+    const int64_t tablet_id = next_id();
+
+    prepare_tablet_dirs(tablet_id);
+
+    TabletMetadataPB metadata;
+    metadata.set_id(tablet_id);
+    metadata.set_version(base_version);
+    set_varchar_sort_key_schema(&metadata, /*schema_id=*/1);
+
+    constexpr int kNumRows = 50'000;
+    constexpr int kSplitCount = 4;
+    const std::string seg_name = "varchar_split_seg.dat";
+    const uint64_t seg_size = write_varchar_key_segment(tablet_id, seg_name, kNumRows);
+
+    auto* rowset = metadata.add_rowsets();
+    rowset->set_id(2);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(kNumRows);
+    rowset->set_data_size(seg_size);
+    rowset->set_num_dels(0);
+    auto* sm = rowset->add_segment_metas();
+    sm->set_filename(seg_name);
+    sm->set_size(seg_size);
+    sm->set_num_rows(kNumRows);
+    sm->mutable_sort_key_min()->CopyFrom(generate_varchar_sort_key(0));
+    sm->mutable_sort_key_max()->CopyFrom(generate_varchar_sort_key(kNumRows - 1));
+
+    EXPECT_OK(put_tablet_metadata(metadata));
+
+    ReshardingTabletInfoPB resharding;
+    auto& splitting = *resharding.mutable_splitting_tablet_info();
+    splitting.set_old_tablet_id(tablet_id);
+    std::vector<int64_t> child_ids;
+    for (int i = 0; i < kSplitCount; ++i) {
+        const int64_t child_id = next_id();
+        child_ids.push_back(child_id);
+        splitting.add_new_tablet_ids(child_id);
+    }
+
+    TxnInfoPB txn_info;
+    txn_info.set_commit_time(1);
+    txn_info.set_gtid(1);
+
+    std::unordered_map<int64_t, TabletMetadataPtr> tablet_metadatas;
+    std::unordered_map<int64_t, TabletRangePB> tablet_ranges;
+    const int64_t data_page_segments_before = sort_key_sampling_data_page_segments_count();
+    const int64_t samples_before = sort_key_sampling_samples_count();
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), resharding, base_version, new_version, txn_info,
+                                              false, tablet_metadatas, tablet_ranges));
+    // kSplitCount children + the old tablet id's own new-version tombstone entry.
+    ASSERT_EQ(static_cast<size_t>(kSplitCount) + 1, tablet_metadatas.size());
+
+    // A VARCHAR sort key is never eligible for the short key index: prove path B (data pages)
+    // actually ran, per sort_key_sampling_data_page_segments_count's own contract in
+    // sort_key_sampler.h, rather than assuming it from the schema alone.
+    EXPECT_GT(sort_key_sampling_data_page_segments_count() - data_page_segments_before, 0)
+            << "a VARCHAR sort key must be sampled via data pages, never the short key index";
+    EXPECT_GT(sort_key_sampling_samples_count() - samples_before, 0);
+
+    int64_t total = 0;
+    for (int64_t child_id : child_ids) {
+        ASSERT_TRUE(tablet_metadatas.count(child_id));
+        ASSIGN_OR_ABORT(const int64_t rows, count_rows(tablet_metadatas.at(child_id)));
+        total += rows;
+        const double ideal = kNumRows / static_cast<double>(kSplitCount);
+        EXPECT_NEAR(static_cast<double>(rows), ideal, ideal * 0.10)
+                << "child " << child_id << " holds a disproportionate share of the rows";
+    }
+    EXPECT_EQ(kNumRows, total) << "the split must conserve every row across its children";
+}
+
+// ---------------------------------------------------------------------------
+// Restored from the stable-metadata reshard rework: these cover the reshard retry cache and
+// the boundary planner's zero-row-segment skip, neither of which this change touches. They
+// were lost when this branch was rebased onto that rework and are re-added verbatim.
+// ---------------------------------------------------------------------------
+
+TEST_F(LakeTabletReshardTest, test_split_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 77;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, true);
+    const auto& ranges = request.splitting_tablet_info().new_tablet_ranges();
+
+    std::unordered_map<int64_t, TabletMetadataPtr> expected;
+    expected.emplace(source->id(), cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid));
+    for (size_t i = 0; i < children.size(); ++i) {
+        expected.emplace(children[i], cache_reshard_metadata(children[i], children[i], kVersion, kGtid, &ranges[i]));
+    }
+
+    int flushes = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(0, flushes);
+    ASSERT_EQ(expected.size(), actual.size());
+    for (const auto& [id, metadata] : expected) {
+        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_identical_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 82;
+    const int64_t source = next_id();
+    const int64_t target = next_id();
+    prepare_tablet_dirs(source);
+    prepare_tablet_dirs(target);
+    TabletMetadataPB base;
+    base.set_id(source);
+    base.set_version(1);
+    ASSERT_OK(put_tablet_metadata(base));
+    ReshardingTabletInfoPB request;
+    request.mutable_identical_tablet_info()->set_old_tablet_id(source);
+    request.mutable_identical_tablet_info()->set_new_tablet_id(target);
+    auto cached_source = cache_reshard_metadata(source, source, kVersion, kGtid);
+    auto cached_target = cache_reshard_metadata(target, target, kVersion, kGtid);
+    _tablet_manager->metacache()->erase(_tablet_manager->tablet_metadata_location(source, 1));
+
+    int metadata_reads = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("TabletManager::load_tablet_metadata:path", [&](void*) { ++metadata_reads; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
+    EXPECT_EQ(0, metadata_reads);
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source)->SerializeAsString());
+    EXPECT_EQ(cached_target->SerializeAsString(), actual.at(target)->SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_merge_retry_cache_complete_returns_without_recompute) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 81;
+    const int64_t source0 = next_id();
+    const int64_t source1 = next_id();
+    const int64_t target = next_id();
+    for (auto id : {source0, source1, target}) prepare_tablet_dirs(id);
+    auto base0 = std::make_shared<TabletMetadataPB>();
+    base0->set_id(source0);
+    base0->set_version(1);
+    auto base1 = std::make_shared<TabletMetadataPB>();
+    base1->set_id(source1);
+    base1->set_version(1);
+    ASSERT_OK(put_merge_sources(base0, base1));
+    ReshardingTabletInfoPB request;
+    auto* merge = request.mutable_merging_tablet_info();
+    merge->add_old_tablet_ids(source0);
+    merge->add_old_tablet_ids(source1);
+    merge->set_new_tablet_id(target);
+    std::unordered_map<int64_t, TabletMetadataPtr> expected;
+    for (auto id : {source0, source1, target}) {
+        expected.emplace(id, cache_reshard_metadata(id, id, kVersion, kGtid));
+    }
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("materialize_planned_rowsets:entry", [&](void*) { ++planner_calls; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, 1, kVersion, txn, false, actual,
+                                              actual_ranges));
+    EXPECT_EQ(0, planner_calls);
+    ASSERT_EQ(expected.size(), actual.size());
+    for (const auto& [id, metadata] : expected) {
+        EXPECT_EQ(metadata->SerializeAsString(), actual.at(id)->SerializeAsString());
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_rejects_wrong_id_version_or_gtid) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 80;
+    for (int malformed_field = 0; malformed_field < 3; ++malformed_field) {
+        auto source = split_source();
+        std::vector<int64_t> children{next_id(), next_id()};
+        auto request = make_split_retry_request(source, children, true);
+        cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
+        cache_reshard_metadata(children[1], children[1], kVersion, kGtid);
+        auto malformed = std::make_shared<TabletMetadataPB>();
+        malformed->set_id(malformed_field == 0 ? next_id() : children[0]);
+        malformed->set_version(malformed_field == 1 ? kVersion + 1 : kVersion);
+        malformed->set_gtid(malformed_field == 2 ? kGtid + 1 : kGtid);
+        _tablet_manager->metacache()->cache_tablet_metadata(
+                _tablet_manager->tablet_metadata_location(children[0], kVersion), malformed);
+
+        int flushes = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        TxnInfoPB txn;
+        txn.set_gtid(kGtid);
+        std::unordered_map<int64_t, TabletMetadataPtr> actual;
+        std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn,
+                                                  false, actual, actual_ranges));
+        EXPECT_EQ(1, flushes) << "malformed field " << malformed_field;
+        ASSERT_EQ(3, actual.size());
+        for (const auto& [id, metadata] : actual) {
+            EXPECT_EQ(id, metadata->id());
+            EXPECT_EQ(kVersion, metadata->version());
+            EXPECT_EQ(kGtid, metadata->gtid());
+        }
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_reshard_retry_cache_skips_nonpositive_gtid) {
+    constexpr int64_t kVersion = 2;
+    for (int64_t gtid : {0, -1}) {
+        auto source = split_source();
+        std::vector<int64_t> children{next_id(), next_id()};
+        auto request = make_split_retry_request(source, children, true);
+        cache_reshard_metadata(source->id(), source->id(), kVersion, gtid);
+        for (auto child : children) cache_reshard_metadata(child, child, kVersion, gtid);
+
+        int flushes = 0;
+        auto* sync = SyncPoint::GetInstance();
+        sync->SetCallBack("tablet_splitter:pk_flush", [&](void*) { ++flushes; });
+        sync->EnableProcessing();
+        DeferOp cleanup([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        TxnInfoPB txn;
+        txn.set_gtid(gtid);
+        std::unordered_map<int64_t, TabletMetadataPtr> actual;
+        std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+        ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn,
+                                                  false, actual, actual_ranges));
+        EXPECT_EQ(1, flushes) << "gtid " << gtid;
+    }
+}
+
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_rejects_mismatched_extra_child) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 79;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid);
+    cache_reshard_metadata(children[0], children[0], kVersion, kGtid);
+    cache_reshard_metadata(children[1], children[1], kVersion, kGtid + 1);
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(1, planner_calls);
+    EXPECT_EQ(2, actual.size());
+    EXPECT_EQ(0, actual.count(children[1]));
+}
+
+TEST_F(LakeTabletReshardTest, test_split_identical_retry_cache_requires_absent_extra_children) {
+    constexpr int64_t kVersion = 2;
+    constexpr int64_t kGtid = 78;
+    auto source = split_source();
+    std::vector<int64_t> children{next_id(), next_id(), next_id()};
+    auto request = make_split_retry_request(source, children, false);
+    TabletRangePB identical_range;
+    *identical_range.mutable_lower_bound() = generate_sort_key(0);
+    *identical_range.mutable_upper_bound() = generate_sort_key(100);
+    auto cached_source = cache_reshard_metadata(source->id(), source->id(), kVersion, kGtid, &identical_range);
+    auto cached_child = cache_reshard_metadata(children[0], children[0], kVersion, kGtid, &identical_range);
+    for (size_t i = 1; i < children.size(); ++i) {
+        ASSERT_EQ(nullptr, _tablet_manager->metacache()->lookup_tablet_metadata(
+                                   _tablet_manager->tablet_metadata_location(children[i], kVersion)));
+    }
+
+    int planner_calls = 0;
+    auto* sync = SyncPoint::GetInstance();
+    sync->SetCallBack("tablet_splitter:set_metadata_visit_limit", [&](void* arg) {
+        ++planner_calls;
+        *static_cast<size_t*>(arg) = 0;
+    });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    TxnInfoPB txn;
+    txn.set_gtid(kGtid);
+    std::unordered_map<int64_t, TabletMetadataPtr> actual;
+    std::unordered_map<int64_t, TabletRangePB> actual_ranges;
+    ASSERT_OK(lake::publish_resharding_tablet(_tablet_manager.get(), request, source->version(), kVersion, txn, false,
+                                              actual, actual_ranges));
+    EXPECT_EQ(0, planner_calls);
+    ASSERT_EQ(2, actual.size());
+    EXPECT_EQ(cached_source->SerializeAsString(), actual.at(source->id())->SerializeAsString());
+    EXPECT_EQ(cached_child->SerializeAsString(), actual.at(children[0])->SerializeAsString());
+}
+
+TEST_F(LakeTabletReshardTest, test_split_boundary_planner_skips_zero_row_segment_without_open) {
+    const int64_t tablet_id = next_id();
+    prepare_tablet_dirs(tablet_id);
+    const std::string empty_name = "sampleless-empty.dat";
+    const std::string live_name = "sampled-live.dat";
+    const auto empty_size = write_two_column_segment(tablet_id, empty_name, 0, [](int key) { return key; });
+    const auto live_size = write_two_column_segment(tablet_id, live_name, 100, [](int key) { return key; });
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(1);
+    metadata->set_next_rowset_id(3);
+    set_two_column_pk_schema(metadata.get(), 4001);
+    metadata->mutable_range()->mutable_lower_bound()->CopyFrom(generate_sort_key(0));
+    metadata->mutable_range()->set_lower_bound_included(true);
+    metadata->mutable_range()->mutable_upper_bound()->CopyFrom(generate_sort_key(100));
+    metadata->mutable_range()->set_upper_bound_included(false);
+    auto* rowset = metadata->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_num_rows(100);
+    rowset->set_data_size(empty_size + live_size);
+    rowset->set_num_dels(0);
+    lake::tablet_reshard_helper::set_rowset_uid(rowset);
+    auto* empty = rowset->add_segment_metas();
+    empty->set_filename(empty_name);
+    empty->set_segment_idx(0);
+    empty->set_num_rows(0);
+    empty->set_size(empty_size);
+    auto* live = rowset->add_segment_metas();
+    live->set_filename(live_name);
+    live->set_segment_idx(1);
+    live->set_num_rows(100);
+    live->set_size(live_size);
+    live->mutable_sort_key_min()->CopyFrom(generate_sort_key(0));
+    live->mutable_sort_key_max()->CopyFrom(generate_sort_key(99));
+    live->set_deprecated_sort_key_sample_row_interval(50);
+    live->add_deprecated_sort_key_samples()->CopyFrom(generate_sort_key(50));
+
+    auto* sync = SyncPoint::GetInstance();
+    int opens = 0;
+    sync->SetCallBack("tablet_splitter:segment_open", [&](void*) { ++opens; });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->DisableProcessing();
+        sync->ClearAllCallBacks();
+    });
+    std::vector<lake::TabletRangeInfo> ranges;
+    ASSERT_OK(lake::get_tablet_split_ranges(_tablet_manager.get(), metadata, 2, &ranges));
+    // ONE open, not zero: sampling is now on demand, so the live segment is opened deliberately --
+    // that is the feature. The number is still what proves the zero-row segment was skipped, since
+    // a broken skip would open both and read 2 here. (This assertion was 0 when a segment carrying
+    // metadata sort-key samples needed no open at all; those samples are no longer written.)
+    EXPECT_EQ(1, opens);
+    ASSERT_EQ(2, ranges.size());
+    ASSERT_TRUE(ranges[0].range.has_upper_bound());
+    EXPECT_EQ(1, ranges[0].range.upper_bound().values_size());
+}
+
+// The alias renumbers the rowsets it emits, so any sidecar keyed by rssid would name the wrong segment
+// once carried over -- and nothing here projects one. build_parent_tablet_metadata already refuses a
+// child carrying DCG or IDG before the alias is built; the alias refuses it as well, rather than
+// clearing the metadata and silently serving the columns' pre-update values.
+// The alias renumbers the rowsets it emits, so any sidecar keyed by rssid would name the wrong segment
+// once carried over -- and nothing here projects one. build_parent_tablet_metadata already refuses a
+// child carrying DCG or IDG before the alias is built; the alias refuses it as well, rather than
+// clearing the metadata and silently serving the columns' pre-update values.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_refuses_a_child_carrying_dcg) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    auto meta_a = make_shared_delvec_source(child_a, {"dcg_guard_shared.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"dcg_guard_shared.dat"});
+    auto& dcg = (*meta_b->mutable_dcg_meta()->mutable_dcgs())[meta_b->rowsets(0).id()];
+    dcg.add_column_files("dcg_guard.cols");
+    dcg.add_versions(1);
+    dcg.add_shared_files(false);
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    ASSERT_FALSE(alias.ok());
+    EXPECT_TRUE(alias.status().is_not_supported()) << alias.status();
+    EXPECT_TRUE(alias.status().message().contains("DCG")) << alias.status();
+}
+
+// A page and the file that holds it live in two different maps: delvecs() keys the page by rssid, and
+// version_to_file() keys the file by the page's version. Metadata that kept the page but lost the file
+// entry would have the alias hand a reader a page it cannot open, so the build refuses it outright --
+// this is the branch the dedup key below reads that file entry from.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_refuses_a_delvec_page_whose_file_is_missing) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "missing_delvec_file_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    DelVector delvec;
+    const uint32_t deleted[] = {5};
+    delvec.init(/*version=*/10, deleted, std::size(deleted));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "missing_delvec.dat", delvec.save());
+    // Keep the page, drop the file it names.
+    meta_b->mutable_delvec_meta()->mutable_version_to_file()->erase(int64_t{10});
+    ASSERT_EQ(1, meta_b->delvec_meta().delvecs().count(1));
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    ASSERT_FALSE(alias.ok());
+    EXPECT_TRUE(alias.status().is_corruption()) << alias.status();
+    EXPECT_TRUE(alias.status().message().contains("has no file in tablet")) << alias.status();
+}
+
+// virtual_merge_for_read builds only what a read needs, so what it does build has to be what a real merge
+// would have produced: the same rowsets, once each, and the same delete vectors. This is the net under it
+// being a separate implementation rather than a flag on merge_tablet -- the sidecars it skips
+// (primary-index SST, DCG, IDG) are compared by their absence.
+
+// virtual_merge_for_read builds only what a read needs, so what it does build has to be what a real merge
+// would have produced: the same rowsets, once each, and the same delete vectors. This is the net under it
+// being a separate implementation rather than a flag on merge_tablet -- the sidecars it skips
+// (primary-index SST, DCG, IDG) are compared by their absence.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_rowsets_and_delvecs_match_a_real_merge) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t merged_tablet = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, merged_tablet, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "differential_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+    // A real merge validates its sources before doing anything (validate_merge_inputs and
+    // validate_canonical_rowset): they need a schema whose key the range can be expressed in, tablet
+    // ranges forming a nonoverlapping contiguous cover, and each rowset's range equal to its
+    // intersection with its tablet's. Give the two children adjacent halves of an int key, which is
+    // what a split would have left behind -- and keep the sort key EQUAL to the primary key here, so
+    // the real merge this test compares against is one that can actually run.
+    for (int i = 0; i < 2; ++i) {
+        auto* meta = i == 0 ? meta_a.get() : meta_b.get();
+        set_int_primary_key_schema(meta, /*schema_id=*/4001);
+        auto* range = meta->mutable_range();
+        range->mutable_lower_bound()->CopyFrom(generate_sort_key(i * 50));
+        range->set_lower_bound_included(true);
+        range->mutable_upper_bound()->CopyFrom(generate_sort_key((i + 1) * 50));
+        range->set_upper_bound_included(false);
+        meta->mutable_rowsets(0)->mutable_range()->CopyFrom(*range);
+    }
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "differential_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {7};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "differential_b.delvec", delvec_b.save());
+
+    ASSIGN_OR_ABORT(auto merged, merge_tablet_directly({meta_a, meta_b}, merged_tablet, kNewVersion,
+                                                       /*read_alias=*/false));
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    ASSERT_EQ(merged->rowsets_size(), alias->rowsets_size());
+    for (int i = 0; i < merged->rowsets_size(); ++i) {
+        const auto& from_merge = merged->rowsets(i);
+        const auto& from_alias = alias->rowsets(i);
+        EXPECT_EQ(from_merge.num_rows(), from_alias.num_rows());
+        EXPECT_EQ(from_merge.uid().hi(), from_alias.uid().hi());
+        EXPECT_EQ(from_merge.uid().lo(), from_alias.uid().lo());
+        ASSERT_EQ(from_merge.segment_metas_size(), from_alias.segment_metas_size());
+        for (int seg = 0; seg < from_merge.segment_metas_size(); ++seg) {
+            EXPECT_EQ(from_merge.segment_metas(seg).filename(), from_alias.segment_metas(seg).filename());
+            EXPECT_EQ(from_merge.segment_metas(seg).shared(), from_alias.segment_metas(seg).shared());
+        }
+    }
+
+    // The delete vectors are the other half a read needs, so they must decode identically. The alias
+    // numbers its own rowsets, so each side is read at the rssid it gave the segment.
+    ASSERT_EQ(1, merged->rowsets_size());
+    LakeIOOptions io_options;
+    DelVector from_merge;
+    ASSERT_OK(
+            lake::get_del_vec(_tablet_manager.get(), *merged, merged->rowsets(0).id(), false, io_options, &from_merge));
+    DelVector from_alias;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, alias->rowsets(0).id(), false, io_options, &from_alias));
+    ASSERT_NE(nullptr, from_merge.roaring());
+    ASSERT_NE(nullptr, from_alias.roaring());
+    EXPECT_EQ(from_merge.save(), from_alias.save());
+    EXPECT_EQ(3, from_alias.cardinality());
+
+    // And the alias declares none of the sidecars it does not build.
+    EXPECT_TRUE(alias->sstable_meta().sstables().empty());
+    EXPECT_TRUE(alias->dcg_meta().dcgs().empty());
+    EXPECT_TRUE(alias->idg_meta().idgs().empty());
+}
+
+// A page only one child draws from is copied through byte for byte, never decoded into a bitmap and
+// re-serialized. What must survive that shortcut is the page's CONTENT and its checksum: the copy
+// carries the source's crc32c over with its bytes, and restates it at the alias's version so
+// MetaFileBuilder still reads it as a live checksum rather than as none.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_copies_a_single_source_page_verbatim) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "verbatim_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    // Only child A ever deleted from the shared segment, so its page is the rssid's single source.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4, 6};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    const std::string content = delvec_a.save();
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "verbatim_a.delvec", content);
+    // Give it a valid checksum, the way a published page carries one.
+    auto& source_page = (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1];
+    source_page.set_crc32c(crc32c::Mask(crc32c::Value(content.data(), content.size())));
+    source_page.set_crc32c_gen_version(10);
+
+    int raw_copy_opens = 0;
+    std::vector<size_t> raw_read_sizes;
+    auto* sync = SyncPoint::GetInstance();
+    sync->ClearAllCallBacks();
+    sync->DisableProcessing();
+    sync->SetCallBack("write_compacted_delvec_pages:copy_source_reader_delta", [&](void* arg) {
+        if (*static_cast<int*>(arg) == 1) {
+            ++raw_copy_opens;
+        }
+    });
+    sync->SetCallBack("write_compacted_delvec_pages:read_chunk_size",
+                      [&](void* arg) { raw_read_sizes.push_back(*static_cast<size_t*>(arg)); });
+    sync->EnableProcessing();
+    DeferOp cleanup([&] {
+        sync->ClearAllCallBacks();
+        sync->DisableProcessing();
+    });
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+    EXPECT_EQ(1, raw_copy_opens) << "the single source must use the raw-copy path";
+    EXPECT_EQ(std::vector<size_t>({content.size()}), raw_read_sizes);
+
+    ASSERT_EQ(1, alias->rowsets_size());
+    const uint32_t target_rssid = alias->rowsets(0).id();
+    DelVector copied;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, target_rssid, false, io_options, &copied));
+    ASSERT_NE(nullptr, copied.roaring());
+    EXPECT_EQ(3, copied.cardinality());
+    for (uint32_t rowid : deleted_by_a) {
+        EXPECT_TRUE(copied.roaring()->contains(rowid)) << "rowid " << rowid;
+    }
+
+    // The bytes went through untouched, so the checksum is the source's -- restated at this version.
+    const auto& alias_page = alias->delvec_meta().delvecs().at(target_rssid);
+    EXPECT_EQ(content.size(), alias_page.size());
+    EXPECT_EQ(source_page.crc32c(), alias_page.crc32c());
+    EXPECT_EQ(kNewVersion, alias_page.crc32c_gen_version())
+            << "a checksum whose gen version is not the page's version reads as no checksum at all";
+    EXPECT_EQ(kNewVersion, alias_page.version());
+}
+
+// The verbatim copy above is the alias's ordinary case, so it is also where a corrupted source page
+// would reach the alias undecoded. The copy checksums the bytes it streams, so the publish fails here
+// instead of handing the alias a page that only fails once somebody reads it.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_rejects_a_single_source_page_that_fails_its_checksum) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "checksum_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {1, 4, 6};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    const std::string content = delvec_a.save();
+    const std::string delvec_name = "checksum_a.delvec";
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, delvec_name, content);
+    auto& source_page = (*meta_a->mutable_delvec_meta()->mutable_delvecs())[1];
+    source_page.set_crc32c(crc32c::Mask(crc32c::Value(content.data(), content.size())));
+    source_page.set_crc32c_gen_version(10);
+
+    // Rewrite the page with bytes the recorded checksum no longer describes, keeping its length so the
+    // range preflight still passes -- a corrupted cache block looks exactly like this.
+    std::string corrupted = content;
+    corrupted[0] = static_cast<char>(corrupted[0] ^ 0xff);
+    write_file(_tablet_manager->delvec_location(child_a, delvec_name), corrupted);
+
+    const bool old_strict = config::enable_strict_delvec_crc_check;
+    DeferOp restore_strict([&] { config::enable_strict_delvec_crc_check = old_strict; });
+    config::enable_strict_delvec_crc_check = true;
+
+    auto alias = merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion, /*read_alias=*/true);
+    EXPECT_TRUE(alias.status().is_corruption()) << alias.status();
+}
+
+// Two children can hold delvec pages that agree on version, offset and size while listing different
+// rowids, so a page cannot be identified by those three alone. One publish advances every child to the
+// same version and each child writes its OWN delvec file for it, its own page at offset 0 -- so when
+// both deleted the same number of rows the sizes match too, and dropping the second as a duplicate
+// loses that child's deletions. What tells the two apart is the file the page lives in: the name
+// carries a fresh uuid per write, so different bytes never answer to the same name.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_keeps_indistinguishable_private_delvec_pages) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "dedup_key_shared.dat";
+    auto meta_a = make_shared_delvec_source(child_a, {segment_name});
+    auto meta_b = make_shared_delvec_source(child_b, {segment_name});
+
+    // One version, one offset, one size, and -- as production always gives them -- two distinct file
+    // names. The old key read the first three and not the name, so it saw one page where there are two.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {3};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "delvec_child_a.dat", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {7};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "delvec_child_b.dat", delvec_b.save());
+
+    // The premise: version, offset and size tell these two pages apart in no way at all.
+    ASSERT_EQ(delvec_a.save().size(), delvec_b.save().size()) << "the two pages must be the same size";
+    const auto& page_a = meta_a->delvec_meta().delvecs().at(1);
+    const auto& page_b = meta_b->delvec_meta().delvecs().at(1);
+    ASSERT_EQ(page_a.version(), page_b.version());
+    ASSERT_EQ(page_a.offset(), page_b.offset());
+    ASSERT_EQ(page_a.size(), page_b.size());
+    ASSERT_NE(meta_a->delvec_meta().version_to_file().at(10).name(),
+              meta_b->delvec_meta().version_to_file().at(10).name())
+            << "each child wrote its own file, so the names must differ";
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    ASSERT_EQ(1, alias->rowsets_size());
+    DelVector unioned;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, alias->rowsets(0).id(), false, io_options, &unioned));
+    ASSERT_NE(nullptr, unioned.roaring());
+    EXPECT_EQ(2, unioned.cardinality()) << "both children's deletions must survive";
+    EXPECT_TRUE(unioned.roaring()->contains(3));
+    EXPECT_TRUE(unioned.roaring()->contains(7));
+}
+
+// A child rowset written after the split exists in that child alone, and the children allocate ids
+// independently -- so the alias has to re-identify one of the two and carry its delete vectors across.
+TEST_F(LakeTabletReshardTest, test_virtual_merge_reidentifies_colliding_post_split_rowsets) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    // Both children inherit rowset 1 over the same shared segment, then each writes its own rowset 2.
+    auto meta_a = make_shared_delvec_source(child_a, {"inherited.dat"});
+    auto meta_b = make_shared_delvec_source(child_b, {"inherited.dat"});
+    for (int i = 0; i < 2; ++i) {
+        auto* meta = i == 0 ? meta_a.get() : meta_b.get();
+        auto* own = meta->add_rowsets();
+        own->set_id(2);
+        own->set_version(2);
+        own->set_num_rows(5);
+        own->set_data_size(50);
+        auto* segment = own->add_segment_metas();
+        segment->set_filename(i == 0 ? "child_a_own.dat" : "child_b_own.dat");
+        segment->set_size(50);
+        stamp_physical_identity_uid(own, i == 0 ? "child_a_own.dat" : "child_b_own.dat");
+        meta->set_next_rowset_id(3);
+    }
+    // A delete vector on child B's own rowset, which must follow it to its new id.
+    DelVector own_delvec;
+    const uint32_t deleted[] = {3};
+    own_delvec.init(/*version=*/10, deleted, std::size(deleted));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/2, "child_b_own.delvec", own_delvec.save());
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    // The inherited rowset once, plus one per child's own: three, with distinct ids.
+    ASSERT_EQ(3, alias->rowsets_size());
+    std::set<uint32_t> ids;
+    std::set<std::string> segments;
+    for (const auto& rowset : alias->rowsets()) {
+        ids.insert(rowset.id());
+        for (const auto& segment : rowset.segment_metas()) {
+            segments.insert(segment.filename());
+        }
+    }
+    EXPECT_EQ(3, ids.size()) << "the children's own rowsets must not collide on an id";
+    EXPECT_EQ(std::set<std::string>({"inherited.dat", "child_a_own.dat", "child_b_own.dat"}), segments);
+    EXPECT_GE(alias->next_rowset_id(), *ids.rbegin() + 1);
+
+    // Child B's delete vector followed its rowset to whichever id it got.
+    uint32_t reidentified = 0;
+    for (const auto& rowset : alias->rowsets()) {
+        if (rowset.segment_metas_size() == 1 && rowset.segment_metas(0).filename() == "child_b_own.dat") {
+            reidentified = rowset.id();
+        }
+    }
+    ASSERT_NE(0u, reidentified);
+    DelVector carried;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, reidentified, false, io_options, &carried));
+    ASSERT_NE(nullptr, carried.roaring());
+    EXPECT_EQ(1, carried.cardinality());
+    EXPECT_TRUE(carried.roaring()->contains(3));
+}
+
+// The read-only parent alias a primary-key-range split keeps alive is not such a merge: it reproduces the
+// pre-split parent, which served every row of a shared segment exactly once. So it must build -- carrying
+// the shared rowset once and the union of the children's delete vectors -- rather than try to locate a gap
+// it has no rowid window for, which is what wedged publish on this shape.
+TEST_F(LakeTabletReshardTest, test_parent_alias_of_a_primary_key_range_split_unions_shared_delvecs) {
+    constexpr int64_t kNewVersion = 2;
+    const int64_t child_a = next_id();
+    const int64_t child_b = next_id();
+    const int64_t alias_tablet = next_id();
+    for (int64_t tablet_id : {child_a, child_b, alias_tablet}) {
+        prepare_tablet_dirs(tablet_id);
+    }
+
+    const std::string segment_name = "alias_shared.dat";
+    auto [meta_a, meta_b] = make_primary_key_range_split_children(child_a, child_b, segment_name,
+                                                                  /*split_key=*/100, /*rowset_lower_key=*/90);
+    // A real segment under the ALIAS tablet id, which is where gap synthesis would look for it: without the
+    // file this test would pass for the wrong reason (a missing segment) instead of proving the
+    // primary-key-interval-to-rowid conversion is gone.
+    write_two_column_segment(
+            alias_tablet, segment_name, /*num_rows=*/10, [](int key) { return key * 2; },
+            /*key_start=*/90);
+
+    // Each child deleted rows of the shared segment that fall in its own range; neither knows the other's.
+    DelVector delvec_a;
+    const uint32_t deleted_by_a[] = {3, 9};
+    delvec_a.init(/*version=*/10, deleted_by_a, std::size(deleted_by_a));
+    add_delvec(meta_a.get(), child_a, /*version=*/10, /*segment_id=*/1, "alias_a.delvec", delvec_a.save());
+    DelVector delvec_b;
+    const uint32_t deleted_by_b[] = {5};
+    delvec_b.init(/*version=*/10, deleted_by_b, std::size(deleted_by_b));
+    add_delvec(meta_b.get(), child_b, /*version=*/10, /*segment_id=*/1, "alias_b.delvec", delvec_b.save());
+
+    ASSIGN_OR_ABORT(auto alias, merge_tablet_directly({meta_a, meta_b}, alias_tablet, kNewVersion,
+                                                      /*read_alias=*/true));
+
+    // One copy of the shared rowset: the uid dedup is what keeps the alias from serving it twice.
+    ASSERT_EQ(1, alias->rowsets_size());
+    ASSERT_EQ(1, alias->rowsets(0).segment_metas_size());
+    EXPECT_EQ(segment_name, alias->rowsets(0).segment_metas(0).filename());
+    // Read-only alias: no primary index is rebuilt for it.
+    EXPECT_TRUE(alias->sstable_meta().sstables().empty());
+
+    const uint32_t target_rssid = alias->rowsets(0).id();
+    DelVector loaded;
+    LakeIOOptions io_options;
+    ASSERT_OK(lake::get_del_vec(_tablet_manager.get(), *alias, target_rssid, false, io_options, &loaded));
+    ASSERT_NE(nullptr, loaded.roaring());
+    // The union, and nothing more: no gap bits masking rows the pre-split parent was serving.
+    EXPECT_EQ(3, loaded.cardinality());
+    EXPECT_TRUE(loaded.roaring()->contains(3));
+    EXPECT_TRUE(loaded.roaring()->contains(5));
+    EXPECT_TRUE(loaded.roaring()->contains(9));
+}
 } // namespace starrocks

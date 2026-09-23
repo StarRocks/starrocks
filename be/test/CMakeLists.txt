@@ -37,10 +37,10 @@ set(EXEC_FILES
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_test.cpp
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
-        ./exec/pipeline/scan/logical_split_morsel_queue_full_key_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
         ./exec/query_cache/query_cache_test.cpp
@@ -122,6 +122,8 @@ set(EXEC_FILES
         ./formats/parquet/dict_encoding_test.cpp
         ./formats/parquet/statistics_helper_test.cpp
         ./http/default_path_handlers_test.cpp
+        ./http/dump_tablet_metadata_action_test.cpp
+        ./http/greplog_action_test.cpp
         ./http/handler_required_privilege_test.cpp
         ./http/metrics_action_test.cpp
         ./http/stop_be_action_test.cpp
@@ -139,8 +141,6 @@ set(EXEC_FILES
         ./runtime/merge_cascade_test.cpp
         ./runtime/exec_env_test.cpp
         ./storage/flat_json_metrics_test.cpp
-        ./storage/seek_tuple_test.cpp
-        ./storage/full_sort_key_codec_test.cpp
         ./util/json_flattener_test.cpp
         ./base/raw_container_test.cpp
         ./util/thrift_customize_test.cpp
@@ -149,6 +149,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         service/backend_base_test.cpp
         ./service/core_dump_resource_releaser_test.cpp
+        ./service/daemon_test.cpp
         ./service/mem_hook_test.cpp
         ./service/service_metrics_test.cpp
         ./service/service_be/arrow_flight_call_header_utils_test.cpp
@@ -280,7 +281,7 @@ SET(DW_TEST_FILES
     ./storage/lake/lake_delvec_loader_test.cpp
     ./storage/lake/lake_meta_reader_test.cpp
     ./storage/lake/lake_persistent_index_test.cpp
-    ./storage/lake/lake_primary_index_selection_test.cpp
+    ./storage/lake/lake_persistent_index_selection_test.cpp
     ./storage/lake/lake_primary_key_consistency_test.cpp
     ./exec/lake_connector_scan_node_test.cpp
     ./storage/lake/metacache_test.cpp
@@ -317,6 +318,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
     ./storage/lake/delete_test.cpp
+    ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
@@ -373,12 +375,11 @@ SET(DW_TEST_FILES
     ./storage/rowset/plain_page_test.cpp
     ./storage/rowset/rle_page_test.cpp
     ./storage/rowset/rowset_test.cpp
-    ./storage/rowset/segment_full_sort_key_index_test.cpp
     ./storage/rowset/segment_iterator_test.cpp
     ./storage/rowset/segment_rewriter_test.cpp
+    ./storage/rowset/segment_tail_index_region_test.cpp
     ./storage/rowset/segment_test.cpp
     ./storage/rowset/segment_writer_short_key_encode_test.cpp
-    ./storage/rowset/segment_writer_sort_key_sampling_test.cpp
     ./storage/rowset/series_column_iterator_test.cpp
     ./storage/rowset/struct_column_rw_test.cpp
     ./storage/rowset/unique_rowset_id_generator_test.cpp
@@ -393,6 +394,7 @@ SET(DW_TEST_FILES
     ./storage/size_tiered_compaction_policy_test.cpp
     ./storage/snapshot_manager_test.cpp
     ./storage/snapshot_meta_test.cpp
+    ./storage/sort_key_sampler_test.cpp
     ./storage/sstable/concatenating_iterator_test.cpp
     ./storage/storage_cleanup_executor_test.cpp
     ./storage/storage_env_test.cpp
@@ -454,11 +456,14 @@ endif()
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
+        connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        connector/paimon/paimon_blob_converter_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()

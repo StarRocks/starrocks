@@ -109,10 +109,10 @@ let
       md5 = "724cd1df9735de2b8939d298f0d95ea2";
       sha256 = "04ng0l997j8vxvsp60haf6nvhx4201qsrkhzm3y35qr57k3f4mh4";
     };
-    "fast-float-3.5.1.tar.gz" = {
-      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v3.5.1.tar.gz";
-      md5 = "adb3789b99f47e0cd971b4d90727d4d0";
-      sha256 = "1nad5fihmv4g2i7cih7nwkv9rba9gw81lill7k8gglnccsfbyn45";
+    "fast-float-8.2.10.tar.gz" = {
+      url = "https://github.com/fastfloat/fast_float/archive/refs/tags/v8.2.10.tar.gz";
+      md5 = "ddcf64ffe15f1e1ed964a355db7a04f3";
+      sha256 = "07wnjlxxwh0gxwaswar58n4gmgfl8xm9iw6ica44vkxijzfmiybn";
     };
     "FlameGraph-20251015.tar.gz" = {
       url = "https://github.com/murphyatwork/FlameGraph/archive/refs/tags/20251015.tar.gz";
@@ -309,15 +309,15 @@ let
       md5 = "bdc1dfcb2a89dc0c09e8370808a946f5";
       sha256 = "0byazknlr5x941n9ba3j14prf29yk2dw7nwh3a4wbqd11zh3pwcv";
     };
-    "simdutf-5.2.8.tar.gz" = {
-      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v5.2.8.tar.gz";
-      md5 = "731c78ab5a10c6073942dc93d5c4b04c";
-      sha256 = "0xwdx99qn4ckv4bd9ib5w3i00l8wiy2d7vrdz2c8avasz2zg21i7";
+    "simdutf-9.1.0.tar.gz" = {
+      url = "https://github.com/simdutf/simdutf/archive/refs/tags/v9.1.0.tar.gz";
+      md5 = "e55123960edadb8d9987fa30f877e588";
+      sha256 = "14yihiaalw4nxmjbbn6b64r7f4qdcpm7x8ml1zmydacm9h553qr4";
     };
-    "snappy-1.1.8.tar.gz" = {
-      url = "https://github.com/google/snappy/archive/1.1.8.tar.gz";
-      md5 = "70e48cba7fecf289153d009791c9977f";
-      sha256 = "07v5b365vz6bjdlqw4vwcna4yhaf6xzxny31hfq159ijg3q7gdhn";
+    "snappy-1.2.1.tar.gz" = {
+      url = "https://github.com/google/snappy/archive/1.2.1.tar.gz";
+      md5 = "dd6f9b667e69491e1dbf7419bdf68823";
+      sha256 = "0wvaxdjdhrb6s8invpzs51jywpbshb96r40nndi1iz62gsjg17w6";
     };
     "starrocks-clucene-2026.06.23.tar.gz" = {
       url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
@@ -465,7 +465,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -500,7 +500,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -513,7 +513,7 @@ let
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -536,7 +536,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -570,7 +570,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -578,11 +578,12 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -605,7 +606,7 @@ let
       "googletest-release-1.10.0.tar.gz"
       "rapidjson-1.1.0.tar.gz"
       "simdjson-v3.9.4.tar.gz"
-      "snappy-1.1.8.tar.gz"
+      "snappy-1.2.1.tar.gz"
       "gperftools-2.7.tar.gz"
       "zlib-ng-2.3.3.tar.gz"
       "lz4-1.10.0.tar.gz"
@@ -639,7 +640,7 @@ let
       "velocypack-XYZ1.0.tar.gz"
       "opentelemetry-cpp-v1.9.1.tar.gz"
       "google_benchmark-1.9.5.tar.gz"
-      "fast-float-3.5.1.tar.gz"
+      "fast-float-8.2.10.tar.gz"
       "streamvbyte-0.5.1.tar.gz"
       "jansson-2.14.tar.gz"
       "avro-release-1.12.0.tar.gz"
@@ -647,11 +648,12 @@ let
       "lzo-2.10.tar.gz"
       "datasketches-cpp-4.0.0.tar.gz"
       "libfiu-1.1.tar.gz"
+      "libdeflate-1.26.zip"
       "llvm-project-18.1.8.src.tar.xz"
       "abseil-cpp-20220623.0.tar.gz"
       "cares-1_19_1.tar.gz"
       "grpc-1.43.0.tar.gz"
-      "simdutf-5.2.8.tar.gz"
+      "simdutf-9.1.0.tar.gz"
       "poco-1.12.5-release.tar.gz"
       "icu4c-76_1-src.zip"
       "xsimd-14.0.0.tar.gz"
@@ -790,6 +792,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -859,6 +862,7 @@ let
       "LZO2"
       "DATASKETCHES"
       "FIU"
+      "LIBDEFLATE"
       "LLVM"
       "ABSL"
       "CARES"
@@ -946,8 +950,8 @@ let
       "xxhash"
       "blake3"
       "benchgen"
-      "breakpad"
       "libdeflate"
+      "breakpad"
     ];
     "aarch64-linux" = [
       "libevent"
@@ -1017,6 +1021,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
     "aarch64-darwin" = [
       "libevent"
@@ -1086,6 +1091,7 @@ let
       "xxhash"
       "blake3"
       "benchgen"
+      "libdeflate"
     ];
   };
 

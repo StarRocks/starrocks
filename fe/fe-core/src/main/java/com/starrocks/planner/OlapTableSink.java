@@ -77,6 +77,7 @@ import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
 import com.starrocks.load.Load;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.server.GlobalStateMgr;
@@ -98,6 +99,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDataSink;
@@ -118,7 +120,6 @@ import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.transaction.ExplicitTxnState;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -168,6 +169,26 @@ public class OlapTableSink extends DataSink {
     // null (default) means write all indexes, i.e. today's behavior.
     private Long targetWriteIndexId = null;
 
+    // Estimated bytes this statement writes, set by the planner that has the estimate (the exec plan
+    // for INSERT, the file list for a broker load). Negative means "no usable estimate", which must
+    // leave the node count alone rather than shrink it -- an unknown size is not a small size.
+    private long estimatedWriteBytes = -1;
+
+    // The multi-node write knobs as the session that SUBMITTED the load had them, or null to read
+    // them from the session planning right now.
+    //
+    // A Broker Load is planned on a scheduler thread long after its statement returned, under the
+    // job's ConnectContext -- which, until an FE failover replaces it, is the client's own live
+    // session. Reading the knobs from there would let a SET issued while the job sat pending
+    // re-decide a load that was already accepted, and after a failover the rebuilt context would
+    // decide it from the defaults instead, turning a submit-time `off` into `auto`. BulkLoadJob
+    // persists the submit-time values and LoadPlanner hands them here, so both paths plan the
+    // session that was actually asked.
+    //
+    // Null for an INSERT, which is planned inside its own statement: there the live session IS the
+    // submitting one.
+    private MultiNodeWriteSettings multiNodeWriteSettings;
+
     // Conservative default for RANGE-partitioned tables under stream / routine load.
     // Both planner paths flag streaming ingest via setIsStreamingLoad(true): StreamLoadPlanner
     // (legacy stream load and routine load) and LoadPlanner (transaction stream load and batch
@@ -215,29 +236,20 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
+        TransactionState explicitTxnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, dbId, dstTable.getId());
         TransactionState txnState = globalTransactionMgr.getTransactionState(dbId, txnId);
-        if (txnState == null) {
-            // Multi-statement stream load plans its sub-task sinks during the load, before the
-            // explicit transaction is upserted into the DatabaseTransactionMgr at commit time, so
-            // getTransactionState misses. Fall back to the explicit transaction registry so the sink
-            // observes the transaction's combined-txn-log decision; otherwise write_txn_log stays at
-            // the per-tablet default while publish expects combined logs, wedging publish.
-            //
-            // Restricted to MULTI_STATEMENT_STREAMING on purpose: INSERT_STREAMING (BEGIN ... COMMIT)
-            // emits per-load-id txn logs that publish reads via the load_ids branch (which takes
-            // precedence over combined_txn_log), so its sink must keep the default per-load-id mode.
-            // Honoring the combined flag here would make BE skip those per-load-id logs and lose data.
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null && explicitTxnState.getTransactionState() != null
-                    && explicitTxnState.getTransactionState().getSourceType()
-                            == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
-                txnState = explicitTxnState.getTransactionState();
-            }
+        if (txnState == null && explicitTxnState != null
+                && explicitTxnState.getSourceType() == TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING) {
+            txnState = explicitTxnState;
         }
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
             tSink.setLabel(txnState.getLabel());
-            tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            if (explicitTxnState == null
+                    || explicitTxnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+                tSink.setWrite_txn_log(txnState.isUseCombinedTxnLog());
+            }
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
@@ -267,6 +279,238 @@ public class OlapTableSink extends DataSink {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_PARTITION, partitionId, dstTable.getName());
             }
         }
+    }
+
+    // `writerNodeCount` value that keeps the historical behaviour: one node per tablet.
+    public static final int NO_MULTI_NODE_WRITE = 1;
+
+    // Resolve the effective single-tablet write parallelism for this sink. Returns NO_MULTI_NODE_WRITE
+    // whenever any precondition of the feature is not met.
+    private int writerNodeCount(TOlapTableSink tSink, TransactionState txnState) {
+        if (!dstTable.isCloudNativeTableOrMaterializedView()) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // Rows sharing a key are not spread: an aggregate, unique or primary key table routes by a
+        // crc32 hash of the key columns, so all of a key's rows reach one node and meet in one writer
+        // in arrival order. A REPLACE, or an upsert-then-delete of the same key inside one
+        // transaction, therefore resolves exactly as it does on the single-node path, and no key type
+        // has to be gated on here. DUPLICATE KEY has no such semantics at all: its rowset is the union
+        // of the segments, so the fold is exact regardless of where a row was written.
+        // Bundled data files are what make the fold safe to widen across nodes: each node opens its
+        // OWN bundle file (uuid-named, so no collision) and every SegmentMetadataPB carries its own
+        // filename plus bundle_file_offset, so concatenating segments from several bundles resolves
+        // correctly. It also keeps the publish-side check "all segments have offsets or none do"
+        // satisfied, which a mix of bundling and non-bundling writers would violate.
+        if (!dstTable.isFileBundling()) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // Every writing node produces a PARTIAL txn log for the tablet, and only the combined-txn-log
+        // path funnels them back to one sender that can aggregate them. Without it each node would write
+        // its own {txn_id}.log to the SAME object-storage path and silently clobber the others.
+        if (txnState == null || !txnState.isUseCombinedTxnLog()) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // An explicit transaction (BEGIN ... COMMIT) collects one load id per statement and commits them
+        // as TxnInfoPB.load_ids, and BE's load_txn_log takes that branch BEFORE the combined-log one,
+        // resolving `{tablet}_{txn}_{load_id}.log`. A load id is per statement, not per node, so several
+        // writing nodes would target that same path. A plain INSERT is INSERT_STREAMING too but never
+        // populates load_ids, so the source type alone is the wrong signal -- ask whether this txn id is
+        // registered as an explicit transaction. (Such a transaction also misses the DatabaseTransactionMgr
+        // lookup above until it commits, so the check above already covers today's behaviour; this states
+        // the actual reason instead of relying on that.)
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.INSERT_STREAMING
+                && GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getExplicitTxnState(tSink.getTxn_id()) != null) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // A partial update, a condition update and a load missing its auto-increment column all make BE
+        // attach RowsetTxnMetaPB to the op_write, and all three used to be refused here. They are not
+        // any more: RowsetTxnMetaPB describes the LOAD, not one node's view of it, so every writer
+        // builds the same one and the fold keeps a single copy (merge_multi_node_write_txn_log checks
+        // they agree). rewrite_segments_meta is per segment and rides along with the segment list.
+        // Publish is untouched either way -- it reads the one folded log and cannot tell how many nodes
+        // produced it.
+        //
+        // A schema change in flight is likewise no longer excluded: the load writes a shadow index too,
+        // but each index's log is folded on its own, so a differing column count changes nothing about
+        // whether the fold is valid.
+        // TabletSinkColocateSender overrides the row dispatch and reads a tablet's node list as a
+        // REPLICA set, so a spread location would make it send every row to all of them -- silent
+        // duplication rather than a spread. BE refuses the combination as well; keep FE from ever
+        // producing it.
+        if (canUseColocateMVIndex(dstTable)) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // Streaming ingest never spreads, and the reason is that it cannot be SIZED. Neither planner
+        // path sets an estimate -- StreamLoadPlanner never calls setEstimatedWriteBytes, and
+        // LoadPlanner's totalSourceFileBytes() has no file list to sum -- so nodesForEstimatedSize
+        // returns Integer.MAX_VALUE and the width collapses to lake_multi_node_write_max_nodes.
+        //
+        // "An unknown size is not a small size" is the right reading for a broker load or an INSERT,
+        // where it means the optimizer could not estimate. Here it means the opposite: a stream load
+        // is a micro-batch by construction, and TStreamLoadPutRequest carries no byte count for us to
+        // read instead. Deferring to the bound would give the smallest and most frequent writes the
+        // WIDEST spread -- every micro-batch cut into lake_multi_node_write_max_nodes segments, each
+        // with its own partial txn log -- which is the exact cost lake_multi_node_write_bytes_per_node
+        // exists to avoid. There is no lever to undo it either: stream load builds a fresh
+        // ConnectContext per request (FrontendServiceImpl), so it always reads the defaults and no
+        // SET can reach it. And the combined-log precondition screens nothing here, because
+        // DatabaseTransactionMgr derives useCombinedTxnLog as `combinedTxnLog || fileBundling`.
+        //
+        // The same reasoning already drives STREAM_LOAD_DEFAULT_OPEN_PARTITION_NUMBER above: this
+        // path gets the conservative default because it cannot be measured.
+        if (isStreamingLoad) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        MultiNodeWriteSettings settings = multiNodeWriteSettings;
+        if (settings == null) {
+            ConnectContext context = ConnectContext.get();
+            if (context == null) {
+                return NO_MULTI_NODE_WRITE;
+            }
+            settings = MultiNodeWriteSettings.from(context.getSessionVariable());
+        }
+        if (settings.mode() == SessionVariable.MultiNodeTabletWriteMode.OFF) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        if (settings.mode() == SessionVariable.MultiNodeTabletWriteMode.AUTO && !autoModeCovers()) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // Every alive compute node, bounded by lake_multi_node_write_max_nodes. A sink instance can only
+        // keep its rows on its own machine if that machine is in the tablet's node list, so each node left
+        // out silently pushes its share back over the network -- which is exactly the behaviour before this
+        // feature, so the bound costs locality but never correctness. The bound exists because every node in
+        // the list writes its own segments: on a very wide warehouse an otherwise ordinary load would be cut
+        // into that many small segments. createLocation clamps the result to the number of alive nodes.
+        //
+        // Three limits meet here and the smallest wins: what the load's own size is worth spreading
+        // over, this bound, and (in createLocation) the alive node count.
+        int bound = settings.maxNodes();
+        int maxNodes = bound > 0 ? bound : Integer.MAX_VALUE;
+        return Math.min(maxNodes, nodesForEstimatedSize(estimatedWriteBytes, settings.bytesPerNode()));
+    }
+
+    /**
+     * The three {@code lake_multi_node_*} knobs, read together so a load cannot end up deciding with
+     * a mode from one moment and a bound from another.
+     */
+    public record MultiNodeWriteSettings(SessionVariable.MultiNodeTabletWriteMode mode, int maxNodes,
+                                         long bytesPerNode) {
+        public static MultiNodeWriteSettings from(SessionVariable sessionVariable) {
+            return new MultiNodeWriteSettings(sessionVariable.getMultiNodeTabletWriteMode(),
+                    sessionVariable.getLakeMultiNodeWriteMaxNodes(),
+                    sessionVariable.getLakeMultiNodeWriteBytesPerNode());
+        }
+
+        /**
+         * The knobs as a load job persisted them when its statement was accepted.
+         *
+         * <p>A Broker Load is planned on a scheduler thread long after that, binding a
+         * ConnectContext that is the client's own session until an FE failover replaces it. Reading
+         * the knobs from that session at plan time would let a SET issued while the job sat pending
+         * re-decide a load already accepted, and after a failover would decide it from the defaults
+         * -- turning a submit-time {@code off} into {@code auto}. BulkLoadJob snapshots them into
+         * the same map that already carries sql_mode and the pre-split opt-out through both cases.
+         *
+         * <p>Returns null when the map has no entry for them, which leaves the sink reading the
+         * session planning it -- today's behaviour, and the right one for a stream or routine load
+         * (whose map is built for a different purpose) and for a job persisted before these knobs
+         * existed.
+         */
+        public static MultiNodeWriteSettings fromPersisted(Map<String, String> persisted) {
+            if (persisted == null) {
+                return null;
+            }
+            String mode = persisted.get(SessionVariable.LAKE_MULTI_NODE_TABLET_WRITE_MODE);
+            String maxNodes = persisted.get(SessionVariable.LAKE_MULTI_NODE_WRITE_MAX_NODES);
+            String bytesPerNode = persisted.get(SessionVariable.LAKE_MULTI_NODE_WRITE_BYTES_PER_NODE);
+            if (mode == null || maxNodes == null || bytesPerNode == null) {
+                return null;
+            }
+            return new MultiNodeWriteSettings(SessionVariable.parseMultiNodeTabletWriteMode(mode),
+                    Integer.parseInt(maxNodes), Long.parseLong(bytesPerNode));
+        }
+    }
+
+    // Null leaves the decision to whatever session plans this sink, which is what an INSERT wants.
+    public void setMultiNodeWriteSettings(MultiNodeWriteSettings multiNodeWriteSettings) {
+        this.multiNodeWriteSettings = multiNodeWriteSettings;
+    }
+
+    // Multi-node write only helps while bucket-level parallelism cannot reach the width this load is
+    // worth. Compared against that width, NOT against the warehouse size: a load whose size warrants
+    // three writers, landing on a partition that already holds five tablets, is already spread wider
+    // than it asked for. Spreading each of those five across three nodes would put fifteen delta
+    // writers on it and cut it into that many segments -- the exact fragmentation
+    // lake_multi_node_write_max_nodes exists to prevent.
+    //
+    // A width of 0 or 1 means there is nothing to spread over, so it reads as "do not spread" without
+    // a separate check for an empty candidate list.
+    @VisibleForTesting
+    static boolean spreadsIndex(int tabletCount, int writerWidth) {
+        return tabletCount < writerWidth;
+    }
+
+    // Whether AUTO turns the feature on for this table without asking the user anything.
+    //
+    // One condition here. The other -- that the partition is still short on tablets -- is left to
+    // createLocation, which requires it of every mode before it spreads an index.
+    //
+    // That check is not a proxy for "pre-split failed", it is pre-split's RESULT. Both load paths
+    // submit the split and then block on it (PreSplitFlow: submitAsynchronously then
+    // awaitFinishedAllowingFallback, up to tablet_pre_split_post_submit_wait_seconds) before the
+    // statement is planned, so the tablet count read here is the post-split one. Split succeeded ->
+    // enough tablets -> declines. Skipped, or the wait timed out and the load fell back to the
+    // layout it can see -> still short -> engages. Asking pre-split why it declined would re-derive
+    // from a weaker signal what the tablet count already states.
+    //
+    // Range-bucket only, because a hash-bucket table can be given more buckets to fill the cluster,
+    // while a range-bucket table's tablet count is decided by data boundaries pre-split may never
+    // have found -- which is the situation this exists for.
+    //
+    // Key type is deliberately NOT part of this. It used to be: a primary-key or aggregate table had
+    // to be left out because rows sharing a key landed on different nodes with no order between
+    // them, and only the caller could say whether their data repeated keys and whether the order
+    // mattered. Key-hash routing sends all of a key's rows to one node, so that question no longer
+    // exists and there is nothing left for the user to answer.
+    private boolean autoModeCovers() {
+        return dstTable.isRangeDistribution();
+    }
+
+    // How many nodes this load's estimated size is worth spreading over, at
+    // lake_multi_node_write_bytes_per_node each.
+    //
+    // Integer division on purpose: a node is added only once there is a full share of bytes to give
+    // it, because spreading is not free. Every node in a tablet's node list writes its own segments
+    // and emits its own partial txn log, and open/close reach every node in that list whether or not
+    // it ends up holding any rows, so a node that receives a sliver still costs a segment and a log.
+    // The measured speedup bears this out: ~1.35x at 5 GB against ~3x at 20-50 GB.
+    //
+    // Returns Integer.MAX_VALUE -- i.e. defers entirely to the node bound -- whenever there is no
+    // usable estimate or the share is non-positive. A load whose size the optimizer cannot estimate
+    // (no statistics, an external source, a planner that never set a cardinality) must keep behaving
+    // as it did before this knob existed; only a size we actually know may narrow the spread.
+    @VisibleForTesting
+    static int nodesForEstimatedSize(long estimatedWriteBytes, long bytesPerNode) {
+        if (estimatedWriteBytes <= 0 || bytesPerNode <= 0) {
+            return Integer.MAX_VALUE;
+        }
+        long nodes = estimatedWriteBytes / bytesPerNode;
+        return (int) Math.max(1L, Math.min(Integer.MAX_VALUE, nodes));
+    }
+
+    // The estimate is advisory: it only ever narrows the spread, so a wrong one costs locality and
+    // never correctness.
+    public void setEstimatedWriteBytes(long estimatedWriteBytes) {
+        this.estimatedWriteBytes = estimatedWriteBytes;
+    }
+
+    @VisibleForTesting
+    static boolean hasMultiNodeTablet(TOlapTableLocationParam location) {
+        if (location.getTablets() == null) {
+            return false;
+        }
+        return location.getTablets().stream().anyMatch(t -> t.getNode_ids() != null && t.getNode_ids().size() > 1);
     }
 
     public void setMissAutoIncrementColumn() {
@@ -386,20 +630,14 @@ public class OlapTableSink extends DataSink {
             return null;
         }
 
-        // normal transaction state
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        TransactionState txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
-
+        TransactionState txnState = globalTransactionMgr.reserveExplicitTransactionLayout(
+                txnId, tSink.getDb_id(), tSink.getTable_id());
         if (txnState == null) {
-            // explicit transaction state
-            ExplicitTxnState explicitTxnState = globalTransactionMgr.getExplicitTxnState(txnId);
-            if (explicitTxnState != null) {
-                txnState = explicitTxnState.getTransactionState();
-            }
-
-            if (txnState == null) {
-                throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
-            }
+            txnState = globalTransactionMgr.getTransactionState(tSink.getDb_id(), txnId);
+        }
+        if (txnState == null) {
+            throw new StarRocksException(ErrorCode.ERR_TXN_NOT_EXIST, txnId);
         }
 
         return txnState;
@@ -460,7 +698,28 @@ public class OlapTableSink extends DataSink {
             TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
                     enableAutomaticPartition, automaticBucketSize, getOpenPartitions(), txnState, targetWriteIndexId);
             tSink.setPartition(partitionParam);
-            tSink.setLocation(createLocation(dstTable, partitionParam, enableReplicatedStorage, computeResource, txnState));
+            TOlapTableLocationParam location = createLocation(dstTable, partitionParam, enableReplicatedStorage,
+                    computeResource, txnState, writerNodeCount(tSink, txnState));
+            tSink.setLocation(location);
+            // Tells BE that a tablet's node list is a SHARD set -- one node per row -- rather than a
+            // replica set. It has to be true of every location this load will ever receive, and the
+            // location just built is not all of them: a partition that automatic partitioning creates
+            // DURING the load gets its tablets from FrontendServiceImpl.buildCreatePartitionResponse,
+            // long after this flag is serialised.
+            //
+            // So the flag is the OR of what the plan produced and what that later path may produce.
+            // createLocation recorded the width on the transaction exactly when this load can reach
+            // that path, and buildRuntimePartitionNodeIds spreads only on that recorded width -- which
+            // makes the flag true whenever a spread list can appear, and keeps it false for a load
+            // that will only ever see one node per tablet. The order matters in one direction only:
+            // a multi-node list reaching BE without this flag would be read as a replica set and every
+            // row written to every node in it.
+            int runtimeWriterWidth = txnState == null
+                    ? NO_MULTI_NODE_WRITE : txnState.getMultiNodeWriteWidth(dstTable.getId());
+            if (dstTable.isCloudNativeTableOrMaterializedView()
+                    && (hasMultiNodeTablet(location) || runtimeWriterWidth > 1)) {
+                tSink.setEnable_multi_node_write(true);
+            }
             tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(computeResource, getSystemInfoService(dstTable)));
             // A column-mode partial update writes the new values into a DCG beside the segment it
             // patches. A split's UNSHARE compaction rewrites every segment wholesale and does not carry
@@ -585,7 +844,8 @@ public class OlapTableSink extends DataSink {
             for (Column column : indexMeta.getSchema()) {
                 TColumn tColumn = column.toThrift();
                 tColumn.setColumn_name(column.getColumnId().getId());
-                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds());
+                column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumnIds(),
+                        table.getZstdCompressionColumnIds(), table.getZstdCompressionPageSizes());
                 columnsDesc.add(tColumn);
                 if (column.getDefaultExpr() != null && column.calculatedDefaultValue() != null) {
                     columnToExprValue.put(column.getColumnId().getId(), column.calculatedDefaultValue());
@@ -763,6 +1023,16 @@ public class OlapTableSink extends DataSink {
         return filtered;
     }
 
+    private static List<MaterializedIndex> selectWriteIndexes(
+            OlapTable table, PhysicalPartition physicalPartition,
+            @Nullable TransactionState txnState, @Nullable Long targetWriteIndexId)
+            throws StarRocksException {
+        List<MaterializedIndex> candidates = txnState == null
+                ? physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL)
+                : txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition);
+        return filterTargetWriteIndexes(candidates, physicalPartition, targetWriteIndexId);
+    }
+
     public static TOlapTablePartitionParam createPartition(long dbId, OlapTable table,
                                                            TupleDescriptor tupleDescriptor,
                                                            boolean enableAutomaticPartition,
@@ -809,9 +1079,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setRangeKeys(rangePartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -892,9 +1161,8 @@ public class OlapTableSink extends DataSink {
                         TOlapTablePartition tPartition = new TOlapTablePartition();
                         tPartition.setId(physicalPartition.getId());
                         setListPartitionValues(listPartitionInfo, partition, tPartition);
-                        List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                                physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                                physicalPartition, targetWriteIndexId);
+                        List<MaterializedIndex> indexes = selectWriteIndexes(
+                                table, physicalPartition, txnState, targetWriteIndexId);
                         setMaterializedIndexes(tPartition, indexes);
                         partitionParam.addToPartitions(tPartition);
                         if (txnState != null) {
@@ -937,9 +1205,8 @@ public class OlapTableSink extends DataSink {
                     TOlapTablePartition tPartition = new TOlapTablePartition();
                     tPartition.setId(physicalPartition.getId());
                     // No lowerBound and upperBound for this range
-                    List<MaterializedIndex> indexes = filterTargetWriteIndexes(
-                            physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL),
-                            physicalPartition, targetWriteIndexId);
+                    List<MaterializedIndex> indexes = selectWriteIndexes(
+                            table, physicalPartition, txnState, targetWriteIndexId);
                     setMaterializedIndexes(tPartition, indexes);
                     partitionParam.addToPartitions(tPartition);
                     if (txnState != null) {
@@ -1067,6 +1334,63 @@ public class OlapTableSink extends DataSink {
         }
     }
 
+    // Build the multi-node write node list of one tablet: its owner node first, then other alive compute
+    // nodes until |parallelism| entries are collected. The owner comes first so that the node which
+    // will later publish this tablet also holds part of its data (and thus its caches). The extra
+    // nodes are picked starting at an offset derived from the tablet id so that different tablets of
+    // the same partition do not all pile onto the same followers.
+    @VisibleForTesting
+    static List<Long> buildWriterNodeIds(long ownerNodeId, List<Long> aliveNodeIds, int parallelism,
+                                             long tabletId) {
+        int target = Math.min(parallelism, aliveNodeIds.size());
+        List<Long> nodeIds = Lists.newArrayList(ownerNodeId);
+        if (target <= 1) {
+            return nodeIds;
+        }
+        int size = aliveNodeIds.size();
+        int start = (int) Math.floorMod(tabletId, size);
+        for (int i = 0; i < size && nodeIds.size() < target; i++) {
+            long nodeId = aliveNodeIds.get((start + i) % size);
+            if (nodeId != ownerNodeId) {
+                nodeIds.add(nodeId);
+            }
+        }
+        return nodeIds;
+    }
+
+    // The compute nodes a tablet's rows may be spread over, in a stable order. Empty when the warehouse
+    // cannot supply two, which reads as "do not spread" everywhere it is used.
+    //
+    // Resolved once per statement by createLocation and again, against the nodes alive at that moment, by
+    // the create-partition path -- a load long enough to create a partition can outlive the node list it
+    // was planned against.
+    public static List<Long> resolveWriterCandidates(WarehouseManager warehouseManager, ComputeResource computeResource) {
+        List<Long> candidates = warehouseManager.getAliveComputeNodes(computeResource).stream()
+                .map(ComputeNode::getId).sorted().collect(Collectors.toList());
+        return candidates.size() < 2 ? Collections.emptyList() : candidates;
+    }
+
+    /**
+     * The node list one tablet of a partition created DURING the load gets.
+     *
+     * <p>createLocation makes this decision for the partitions the plan could see; automatic
+     * partitioning creates others afterwards, and FrontendServiceImpl.buildCreatePartitionResponse
+     * hands those back over the create-partition RPC. Same rule, same two helpers, so a runtime-created
+     * partition spreads exactly when a planned one of the same shape would.
+     *
+     * <p>|writerWidth| must be the width the plan recorded on the transaction, not one re-derived here.
+     * TOlapTableSink.enable_multi_node_write was serialised from that number, and without the flag BE
+     * reads a tablet's node list as a REPLICA set: a spread list handed to a load whose flag is off
+     * would write every row to every node in the list.
+     */
+    public static List<Long> buildRuntimePartitionNodeIds(long ownerNodeId, List<Long> writerCandidates,
+                                                          int writerWidth, int tabletCount, long tabletId) {
+        if (!spreadsIndex(tabletCount, Math.min(writerWidth, writerCandidates.size()))) {
+            return Collections.singletonList(ownerNodeId);
+        }
+        return buildWriterNodeIds(ownerNodeId, writerCandidates, writerWidth, tabletId);
+    }
+
     // Pick the first alive node id from a pre-fetched candidate list.
     // Returns -1 when the list is null/empty or no candidate is alive; callers fall back to a per-tablet lookup.
     private static long pickAliveComputeNodeId(List<Long> candidates, SystemInfoService infoService) {
@@ -1091,6 +1415,18 @@ public class OlapTableSink extends DataSink {
                                                          boolean enableReplicatedStorage,
                                                          ComputeResource computeResource,
                                                          TransactionState txnState) throws StarRocksException {
+        return createLocation(table, partitionParam, enableReplicatedStorage, computeResource, txnState,
+                NO_MULTI_NODE_WRITE);
+    }
+
+    // |writerNodeCount| > 1 asks for multi-node write (shared-data only): each eligible tablet's
+    // location carries several compute nodes so the sink can spread one tablet's rows over them.
+    // See TOlapTableSink.enable_multi_node_write. NO_MULTI_NODE_WRITE keeps the historical one-node behaviour.
+    public static TOlapTableLocationParam createLocation(OlapTable table, TOlapTablePartitionParam partitionParam,
+                                                         boolean enableReplicatedStorage,
+                                                         ComputeResource computeResource,
+                                                         TransactionState txnState,
+                                                         int writerNodeCount) throws StarRocksException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
@@ -1108,9 +1444,8 @@ public class OlapTableSink extends DataSink {
             List<Long> allTabletIds = new ArrayList<>();
             for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
-                List<MaterializedIndex> indexes = (txnState != null)
-                        ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                        : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+                List<MaterializedIndex> indexes = selectWriteIndexes(
+                        table, physicalPartition, txnState, null);
                 for (MaterializedIndex index : indexes) {
                     for (Tablet tablet : index.getTablets()) {
                         allTabletIds.add(tablet.getId());
@@ -1126,6 +1461,30 @@ public class OlapTableSink extends DataSink {
                 }
             }
         }
+        // Multi-node write: the candidate compute nodes one tablet's rows may be spread over. Resolved once
+        // per statement (not per tablet) and left empty when the feature is off or the warehouse has a
+        // single node, in which case every tablet keeps exactly one node in its location.
+        List<Long> writerCandidates = Collections.emptyList();
+        if (writerNodeCount > 1 && table.isCloudNativeTableOrMaterializedView()) {
+            writerCandidates = resolveWriterCandidates(warehouseManager, computeResource);
+        }
+        // How many nodes one tablet actually ends up on: what the load asked for, clamped to what the
+        // warehouse has. buildWriterNodeIds applies the same clamp, so this is the real width and not an
+        // upper bound on it.
+        int writerWidth = Math.min(writerNodeCount, writerCandidates.size());
+        // Hand the resolved width to the create-partition path, which has to make this same decision for
+        // a partition that does not exist yet. Only for a load that partitions automatically -- no other
+        // load can reach that path, and recording it for one that cannot would turn on
+        // enable_multi_node_write (complete() reads this back) for a load that never spreads anything.
+        //
+        // Recorded against THIS table. One transaction can carry several: a multi-table Broker Load
+        // plans a sink per table on one txn id before any of them runs, and every input to the width
+        // -- file bundling, colocate MV, and the estimated size -- belongs to one table. A shared
+        // value would let this table's width answer another table's create-partition RPC, and set
+        // that table's flag, with nothing having established its eligibility.
+        if (writerWidth > 1 && txnState != null && partitionParam.isEnable_automatic_partition()) {
+            txnState.setMultiNodeWriteWidth(table.getId(), writerWidth);
+        }
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
             PhysicalPartition physicalPartition = table.getPhysicalPartition(tPhysicalPartition.getId());
             int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
@@ -1133,10 +1492,10 @@ public class OlapTableSink extends DataSink {
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
             LOG.debug("partition: {}, physical partition: {}", tPhysicalPartition, physicalPartition);
-            List<MaterializedIndex> indexes = (txnState != null)
-                    ? txnState.getPartitionLoadedIndexes(table.getId(), physicalPartition)
-                    : physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL);
+            List<MaterializedIndex> indexes = selectWriteIndexes(
+                    table, physicalPartition, txnState, null);
             for (MaterializedIndex index : indexes) {
+                boolean multiNodeWriteIndex = spreadsIndex(index.getTablets().size(), writerWidth);
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
@@ -1148,7 +1507,11 @@ public class OlapTableSink extends DataSink {
                             computeNodeId = warehouseManager
                                     .getComputeNodeAssignedToTablet(computeResource, tablet.getId()).getId();
                         }
-                        locationParam.addToTablets(new TTabletLocation(tablet.getId(), Lists.newArrayList(computeNodeId)));
+                        List<Long> nodeIds = multiNodeWriteIndex
+                                ? buildWriterNodeIds(computeNodeId, writerCandidates, writerNodeCount,
+                                        tablet.getId())
+                                : Lists.newArrayList(computeNodeId);
+                        locationParam.addToTablets(new TTabletLocation(tablet.getId(), nodeIds));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load

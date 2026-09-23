@@ -70,6 +70,16 @@ CONF_mBool(starlet_use_star_cache, "true");
 
 CONF_Bool(starlet_star_cache_async_init, "true");
 
+// Whether a StarCache disk block that this process wrote and has not evicted since skips the first
+// full-block checksum read when a later request touches it. That verification re-reads the whole
+// block from disk to check data the process just wrote and still tracks in memory, which costs an
+// extra disk read on the first access to every freshly cached block. Set to false to verify every
+// block on first access, which is only worth its cost where the cache disk is suspected of
+// corrupting data at rest. Blocks inherited from a previous run are always verified, whatever this
+// is set to, because nothing in this process witnessed their write. Read once when StarCache
+// initializes.
+CONF_Bool(starlet_star_cache_skip_fresh_block_checksum_verification, "true");
+
 CONF_mInt32(starlet_star_cache_mem_size_percent, "0");
 
 CONF_mInt64(starlet_star_cache_mem_size_bytes, "134217728");
@@ -101,6 +111,33 @@ CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
 
 CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 
+// Object-store upload thresholds, forwarded to the starlet gflags of the same name without the
+// `starlet_` prefix. For each backend, an object larger than `*_max_single_part_size` is uploaded
+// with a multipart upload instead of a single request, and `*_min_upload_part_size` is the
+// multipart part size. GCS has no part-size knob: above its threshold starlet switches to a
+// streaming upload. Defaults equal starlet's own gflag defaults, so leaving these alone changes
+// nothing.
+//
+// Memory: starlet buffers in memory up to `*_max_single_part_size` before switching to multipart,
+// then up to `*_min_upload_part_size` between part flushes, so the per-output-stream high-water
+// mark is roughly the larger of the two, multiplied by the number of concurrent output streams on
+// the node. Raising either value raises memory usage.
+//
+// Values must be greater than 0. A dynamic update to a non-positive value is rejected and nothing
+// changes. At startup a non-positive value is not applied and a warning is logged, leaving the
+// previously effective value in force: a valid value here overrides a `--fslib_*` gflag passed on
+// the BE command line, but a rejected one leaves that command-line value active while this config
+// still reports the rejected number.
+CONF_mInt64(starlet_fslib_s3_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_s3_min_upload_part_size, "5242880");
+
+CONF_mInt64(starlet_fslib_gcs_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_max_single_part_size, "104857600");
+
+CONF_mInt64(starlet_fslib_azure_storage_min_upload_part_size, "5242880");
+
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
@@ -110,6 +147,18 @@ CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
 CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 
 CONF_mInt32(starlet_filesystem_instance_cache_ttl_sec, "86400");
+
+// Compression applied to the worker heartbeat this node sends StarMgr, which carries one entry per
+// tablet the node holds and is therefore the largest recurring request in a shared-data cluster.
+// "zstd" compresses the payload on the heartbeat thread, inside the same
+// starmgr_client_rpc_timeout_ms budget, and the FE decompresses it. "none", the default, sends the
+// heartbeat uncompressed as before.
+//
+// The FE must be able to decompress before any node is switched: an FE that predates this
+// mechanism discards the compressed heartbeat, so upgrade the FEs first and only then set this on
+// the compute nodes. An unrecognized value is reported and falls back to "none" rather than
+// keeping the node from starting.
+CONF_mString_enum_or_default(starlet_starmgr_client_compression_type, "none", "none,zstd");
 
 #endif
 

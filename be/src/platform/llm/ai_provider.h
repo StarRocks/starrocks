@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -23,6 +24,7 @@
 #include "base/statusor.h"
 #include "platform/llm/ai_http_client.h"
 #include "platform/llm/ai_provider_options.h"
+#include "platform/llm/ai_rate_limiter.h"
 
 namespace starrocks {
 
@@ -32,6 +34,7 @@ struct AIChatRequest {
     std::string_view api_key;
     std::string_view prompt;
     const AIProviderOptions* options = nullptr;
+    AICapability capability = AICapability::CHAT;
 };
 
 struct AIProviderHttpRequest {
@@ -61,15 +64,27 @@ enum class AIProviderErrorAction : uint8_t {
 
 AIProviderErrorAction ai_provider_error_action(AIProviderErrorCode code);
 
+struct AIProviderUsage {
+    std::optional<int64_t> prompt_tokens;
+    std::optional<int64_t> completion_tokens;
+    std::optional<int64_t> total_tokens;
+};
+
+using AIProviderValue = std::variant<std::string, std::vector<float>>;
+
 struct AIProviderSuccess {
-    std::string content;
+    AIProviderValue value;
+    AIProviderUsage usage;
 };
 
 struct AIProviderStructuredError {
     AIProviderErrorCode code = AIProviderErrorCode::UNKNOWN;
+    AIProviderUsage usage;
 };
 
-struct AIProviderMalformed {};
+struct AIProviderMalformed {
+    AIProviderUsage usage;
+};
 
 using AIProviderParseResult = std::variant<AIProviderSuccess, AIProviderStructuredError, AIProviderMalformed>;
 
@@ -78,7 +93,8 @@ public:
     virtual ~AIProvider() = default;
 
     virtual StatusOr<AIProviderHttpRequest> build_request(const AIChatRequest& request) const = 0;
-    virtual AIProviderParseResult parse_response(std::string_view body) const = 0;
+    virtual AIProviderParseResult parse_response(std::string_view body,
+                                                 AICapability capability = AICapability::CHAT) const = 0;
 };
 
 } // namespace starrocks

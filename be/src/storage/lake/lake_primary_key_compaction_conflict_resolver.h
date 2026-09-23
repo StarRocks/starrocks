@@ -26,7 +26,7 @@ namespace starrocks::lake {
 class Rowset;
 class UpdateManager;
 class MetaFileBuilder;
-class LakePrimaryIndex;
+class LakePersistentIndex;
 
 class LakePrimaryKeyCompactionConflictResolver : public PrimaryKeyCompactionConflictResolver {
 public:
@@ -35,7 +35,7 @@ public:
     // during conflict resolution.
     explicit LakePrimaryKeyCompactionConflictResolver(const TabletMetadata* metadata, Rowset* rowset,
                                                       TabletManager* tablet_mgr, MetaFileBuilder* builder,
-                                                      LakePrimaryIndex* index, int64_t base_version,
+                                                      LakePersistentIndex* index, int64_t base_version,
                                                       FileMetaPB lcrm_file,
                                                       std::map<uint32_t, size_t>* segment_id_to_add_dels,
                                                       std::vector<std::pair<uint32_t, DelVectorPtr>>* delvecs)
@@ -74,7 +74,7 @@ private:
     Rowset* _rowset = nullptr;
     TabletManager* _tablet_mgr = nullptr;
     MetaFileBuilder* _builder = nullptr;
-    LakePrimaryIndex* _index = nullptr;
+    LakePersistentIndex* _index = nullptr;
     int64_t _base_version = 0;
     // Lake Compaction Rows Mapper file metadata
     // WHY: Stores metadata (name + size) for the remote storage mapper file (.lcrm extension).

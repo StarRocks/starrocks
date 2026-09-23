@@ -81,13 +81,10 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     public PreSplitFlow.Prepared prepare(InsertStmt insertStmt, SelectRelation selectRelation,
                                          OlapTable target, Database database, ConnectContext context)
             throws AccessDeniedException {
-        // The INSERT-from-table column mapping (InsertSelectSourceColumns) assumes
-        // the load writes the full base schema in order, so a partial / reordered
-        // target column list is not yet supported on this path (the common gate
-        // only guarantees all sort keys are present, which is weaker).
-        if (!InsertPreSplitHook.targetColumnListIsFullIdentity(insertStmt, target)) {
-            return null;
-        }
+        // No column-list gate of its own: InsertPreSplitHook#targetColumnListIsPreSplitSafe has
+        // already vetted the list for every path, and InsertSelectSourceColumns#resolve pairs the
+        // SELECT outputs against the columns the list names, so a partial or reordered list maps
+        // as written.
         TableRelation sourceRelation = (TableRelation) selectRelation.getRelation();
         ResolvedSource resolvedSource = resolveSourceTable(sourceRelation, context);
         if (resolvedSource == null) {
@@ -96,7 +93,12 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (!sourceAuthorizedAndPolicyFree(resolvedSource, context)) {
             return null;
         }
-        Expr where = selectRelation.getWhereClause();
+        // Fold plan-time constants in the user's context before the gate, so the ROOT sampler
+        // never evaluates a function that reads session state (time zone, query start time).
+        Expr where = SamplingPredicateGate.foldPlanTimeConstants(selectRelation.getWhereClause(), context);
+        if (where == null && selectRelation.getWhereClause() != null) {
+            return null;
+        }
         if (!SamplingPredicateGate.isDeterministicAndSafe(
                 where, resolvedSource.normalizedName(), resolvedSource.sourceAlias())) {
             return null;

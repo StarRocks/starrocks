@@ -37,6 +37,9 @@ template <bool IsWindowFunc>
 class CountAggregateFunction final : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
                                                                          CountAggregateFunction<IsWindowFunc>> {
 public:
+    // count returns 0, never NULL, even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).count = 0;
         if constexpr (IsWindowFunc) {
@@ -155,6 +158,9 @@ class CountNullableAggregateFunction final
         : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
                                               CountNullableAggregateFunction<IsWindowFunc>> {
 public:
+    // count returns 0, never NULL, even over a nullable input or an empty window frame.
+    bool is_result_non_nullable() const override { return true; }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).count = 0;
         if constexpr (IsWindowFunc) {

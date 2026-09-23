@@ -186,6 +186,16 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 
 如果要在当前会话中激活一个角色，可以使用 [SET ROLE](sql-statements/account-management/SET_ROLE.md)。
 
+### ai_topn_pushdown_max_global_limit
+
+* **描述**：在满足条件的 AI 投影下方使用全局候选 TopN 的最大 SQL `LIMIT` 值。超过阈值时，按每个 Fragment Instance 使用本地候选 TopN 裁剪。`0` 表示仅使用本地裁剪，不会禁用优化。
+* **默认值**：1000
+* **数据类型**：long
+* **取值范围**：[0, 9223372036854775807]
+* **作用域**：Session、Global
+
+支持通过 `SET`、`SET GLOBAL` 或语句级 `SET_VAR` Hint 设置，无需重启。策略说明和示例参见 [减少 AI 输入行数](sql-functions/ai-functions/ai_functions.mdx#reducing-ai-input-rows)。
+
 ### ann_params
 
 * **描述**：指定近似最近邻（ANN）向量索引检索的查询参数。取值是键和值均为字符串的 JSON 对象字符串。HNSW 支持 `efsearch`；IVFPQ 支持 `nprobe`、`max_codes`、`scan_table_threshold`、`polysemous_ht` 和 `range_search_confidence`。可以在会话或单条语句中设置，例如 `SET ann_params = '{"efsearch":"256"}'` 或 `SET_VAR (ann_params='{"efsearch":"256"}')`。
@@ -1682,6 +1692,36 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ### system_time_zone (global)
 
 显示当前系统时区。不可更改。
+
+### lake_multi_node_tablet_write_mode
+
+* **描述**：仅在存算分离模式下生效。控制导入是否可以把同一个 tablet 的写入分散到多个计算节点，而不是把每一行都发给该 tablet 归属的那一个节点。三个取值：
+  * `off` —— 永不生效，即本功能出现之前的行为。
+  * `auto`（默认）—— 当目标表采用 **range bucket** 分布、且其分区的 tablet 数仍少于本次导入的数据量所对应的写入节点数（见 `lake_multi_node_write_bytes_per_node`）时生效。presplit 会在语句规划之前执行并等待完成，因此这里读到的 tablet 数就是 presplit 的**结果**：presplit 切得足够宽则 `auto` 不介入；presplit 被跳过、或其等待超时而导入退回按当前可见布局继续，则 `auto` 生效。**对所有 key 类型都适用**：相同 key 的行按 key 列的哈希路由，会全部落到同一个节点，因此导入结果与哪个节点写了哪一行无关，无需额外确认。哈希分桶表被排除在外，因为它只要增加分桶数就能占满集群。
+  * `force` —— 只要其余前置条件允许就生效，包括哈希分桶分布。当你希望在 `auto` 不会接管的表上也分散写入时使用。
+* 无论哪种模式，还需同时满足：存算分离表且开启 `file_bundling`、事务使用 combined txn log、且分区的 tablet 数少于本次导入实际分散到的节点数。该宽度取三者的最小值：按导入大小算出的节点数（见 `lake_multi_node_write_bytes_per_node`）、`lake_multi_node_write_max_nodes`、以及存活的计算节点数。tablet 数已经达到该宽度的分区，即使指定 `force` 也仍走单节点写入——六个计算节点的 Warehouse 上有五个 tablet 时，若这次导入的数据量只够三个写入节点，就不会分散。Stream Load 与 Routine Load 一律不参与：这两条路径在规划阶段拿不到导入大小，若把未知大小当成大导入处理，反而会让最小、最频繁的那批写入分散得最宽。部分列更新（行模式与列模式）、条件更新、缺少自增列的导入、以及 schema change 期间的导入均受支持。
+* 由自动分区在导入过程中新建的分区同样会分散写入。这类分区不在执行计划里，其 tablet 是随后通过 create-partition RPC 交给导入的：分散宽度沿用该导入在规划阶段定下的节点数，具体节点则在新建分区的那一刻从当时存活的计算节点中挑选——耗时较长的导入完全可能跨越计算节点的上下线。新建分区的数据边界尚未出现，通常只有一个 tablet，正是本变量所针对的形态。
+* **默认值**：auto
+* **类型**：String
+* **粒度**：Session
+* **引入版本**：v4.2
+
+### lake_multi_node_write_max_nodes
+
+* **描述**：允许并行写入**同一个 tablet** 的最大计算节点数。位于该列表中的每个节点都会为该 tablet 建立自己的 delta writer 并产出自己的 segment，因此在节点数很多的 Warehouse 中，一次普通规模的导入会被切成同样多的小 segment。超出该上限的节点仍会运行自己的 sink 实例，只是它们的数据会走网络发往列表内的节点——也就是本功能出现之前的行为。该值是上限而非实际并行度：最终使用的并行度取三者中的最小值——本变量、根据导入预估大小推算出的节点数（`lake_multi_node_write_bytes_per_node`）、以及存活计算节点数。设置为小于等于 `0` 表示不设上限。
+* **默认值**：6
+* **类型**：Int
+* **粒度**：Session
+* **引入版本**：v4.2
+
+### lake_multi_node_write_bytes_per_node
+
+* **描述**：仅在存算分离模式下生效，且只有在开启 `lake_multi_node_tablet_write_mode` 后才起作用。表示在把下一个节点加入某个 tablet 的写入集合之前，先给一个计算节点分配多少字节的导入量。节点数量等于该导入的预估大小除以本变量（整除，因此只有凑满一整份时才会增加一个节点），最终使用的并行度取该数值、会话变量 `lake_multi_node_write_max_nodes` 以及存活计算节点数量三者中的最小值。例如 10 GB 的导入在默认 2 GB 下得到 5 个节点，在 3 节点的 Warehouse 上再被夹到 3。分散写入并非没有代价：tablet 节点列表中的每一个节点都会写出自己的 segment 并产生自己的部分事务日志，而且无论某个节点最终是否分到数据，open/close 都会发送到列表中的每一个节点——因此把小规模导入摊得过开，只会按节点数多付出 segment 和事务日志，收益却很有限。大小来源：`INSERT` 取优化器的预估值，Broker Load 取已解析的文件列表；两者都拿不到时，节点数量完全交由 `lake_multi_node_write_max_nodes` 决定——对这两条路径来说，"大小未知"不等于"大小很小"。Stream Load 与 Routine Load 则是例外，根本不会分散：对这两条路径而言，大小未知恰恰说明这是一次小批量写入，而不是没能估算出来的大批量导入。设置为 0 表示关闭按大小推算。
+* **默认值**：2147483648（2 GB）
+* **单位**：字节
+* **类型**：Long
+* **粒度**：Session
+* **引入版本**：v4.2
 
 ### time_zone
 
