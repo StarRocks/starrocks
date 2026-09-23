@@ -20,22 +20,17 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.ListComparator;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -52,8 +47,6 @@ public class SchemaChangeProcDir implements ProcDirInterface {
         TITLE_NAMES = builder.build();
     }
 
-    private static final Logger LOG = LogManager.getLogger(SchemaChangeProcDir.class);
-
     private SchemaChangeHandler schemaChangeHandler;
     private Database db;
 
@@ -67,61 +60,8 @@ public class SchemaChangeProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(schemaChangeHandler);
 
-        List<List<Comparable>> schemaChangeJobInfos = schemaChangeHandler.getAlterJobInfosByDb(db);
-
-        //where
-        List<List<Comparable>> jobInfos;
-        if (filter == null || filter.size() == 0) {
-            jobInfos = schemaChangeJobInfos;
-        } else {
-            jobInfos = Lists.newArrayList();
-            for (List<Comparable> infoStr : schemaChangeJobInfos) {
-                if (infoStr.size() != TITLE_NAMES.size()) {
-                    LOG.warn("SchemaChangeJobInfos.size() " + schemaChangeJobInfos.size()
-                            + " not equal TITLE_NAMES.size() " + TITLE_NAMES.size());
-                    continue;
-                }
-                boolean isNeed = true;
-                for (int i = 0; i < infoStr.size(); i++) {
-                    isNeed = ProcUtils.filterResult(TITLE_NAMES.get(i), infoStr.get(i), filter);
-                    if (!isNeed) {
-                        break;
-                    }
-                }
-                if (isNeed) {
-                    jobInfos.add(infoStr);
-                }
-            }
-        }
-
-        // order by
-        if (orderByPairs != null) {
-            ListComparator<List<Comparable>> comparator = null;
-            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
-            comparator = new ListComparator<List<Comparable>>(orderByPairs.toArray(orderByPairArr));
-            Collections.sort(jobInfos, comparator);
-        }
-
-        //limit
-        if (limitElement != null && limitElement.hasLimit()) {
-            int beginIndex = (int) limitElement.getOffset();
-            int endIndex = (int) (beginIndex + limitElement.getLimit());
-            if (endIndex > jobInfos.size()) {
-                endIndex = jobInfos.size();
-            }
-            jobInfos = jobInfos.subList(beginIndex, endIndex);
-        }
-
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-        for (List<Comparable> jobInfo : jobInfos) {
-            List<String> oneResult = new ArrayList<String>(jobInfos.size());
-            for (Comparable column : jobInfo) {
-                oneResult.add(column.toString());
-            }
-            result.addRow(oneResult);
-        }
-        return result;
+        return ProcUtils.applyFilterOrderLimit(TITLE_NAMES, schemaChangeHandler.getAlterJobInfosByDb(db),
+                filter, orderByPairs, limitElement);
     }
 
     @Override

@@ -15,22 +15,95 @@
 package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
 public class ProcUtils {
+
+    private static final Logger LOG = LogManager.getLogger(ProcUtils.class);
+
+    /**
+     * Apply a SHOW statement's WHERE, ORDER BY and LIMIT to rows a proc dir has already fetched.
+     *
+     * Everything after "fetch the rows" is the same for every layout, and was copied out three
+     * times to prove it: SchemaChangeProcDir, OptimizeProcDir and RollupProcDir differed only in
+     * the call that produced `rows`, down to OptimizeProcDir still naming its local variable
+     * schemaChangeJobInfos. What is left in each proc dir is the part that is actually its own.
+     *
+     * Rows whose width does not match the title list are dropped rather than filtered, because
+     * neither the filter nor the order-by index would mean anything against them.
+     */
+    public static ProcResult applyFilterOrderLimit(List<String> titleNames, List<List<Comparable>> rows,
+                                                   Map<String, Expr> filter, List<OrderByPair> orderByPairs,
+                                                   LimitElement limitElement) throws AnalysisException {
+        List<List<Comparable>> selected;
+        if (filter == null || filter.isEmpty()) {
+            selected = rows;
+        } else {
+            selected = Lists.newArrayList();
+            for (List<Comparable> row : rows) {
+                if (row.size() != titleNames.size()) {
+                    LOG.warn("row width {} not equal titleNames.size() {}", row.size(), titleNames.size());
+                    continue;
+                }
+                boolean isNeed = true;
+                for (int i = 0; i < row.size(); i++) {
+                    isNeed = filterResult(titleNames.get(i), row.get(i), filter);
+                    if (!isNeed) {
+                        break;
+                    }
+                }
+                if (isNeed) {
+                    selected.add(row);
+                }
+            }
+        }
+
+        if (orderByPairs != null && !orderByPairs.isEmpty()) {
+            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
+            Collections.sort(selected, new ListComparator<>(orderByPairs.toArray(orderByPairArr)));
+        }
+
+        if (limitElement != null && limitElement.hasLimit()) {
+            int beginIndex = (int) limitElement.getOffset();
+            int endIndex = (int) (beginIndex + limitElement.getLimit());
+            if (endIndex > selected.size()) {
+                endIndex = selected.size();
+            }
+            selected = selected.subList(beginIndex, endIndex);
+        }
+
+        BaseProcResult result = new BaseProcResult();
+        result.setNames(titleNames);
+        for (List<Comparable> row : selected) {
+            List<String> oneResult = new ArrayList<>(row.size());
+            for (Comparable column : row) {
+                oneResult.add(column.toString());
+            }
+            result.addRow(oneResult);
+        }
+        return result;
+    }
 
     /**
      * Decide whether one cell of one row survives a SHOW statement's WHERE clause.
