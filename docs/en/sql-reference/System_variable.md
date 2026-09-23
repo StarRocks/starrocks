@@ -684,6 +684,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_global_late_materialization
+
+* **Default**: false
+* **Type**: Boolean
+* **Description**: Enables global late materialization, which defers reading selected columns until a later stage of query execution. Enable it explicitly with `SET enable_global_late_materialization = true`. Keep it disabled during an upgrade if the cluster contains versions using different Iceberg row locators. The default does not override existing session settings or persisted global settings.
+
 ### enable_global_runtime_filter
 
 Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
