@@ -143,7 +143,7 @@ public class DefaultPreSplitPipelineTest {
     }
 
     @Test
-    public void testMetaTierFooterIoFailureFallsBackToDataTierAndRecordsReason() throws Exception {
+    public void testMetaTierFooterIoFailureFallsBackToDataTier() throws Exception {
         IOException footerIoFailure = new IOException(
                 "ApiCallTimeoutException: Client execution did not complete within 60000 millis");
         MetaTierSampler metaTier = (request, requestedTabletCount) -> {
@@ -158,19 +158,14 @@ public class DefaultPreSplitPipelineTest {
                     List.of(bigintTuple(10), bigintTuple(20), bigintTuple(30), bigintTuple(40)),
                     new Estimates(FILE_TOTAL_BYTES, 4L));
         };
-        PreSplitProfile profile = new PreSplitProfile();
-
         TabletReshardJob fakeJob = mock(TabletReshardJob.class);
         try (MockedStatic<SplitTabletJobFactory> mocked = Mockito.mockStatic(SplitTabletJobFactory.class)) {
             mocked.when(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()))
                     .thenReturn(fakeJob);
 
             DefaultPreSplitPipeline pipeline = newPipeline(metaTier, dataTier, Clock.systemUTC());
-            Optional<PreSplitPipeline.PreparedReshardJob> prepared;
-            try (PreSplitProfile.Scope ignored =
-                         PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
-                prepared = pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
-            }
+            Optional<PreSplitPipeline.PreparedReshardJob> prepared =
+                    pipeline.preSubmit(sampleRequest, ACTIVE_COMPUTE_NODES, PRE_SUBMIT_TIMEOUT);
 
             Assertions.assertTrue(prepared.isPresent(),
                     "a footer I/O failure must use data-tier boundaries instead of skipping pre-split");
@@ -184,12 +179,6 @@ public class DefaultPreSplitPipelineTest {
             Assertions.assertEquals(sampleRequest.getSeed(), fallbackRequest.getSeed());
             Assertions.assertTrue(fallbackRequest.getQueryTimeoutSeconds() > 0,
                     "the fallback request must carry the remaining pre-submit budget");
-            Assertions.assertEquals("meta_tier, data_tier",
-                    profile.toRuntimeProfile().getInfoString("SourceTiers"));
-            Assertions.assertEquals(
-                    "MetaTierUnavailableException: failed to read ORC footer for "
-                            + "s3://bucket/source.orc: " + footerIoFailure.getMessage(),
-                    profile.toRuntimeProfile().getInfoString(PreSplitProfile.META_TIER_FALLBACK_REASONS));
         }
     }
 

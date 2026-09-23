@@ -240,14 +240,13 @@ public class InsertPreSplitHookFilesTest {
             metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getSessionAwareTable(any(), eq(database), any()))
                     .thenReturn(target);
             metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getRangeDistributionColumns(target))
-                    .thenReturn(List.of(bigintColumn("k")));
+                    .thenReturn(List.of(PresplitTestSupport.bigintColumn("k")));
 
             targets.when(() -> PreSplitTargets.findEligibleTarget(database, target))
                     .thenReturn(new PreSplitTargets.EligibleTarget(database, target, /*partitionId*/ 11L,
-                            List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
-                                    List.of(bigintColumn("k"))))));
+                            /*oldTabletId*/ 22L));
             pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
-                    any(), any(), any(), anyLong(), any(), any()))
+                    any(), any(), anyLong(), anyLong(), any(), any()))
                     .thenReturn(mock(DefaultPreSplitPipeline.class));
 
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);

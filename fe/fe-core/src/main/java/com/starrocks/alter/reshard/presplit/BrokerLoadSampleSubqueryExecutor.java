@@ -122,16 +122,12 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
     }
 
     /**
-     * The union of every key column this request will sample: the base sort key plus each visible
-     * rollup's own sort key. The mapping guard must clear all of them, not just the base — a rollup
-     * sort-key column supplied from the path is just as unsamplable as a base one.
+     * Every key column this request will sample. Pre-split only admits a table with a single
+     * visible index (a rollup or synchronous MV is declined as HAS_MATERIALIZED_VIEW_OR_ROLLUP
+     * before sampling), so the sampled keys are exactly the base sort key.
      */
     static List<Column> sampledKeyColumns(SampleRequest request) {
-        List<Column> sampledKeyColumns = new ArrayList<>(request.getSortKey());
-        for (SecondaryIndexSpec secondaryIndex : request.getSecondaryIndexSortKeys()) {
-            sampledKeyColumns.addAll(secondaryIndex.sortKey());
-        }
-        return sampledKeyColumns;
+        return new ArrayList<>(request.getSortKey());
     }
 
     /**
