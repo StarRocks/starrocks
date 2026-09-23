@@ -15,7 +15,8 @@
 #include "connector/lance/lance_connector.h"
 
 #include "base/testutil/sync_point.h"
-#include "connector/hive/scanner/jni_scanner.h"
+#include "connector/lance/lance_native_reader.h"
+#include "exprs/chunk_predicate_evaluator.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
 
@@ -60,73 +61,48 @@ Status LanceDataSource::open(RuntimeState* state) {
         return Status::InternalError("Failed to resolve LanceTableDescriptor for Lance scan");
     }
 
-    std::map<std::string, std::string> jni_scanner_params;
     if (_scan_range.__isset.lance_split_info && !_scan_range.lance_split_info.empty()) {
         return Status::NotSupported("Lance fragment splits are not supported yet");
     }
-    jni_scanner_params["lance_dataset_uri"] = std::string(lance_table->lance_dataset_uri());
-
-    if (hdfs_scan_node.__isset.cloud_configuration) {
-        const auto& cloud = hdfs_scan_node.cloud_configuration;
-        switch (cloud.cloud_type) {
-        case TCloudType::DEFAULT:
-            jni_scanner_params["lance.cloud_type"] = "DEFAULT";
-            break;
-        case TCloudType::AWS:
-            jni_scanner_params["lance.cloud_type"] = "AWS";
-            break;
-        case TCloudType::AZURE:
-            jni_scanner_params["lance.cloud_type"] = "AZURE";
-            break;
-        default:
-            return Status::NotSupported("Unsupported Lance catalog cloud configuration");
-        }
-        for (const auto& [key, value] : cloud.cloud_properties) {
-            jni_scanner_params["lance.cloud." + key] = value;
-        }
+    TCloudConfiguration cloud;
+    cloud.__set_cloud_type(TCloudType::DEFAULT);
+    if (hdfs_scan_node.__isset.cloud_configuration) cloud = hdfs_scan_node.cloud_configuration;
+    if (cloud.cloud_type != TCloudType::DEFAULT && cloud.cloud_type != TCloudType::AWS &&
+        cloud.cloud_type != TCloudType::AZURE) {
+        return Status::NotSupported("Unsupported Lance catalog cloud configuration");
     }
-
-    std::string scanner_factory_class = "com/starrocks/lance/reader/LanceSplitScannerFactory";
-    _scanner = std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
-
-    _scanner_ctx.tuple_desc = _tuple_desc;
-    _scanner_ctx.runtime_filter_collector = _runtime_filters;
-    _scanner_ctx.format_scan_context.conjuncts.all_ctxs = _conjunct_ctxs;
-    // Lance does not push predicates into its reader; evaluate every scan conjunct on the decoded chunk.
-    _scanner_ctx.format_scan_context.conjuncts.scanner_ctxs = _conjunct_ctxs;
-    for (int i = 0; i < _tuple_desc->slots().size(); i++) {
-        auto* slot = _tuple_desc->slots()[i];
-        _scanner_ctx.materialize_slots.push_back(slot);
-        _scanner_ctx.materialize_index_in_chunk.push_back(i);
-    }
-    _scanner_ctx.scan_range = &_scan_range;
-
+    _scanner = std::make_unique<LanceNativeReader>();
     TEST_SYNC_POINT_CALLBACK("LanceDataSource::open:scanner", &_scanner);
-    RETURN_IF_ERROR(_scanner->init(state, &_scanner_ctx));
-    RETURN_IF_ERROR(_scanner->open(state));
+    RETURN_IF_ERROR(_scanner->open(state, _tuple_desc, std::string(lance_table->lance_dataset_uri()), cloud));
     return Status::OK();
 }
 
 void LanceDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         _scanner->close();
+        _scanner.reset();
     }
 }
 
 Status LanceDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
-    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, state->chunk_size()));
-    Status status = _scanner->get_next(state, chunk);
-    if (status.is_end_of_file()) {
-        return status;
-    }
+    RETURN_IF_CANCELLED(state);
+    auto status = _scanner->get_next(state, chunk);
+    _reader_cpu_time_ns = _scanner->cpu_time_spent();
+    _io_time_ns = _scanner->io_time_spent();
     RETURN_IF_ERROR(status);
-    _rows_read += (*chunk)->num_rows();
+    _raw_rows_read += (*chunk)->num_rows();
     _bytes_read += (*chunk)->bytes_usage();
+    // Evaluate each residual exactly once, after native decoding and before LIMIT.
+    {
+        SCOPED_RAW_TIMER(&_filter_time_ns);
+        RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_conjunct_ctxs, chunk->get()));
+    }
+    _rows_read += (*chunk)->num_rows();
     return Status::OK();
 }
 
 int64_t LanceDataSource::raw_rows_read() const {
-    return _rows_read;
+    return _raw_rows_read;
 }
 
 int64_t LanceDataSource::num_rows_read() const {
@@ -138,7 +114,11 @@ int64_t LanceDataSource::num_bytes_read() const {
 }
 
 int64_t LanceDataSource::cpu_time_spent() const {
-    return 0;
+    return _reader_cpu_time_ns + _filter_time_ns;
+}
+
+int64_t LanceDataSource::io_time_spent() const {
+    return _io_time_ns;
 }
 
 } // namespace starrocks::connector

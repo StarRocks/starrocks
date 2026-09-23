@@ -123,7 +123,7 @@ Usage: $0 <options>
      --without-connector-mysql
                         build Backend without the MySQL connector
      --without-connector-lance
-                        build Backend without the Lance JNI connector
+                        build Backend without the Lance Rust connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --with-glibc-compat
@@ -523,9 +523,6 @@ if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
 fi
 
 java_ext_mvn_opts="${addon_mvn_opts}"
-if [ "${WITH_CONNECTOR_LANCE}" = "OFF" ]; then
-    java_ext_mvn_opts="${java_ext_mvn_opts} -DskipLanceReader"
-fi
 
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
@@ -774,6 +771,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    # CMake install leaves artifacts from previous configurations in be/output.
+    # An incremental opt-out build must not repackage an old Lance shared library.
+    if [ "${WITH_CONNECTOR_LANCE}" = "OFF" ]; then
+        rm -f "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.so" \
+              "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.dylib"
+    fi
     shopt -s nullglob
     be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
     if starrocks_is_darwin; then
@@ -893,11 +896,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/kudu-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/kudu-reader/target/starrocks-kudu-reader.jar ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib
-        if [ "${WITH_CONNECTOR_LANCE}" = "ON" ]; then
-            cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/lance-reader-lib ${STARROCKS_OUTPUT}/be/lib/
-            cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
-            cp -r -p ${STARROCKS_HOME}/java-extensions/lance-reader/target/starrocks-lance-reader.jar ${STARROCKS_OUTPUT}/be/lib/lance-reader-lib
-        fi
         cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-ext/target/starrocks-hadoop-ext.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/hive-reader-lib ${STARROCKS_OUTPUT}/be/lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

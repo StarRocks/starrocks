@@ -1293,14 +1293,13 @@
     {
       "id": "connectorlance",
       "doc_label": "ConnectorLance",
-      "summary": "Lance dataset connector implementation that delegates scan reads to the shared JNI scanner above connector contracts and without registry composition, storage, service, or full Exec coupling.",
+      "summary": "Lance dataset connector implementation that reads Arrow batches through its Rust SDK FFI above connector contracts and without registry composition, storage, service, or full Exec coupling.",
       "agents_path": "be/src/connector/lance/AGENTS.md",
       "owned_targets": ["ConnectorLance"],
       "owned_roots": ["be/src/connector/lance"],
       "allowed_include_prefixes": [
         "connector/lance/",
-        "connector/hive/scanner/hdfs_scanner_context.h",
-        "connector/hive/scanner/jni_scanner.h",
+        "formats/arrow/",
         "connector_primitive/",
         "exprs/",
         "runtime/",
@@ -1316,8 +1315,8 @@
         "connector/connector_registry.h",
         "exec/exec_env.h"
       ],
-      "allowed_target_deps": ["ConnectorHive", "ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
-      "remediation": "Keep ConnectorLance limited to Lance read-side scan logic that delegates to the shared JNI scanner; keep registration in ModuleBootstrap and avoid registry, storage, service, or full Exec dependencies."
+      "allowed_target_deps": ["FormatCore", "ConnectorPrimitive", "Expr", "Runtime", "ChunkCore", "ColumnCore", "Types", "Common", "Base", "Gutil", "StarRocksGen"],
+      "remediation": "Keep ConnectorLance limited to Lance read-side scan logic that uses its isolated Rust SDK FFI; keep registration in ModuleBootstrap and avoid registry, storage, service, or full Exec dependencies."
     },
     {
       "id": "modulebootstrap",

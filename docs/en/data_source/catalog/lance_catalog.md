@@ -6,7 +6,7 @@ description: Query Lance datasets using a read-only external catalog and catalog
 
 # Lance catalog
 
-The Lance connector is experimental. It reads existing datasets through the Lance JNI reader. Deploy the FE planner, BE connector, and reader JARs together. Catalog discovery alone does not provide SQL execution.
+The Lance connector is experimental. It reads existing datasets through the Lance Rust SDK and the Arrow C Data Interface. Deploy the FE planner, BE connector, and native reader library together. Catalog discovery alone does not provide SQL execution.
 
 ## Create a catalog
 
@@ -61,8 +61,12 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 - Each table scan uses one range covering every dataset fragment. Fragment-level parallel scans and predicate pushdown into Lance are not implemented. StarRocks evaluates SQL predicates on the decoded rows.
 - Column pruning reads the projected columns and columns required by predicates. `COUNT(*)` retains a scalar column when available.
 - Arrow large strings and large binary values are supported. Declare them as `large_string` (or `large_utf8`) and `large_binary`. Unsigned integers widen without overflow: `uint8` → `SMALLINT`, `uint16` → `INT`, `uint32` → `BIGINT`, and `uint64` → `DECIMAL(20,0)`.
-- Scalar values, dates, timestamps, and lists are supported by the reader. Arrow date64 values are interpreted as UTC dates. Map and struct materialization is not supported.
+- Scalar values, dates, timestamps, and lists are supported by the reader. Dates and timestamps retain UTC semantics, including fractional values before the Unix epoch. Unsupported schema conversions fail the query instead of dropping rows.
 - The catalog is read-only. Local file URIs must be accessible on the BE selected for the scan.
-- Reader dependencies are packaged in `be/lib/lance-reader-lib`, with the scanner factory JAR also in `be/lib/jni-packages`.
+- The native reader is packaged as `be/lib/libstarrocks_lance.so` on Linux. Lance scans do not require a Java reader or JVM.
 
-To build without Lance, pass `--without-connector-lance` to `build.sh`. This disables the BE connector, skips the reader Maven module, and excludes its JARs from the BE package.
+To build without Lance, pass `--without-connector-lance` to `build.sh`. This disables the BE connector, skips the Rust build, and excludes its native library from the BE package.
+
+The reader opens a dataset once and keeps that immutable snapshot for all batches of a scan. The FE does not yet pin a common version across separate scan operators, including self-joins.
+
+Native builds use Rust 1.96.1 or newer. If a suitable toolchain is unavailable on Linux x86-64 or AArch64, the build downloads and verifies a pinned official toolchain into the BE build directory. The Rust dependency graph is locked in `Cargo.lock`. Set `LANCE_BUILD_JOBS` to bound Rust compilation parallelism (default: 2). Offline builds require a preinstalled toolchain and a populated Cargo dependency cache.

@@ -14,11 +14,10 @@
 
 #pragma once
 
-#include "connector/hive/scanner/hdfs_scanner_context.h"
 #include "connector_primitive/connector.h"
 
 namespace starrocks {
-class JniScanner;
+class LanceNativeReader;
 } // namespace starrocks
 
 namespace starrocks::connector {
@@ -66,12 +65,16 @@ public:
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
+    int64_t io_time_spent() const override;
 
 private:
     const LanceDataSourceProvider* _provider;
     THdfsScanRange _scan_range;
-    HdfsScannerContext _scanner_ctx;
-    std::unique_ptr<JniScanner> _scanner;
+    std::unique_ptr<LanceNativeReader> _scanner;
+    int64_t _raw_rows_read = 0;
+    int64_t _filter_time_ns = 0;
+    int64_t _reader_cpu_time_ns = 0;
+    int64_t _io_time_ns = 0;
     int64_t _rows_read = 0;
     int64_t _bytes_read = 0;
 };
