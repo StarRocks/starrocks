@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergMORParams.EqDeleteScope;
@@ -97,20 +98,15 @@ public class ConvertEqualityDeletesPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         TvrVersionRange tvr = TvrTableSnapshot.of(snapshotId);
 
-        // tableFullMORParams ties the split scan nodes to one RemoteFileInfoSource and keys its queues.
-        // It mirrors the read rule's [WITHOUT, WITH, legs...] shape: the trigger requires size >= 3 and
-        // derives needToCheckEqualityIds from it. Convert does not materialize the WITHOUT branch (no
-        // scan node consumes it -- non-deleted rows are irrelevant to conversion); it is present only so
-        // the trigger keys the WITH/eq-delete queues correctly.
-        List<IcebergMORParams> fullMorParams = new ArrayList<>();
-        fullMorParams.add(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
-        fullMorParams.add(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
-        fullMorParams.addAll(legs);
-        IcebergTableMORParams tableFullMorParams = new IcebergTableMORParams(icebergTable.getId(), fullMorParams);
-
         List<OptExpression> legPlans = new ArrayList<>();
         List<List<ColumnRefOperator>> legOutputs = new ArrayList<>();
         for (IcebergMORParams leg : legs) {
+            // Each leg scans all candidate data files. Sharing a MOR id would make the data scans
+            // consume one queue, leaving later legs without the rows they must convert.
+            IcebergTableMORParams tableFullMorParams = new IcebergTableMORParams(
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asLong(),
+                    List.of(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE,
+                            IcebergMORParams.DATA_FILE_WITH_EQ_DELETE, leg));
             LegPlan legPlan = buildLegPlan(leg, icebergTable, columnRefFactory, tvr, tableFullMorParams);
             legPlans.add(legPlan.root);
             legOutputs.add(legPlan.output);

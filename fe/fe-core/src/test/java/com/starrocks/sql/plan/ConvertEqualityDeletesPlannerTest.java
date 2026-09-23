@@ -17,12 +17,17 @@ package com.starrocks.sql.plan;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ConvertEqualityDeletesPlanner;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Plan tests for the equality-delete -> position-delete conversion planner
@@ -91,6 +96,27 @@ public class ConvertEqualityDeletesPlannerTest extends ConnectorPlanTestBase {
         int semiJoins = countOccurrences(plan, "LEFT SEMI JOIN");
         Assertions.assertTrue(semiJoins >= 2,
                 "expected >= 2 LEFT SEMI JOIN legs (one per scope), found " + semiJoins + " in plan:\n" + plan);
+    }
+
+    @Test
+    public void testMixedScopeUsesIndependentDataQueues() {
+        IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "eq_delete_db", "eq_delete_mixed");
+        ExecPlan plan = new ConvertEqualityDeletesPlanner().plan(table,
+                table.getNativeTable().currentSnapshot().snapshotId(), connectContext);
+        Map<Long, Integer> dataScans = new HashMap<>();
+        Map<Long, Integer> deleteScans = new HashMap<>();
+        for (ScanNode scan : plan.getScanNodes()) {
+            if (scan instanceof IcebergScanNode icebergScan) {
+                long morId = icebergScan.getTableFullMORParams().getMORId();
+                Map<Long, Integer> counts = scan.getPlanNodeName().equals("IcebergScanNode")
+                        ? dataScans : deleteScans;
+                counts.merge(morId, 1, Integer::sum);
+            }
+        }
+        Assertions.assertEquals(2, dataScans.size());
+        Assertions.assertEquals(dataScans, deleteScans);
+        Assertions.assertTrue(dataScans.values().stream().allMatch(count -> count == 1));
     }
 
     private static int countOccurrences(String haystack, String needle) {
