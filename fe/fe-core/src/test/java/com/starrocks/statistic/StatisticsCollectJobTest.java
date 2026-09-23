@@ -1299,7 +1299,10 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
         // All columns and all three partition predicates appear across the query list.
         assertContains(collectSqlList.toString(), "c1", "c2", "c3", "par_col");
-        assertContains(collectSqlList.toString(), "`par_col` = '0'", "`par_col` = '1'", "`par_col` = '2'");
+        // An integer partition column compares against an unquoted literal: a quoted one makes this a
+        // string comparison, and the implicit cast resolving it can land on the column, where it defeats
+        // partition pruning and the file min/max filters (see ExternalFullStatisticsCollectJob#partitionEquals).
+        assertContains(collectSqlList.toString(), "`par_col` = 0", "`par_col` = 1", "`par_col` = 2");
 
         database = connectContext.getGlobalStateMgr().getMetadataMgr().getDb(connectContext, "hive0", "tpch");
         table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable(connectContext, "hive0", "tpch", "region");
@@ -1336,7 +1339,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(18, collectSqlList.size());
         Assertions.assertEquals(6, collectJob.buildCollectSQLList(128).size());
         assertContains(collectSqlList.toString(), "par_col=1/par_date=NULL");
-        assertContains(collectSqlList.toString(), "`par_col` = '1' AND `par_date` IS NULL");
+        assertContains(collectSqlList.toString(), "`par_col` = 1 AND `par_date` IS NULL");
         assertContains(collectSqlList.toString(), "par_col=NULL/par_date=2020-01-03");
         assertContains(collectSqlList.toString(), "`par_col` IS NULL AND `par_date` = '2020-01-03'");
     }

@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.statistics;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -111,10 +112,16 @@ public class ConnectorTableTriggerAnalyzeMgr {
             } else {
                 // check column stats last update time
                 ConnectorTableColumnStats columnStatsValue = columnStatsOptional.get();
-                if (columnStatsValue.getUpdateTime() == null) {
+                LocalDateTime lastUpdateTime = parseUpdateTime(columnStatsValue.getUpdateTime());
+                if (lastUpdateTime == null) {
+                    // No usable timestamp, so there is no interval this column can be inside: it is due.
+                    // Letting the parse throw instead would abandon the whole table - every other column in
+                    // the same batch included - and the exception would vanish into the async callback that
+                    // got us here (CachedStatisticStorage#getConnectorTableStatistics), leaving the table
+                    // silently without statistics.
                     analyzeColumns.add(columnKey.column);
+                    continue;
                 }
-                LocalDateTime lastUpdateTime = DateUtils.parseStrictDateTime(columnStatsValue.getUpdateTime());
                 long rowCount = columnStatsValue.getRowCount();
                 long timeInterval = rowCount < Config.connector_table_query_trigger_analyze_small_table_rows ?
                         Config.connector_table_query_trigger_analyze_small_table_interval :
@@ -129,6 +136,25 @@ public class ConnectorTableTriggerAnalyzeMgr {
             // need to execute analyze
             this.connectorAnalyzeTaskQueue.addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, analyzeColumns));
         }
+    }
+
+    // The recorded collection time, or null when there is none or it cannot be read.
+    private static LocalDateTime parseUpdateTime(String updateTime) {
+        if (updateTime == null) {
+            return null;
+        }
+        try {
+            return DateUtils.parseStrictDateTime(updateTime);
+        } catch (Exception e) {
+            LOG.warn("[ExternalStats] unparseable statistics update time, treating the column as due | value={}",
+                    updateTime, e);
+            return null;
+        }
+    }
+
+    @VisibleForTesting
+    public ConnectorAnalyzeTaskQueue getConnectorAnalyzeTaskQueue() {
+        return connectorAnalyzeTaskQueue;
     }
 
     public void addDictUpdateTask(ConnectorTableColumnKey key, Optional<String> fileName) {

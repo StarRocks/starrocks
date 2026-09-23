@@ -40,6 +40,9 @@ const int STATISTIC_BATCH_V5_VERSION = 9;
 const int STATISTIC_MULTI_COLUMN_VERSION = 12;
 const int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
 const int STATISTIC_PARTITION_VERSION_V2 = 20;
+// Same per-column aggregate as STATISTIC_EXTERNAL_QUERY_VERSION_V2, plus how many partitions it
+// covers and the per-partition distinct counts added up - see TStatisticData in Data.thrift.
+const int STATISTIC_EXTERNAL_QUERY_VERSION_V3 = 21;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -162,6 +165,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
                                   "Fill table statistic data failed");
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
+                                  "Fill table statistic data failed");
+    } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V3) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v3(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
     } else if (version == STATISTIC_MULTI_COLUMN_VERSION) {
         RETURN_IF_ERROR_WITH_WARN(_fill_multi_columns_statistics_data(version, result_columns, chunk, result.get()),
@@ -690,6 +696,55 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
         data_list[i].__set_max(maxColumn.value(i).to_string());
         data_list[i].__set_min(minColumn.value(i).to_string());
         data_list[i].__set_updateTime(updateTime.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+// The v2 aggregate plus two numbers describing its own shape: how many partitions contributed rows, and
+// the per-partition distinct counts added up. Both come out of the same aggregate over the same rows as
+// everything else here, which is the point - the read side can size and scale the result from the rows
+// themselves instead of from metadata maintained on another path that may disagree with them.
+Status StatisticResultWriter::_fill_full_statistic_query_external_v3(int version, const Columns& columns,
+                                                                     const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 11);
+
+    auto columnName = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto countDistincts = ColumnViewer<TYPE_BIGINT>(columns[4]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
+    auto maxColumn = ColumnViewer<TYPE_VARCHAR>(columns[6]);
+    auto minColumn = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    auto updateTime = ColumnViewer<TYPE_DATETIME>(columns[8]);
+    auto collectedPartitionCounts = ColumnViewer<TYPE_BIGINT>(columns[9]);
+    auto perPartitionNdvSums = ColumnViewer<TYPE_BIGINT>(columns[10]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_columnName(columnName.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_countDistinct(countDistincts.value(i));
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(maxColumn.value(i).to_string());
+        data_list[i].__set_min(minColumn.value(i).to_string());
+        data_list[i].__set_updateTime(updateTime.value(i).to_string());
+        data_list[i].__set_collectedPartitionCount(collectedPartitionCounts.value(i));
+        data_list[i].__set_perPartitionNdvSum(perPartitionNdvSums.value(i));
     }
 
     result->result_batch.rows.resize(num_rows);

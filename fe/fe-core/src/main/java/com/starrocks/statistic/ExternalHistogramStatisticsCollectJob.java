@@ -25,6 +25,11 @@ import java.util.Map;
 public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob {
     private final String catalogName;
 
+    // Columns whose histogram row actually reached storage. Null until collect() has run; a job that
+    // tolerated a failed column collected fewer columns than it declared, and only these may be recorded
+    // as having a histogram (see StatisticExecutor#collectStatistics).
+    private List<String> collectedColumns = null;
+
     public ExternalHistogramStatisticsCollectJob(String catalogName, Database db, Table table, List<String> columnNames,
                                                  List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                                  StatsConstants.ScheduleType scheduleType,
@@ -47,7 +52,21 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
-        new HistogramCollector(new ExternalHistogramTraits(this, new HistogramCollectParams(properties)))
-                .collect(context, analyzeStatus);
+        HistogramCollector collector =
+                new HistogramCollector(new ExternalHistogramTraits(this, new HistogramCollectParams(properties)));
+        try {
+            collector.collect(context, analyzeStatus);
+        } finally {
+            collectedColumns = List.copyOf(collector.collectedColumns());
+        }
+    }
+
+    /**
+     * The columns this job actually produced a histogram for, which is every declared column unless a
+     * column's collection failed and was tolerated (see {@link HistogramCollectTraits#toleratesColumnFailure}).
+     * Recording a histogram for a column that has none would leave metadata pointing at nothing.
+     */
+    public List<String> getCollectedColumns() {
+        return collectedColumns == null ? columnNames : collectedColumns;
     }
 }

@@ -93,6 +93,16 @@ final class ExternalHistogramTraits extends HistogramCollectTraits {
     }
 
     @Override
+    boolean toleratesColumnFailure() {
+        return true;
+    }
+
+    @Override
+    boolean waitsOutProcessMemoryPressure() {
+        return true;
+    }
+
+    @Override
     String buildMcvQuery(String columnName) {
         VelocityContext context = new VelocityContext();
         context.put("columnName", StatisticUtils.quoting(table, columnName));

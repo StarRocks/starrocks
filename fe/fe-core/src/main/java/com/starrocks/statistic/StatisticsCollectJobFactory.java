@@ -297,8 +297,20 @@ public class StatisticsCollectJobFactory {
             if (basicStatsMeta == null || !basicStatsMeta.getColumnStatsMetaMap().containsKey(columnName)) {
                 needCollectStatsColumns.add(columnName);
             } else {
+                ColumnStatsMeta columnStatsMeta = basicStatsMeta.getColumnStatsMeta(columnName);
+                // A previous collection did not reach every partition it asked for, and neither the table
+                // being quiet nor the interval having just been reset makes that any less true. Left to
+                // the checks below, a table that stops changing keeps its incomplete statistics forever.
+                if (columnStatsMeta.isCoverageIncomplete()) {
+                    LOG.info("statistics job resumes an incomplete collection on table: {}, column: {}, " +
+                                    "collected {} of {} partitions", table.getName(), columnName,
+                            columnStatsMeta.getSampledPartitionsHashValue().size(),
+                            columnStatsMeta.getRequestedPartitionCount());
+                    needCollectStatsColumns.add(columnName);
+                    continue;
+                }
                 // check stats column last update time, if last collect time is after table update time, skip this column
-                LocalDateTime columnCollectStatsTime = basicStatsMeta.getColumnStatsMeta(columnName).getUpdateTime();
+                LocalDateTime columnCollectStatsTime = columnStatsMeta.getUpdateTime();
                 if (tableUpdateTime != null) {
                     if (columnCollectStatsTime.isAfter(tableUpdateTime)) {
                         LOG.info("statistics job doesn't work on non-update table: {}, " +

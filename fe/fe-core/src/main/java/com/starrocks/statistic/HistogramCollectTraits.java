@@ -83,6 +83,31 @@ abstract class HistogramCollectTraits {
     void afterCollection(ConnectContext context, List<String> insertedColumns) {
     }
 
+    /**
+     * Whether one column's failure should abandon the remaining columns.
+     *
+     * <p>A histogram is a self-contained per-column artifact: unlike the partitioned row counts of a
+     * full collection, nothing about column A's histogram is read through column B's, so losing one
+     * column costs exactly that column. The external flavour therefore keeps going and commits what
+     * it got (see {@link HistogramCollector}); a table's histograms should not all be missing because
+     * the backend was momentarily busy while one column was being scanned.
+     *
+     * <p>False by default, which is the long-standing native behaviour: the first failure ends the job.
+     */
+    boolean toleratesColumnFailure() {
+        return false;
+    }
+
+    /**
+     * Whether a backend that is out of memory should be waited out rather than counted as a failure.
+     * Same reasoning, and the same budget, as the full external collection path - see
+     * {@link StatisticsCollectJob#awaitBackendMemory}. False for the native flavour, which fails
+     * immediately as it always has.
+     */
+    boolean waitsOutProcessMemoryPressure() {
+        return false;
+    }
+
     /** Fails unless the bucket query returned exactly the one row it is supposed to. */
     TStatisticData singleResult(List<TStatisticData> results, String columnName) throws DdlException {
         return HistogramStatisticsUtils.getSingleHistogramResult(results, columnName, statisticsDescription());

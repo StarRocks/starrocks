@@ -63,6 +63,8 @@ final class HistogramCollector {
 
         long bufferSize = batchInsertPrefixSize(statsTableName);
         long bufferLimit = Math.max(1, Config.histogram_batch_insert_buffer_size);
+        int failedColumns = 0;
+        Exception lastFailure = null;
 
         try {
             for (int i = 0; i < columnNames.size(); i++) {
@@ -72,22 +74,24 @@ final class HistogramCollector {
                 String rowSql;
                 long rowSize;
                 try {
-                    List<TStatisticData> mcv = job.queryStatisticSync(
-                            traits.buildMcvQuery(columnName), context, analyzeStatus);
-                    Map<String, String> mostCommonValues = traits.buildMostCommonValues(mcv);
-
-                    String bucketsQuery = traits.buildBucketsQuery(
-                            context, analyzeStatus, columnName, columnType, mostCommonValues);
-                    String buckets = traits.singleResult(
-                            job.queryStatisticSync(bucketsQuery, context, analyzeStatus), columnName).histogram;
-
-                    String mcvJson = buildMcvJson(mostCommonValues);
-                    row = traits.buildInsertRow(columnName, buckets, mcvJson);
-                    rowSql = traits.buildInsertRowSql(columnName, buckets, mcvJson);
+                    ColumnHistogram histogram = collectColumn(context, analyzeStatus, columnName, columnType);
+                    row = traits.buildInsertRow(columnName, histogram.buckets(), histogram.mcvJson());
+                    rowSql = traits.buildInsertRowSql(columnName, histogram.buckets(), histogram.mcvJson());
                     rowSize = utf8Length(rowSql) + (sqlBuffer.isEmpty() ? 0 : 2);
                 } catch (Exception collectionFailure) {
                     flushOnCollectionFailure(context, analyzeStatus, columnName, collectionFailure);
-                    throw collectionFailure;
+                    if (!traits.toleratesColumnFailure()) {
+                        throw collectionFailure;
+                    }
+                    // One column's histogram is independent of every other column's, so the rest of the
+                    // job is still worth running and what it produces is still worth keeping. The failures
+                    // are reported together once the loop ends.
+                    failedColumns++;
+                    lastFailure = collectionFailure;
+                    LOG.warn("Failed to collect {} for column {}, continuing with the remaining columns ({}/{} " +
+                                    "failed so far)", traits.statisticsDescription(), columnName, failedColumns,
+                            columnNames.size(), collectionFailure);
+                    continue;
                 }
 
                 if (!rowsBuffer.isEmpty() && bufferSize + rowSize > bufferLimit) {
@@ -114,8 +118,80 @@ final class HistogramCollector {
             traits.afterCollection(context, insertedColumns);
         }
 
+        if (lastFailure != null) {
+            // Nothing survived: there is no partial result to keep, and reporting success would hide a
+            // collection that produced no histogram at all.
+            if (insertedColumns.isEmpty()) {
+                throw lastFailure;
+            }
+            // Some columns have a histogram and some do not. The job finishes - what it wrote is correct
+            // and usable - but says so, and only the columns it actually wrote get metadata (see
+            // collectedColumns, which StatisticExecutor uses when committing ExternalHistogramStatsMeta).
+            String message = String.format("collect %s job partially failed but tolerated %d/%d, " +
+                    "last error is %s", traits.statisticsDescription(), failedColumns, columnNames.size(),
+                    lastFailure);
+            analyzeStatus.setReason(message);
+            LOG.warn(message);
+        }
+
         analyzeStatus.setProgress(100);
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+    }
+
+    /** The columns whose histogram row reached storage; only these should get metadata. */
+    List<String> collectedColumns() {
+        return insertedColumns;
+    }
+
+    /**
+     * Queries one column's most common values and buckets, waiting out a backend that is momentarily out
+     * of memory when the flavour asks for it. A statistics query is tiny, so such a rejection is about
+     * other work on that backend and stops being true on its own - see
+     * {@link StatisticsCollectJob#awaitBackendMemory} for why the waiting is budgeted.
+     */
+    private ColumnHistogram collectColumn(ConnectContext context, AnalyzeStatus analyzeStatus, String columnName,
+                                          Type columnType) throws Exception {
+        StatisticsCollectJob job = traits.job;
+        for (int attempt = 0; ; attempt++) {
+            try {
+                List<TStatisticData> mcv = job.queryStatisticSync(
+                        traits.buildMcvQuery(columnName), context, analyzeStatus);
+                Map<String, String> mostCommonValues = traits.buildMostCommonValues(mcv);
+
+                String bucketsQuery = traits.buildBucketsQuery(
+                        context, analyzeStatus, columnName, columnType, mostCommonValues);
+                String buckets = traits.singleResult(
+                        job.queryStatisticSync(bucketsQuery, context, analyzeStatus), columnName).histogram;
+
+                return new ColumnHistogram(buckets, buildMcvJson(mostCommonValues));
+            } catch (Exception e) {
+                if (!traits.waitsOutProcessMemoryPressure()
+                        || attempt >= job.maxProcessMemoryRetries()
+                        || !StatisticsCollectJob.isProcessMemoryExhausted(e)) {
+                    throw e;
+                }
+                // A KILL or the overall analyze deadline can land while a query is in flight, where it
+                // surfaces as that query's failure. Re-check both before waiting, so neither is mistaken
+                // for a busy backend and silently retried.
+                job.checkCancelled(analyzeStatus);
+                job.calculateAndSetRemainingTimeout(context, analyzeStatus);
+
+                long backoffMs = job.retryBackoffMillis(attempt);
+                LOG.info("[ExternalStats] backend out of memory, retrying histogram | table={} column={} " +
+                        "attempt={} backoffMs={}", table(), columnName, attempt + 1, backoffMs);
+                if (!job.awaitBackendMemory(backoffMs)) {
+                    throw e;
+                }
+            }
+        }
+    }
+
+    private String table() {
+        return traits.table == null ? "?" : traits.table.getName();
+    }
+
+    /** One column's collected histogram, before it is turned into a buffered row. */
+    private record ColumnHistogram(String buckets, String mcvJson) {
     }
 
     /**

@@ -202,6 +202,32 @@ This topic introduces the following types of FE configurations:
 - Description: The maximum time a single external-table statistics collection query may run. Statistics collection issues one query per (partition, column group); each of them reads one partition under the scan caps above into fixed-size sketches and normally returns in well under a second. Without this ceiling every such query inherits whatever is left of `statistic_collect_query_timeout`, which is the budget for the whole collection job, so one query stuck behind an overloaded backend can consume the entire budget and leave every remaining partition uncollected. Raise this for cold or distant object storage where a capped scan can legitimately take longer. A value of `0` or less removes the separate ceiling, so a query may again use the job's whole remaining budget. The effective timeout is always the smaller of this value and the job's remaining budget.
 - Introduced in: v4.1
 
+### `connector_table_analyze_min_column_coverage_ratio`
+
+- Default: 0.5
+- Type: Double
+- Is mutable: Yes
+- Description: The least fraction of the partitions an external-table statistics collection asked for that must actually be collected before a column's statistics are recorded. A collection that is cut short - some queries tolerated away, or the job failing partway - still writes rows for the partitions it read and records how many that was, so the read path scales them correctly. Below some coverage that stops being worthwhile: row counts extrapolate from the partitions collected, but NDV does not, and NDV is what join cardinality estimates are most sensitive to. A column collected from a twentieth of its partitions would hand the optimizer an NDV roughly twenty times too small, presented as fact. A column below this ratio is left without metadata instead, so the optimizer falls back to the connector's own table metadata: an accurate row count and no NDV, which gives a default selectivity rather than a confidently wrong one. Measured against what the collection asked for, not against the table, so a sample is not treated as sparse merely for being a sample. A value of `0` or less records whatever was collected.
+- Introduced in: v4.1
+
+### `connector_table_analyze_memory_backoff_budget_second`
+
+- Default: 300
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The total time one external-table statistics collection job may spend waiting for a backend to free memory. A collection query that a backend rejects because the backend as a whole is out of memory is retried after a pause rather than counted as a failed partition, because the shortage is caused by other work and passes on its own. That is only true of a short spike: under a sustained shortage every query is rejected, and without this ceiling the job would sleep away its entire `statistic_collect_query_timeout` budget while holding one of the `connector_table_query_trigger_analyze_max_running_task_num` slots, collecting nothing and preventing any other table from being collected. Once the budget is used up the job stops waiting; its failures then count against `statistic_full_statistics_failure_tolerance_ratio` as they did before retries existed, and the job ends early enough to be triggered again after the cluster recovers. A value of `0` or less means unlimited waiting, bounded only by `statistic_collect_query_timeout`.
+- Introduced in: v4.1
+
+### `connector_table_query_trigger_analyze_failure_backoff_max_second`
+
+- Default: 1800
+- Type: Long
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The longest a table whose query-triggered analyze keeps failing is left alone before being tried again. A failed collection commits no metadata, so the statistics it was collecting are still missing and the next query asks for them again; the scheduler then runs the same job one tick later, every `connector_table_query_trigger_task_schedule_interval` seconds, for as long as the failure lasts. The interval settings above cannot prevent this, because they are measured against metadata a failed job never wrote. After each consecutive failure the table is left alone for twice as long, starting at one minute and stopping at this ceiling; one successful collection resets it. Manual `ANALYZE` is never held back. A value of `0` or less disables the backoff, restoring a retry on every schedule tick.
+- Introduced in: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - Default: 12 * 3600

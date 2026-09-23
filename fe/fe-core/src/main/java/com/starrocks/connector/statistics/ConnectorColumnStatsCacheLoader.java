@@ -144,6 +144,8 @@ public class ConnectorColumnStatsCacheLoader implements
 
         ColumnStatistic columnStatistic = ColumnBasicStatsCacheLoader.buildColumnStatistics(statisticData, splits[0],
                 splits[1], splits[3], statisticData.columnName, columnType);
-        return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount, statisticData.updateTime);
+        return new ConnectorTableColumnStats(columnStatistic, statisticData.rowCount, statisticData.updateTime,
+                statisticData.isSetCollectedPartitionCount() ? statisticData.collectedPartitionCount : 0,
+                statisticData.isSetPerPartitionNdvSum() ? statisticData.perPartitionNdvSum : 0);
     }
 }

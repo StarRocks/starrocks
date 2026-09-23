@@ -73,10 +73,24 @@ public class ConnectorAnalyzeTask {
         this.columns.removeAll(columns);
     }
 
-    private boolean needAnalyze(String column, LocalDateTime lastAnalyzedTime) {
-        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+    // `tableUpdateTime` is resolved once by the caller: it comes from the connector, and asking for it
+    // again for every column of a wide table is the same answer fetched thirty times.
+    private boolean needAnalyze(ColumnStatsMeta columnStatsMeta, LocalDateTime tableUpdateTime) {
+        String column = columnStatsMeta.getColumnName();
+        // A previous collection left partitions of its own request uncollected, so this column's
+        // statistics are built on less than they were meant to be. Nothing about the table changing will
+        // ever fix that - on a table that is never written again, "up to date" would mean "permanently
+        // incomplete" - so finish it regardless of how fresh the metadata looks.
+        if (columnStatsMeta.isCoverageIncomplete()) {
+            LOG.info("[ExternalStats] trigger resume | catalog={} db={} table={} column={} collected={} requested={}",
+                    catalogName, db.getFullName(), table.getName(), column,
+                    columnStatsMeta.getSampledPartitionsHashValue().size(),
+                    columnStatsMeta.getRequestedPartitionCount());
+            return true;
+        }
         // check table update time is after last analyzed time
         if (tableUpdateTime != null) {
+            LocalDateTime lastAnalyzedTime = columnStatsMeta.getUpdateTime();
             if (lastAnalyzedTime.isAfter(tableUpdateTime)) {
                 LOG.info("[ExternalStats] trigger skip | catalog={} db={} table={} column={} reason=col_uptodate " +
                                 "table_update={} last_analyze={}",
@@ -111,16 +125,18 @@ public class ConnectorAnalyzeTask {
                 getExternalTableBasicStatsMeta(catalogName, db.getFullName(), table.getName());
         Optional<LocalDateTime> lastEarliestAnalyzedTime = Optional.empty();
         if (externalBasicStatsMeta != null) {
-            Map<String, LocalDateTime> columnLastAnalyzedTime = externalBasicStatsMeta.getColumnStatsMetaMap().values()
-                    .stream().collect(
-                            Collectors.toMap(ColumnStatsMeta::getColumnName, ColumnStatsMeta::getUpdateTime));
+            Map<String, ColumnStatsMeta> columnStatsMetas = externalBasicStatsMeta.getColumnStatsMetaMap();
             Set<String> needAnalyzeColumns = new HashSet<>(columns);
+            // Resolved once for the whole table rather than once per column: it is a connector metadata
+            // lookup, and every column of the table gets the same answer.
+            LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
 
             for (String column : columns) {
-                if (columnLastAnalyzedTime.containsKey(column)) {
-                    LocalDateTime lastAnalyzedTime = columnLastAnalyzedTime.get(column);
+                ColumnStatsMeta columnStatsMeta = columnStatsMetas.get(column);
+                if (columnStatsMeta != null) {
+                    LocalDateTime lastAnalyzedTime = columnStatsMeta.getUpdateTime();
                     Preconditions.checkNotNull(lastAnalyzedTime, "Last analyzed time is null");
-                    if (needAnalyze(column, lastAnalyzedTime)) {
+                    if (needAnalyze(columnStatsMeta, tableUpdateTime)) {
                         // need analyze columns, compare the last analyzed time, get the earliest time
                         lastEarliestAnalyzedTime = lastEarliestAnalyzedTime.
                                 map(localDateTime -> localDateTime.isAfter(lastAnalyzedTime) ? lastAnalyzedTime : localDateTime).

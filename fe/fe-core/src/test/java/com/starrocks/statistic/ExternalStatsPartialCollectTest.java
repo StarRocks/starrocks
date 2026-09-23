@@ -47,8 +47,11 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 // A collection query that fails must not take the rest of the job (or the metadata describing what the job
 // did manage to collect) down with it. Covers both halves of that: the tolerance rules in
@@ -95,6 +98,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         private int collectedCount = 0;
         private int forceFlushCount = 0;
         private int backoffCount = 0;
+        private long backoffMillis = 0;
 
         RecordingJob(List<String> partitionNames, List<String> columnNames, List<Type> columnTypes,
                      Set<Integer> failAtIndexes) {
@@ -124,11 +128,12 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         protected void cleanupStaleRawKeyedRows(ConnectContext context, long jobId) {
         }
 
-        // Keep the retry logic, drop the waiting.
+        // Keep the retry logic, drop the waiting - unless a test is specifically about how long the job
+        // is allowed to spend waiting.
         @Override
         protected long retryBackoffMillis(int attempt) {
             backoffCount++;
-            return 0;
+            return backoffMillis;
         }
 
         int getExecutedCount() {
@@ -276,6 +281,60 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         Assertions.assertEquals(33, job.getExecutedCount());
         Assertions.assertEquals(22, job.backoffCount);
         Assertions.assertEquals(0, job.collectedCount);
+    }
+
+    @Test
+    public void testWaitingForMemoryIsBoundedByABudget() throws Exception {
+        // Waiting out a busy backend is right for a spike and wrong for a sustained shortage: then every
+        // query is rejected, and a job that keeps waiting sleeps away its whole deadline while holding one
+        // of the two analyze slots - collecting nothing, and blocking every other table from being
+        // collected either. Past the budget it stops waiting and fails in the ordinary way.
+        Set<Integer> failures = new HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            failures.add(i);
+        }
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), failures);
+        job.failureMessage = BACKEND_OUT_OF_MEMORY;
+        job.backoffMillis = 600;
+
+        long saved = Config.connector_table_analyze_memory_backoff_budget_second;
+        try {
+            // Room for exactly one 600ms wait; the second would take the job past a second.
+            Config.connector_table_analyze_memory_backoff_budget_second = 1;
+            Exception e = Assertions.assertThrows(Exception.class,
+                    () -> job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L));
+            Assertions.assertTrue(e.getMessage().contains("too many failed tasks"), e.getMessage());
+        } finally {
+            Config.connector_table_analyze_memory_backoff_budget_second = saved;
+        }
+
+        // Same 11 counted failures as with unlimited waiting, but reached in 12 queries instead of 33:
+        // only the first was retried, and only once. The job as a whole slept 600ms, not 11 x 40s.
+        Assertions.assertEquals(12, job.getExecutedCount());
+        Assertions.assertEquals(600, job.getProcessMemoryBackoffSpentMs());
+    }
+
+    @Test
+    public void testWaitingBudgetCanBeTurnedOff() throws Exception {
+        // <= 0 restores unbounded waiting, for a cluster that would rather have the statistics late than
+        // not at all.
+        Set<Integer> failures = new HashSet<>();
+        for (int i = 0; i < 40; i++) {
+            failures.add(i * 3);
+        }
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), failures);
+        job.failureMessage = BACKEND_OUT_OF_MEMORY;
+
+        long saved = Config.connector_table_analyze_memory_backoff_budget_second;
+        try {
+            Config.connector_table_analyze_memory_backoff_budget_second = 0;
+            job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L);
+        } finally {
+            Config.connector_table_analyze_memory_backoff_budget_second = saved;
+        }
+
+        Assertions.assertFalse(job.hasToleratedFailures());
+        Assertions.assertEquals(200, job.collectedCount);
     }
 
     @Test
@@ -528,6 +587,52 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testConcurrentMetaCommitsDoNotLoseEachOther() throws Exception {
+        // Committing metadata is a read-modify-write, and two analyze jobs on the same table can easily
+        // overlap: the query trigger only keeps its own tasks off each other, and says nothing about the
+        // auto collector or a manual ANALYZE. If both read before either writes, one job's columns vanish -
+        // and with per-column coverage that is not a harmless rewrite of the same values, it is coverage
+        // nothing will restore until the next full collection.
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        CountDownLatch firstIsInside = new CountDownLatch(1);
+        CountDownLatch secondHasStarted = new CountDownLatch(1);
+        AtomicReference<ExternalBasicStatsMeta> whatTheSecondOneSaw = new AtomicReference<>();
+
+        Thread first = new Thread(() -> analyzeMgr.updateExternalBasicStatsMeta(CATALOG, DB, TABLE, current -> {
+            firstIsInside.countDown();
+            try {
+                // Hold the commit open long enough that the second one would read a stale snapshot if
+                // nothing serialized them.
+                secondHasStarted.await(5, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE,
+                    Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    Maps.newHashMap());
+            meta.addColumnStatsMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE,
+                    LocalDateTime.now()));
+            return meta;
+        }));
+        first.start();
+        Assertions.assertTrue(firstIsInside.await(5, TimeUnit.SECONDS));
+
+        Thread second = new Thread(() -> analyzeMgr.updateExternalBasicStatsMeta(CATALOG, DB, TABLE, current -> {
+            whatTheSecondOneSaw.set(current);
+            return null;
+        }));
+        second.start();
+        secondHasStarted.countDown();
+        first.join(10_000);
+        second.join(10_000);
+
+        // The second commit started while the first was still inside, yet read the first one's result:
+        // the two are serialized, so neither can overwrite the other from a stale copy.
+        Assertions.assertNotNull(whatTheSecondOneSaw.get(), "second commit read the table before the first wrote");
+        Assertions.assertTrue(whatTheSecondOneSaw.get().getColumnStatsMetaMap().containsKey("c1"));
+    }
+
+    @Test
     public void testPartialRunLeavesAFullyCollectedColumnAlone() {
         // The failure budget counts queries across the whole job, but coverage is per column: a wide table
         // splits each partition into many column-group queries, so one group can lose nearly every partition
@@ -541,7 +646,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
                 Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
-                Maps.newHashMap(java.util.Map.of("c1", barelyAnything)), false);
+                Maps.newHashMap(java.util.Map.of("c1", barelyAnything)), Collections.emptyMap(), false);
 
         ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
@@ -563,7 +668,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
                 Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
-                Maps.newHashMap(java.util.Map.of("c1", collected)), false);
+                Maps.newHashMap(java.util.Map.of("c1", collected)), Collections.emptyMap(), false);
 
         ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
@@ -591,7 +696,7 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
                 Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), allPartitions, 3,
-                Maps.newHashMap(java.util.Map.of("c1", collected)), false);
+                Maps.newHashMap(java.util.Map.of("c1", collected)), Collections.emptyMap(), false);
 
         ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
                 .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
@@ -637,6 +742,164 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
                 rowCount, "");
     }
 
+    // As above, plus the two numbers the aggregate now reports about itself: how many partitions it
+    // covers, and the per-partition distinct counts added up.
+    private static ConnectorTableColumnStats sampledStats(long rowCount, double mergedNdv,
+                                                          long collectedPartitions, long perPartitionNdvSum) {
+        return new ConnectorTableColumnStats(ColumnStatistic.builder().setDistinctValuesCount(mergedNdv).build(),
+                rowCount, "", collectedPartitions, perPartitionNdvSum);
+    }
+
+    @Test
+    public void testAFailedJobStillPersistsWhatItCollected() {
+        // The buffered rows are everything the job managed to collect, and on a job that is about to fail
+        // they are all there is. Dropping them means the next attempt starts from nothing - which, on a
+        // table whose collection keeps being cut short, is why it never finishes.
+        Set<Integer> failures = new HashSet<>();
+        for (int i = 100; i < 200; i++) {
+            failures.add(i);
+        }
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), failures);
+
+        Assertions.assertThrows(Exception.class, () -> job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L));
+
+        // The force flush ran even though the job ended by throwing, and the coverage it can report is
+        // the 100 partitions that did go through.
+        Assertions.assertEquals(1, job.forceFlushCount);
+        Assertions.assertEquals(100, job.getCollectedPartitionsHashByColumn().get("c1").size());
+    }
+
+    @Test
+    public void testPartialRunRecordsWhatItAskedFor() {
+        // The gap between what a collection asked for and what it got is the only durable sign that a
+        // column is not as covered as it was meant to be. Without it a run cut short looks exactly like a
+        // complete one, and the scheduler leaves the column alone for as long as the table is quiet.
+        Set<Long> collected = new HashSet<>();
+        for (int i = 0; i < 60; i++) {
+            collected.add(hash("par_col=" + i));
+        }
+
+        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                Maps.newHashMap(java.util.Map.of("c1", collected)),
+                Maps.newHashMap(java.util.Map.of("c1", 100)), false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertEquals(100, columnMeta.getRequestedPartitionCount());
+        Assertions.assertTrue(columnMeta.isCoverageIncomplete());
+        Assertions.assertTrue(columnMeta.simpleString(true).contains("incomplete_of=100"),
+                columnMeta.simpleString(true));
+    }
+
+    @Test
+    public void testACompleteRunIsNotMarkedIncomplete() {
+        Set<Long> collected = new HashSet<>();
+        for (int i = 0; i < 100; i++) {
+            collected.add(hash("par_col=" + i));
+        }
+
+        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                Maps.newHashMap(java.util.Map.of("c1", collected)),
+                Maps.newHashMap(java.util.Map.of("c1", 100)), false);
+
+        ColumnStatsMeta columnMeta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE).getColumnStatsMeta("c1");
+        Assertions.assertFalse(columnMeta.isCoverageIncomplete());
+    }
+
+    @Test
+    public void testATooSparselyCollectedColumnIsNotRecorded() {
+        // Row counts extrapolate from a thin sample; NDV does not. A column collected from a twentieth of
+        // its partitions would give the optimizer an NDV twenty times too small, stated as fact - worse
+        // than no statistics, which at least falls back to an accurate row count from table metadata.
+        Set<Long> barelyAnything = new HashSet<>();
+        barelyAnything.add(hash("par_col=0"));
+
+        new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                Maps.newHashMap(java.util.Map.of("c1", barelyAnything)),
+                Maps.newHashMap(java.util.Map.of("c1", 100)), false);
+
+        ExternalBasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE);
+        Assertions.assertFalse(meta.getColumnStatsMetaMap().containsKey("c1"));
+    }
+
+    @Test
+    public void testTheCoverageFloorCanBeTurnedOff() {
+        Set<Long> barelyAnything = new HashSet<>();
+        barelyAnything.add(hash("par_col=0"));
+
+        double saved = Config.connector_table_analyze_min_column_coverage_ratio;
+        try {
+            Config.connector_table_analyze_min_column_coverage_ratio = 0;
+            new StatisticExecutor().commitExternalColumnStatsMeta(hiveDb, hiveTable, CATALOG,
+                    Lists.newArrayList("c1"), Lists.newArrayList("c1"), StatsConstants.AnalyzeType.SAMPLE,
+                    LocalDateTime.now(), Maps.newHashMap(), new HashSet<>(), Collections.emptySet(), 100,
+                    Maps.newHashMap(java.util.Map.of("c1", barelyAnything)),
+                    Maps.newHashMap(java.util.Map.of("c1", 100)), false);
+        } finally {
+            Config.connector_table_analyze_min_column_coverage_ratio = saved;
+        }
+
+        ExternalBasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                .getExternalTableBasicStatsMeta(CATALOG, DB, TABLE);
+        Assertions.assertTrue(meta.getColumnStatsMetaMap().containsKey("c1"));
+    }
+
+    @Test
+    public void testAResumedRunSkipsPartitionsAlreadyCollected() throws Exception {
+        // The first run collected 120 of the 200 partitions it asked for before running out of budget.
+        Set<Long> alreadyCollected = new HashSet<>();
+        for (int i = 0; i < 120; i++) {
+            alreadyCollected.add(hash("par_col=" + i));
+        }
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE,
+                Lists.newArrayList("c1", "c2"), StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                Maps.newHashMap());
+        for (String column : columns()) {
+            meta.addColumnStatsMeta(new ColumnStatsMeta(column, StatsConstants.AnalyzeType.SAMPLE,
+                    LocalDateTime.now(), alreadyCollected, 200, 200));
+        }
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), new HashSet<>());
+        job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L);
+
+        // Only the 80 partitions that are actually missing were read; the other 120 already have rows,
+        // and a run that starts over every time never gets to the end of a table it keeps failing on.
+        Assertions.assertEquals(80, job.getExecutedCount());
+        Assertions.assertEquals(80, job.getCollectedPartitionsHashByColumn().get("c1").size());
+    }
+
+    @Test
+    public void testACompletelyCollectedColumnIsStillRefreshed() throws Exception {
+        // Nothing may be skipped when the recorded coverage is whole: this run is a refresh, and reusing
+        // the previous run's partitions would mean the statistics never get refreshed at all.
+        Set<Long> allOfThem = new HashSet<>();
+        for (int i = 0; i < 200; i++) {
+            allOfThem.add(hash("par_col=" + i));
+        }
+        ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE,
+                Lists.newArrayList("c1", "c2"), StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                Maps.newHashMap());
+        for (String column : columns()) {
+            meta.addColumnStatsMeta(new ColumnStatsMeta(column, StatsConstants.AnalyzeType.SAMPLE,
+                    LocalDateTime.now(), allOfThem, 200, 200));
+        }
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().replayAddExternalBasicStatsMeta(meta);
+
+        RecordingJob job = new RecordingJob(partitions(200), columns(), columnTypes(), new HashSet<>());
+        job.runCollectPhases(connectContext, newAnalyzeStatus(), 1L);
+
+        Assertions.assertEquals(200, job.getExecutedCount());
+    }
+
     private static void putMeta(ColumnStatsMeta columnStatsMeta) {
         ExternalBasicStatsMeta meta = new ExternalBasicStatsMeta(CATALOG, DB, TABLE, Lists.newArrayList("c1"),
                 StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap());
@@ -677,6 +940,23 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testASparseColumnDoesNotScaleToZeroRows() {
+        // Rounding the per-partition average down before multiplying it back up discards everything
+        // below one row per partition, so a column whose sampled partitions hold less than a row each
+        // came out as zero rows however large the table is - and took the distinct-value ceiling with it.
+        Set<Long> sampled = new HashSet<>();
+        sampled.add(hash("par_col=0"));
+        sampled.add(hash("par_col=1"));
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), sampled, 100));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1));
+
+        // One row across two partitions is half a row each, so a hundred partitions hold about fifty.
+        Assertions.assertEquals(50, estimated.getRowCount());
+    }
+
+    @Test
     public void testZeroCollectedPartitionsIsUnknown() {
         // Defensive: a SAMPLE entry covering no partition has nothing to scale by and used to divide by zero.
         putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), new HashSet<>(), 300));
@@ -692,6 +972,127 @@ public class ExternalStatsPartialCollectTest extends PlanTestNoneDBBase {
         ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1", sampledStats(1000));
         Assertions.assertFalse(estimated.isUnknown());
         Assertions.assertEquals(1000, estimated.getRowCount());
+    }
+
+    @Test
+    public void testTheDenominatorComesFromTheRowsNotTheRecordedSet() {
+        // The recorded set says 10 partitions; the rows say 50 came from a later run whose metadata is
+        // not what is being read here. The row count is the sum over those 50, so 50 is the only
+        // denominator that matches it - dividing by 10 would inflate the table five-fold.
+        Set<Long> sampled = new HashSet<>();
+        for (int i = 0; i < 10; i++) {
+            sampled.add(hash("par_col=" + i));
+        }
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), sampled, 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000, 100, 50, 0));
+
+        Assertions.assertEquals(6000, estimated.getRowCount());
+    }
+
+    @Test
+    public void testAnOlderBackendStillFallsBackToTheRecordedSet() {
+        // A backend that predates the query version reporting it sends 0, and then the recorded set is
+        // the only denominator there is.
+        Set<Long> sampled = new HashSet<>();
+        for (int i = 0; i < 10; i++) {
+            sampled.add(hash("par_col=" + i));
+        }
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), sampled, 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000));
+
+        Assertions.assertEquals(30000, estimated.getRowCount());
+    }
+
+    @Test
+    public void testDistinctValuesGrowWithTheTableWhenPartitionsShareNothing() {
+        // Each of the 10 sampled partitions held 100 distinct values and the merge found 1000: no value
+        // appears in two partitions, so 300 partitions hold 30x as many. An order key behaves like this,
+        // and leaving it at 1000 is what makes a join over it look 30 times cheaper than it is.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(100000, 1000, 10, 1000));
+
+        Assertions.assertEquals(30000, estimated.getColumnStatistic().getDistinctValuesCount(), 1.0);
+    }
+
+    @Test
+    public void testDistinctValuesStayPutWhenEveryPartitionHoldsTheSameValues() {
+        // 10 partitions of 100 distinct values each, and the merge still found only 100: every partition
+        // draws from the same set, as a foreign key into a dimension does. More partitions add no new
+        // values, and scaling this one would be as wrong as not scaling the previous one.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(100000, 100, 10, 1000));
+
+        Assertions.assertEquals(100, estimated.getColumnStatistic().getDistinctValuesCount(), 1.0);
+    }
+
+    @Test
+    public void testDistinctValuesGrowPartlyWhenPartitionsOverlap() {
+        // Between the two ends: 10 partitions of 100 each, 400 distinct after merging, so values repeat
+        // but not completely. The estimate must land between "no growth" and "30x growth" rather than
+        // collapsing to either.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(1000000, 400, 10, 1000));
+        double ndv = estimated.getColumnStatistic().getDistinctValuesCount();
+
+        Assertions.assertTrue(ndv > 400, "expected growth beyond the sampled 400, got " + ndv);
+        Assertions.assertTrue(ndv < 400 * 30.0, "expected less than proportional growth, got " + ndv);
+    }
+
+    @Test
+    public void testDistinctValuesNeverExceedTheRowCount() {
+        // 10 partitions of 100 distinct values, all disjoint, but the table only has 1500 rows: a column
+        // cannot hold more distinct values than the table has rows.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(50, 1000, 10, 1000));
+
+        Assertions.assertTrue(estimated.getColumnStatistic().getDistinctValuesCount() <= estimated.getRowCount(),
+                "ndv " + estimated.getColumnStatistic().getDistinctValuesCount()
+                        + " exceeded rowCount " + estimated.getRowCount());
+    }
+
+    @Test
+    public void testDistinctValuesAreCappedByRowsEvenWhenTheSampleSaysOtherwise() {
+        // A sampled distinct count above the extrapolated row count means the two disagree; rows are
+        // the physical bound, so the cap has to apply below the sampled value too.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        // 2 rows over 10 sampled partitions -> 60 rows over 300, against a sampled distinct count of 1000.
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(2, 1000, 10, 1000));
+
+        Assertions.assertEquals(60, estimated.getRowCount());
+        Assertions.assertTrue(estimated.getColumnStatistic().getDistinctValuesCount() <= 60,
+                "ndv " + estimated.getColumnStatistic().getDistinctValuesCount() + " exceeded 60 rows");
+    }
+
+    @Test
+    public void testAnOlderBackendLeavesDistinctValuesAlone() {
+        // No per-partition sum reported, so there is nothing to tell apart the two ends and the sampled
+        // value is used unchanged - the behaviour before this existed.
+        putMeta(new ColumnStatsMeta("c1", StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                new HashSet<>(List.of(1L)), 300));
+
+        ConnectorTableColumnStats estimated = StatisticsUtils.estimateColumnStatistics(hiveTable, "c1",
+                sampledStats(100000, 1000, 10, 0));
+
+        Assertions.assertEquals(1000, estimated.getColumnStatistic().getDistinctValuesCount(), 0.001);
     }
 
     private static File newFolder(File root, String... subDirs) throws IOException {

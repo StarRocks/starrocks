@@ -39,6 +39,9 @@ public class StatsConstants {
     public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
     public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
     public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
+    // Same per-column aggregate as V2, plus the number of partitions it covers and the per-partition
+    // distinct counts added up, so the read path can size and scale the result from the rows themselves.
+    public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
 
 
 
@@ -59,6 +62,7 @@ public class StatsConstants {
                     .add(STATISTIC_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
                     .add(STATISTIC_PARTITION_VERSION_V2)
+                    .add(STATISTIC_EXTERNAL_QUERY_V3_VERSION)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

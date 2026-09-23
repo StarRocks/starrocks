@@ -456,6 +456,29 @@ public class StatisticsSQLTest extends PlanTestBase {
     }
 
     @Test
+    public void testExternalQueryReportsItsOwnCoverage() {
+        // The read path sizes and scales the aggregate from these two, so they have to be part of the
+        // same aggregate over the same rows as everything else - not fetched separately.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT));
+        assertContains(sql, "cast(count(distinct partition_name) as bigint)");
+        assertContains(sql, "cast(sum(hll_cardinality(ndv)) as bigint)");
+        // The version tells the backend which result shape to serialize; it must move with the shape.
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V3_VERSION + " as INT)");
+    }
+
+    @Test
+    public void testTheOlderResultShapeIsStillAvailable() {
+        // A backend that cannot serialize the coverage counts is asked the old way instead, so a rolling
+        // upgrade costs the sharper estimate for a few minutes rather than the statistics themselves.
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1"),
+                Lists.newArrayList(IntegerType.INT), false);
+        assertContains(sql, "cast(" + StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION + " as INT)");
+        Assertions.assertFalse(sql.contains("count(distinct partition_name)"), sql);
+        Assertions.assertFalse(sql.contains("hll_cardinality"), sql);
+    }
+
+    @Test
     public void testExternalTableCollectionStatsType() {
         String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL("a", Lists.newArrayList("col1", "col2"),
                 Lists.newArrayList(ArrayType.ARRAY_INT, new MapType(IntegerType.INT, StringType.STRING)));
