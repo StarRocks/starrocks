@@ -27,6 +27,7 @@ import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,6 +38,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -743,6 +745,19 @@ public class ScalarOperatorFunctionsTest {
     }
 
     @Test
+    public void nextDayWithFoldedBinaryDow() {
+        // Folding cast(<varbinary> as varchar) used to yield the java default byte[] toString(), which then
+        // poisoned every function reading the folded value: next_day reported
+        // "[B@3461c8cb not supported in next_day dow_string".
+        ConstantOperator dow = ConstantOperator
+                .createBinary("Sunday".getBytes(StandardCharsets.UTF_8), VarbinaryType.VARBINARY)
+                .castTo(VarcharType.VARCHAR).get();
+        assertEquals("Sunday", dow.getVarchar());
+        assertEquals("2015-03-29T09:23:55",
+                ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, dow).getDate().toString());
+    }
+
+    @Test
     public void previousDay() {
         assertEquals("2015-03-22T09:23:55", ScalarOperatorFunctions.previousDay(O_DT_20150323_092355,
                 ConstantOperator.createVarchar("Sunday")).getDate().toString());
@@ -1023,7 +1038,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void subtractDouble() {
         assertEquals(0.0,
-                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.subtractDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test
@@ -1119,7 +1134,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void divideDouble() {
         assertEquals(1.0,
-                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 1);
+                ScalarOperatorFunctions.divideDouble(O_DOUBLE_100, O_DOUBLE_100).getDouble(), 0.001);
     }
 
     @Test

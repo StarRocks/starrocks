@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/column_value_range.h"
+#include "storage_primitive/column_value_range.h"
 
 #include "base/testutil/assert.h"
 #include "column/runtime_type_traits.h"
 #include "gtest/gtest.h"
-#include "storage/primitive/filter_condition.h"
+#include "storage_primitive/filter_condition.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

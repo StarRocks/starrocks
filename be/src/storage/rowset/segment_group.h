@@ -109,7 +109,7 @@ private:
 // It is used to perform binary search on the short keys of all the segments.
 class SegmentGroup {
 public:
-    SegmentGroup(std::vector<SegmentSharedPtr>&& segments);
+    explicit SegmentGroup(std::vector<SegmentSharedPtr>&& segments);
 
     ShortKeyIndexGroupIterator lower_bound(const Slice& key) const { return _decoder_group.lower_bound(key); }
 

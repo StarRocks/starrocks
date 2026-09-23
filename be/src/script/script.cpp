@@ -23,13 +23,13 @@
 #include "common/logging.h"
 #include "common/stack_util.h"
 #include "common/vlog_cntl.h"
-#include "exec/schema_scanner/schema_be_tablets_scanner.h"
-#include "fs/key_cache.h"
+#include "exec/exec_env.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
-#include "runtime/exec_env.h"
+#include "platform/key_cache.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/memory/jemalloc_conf_updater.h"
 #include "runtime/prof/heap_prof.h"
 #include "storage/del_vector.h"
 #include "storage/lake/tablet.h"
@@ -39,10 +39,12 @@
 #include "storage/manual_compaction.h"
 #include "storage/primary_key_dump.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
+#include "storage_primitive/tablet_basic_info.h"
 #include "wrenbind17/wrenbind17.hpp"
 
 using namespace wrenbind17;
@@ -116,16 +118,35 @@ static uint64_t get_minor_number(EditVersion& self) {
     return self.minor_number();
 }
 
+// Status::to_string() takes a defaulted argument, so its member pointer does not fit the
+// zero-argument getter form propReadonly() binds. Wrap it.
+static std::string status_to_string(Status& self) {
+    return self.to_string();
+}
+
 static void bind_common(ForeignModule& m) {
     {
         auto& cls = m.klass<Status>("Status");
         cls.func<&Status::to_string>("toString");
+        cls.propReadonlyExt<&status_to_string>("toString");
         REG_METHOD(Status, ok);
     }
 }
 
 std::string memtracker_debug_string(MemTracker& self) {
     return self.debug_string();
+}
+
+// Bound in place of HeapProf::enable_prof/disable_prof so that toggling heap profiling from
+// `ADMIN EXECUTE` goes through the `jemalloc_conf` config, the same path an operator editing
+// information_schema.be_configs takes. Keeping these out of HeapProf is deliberate: the config
+// update hook calls HeapProf, so a call back the other way would deadlock on HeapProf's mutex.
+static Status heap_prof_enable_prof(HeapProf& /*self*/) {
+    return set_prof_active_via_config(true);
+}
+
+static Status heap_prof_disable_prof(HeapProf& /*self*/) {
+    return set_prof_active_via_config(false);
 }
 
 static std::vector<FileWriteStat> get_file_write_history() {
@@ -181,6 +202,44 @@ static std::string key_cache_info() {
     return KeyCache::instance().to_string();
 }
 
+static void bind_runtime_env_class(ForeignKlassImpl<RuntimeEnv>& cls) {
+    REG_STATIC_METHOD(RuntimeEnv, GetInstance);
+
+    // level 0
+    REG_METHOD(RuntimeEnv, process_mem_tracker);
+
+    // level 1
+    REG_METHOD(RuntimeEnv, query_pool_mem_tracker);
+    REG_METHOD(RuntimeEnv, load_mem_tracker);
+    REG_METHOD(RuntimeEnv, metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, compaction_mem_tracker);
+    REG_METHOD(RuntimeEnv, schema_change_mem_tracker);
+    REG_METHOD(RuntimeEnv, page_cache_mem_tracker);
+    REG_METHOD(RuntimeEnv, jit_cache_mem_tracker);
+    REG_METHOD(RuntimeEnv, update_mem_tracker);
+    REG_METHOD(RuntimeEnv, passthrough_mem_tracker);
+    REG_METHOD(RuntimeEnv, clone_mem_tracker);
+    REG_METHOD(RuntimeEnv, consistency_mem_tracker);
+    REG_METHOD(RuntimeEnv, connector_scan_pool_mem_tracker);
+    REG_METHOD(RuntimeEnv, datacache_mem_tracker);
+
+    // level 2
+    REG_METHOD(RuntimeEnv, tablet_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, rowset_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, segment_metadata_mem_tracker);
+    REG_METHOD(RuntimeEnv, column_metadata_mem_tracker);
+
+    // level 3
+    REG_METHOD(RuntimeEnv, tablet_schema_mem_tracker);
+    REG_METHOD(RuntimeEnv, column_zonemap_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, ordinal_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, bitmap_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, bloom_filter_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, builtin_inverted_index_mem_tracker);
+    REG_METHOD(RuntimeEnv, segment_zonemap_mem_tracker);
+    REG_METHOD(RuntimeEnv, short_key_index_mem_tracker);
+}
+
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -190,6 +249,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(MemTracker, peak_consumption);
         REG_METHOD(MemTracker, parent);
         cls.funcExt<&memtracker_debug_string>("toString");
+        cls.propReadonlyExt<&memtracker_debug_string>("toString");
     }
     {
         auto& cls = m.klass<FileWriteStat>("FileWriteStat");
@@ -216,48 +276,18 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&key_cache_info>("key_cache_info");
     }
     {
-        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
-        REG_STATIC_METHOD(GlobalEnv, GetInstance);
-
-        // level 0
-        REG_METHOD(GlobalEnv, process_mem_tracker);
-
-        // level 1
-        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, load_mem_tracker);
-        REG_METHOD(GlobalEnv, metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, compaction_mem_tracker);
-        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
-        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
-        REG_METHOD(GlobalEnv, jit_cache_mem_tracker);
-        REG_METHOD(GlobalEnv, update_mem_tracker);
-        REG_METHOD(GlobalEnv, passthrough_mem_tracker);
-        REG_METHOD(GlobalEnv, clone_mem_tracker);
-        REG_METHOD(GlobalEnv, consistency_mem_tracker);
-        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
-        REG_METHOD(GlobalEnv, datacache_mem_tracker);
-
-        // level 2
-        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
-        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
-
-        // level 3
-        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
-        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
-        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
-        REG_METHOD(GlobalEnv, builtin_inverted_index_mem_tracker);
-        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
-        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+        auto& cls = m.klass<RuntimeEnv>("RuntimeEnv");
+        bind_runtime_env_class(cls);
+    }
+    {
+        auto& cls = m.klass<RuntimeEnv>("GlobalEnv");
+        bind_runtime_env_class(cls);
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");
         REG_STATIC_METHOD(HeapProf, getInstance);
-        REG_METHOD(HeapProf, enable_prof);
-        REG_METHOD(HeapProf, disable_prof);
+        cls.funcExt<&heap_prof_enable_prof>("enable_prof");
+        cls.funcExt<&heap_prof_disable_prof>("disable_prof");
         REG_METHOD(HeapProf, has_enable);
         REG_METHOD(HeapProf, snapshot);
         REG_METHOD(HeapProf, to_dot_format);
@@ -296,7 +326,7 @@ public:
     }
 
     static std::string get_lake_tablet_metadata_json(int64_t tablet_id, int64_t version) {
-        auto tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager();
+        auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         RETURN_IF(nullptr == tablet_manager, "");
         auto meta_st = tablet_manager->get_tablet_metadata(tablet_id, version, false);
         RETURN_IF(!meta_st.ok(), meta_st.status().to_string());
@@ -475,6 +505,7 @@ public:
             REG_METHOD(TabletSchema, keys_type);
             REG_METHOD(TabletSchema, mem_usage);
             cls.func<&TabletSchema::debug_string>("toString");
+            cls.propReadonly<&TabletSchema::debug_string>("toString");
         }
         {
             auto& cls = m.klass<Tablet>("Tablet");
@@ -501,12 +532,14 @@ public:
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
             cls.funcExt<&proto_to_json<EditVersionPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<EditVersionPB>>("toString");
         }
         {
             auto& cls = m.klass<EditVersionMetaPB>("EditVersionMetaPB");
             REG_METHOD(EditVersionMetaPB, version);
             REG_METHOD(EditVersionMetaPB, creation_time);
             cls.funcExt<&proto_to_json<EditVersionMetaPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<EditVersionMetaPB>>("toString");
         }
         {
             auto& cls = m.klass<TabletUpdatesPB>("TabletUpdatesPB");
@@ -516,12 +549,14 @@ public:
             REG_METHOD(TabletUpdatesPB, next_rowset_id);
             REG_METHOD(TabletUpdatesPB, next_log_id);
             cls.funcExt<&proto_to_json<TabletUpdatesPB>>("toString");
+            cls.propReadonlyExt<&proto_to_json<TabletUpdatesPB>>("toString");
         }
         {
             auto& cls = m.klass<EditVersion>("EditVersion");
             cls.funcExt<&get_major_number>("major_number");
             cls.funcExt<&get_minor_number>("minor_number");
             cls.func<&EditVersion::to_string>("toString");
+            cls.propReadonly<&EditVersion::to_string>("toString");
         }
         {
             auto& cls = m.klass<CompactionInfo>("CompactionInfo");
@@ -622,7 +657,8 @@ Status execute_script(const std::string& script, std::string& output) {
     bind_common(m);
     bind_exec_env(m);
     StorageEngineRef::bind(m);
-    vm.runFromSource("main", R"(import "starrocks" for ExecEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
+    vm.runFromSource("main",
+                     R"(import "starrocks" for ExecEnv, RuntimeEnv, GlobalEnv, HeapProf, StorageEngine, VLogCntl)");
     try {
         vm.runFromSource("main", script);
     } catch (const std::exception& e) {

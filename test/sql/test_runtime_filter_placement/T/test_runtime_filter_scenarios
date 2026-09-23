@@ -1,0 +1,171 @@
+-- name: test_runtime_filter_scenarios
+-- A runtime filter has to survive whatever sits between the join and the scan. This walks the
+-- shapes that rewrite the probe column on the way down -- a projection, an aggregation, a
+-- window, global late materialization and the low-cardinality dictionary -- and pins both
+-- halves for each: where the planner records the filter, and whether it reaches an operator.
+--
+-- Two counters are read from the query profile:
+--   RuntimeInFilterNum  -- a LOCAL in-filter was bound to that operator. Deterministic: a
+--                          local filter has no wait timeout, the driver blocks until the
+--                          holder is ready (PipelineDriver::local_rf_block()).
+--   RuntimeFilterDesc   -- a GLOBAL bloom filter was delivered to that operator. Only its
+--                          arrival is asserted, never how many rows it removed: that races
+--                          with the global filter's wait timeout.
+-- A scenario whose filter turns global reports no local in-filter, and that is the point --
+-- the two answers together say which kind of filter the shape produced. Deliberately not
+-- counts: the number of operators holding a filter moves with the backend count, the
+-- fragment-instance count and whether a scan decomposes into a separate prepare operator.
+DROP DATABASE IF EXISTS test_runtime_filter_scenarios;
+CREATE DATABASE test_runtime_filter_scenarios;
+USE test_runtime_filter_scenarios;
+
+CREATE TABLE fact (
+  id bigint NOT NULL,
+  u  varchar(64),
+  d  varchar(64),
+  n  int,
+  m  bigint
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE dim (
+  id bigint NOT NULL,
+  u  varchar(64),
+  d  varchar(64),
+  n  int,
+  m  bigint
+) ENGINE=OLAP DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+-- `u` holds a handful of distinct values so the global dictionary picks it up.
+INSERT INTO fact
+SELECT generate_series, concat('U', generate_series % 4), concat('D', generate_series % 3),
+       generate_series % 1000, generate_series
+FROM table(generate_series(1, 4000));
+
+INSERT INTO dim
+SELECT generate_series, concat('U', generate_series % 4), concat('D', generate_series % 3),
+       generate_series % 1000, generate_series
+FROM table(generate_series(1, 40));
+
+[UC] analyze full table fact;
+[UC] analyze full table dim;
+
+SET pipeline_dop = 1;
+SET global_runtime_filter_build_min_size = 0;
+SET global_runtime_filter_probe_min_size = 0;
+SET enable_profile = true;
+SET enable_async_profile = false;
+
+--------------------------------------------------------------------------------
+-- Projection: the join keys have different integer widths, so the projection
+-- materialises an implicit widening CAST. The filter has to descend past it --
+-- stopping on the projection would mean never being applied, because no project
+-- operator evaluates a bloom filter or consumes a local in-filter.
+--------------------------------------------------------------------------------
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT cast(n as bigint) AS k FROM fact) x JOIN [broadcast] dim d ON x.k = d.m", "probe_expr = (CAST(")
+
+SELECT count(*) FROM (SELECT cast(n as bigint) AS k FROM fact) x JOIN [broadcast] dim d ON x.k = d.m;
+SELECT
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
+FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p;
+
+--------------------------------------------------------------------------------
+-- Aggregation: the aggregate source operator both evaluates a bloom filter and
+-- consumes a local in-filter, so the filter is useful on the aggregate itself and
+-- on the scan feeding it.
+--------------------------------------------------------------------------------
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT u, count(*) c FROM fact GROUP BY u) x JOIN [broadcast] dim d ON x.u = d.u", "probe runtime filters")
+
+SELECT count(*) FROM (SELECT u, count(*) c FROM fact GROUP BY u) x JOIN [broadcast] dim d ON x.u = d.u;
+SELECT
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
+FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p;
+
+--------------------------------------------------------------------------------
+-- Window: the probe column is the PARTITION BY column, so the filter deletes whole
+-- window partitions and every surviving row keeps its window value. It must reach
+-- the scan, crossing the SELECT, the ANALYTIC and the SORT on the way -- of those
+-- three only the analytic source would ever apply it.
+--------------------------------------------------------------------------------
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT id, u, first_value(id) OVER (PARTITION BY u ORDER BY id) rz FROM fact) t WHERE rz > 0) x JOIN [broadcast] dim d ON x.u = d.u", "0:OlapScanNode")
+
+SELECT count(*) FROM (SELECT * FROM (SELECT id, u, first_value(id) OVER (PARTITION BY u ORDER BY id) rz FROM fact) t WHERE rz > 0) x JOIN [broadcast] dim d ON x.u = d.u;
+SELECT
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
+FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p;
+
+--------------------------------------------------------------------------------
+-- Global late materialization: the plan grows a FETCH above the join and the TOP-N
+-- builds a second filter of its own, so the scan ends up probing with two filters
+-- at once -- the join's and the TopN's.
+--------------------------------------------------------------------------------
+SET enable_global_late_materialization = true;
+SET enable_global_late_materialization_cost_based = false;
+function: assert_explain_verbose_contains("SELECT f.id, f.u, f.d FROM fact f JOIN [broadcast] dim d ON f.id = d.id ORDER BY f.id LIMIT 10", "FETCH")
+function: assert_explain_verbose_contains("SELECT f.id, f.u, f.d FROM fact f JOIN [broadcast] dim d ON f.id = d.id ORDER BY f.id LIMIT 10", "filter_id = 1")
+
+SELECT f.id, f.u, f.d FROM fact f JOIN [broadcast] dim d ON f.id = d.id ORDER BY f.id LIMIT 10;
+SELECT
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
+FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p;
+SET enable_global_late_materialization = false;
+
+--------------------------------------------------------------------------------
+-- Low cardinality: once `u` has a global dictionary the join key is dictionary
+-- encoded, so the filter probes the dictionary id rather than the string.
+--------------------------------------------------------------------------------
+SET cbo_enable_low_cardinality_optimize = true;
+SET low_cardinality_optimize_v2 = true;
+function: wait_global_dict_ready('u', 'fact')
+function: wait_global_dict_ready('u', 'dim')
+function: assert_explain_verbose_contains("SELECT count(*) FROM fact f JOIN [broadcast] dim d ON f.u = d.u", "DictDecode")
+
+SELECT count(*) FROM fact f JOIN [broadcast] dim d ON f.u = d.u;
+SELECT
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeInFilterNum: %"
+               AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0
+              THEN 1 ELSE 0 END) > 0, "yes", "no") AS local_in_filter_delivered,
+  if(sum(CASE WHEN trim(line) LIKE "- RuntimeFilterDesc: %" THEN 1 ELSE 0 END) > 0,
+     "yes", "no") AS bloom_filter_delivered
+FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p;
+
+-- The dictionary changes what the filter probes, never which rows survive it.
+SET cbo_enable_low_cardinality_optimize = false;
+SELECT count(*) FROM fact f JOIN [broadcast] dim d ON f.u = d.u;
+SET cbo_enable_low_cardinality_optimize = true;
+
+DROP DATABASE test_runtime_filter_scenarios;

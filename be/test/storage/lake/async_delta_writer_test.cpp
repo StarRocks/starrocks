@@ -34,6 +34,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
@@ -42,9 +43,9 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 
@@ -579,6 +580,44 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
 }
 
+// A writer closed after being cancelled must report the cancel reason instead of the generic
+// "closed" message: the reason carries the root cause that the load coordinator has to surface.
+TEST_F(LakeAsyncDeltaWriterTest, test_open_and_write_after_cancel_and_close) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+
+    delta_writer->cancel(Status::Cancelled("Division by zero"));
+    delta_writer->close();
+
+    auto st = delta_writer->open();
+    ASSERT_TRUE(st.is_cancelled()) << st;
+    ASSERT_TRUE(st.message().find("Division by zero") != std::string::npos) << st;
+
+    CountDownLatch write_latch(1);
+    delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& write_st) {
+        ASSERT_TRUE(write_st.is_cancelled()) << write_st;
+        ASSERT_TRUE(write_st.message().find("Division by zero") != std::string::npos) << write_st;
+        write_latch.count_down();
+    });
+    write_latch.wait();
+}
+
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {
     // Prepare data for writing
     static const int kChunkSize = 128;
@@ -681,7 +720,7 @@ void LakeAsyncDeltaWriterTest::do_block_merger(bool use_profile) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -727,7 +766,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger_running_while_close) {
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -785,7 +824,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_race_with_finish_submit_merge_task) 
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;
@@ -851,7 +890,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_does_not_destroy_writer_during_merge
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    StorageEngine::instance()->load_spill_block_merge_executor()->refresh_max_thread_num();
+    StorageEnv::GetInstance()->load_spill_block_merge_executor()->refresh_max_thread_num();
     CountDownLatch flush_latch(10);
     // flush multiple times to generate spill blocks
     int64_t old_val = config::write_buffer_size;

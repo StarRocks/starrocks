@@ -34,6 +34,7 @@
 
 #include "storage/rowset/segment_writer.h"
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 
@@ -47,16 +48,20 @@
 #include "common/config_json_flat_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "common/logging.h" // LOG
-#include "fs/fs.h"          // FileSystem
+#include "common/logging.h"            // LOG
+#include "common/system/master_info.h" // get_master_run_mode
+#include "fs/fs.h"                     // FileSystem
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/segment.pb.h"
+#include "runtime/current_thread.h"
 #include "storage/base/short_key_index.h"
 #include "storage/chunk_variant_helper.h"
 #include "storage/index/index_descriptor.h"
+#include "storage/index/inverted/inverted_index_option.h"
 #include "storage/row_store_encoder.h"
 #include "storage/rowset/column_writer.h" // ColumnWriter
 #include "storage/rowset/json_column_writer.h"
+#include "storage/rowset/ordinal_page_index.h" // OrdinalIndexWriter::finish
 #include "storage/rowset/page_io.h"
 #include "storage/rowset/segment_file_info.h"
 #include "storage/seek_tuple.h"
@@ -64,6 +69,25 @@
 #include "types/logical_type.h"
 
 namespace starrocks {
+
+namespace {
+// The cluster's run mode, as the FE reports it over the heartbeat.
+//
+// Neither `#ifdef USE_STAROS` nor the presence of a lake TabletManager will do here, and both are
+// tempting: the official artifact is built with `--enable-shared-data`
+// (docker/dockerfiles/artifacts/artifact.Dockerfile), and startup then selects the starlet lake
+// provider whenever USE_STAROS is defined, regardless of run mode
+// (service_be/starrocks_be.cpp). Either check is therefore true on a shared-nothing deployment
+// too, which would hand it the tail layout that the config and the documentation promise it will
+// not get.
+//
+// Unknown -- no heartbeat yet -- is treated as shared-nothing, so an early write keeps the
+// original layout rather than guessing.
+bool is_shared_data_mode() {
+    auto run_mode = get_master_run_mode();
+    return run_mode.has_value() && run_mode.value() == TRunMode::SHARED_DATA;
+}
+} // namespace
 
 const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
@@ -73,7 +97,12 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
         : _segment_id(segment_id),
           _tablet_schema(std::move(tablet_schema)),
           _opts(std::move(opts)),
-          _wfile(std::move(wfile)) {
+          _wfile(std::move(wfile)),
+          // _tail_index_layout_usable is seeded FROM _tail_index_layout, so it has to be
+          // initialized after it -- which the declaration order guarantees. Keep the list in
+          // declaration order or -Wreorder fires.
+          _tail_index_layout(config::lake_enable_segment_tail_index_region && is_shared_data_mode()),
+          _tail_index_layout_usable(_tail_index_layout) {
     CHECK_NOTNULL(_wfile.get());
 }
 
@@ -95,6 +124,15 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
     meta->set_compression(_tablet_schema->compression_type());
     meta->set_compression_level(_tablet_schema->compression_level());
+    // A column listed in zstd_compression_columns carries its own ZSTD codec,
+    // overriding the table-level compression. This is the user's request and does
+    // NOT depend on enable_zstd_compression_dict: that switch only governs whether
+    // the internal shared dictionary is built, never whether the column is ZSTD.
+    // The per-column flag lives only on the top-level column, so the subcolumn
+    // recursion below never re-triggers this.
+    if (column.use_zstd_compression()) {
+        meta->set_compression(CompressionTypePB::ZSTD);
+    }
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
@@ -132,6 +170,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
     // rewrite partial segment into full segment only need to write other value columns into full segment
     // merge partial segment footer to avoid loss of metadata
     if (footer != nullptr) {
+        // Continuing a segment someone else started: SegmentRewriter copies the partial segment's
+        // prefix byte for byte and this writer only appends the remaining value columns. The
+        // copied columns keep the ordinal index pages they were written with, so a tail region
+        // gathered from the appended columns would advertise a range covering only some of the
+        // segment's indexes. Keep the original layout for the whole rewrite instead.
+        _tail_index_layout_usable = false;
         for (uint32_t ordinal = 0; ordinal < footer->columns().size(); ++ordinal) {
             *_footer.add_columns() = footer->columns(ordinal);
         }
@@ -167,6 +211,28 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             _init_column_meta(opts.meta, column_index, column);
         }
 
+        // turn on the compression-dictionary write path for this column. The
+        // ScalarColumnWriter samples/builds the dict; for JSON columns the flag
+        // is further propagated to the flat-json sub-columns by
+        // FlatJsonColumnWriter. Gated on the master switch so it can be disabled
+        // at runtime.
+        // The dictionary itself IS gated on the switch: with it off the column is
+        // still ZSTD, just without a shared dictionary.
+        if (config::enable_zstd_compression_dict && column.use_zstd_compression()) {
+            opts.use_zstd_compression = true;
+        }
+
+        // Per-column data page size. Unset (0) keeps config::data_page_size, so a
+        // table that does not ask for one is written exactly as before. The bound
+        // mirrors the one the FE validates against; it is repeated here because the
+        // value arrives over the wire and the page size decides how much a single
+        // point lookup has to decompress.
+        if (column.zstd_compression_page_size() > 0) {
+            constexpr uint32_t kMinDataPageSize = 4 * 1024;
+            constexpr uint32_t kMaxDataPageSize = 1024 * 1024;
+            opts.data_page_size = std::clamp(column.zstd_compression_page_size(), kMinDataPageSize, kMaxDataPageSize);
+        }
+
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
@@ -200,6 +266,18 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         }
 
         RETURN_IF_ERROR(_tablet_schema->get_indexes_for_column(column.unique_id(), &opts.tablet_index));
+        if (opts.need_inverted_index && _opts.segment_file_mark.rowset_path_prefix.empty()) {
+            // Writers that produce auxiliary segments without a segment file mark (e.g. the
+            // column-mode partial update .cols writer) cannot derive a valid standalone index
+            // path: the path built below would be malformed and readers never look it up.
+            // Skip standalone (CLucene) index generation there instead of writing it to a
+            // bogus location; readers fall back to evaluating predicates on the data.
+            // Footer-inlined implementations (builtin) need no path and are kept.
+            ASSIGN_OR_RETURN(auto imp_type, get_inverted_imp_type(opts.tablet_index.at(GIN)));
+            if (imp_type != InvertedImplementType::BUILTIN) {
+                opts.need_inverted_index = false;
+            }
+        }
         if (opts.need_inverted_index) {
             opts.standalone_index_file_paths.emplace(
                     GIN, IndexDescriptor::inverted_index_file_path(_opts.segment_file_mark.rowset_path_prefix,
@@ -267,7 +345,13 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             sort_column_idx_by_column_index[column_index] = i;
         }
     }
-    if (!sort_column_idx_by_column_index.empty()) {
+    // Only a key-columns pass builds the short key index out of these positions (see the
+    // `if (_has_key)` branch of append_chunk), so only it needs the whole sort key present. A
+    // value-only pass -- a partial-update segment rewrite, or a vertical writer's value column group
+    // -- never touches _sort_column_indexes, and demanding the full sort key there is a false alarm:
+    // fatal once ORDER BY puts value columns into a primary key table's sort key, since the pass then
+    // holds SOME sort key columns (map non-empty) but not the key ones.
+    if (has_key && !sort_column_idx_by_column_index.empty()) {
         for (auto& column_idx : _tablet_schema->sort_key_idxes()) {
             auto iter = sort_column_idx_by_column_index.find(column_idx);
             if (iter != sort_column_idx_by_column_index.end()) {
@@ -290,26 +374,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         _index_builder = std::make_unique<ShortKeyIndexBuilder>(_segment_id, _opts.num_rows_per_block);
     }
 
-    // Sort-key sampler one-shot init: arm only on the first key-columns pass.
-    // The vertical writer (general_tablet_writer.cpp) re-enters this init() for
-    // each non-key column group on the same SegmentWriter; we must preserve the
-    // previously armed state and the already-collected samples. Use the
-    // `has_key` parameter rather than the `_has_key` member so the check is
-    // independent of assignment ordering above.
-    //
-    // The vertical writer's invariant (general_tablet_writer.cpp:247) requires
-    // the first write_columns() call to have is_key=true, so _num_rows_written
-    // must be 0 here when has_key first becomes true. The DCHECK makes this
-    // contract crash-loud in debug/test builds; in release we fall back to
-    // leaving the sampler disabled instead of sampling mid-stream.
-    if (has_key && !_sort_column_indexes.empty() && _sort_key_sample_row_interval == 0) {
-        DCHECK_EQ(_num_rows_written, 0) << "sampler arm requires fresh writer";
-        const int64_t row_interval = config::segment_sort_key_sample_row_interval;
-        if (_num_rows_written == 0 && row_interval > 0) {
-            _sort_key_sample_row_interval = row_interval;
-            _next_sort_key_sample_row_index = row_interval;
-        }
-    }
     const auto& column = _tablet_schema->columns().back();
     if (column.name() == Schema::FULL_ROW_COLUMN) {
         std::vector<ColumnId> cids(_tablet_schema->num_columns() - 1);
@@ -327,8 +391,6 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 void SegmentWriter::write_sort_key_fields_to(SegmentFileInfo& file_info) {
     file_info.sort_key_min = _sort_key_min;
     file_info.sort_key_max = _sort_key_max;
-    file_info.sort_key_samples = std::move(_sort_key_samples);
-    file_info.sort_key_sample_row_interval = file_info.sort_key_samples.empty() ? 0 : _sort_key_sample_row_interval;
 }
 
 // TODO(lingbin): Currently this function does not include the size of various indexes,
@@ -351,6 +413,13 @@ uint64_t SegmentWriter::current_filesz() const {
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
     RETURN_IF_ERROR(finalize_columns(index_size));
+    // The deferred region is written by finalize_footer(), so its bytes are added here rather
+    // than inside finalize_columns(). (The vertical path discards its per-group index_size
+    // already, so nothing is lost there.)
+    if (_small_index_region_deferred) {
+        RETURN_IF_ERROR(_write_small_index_region(index_size));
+        _small_index_region_deferred = false;
+    }
     *footer_position = _wfile->size();
     return finalize_footer(segment_file_size);
 }
@@ -366,6 +435,33 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
     _num_rows_written = 0;
 
     size_t num_columns = _tablet_schema->num_columns();
+
+    // Gather the one index a cold scan cannot avoid and cannot get for free -- the ordinal index
+    // of every accessed column -- into one contiguous run at the tail, immediately before the
+    // footer (see config::lake_enable_segment_tail_index_region).
+    //
+    // The page zone map deliberately stays inline, right after its own column's data pages. In
+    // the legacy layout an index sitting next to its column's data rides in the same cache block
+    // as data the query is already reading, so it costs nothing; a zone map is only consulted for
+    // a predicate column, whose data the scan is about to read anyway, so it keeps that free ride.
+    // The ordinal index does not: it is loaded for every projected column before any data page is
+    // touched. Measured over five interleaved cold rounds on two shared-data clusters, counting
+    // remote 1 MiB blocks against the legacy layout: -121 on ClickBench (105 columns) and -146 on
+    // SSB SF100 with the zone maps left inline, against -72 and -63 with them hoisted too.
+    //
+    // This works for a vertical writer too, which calls finalize_columns() once per column
+    // group: the deferred writers accumulate across groups and finalize_footer() flushes them
+    // all at the end, so an early group's indexes still land at the tail rather than under a
+    // later group's data pages. That matters far more than it first appears -- compaction picks
+    // VERTICAL for any table wider than vertical_compaction_max_columns_per_group (5) with more
+    // than one source rowset, so leaving it on the legacy layout would mean the region vanished
+    // from essentially every wide table at its first real compaction.
+    //
+    // The larger optional indexes (bloom filter, bitmap, inverted, vector) stay inline for the
+    // same reason as the zone maps, plus their own: they are read only when a predicate needs
+    // them, and they are big enough that hoisting them would inflate the region.
+    const bool defer_small_index = _tail_index_layout_usable;
+
     for (size_t i = 0; i < _column_indexes.size(); ++i) {
         uint32_t column_index = _column_indexes[i];
         if (column_index >= num_columns) {
@@ -379,7 +475,9 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         RETURN_IF_ERROR(column_writer->write_data());
         // write index
         uint64_t index_offset = _wfile->size();
-        RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        if (!defer_small_index) {
+            RETURN_IF_ERROR(column_writer->write_ordinal_index());
+        }
         RETURN_IF_ERROR(column_writer->write_zone_map());
         RETURN_IF_ERROR(column_writer->write_bitmap_index());
         RETURN_IF_ERROR(column_writer->write_bloom_filter_index());
@@ -388,6 +486,7 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         uint64_t standalone_index_size = 0;
         RETURN_IF_ERROR(column_writer->write_vector_index(&standalone_index_size));
         *index_size += _wfile->size() - index_offset + standalone_index_size;
+        _standalone_index_size += standalone_index_size;
 
         // The footer's vector_index_storage_type is a segment-level flag: any column that
         // produced a standalone .vi file makes the whole segment STANDALONE. Only upgrade
@@ -397,13 +496,12 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
             _has_vector_index_written = true;
         } else if (!_has_vector_index_written &&
                    _tablet_schema->has_index(_tablet_schema->column(column_index).unique_id(), IndexType::VECTOR)) {
-            // No .vi was produced inline. In async mode, the deferred build task will
-            // produce one later iff this segment has enough rows and isn't a bundle
-            // (bundle segments don't carry .vi). Mark STANDALONE in that case so the
-            // read path looks for the .vi when it lands; otherwise mark NONE so
-            // readers fall back to brute-force scan instead of waiting forever.
-            const bool will_build_async = _opts.defer_vector_index_build && !_opts.skip_vector_index &&
-                                          _num_rows >= _opts.vector_index_build_threshold;
+            // No .vi was produced inline. In async/deferred mode the build task will produce one
+            // later iff this segment has enough rows (bundle segments included now -- their .vi is
+            // named per-tablet). Mark STANDALONE so the read path looks for the .vi when it lands;
+            // otherwise mark NONE so readers fall back to brute-force instead of waiting forever.
+            const bool will_build_async =
+                    _opts.defer_vector_index_build && _num_rows >= _opts.vector_index_build_threshold;
             _footer.set_vector_index_storage_type(will_build_async ? VECTOR_INDEX_STORAGE_STANDALONE
                                                                    : VECTOR_INDEX_STORAGE_NONE);
         }
@@ -411,22 +509,76 @@ Status SegmentWriter::finalize_columns(uint64_t* index_size) {
         // check global dict valid
         _check_column_global_dict_valid(column_writer.get(), column_index);
 
+        if (defer_small_index) {
+            // Take just the ordinal-index builder; everything else this writer holds has been
+            // flushed above and is released with it, exactly as before.
+            column_writer->take_ordinal_index_builders(&_deferred_ordinal_indexes);
+        }
         // reset to release memory
         column_writer.reset();
     }
+
     _column_writers.clear();
     _column_indexes.clear();
 
+    // The short key index keeps the position it has always had, right here at the end of the
+    // column group that carried the keys. Only the ordinal indexes move.
     if (_has_key) {
         uint64_t index_offset = _wfile->size();
         RETURN_IF_ERROR(_write_short_key_index());
         *index_size += _wfile->size() - index_offset;
         _index_builder.reset();
     }
+
+    if (defer_small_index) {
+        _small_index_region_deferred = true;
+    }
+    return Status::OK();
+}
+
+// Every column's ordinal index, written back to back immediately before the footer. Called from
+// finalize_footer() so that it runs after the LAST column group's data, which is what lets a
+// vertical writer produce the layout at all.
+//
+// Sitting immediately before the footer is the whole point: parsing the footer already fetches the
+// file's final cache block, so an ordinal index that lands in it arrives at no extra cost. That is
+// worth doing for these and not for the other indexes, because _init_column_iterators() loads one
+// for every projected column before any other index and before any data page.
+//
+// Nothing else moves. The short key index keeps its old position, and every index is still located
+// through its own absolute PagePointer, so no reader may assume anything about the layout.
+Status SegmentWriter::_write_small_index_region(uint64_t* index_size) {
+    const uint64_t region_offset = _wfile->size();
+
+    for (auto& deferred : _deferred_ordinal_indexes) {
+        RETURN_IF_ERROR(deferred.builder->finish(_wfile.get(), deferred.meta->add_indexes()));
+        // reset to release memory
+        deferred.builder.reset();
+    }
+    _deferred_ordinal_indexes.clear();
+
+    const uint64_t region_size = _wfile->size() - region_offset;
+    if (index_size != nullptr) {
+        *index_size += region_size;
+    } else {
+        // finalize_footer() has no index_size out-param, and the vertical rowset writer has
+        // already finished accumulating from finalize_columns() by the time it calls us. Without
+        // this the region's bytes are counted as data rather than index, understating
+        // index_disk_size and inflating data_disk_size, which feeds compaction sizing.
+        _unreported_small_index_region_size += region_size;
+    }
+    _footer.set_small_index_region_offset(region_offset);
+    _footer.set_small_index_region_size(region_size);
     return Status::OK();
 }
 
 Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* footer_position) {
+    if (_small_index_region_deferred) {
+        // Before footer_position is taken: the region has to sit between the last data page and
+        // the footer, and the caller's footer_position must point at the footer itself.
+        RETURN_IF_ERROR(_write_small_index_region(nullptr));
+        _small_index_region_deferred = false;
+    }
     if (footer_position != nullptr) {
         *footer_position = _wfile->size();
     }
@@ -477,6 +629,23 @@ Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
     return Status::OK();
 }
 
+// Sort-key positions only: materializing the whole row allocates tens of GB when a value column holds a huge ARRAY.
+Status SegmentWriter::_append_sort_key_index_entry(const Chunk& chunk, size_t row) {
+    TRY_CATCH_BAD_ALLOC({
+        std::vector<Datum> values(chunk.num_columns());
+        for (uint32_t idx : _sort_column_indexes) {
+            // SeekTuple encodes an out-of-range sort column as NULL; leave the slot unset rather than indexing OOB.
+            if (idx < values.size()) {
+                values[idx] = chunk.get_column_by_index(idx)->get(row);
+            }
+        }
+        SeekTuple tuple(*chunk.schema(), std::move(values));
+        size_t keys = _tablet_schema->num_short_key_columns();
+        RETURN_IF_ERROR(_index_builder->add_item(tuple.short_key_encode(keys, _sort_column_indexes, 0)));
+    });
+    return Status::OK();
+}
+
 Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
@@ -514,20 +683,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
         for (size_t i = 0; i < chunk_num_rows; i++) {
             // At the begin of one block, so add a short key index entry
             if ((_num_rows_written % _opts.num_rows_per_block) == 0) {
-                size_t keys = _tablet_schema->num_short_key_columns();
-                SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
-                std::string encoded_key;
-                encoded_key = tuple.short_key_encode(keys, _sort_column_indexes, 0);
-                RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
-            }
-            // Sort-key sample: take one tuple every _sort_key_sample_row_interval
-            // rows. Samples are at 0-indexed rows interval, 2*interval, 3*interval,
-            // ... so samples[k] is the key at row (k+1) * interval. The producer
-            // invariant samples.size() * interval < num_rows holds strictly
-            // because the last sample lands at row N*interval (< num_rows).
-            if (_sort_key_sample_row_interval > 0 && _num_rows_written == _next_sort_key_sample_row_index) {
-                _sort_key_samples.emplace_back(build_variant_tuple_from_chunk_row(chunk, i, _sort_column_indexes));
-                _next_sort_key_sample_row_index += _sort_key_sample_row_interval;
+                RETURN_IF_ERROR(_append_sort_key_index_entry(chunk, i));
             }
             ++_num_rows_written;
         }

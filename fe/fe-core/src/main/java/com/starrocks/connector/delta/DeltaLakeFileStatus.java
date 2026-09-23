@@ -33,6 +33,14 @@ public class DeltaLakeFileStatus {
         return path;
     }
 
+    public long getSize() {
+        return size;
+    }
+
+    public long getModificationTime() {
+        return modificationTime;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

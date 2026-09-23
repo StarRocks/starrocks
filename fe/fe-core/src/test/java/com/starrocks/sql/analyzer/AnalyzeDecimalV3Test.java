@@ -443,7 +443,7 @@ public class AnalyzeDecimalV3Test {
 
     public void testDecimalTypedInPredicatePushDownHelper(
             String predicate, int n, Type targetType) throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql1 = "" +
                 "select\n" +
@@ -457,7 +457,6 @@ public class AnalyzeDecimalV3Test {
         Assertions.assertTrue(expr0 instanceof SlotRef);
         Assertions.assertEquals(expr0.getType(), targetType);
         for (int i = 1; i <= n; ++i) {
-            Expr expr = queryRelation.getPredicate().getChild(i);
             Assertions.assertEquals(expr0.getType(), targetType);
         }
     }
@@ -484,7 +483,7 @@ public class AnalyzeDecimalV3Test {
     }
 
     public void testDecimalArithmeticHelper(String snippet, Type targetType) throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -717,7 +716,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testAvgDecimal32() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -736,7 +735,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testAvgDecimal64() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -755,7 +754,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testAvgDecimal128() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -774,7 +773,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testStddevAndVarianceOnDecimal() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -831,7 +830,7 @@ public class AnalyzeDecimalV3Test {
 
         {
             SelectRelation queryRelation = (SelectRelation) analyzeSuccess(sql);
-            List<Expr> items = ((SelectRelation) queryRelation).getOutputExpression();
+            ((SelectRelation) queryRelation).getOutputExpression();
 
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
             LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
@@ -848,7 +847,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testIntDiv() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -864,7 +863,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testIfnullGreatestLeastCoalesce() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +
@@ -888,7 +887,7 @@ public class AnalyzeDecimalV3Test {
 
     @Test
     public void testSelectDecimalLiteral() throws Exception {
-        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         String sql = "" +
                 "select\n" +

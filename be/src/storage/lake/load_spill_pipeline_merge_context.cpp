@@ -1,0 +1,102 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/load_spill_pipeline_merge_context.h"
+
+#include <algorithm>
+
+#include "common/thread/threadpool.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
+#include "storage/lake/tablet_internal_parallel_merge_task.h"
+#include "storage/lake/tablet_writer.h"
+#include "storage/storage_env.h"
+
+namespace starrocks {
+
+LoadSpillPipelineMergeContext::LoadSpillPipelineMergeContext(lake::TabletWriter* writer) : _writer(writer) {}
+
+LoadSpillPipelineMergeContext::~LoadSpillPipelineMergeContext() {
+    _quit_flag.store(true);
+    if (_token != nullptr) {
+        _token->shutdown();
+    }
+}
+
+void LoadSpillPipelineMergeContext::create_thread_pool_token() {
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token == nullptr) {
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        DCHECK(executor != nullptr);
+        _token = executor->create_tablet_internal_parallel_merge_token();
+    }
+}
+
+void LoadSpillPipelineMergeContext::init_parallel_merge() {
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token == nullptr) {
+        _writer->set_auto_flush(false);
+        _writer->try_enable_pk_index_eager_build();
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        DCHECK(executor != nullptr);
+        _token = executor->create_tablet_internal_parallel_merge_token();
+    }
+}
+
+void LoadSpillPipelineMergeContext::add_merge_task(const std::shared_ptr<lake::TabletInternalParallelMergeTask>& task) {
+    // THREAD SAFETY: Lock required because multiple pipeline operators may concurrently
+    // register tasks. std::vector is not thread-safe for concurrent push_back operations.
+    // Lock scope is minimal (only protects vector modification, not task creation/execution)
+    // to avoid serialization bottleneck during parallel task generation.
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    _merge_tasks.push_back(task);
+}
+
+Status LoadSpillPipelineMergeContext::merge_task_results() {
+    // Hold lock during entire merge operation to prevent concurrent add_merge_task() calls
+    // while iterating. This is safe because merge_task_results() is only called after
+    // all tasks complete, so no new tasks should be added anyway.
+    std::lock_guard<std::mutex> lg(_merge_tasks_mutex);
+    if (_token != nullptr) {
+        _token->wait();
+    }
+
+    // Consolidate in flush (slot) order. Tasks are registered via add_merge_task() from concurrent eager
+    // merges (parallel flush) where generating a batch and registering its task are not atomic, so the
+    // registration order does NOT necessarily match the batch slot order. merge_other_writer() appends
+    // each task's segments/del files in the order iterated here and (for PK tables) derives del rssid /
+    // op_offset from the running segment count, so consolidating out of slot order would let an
+    // earlier-flush row/delete win over a later one. Sort by the batch's smallest slot_idx first.
+    std::stable_sort(_merge_tasks.begin(), _merge_tasks.end(),
+                     [](const std::shared_ptr<lake::TabletInternalParallelMergeTask>& a,
+                        const std::shared_ptr<lake::TabletInternalParallelMergeTask>& b) {
+                         return a->slot_idx() < b->slot_idx();
+                     });
+
+    for (const auto& task : _merge_tasks) {
+        // IMPORTANT: Check task status first to fail fast if any parallel merge task failed.
+        // This prevents wasting time merging partial results from failed operations.
+        // Task failures could include: OOM during merge, disk I/O errors, user cancellation.
+        RETURN_IF_ERROR(task->status());
+
+        // Merge task's writer results into parent writer. Each task wrote to a cloned
+        // writer instance during parallel execution. Now we consolidate all results.
+        // NOTE: This merge is sequential (not parallel) to maintain data ordering and
+        // consistency. The performance impact is acceptable because the heavy lifting
+        // (sorting, aggregation, I/O) already happened in parallel during task execution.
+        RETURN_IF_ERROR(_writer->merge_other_writer(task->writer().get()));
+    }
+    return Status::OK();
+}
+
+} // namespace starrocks

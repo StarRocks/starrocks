@@ -14,6 +14,7 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -38,21 +39,49 @@ import java.util.Objects;
  * <p>The {@code brokerDesc} may be {@code null} for HDFS-style direct loads
  * that don't go through a broker — matching the same nullability rule the
  * load planner already follows.
+ *
+ * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
+ * query globals use). The meta-tier readers use it to reproduce the BE's
+ * offset for a UTC-adjusted / TIMESTAMP_INSTANT value; a non-fixed / null
+ * zone -> data tier.
+ *
+ * <p>{@code targetBaseSchema} is the target table's base schema as the hook
+ * snapshotted it. Only the CSV data tier reads it: a file group that declares
+ * no {@code COLUMNS} list takes its positional field layout from that schema
+ * ({@link com.starrocks.load.Load#initColumns}), and the sampler has to declare
+ * the same layout to FILES. Parquet/ORC resolve by name and never consult it.
  */
 public record BrokerLoadScanContext(
         BrokerDesc brokerDesc,
         List<BrokerFileGroup> fileGroups,
         List<List<TBrokerFileStatus>> fileStatusesPerGroup,
-        ComputeResource computeResource) implements ScanContext {
+        ComputeResource computeResource,
+        String loadTimeZone,
+        List<Column> targetBaseSchema) implements ScanContext {
 
     public BrokerLoadScanContext {
         Objects.requireNonNull(fileGroups, "fileGroups");
         Objects.requireNonNull(fileStatusesPerGroup, "fileStatusesPerGroup");
         Objects.requireNonNull(computeResource, "computeResource");
+        Objects.requireNonNull(targetBaseSchema, "targetBaseSchema");
         if (fileGroups.size() != fileStatusesPerGroup.size()) {
             throw new IllegalArgumentException(String.format(
                     "fileGroups size %d != fileStatusesPerGroup size %d",
                     fileGroups.size(), fileStatusesPerGroup.size()));
         }
+    }
+
+    /**
+     * Constructor for the paths that never need the target schema: every format but CSV, and
+     * every CSV file group that declares its own {@code COLUMNS} list. A CSV file group without
+     * one is rejected rather than sampled against an empty schema.
+     */
+    public BrokerLoadScanContext(
+            BrokerDesc brokerDesc,
+            List<BrokerFileGroup> fileGroups,
+            List<List<TBrokerFileStatus>> fileStatusesPerGroup,
+            ComputeResource computeResource,
+            String loadTimeZone) {
+        this(brokerDesc, fileGroups, fileStatusesPerGroup, computeResource, loadTimeZone, List.of());
     }
 }

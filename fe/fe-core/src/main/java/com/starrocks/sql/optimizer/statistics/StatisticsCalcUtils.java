@@ -62,8 +62,8 @@ public class StatisticsCalcUtils {
     }
 
     public static Statistics.Builder estimateScanColumns(Table table,
-                                                         Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                                         OptimizerContext optimizerContext) {
+                                                          Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                          OptimizerContext optimizerContext) {
         Statistics.Builder builder = Statistics.builder();
         List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
@@ -84,8 +84,10 @@ public class StatisticsCalcUtils {
             }
             builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
             if (optimizerContext != null && optimizerContext.getDumpInfo() != null) {
+                // Dump the histogram-merged statistic (not the base columnStatisticList entry), so the
+                // histogram is captured in the query dump and can be replayed. See QueryDumpSerializer.
                 optimizerContext.getDumpInfo()
-                        .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
+                        .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatistic);
             }
         }
         return builder;

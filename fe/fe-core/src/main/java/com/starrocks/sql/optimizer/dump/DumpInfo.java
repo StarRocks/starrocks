@@ -19,8 +19,11 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.IMinMaxStatsMgr;
 
+import java.util.List;
 import java.util.Map;
 
 
@@ -41,6 +44,19 @@ public interface DumpInfo {
     }
 
     default void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
+    }
+
+    default void addExternalTableRowCount(Table table, long rowCount) {
+    }
+
+    default void addExternalTablePartitions(Table table, List<String> partitionSpec,
+                                            List<String> partitionNames) {
+    }
+
+    default void addTableGlobalDict(Table table, String column, ColumnDict columnDict) {
+    }
+
+    default void addColumnMinMax(Table table, String column, IMinMaxStatsMgr.ColumnMinMax minMax) {
     }
 
     default void addPartitionRowCount(Table table, String partition, long rowCount) {

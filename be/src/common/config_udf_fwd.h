@@ -34,4 +34,10 @@ CONF_Bool(python_worker_reuse, "true");
 
 CONF_Int32(python_worker_expire_time_sec, "300");
 
+// Timeout (ms) for the Arrow Flight call to a Python UDF worker (local or external service_url).
+// Applied as the gRPC deadline on the DoExchange stream, so a dead/unreachable/hung worker fails
+// the query instead of hanging forever. Note it bounds the whole stream's lifetime, so set it above
+// the longest expected UDF query. 0 (default) disables the timeout (wait indefinitely).
+CONF_mInt32(python_udf_rpc_timeout_ms, "0");
+
 } // namespace starrocks::config

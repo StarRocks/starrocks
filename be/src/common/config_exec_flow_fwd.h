@@ -113,6 +113,11 @@ CONF_Bool(pipeline_analytic_enable_streaming_process, "true");
 
 CONF_mBool(pipeline_analytic_enable_removable_cumulative_process, "true");
 
+// `window_fun(... ) IGNORE NULLS` can be evaluated in streaming mode with
+// watermark-based eviction of the input buffer instead of materializing the whole partition.
+// Set to false to fall back to the legacy whole-partition materializing behavior.
+CONF_mBool(pipeline_analytic_enable_ignore_nulls_streaming, "true");
+
 CONF_Int32(pipline_limit_max_delivery, "4096");
 
 // the maximum number of connections in the connection pool for a single jdbc url
@@ -163,6 +168,9 @@ CONF_mDouble(spill_max_dir_bytes_ratio, "0.8"); // 80%
 CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
+
+// Route the spillable sort (ORDER BY / TOP-N) operator onto the pipeline event scheduler instead of the busy-poller.
+CONF_mBool(enable_spill_sort_events, "false");
 
 // The max number of threads for exec_state_report thread pool.
 CONF_mInt32(exec_state_report_max_threads, "2");

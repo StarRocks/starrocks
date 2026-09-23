@@ -266,6 +266,44 @@ public:
         return nullptr;
     }
 
+    /// Reclassifies already allocated process memory to this tracker and its non-root ancestors. The root tracker is
+    /// not incremented because allocator hooks have already charged the physical allocation there. An already
+    /// exceeded root still rejects new ownership.
+    WARN_UNUSED_RESULT
+    MemTracker* try_consume_without_root(int64_t bytes) {
+        if (UNLIKELY(bytes <= 0)) return nullptr;
+        if (UNLIKELY(_all_trackers.empty())) {
+            return this;
+        }
+
+        MemTracker* root = _all_trackers.back();
+        if (UNLIKELY(root->type() != MemTrackerType::PROCESS)) {
+            return root;
+        }
+        if (UNLIKELY(root->limit_exceeded())) {
+            return root;
+        }
+
+        int64_t i;
+        // Walk the non-root tracker chain top-down.
+        for (i = static_cast<int64_t>(_all_trackers.size()) - 2; i >= 0; --i) {
+            MemTracker* tracker = _all_trackers[i];
+            const int64_t limit = tracker->limit();
+            const int64_t effective_limit = limit < 0 ? std::numeric_limits<int64_t>::max() : limit;
+            if (LIKELY(tracker->_consumption->try_add(bytes, effective_limit))) {
+                continue;
+            } else {
+                // Roll back only the non-root ancestors updated by this call.
+                for (int64_t j = static_cast<int64_t>(_all_trackers.size()) - 2; j > i; --j) {
+                    _all_trackers[j]->_consumption->add(-bytes);
+                }
+                return tracker;
+            }
+        }
+        DCHECK_EQ(i, -1);
+        return nullptr;
+    }
+
     // Attempts to consume `bytes` memory from all trackers in the hierarchy.
     WARN_UNUSED_RESULT
     MemTracker* try_consume_with_limited(int64_t bytes, size_t shared_reserve_bytes) {

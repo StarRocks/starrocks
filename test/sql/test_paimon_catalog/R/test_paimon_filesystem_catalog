@@ -1,0 +1,140 @@
+-- name: test_paimon_filesystem_catalog
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/scalar_types/ >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/variant_basic oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/variant_basic/ >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob/ >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_desc oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_desc/ >/dev/null
+-- result:
+0
+
+-- !result
+shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_view oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_view/ >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `paimon_filesystem_catalog_${uuid0}`
+properties (
+"type"  =  "paimon",
+"paimon.catalog.type"  =  "filesystem",
+"paimon.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/",
+"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+use paimon_filesystem_catalog_${uuid0}.paimon_test;
+-- result:
+-- !result
+set binary_encoding_level = 'all';
+-- result:
+-- !result
+[ORDER]select * from scalar_types order by 1;
+-- result:
+1	1	127	32767	2147483647	9223372036854775807	3.5	2.718281828	1234567.89	1234567890123456.7890	1234567890123456789012345678.0123456789	ab   	varchar_val	string 值 🚀	0102ff	2024-01-15	2024-01-15 10:30:45.123456	2024-01-15 10:30:45.123456
+2	0	-128	-32768	-2147483648	-9223372036854775808	-0.5	-1.25	-9999999.99	-9999999999999999.9999	-1E-10	     			00	1970-01-01	1970-01-01 00:00:00	1970-01-01 08:00:00.000001
+3	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+4	1	1	2	3	4	1.5	2.5	0.10	10.0000	42.0000000001	hello	world	StarRocks	deadbeef	9999-12-31	2038-01-19 03:14:07	2038-01-19 03:14:07
+-- !result
+[ORDER]select id, variant_typeof(v) from variant_basic order by 1;
+-- result:
+1	Object
+2	Object
+3	Array
+4	String
+5	Int16
+6	Decimal4
+7	Boolean(true)
+8	Null
+9	None
+-- !result
+[ORDER]select id from scalar_types where c_int > c_smallint order by 1;
+-- result:
+1
+4
+-- !result
+[ORDER]select id from scalar_types where c_bigint > c_int and c_int > 0 order by 1;
+-- result:
+1
+4
+-- !result
+select count(*) from scalar_types where c_dec_20_4 > c_dec_9_2;
+-- result:
+2
+-- !result
+desc image_blob;
+-- result:
+id	INT	Yes	false	None		None
+name	VARCHAR(2147483647)	Yes	false	None		None
+image	FILE	Yes	false	None		raw image bytes
+-- !result
+select * from image_blob order by id;
+-- result:
+1	png_header	{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"89504e470d0a1a0a"}
+2	hello	{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"68656c6c6f"}
+3	null_blob	None
+-- !result
+select id, name from image_blob where id = 2;
+-- result:
+2	hello
+-- !result
+select image from image_blob where id = 1;
+-- result:
+{"uri":null,"offset":null,"size":null,"content_type":null,"checksum":null,"inline":"89504e470d0a1a0a"}
+-- !result
+select count(*) from image_blob;
+-- result:
+3
+-- !result
+select * from image_blob_desc order by id;
+-- result:
+1	{"uri":"file:///tmp/images/a.png","offset":0,"size":-1,"content_type":null,"checksum":null,"inline":null}
+2	{"uri":"file:///tmp/images/b.png","offset":0,"size":-1,"content_type":null,"checksum":null,"inline":null}
+3	None
+-- !result
+select * from image_blob_view order by id;
+-- result:
+[REGEX]1\tpng_header\t\{.*\}\n2\thello\t\{.*\}\n3\tnull_blob\tNone
+-- !result
+set paimon_reader_mode = jni;
+-- result:
+-- !result
+[ORDER]select * from scalar_types order by 1;
+-- result:
+1	1	127	32767	2147483647	9223372036854775807	3.5	2.718281828	1234567.89	1234567890123456.7890	1234567890123456789012345678.0123456789	ab   	varchar_val	string 值 🚀	0102ff	2024-01-15	2024-01-15 10:30:45.123456	2024-01-15 10:30:45.123456
+2	0	-128	-32768	-2147483648	-9223372036854775808	-0.5	-1.25	-9999999.99	-9999999999999999.9999	-1E-10	     			00	1970-01-01	1970-01-01 00:00:00	1970-01-01 08:00:00.000001
+3	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None	None
+4	1	1	2	3	4	1.5	2.5	0.10	10.0000	42.0000000001	hello	world	StarRocks	deadbeef	9999-12-31	2038-01-19 03:14:07	2038-01-19 03:14:07
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog paimon_filesystem_catalog_${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

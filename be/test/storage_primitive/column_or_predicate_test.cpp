@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/column_or_predicate.h"
+#include "storage_primitive/column_or_predicate.h"
 
 #include <gtest/gtest.h>
 
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {

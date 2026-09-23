@@ -15,6 +15,10 @@
 package com.starrocks.leader;
 
 import com.starrocks.leader.TabletCollector.CollectStat;
+import com.starrocks.system.Backend;
+import com.starrocks.thrift.TGetTabletsInfoResult;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;
 import org.junit.jupiter.api.Assertions;
@@ -61,5 +65,20 @@ public class TabletCollectorTest {
 
         Assertions.assertTrue(queue.isEmpty(), "collectQueue should be cleared on demotion");
         Assertions.assertTrue(queuedBeIds.isEmpty(), "queuedBeIds should be cleared on demotion");
+    }
+
+    @Test
+    public void testUpdateTabletMaxCompactionScore() {
+        Backend backend = new Backend(1L, "127.0.0.1", 9050);
+        backend.setTabletMaxCompactionScore(10L);
+
+        TGetTabletsInfoResult oldBeResult = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        TabletCollector.updateTabletMaxCompactionScore(backend, oldBeResult);
+        Assertions.assertEquals(10L, backend.getTabletMaxCompactionScore());
+
+        TGetTabletsInfoResult newBeResult = new TGetTabletsInfoResult(new TStatus(TStatusCode.OK));
+        newBeResult.setTablet_max_compaction_score(42L);
+        TabletCollector.updateTabletMaxCompactionScore(backend, newBeResult);
+        Assertions.assertEquals(42L, backend.getTabletMaxCompactionScore());
     }
 }

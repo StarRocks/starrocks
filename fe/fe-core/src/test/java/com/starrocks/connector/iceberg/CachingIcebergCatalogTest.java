@@ -20,6 +20,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
@@ -218,6 +219,38 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testPartitionCacheCountedInEstimateSize(@Mocked IcebergCatalog icebergCatalog) {
+        PartitionSpec spec = Mockito.mock(PartitionSpec.class);
+        Mockito.when(spec.isUnpartitioned()).thenReturn(false);
+        Table nativeTable = createBaseTableWithManifests(1, 0, spec);
+        Map<String, Partition> partitionMap = new HashMap<>();
+        for (int i = 0; i < 1000; i++) {
+            partitionMap.put("dt=part-" + i, new Partition(1234L, 1L));
+        }
+        new Expectations() {
+            {
+                icebergCatalog.getTable((ConnectContext) any, "db", "test");
+                result = nativeTable;
+                minTimes = 0;
+                icebergCatalog.getPartitions((IcebergTable) any, anyLong, null);
+                result = partitionMap;
+                minTimes = 0;
+            }
+        };
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergTable table = IcebergTable.builder().setSrTableName("test")
+                .setCatalogDBName("db").setCatalogTableName("test").setNativeTable(nativeTable).build();
+
+        long before = cachingIcebergCatalog.estimateSize();
+        cachingIcebergCatalog.getPartitions(table, 1L, null);
+        long after = cachingIcebergCatalog.estimateSize();
+        // partitionCache used to be excluded from estimateSize, so a full partition map was invisible.
+        Assertions.assertTrue(after > before,
+                "partitionCache must be counted in estimateSize; before=" + before + " after=" + after);
+    }
+
+    @Test
     public void testGetDB(@Mocked IcebergCatalog icebergCatalog, @Mocked Database db) {
         new Expectations() {
             {
@@ -266,7 +299,7 @@ public class CachingIcebergCatalogTest {
                 () -> cachingIcebergCatalog.getTable(connectContext, "test", "table"));
         String expectedPrefix = "Failed to get iceberg table iceberg_catalog.test.table";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
     }
 
     private int getStaticIntField(String fieldName) {
@@ -388,7 +421,7 @@ public class CachingIcebergCatalogTest {
                                                          @Mocked IcebergCatalogProperties props,
                                                          @Mocked ConnectContext ctx) throws Exception {
         Table nativeTable1 = createBaseTableWithManifests(1, 1);
-        Table nativeTable2 = createBaseTableWithManifests(1, 1);
+        createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
                 props.isEnableIcebergMetadataCache(); 
@@ -410,11 +443,9 @@ public class CachingIcebergCatalogTest {
 
         ExecutorService es = Executors.newFixedThreadPool(5);
         try {
-            CachingIcebergCatalog catalog =
-                    new CachingIcebergCatalog("iceberg0", delegate, props, es);
-
-            org.apache.iceberg.Table r1 = catalog.getTable(ctx, "db1", "t1");
-            org.apache.iceberg.Table r2 = catalog.getTable(ctx, "db1", "t1");
+            CachingIcebergCatalog catalog = new CachingIcebergCatalog("iceberg0", delegate, props, es);
+            catalog.getTable(ctx, "db1", "t1");
+            catalog.getTable(ctx, "db1", "t1");
 
             new Verifications() {
                 {
@@ -464,63 +495,114 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
-    public void testGetTableBypassCacheWhenVendedCredentialsEnabled(@Mocked IcebergRESTCatalog restCatalog) {
-        // When vended credentials is enabled, caching should be bypassed to avoid
-        // using expired credentials.
+    public void testRestCatalogWithoutAuthTokenUsesCache(@Mocked IcebergRESTCatalog restCatalog) {
+        // A REST catalog (including one with vended credentials) is served from the cache: the delegate
+        // is hit once and the second getTable() is a cache hit. Guards the revert of the #69434 bypass.
         ConnectContext ctx = new ConnectContext();
-        Table nativeTable1 = createBaseTableWithManifests(1, 1);
-        Table nativeTable2 = createBaseTableWithManifests(1, 1);
-
+        Table nativeTable = createBaseTableWithManifests(1, 1);
         new Expectations() {
             {
-                restCatalog.isVendedCredentialsEnabled();
-                result = true;
-                minTimes = 0;
-
                 restCatalog.getTable(ctx, "db4", "tbl4");
-                result = nativeTable1;
-                result = nativeTable2;
+                result = nativeTable;
+                times = 1;
             }
         };
 
         CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
 
-        Table result1 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
-        Table result2 = cachingIcebergCatalog.getTable(ctx, "db4", "tbl4");
-
-        // Should return different instances (no caching)
-        Assertions.assertSame(nativeTable1, result1);
-        Assertions.assertSame(nativeTable2, result2);
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db4", "tbl4"));
+        Assertions.assertSame(nativeTable, cachingIcebergCatalog.getTable(ctx, "db4", "tbl4"));
     }
 
     @Test
-    public void testGetTableWithCacheWhenVendedCredentialsDisabled(@Mocked IcebergRESTCatalog restCatalog) {
-        // When vended credentials is disabled, normal caching should work.
+    public void testReloadReturnsFreshTableWhenMetadataUnchanged(@Mocked IcebergCatalog delegate) throws Exception {
         ConnectContext ctx = new ConnectContext();
-        Table nativeTable = createBaseTableWithManifests(1, 1);
+        Table oldTable = createBaseTableWithManifests(1, 1);
+        Table freshTable = createBaseTableWithManifests(1, 1);
+        // Identical metadata location on both: the removed short-circuit would have returned oldValue here,
+        // so this asserts the fresh (renewed-credential) table is installed regardless of metadata equality.
+        String sharedLocation = "s3://bucket/metadata/v1.metadata.json";
+        Mockito.when(((BaseTable) oldTable).operations().current().metadataFileLocation()).thenReturn(sharedLocation);
+        Mockito.when(((BaseTable) freshTable).operations().current().metadataFileLocation()).thenReturn(sharedLocation);
 
+        AtomicInteger calls = new AtomicInteger();
         new Expectations() {
             {
-                restCatalog.isVendedCredentialsEnabled();
-                result = false;
-                minTimes = 0;
-
-                restCatalog.getTable(ctx, "db5", "tbl5");
-                result = nativeTable;
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table get(ConnectContext c, String db, String tbl) {
+                        return calls.getAndIncrement() == 0 ? oldTable : freshTable;
+                    }
+                };
             }
         };
 
-        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
+        ExecutorService refreshExecutor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, refreshExecutor);
+        LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+        IcebergTableName key = new IcebergTableName("db1", "t1");
+
+        Assertions.assertSame(oldTable, catalog.getTable(ctx, "db1", "t1"));
+        tableCache.refresh(key);
+        // refresh dispatches reload() onto refreshExecutor; this FIFO barrier returns once it has run.
+        refreshExecutor.submit(() -> { }).get();
+        Assertions.assertSame(freshTable, tableCache.getIfPresent(key));
+    }
+
+    @Test
+    public void testRefreshTableRenewsCredentialsWhenMetadataUnchanged(@Mocked IcebergCatalog delegate) {
+        ConnectContext ctx = new ConnectContext();
+        Table cachedTable = createBaseTableWithManifests(1, 1);
+        Table reloadedTable = createBaseTableWithManifests(1, 1);
+        // Identical metadata location: no snapshot change, so the background refresh keeps the
+        // partition/file caches but must still swap in the reloaded table to pick up renewed credentials.
+        String sharedLocation = "s3://bucket/metadata/v1.metadata.json";
+        Mockito.when(((BaseTable) cachedTable).operations().current().metadataFileLocation()).thenReturn(sharedLocation);
+        Mockito.when(((BaseTable) reloadedTable).operations().current().metadataFileLocation()).thenReturn(sharedLocation);
+
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table get(ConnectContext c, String db, String tbl) {
+                        return calls.getAndIncrement() == 0 ? cachedTable : reloadedTable;
+                    }
+                };
+            }
+        };
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+        IcebergTableName key = new IcebergTableName("db1", "t1");
+
+        Assertions.assertSame(cachedTable, catalog.getTable(ctx, "db1", "t1"));
+        catalog.refreshTable("db1", "t1", ctx, executor);
+        Assertions.assertSame(reloadedTable, tableCache.getIfPresent(key));
+    }
+
+    @Test
+    public void testRestTableCacheTtlIsCapped(@Mocked IcebergRESTCatalog restCatalog,
+                                              @Mocked IcebergCatalog hiveCatalog) {
+        // REST catalog: the table cache hard-expiry is capped regardless of the (default 24h) meta cache
+        // TTL, so an idle vended-credential entry cannot outlive its token.
+        CachingIcebergCatalog restCaching = new CachingIcebergCatalog(CATALOG_NAME, restCatalog,
                 DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        LoadingCache<IcebergTableName, Table> restCache = Deencapsulation.getField(restCaching, "tables");
+        long restTtl = restCache.policy().expireAfterWrite().get().getExpiresAfter(TimeUnit.SECONDS);
+        Assertions.assertTrue(restTtl <= 3000, "REST table cache TTL must be capped, was " + restTtl);
 
-        Table result1 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
-        Table result2 = cachingIcebergCatalog.getTable(ctx, "db5", "tbl5");
-
-        // Should return the same instance (cached)
-        Assertions.assertSame(nativeTable, result1);
-        Assertions.assertSame(nativeTable, result2);
-        Assertions.assertSame(result1, result2);
+        // Non-REST catalog: TTL stays at the configured meta cache TTL (no credential to protect).
+        CachingIcebergCatalog hiveCaching = new CachingIcebergCatalog(CATALOG_NAME, hiveCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        LoadingCache<IcebergTableName, Table> hiveCache = Deencapsulation.getField(hiveCaching, "tables");
+        long hiveTtl = hiveCache.policy().expireAfterWrite().get().getExpiresAfter(TimeUnit.SECONDS);
+        Assertions.assertEquals(DEFAULT_CATALOG_PROPERTIES.getIcebergMetaCacheTtlSec(), hiveTtl,
+                "non-REST table cache TTL must equal the configured meta cache TTL");
     }
 
     @Test
@@ -610,7 +692,7 @@ public class CachingIcebergCatalogTest {
         config.put(IcebergCatalogProperties.ICEBERG_TABLE_CACHE_MEMORY_SIZE_RATIO, "1");
         IcebergCatalogProperties icebergProperties = new IcebergCatalogProperties(config);
         ExecutorService exectorCatalog = Executors.newSingleThreadExecutor();
-        ExecutorService exector = Executors.newSingleThreadExecutor();
+        Executors.newSingleThreadExecutor();
         
 
         CachingIcebergCatalog catalog = new CachingIcebergCatalog("test_catalog", delegate, icebergProperties, exectorCatalog);
@@ -746,8 +828,8 @@ public class CachingIcebergCatalogTest {
         LoadingCache<IcebergTableName, Table> tables = Deencapsulation.getField(catalog, "tables");
         Table tmp1 = delegate.getTable(ctx, dbName, tblName);
         Table tmp2 = delegate.getTable(ctx, dbName, tblName);
-        Table tmp3 = delegate.getTable(ctx, dbName, tblName);
-        
+        delegate.getTable(ctx, dbName, tblName);
+
         System.out.println("===== cache test =====");
         catalog.getTable(ctx, dbName, tblName);
         catalog.refreshTable(dbName, tblName, ctx, null);

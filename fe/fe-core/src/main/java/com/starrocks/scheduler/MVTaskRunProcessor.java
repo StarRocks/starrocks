@@ -129,6 +129,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                     mv.getName(), mvId, mv.getInactiveReason());
             logger.warn(errorMsg);
             mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
+            MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
+                    Constants.TaskRunState.FAILED, runWarehouse(context));
             throw new DmlException(errorMsg);
         }
 
@@ -158,11 +160,12 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
     }
 
     /**
-     * Get the execution plan for refreshing the materialized view.
-     * @return the execution plan for refreshing the materialized view, or null if no refresh is needed.
+     * Build the refresh plan for the materialized view, keeping the skip reason so the caller can tell why
+     * there is no plan.
+     * @return the would-be task run result; its execPlan is null when nothing was planned
      * @throws Exception if an error occurs while getting the execution plan.
      */
-    public ExecPlan getMVRefreshExecPlan() throws Exception {
+    public MVRefreshProcessor.ProcessExecPlan getMVRefreshProcessExecPlan() throws Exception {
         Preconditions.checkNotNull(mvTaskRunContext);
         Preconditions.checkNotNull(mvRefreshProcessor);
 
@@ -172,10 +175,11 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         MVRefreshProcessor.ProcessExecPlan processExecPlan =
                 mvRefreshProcessor.getProcessExecPlan(mvTaskRunContext);
         if (processExecPlan == null || processExecPlan.state() != Constants.TaskRunState.SUCCESS) {
-            logger.info("No need to refresh mv: {}, because the materialized view is up to date.", mv.getName());
-            return null;
+            logger.info("No refresh plan for mv: {}, state: {}, skip reason: {}", mv.getName(),
+                    processExecPlan == null ? null : processExecPlan.state(),
+                    processExecPlan == null ? null : processExecPlan.skipReason());
         }
-        return processExecPlan.execPlan();
+        return processExecPlan;
     }
 
     @Override
@@ -219,6 +223,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
                 // Count the job once on its terminal run; intermediate successful batches are not counted.
                 if (!spawnedNext) {
                     mvMetricsEntity.increaseRefreshJobStatus(this.taskRunState);
+                    MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
+                            this.taskRunState, runWarehouse(mvTaskRunContext));
                     recordRefreshJobDuration(mvMetricsEntity);
                 }
                 connectContext.getState().setOk();
@@ -226,6 +232,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         } catch (Exception e) {
             if (mvMetricsEntity != null) {
                 mvMetricsEntity.increaseRefreshJobStatus(Constants.TaskRunState.FAILED);
+                MaterializedViewMetricsRegistry.increaseGlobalRefreshJobStatus(
+                        Constants.TaskRunState.FAILED, runWarehouse(mvTaskRunContext));
                 recordRefreshJobDuration(mvMetricsEntity);
             }
             connectContext.getState().setError(e.getMessage());
@@ -385,6 +393,8 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             throw e;
         } finally {
             logger.info("[QueryId:{}] finished to refresh mv in DML", ctx.getQueryId());
+            // the MV refresh uses its own fresh ConnectContext whose audit builder starts at the default value.
+            executor.recordExecStatsIntoContext();
             auditAfterExec(mvTaskRunContext, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
             executor.addFinishedQueryDetail();
         }
@@ -466,6 +476,13 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
         return runtimeProfile;
     }
 
+    // The warehouse a refresh ran under is snapshotted into the task run at submit time; reading the live MV
+    // property instead would misattribute a job when ALTER ... SET ('warehouse') runs mid-refresh.
+    private static String runWarehouse(TaskRunContext context) {
+        TaskRunStatus status = context == null ? null : context.getStatus();
+        return status == null ? "" : status.getWarehouseName();
+    }
+
     // Records the job's wall-clock duration once, on the terminal run, reusing the exact roll-up the
     // materialized_view_refresh_jobs system table uses so the metric and the table never diverge.
     private void recordRefreshJobDuration(IMaterializedViewMetricsEntity metricsEntity) {
@@ -500,6 +517,7 @@ public class MVTaskRunProcessor extends BaseTaskRunProcessor implements MVRefres
             long endMs = rjs.getMvRefreshEndTime() > 0 ? rjs.getMvRefreshEndTime() : System.currentTimeMillis();
             long wallMs = Math.max(0L, endMs - startBasis);
             metricsEntity.updateRefreshDuration(wallMs);
+            MaterializedViewMetricsRegistry.updateGlobalRefreshDuration(wallMs, runWarehouse(mvTaskRunContext));
         } catch (Exception e) {
             logger.warn("skip refresh job duration metric for mv {}", mv.getName(), e);
         }

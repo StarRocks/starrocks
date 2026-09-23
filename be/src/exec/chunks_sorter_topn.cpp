@@ -20,11 +20,11 @@
 #include "base/utility/defer_op.h"
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sort_permute.h"
-#include "compute_env/sorting/sorting.h"
 #include "exprs/expr.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
@@ -750,7 +750,7 @@ void ChunksSorterTopn::_rank_pruning() {
 
     const auto& merged_runs = _merged_runs;
     for (int i = 0; i < merged_runs.num_chunks(); ++i) {
-        if (target_index > merged_runs.at(i).num_rows()) {
+        if (target_index >= merged_runs.at(i).num_rows()) {
             target_index -= merged_runs.at(i).num_rows();
         } else {
             index_in_runs = i;

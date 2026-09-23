@@ -1,4 +1,5 @@
 ---
+sidebar_position: 160
 displayed_sidebar: docs
 description: "External Catalog 方便访问并查询存储在各类外部数据源的数据，无需创建外部表。"
 ---
@@ -9,7 +10,7 @@ description: "External Catalog 方便访问并查询存储在各类外部数据�
 
 ## 前提条件
 
-根据数据源已创建不同类型的 External Catalog。关于当前支持的 External Catalog 类型，请参见 [Catalog](../catalog/catalog_overview.md#catalog)。
+根据数据源已创建不同类型的 External Catalog。关于当前支持的 External Catalog 类型，请参见 [Catalog](./catalog_overview.md#catalog)。
 
 ## 操作步骤
 
@@ -64,4 +65,4 @@ SELECT * FROM hive1.hive_db.hive_table limit 1;
 
 ## 更多操作
 
-如要查询 StarRocks 的内部数据，请参见[查询内部数据](../catalog/default_catalog.md#查询内部数据)。
+如要查询 StarRocks 的内部数据，请参见[查询内部数据](./default_catalog.md#查询内部数据)。

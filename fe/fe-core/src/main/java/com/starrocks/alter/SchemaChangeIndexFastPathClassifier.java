@@ -14,14 +14,17 @@
 
 package com.starrocks.alter;
 
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.IndexDef;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,10 +47,12 @@ import java.util.Set;
  * {@code LakeTableAddIndexJob} / {@code LakeTableDropIndexJob} to keep the
  * responsibility split clean and avoid duplicating table-internals lookups here.
  *
- * <p>Supported index types for the fast path: BITMAP, NGRAMBF, GIN. VECTOR is
- * intentionally excluded (separate lifecycle / parameter surface). Bloom filter
- * is a table-level property rather than a {@link CreateIndexClause}, so it is
- * not routed through this path.
+ * <p>Supported index types for the fast path: BITMAP only. NGRAMBF is excluded
+ * because the fast-path .idx ngram bloom is not consulted at query time (see
+ * isSupportedIndexType); GIN / VECTOR are excluded for separate lifecycle /
+ * parameter surface reasons — all stay on the legacy schema-change path. Plain
+ * bloom filter is a table-level property rather than a {@link CreateIndexClause}
+ * (it takes the fast path via the bloom_filter_columns handler, not this one).
  */
 public final class SchemaChangeIndexFastPathClassifier {
 
@@ -249,6 +254,43 @@ public final class SchemaChangeIndexFastPathClassifier {
             LOG.debug("BF fast-path rejected: mixed add+drop");
             return null;
         }
+        // Validate column-type / key-column eligibility for every newly added
+        // bloom-filter column. The legacy createJob path
+        // (PropertyAnalyzer.analyzeBloomFilterColumns -> Type.supportBloomFilter
+        // plus the key/agg rule) is bypassed once the fast path is taken, so
+        // without this guard unsupported types (JSON, ARRAY and other
+        // complex/float types) on the bloom_filter_columns property would
+        // silently succeed instead of erroring. On any ineligible column, fall
+        // back to the legacy path, which raises the canonical error message.
+        if (!added.isEmpty()) {
+            List<Column> baseSchema = table.getBaseSchema();
+            if (baseSchema == null) {
+                // Defensive: without a base schema we cannot validate column
+                // types, so fall back to the legacy path rather than risk an NPE.
+                return null;
+            }
+            boolean isPrimaryKey = table.getKeysType() == KeysType.PRIMARY_KEYS;
+            for (String addedCol : added) {
+                Column column = null;
+                for (Column c : baseSchema) {
+                    if (c.getName().equalsIgnoreCase(addedCol)) {
+                        column = c;
+                        break;
+                    }
+                }
+                if (column == null || !column.getType().supportBloomFilter()) {
+                    LOG.debug("BF fast-path rejected: column {} missing or unsupported type", addedCol);
+                    return null;
+                }
+                // Bloom filter is only allowed on DUP/PRIMARY columns or the key
+                // columns of UNIQUE/AGG tables, mirroring the legacy validation.
+                if (!(column.isKey() || isPrimaryKey || column.getAggregationType() == AggregateType.NONE)) {
+                    LOG.debug("BF fast-path rejected: column {} is a non-key value column of a UNIQUE/AGG table",
+                            addedCol);
+                    return null;
+                }
+            }
+        }
         return new BloomFilterDelta(
                 Collections.unmodifiableSet(added), Collections.unmodifiableSet(dropped));
     }
@@ -257,16 +299,22 @@ public final class SchemaChangeIndexFastPathClassifier {
         if (type == null) {
             return false;
         }
-        // Only BITMAP and NGRAMBF take the lake IDG fast path. The BE
-        // builder (AddIndexSchemaChange::run) returns Status::NotSupported
-        // for GIN / VECTOR, and the fast-path job does not auto-fall-back
-        // to the legacy schema-change job on a BE rejection — routing
-        // these types here would simply fail the alter. Keep them on the
-        // legacy path until BE adds a fast-path builder for them.
+        // Only BITMAP takes the lake IDG fast path. The BE builder
+        // (AddIndexSchemaChange::run) returns Status::NotSupported for
+        // GIN / VECTOR, and the fast-path job does not auto-fall-back to the
+        // legacy schema-change job on a BE rejection — routing those types
+        // here would simply fail the alter.
+        //
+        // NGRAMBF is intentionally excluded: the fast-path .idx ngram bloom is
+        // not consulted at query time (the read path never surfaces the IDG
+        // ngram entry, so LIKE queries never prune — verified on-cluster:
+        // footer ngram filters, fast-path ngram does a full scan), so it must
+        // stay on the legacy path (which rewrites segments with a correct
+        // footer ngram) until the BE fast-path ngram read is implemented.
         switch (type) {
             case BITMAP:
-            case NGRAMBF:
                 return true;
+            case NGRAMBF:
             case GIN:
             case VECTOR:
             default:

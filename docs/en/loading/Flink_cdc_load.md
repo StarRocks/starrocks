@@ -1,4 +1,5 @@
 ---
+sidebar_position: 100
 displayed_sidebar: docs
 keywords:
   - MySql
@@ -11,6 +12,7 @@ description: "How to use Flink CDC to capture MySQL change data in real time and
 # Realtime synchronization from MySQL
 
 import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.mdx'
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks supports multiple methods to synchronize data from MySQL to StarRocks in real time, delivering low latency real-time analytics of massive data.
 
@@ -190,6 +192,12 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     1 row in set (0.00 sec)
     ```
 
+### Connect to StarRocks
+
+The SMT configuration file sets these addresses in `flink.starrocks.jdbc-url` and `flink.starrocks.load-url`.
+
+<FlinkStarRocksConnection />
+
 ## Synchronize database & table schema
 
 1. Edit the SMT configuration file.
@@ -241,7 +249,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     - `[table-rule]`: database & table matching rules and the corresponding flink-connector-starrocks configuration.
 
        - `Database`, `table`: the names of the database & table in MySQL. Regular expressions are supported.
-       - `flink.starrocks.*`: configuration information of flink-connector-starrocks. For more configurations and information, see [flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+       - `flink.starrocks.*`: configuration information of flink-connector-starrocks. For more configurations and information, see [flink-connector-starrocks](./Flink-connector-starrocks.md).
 
        > If you need to use different flink-connector-starrocks configurations for different tables. For example, if some tables are frequently updated and you need to accelerate data loading, see [Use different flink-connector-starrocks configurations for different tables](#use-different-flink-connector-starrocks-configurations-for-different-tables). If you need to load multiple tables obtained from MySQL sharding into the same StarRocks table, see [Synchronize multiple tables after MySQL sharding to one table in StarRocks](#synchronize-multiple-tables-after-mysql-sharding-to-one-table-in-starrocks).
 

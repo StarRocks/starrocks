@@ -15,8 +15,8 @@
 #pragma once
 
 #include "base/concurrency/race_detect.h"
-#include "exec/pipeline/operator_factory.h"
 #include "exec/pipeline/set/intersect_context.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 

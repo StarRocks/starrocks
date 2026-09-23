@@ -17,13 +17,93 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <initializer_list>
+#include <limits>
+#include <optional>
 #include <unordered_set>
+#include <vector>
 
+#include "column/array_column.h"
 #include "column/const_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/variant_column.h"
+#include "column/variant_encoder.h"
+#include "exprs/array_size_limit.h"
+#include "exprs/builtin_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 
 namespace starrocks {
+
+static ColumnPtr make_nullable_variant_values(const std::vector<std::optional<std::string>>& json_values) {
+    auto data = VariantColumn::create();
+    auto nulls = NullColumn::create();
+    for (const auto& json : json_values) {
+        if (!json.has_value()) {
+            data->append_default();
+            nulls->append(DATUM_NULL);
+            continue;
+        }
+        auto encoded = VariantEncoder::encode_json_text_to_variant(*json);
+        CHECK(encoded.ok()) << encoded.status().to_string();
+        data->append(encoded.value());
+        nulls->append(DATUM_NOT_NULL);
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+static UInt32Column::Ptr make_array_offsets(std::initializer_list<uint32_t> offsets) {
+    auto column = UInt32Column::create();
+    for (uint32_t offset : offsets) {
+        column->append(offset);
+    }
+    return column;
+}
+
+static void expect_variant_array_row(const ColumnPtr& result, size_t row,
+                                     const std::vector<std::optional<std::string>>& expected_json) {
+    const Column* outer = result.get();
+    size_t physical_row = row;
+    if (outer->is_constant()) {
+        outer = down_cast<const ConstColumn*>(outer)->data_column().get();
+        physical_row = 0;
+    }
+    ASSERT_FALSE(outer->is_null(physical_row));
+    if (outer->is_nullable()) {
+        outer = down_cast<const NullableColumn*>(outer)->data_column().get();
+    }
+
+    const auto* array = down_cast<const ArrayColumn*>(outer);
+    const auto [element_offset, element_size] = array->get_element_offset_size(physical_row);
+    ASSERT_EQ(expected_json.size(), element_size);
+
+    const Column* elements = array->elements_column().get();
+    for (size_t i = 0; i < expected_json.size(); ++i) {
+        const size_t element_row = element_offset + i;
+        if (!expected_json[i].has_value()) {
+            ASSERT_TRUE(elements->is_null(element_row));
+            continue;
+        }
+
+        ASSERT_FALSE(elements->is_null(element_row));
+        const Column* element_data = elements;
+        size_t physical_element_row = element_row;
+        if (element_data->is_constant()) {
+            element_data = down_cast<const ConstColumn*>(element_data)->data_column().get();
+            physical_element_row = 0;
+        }
+        if (element_data->is_nullable()) {
+            element_data = down_cast<const NullableColumn*>(element_data)->data_column().get();
+        }
+        const auto* variants = down_cast<const VariantColumn*>(element_data);
+        VariantRowValue row_buffer;
+        const VariantRowValue* value = variants->get_row_value(physical_element_row, &row_buffer);
+        ASSERT_NE(nullptr, value);
+        auto json = value->to_json();
+        ASSERT_TRUE(json.ok()) << json.status().to_string();
+        EXPECT_EQ(*expected_json[i], json.value());
+    }
+}
 
 class ArrayFunctionsTest : public ::testing::Test {
 protected:
@@ -3168,14 +3248,47 @@ TEST_F(ArrayFunctionsTest, array_reverse_only_null) {
     ASSERT_TRUE(dest_column->get(2).is_null());
 }
 
+// array_difference is a header-only function template; in production it is reached only
+// through the builtin-function registry. Invoke it the same way here so incremental
+// coverage attributes the exercised lines to the product translation unit (array_functions.cpp
+// via ArrayFunctions.inc) instead of only this test object.
+static ColumnPtr call_array_difference(LogicalType input_type, const ColumnPtr& arg) {
+    uint64_t fid = 0;
+    LogicalType result_element = TYPE_BIGINT;
+    switch (input_type) {
+    case TYPE_BOOLEAN:
+        fid = 150160;
+        break;
+    case TYPE_INT:
+        fid = 150163;
+        break;
+    case TYPE_BIGINT:
+        fid = 150164;
+        break;
+    case TYPE_DOUBLE:
+        fid = 150167;
+        result_element = TYPE_DOUBLE;
+        break;
+    default:
+        CHECK(false) << "unsupported array_difference input type " << input_type;
+    }
+    const auto* desc = BuiltinFunctions::find_builtin_function(fid);
+    CHECK(desc != nullptr);
+    // Invoke with a real FunctionContext (as production does) rather than nullptr, so the call
+    // matches the production convention and stays robust if array_difference starts using it.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+            {TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(input_type))},
+            TypeDescriptor::create_array_type(TypeDescriptor::from_logical_type(result_element))));
+    return desc->scalar_function(ctx.get(), Columns{arg}).value();
+}
+
 TEST_F(ArrayFunctionsTest, array_difference_boolean) {
     auto src_column = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
     src_column->append_datum(DatumArray{(uint8_t)5, (uint8_t)3, (uint8_t)6});
     src_column->append_datum(DatumArray{(uint8_t)2, (uint8_t)3, (uint8_t)7, (uint8_t)8});
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, (uint8_t)1});
 
-    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
@@ -3190,8 +3303,7 @@ TEST_F(ArrayFunctionsTest, array_difference_boolean_with_entry_null) {
     src_column->append_datum(DatumArray{(uint8_t)4, (uint8_t)3, (uint8_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_BOOLEAN> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BOOLEAN, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3217,13 +3329,26 @@ TEST_F(ArrayFunctionsTest, array_difference_int) {
     src_column->append_datum(DatumArray{2, 3, 7, 8});
     src_column->append_datum(DatumArray{4, 3, 2, 1});
 
-    ArrayDifference<LogicalType::TYPE_INT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({0, -2, 3}, dest_column->get(0).get_array());
     _check_array<int64_t>({0, 1, 4, 1}, dest_column->get(1).get_array());
     _check_array<int64_t>({0, -1, -1, -1}, dest_column->get(2).get_array());
+}
+
+TEST_F(ArrayFunctionsTest, array_difference_int_overflow) {
+    auto src_column = ColumnHelper::create_column(TYPE_ARRAY_INT, true);
+    constexpr int32_t kIntMax = std::numeric_limits<int32_t>::max();
+    constexpr int32_t kIntMin = std::numeric_limits<int32_t>::min();
+    src_column->append_datum(DatumArray{kIntMax, kIntMin});
+    src_column->append_datum(DatumArray{kIntMin, kIntMax});
+
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
+
+    ASSERT_EQ(dest_column->size(), 2);
+    _check_array<int64_t>({0, -4294967295}, dest_column->get(0).get_array());
+    _check_array<int64_t>({0, 4294967295}, dest_column->get(1).get_array());
 }
 
 TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
@@ -3233,8 +3358,7 @@ TEST_F(ArrayFunctionsTest, array_difference_int_with_entry_null) {
     src_column->append_datum(DatumArray{4, 3, 2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_INT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_INT, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3260,8 +3384,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint) {
     src_column->append_datum(DatumArray{(int64_t)2, (int64_t)3, (int64_t)7, (int64_t)8});
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, (int64_t)1});
 
-    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<int64_t>({(int64_t)0, (int64_t)-2, (int64_t)3}, dest_column->get(0).get_array());
@@ -3276,8 +3399,7 @@ TEST_F(ArrayFunctionsTest, array_difference_bigint_with_entry_null) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)3, (int64_t)2, Datum()});
     src_column->append_datum(Datum());
 
-    ArrayDifference<LogicalType::TYPE_BIGINT> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_BIGINT, src_column);
 
     ASSERT_EQ(dest_column->size(), 4);
 
@@ -3303,8 +3425,7 @@ TEST_F(ArrayFunctionsTest, array_difference_double) {
     src_column->append_datum(DatumArray{(double)2, (double)3, (double)7, (double)8});
     src_column->append_datum(DatumArray{(double)4, (double)3, (double)2, (double)1});
 
-    ArrayDifference<LogicalType::TYPE_DOUBLE> difference;
-    auto dest_column = difference.process(nullptr, {src_column});
+    auto dest_column = call_array_difference(TYPE_DOUBLE, src_column);
 
     ASSERT_EQ(dest_column->size(), 3);
     _check_array<double>({(double)0, (double)-2, (double)3}, dest_column->get(0).get_array());
@@ -5977,6 +6098,110 @@ TEST_F(ArrayFunctionsTest, array_flatten_int) {
     }
 }
 
+TEST_F(ArrayFunctionsTest, array_repeat_variant_uses_column_copy) {
+    auto source = make_nullable_variant_values({std::string("1"), std::string(R"({"a":2})"), std::nullopt});
+    auto repeat_data = Int32Column::create();
+    repeat_data->append(2);
+    repeat_data->append(1);
+    repeat_data->append(3);
+
+    auto result = ArrayFunctions::repeat(nullptr, {source, repeat_data}).value();
+    expect_variant_array_row(result, 0, {std::string("1"), std::string("1")});
+    expect_variant_array_row(result, 1, {std::string(R"({"a":2})")});
+    expect_variant_array_row(result, 2, {std::nullopt, std::nullopt, std::nullopt});
+
+    auto nullable_repeat_data = Int32Column::create();
+    nullable_repeat_data->append(2);
+    nullable_repeat_data->append(0);
+    nullable_repeat_data->append(1);
+    auto repeat_nulls = NullColumn::create();
+    repeat_nulls->append(DATUM_NOT_NULL);
+    repeat_nulls->append(DATUM_NULL);
+    repeat_nulls->append(DATUM_NOT_NULL);
+    auto nullable_repeat = NullableColumn::create(std::move(nullable_repeat_data), std::move(repeat_nulls));
+
+    result = ArrayFunctions::repeat(nullptr, {source, nullable_repeat}).value();
+    expect_variant_array_row(result, 0, {std::string("1"), std::string("1")});
+    ASSERT_TRUE(result->is_null(1));
+    expect_variant_array_row(result, 2, {std::nullopt});
+
+    auto const_value = VariantEncoder::encode_json_text_to_variant(R"({"const":7})");
+    ASSERT_TRUE(const_value.ok());
+    auto const_data = VariantColumn::create();
+    const_data->append(const_value.value());
+    auto const_source = ConstColumn::create(std::move(const_data), 3);
+    auto const_repeat = Int32Column::create();
+    const_repeat->append(1);
+    const_repeat->append(2);
+    const_repeat->append(0);
+
+    result = ArrayFunctions::repeat(nullptr, {const_source, const_repeat}).value();
+    expect_variant_array_row(result, 0, {std::string(R"({"const":7})")});
+    expect_variant_array_row(result, 1, {std::string(R"({"const":7})"), std::string(R"({"const":7})")});
+    expect_variant_array_row(result, 2, {});
+}
+
+TEST_F(ArrayFunctionsTest, array_slice_variant_uses_element_ranges) {
+    auto elements = make_nullable_variant_values(
+            {std::string("1"), std::string(R"({"a":2})"), std::nullopt, std::string("4"), std::string(R"({"x":1})"),
+             std::string(R"({"y":2})"), std::string("3"), std::string("5"), std::string("6")});
+    auto source = ArrayColumn::create(elements, make_array_offsets({0, 4, 7, 9}));
+    auto offsets = Int64Column::create();
+    offsets->append(2);
+    offsets->append(-2);
+    offsets->append(1);
+    auto lengths = Int64Column::create();
+    lengths->append(2);
+    lengths->append(1);
+    lengths->append(-1);
+
+    auto result = ArrayFunctions::array_slice(nullptr, {source, offsets, lengths}).value();
+    expect_variant_array_row(result, 0, {std::string(R"({"a":2})"), std::nullopt});
+    expect_variant_array_row(result, 1, {std::string(R"({"y":2})")});
+    expect_variant_array_row(result, 2, {});
+}
+
+TEST_F(ArrayFunctionsTest, array_flatten_variant_preserves_nullable_inner_rows_and_leaves) {
+    auto leaves = make_nullable_variant_values(
+            {std::string("1"), std::nullopt, std::string(R"({"a":2})"), std::string(R"({"b":3})"), std::string("4")});
+    auto inner_arrays = ArrayColumn::create(leaves, make_array_offsets({0, 2, 2, 3, 5}));
+    auto inner_nulls = NullColumn::create();
+    inner_nulls->append(DATUM_NOT_NULL);
+    inner_nulls->append(DATUM_NULL);
+    inner_nulls->append(DATUM_NOT_NULL);
+    inner_nulls->append(DATUM_NOT_NULL);
+    auto nullable_inner_arrays = NullableColumn::create(std::move(inner_arrays), std::move(inner_nulls));
+
+    auto outer_arrays = ArrayColumn::create(nullable_inner_arrays, make_array_offsets({0, 3, 4, 4}));
+    auto outer_nulls = NullColumn::create();
+    outer_nulls->append(DATUM_NOT_NULL);
+    outer_nulls->append(DATUM_NOT_NULL);
+    outer_nulls->append(DATUM_NULL);
+    auto source = NullableColumn::create(std::move(outer_arrays), std::move(outer_nulls));
+
+    auto result = ArrayFunctions::array_flatten(nullptr, {source}).value();
+    expect_variant_array_row(result, 0, {std::string("1"), std::nullopt, std::string(R"({"a":2})")});
+    expect_variant_array_row(result, 1, {std::string(R"({"b":3})"), std::string("4")});
+    ASSERT_TRUE(result->is_null(2));
+}
+
+TEST_F(ArrayFunctionsTest, array_flatten_variant_unwraps_const_null_inner_array) {
+    auto leaves = make_nullable_variant_values({});
+    auto inner_array = ArrayColumn::create(leaves, make_array_offsets({0, 0}));
+    auto inner_nulls = NullColumn::create(1, DATUM_NULL);
+    auto nullable_inner_array = NullableColumn::create(std::move(inner_array), std::move(inner_nulls));
+    auto const_inner_arrays = ConstColumn::create(std::move(nullable_inner_array), 2);
+
+    auto outer_array = ArrayColumn::create(std::move(const_inner_arrays), make_array_offsets({0, 2}));
+    ColumnPtr source = ConstColumn::create(std::move(outer_array), 2);
+
+    auto result = ArrayFunctions::array_flatten(nullptr, {source}).value();
+    ASSERT_TRUE(result->is_constant());
+    ASSERT_EQ(2, result->size());
+    expect_variant_array_row(result, 0, {});
+    expect_variant_array_row(result, 1, {});
+}
+
 TEST_F(ArrayFunctionsTest, null_or_empty) {
     // null_or_empty(NULL): 1
     // null_or_empty([1,2]): 0
@@ -6636,6 +6861,32 @@ TEST_F(ArrayFunctionsTest, array_generate_datetime_with_microsecond_unit) {
 
     ASSERT_TRUE(ArrayGenerate<TYPE_DATETIME>::close(ctx, FunctionContext::FRAGMENT_LOCAL).ok());
     delete ctx;
+}
+
+TEST_F(ArrayFunctionsTest, max_array_length_unlimited_by_default) {
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 1000000));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_length_negative_limit_means_unlimited) {
+    _ctx.set_max_array_length(-1);
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 1000000));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_length_accepts_an_array_of_exactly_the_limit) {
+    _ctx.set_max_array_length(4);
+    ASSERT_FALSE(reject_if_array_too_large(&_ctx, "array_concat", 4));
+    ASSERT_FALSE(_ctx.has_error());
+}
+
+TEST_F(ArrayFunctionsTest, max_array_length_rejects_an_oversized_array) {
+    _ctx.set_max_array_length(4);
+
+    ASSERT_TRUE(reject_if_array_too_large(&_ctx, "array_concat", 5));
+    ASSERT_TRUE(_ctx.has_error());
+    ASSERT_NE(std::string(_ctx.error_msg()).find("array_concat"), std::string::npos);
+    ASSERT_NE(std::string(_ctx.error_msg()).find("max_array_length"), std::string::npos);
 }
 
 } // namespace starrocks

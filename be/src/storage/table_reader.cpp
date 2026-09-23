@@ -20,17 +20,17 @@
 #include "base/brpc/ref_count_closure.h"
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
-#include "exec/tablet_info.h"
 #include "platform/platform_env.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
-#include "serde/protobuf_serde.h"
+#include "runtime/serde/protobuf_chunk_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/local_tablet_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_reader.h"
+#include "storage_primitive/tablet_info.h"
 
 namespace starrocks {
 
@@ -66,7 +66,6 @@ Status TableReader::init(const TableReaderParams& params) {
     RETURN_IF_ERROR(_partition_param->init(nullptr));
     _location_param = std::make_unique<OlapTableLocationParam>(params.location_param);
     _nodes_info = std::make_unique<StarRocksNodesInfo>(params.nodes_info);
-    _row_desc = std::make_unique<RowDescriptor>(_schema_param->tuple_desc());
     return Status::OK();
 }
 

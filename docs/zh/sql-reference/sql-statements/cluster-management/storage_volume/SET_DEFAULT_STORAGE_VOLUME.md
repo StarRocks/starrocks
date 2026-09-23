@@ -11,7 +11,7 @@ description: "SET DEFAULT STORAGE VOLUME designates a storage volume as the defa
 
 > **注意**
 >
-> - 仅拥有指定存储卷 USAGE 权限的用户可以执行该操作。
+> - 仅拥有指定存储卷 ALTER 权限的用户可以执行该操作。
 > - 默认存储卷无法删除或禁用。
 > - 您必须为 StarRocks 存算分离集群设置默认存储卷，因为 StarRocks 会将系统统计信息存储在默认存储卷中。
 

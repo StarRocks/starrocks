@@ -48,11 +48,12 @@ class ThriftServer;
 // to bind multiple services on single port.
 class BackendService : public BackendServiceBase {
 public:
-    explicit BackendService(ExecEnv* exec_env);
+    BackendService(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env);
 
     ~BackendService() override;
 
-    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, MetricRegistry* metrics, int port);
+    static std::unique_ptr<ThriftServer> create(ExecEnv* exec_env, orchestration::OrchestrationEnv* orchestration_env,
+                                                MetricRegistry* metrics, int port);
 
     void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
 

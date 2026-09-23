@@ -15,6 +15,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <random>
 
@@ -157,6 +158,30 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
+}
+
+PARALLEL_TEST(VecStringFunctionsTest, substrTruncatedUtf8TailTest) {
+    // a lead byte at the tail that claims more bytes than remain must not extend the result past the input
+    auto str = BinaryColumn::create();
+    str->append(Slice("A\xF0", 2));
+    str->append(Slice("\xE4\xBD", 2));
+    str->append("壹贰");
+
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto state = std::make_unique<SubstrState>();
+    ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
+    state->is_const = true;
+    state->pos = 1;
+    state->len = 2;
+    starrocks::Columns columns;
+    columns.emplace_back(str);
+
+    ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
+    auto* binary = down_cast<const BinaryColumn*>(result.get());
+    ASSERT_EQ(3, binary->size());
+    ASSERT_EQ(Slice("A\xF0", 2), binary->get_slice(0));
+    ASSERT_EQ(Slice("\xE4\xBD", 2), binary->get_slice(1));
+    ASSERT_EQ("壹贰", binary->get_slice(2).to_string());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
@@ -1885,7 +1910,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractNullablePattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns).value();
 
@@ -1902,7 +1927,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractNullablePattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -1930,7 +1955,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractOnlyNullPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns).value();
     for (int i = 0; i < length; ++i) {
@@ -1938,7 +1963,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractOnlyNullPattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -1969,7 +1994,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractConstPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -1979,7 +2004,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractConstPattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -2013,7 +2038,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
@@ -2023,7 +2048,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtract) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -2060,7 +2085,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceNullablePattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(ColumnHelper::as_raw_column<NullableColumn>(result)->data_column());
@@ -2069,7 +2094,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceNullablePattern) {
     ASSERT_TRUE(result->is_null(1));
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -2100,7 +2125,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceOnlyNullPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns).value();
 
@@ -2108,7 +2133,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceOnlyNullPattern) {
     ASSERT_TRUE(result->is_null(1));
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -2139,7 +2164,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2149,12 +2174,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceConstPattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     // Test Binary input data
     {
-        FunctionContext::FunctionStateScope scope = FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL;
+        FunctionContext::FunctionStateScope scope =
+                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL;
         std::unique_ptr<FunctionContext> ctx0(FunctionContext::create_test_context());
         int binary_size = 10;
         std::unique_ptr<char[]> binary_datas = std::make_unique<char[]>(binary_size);
@@ -2199,7 +2225,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2209,7 +2235,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -2241,7 +2267,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_replace(context, columns).value();
     auto v = ColumnHelper::as_column<BinaryColumn>(result);
@@ -2251,7 +2277,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -3407,6 +3433,44 @@ PARALLEL_TEST(VecStringFunctionsTest, strposTest) {
     }
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, strposInstanceIntMinTest) {
+    // std::abs(INT32_MIN) is undefined and returns INT32_MIN again, so the old
+    // `int abs_instance = std::abs(instance_value)` stayed negative, passed the
+    // `abs_instance <= positions.size()` bounds check, and then indexed
+    // positions[positions.size() - abs_instance] -- a size_t subtraction that ADDS 2^31.
+    // With 4-byte elements that reads 2^33 bytes past the vector.
+    //
+    // The boundary either side of the occurrence count is asserted too: a fix that merely
+    // stops the crash but shifts the comparison by one would still pass on INT32_MIN alone.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+
+    Columns columns;
+    auto haystack = BinaryColumn::create();
+    auto needle = BinaryColumn::create();
+    auto instance = Int32Column::create();
+
+    // "aaa" contains "a" at 1, 2 and 3.
+    std::vector<int32_t> instances = {std::numeric_limits<int32_t>::min(), -4, -3, -1, 1, 3,
+                                      std::numeric_limits<int32_t>::max()};
+    std::vector<int64_t> expected = {0, 0, 1, 3, 1, 3, 0};
+
+    for (int32_t inst : instances) {
+        haystack->append("aaa");
+        needle->append("a");
+        instance->append(inst);
+    }
+    columns.emplace_back(haystack);
+    columns.emplace_back(needle);
+    columns.emplace_back(instance);
+
+    ColumnPtr result = StringFunctions::strpos_instance(ctx.get(), columns).value();
+    ASSERT_EQ(instances.size(), result->size());
+    auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+    for (size_t i = 0; i < instances.size(); ++i) {
+        ASSERT_EQ(expected[i], v->get_data()[i]) << "Failed for instance " << instances[i];
+    }
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, strposInstanceTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
@@ -3545,12 +3609,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllPatternZero) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3585,12 +3649,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConstPatternZero) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -3622,12 +3686,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConstZero) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3665,12 +3729,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllNullableGroupPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3705,12 +3769,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3746,10 +3810,10 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllNullablePattern1) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3787,12 +3851,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllNullablePattern2) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3824,7 +3888,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllOnlyNullPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
     for (int i = 0; i < length; ++i) {
@@ -3832,7 +3896,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllOnlyNullPattern) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 }
 
@@ -3863,12 +3927,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConstPattern) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -3900,12 +3964,12 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpExtractAllConst) {
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(
-            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 
     auto result = StringFunctions::regexp_extract_all(context, columns).value();
 
     ASSERT_TRUE(
-            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
@@ -3951,12 +4015,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -3990,12 +4055,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4028,12 +4094,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4077,12 +4144,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4114,12 +4182,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4155,12 +4224,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4193,12 +4263,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4237,12 +4308,13 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpSplitTest) {
 
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL)
-                            .ok());
+        ASSERT_TRUE(
+                StringFunctions::regexp_extract_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
         auto result = StringFunctions::regexp_split(context, columns).value();
 
         ASSERT_TRUE(StringFunctions::regexp_close(context,
-                                                  FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                                                  FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
         for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
@@ -4352,8 +4424,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionTest) {
 
     context->set_constant_columns(columns);
 
-    ASSERT_TRUE(
-            StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+    ASSERT_TRUE(StringFunctions::regexp_position_prepare(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
     auto result = StringFunctions::regexp_position(context, columns).value();
     ASSERT_TRUE(result->is_nullable());
@@ -4372,7 +4444,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionTest) {
     }
 
     ASSERT_TRUE(
-            StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+            StringFunctions::regexp_position_close(context, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL).ok());
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
@@ -4414,7 +4486,10 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpPositionInvalidRegex) {
 }
 
 PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
-    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    // regexp_count_prepare runs under FRAGMENT_LOCAL and validates get_num_args() == 2, so the
+    // test context must carry the two (str, pattern) argument types.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(
+            {TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)}, TypeDescriptor(TYPE_BIGINT)));
     auto context = ctx.get();
 
     {
@@ -4439,10 +4514,7 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpCountTest) {
         Columns columns = {nullable_str_col, pattern_col};
         context->set_constant_columns(columns);
 
-        ASSERT_TRUE(
-                StringFunctions::regexp_count_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
         auto result = StringFunctions::regexp_count(context, columns).value();
-        ASSERT_TRUE(StringFunctions::regexp_close(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
 
         ASSERT_EQ(result->size(), 5);
         ASSERT_EQ(result->get(0).get_int64(), 6);

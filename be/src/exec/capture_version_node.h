@@ -15,8 +15,8 @@
 #pragma once
 
 #include "common/statusor.h"
-#include "exec/exec_node.h"
 #include "exec/scan_node.h"
+#include "exec_primitive/exec_node.h"
 
 namespace starrocks {
 class CaptureVersionNode final : public ExecNode {

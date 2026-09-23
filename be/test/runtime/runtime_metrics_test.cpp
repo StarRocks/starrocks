@@ -106,15 +106,4 @@ TEST(RuntimeMetricsTest, InstallRegistersLakeTxnLogMetrics) {
     assert_metric_value(&registry, "lake_txn_log_collect_orphan_partition_total", "22");
 }
 
-TEST(RuntimeMetricsTest, RegisterRuntimeFilterQueueHookBeforeInstall) {
-    RuntimeMetrics metrics;
-    metrics.register_runtime_filter_event_queue_len_hook([] { return 23; });
-
-    MetricRegistry registry("test_registry");
-    metrics.install(&registry);
-    registry.trigger_hook();
-
-    assert_metric_value(&registry, "runtime_filter_event_queue_len", "23");
-}
-
 } // namespace starrocks

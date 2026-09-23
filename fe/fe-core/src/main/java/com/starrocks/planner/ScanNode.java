@@ -39,6 +39,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.BucketProperty;
@@ -255,16 +256,18 @@ public abstract class ScanNode extends PlanNode {
         return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
                 this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
                 this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
-                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode;
+                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode ||
+                this instanceof FlussScanNode;
     }
 
     protected String explainColumnDict(String prefix) {
         StringBuilder output = new StringBuilder();
         if (!appliedDictStringColumns.isEmpty()) {
-            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            int limit = Math.max(0, Config.explain_dict_column_size);
+            int maxSize = Math.min(appliedDictStringColumns.size(), limit);
             List<String> printList = appliedDictStringColumns.subList(0, maxSize);
             String format_template = "dict_col=%s";
-            if (appliedDictStringColumns.size() > 5) {
+            if (appliedDictStringColumns.size() > limit) {
                 format_template = format_template + "...";
             }
             output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));

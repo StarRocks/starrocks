@@ -23,7 +23,7 @@
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/predicate_parser.h"
+#include "storage_primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
 #include "types/logical_type.h"
 
@@ -275,6 +275,8 @@ void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts
                                                                     ctx->predicates.predicate_free_pool);
     ASSERT_TRUE(st.ok());
     ctx->predicates.predicate_tree = st.value();
+    ctx->format_scan_context.predicate_tree = &ctx->predicates.predicate_tree;
+    ctx->format_scan_context.runtime_filter_scan_range_pruner = ctx->predicates.runtime_filter_scan_range_pruner.get();
 }
 
 void ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id,

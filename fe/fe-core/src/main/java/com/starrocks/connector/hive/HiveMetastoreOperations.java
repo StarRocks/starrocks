@@ -335,7 +335,6 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = (table).getCatalogName();
         String dbName = (table).getCatalogDBName();
         String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()

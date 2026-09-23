@@ -41,11 +41,13 @@
 #include <vector>
 
 #include "common/logging.h"
-#include "connector/connector.h"
+#include "common/util/thrift_util.h"
+#include "connector_primitive/connector.h"
 #include "exec/aggregate/aggregate_blocking_node.h"
 #include "exec/aggregate/aggregate_streaming_node.h"
 #include "exec/aggregate/distinct_blocking_node.h"
 #include "exec/aggregate/distinct_streaming_node.h"
+#include "exec/ai_project_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
 #include "exec/capture_version_node.h"
@@ -53,6 +55,7 @@
 #include "exec/cross_join_node.h"
 #include "exec/dict_decode_node.h"
 #include "exec/empty_set_node.h"
+#include "exec/enforce_unique_row_locator_node.h"
 #include "exec/except_node.h"
 #include "exec/exchange_node.h"
 #include "exec/fetch_node.h"
@@ -109,7 +112,7 @@ Status check_tuple_ids_in_descs(const DescriptorTbl& descs, const TPlanNode& pla
             ss << "DescriptorTbl: " << descs.debug_string();
             LOG(ERROR) << ss.str();
             ss.str("");
-            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(plan_node);
+            ss << "TPlanNode: " << thrift_plan_debug_string(plan_node);
             LOG(ERROR) << ss.str();
             return Status::InternalError("Tuple ids are not in descs");
         }
@@ -294,6 +297,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
     case TPlanNodeType::PROJECT_NODE:
         CREATE_NODE(ProjectNode, pool, tnode, descs);
         return Status::OK();
+    case TPlanNodeType::AI_PROJECT_NODE:
+        CREATE_NODE(AIProjectNode, pool, tnode, descs);
+        return Status::OK();
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         CREATE_NODE(TableFunctionNode, pool, tnode, descs);
         return Status::OK();
@@ -367,6 +373,9 @@ Status ExecFactory::create_vectorized_node(RuntimeState* state, ObjectPool* pool
         CREATE_NODE(ConnectorScanNode, pool, new_node, descs);
         return Status::OK();
     }
+    case TPlanNodeType::ENFORCE_UNIQUE_ROW_LOCATOR_NODE:
+        CREATE_NODE(EnforceUniqueRowLocatorNode, pool, tnode, descs);
+        return Status::OK();
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }

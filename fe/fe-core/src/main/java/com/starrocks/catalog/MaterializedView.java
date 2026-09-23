@@ -110,6 +110,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -266,6 +267,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             this.fileNumber = -1;
         }
 
+        // Store the connector-native modified-time unit (OLAP/JDBC/Paimon millis, Hive epoch seconds,
+        // Iceberg micros). External change detection compares this exactly against the live raw modified
+        // time from the same connector, so it must not be lossily converted here (e.g. micros -> millis
+        // would truncate). The staleness rollback guard in isStalenessSatisfied() normalizes by magnitude
+        // at comparison time instead.
         public static BasePartitionInfo fromExternalTable(com.starrocks.connector.PartitionInfo info) {
             return new BasePartitionInfo(-1, info.getVersion(), info.getModifiedTime());
         }
@@ -713,9 +719,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     // this is the version for encode row id algorithm which must be consistent along with the mv's lifecycle,
     // otherwise the incremental refresh may cause incorrect result.
-    // 0: no encode row id
-    // 1: encode_sort_key
-    // 2: encode_fingerprint_sha256
+    // Keys of IvmOpUtils.ENCODE_ROW_ID_FUNCTION_MAP, chosen by IvmOpUtils.deduceEncodeRowIdVersion():
+    // 0 is encode_sort_key, 1 is encode_fingerprint_sha256.
+    // "No row id" is not a value here -- it is expressed by the mv having no __ROW_ID__ column, so the
+    // default 0 is indistinguishable from an append-only mv. Test for the column, not for this field.
     @SerializedName(value = "encodeRowIdVersion")
     private int encodeRowIdVersion = 0;
 
@@ -807,8 +814,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-     * This can be time costing because `evictMaterializedViewCache` may visit all its base tables to build ast key, so only use
-     * it when necessary.
+     * Marks this mv inactive and drops it from the rewrite caches. Callers hold a metadata lock --
+     * AlterJobMgr's replay paths, LocalMetastore#replayAlterMaterializedViewProperties, backup and
+     * restore -- so nothing here may wait on an external system: `evictMaterializedViewCache` used to
+     * rebuild this mv's ast keys, which re-analyzed the define query and resolved every base table
+     * through the connector, and now walks the cache instead.
      * @param reason the reason for being inactive
      */
     public synchronized void setInactiveAndReason(String reason) {
@@ -889,8 +899,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return formatInsertSql("insert overwrite");
     }
 
-    public String getIVMTaskDefinition() {
-        return formatInsertSql("INSERT INTO");
+    public String getTaskDefinition(String selectSql) {
+        return formatInsertSql("insert overwrite", selectSql);
+    }
+
+    public String getIVMTaskDefinition(String selectSql) {
+        return formatInsertSql("INSERT INTO", selectSql);
     }
 
     /**
@@ -900,25 +914,34 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * which {@code InsertAnalyzer} rejects if listed explicitly.
      */
     private String formatInsertSql(String insertKeyword) {
+        return formatInsertSql(insertKeyword, getMVQueryDefinedSql());
+    }
+
+    private String formatInsertSql(String insertKeyword, String selectSql) {
         String targetSpec = hasAutoIncrementColumn()
                 ? String.format("`%s` (%s)", getName(), queryProducedColumnList())
                 : String.format("`%s`", getName());
-        return String.format("%s %s %s", insertKeyword, targetSpec, getMVQueryDefinedSql());
+        return String.format("%s %s %s", insertKeyword, targetSpec, selectSql);
     }
 
     /**
-     * Backtick-quoted schema columns in <strong>query projection order</strong>, excluding
-     * columns the storage engine fills in itself (AUTO_INCREMENT / generated). Sort-key
-     * reorder may permute schema order; the INSERT column list must still match the query's
-     * SELECT order so values line up correctly.
+     * Schema columns in <strong>query projection order</strong>, excluding columns the storage
+     * engine fills in itself (AUTO_INCREMENT / generated). Sort-key reorder may permute schema
+     * order; a column list paired with the defined query must follow the query's SELECT order
+     * so values line up correctly.
      */
-    private String queryProducedColumnList() {
+    private List<Column> queryProducedColumns() {
         // getOrderedOutputColumns(true) returns query-output-order columns, already excluding
         // generated (via baseSchemaWithoutGeneratedColumn) and AUTO_INCREMENT columns (which
         // are marked NO_QUERY_OUTPUT in queryOutputIndices). Defensive !isAutoIncrement
         // filter covers the identity-queryOutputIndices edge case.
         return getOrderedOutputColumns(true).stream()
                 .filter(col -> !col.isAutoIncrement())
+                .collect(Collectors.toList());
+    }
+
+    private String queryProducedColumnList() {
+        return queryProducedColumns().stream()
                 .map(col -> "`" + col.getName() + "`")
                 .collect(Collectors.joining(", "));
     }
@@ -1092,7 +1115,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (StringUtils.isEmpty(tableProperty.getMvRefreshMode())) {
             return RefreshMode.PCT;
         }
-        return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase());
+        return RefreshMode.valueOf(tableProperty.getMvRefreshMode().toUpperCase(Locale.ROOT));
     }
 
     public RefreshMode getCurrentRefreshMode() {
@@ -1214,43 +1237,82 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         long maxRowCount = 0;
         for (Map.Entry<Long, Partition> entry : idToPartition.entrySet()) {
             for (PhysicalPartition partition : entry.getValue().getSubPartitions()) {
-                maxRowCount = Math.max(maxRowCount, partition.getLatestBaseIndex().getRowCount());
+                maxRowCount = Math.max(maxRowCount, partition.getQueryableBaseIndex().getRowCount());
             }
         }
         return maxRowCount;
     }
 
     /**
-     * Check weather this materialized view's staleness is satisfied.
+     * Check whether this materialized view's staleness is satisfied for query rewrite.
      *
-     * @return
+     * Staleness baseline: the start time of the last COMPLETE refresh batch whose freshness was
+     * confirmed ({@code lastFreshnessConfirmedAt}), NOT {@code lastRefreshTime}. The latter is
+     * overwritten by every task run with the max visible version time of the base partitions that
+     * run consumed, so a chained partial run refreshing one recently-committed partition would keep
+     * renewing the whole MV's freshness while other partitions lag beyond the tolerance
+     * (cross-partition staleness masking).
      */
     @VisibleForTesting
     public boolean isStalenessSatisfied() {
         if (this.maxMVRewriteStaleness <= 0) {
             return false;
         }
-        // Define:
-        //      MV's stalness = max of all base tables' refresh timestamp  - mv's refresh timestamp .
-        // Check staleness by using all base tables' refresh timestamp and this mv's refresh timestamp,
-        // if MV's staleness is greater than user's config `maxMVRewriteStaleness`:
-        // we think this mv is outdated, otherwise we can use this mv to rewrite user's query.
-        long mvRefreshTimestamp = getLastRefreshTime();
         Optional<Long> baseTableRefreshTimestampOpt = maxBaseTableRefreshTimestamp();
         // If we can not find the base table's refresh timestamp, just return false directly.
         if (!baseTableRefreshTimestampOpt.isPresent()) {
             return false;
         }
-
         long baseTableRefreshTimestamp = baseTableRefreshTimestampOpt.get();
-        long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
+        ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
+        // The live max (maxBaseTableRefreshTimestamp()) is epoch millis by the maxPartitionRefreshTs()
+        // contract, but the recorded getLastRefreshTime() is kept in each base table's native unit
+        // (OLAP/JDBC/Paimon millis, Hive epoch seconds, Iceberg micros) so per-partition change detection
+        // can compare it exactly against the live raw modified time. Normalize both to epoch millis by
+        // magnitude here (comparison only; nothing is persisted).
+        long baseRefreshTimestampMillis =
+                TimeUtils.inferEpochUnit(baseTableRefreshTimestamp).toMillis(baseTableRefreshTimestamp);
+        long lastRefreshTime = getLastRefreshTime();
+        long lastRefreshTimeMillis = lastRefreshTime <= 0 ? lastRefreshTime
+                : TimeUtils.inferEpochUnit(lastRefreshTime).toMillis(lastRefreshTime);
+        // A base table's refresh timestamp regressed below what the MV has absorbed (e.g. after an
+        // Iceberg rollback_to_snapshot/rollback_to_timestamp, or after dropping the newest base
+        // partitions): treat as outdated rather than trusting the staleness window, otherwise the MV
+        // could serve rows removed from the base table. On a normal timeline the base timestamp is >=
+        // what the MV absorbed, so this guard fires only on a genuine regression, for every connector.
+        // LIMITATION (multi-base-table MVs with mixed timestamp units): both operands are GLOBAL
+        // scalars -- maxBaseTableRefreshTimestamp() is the latest real instant across tables (each
+        // table normalized to epoch millis), while getLastRefreshTime() is a native-unit max
+        // dominated by the base table with the numerically largest raw value (e.g. Iceberg micros
+        // over Hive seconds), so the two can reflect DIFFERENT tables and a rollback of the
+        // unit-dominant table may be masked by another table whose real instant is later.
+        // Single-table and same-unit multi-table MVs are unaffected. This pre-existing
+        // global-scalar limitation (#75924) is tracked for a per-base-table check in #77023.
+        if (baseRefreshTimestampMillis < lastRefreshTimeMillis) {
+            LOG.debug("MV is outdated because base tables' refresh timestamp {} regressed below MV's "
+                            + "lastRefreshTime {}",
+                    DateUtils.formatTimeStampInMill(baseRefreshTimestampMillis, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(lastRefreshTimeMillis, currentTimeZoneId));
+            return false;
+        }
+        long lastFreshnessConfirmedAt = refreshScheme.getLastFreshnessConfirmedAt();
+        // Freshness has never been confirmed by a complete refresh (new MV, only partial refreshes so
+        // far, or an upgraded FE before its first complete refresh finished): be conservative and fall
+        // back to per-partition change checks.
+        if (lastFreshnessConfirmedAt <= 0) {
+            LOG.debug("MV's staleness is not satisfied because its freshness has never been confirmed "
+                    + "by a complete refresh");
+            return false;
+        }
+        // A negative gap is the quiet-MV common case: no base commits since the confirmed batch
+        // started, so the MV is fresh.
+        long mvStaleness = (baseTableRefreshTimestamp - lastFreshnessConfirmedAt) / 1000;
         if (mvStaleness > this.maxMVRewriteStaleness) {
-            ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
-            LOG.debug("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
-                            "MV's lastRefreshTime {}) is greater than the staleness config {}",
-                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
-                    DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId),
+            LOG.debug("MV is outdated because MV's staleness {}s (baseTables' max refresh timestamp {} "
+                            + "- MV's lastFreshnessConfirmedAt {}) is greater than the staleness config {}s",
                     mvStaleness,
+                    DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
+                    DateUtils.formatTimeStampInMill(lastFreshnessConfirmedAt, currentTimeZoneId),
                     maxMVRewriteStaleness);
             return false;
         }
@@ -1385,6 +1447,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+    private static void removeConnectorRelatedMaterializedView(BaseTableInfo baseTableInfo, MvId mvId) {
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(),
+                        baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build());
+    }
+
     private void onDropImpl(Database db, boolean replay) {
         MvId mvId = new MvId(db.getId(), getId());
 
@@ -1397,18 +1468,38 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
+            if (!baseTableInfo.isInternalCatalog()) {
+                // An external base table is not resolved here, on purpose. The authoritative record of this
+                // relationship is ConnectorTblMetaInfoMgr, not the Table object: MetadataMgr#getTable
+                // re-applies the entry onto whatever instance the connector cache hands back, see
+                // ConnectorTableInfo#seTableInfoForConnectorTable. So resolving the table only to strip one
+                // cached projection of that entry is a connector round trip bought for nothing -- and every
+                // caller of onDrop holds the database write lock (Database#unprotectDropTable), including the
+                // rollback of a failed CREATE, where the catalog is by definition the one that just failed.
+                //
+                // Dropping the authoritative entry is the whole job, and it is also exactly what this code
+                // already fell back to whenever the resolve threw, which is the case an unreachable external
+                // system produced anyway.
+                //
+                // Known gap, deliberately left: a Table instance the connector already has cached keeps this
+                // MvId until it is evicted, because ConnectorTableInfo#seTableInfoForConnectorTable only ever
+                // adds. Making it reconcile instead was tried and does not work yet -- the store is looked up
+                // by Table#getTableIdentifier, which does not reliably match the identifier the relationship
+                // was recorded under, so "no entry" cannot be read as "no related MVs" without emptying sets
+                // that are the only copy (it breaks mv rewrite over external tables outright). What is left
+                // behind is the same shape as the create-side window documented on Table#onCreateAfterUnlock:
+                // not persisted, and skipped by every consumer that resolves the id -- and not seen at all by
+                // AnalyzerUtils.CopyUnsafeTablesCollector, which returns before counting for a table in an
+                // external catalog. Fixing the keying is its own change.
+                removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
+                continue;
+            }
+
             Optional<Table> baseTableOpt;
             try {
+                // Internal catalog only: a local metastore lookup, not I/O.
                 baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
             } catch (Exception e) {
-                if (!(baseTableInfo.isInternalCatalog())) {
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                    baseTableInfo.getDbName(),
-                                    baseTableInfo.getTableIdentifier(),
-                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                            Sets.newHashSet(mvId)).build());
-                }
                 LOG.error("Failed to get base table: {}", baseTableInfo, e);
                 continue;
             }
@@ -1418,12 +1509,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 baseTable.removeRelatedMaterializedView(mvId);
                 if (!baseTable.isNativeTableOrMaterializedView()) {
                     // remove relatedMaterializedViews for connector table
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                    baseTableInfo.getDbName(),
-                                    baseTableInfo.getTableIdentifier(),
-                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                            Sets.newHashSet(mvId)).build());
+                    removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
                 }
             }
         }
@@ -1447,13 +1533,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Suppressed here, and done in {@link #onCreateAfterUnlock} instead. {@link Table#onCreate} runs under
+     * the database write lock and an MV reload is the single most expensive thing on the create path:
+     * {@link #onReloadImplHeavy} analyzes the partition exprs and {@link #checkIsActiveOnLoadBlocking}
+     * resolves every base table, both of which go through {@code MetadataMgr#getTable} and are remote calls
+     * for an external base table. Every waiter on that database's lock used to pay for them.
+     */
+    @Override
+    protected void reloadOnCreate() {
+    }
+
+    /**
      * This is method is called in mv creating, if error is met, throw exception to fail the creating operation.
+     * Runs after {@link com.starrocks.server.LocalMetastore#onCreate} has released the database write lock;
+     * a failure here rolls the creation back, see {@link Table#onCreateAfterUnlock}.
      * @param database database where the table is created
      * @throws DdlException
      */
     @Override
-    public void onCreate(Database database) throws DdlException {
-        super.onCreate(database);
+    public void onCreateAfterUnlock(Database database) throws DdlException {
         onReload(false, isActive(), true);
     }
 
@@ -1941,19 +2039,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         sb.append("CREATE MATERIALIZED VIEW `").append(getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
 
-        // NOTE: only output non-generated columns.
-        // Start with query-output order (preserves user's ORDER BY reorder effect), then
-        // append schema columns not produced by the query (e.g. AUTO_INCREMENT __ROW_ID__
-        // on non-aggregate IVM). Match the pre-existing behavior of showing hidden columns
-        // like __ROW_ID__ / __AGG_STATE__ in the DDL.
-        List<Column> orderedColumns = new ArrayList<>(getOrderedOutputColumns(true));
-        Set<String> alreadyIncluded = orderedColumns.stream()
-                .map(Column::getName)
-                .collect(Collectors.toSet());
-        getBaseSchemaWithoutGeneratedColumn().stream()
-                .filter(col -> !alreadyIncluded.contains(col.getName()))
-                .forEach(orderedColumns::add);
-        for (Column column : orderedColumns) {
+        // NOTE: only output non-generated columns, in query-output order.
+        // ALTER ... ACTIVE re-analyzes this DDL, and the analyzer requires one listed column per
+        // query output field, then re-appends storage-filled ones (AUTO_INCREMENT __ROW_ID__ on
+        // non-aggregate IVM) itself — listing those here breaks the round trip.
+        for (Column column : queryProducedColumns()) {
             StringBuilder colSb = new StringBuilder();
             // Since mv supports complex expressions as the output column, add `` to support to replay it.
             colSb.append("`" + column.getName() + "`");
@@ -2084,6 +2174,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     .append("\" = \"");
             sb.append(Joiner.on(", ").join(bfColumnNames)).append("\"");
+        }
+
+        // per-column ZSTD compression. ALTER TABLE mv SET (...) accepts this property and rewrites
+        // the MV's tablets, so leaving it out here would make the setting invisible and lose it in
+        // any flow that recreates the view from this DDL.
+        String zstdCompressionColumns =
+                getCommonProperties().get(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
+        if (zstdCompressionColumns != null) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                    .append(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)
+                    .append("\" = \"").append(zstdCompressionColumns).append("\"");
         }
 
         // colocate_with

@@ -2893,6 +2893,326 @@ TEST_F(SchemaChangeBaseTabletReadSchemaTest, test_sorted_schema_change_skips_sch
             << "SortedSchemaChange must not call the FE schema RPC when DeltaWriter is given a preset schema";
 }
 
+// A schema-change txn log may legitimately carry a rowset that references nothing: the range
+// distribution online rewrite anchors an empty op_write as op_schema_change for a zero-row shadow
+// tablet. Publishing it must succeed and must not leave that rowset in the metadata -- tablet merge
+// rejects a rowset with no segments, no del files and no delete predicate.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, empty_op_schema_change_rowset_is_not_recorded) {
+    auto metadata = create_base_tablet_metadata();
+    auto tablet_id = metadata->id();
+    metadata->clear_rowsets();
+    metadata->set_next_rowset_id(1);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+    auto* rowset = op_schema_change->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    EXPECT_EQ(0, published->rowsets_size());
+    EXPECT_EQ(1, published->next_rowset_id());
+}
+
+// The primary-key applier appends op_schema_change rowsets with the same loop, and the producer that
+// emits a rowset referencing nothing is key-type agnostic.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, empty_op_schema_change_rowset_is_not_recorded_pk) {
+    auto metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    auto tablet_id = metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+    auto* rowset = op_schema_change->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(0);
+    rowset->set_data_size(0);
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    EXPECT_EQ(0, published->rowsets_size());
+    EXPECT_EQ(1, published->next_rowset_id());
+}
+
+// A delete-predicate rowset holds no data and its effect is already applied to the rewritten rows
+// by the conversion read, so the conversion must not emit a rowset for it at all.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, delete_predicate_rowset_is_not_converted) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+
+    auto new_metadata = std::make_shared<TabletMetadata>();
+    new_metadata->set_id(next_id());
+    new_metadata->set_version(1);
+    new_metadata->set_next_rowset_id(1);
+    auto* new_schema = new_metadata->mutable_schema();
+    new_schema->CopyFrom(base_metadata->schema());
+    new_schema->set_id(next_id());
+    auto* c5 = new_schema->add_column();
+    c5->set_unique_id(6);
+    c5->set_name("c5");
+    c5->set_type("INT");
+    c5->set_is_key(false);
+    c5->set_is_nullable(false);
+    c5->set_aggregation("NONE");
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*new_metadata));
+
+    int64_t version = 1;
+    auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
+    auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+
+    // Two data rows: c2 = 100 survives, c2 = 200 is deleted below.
+    auto c0 = Int32Column::create();
+    auto c1 = BinaryColumn::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    auto c4 = Int32Column::create();
+    c0->append_datum(Datum(1));
+    c1->append_datum(Datum("keep"));
+    c2->append_datum(Datum(100));
+    c3->append_datum(Datum(1));
+    c4->append_datum(Datum(1));
+    c0->append_datum(Datum(2));
+    c1->append_datum(Datum("drop"));
+    c2->append_datum(Datum(200));
+    c3->append_datum(Datum(2));
+    c4->append_datum(Datum(2));
+
+    VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
+    uint32_t indexes[2] = {0, 1};
+
+    int64_t write_txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(base_tablet_id)
+                                               .set_txn_id(write_txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(base_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk, indexes, sizeof(indexes) / sizeof(indexes[0])));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, write_txn_id).status());
+    version++;
+
+    // DELETE FROM t WHERE c2 = 200 -- a rowset with a predicate and nothing else.
+    DeletePredicatePB delete_predicate;
+    delete_predicate.set_version(-1);
+    auto* binary_predicate = delete_predicate.add_binary_predicates();
+    binary_predicate->set_column_name("c2");
+    binary_predicate->set_op("=");
+    binary_predicate->set_value("200");
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
+    int64_t delete_txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
+    version++;
+
+    ASSIGN_OR_ABORT(auto base_after_delete, _tablet_manager->get_tablet_metadata(base_tablet_id, version));
+    ASSERT_EQ(2, base_after_delete->rowsets_size());
+    ASSERT_TRUE(base_after_delete->rowsets(1).has_delete_predicate());
+
+    auto new_tablet_id = new_metadata->id();
+    int64_t alter_txn_id = next_id();
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_tablet_id;
+    request.new_tablet_id = new_tablet_id;
+    request.alter_version = version;
+    request.txn_id = alter_txn_id;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    // The conversion emits one rowset for the data and none for the predicate.
+    ASSIGN_OR_ABORT(auto alter_log, _tablet_manager->get_txn_log(new_tablet_id, alter_txn_id));
+    ASSERT_TRUE(alter_log->has_op_schema_change());
+    ASSERT_EQ(1, alter_log->op_schema_change().rowsets_size());
+    const auto& converted = alter_log->op_schema_change().rowsets(0);
+    EXPECT_GT(converted.segment_metas_size(), 0);
+    EXPECT_FALSE(converted.has_delete_predicate());
+
+    // The delete is still applied, and it is the c2 = 200 row that is gone.
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+    ASSIGN_OR_ABORT(auto shadow, _tablet_manager->get_tablet_metadata(new_tablet_id, version + 1));
+    ASSERT_EQ(1, shadow->rowsets_size());
+
+    auto new_tablet_schema = TabletSchema::create(shadow->schema());
+    auto new_vschema = std::make_shared<VSchema>(ChunkHelper::convert_schema(new_tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_manager.get(), shadow, *new_vschema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto read_chunk = ChunkFactory::new_chunk(*new_vschema, 128);
+    ASSERT_OK(reader->get_next(read_chunk.get()));
+    ASSERT_EQ(1, read_chunk->num_rows());
+    EXPECT_EQ(100, read_chunk->get(0)[2].get_int32());
+    // ChunkIterator requires an empty output chunk; SegmentIterator DCHECKs it.
+    read_chunk->reset();
+    EXPECT_TRUE(reader->get_next(read_chunk.get()).is_end_of_file());
+}
+
+// The conversion can empty an ordinary rowset outright, when a later delete predicate removes every
+// row it holds. That leaves a rowset referencing nothing, which must not be recorded either.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, fully_deleted_rowset_contributes_no_rowset) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto base_tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+
+    auto new_metadata = std::make_shared<TabletMetadata>();
+    new_metadata->set_id(next_id());
+    new_metadata->set_version(1);
+    new_metadata->set_next_rowset_id(1);
+    auto* new_schema = new_metadata->mutable_schema();
+    new_schema->CopyFrom(base_metadata->schema());
+    new_schema->set_id(next_id());
+    auto* c5 = new_schema->add_column();
+    c5->set_unique_id(6);
+    c5->set_name("c5");
+    c5->set_type("INT");
+    c5->set_is_key(false);
+    c5->set_is_nullable(false);
+    c5->set_aggregation("NONE");
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*new_metadata));
+
+    int64_t version = 1;
+    auto base_tablet_schema = TabletSchema::create(base_metadata->schema());
+    auto base_schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(base_tablet_schema));
+
+    // A single row, which the delete below removes entirely.
+    auto c0 = Int32Column::create();
+    auto c1 = BinaryColumn::create();
+    auto c2 = Int32Column::create();
+    auto c3 = Int32Column::create();
+    auto c4 = Int32Column::create();
+    c0->append_datum(Datum(1));
+    c1->append_datum(Datum("gone"));
+    c2->append_datum(Datum(42));
+    c3->append_datum(Datum(1));
+    c4->append_datum(Datum(1));
+
+    VChunk chunk({std::move(c0), std::move(c1), std::move(c2), std::move(c3), std::move(c4)}, base_schema);
+    uint32_t indexes[1] = {0};
+
+    int64_t write_txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_manager.get())
+                                               .set_tablet_id(base_tablet_id)
+                                               .set_txn_id(write_txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(base_tablet_schema->id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk, indexes, sizeof(indexes) / sizeof(indexes[0])));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, write_txn_id).status());
+    version++;
+
+    DeletePredicatePB delete_predicate;
+    delete_predicate.set_version(-1);
+    auto* binary_predicate = delete_predicate.add_binary_predicates();
+    binary_predicate->set_column_name("c2");
+    binary_predicate->set_op("=");
+    binary_predicate->set_value("42");
+
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(base_tablet_id));
+    int64_t delete_txn_id = next_id();
+    ASSERT_OK(tablet.delete_data(delete_txn_id, delete_predicate, nullptr));
+    ASSERT_OK(TEST_publish_single_version(_tablet_manager.get(), base_tablet_id, version + 1, delete_txn_id).status());
+    version++;
+
+    auto new_tablet_id = new_metadata->id();
+    int64_t alter_txn_id = next_id();
+    TAlterTabletReqV2 request;
+    request.base_tablet_id = base_tablet_id;
+    request.new_tablet_id = new_tablet_id;
+    request.alter_version = version;
+    request.txn_id = alter_txn_id;
+    SchemaChangeHandler handler(_tablet_manager.get());
+    ASSERT_OK(handler.process_alter_tablet(request));
+    ASSERT_OK(publish_version_for_schema_change(new_tablet_id, version + 1, alter_txn_id));
+
+    ASSIGN_OR_ABORT(auto shadow, _tablet_manager->get_tablet_metadata(new_tablet_id, version + 1));
+    EXPECT_EQ(0, shadow->rowsets_size());
+    EXPECT_EQ(1, shadow->next_rowset_id());
+
+    auto new_tablet_schema = TabletSchema::create(shadow->schema());
+    auto new_vschema = std::make_shared<VSchema>(ChunkHelper::convert_schema(new_tablet_schema));
+    auto reader = std::make_shared<TabletReader>(_tablet_manager.get(), shadow, *new_vschema);
+    ASSERT_OK(reader->prepare());
+    ASSERT_OK(reader->open(TabletReaderParams()));
+    auto read_chunk = ChunkFactory::new_chunk(*new_vschema, 128);
+    EXPECT_TRUE(reader->get_next(read_chunk.get()).is_end_of_file());
+}
+
+// The appliers derive next_rowset_id from the LAST appended rowset in the txn log, not from the
+// last rowset in the log itself. A hollow rowset trailing a retained one is dropped rather than
+// appended, so it must not be the one next_rowset_id is derived from.
+TEST_F(SchemaChangeBaseTabletReadSchemaTest, hollow_trailing_rowset_does_not_move_next_rowset_id) {
+    auto metadata = create_base_tablet_metadata();
+    auto tablet_id = metadata->id();
+    metadata->clear_rowsets();
+    metadata->set_next_rowset_id(1);
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*metadata));
+
+    int64_t txn_id = next_id();
+    auto txn_log = std::make_shared<TxnLog>();
+    txn_log->set_tablet_id(tablet_id);
+    txn_log->set_txn_id(txn_id);
+    auto* op_schema_change = txn_log->mutable_op_schema_change();
+    op_schema_change->set_alter_version(1);
+
+    // Retained rowset: one segment.
+    auto* retained = op_schema_change->add_rowsets();
+    retained->set_id(1);
+    retained->set_overlapped(false);
+    retained->set_num_rows(1);
+    retained->set_data_size(100);
+    auto* segment = retained->add_segment_metas();
+    segment->set_filename("seg.dat");
+    segment->set_num_rows(1);
+    segment->set_segment_idx(0);
+
+    // Hollow rowset trailing the retained one: no segments, no del files, no predicate, zero stats.
+    auto* hollow = op_schema_change->add_rowsets();
+    hollow->set_id(2);
+    hollow->set_overlapped(false);
+    hollow->set_num_rows(0);
+    hollow->set_data_size(0);
+
+    ASSERT_OK(_tablet_manager->put_txn_log(std::move(txn_log)));
+
+    ASSERT_OK(publish_version_for_schema_change(tablet_id, 2, txn_id));
+
+    ASSIGN_OR_ABORT(auto published, _tablet_manager->get_tablet_metadata(tablet_id, 2));
+    ASSERT_EQ(1, published->rowsets_size());
+    EXPECT_EQ(1, published->rowsets(0).id());
+    EXPECT_EQ(1, published->rowsets(0).segment_metas_size());
+    // next_rowset_id comes from the retained rowset alone: id(1) + get_rowset_id_step (1, for a
+    // single un-indexed segment) = 2. The dropped hollow rowset (id 2) must not be the source of
+    // this value, even though it is last in the log.
+    EXPECT_EQ(2, published->next_rowset_id());
+}
+
 // --- do_process_add_index_only validation -------------------------------
 //
 // The ADD INDEX fast path validates incoming TAlterTabletReqV2 before
@@ -2946,12 +3266,13 @@ TEST_F(SchemaChangeAddIndexOnlyTest, missing_txn_id_returns_invalid_argument) {
     EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
 }
 
-TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_returns_invalid_argument) {
-    // Empty indexes_to_add must surface as InvalidArgument and NOT fall
-    // back to do_process_alter_tablet — the fast-path request has
-    // base_tablet_id == new_tablet_id with no schema diff, and the legacy
-    // rewrite path treats that as self-targeted alter, appending duplicate
-    // rowsets and doubling the row count.
+TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_is_explicit_noop) {
+    // An EMPTY indexes_to_add set is the FE's way of saying "this materialized
+    // index (rollup / sync MV) does not carry the indexed column(s)": BE must
+    // write a no-op txn log (version advance only) so the reserved alter
+    // version still publishes on this tablet — and must NOT fall back to
+    // do_process_alter_tablet (base_tablet_id == new_tablet_id would make the
+    // legacy rewrite self-target the tablet and duplicate rowsets).
     TAlterTabletReqV2 request;
     request.__set_new_tablet_id(5002);
     request.__set_base_tablet_id(5000);
@@ -2960,9 +3281,13 @@ TEST_F(SchemaChangeAddIndexOnlyTest, empty_indexes_to_add_returns_invalid_argume
     // indexes_to_add intentionally unset
 
     SchemaChangeHandler handler(_tablet_manager.get());
-    Status st = handler.process_alter_tablet(request);
-    ASSERT_FALSE(st.ok());
-    EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    ASSERT_OK(handler.process_alter_tablet(request));
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_manager->load_txn_log(_tablet_manager->txn_log_location(5002, 800002),
+                                                                /*fill_cache=*/false));
+    ASSERT_TRUE(txn_log->has_op_add_index());
+    EXPECT_EQ(0, txn_log->op_add_index().new_indexes_size());
+    EXPECT_EQ(0, txn_log->op_add_index().segment_entries_size());
 }
 
 TEST_F(SchemaChangeAddIndexOnlyTest, index_without_type_rejected) {

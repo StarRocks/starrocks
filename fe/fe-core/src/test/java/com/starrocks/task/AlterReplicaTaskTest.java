@@ -64,6 +64,23 @@ public class AlterReplicaTaskTest {
     }
 
     @Test
+    public void testAlterLocalTablet_OnlyAddIndex_CarriesNewSchema() {
+        // The lake fast-path ADD INDEX durability fix flows an FE-allocated new
+        // schema id/version through the AlterReplicaTask into TAlterTabletReqV2 so
+        // BE's apply_add_index stamps them onto the tablet metadata schema.
+        AlterReplicaTask task = AlterReplicaTask.alterLocalTablet(1, 2, 3, 4, 5, 6,
+                7, 8, 9, 10, 11, 12, null, Collections.emptyList());
+        task.setOnlyAddIndex(Collections.emptyList());
+        task.setNewIndexSchema(555L, 3L);
+
+        TAlterTabletReqV2 request = task.toThrift();
+        Assertions.assertTrue(request.only_add_index);
+        Assertions.assertTrue(request.isSetNew_index_schema_id());
+        Assertions.assertEquals(555L, request.new_index_schema_id);
+        Assertions.assertEquals(3L, request.new_index_schema_version);
+    }
+
+    @Test
     public void testRollupLocalTablet() {
         AlterReplicaTask task = AlterReplicaTask.rollupLocalTablet(1, 2, 3, 4, 5, 6,
                 7, 8, 9, 10, 11, 12, null, null);

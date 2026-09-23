@@ -9,7 +9,7 @@ description: "pipesは現在のまたは指定されたデータベースに保�
 
 :::note
 
-指定されたデータベースまたは使用中の現在のデータベースに保存されているパイプを表示するには、[SHOW PIPES](../../sql-reference/sql-statements/loading_unloading/pipe/SHOW_PIPES.md) を使用することもできます。このコマンドも v3.2 以降でサポートされています。
+指定されたデータベースまたは使用中の現在のデータベースに保存されているパイプを表示するには、[SHOW PIPES](../sql-statements/loading_unloading/pipe/SHOW_PIPES.md) を使用することもできます。このコマンドも v3.2 以降でサポートされています。
 
 :::
 

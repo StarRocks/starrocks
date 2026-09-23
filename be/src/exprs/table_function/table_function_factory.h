@@ -25,6 +25,10 @@ public:
 
 extern const TableFunction* get_table_function(const std::string& name, const std::vector<LogicalType>& arg_type,
                                                const std::vector<LogicalType>& return_type,
-                                               TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN);
+                                               TFunctionBinaryType::type binary_type = TFunctionBinaryType::BUILTIN,
+                                               bool is_arrow_input = false);
+extern void register_builtin_table_function(std::string name, const std::vector<LogicalType>& arg_type,
+                                            const std::vector<LogicalType>& return_type,
+                                            const TableFunctionPtr& table_func);
 
 } // namespace starrocks

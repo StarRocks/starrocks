@@ -42,6 +42,7 @@ import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OrderByElement;
 import com.starrocks.sql.ast.expression.ArrayExpr;
+import com.starrocks.sql.ast.expression.CastExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -168,10 +169,42 @@ public class FunctionAnalyzer {
                         functionCallExpr.getPos());
             }
 
-            if (!functionCallExpr.getChild(2).isConstant()) {
+            // gram_num is read on the BE as a raw non-nullable INT constant column, with no type or
+            // null check. It is read twice: by ngram_search itself, and -- more dangerously -- by
+            // VectorizedFunctionCallExpr::split_normal_string_to_ngram() while evaluating an NGRAMBF
+            // index in the storage layer, which is reached before ordinary expression evaluation.
+            // "constant" alone is not enough there: a constant of another type (e.g. a JSON
+            // expression) or a constant NULL is a ConstColumn over something that is not an
+            // Int32Column, and reading it crashes the BE. Require a positive integer constant.
+            Expr gramNumExpr = functionCallExpr.getChild(2);
+            Optional<Long> gramNum = extractIntegerValue(gramNumExpr);
+            if (!gramNum.isPresent() || gramNum.get() <= 0 || gramNum.get() > Integer.MAX_VALUE) {
                 throw new SemanticException(
-                        fnName + " function 's third parameter must be constant",
-                        functionCallExpr.getPos());
+                        fnName + " function 's third parameter must be a constant positive integer",
+                        gramNumExpr.getPos());
+            }
+        }
+
+        // tokenize(tokenizer_name, content): the tokenizer name is read on the BE at prepare time as
+        // a raw non-nullable VARCHAR constant column, with no type or null check. A constant of
+        // another type -- e.g. cast('english' as time), which the FE cannot fold and so cannot see
+        // is NULL -- reaches the BE as a constant of the wrong shape and crashes it. Require a
+        // string literal naming one of the tokenizers the BE implements. A NULL constant stays
+        // legal: FoldConstantsRule rewrites the whole call to NULL, so it never reaches the BE.
+        if (fnName.equals(FunctionSet.TOKENIZE) && functionCallExpr.hasChild(0)) {
+            Expr tokenizerExpr = functionCallExpr.getChild(0);
+            Expr unwrapped = unwrapConstantString(tokenizerExpr);
+            if (unwrapped instanceof StringLiteral) {
+                String tokenizer = ((StringLiteral) unwrapped).getValue();
+                if (!FunctionSet.SUPPORTED_TOKENIZERS.contains(tokenizer)) {
+                    throw new SemanticException(
+                            "Unknown tokenizer '" + tokenizer + "'. Supported tokenizers are: " +
+                                    String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
+                }
+            } else if (!(unwrapped instanceof NullLiteral)) {
+                throw new SemanticException(
+                        "tokenize function 's first parameter (tokenizer_name) must be a constant string, one of: " +
+                                String.join(", ", FunctionSet.SUPPORTED_TOKENIZERS), tokenizerExpr.getPos());
             }
         }
         Function fn = functionCallExpr.getFn();
@@ -251,6 +284,10 @@ public class FunctionAnalyzer {
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
+
+        if (fn != null && fn.isAi()) {
+            AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -265,6 +302,24 @@ public class FunctionAnalyzer {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
+        }
+
+        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
+        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
+        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
+        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
+        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
+        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
+        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        if (fnParams.isDistinct()) {
+            for (Expr child : functionCallExpr.getChildren()) {
+                if (child.getType().isPercentile()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
+            }
         }
 
         if (fnName.equals(FunctionSet.COUNT)) {
@@ -561,9 +616,22 @@ public class FunctionAnalyzer {
                                     ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
                 if (n.get() > Config.minmax_n_max_size) {
-                    throw new SemanticException("The second parameter of " + fnName + 
+                    throw new SemanticException("The second parameter of " + fnName +
                             " cannot exceed " + Config.minmax_n_max_size + ExprToSql.toSql(functionCallExpr), nExpr.getPos());
                 }
+            }
+        }
+
+        // histogram(expr, bucket_num, sample_ratio[, ...]): bucket_num is a constant INT used as a
+        // divisor / bucket-size base in the BE finalize step. A non-positive value divided by zero
+        // (SIGFPE crash) or mis-bucketed every row; reject it here at analysis instead.
+        if (fnName.equals(FunctionSet.HISTOGRAM) && functionCallExpr.hasChild(1)) {
+            Expr bucketNumExpr = functionCallExpr.getChild(1);
+            Optional<Long> bucketNum = extractIntegerValue(bucketNumExpr);
+            if (!bucketNum.isPresent() || bucketNum.get() <= 0) {
+                throw new SemanticException(
+                        "The second parameter (bucket_num) of histogram must be a constant positive integer: " +
+                                ExprToSql.toSql(functionCallExpr), bucketNumExpr.getPos());
             }
         }
 
@@ -676,7 +744,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function should have two args", functionCallExpr.getPos());
             }
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException(fnName + " function 's args must be constant");
+                throw new SemanticException(fnName + " function 's args must not be constant");
             }
         }
 
@@ -713,11 +781,36 @@ public class FunctionAnalyzer {
             expr = ((UserVariableExpr) expr).getValue();
         }
 
+        // Unwrap a cast over a constant integer, e.g. cast(64 as int). Auto-generated statistics
+        // collection SQL wraps the bucket_num literal in such a cast, so fold it to the inner value.
+        if (expr instanceof CastExpr && expr.getType().isFixedPointType()) {
+            return extractIntegerValue(expr.getChild(0));
+        }
+
         if (expr instanceof LiteralExpr && expr.getType().isFixedPointType()) {
             return Optional.of(((LiteralExpr) expr).getLongValue());
         }
 
         return Optional.empty();
+    }
+
+    /**
+     * Peel user variables and casts to a string type off an expression, so that a constant string
+     * argument can be recognised through e.g. cast('english' as varchar). A cast to a non-string
+     * type is deliberately not peeled: cast('english' as time) is not a constant string, even
+     * though the FE will later wrap it in an implicit cast back to VARCHAR -- its value is whatever
+     * the inner cast produces, which the FE cannot fold and which is NULL at runtime.
+     */
+    private static Expr unwrapConstantString(Expr expr) {
+        if (expr instanceof UserVariableExpr) {
+            return unwrapConstantString(((UserVariableExpr) expr).getValue());
+        }
+
+        if (expr instanceof CastExpr && expr.getType().isStringType()) {
+            return unwrapConstantString(expr.getChild(0));
+        }
+
+        return expr;
     }
 
     /**
@@ -872,6 +965,8 @@ public class FunctionAnalyzer {
         } catch (Exception e) {
             throw new SemanticException("Failed to parse view definition: " + fn.getSql());
         }
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expr, AIFunctionUsageAnalyzer.PlacementContext.SQL_UDF_BODY);
         SqlFunction v = (SqlFunction) fn.copy();
         v.setAnalyzeExpr(expr);
         v.setRetType(expr.getType());
@@ -1106,6 +1201,10 @@ public class FunctionAnalyzer {
                         fnName.replace(FeConstants.ICEBERG_TRANSFORM_EXPRESSION_PREFIX, ""),
                         Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.joining(", ")));
             }
+            // the resolved builtin is a shared singleton: mutate a copy, or the wildcard decimal
+            // signature gets stamped with a concrete (precision, scale) and later lookups with a
+            // different scale fail until the FE restarts
+            fn = fn.copy();
             if (args[0].isDecimalV3()) {
                 fn.setArgsType(args);
             }

@@ -23,10 +23,10 @@
 #include "compute_env/runtime_range_pruner.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
-#include "storage/runtime_filter_predicate.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class Conditions;
@@ -102,6 +102,7 @@ public:
     TTableSampleOptions sample_options;
     bool enable_join_runtime_filter_pushdown = false;
     bool enable_predicate_col_late_materialize = false;
+    bool has_predicate_above_iterator = false;
 };
 
 } // namespace starrocks

@@ -26,8 +26,8 @@
 #include "column/hash_set.h"
 #include "column/runtime_type_traits.h"
 #include "column/vectorized_fwd.h"
-#include "exec/aggregator_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_memory_threshold.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/sum.h"
@@ -408,6 +408,9 @@ class TDistinctAggregateFunction final
 public:
     using ColumnType = RunTimeColumnType<LT>;
 
+    // multi_distinct_count returns 0 (never NULL); multi_distinct_sum can be NULL, so restrict this to COUNT.
+    bool is_result_non_nullable() const override { return DistinctType == AggDistinctType::COUNT; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         auto value = GetContainer<LT>::get_data(columns[0], row_num);
         this->data(state).update(ctx->mem_pool(), value);
@@ -510,36 +513,35 @@ public:
         Bytes& bytes = dst_column->get_bytes();
 
         const auto* src_column = down_cast<const ColumnType*>(src[0].get());
-        if constexpr (IsSlice<T>) {
-            bytes.reserve(chunk_size * (sizeof(uint32_t) + src_column->get_slice(0).size));
-        } else {
-            bytes.reserve(chunk_size * sizeof(T));
-        }
-        dst_column->get_offset().resize(chunk_size + 1);
-
         size_t old_size = bytes.size();
+
+        size_t final_size = old_size;
+        if constexpr (IsSlice<T>) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                final_size += sizeof(uint32_t) + src_column->get_slice(i).size;
+            }
+        } else {
+            final_size += chunk_size * sizeof(T);
+        }
+
+        bytes.resize(final_size);
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
+
         for (size_t i = 0; i < chunk_size; ++i) {
             if constexpr (IsSlice<T>) {
                 Slice key = src_column->get_slice(i);
-                size_t new_size = old_size + key.size + sizeof(uint32_t);
-                bytes.resize(new_size);
-
                 auto size = (uint32_t)key.size;
                 memcpy(bytes.data() + old_size, &size, sizeof(uint32_t));
                 old_size += sizeof(uint32_t);
                 memcpy(bytes.data() + old_size, key.data, key.size);
                 old_size += key.size;
-                dst_column->get_offset()[i + 1] = new_size;
             } else {
                 T key = src_column->immutable_data()[i];
-
-                size_t new_size = old_size + sizeof(T);
-                bytes.resize(new_size);
                 memcpy(bytes.data() + old_size, &key, sizeof(T));
-
-                dst_column->get_offset()[i + 1] = new_size;
-                old_size = new_size;
+                old_size += sizeof(T);
             }
+            offsets.set(i + 1, old_size);
         }
     }
 

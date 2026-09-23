@@ -352,7 +352,12 @@ public class PolymorphicFunctionAnalyzer {
         String fnName = fn.getFunctionName().getFunction();
         if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) ||
                 FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName))  {
-            Type elementType = ((ArrayType) inputArgTypes[0]).getItemType();
+            // An untyped NULL is a valid ANY_ARRAY argument -- ExpressionAnalyzer admits it explicitly
+            // for these functions -- and reaches this point as NullType, so it cannot be cast directly.
+            // Normalize it the same way resolveArgTypes does for pseudo-type positions; that path only
+            // covers functions with a single pseudo-type argument, so it never sees these two.
+            Type arrayArgType = inputArgTypes[0].isNull() ? new ArrayType(inputArgTypes[0]) : inputArgTypes[0];
+            Type elementType = ((ArrayType) arrayArgType).getItemType();
             Type commonType = TypeManager.getCommonSuperType(elementType, inputArgTypes[1]);
             if (commonType == null) {
                 return null;

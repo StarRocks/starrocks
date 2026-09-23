@@ -1,7 +1,4 @@
 -- name: test_sd_pk_partial_update_vector_index_sync @cloud
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 create database db_sd_pk_pu_vidx_sync_${uuid0};
 -- result:
 -- !result
@@ -59,9 +56,6 @@ drop database db_sd_pk_pu_vidx_sync_${uuid0} force;
 -- result:
 -- !result
 -- name: test_sd_pk_partial_update_vector_index_async @cloud
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 create database db_sd_pk_pu_vidx_async_${uuid0};
 -- result:
 -- !result

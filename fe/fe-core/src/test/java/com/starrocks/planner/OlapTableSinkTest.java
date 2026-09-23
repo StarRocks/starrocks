@@ -25,6 +25,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -50,6 +51,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.PartitionValue;
@@ -150,6 +152,8 @@ public class OlapTableSinkTest {
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
         Partition partition = new Partition(2, 22, "p1", index, distInfo);
+        TransactionState registeredState = new TransactionState();
+        registeredState.setUseCombinedTxnLog(true);
 
         new Expectations() {
             {
@@ -157,8 +161,10 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
-                result = new TransactionState();
+                result = registeredState;
                 globalStateMgr.getNodeMgr().getClusterInfo();
                 result = new SystemInfoService();
                 dstTable.getId();
@@ -180,6 +186,164 @@ public class OlapTableSinkTest {
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // init() plans the sink during the load, before an explicit transaction (multi-statement stream
+    // load / BEGIN..COMMIT) is upserted into the DatabaseTransactionMgr. It must reserve the
+    // explicit transaction layout to observe the
+    // combined-txn-log decision; otherwise write_txn_log stays at the per-tablet default and publish
+    // (which expects combined logs) wedges.
+    @Test
+    public void testInitFallsBackToExplicitTxnStateForCombinedTxnLog(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertTrue(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // Layout reservation applies to every explicit transaction source, but INSERT_STREAMING must
+    // keep its per-load-id logs rather than enabling the combined transaction log.
+    @Test
+    public void testInitDoesNotFallBackForInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = null;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
+    }
+
+    // A registered explicit INSERT_STREAMING transaction still reserves its layout, but the normal
+    // database lookup must not let the same state enable combined transaction logs.
+    @Test
+    public void testInitKeepsPerTabletTxnLogForRegisteredExplicitInsertStreaming(
+            @Mocked GlobalStateMgr globalStateMgr,
+            @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                2, Lists.newArrayList(new Column("k1", IntegerType.BIGINT)));
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        TransactionState explicitState = new TransactionState();
+        explicitState.setUseCombinedTxnLog(true);
+        Deencapsulation.setField(explicitState, "sourceType",
+                TransactionState.LoadJobSourceType.INSERT_STREAMING);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(3L, 4L, 1L);
+                result = explicitState;
+                times = 2;
+                globalTransactionMgr.getTransactionState(4L, 3L);
+                result = explicitState;
+                times = 1;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getDefaultDistributionInfo();
+                result = distInfo;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isWrite_txn_log());
     }
 
     @Test
@@ -204,6 +368,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -478,6 +644,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -505,6 +673,318 @@ public class OlapTableSinkTest {
         Assertions.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 
+    private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, short replicationNum) {
+        return buildSinkForReplicaCountTest(tuple, dstTable, replicationNum);
+    }
+
+    private OlapTableSink buildSinkForReplicaCountTest(TupleDescriptor tuple, OlapTable table, short replicationNum) {
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("province", StringType.STRING)));
+        listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
+        listPartitionInfo.setReplicationNum(1, replicationNum);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", IntegerType.BIGINT)));
+        Partition partition = new Partition(1, 11, "p1", index, distInfo);
+
+        Map<ColumnId, Column> idToColumn = Maps.newTreeMap(ColumnId.CASE_INSENSITIVE_ORDER);
+        idToColumn.put(ColumnId.create("province"), new Column("province", StringType.STRING));
+
+        new Expectations() {
+            {
+                table.getId();
+                result = 1;
+                minTimes = 0;
+                table.getPartitions();
+                result = Lists.newArrayList(partition);
+                minTimes = 0;
+                table.getPartition(1L);
+                result = partition;
+                minTimes = 0;
+                table.getPartitionInfo();
+                result = listPartitionInfo;
+                minTimes = 0;
+                table.getIdToColumn();
+                result = idToColumn;
+                minTimes = 0;
+                table.getDefaultDistributionInfo();
+                result = distInfo;
+                minTimes = 0;
+            }
+        };
+
+        return new OlapTableSink(table, tuple, Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+    }
+
+    /**
+     * A shared-data table can still carry replication_num > 1 in its persisted PartitionInfo,
+     * typically inherited from a shared-nothing DDL. Shipping that value to the sink raises the
+     * write-quorum threshold to (n + 1) / 2, so a single failed node channel is tolerated even
+     * though, in shared-data, the tablets that node owned have no data anywhere. The sink must
+     * report exactly one replica for cloud-native tables regardless of the stored property.
+     */
+    @Test
+    public void testCloudNativeTableReportsSingleReplica(@Mocked GlobalStateMgr globalStateMgr,
+                                                         @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertEquals(1, sink.toThrift().getOlap_table_sink().getNum_replicas(),
+                "shared-data sink must report a single replica so any node channel failure aborts the load");
+    }
+
+    /**
+     * TOlapTableSink.enable_multi_node_write has to be true of every location this load will ever
+     * receive, and the one the planner builds is not all of them: automatic partitioning creates
+     * partitions DURING the load and FrontendServiceImpl.buildCreatePartitionResponse hands those
+     * back long afterwards. createLocation records the width it resolved on the transaction exactly
+     * when that can happen, and the flag is derived from that width rather than only from the
+     * location built here -- which in this test carries no multi-node tablet at all, so the flag can
+     * come from nowhere else.
+     *
+     * <p>The order is the point. A spread node list reaching BE without this flag is read as a
+     * REPLICA set, and every row is written to every node in it.
+     */
+    @Test
+    public void testMultiNodeWriteFlagFollowsTheRecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                              @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState spreadingTxn = new TransactionState();
+        // dstTable is the @Injectable OlapTable whose getId() the Expectations below pin to 1.
+        spreadingTxn.setMultiNodeWriteWidth(1L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = spreadingTxn;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink tSink = sink.toThrift().getOlap_table_sink();
+        Assertions.assertFalse(OlapTableSink.hasMultiNodeTablet(tSink.getLocation()),
+                "this location is built one node per tablet; the flag must not be coming from it");
+        Assertions.assertTrue(tSink.isEnable_multi_node_write(),
+                "a load that will spread a runtime-created partition must tell BE so before the "
+                        + "create-partition path can hand one back");
+    }
+
+    /**
+     * The width is per TABLE, not per transaction. A multi-table Broker Load plans one sink per
+     * table on a single txn id -- {@code BrokerLoadJob.buildLoadingTasksUnderReadLock} calls
+     * {@code task.prepare()} inside the per-table loop -- and only some of those tables may be
+     * eligible. An eligible table's width must not turn on this table's flag: every input to the
+     * decision (file bundling, colocate MV, and the estimated size the width is derived from) is
+     * that other table's, and nothing here established this one's eligibility.
+     */
+    @Test
+    public void testMultiNodeWriteFlagIgnoresAnotherTablesWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        TransactionState otherTableSpread = new TransactionState();
+        // dstTable's id is pinned to 1 below; some other table in this transaction resolved 3.
+        otherTableSpread.setMultiNodeWriteWidth(2L, 3);
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = otherTableSpread;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write(),
+                "another table's width must not enable the shard-set reading for this one");
+    }
+
+    /**
+     * The other half of the same rule: a load the planner did not record a width for spreads
+     * nothing, now or later, so the flag stays off and BE keeps the behaviour that existed before
+     * multi-node write.
+     */
+    @Test
+    public void testMultiNodeWriteFlagStaysOffWithoutARecordedWidth(@Mocked GlobalStateMgr globalStateMgr,
+                                                                    @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertFalse(sink.toThrift().getOlap_table_sink().isEnable_multi_node_write());
+    }
+
+    /**
+     * A cross-cluster INSERT whose destination is an ExternalOlapTable backed by a cloud-native
+     * source table is a lake write too -- init() derives is_lake_table from exactly that composite
+     * condition. The replica count has to follow the same predicate: judged only by
+     * isCloudNativeTableOrMaterializedView(), such a destination keeps shipping the source table's
+     * stored replication_num and the quorum threshold stays raised on a single-copy write.
+     */
+    @Test
+    public void testExternalCloudNativeTableReportsSingleReplica(@Injectable ExternalOlapTable extTable,
+                                                                 @Mocked GlobalStateMgr globalStateMgr,
+                                                                 @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                extTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+                extTable.isOlapExternalTable();
+                result = true;
+                minTimes = 0;
+                extTable.isSourceTableCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, extTable, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        TOlapTableSink thriftSink = sink.toThrift().getOlap_table_sink();
+        // Guard the invariant itself: the two must never disagree.
+        Assertions.assertTrue(thriftSink.isIs_lake_table());
+        Assertions.assertEquals(1, thriftSink.getNum_replicas(),
+                "an external destination backed by a cloud-native table is still a single-copy write");
+    }
+
+    /** The shared-nothing path must keep using the table's real replication_num. */
+    @Test
+    public void testSharedNothingTableKeepsReplicationNum(@Mocked GlobalStateMgr globalStateMgr,
+                                                          @Mocked GlobalTransactionMgr globalTransactionMgr)
+            throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                minTimes = 0;
+                globalStateMgr.getGlobalTransactionMgr();
+                result = globalTransactionMgr;
+                minTimes = 0;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
+                minTimes = 0;
+                globalTransactionMgr.getTransactionState(anyLong, anyLong);
+                result = new TransactionState();
+                minTimes = 0;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = new SystemInfoService();
+                minTimes = 0;
+                dstTable.isCloudNativeTableOrMaterializedView();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        OlapTableSink sink = buildSinkForReplicaCountTest(tuple, (short) 3);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assertions.assertEquals(3, sink.toThrift().getOlap_table_sink().getNum_replicas());
+    }
+
     @Test
     public void testImmutablePartition(@Mocked GlobalStateMgr globalStateMgr,
                                        @Mocked GlobalTransactionMgr globalTransactionMgr) throws StarRocksException {
@@ -530,6 +1010,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -581,6 +1063,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -841,6 +1325,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -935,6 +1421,63 @@ public class OlapTableSinkTest {
     }
 
     @Test
+    public void testFindPrimaryReplicaSkipDecommission() throws StarRocksException {
+        Backend be1 = new Backend(2001L, "127.0.0.1", 9050);
+        Backend be2 = new Backend(2002L, "127.0.0.2", 9050);
+        Backend be3 = new Backend(2003L, "127.0.0.3", 9050);
+        be1.setAlive(true);
+        be2.setAlive(true);
+        be3.setAlive(true);
+
+        Map<Long, Backend> idToBackendRef = new HashMap<>();
+        idToBackendRef.put(be1.getId(), be1);
+        idToBackendRef.put(be2.getId(), be2);
+        idToBackendRef.put(be3.getId(), be3);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public Backend getBackend(long backendId) {
+                return idToBackendRef.get(backendId);
+            }
+        };
+
+        //be1 hosts the fewest primaries, so without the DECOMMISSION check it would be selected
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
+        bePrimaryMap.put(be1.getId(), 0L);
+        bePrimaryMap.put(be2.getId(), 1L);
+        bePrimaryMap.put(be3.getId(), 2L);
+
+        OlapTable olapTable = new OlapTable();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        MaterializedIndex index = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        List<Long> selectedBackedIds = Lists.newArrayList();
+
+        //1.a replica being decommissioned must not be selected while other candidates exist
+        Replica decommissioned = new Replica(55L, be1.getId(), Replica.ReplicaState.DECOMMISSION, 1, 0);
+        Replica normal1 = new Replica(66L, be2.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        Replica normal2 = new Replica(77L, be3.getId(), Replica.ReplicaState.NORMAL, 1, 0);
+        decommissioned.setLastWriteFail(false);
+        normal1.setLastWriteFail(false);
+        normal2.setLastWriteFail(false);
+        List<Replica> replicaList = new ArrayList<>();
+        replicaList.add(decommissioned);
+        replicaList.add(normal1);
+        replicaList.add(normal2);
+
+        int lowUsageIndex1 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, replicaList);
+        Assertions.assertEquals(normal1.getId(), replicaList.get(lowUsageIndex1).getId());
+        Assertions.assertEquals(be2.getId(), replicaList.get(lowUsageIndex1).getBackendId());
+
+        //2.fall back to the decommissioned replica when it is the only candidate
+        List<Replica> onlyDecommissionedList = new ArrayList<>();
+        onlyDecommissionedList.add(decommissioned);
+
+        int lowUsageIndex2 = OlapTableSink.findPrimaryReplica(olapTable, bePrimaryMap, infoService,
+                index, selectedBackedIds, onlyDecommissionedList);
+        Assertions.assertEquals(decommissioned.getId(), onlyDecommissionedList.get(lowUsageIndex2).getId());
+    }
+
+    @Test
     public void testCreateLocationWithSharedDataMode(@Mocked GlobalStateMgr globalStateMgr) throws Exception {
         SystemInfoService sysInfoService = new SystemInfoService();
         MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
@@ -1023,6 +1566,91 @@ public class OlapTableSinkTest {
         Assertions.assertEquals((Long) node2.getId(), nodes.get(0));
     }
 
+    // A reshard can install a newer index generation after the first sink is planned. Every later
+    // partition and location build in that transaction must remain on the original tablet layout.
+    @Test
+    public void testCreatePartitionAndLocationReuseLoadedIndexGeneration(
+            @Mocked GlobalStateMgr globalStateMgr) throws Exception {
+        SystemInfoService sysInfoService = new SystemInfoService();
+        MockedWarehouseManager warehouseManager = new MockedWarehouseManager();
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = sysInfoService;
+                globalStateMgr.getWarehouseMgr();
+                result = warehouseManager;
+            }
+        };
+
+        ComputeNode node = new ComputeNode(7010L, "127.0.0.1", 9071);
+        node.updateOnce(1, 2, 3);
+        sysInfoService.addComputeNode(node);
+        warehouseManager.setAllComputeNodeIds(List.of(node.getId()));
+        warehouseManager.setAliveComputeNodes(List.of(node));
+        warehouseManager.setComputeNodeIdsAssignToTablet(Sets.newHashSet(node.getId()));
+
+        long dbId = 7001L;
+        long tableId = 7002L;
+        long partitionId = 7003L;
+        long physicalPartitionId = 7004L;
+        long metaId = 7005L;
+        long oldIndexId = 7006L;
+        long newIndexId = 7007L;
+        long oldTabletId = 7008L;
+        long newTabletId = 7009L;
+
+        Column k1 = new Column("k1", IntegerType.BIGINT);
+        HashDistributionInfo distribution = new HashDistributionInfo(1, List.of(k1));
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        MaterializedIndex oldIndex = new MaterializedIndex(
+                oldIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        oldIndex.addTablet(new LakeTablet(oldTabletId), null, false);
+        Partition partition = new Partition(
+                partitionId, physicalPartitionId, "p1", oldIndex, distribution);
+        LakeTable table = new LakeTable(
+                tableId, "pin_layout", List.of(k1), KeysType.PRIMARY_KEYS, partitionInfo, distribution);
+        Deencapsulation.setField(table, "baseIndexMetaId", metaId);
+        table.addPartition(partition);
+        table.setIndexMeta(metaId, "pin_layout", List.of(k1), 0, 0,
+                (short) 1, TStorageType.COLUMN, KeysType.PRIMARY_KEYS);
+
+        TransactionState txn = new TransactionState();
+        TOlapTablePartitionParam first = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                first.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        MaterializedIndex newIndex = new MaterializedIndex(
+                newIndexId, metaId, MaterializedIndex.IndexState.NORMAL, 1L);
+        newIndex.addTablet(new LakeTablet(newTabletId), null, false);
+        partition.getDefaultPhysicalPartition().addMaterializedIndex(newIndex, true);
+
+        TOlapTablePartitionParam second = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), txn, null);
+        Assertions.assertEquals(oldTabletId,
+                second.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTablePartitionParam fresh = OlapTableSink.createPartition(
+                dbId, table, null, false, 0, List.of(partitionId), new TransactionState(), null);
+        Assertions.assertEquals(newTabletId,
+                fresh.getPartitions().get(0).getIndexes().get(0).getTablet_ids().get(0));
+
+        TOlapTableLocationParam location = OlapTableSink.createLocation(table, second, false, txn);
+        Assertions.assertEquals(1, location.getTablets().size());
+        Assertions.assertEquals(oldTabletId, location.getTablets().get(0).getTablet_id());
+    }
+
     // Verifies that `Config.lake_enable_per_partition_coordinator_txn_log` is
     // propagated verbatim onto `TOlapTableSink.enable_lake_per_partition_coordinator_txn_log`
     // on every built sink plan. This is the FE-side half of the per-partition
@@ -1046,6 +1674,8 @@ public class OlapTableSinkTest {
                 result = globalStateMgr;
                 globalStateMgr.getGlobalTransactionMgr();
                 result = globalTransactionMgr;
+                globalTransactionMgr.reserveExplicitTransactionLayout(anyLong, anyLong, anyLong);
+                result = null;
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);
                 result = new TransactionState();
                 globalStateMgr.getNodeMgr().getClusterInfo();
@@ -1492,4 +2122,159 @@ public class OlapTableSinkTest {
         Assertions.assertTrue(e.getMessage().contains("not found in partition"),
                 "missing target index must fail with a 'not found in partition' message, got: " + e.getMessage());
     }
+
+    // Verify that setTargetWriteIndexId() on the sink — which InsertPlanner calls when
+    // insertStmt.getTargetWriteIndexId() is non-null — causes createSchema to emit only the
+    // target index. The OlapTableSinkTest harness does not run a full InsertPlanner pipeline,
+    // so this test exercises the sink-side forwarding contract that InsertPlanner depends on.
+    @Test
+    public void testInsertPlannerForwardsTargetWriteIndexIdToSink() {
+        List<Column> schema = targetIndexSchema();
+        expectTargetWriteSchema(schema);
+        TupleDescriptor tuple = buildOutputTuple(schema);
+
+        // Simulate what InsertPlanner does: create the sink and call setTargetWriteIndexId.
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(900L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.setTargetWriteIndexId(TARGET_ROLLUP_INDEX_ID);
+
+        // Verify that the schema emitted via createSchema (which complete() delegates to) is
+        // restricted to the single target index — the invariant the BE relies on.
+        TOlapTableSchemaParam schema2 =
+                OlapTableSink.createSchema(TARGET_TABLE_ID, dstTable, tuple, TARGET_ROLLUP_INDEX_ID);
+        Assertions.assertEquals(1, schema2.getIndexes().size(),
+                "schema must contain exactly one index when targetWriteIndexId is set");
+        Assertions.assertEquals(TARGET_ROLLUP_INDEX_ID, schema2.getIndexes().get(0).getId(),
+                "the single index in the schema must be the target write index");
+    }
+
+    // Verify that a SHADOW index whose MaterializedIndexMeta carries a reordered sort key emits
+    // distributed_exprs over the NEW key order, so range-routing for double-writes uses the new key.
+    //
+    // Scenario: base sort key is (k1, k2) (sortKeyIdxes=[0,1]); shadow sort key is (k2, k1)
+    // (sortKeyIdxes=[1,0]). The output tuple carries shadow-prefixed columns whose slot-binding key
+    // is the column name (isShadowColumn() == true → getName()). We verify:
+    //   1. MetaUtils.getRangeDistributionColumns returns (shadow_k2, shadow_k1) for the shadow meta.
+    //   2. The TOlapTableIndexSchema for the shadow index has distributed_exprs set.
+    //   3. The exprs have 2 slot-refs in shadow-key order: first points to shadow_k2, second to shadow_k1.
+    @Test
+    public void testShadowIndexEmitsDistributedExprsForNewSortKeyOrder() {
+        // Shadow columns: prefix mirrors SchemaChangeHandler.SHADOW_NAME_PREFIX = "__starrocks_shadow_"
+        String shadowPrefix = "__starrocks_shadow_";
+        Column shadowK1 = new Column(shadowPrefix + "k1", IntegerType.INT, true, null, false, null, "");
+        Column shadowK2 = new Column(shadowPrefix + "k2", IntegerType.INT, true, null, false, null, "");
+        Column v1 = new Column("v1", IntegerType.INT, false, null, true, null, "");
+        // Schema order: [shadowK1(0), shadowK2(1), v1(2)].
+        // sortKeyIdxes=[1,0] → sort key is (shadowK2, shadowK1), i.e. the reordered/permuted new key.
+        List<Column> schema = Lists.newArrayList(shadowK1, shadowK2, v1);
+        long shadowMetaId = 300L;
+        MaterializedIndexMeta shadowMeta = new MaterializedIndexMeta(shadowMetaId, schema, 0, 0, (short) 2,
+                TStorageType.COLUMN, KeysType.DUP_KEYS, null, Lists.newArrayList(1, 0));
+        Map<Long, MaterializedIndexMeta> indexMetaIdToMeta = Maps.newLinkedHashMap();
+        indexMetaIdToMeta.put(shadowMetaId, shadowMeta);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1L;
+                dstTable.getBaseIndexMetaId();
+                result = shadowMetaId;
+                dstTable.getIndexMetaByMetaId(shadowMetaId);
+                result = shadowMeta;
+                dstTable.getIndexMetaIdToMeta();
+                result = indexMetaIdToMeta;
+                dstTable.getKeysType();
+                result = KeysType.DUP_KEYS;
+                dstTable.getIndexes();
+                result = Lists.newArrayList();
+                dstTable.getBfColumnIds();
+                result = Sets.newHashSet();
+                dstTable.isRangeDistribution();
+                result = true;
+            }
+        };
+
+        // 1. Verify MetaUtils returns the new key order: (shadowK2, shadowK1).
+        List<Column> routingCols = MetaUtils.getRangeDistributionColumns(dstTable, shadowMetaId);
+        Assertions.assertEquals(2, routingCols.size());
+        Assertions.assertEquals(shadowPrefix + "k2", routingCols.get(0).getName(),
+                "first routing column must be shadow_k2 (the reordered new key)");
+        Assertions.assertEquals(shadowPrefix + "k1", routingCols.get(1).getName(),
+                "second routing column must be shadow_k1");
+
+        // 2 & 3. Verify createSchema emits distributed_exprs with slot-refs in the new key order.
+        TupleDescriptor tuple = buildOutputTuple(schema);
+        TOlapTableSchemaParam schemaParam = OlapTableSink.createSchema(1L, dstTable, tuple, null, true);
+
+        Assertions.assertEquals(1, schemaParam.getIndexes().size());
+        TOlapTableIndexSchema indexSchema = schemaParam.getIndexes().get(0);
+        Assertions.assertTrue(indexSchema.isSetDistributed_exprs(),
+                "shadow range-distribution index must carry distributed_exprs");
+        List<TExpr> exprs = indexSchema.getDistributed_exprs();
+        Assertions.assertEquals(2, exprs.size(), "one routing expr per new sort-key column");
+
+        // Resolve slot_id → column name via the schema param's slot descriptors.
+        Map<Integer, String> slotIdToColName = Maps.newHashMap();
+        for (TSlotDescriptor slotDesc : schemaParam.getSlot_descs()) {
+            slotIdToColName.put(slotDesc.getId(), slotDesc.getColName());
+        }
+
+        // First expr must point to shadow_k2; second to shadow_k1 (the new key order, not the schema order).
+        for (TExpr expr : exprs) {
+            Assertions.assertEquals(1, expr.getNodes().size(), "each routing expr is a single slot-ref node");
+            Assertions.assertEquals(TExprNodeType.SLOT_REF, expr.getNodes().get(0).getNode_type());
+        }
+        int slotId0 = exprs.get(0).getNodes().get(0).getSlot_ref().getSlot_id();
+        int slotId1 = exprs.get(1).getNodes().get(0).getSlot_ref().getSlot_id();
+        Assertions.assertEquals(shadowPrefix + "k2", slotIdToColName.get(slotId0),
+                "first distributed_expr slot must resolve to shadow_k2 (new key order)");
+        Assertions.assertEquals(shadowPrefix + "k1", slotIdToColName.get(slotId1),
+                "second distributed_expr slot must resolve to shadow_k1 (new key order)");
+    }
+
+    /**
+     * Streaming ingest must never spread a tablet's write, because it cannot be sized: neither
+     * StreamLoadPlanner nor LoadPlanner's streaming path sets an estimate, so nodesForEstimatedSize
+     * answers Integer.MAX_VALUE and the width would collapse to lake_multi_node_write_max_nodes.
+     * That would give the smallest and most frequent writes the widest spread -- every micro-batch
+     * cut into that many segments, each with its own partial txn log -- and stream load has no
+     * session to SET, so nothing could turn it off.
+     *
+     * The control arm is the point: the same sink, same table, same settings, differing only in the
+     * streaming flag, does spread. Without it this test would pass on any unrelated precondition.
+     */
+    @Test
+    public void testStreamingLoadNeverSpreadsAcrossNodes(@Injectable OlapTable table) {
+        new Expectations() {
+            {
+                table.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                table.isFileBundling();
+                result = true;
+                minTimes = 0;
+            }
+        };
+
+        TransactionState txnState = new TransactionState();
+        txnState.setUseCombinedTxnLog(true);
+
+        OlapTableSink sink = new OlapTableSink(table, getTuple(), Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        // Pinned explicitly so the resolution never reaches ConnectContext: the knobs are not what
+        // this test is about, and a unit test has no bound session. A zero share means "no size
+        // estimate", which is exactly the state both streaming planners leave the sink in.
+        sink.setMultiNodeWriteSettings(new OlapTableSink.MultiNodeWriteSettings(
+                SessionVariable.MultiNodeTabletWriteMode.FORCE, 6, 0));
+
+        int spreadWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(6, spreadWidth,
+                "control: a non-streaming load with every precondition met spreads to the node bound");
+
+        sink.setIsStreamingLoad(true);
+        int streamingWidth = Deencapsulation.invoke(sink, "writerNodeCount", new TOlapTableSink(), txnState);
+        Assertions.assertEquals(OlapTableSink.NO_MULTI_NODE_WRITE, streamingWidth,
+                "a stream or routine load must stay on one node whatever the mode says");
+    }
+
 }

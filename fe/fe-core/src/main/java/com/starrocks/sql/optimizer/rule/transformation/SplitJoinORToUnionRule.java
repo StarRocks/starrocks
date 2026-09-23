@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -183,6 +184,14 @@ public class SplitJoinORToUnionRule extends TransformationRule {
             return false;
         }
 
+        // The per-branch dedup predicate built in transform() is the negation of plain '=', which
+        // is NOT a correct negation of the null-safe '<=>' (EQ_FOR_NULL): for NULL operands both
+        // the join condition and the dedup predicate are true, so the row is emitted by both
+        // UNION ALL branches (duplicate rows). Refuse to rewrite null-safe-equal disjuncts.
+        if (equalPredicates.stream().anyMatch(p -> p.getBinaryType() == BinaryType.EQ_FOR_NULL)) {
+            return false;
+        }
+
         return true;
     }
 
@@ -254,7 +263,14 @@ public class SplitJoinORToUnionRule extends TransformationRule {
             if (isFirst) {
                 OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
                 unionChildren.add(branchOpt);
-                outputColumns = context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream().toList();
+                // The union pairs its branches by position, so every branch must be listed in the same
+                // order. The branches below are built from RowOutputInfo, so this one has to be too:
+                // getOutputColumns() is a ColumnRefSet and iterates in column-id order, while
+                // RowOutputInfo of a projected operator follows the projection map's iteration order.
+                // Those two agree only while the column ids stay inside one hash bucket range.
+                outputColumns = input.getRowOutputInfo().getColumnOutputInfo().stream()
+                        .map(ColumnOutputInfo::getColumnRef)
+                        .collect(Collectors.toList());
                 childOutputColumns.add(outputColumns);
                 isFirst = false;
                 continue;
@@ -292,6 +308,10 @@ public class SplitJoinORToUnionRule extends TransformationRule {
     private boolean containsUnsupportedOperators(OptExpression expr) {
         if (expr == null) {
             return false;
+        }
+
+        if (expr.getOp() instanceof LogicalAIProjectOperator) {
+            return true;
         }
 
         if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {

@@ -315,9 +315,9 @@ public class SlotSelectionStrategyV2WeightedRoundRobinQueueTest {
     @Test
     public void testSkipEmptyQueue() {
         SlotContext slot1 = generateSlotContext(1024);
-        SlotContext slot2 = generateSlotContext(512);
-        SlotContext slot3 = generateSlotContext(256);
-        SlotContext slot4 = generateSlotContext(1);
+        generateSlotContext(512);
+        generateSlotContext(256);
+        generateSlotContext(1);
 
         WeightedRoundRobinQueue queue = new WeightedRoundRobinQueue(1024, 1);
 

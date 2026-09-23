@@ -29,6 +29,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -42,6 +43,9 @@ public class PostgresSchemaResolverTest {
 
     @Mocked
     Connection connection;
+
+    @Mocked
+    PreparedStatement preparedStatement;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -235,5 +239,75 @@ public class PostgresSchemaResolverTest {
                 Types.TIMESTAMP, "timestamp with time zone", 0, 0).isDatetime());
         Assertions.assertTrue(postgresSchemaResolver.convertColumnType(
                 Types.TIMESTAMP_WITH_TIMEZONE, "timestamp with time zone", 0, 0).isDatetime());
+    }
+
+    // -------------------------------------------------------------------------
+    // getTableRowCount tests
+    // -------------------------------------------------------------------------
+
+    @Test
+    public void testGetTableRowCountReturnsCount() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList(5_000_000L));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(5_000_000L, count);
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenEmpty() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList());
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(-1L, count, "Should return -1 when table is not found in pg_class");
+    }
+
+    @Test
+    public void testGetTableRowCountReturnsNegativeOneWhenNull() throws SQLException {
+        PostgresSchemaResolver resolver = new PostgresSchemaResolver();
+        MockResultSet rs = new MockResultSet("row_count");
+        rs.addColumn("reltuples", Arrays.asList((Object) null));
+
+        new Expectations() {
+            {
+                connection.prepareStatement(anyString);
+                result = preparedStatement;
+                minTimes = 1;
+
+                preparedStatement.executeQuery();
+                result = rs;
+                minTimes = 1;
+            }
+        };
+
+        long count = resolver.getTableRowCount(connection, "public", "orders");
+        Assertions.assertEquals(-1L, count, "Should return -1 when reltuples is NULL");
     }
 }

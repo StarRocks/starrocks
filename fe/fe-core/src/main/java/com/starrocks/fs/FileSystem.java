@@ -21,6 +21,7 @@ import com.starrocks.fs.azure.AzBlobFileSystem;
 import com.starrocks.fs.hdfs.HdfsFileSystemWrap;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.fs.hdfs.WildcardURI;
+import com.starrocks.fs.s3.S3FileSystem;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.hadoop.fs.FileStatus;
 
@@ -55,6 +56,11 @@ public interface FileSystem {
                 (scheme.equalsIgnoreCase(HdfsFsManager.WASB_SCHEME) || scheme.equalsIgnoreCase(HdfsFsManager.WASBS_SCHEME))) {
             // Use native Azure SDK is enabled and the scheme is wasb/wasbs
             return new AzBlobFileSystem(properties);
+        } else if (Config.s3_use_native_sdk_for_glob && S3FileSystem.isSupportedScheme(scheme)) {
+            // Native S3 SDK glob for S3/S3-compatible object stores. Whether the properties actually
+            // resolve to an AWS configuration (and whether the pattern is eligible) is decided inside
+            // S3FileSystem.globList, which falls back to the Hadoop path otherwise.
+            return new S3FileSystem(properties);
         } else {
             // HDFS-compatible implementation
             return new HdfsFileSystemWrap(properties);

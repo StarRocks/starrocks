@@ -1448,6 +1448,28 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select cast(cast(id_bool as boolean) as string) from test_bool;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "CAST(11: id_bool AS VARCHAR(65533))");
+
+        // float -> integral truncates, so the inner cast must survive
+        sql = "select cast(cast(t1f as bigint) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(6: t1f AS BIGINT) AS VARCHAR(65533))");
+
+        sql = "select cast(cast(t1e as bigint) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(5: t1e AS BIGINT) AS VARCHAR(65533))");
+
+        sql = "select cast(cast(t1f as bigint) as double) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(6: t1f AS BIGINT) AS DOUBLE)");
+
+        // integral -> float rounds, so the inner cast must survive
+        sql = "select cast(cast(t1d as double) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(4: t1d AS DOUBLE) AS VARCHAR(65533))");
+
+        sql = "select cast(cast(t1c as float) as string) from test_all_type;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(CAST(3: t1c AS FLOAT) AS VARCHAR(65533))");
     }
 
     @Test
@@ -2129,5 +2151,29 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select 'abcdefg' like '%%%%efg'";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 2> : TRUE");
+    }
+
+    @Test
+    public void testReduceCastBoundaryDateDoesNotAbortPlanning() throws Exception {
+        starRocksAssert.withTable("create table rc_t (id int, dt datetime) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        starRocksAssert.withTable("create table rc_t2 (id int, d date) duplicate key(id) " +
+                "distributed by hash(id) buckets 1 properties('replication_num'='1')");
+        try {
+            // Boundary date literals used to make ReduceCastRule shift past [0000-01-01, 9999-12-31]
+            // via plusDays(+/-1) and throw "Invalid date value", aborting planning of valid queries.
+            for (String sql : new String[] {
+                    "select * from rc_t where cast(dt as date) <= '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) > '9999-12-31'",
+                    "select * from rc_t where cast(dt as date) = '9999-12-31'",
+                    "select * from rc_t2 where cast(d as datetime) < '0000-01-01 00:00:00'",
+                    "select * from rc_t2 where cast(d as datetime) > '9999-12-31 12:00:00'"}) {
+                String plan = getFragmentPlan(sql);
+                Assertions.assertTrue(plan.contains("rc_t"), sql + " => " + plan);
+            }
+        } finally {
+            starRocksAssert.dropTable("rc_t");
+            starRocksAssert.dropTable("rc_t2");
+        }
     }
 }

@@ -22,11 +22,13 @@
 #include "base/testutil/assert.h"
 #include "common/system/cpu_info.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
 #include "exec/runtime/fragment_context.h"
 #include "exec/runtime/fragment_context_manager.h"
+#include "exec/runtime/pipeline.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/scan/morsel_queue_factory_base.h"
 #include "runtime/runtime_state.h"
 #include "runtime/service_contexts.h"
 
@@ -69,6 +71,50 @@ public:
     int audit_failure_count = 0;
     QueryContext* last_query_ctx = nullptr;
     FragmentContext* last_fragment_ctx = nullptr;
+};
+
+// Liveness tracker shared between the MorselQueueFactory stand-in and the
+// Pipeline stand-in so the pipeline teardown can observe factory liveness without
+// dereferencing freed memory itself.
+struct MorselFactoryLiveness {
+    bool factory_alive = true;
+    bool factory_destroyed_before_pipeline = false;
+};
+
+// Stands in for the MorselQueueFactory owned by FragmentContext::_morsel_queue_factories.
+// In production a scan operator's ConnectorChunkSource::close() calls into this
+// object during fragment teardown.
+class TrackingMorselQueueFactory final : public MorselQueueFactory {
+public:
+    explicit TrackingMorselQueueFactory(std::shared_ptr<MorselFactoryLiveness> live) : _live(std::move(live)) {}
+    ~TrackingMorselQueueFactory() override { _live->factory_alive = false; }
+
+    MorselQueue* create(int /*driver_sequence*/) override { return nullptr; }
+    size_t size() const override { return 0; }
+    size_t num_original_morsels() const override { return 0; }
+    bool is_shared() const override { return false; }
+    bool could_local_shuffle() const override { return false; }
+
+private:
+    std::shared_ptr<MorselFactoryLiveness> _live;
+};
+
+// Stands in for the operator subtree owned by FragmentContext::_pipelines. The
+// real teardown chain is ~PipelineDriver -> ~ScanOperator ->
+// ConnectorChunkSource::close() -> MorselQueueFactory::mark_split_source_morsel_finished();
+// this destructor observes whether the factory is still alive at that point.
+class TrackingPipeline final : public Pipeline {
+public:
+    explicit TrackingPipeline(std::shared_ptr<MorselFactoryLiveness> live)
+            : Pipeline(0, OpFactories{}, nullptr), _live(std::move(live)) {}
+    ~TrackingPipeline() override {
+        if (!_live->factory_alive) {
+            _live->factory_destroyed_before_pipeline = true;
+        }
+    }
+
+private:
+    std::shared_ptr<MorselFactoryLiveness> _live;
 };
 
 std::shared_ptr<FragmentContext> make_fragment_context(const TUniqueId& query_id, const TUniqueId& fragment_id) {
@@ -150,6 +196,34 @@ TEST(FragmentContextExecRuntimeTest, FailureAuditUsesInjectedExecutionServicesWi
     EXPECT_EQ(query_ctx, recording_executor->last_query_ctx);
     EXPECT_EQ(&fragment_ctx, recording_executor->last_fragment_ctx);
     manager.close();
+}
+
+// Regression test for the scan-teardown use-after-free that crashed CN nodes:
+// ConnectorChunkSource::close() runs from ~ScanOperator while FragmentContext's
+// _pipelines are being destroyed, and calls back into a MorselQueueFactory owned
+// by _morsel_queue_factories. The factory must therefore be destroyed AFTER the
+// pipelines, i.e. declared before them. This pins that ordering so a future
+// reshuffle of the member declarations cannot silently reintroduce the UAF.
+TEST(FragmentContextExecRuntimeTest, MorselQueueFactoryOutlivesPipelines) {
+    TUniqueId query_id;
+    query_id.hi = 10;
+    query_id.lo = 20;
+    TUniqueId fragment_id;
+    fragment_id.hi = 30;
+    fragment_id.lo = 40;
+
+    auto live = std::make_shared<MorselFactoryLiveness>();
+    {
+        auto fragment_ctx = make_fragment_context(query_id, fragment_id);
+        fragment_ctx->morsel_queue_factories().emplace(0, std::make_unique<TrackingMorselQueueFactory>(live));
+
+        Pipelines pipelines;
+        pipelines.emplace_back(std::make_shared<TrackingPipeline>(live));
+        fragment_ctx->set_pipelines(ExecutionGroups{}, std::move(pipelines));
+    } // ~FragmentContext destroys members in reverse declaration order here.
+
+    EXPECT_FALSE(live->factory_destroyed_before_pipeline)
+            << "MorselQueueFactory was destroyed before the pipelines; scan teardown would use-after-free";
 }
 
 } // namespace

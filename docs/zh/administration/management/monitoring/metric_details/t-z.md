@@ -16,10 +16,80 @@ description: "Alphabetical t - z"
 - 单位: -
 - 描述: 此BE中tablet的最高累积合并分数。
 
+## `tablet_merge_sstable_fallback_cohort_mismatch_total`
+
+- 单位: 计数
+- 描述: 因各源 tablet 的 SST 队列在数量、顺序或语义元数据上不一致而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_duplicate_physical_file_total`
+
+- 单位: 计数
+- 描述: 因候选 SST 队列中存在重复物理 SST 文件名而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_embedded_delvec_total`
+
+- 单位: 计数
+- 描述: 因 SST 投影后无法解析所需内嵌删除向量而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_nonuniform_mapping_total`
+
+- 单位: 计数
+- 描述: 因源到目标的 RSSID 映射或所有权不满足元数据安全复用的一致性要求而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_projected_domain_total`
+
+- 单位: 计数
+- 描述: 因投影后的 SST 所有者、RSSID 偏移或水位超出可复用的存活域或支持域而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_rowset_layout_mismatch_total`
+
+- 单位: 计数
+- 描述: 因各源 rowset 的物理布局不一致而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_shared_or_mixed_total`
+
+- 单位: 计数
+- 描述: 因源 SST 为共享所有权或混合所有权而无法安全复用元数据并选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_fallback_unsupported_sst_form_total`
+
+- 单位: 计数
+- 描述: 因源范围或 SST 元数据不符合支持的复用形式而选择延迟重建主键索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_identical_total`
+
+- 单位: 计数
+- 描述: 在合并后 tablet 元数据中复用一组完整且完全相同的继承 SST 队列的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_lazy_rebuild_total`
+
+- 单位: 计数
+- 描述: 省略源 SST 元数据，使下一次加载主键索引的操作或使用方重建该索引的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_meta_private_total`
+
+- 单位: 计数
+- 描述: 投影并复用一组完整私有源 SST 元数据的 tablet 合并累计次数。
+
+## `tablet_merge_sstable_omitted_bytes_total`
+
+- 单位: Bytes
+- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计大小。
+
+## `tablet_merge_sstable_omitted_file_total`
+
+- 单位: 计数
+- 描述: 延迟重建回退期间从合并索引元数据中省略并记录为孤立文件的唯一源 SST 文件累计数量。
+
 ## `tablet_metadata_mem_bytes`
 
 - 单位: 字节
 - 描述: tablet元数据使用的内存。
+
+## `tablet_reshard_merge_candidate_blocked`
+
+- 单位: 计数
+- 描述: 该指标统计的是合并规划过程中 Tablet 被排除事件的累计次数，而不是当前仍被阻塞的 Tablet 数量：只要某次规划把一个原本符合条件的 Tablet 判定为排除，计数就会加一，且不会随后回退，只有 FE 重启才会清零。因此应关注该值的增长速率，而非其绝对大小。一个 Tablet 被排除，原因要么是它仍持有 Tablet 分裂遗留下来、会阻塞合并的共享数据文件，要么是尚未被证实不含这类文件——后一种情况通常意味着 compaction 还没追上，但也可能是该 Tablet 所在 BE 版本过旧、不支持这项检查，或者该 Tablet 还未被观测到。清掉分裂遗留的共享文件需要一次重写它们的 compaction：非主键表可以用 `ALTER TABLE ... COMPACT` 按需触发；主键表执行同样的语句时，只有当该 Tablet 存在未清理的删除时才会触发 base compaction，而刚分裂出来的 Tablet 通常没有删除，因此对它无效，只能等常规 compaction 自行重写到那些 rowset。仅 Leader FE 会递增该计数器。
 
 ## `tablet_schema_mem_bytes`
 
@@ -30,6 +100,11 @@ description: "Alphabetical t - z"
 
 - 单位: -
 - 描述: 当前BE中主键表tablet的最高合并分数。
+
+## `threadpool_task_exception_total`
+
+- 单位: 计数
+- 描述: BE 进程内所有 ThreadPool 工作线程捕获并吞掉的任务异常累计次数。仅当 [`enable_threadpool_catch_task_exception`](../../../configuration/BE_parameters/log_server_meta.md#enable_threadpool_catch_task_exception) 为 `true` 时才会增加；该配置为 `false`（默认）时没有外层 catch，该指标不会变化。可在开启 catch 模式时用于告警；具体线程池名称和异常详情仍记录在 BE ERROR 日志中。
 
 ## `thrift_connections_total`
 
@@ -42,6 +117,30 @@ description: "Alphabetical t - z"
 
 - 单位: 计数
 - 描述: 当前打开的thrift客户端数量。
+
+## `thrift_server_acceptor_stall_ms`
+
+- 单位: 毫秒
+- 类型: 瞬时
+- 描述: FE Thrift 接收循环（accept loop）上次返回连接至今的时长（毫秒）。接收循环卡住会使该值上升，但没有 Thrift 流量的 FE 同样会上升，因此应结合连接到达速率一起判断，不要仅凭该指标告警。此外，当接收循环根本没有运行时（Thrift 服务器启动之前、停止之后）该值同样为 `0`，因此基于阈值的告警无法区分 Thrift 服务已停止与服务健康这两种情况。
+
+## `thrift_server_expired_connections_total`
+
+- 单位：计数
+- 类型：累积
+- 描述：因在等待队列中的滞留时间超过 `thrift_server_queue_timeout_ms` 而被 FE Thrift 服务器直接关闭、未予处理的连接总数。该检查默认关闭，因此在运维人员启用该超时之前，本指标恒为 0。该值上升表示 FE 当时正在处理一批调用方几乎肯定已经放弃的积压连接；可结合 `thrift_server_queue_wait_ms` 判断队列落后的程度。
+
+## `thrift_server_queue_wait_ms`
+
+- 单位：毫秒
+- 类型：瞬时
+- 描述：连接在被工作线程取走之前，在 FE Thrift 服务器等待队列中滞留时长的分位数。每个出队连接都会采样，包括随后因超时而被丢弃的连接，因此该分布不会被 `thrift_server_queue_timeout_ms` 截断。这是 Thrift 饱和的先行指标：在工作线程池尚能跟上时它就会上升，远早于 `thrift_server_rejected_connections_total` 开始变化。
+
+## `thrift_server_rejected_connections_total`
+
+- 单位: 计数
+- 类型: 累积
+- 描述: FE Thrift 服务器因工作线程池饱和而立即关闭的连接总数。每次拒绝都会计数，包括因日志限流而未打印告警的那些。该值上升表示客户端正在被拒绝；请结合 `thrift-server-pool` 的 `thread_pool` 指标一起查看，其增长速率可反映工作线程容量的缺口。
 
 ## `thrift_used_clients`
 
@@ -168,6 +267,48 @@ description: "Alphabetical t - z"
 
 - 单位：计数
 - 描述：主键表中行集 COMMIT 请求总数。
+
+## `vector_index_cache_async_load_failure`
+
+- 类型：累计
+- 单位：计数
+- 描述：已经开始执行、但在加载或写入缓存过程中失败的向量索引缓存后台加载任务累计数。不包括执行前被取消的任务。
+
+## `vector_index_cache_async_load_inflight`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：当前正在后台 worker 中运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_ns`
+
+- 类型：累计
+- 单位：纳秒
+- 描述：已经开始执行的向量索引缓存后台加载任务累计执行时间，包括成功和失败的任务，不包括队列等待时间和被拒绝的任务。
+
+## `vector_index_cache_async_load_queued`
+
+- 类型：瞬时
+- 单位：计数
+- 描述：后台线程池已经接受、但尚未开始运行的向量索引缓存加载任务数。
+
+## `vector_index_cache_async_load_rejected`
+
+- 类型：累计
+- 单位：计数
+- 描述：执行前被拒绝的向量索引缓存后台加载请求累计数。例如，缓存容量为零、线程池已经停止或任务队列无法接受任务时，该指标会增加。
+
+## `vector_index_cache_async_load_success`
+
+- 类型：累计
+- 单位：计数
+- 描述：成功加载索引并将其写入缓存的后台任务累计数。如果缓存无法继续保留该条目，容量淘汰可能会立即移除已经成功写入的索引。
+
+## `vector_index_cache_loading_wait_timeout`
+
+- 类型：累计
+- 单位：计数
+- 描述：同步缓存调用方等待正在进行的向量索引加载达到 `vector_index_cache_loading_wait_timeout_ms` 的累计次数。该指标按调用方而不是唯一索引计数；等待超时后，已经开始的 loader 会继续执行。
 
 ## `wait_base_compaction_task_num`
 

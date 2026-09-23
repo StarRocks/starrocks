@@ -41,19 +41,24 @@
 #include <boost/algorithm/string.hpp>
 #include <cctype>
 #include <filesystem>
+#include <limits>
+#include <optional>
 #include <sstream>
+#include <string_view>
 #include <vector>
 
 #include "base/utility/pretty_printer.h"
 #include "common/config_diagnostic_fwd.h"
 #include "common/config_path_fwd.h"
 #include "common/configbase.h"
+#include "common/logging.h"
+#include "exec/exec_env.h"
 #include "http/action/profile_utils.h"
+#include "http/utils.h"
 #include "http/web_page_handler.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/env/global_env.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
 
@@ -116,9 +121,24 @@ void print_mem_str(std::stringstream* output, const MemTracker::SimpleItem& item
     }
 }
 
-void MemTrackerWebPageHandler::handle(const GlobalEnv& global_env, MemTracker* mem_tracker,
+void MemTrackerWebPageHandler::handle(const RuntimeEnv& runtime_env, MemTracker* mem_tracker,
                                       const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
+
+    size_t upper_level = 2;
+    auto iter = args.find("upper_level");
+    if (iter != args.end()) {
+        int64_t requested_level = 0;
+        Status st = parse_int64_param("upper_level", iter->second, &requested_level, 0,
+                                      std::numeric_limits<int32_t>::max());
+        if (st.ok()) {
+            upper_level = static_cast<size_t>(requested_level);
+        } else {
+            LOG(WARNING) << st;
+            (*output) << "<p><strong>Invalid upper_level.</strong> Showing " << upper_level << " levels.</p>\n";
+        }
+    }
+
     (*output) << "<table data-toggle='table' "
                  "       data-page-size='25' "
                  "       data-pagination='true' "
@@ -137,18 +157,10 @@ void MemTrackerWebPageHandler::handle(const GlobalEnv& global_env, MemTracker* m
                  ">Peak Consumption</th>";
     (*output) << "<tbody>\n";
 
-    size_t upper_level;
-    auto iter = args.find("upper_level");
-    if (iter != args.end()) {
-        upper_level = std::stol(iter->second);
-    } else {
-        upper_level = 2;
-    }
-
     MemTracker* start_mem_tracker;
     iter = args.find("type");
     if (iter != args.end()) {
-        auto item = global_env.get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
+        auto item = runtime_env.get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
         if (item != nullptr) {
             start_mem_tracker = item.get();
         } else {
@@ -164,26 +176,26 @@ void MemTrackerWebPageHandler::handle(const GlobalEnv& global_env, MemTracker* m
 
     if (start_mem_tracker != nullptr) {
         MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, upper_level);
-        if (start_mem_tracker == global_env.process_mem_tracker()) {
+        if (start_mem_tracker == runtime_env.process_mem_tracker()) {
             // Metadata memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
-            MemTracker* meta_mem_tracker = global_env.metadata_mem_tracker();
+            MemTracker* meta_mem_tracker = runtime_env.metadata_mem_tracker();
             auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
             meta_item->parent = root;
 
             // Update memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
-            MemTracker* update_mem_tracker = global_env.update_mem_tracker();
+            MemTracker* update_mem_tracker = runtime_env.update_mem_tracker();
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
             update_item->parent = root;
 
             // passthrough memory tracker not in RootMemTrackerTree
-            MemTracker* passthrough_mem_tracker = global_env.passthrough_mem_tracker();
+            MemTracker* passthrough_mem_tracker = runtime_env.passthrough_mem_tracker();
             auto* passthrough_item = passthrough_mem_tracker->get_snapshot(&obj_pool, upper_level);
             passthrough_item->parent = root;
 
             // Brpc iobuf memory statistics use the old memory framework,
-            MemTracker* brpc_iobuf_mem_tracker = global_env.brpc_iobuf_mem_tracker();
+            MemTracker* brpc_iobuf_mem_tracker = runtime_env.brpc_iobuf_mem_tracker();
             auto* brpc_iobuf_item = brpc_iobuf_mem_tracker->get_snapshot(&obj_pool, upper_level);
             brpc_iobuf_item->parent = root;
 
@@ -204,6 +216,26 @@ void malloc_stats_write_cb(void* opaque, const char* data) {
     buf->append(data);
 }
 
+// jemalloc's own opts string: every character OMITS a section -- 'g' general, 'm' merged
+// arenas, 'd' destroyed arenas, 'a' per-arena, 'b' bins, 'l' large, 'x' mutex, 'e' extents,
+// 'h' hpa. An empty string omits nothing. Taken from STATS_PRINT_OPTIONS in jemalloc's
+// include/jemalloc/internal/stats.h, minus 'J': it switches the report to JSON, and this page
+// wraps whatever it gets in HTML, so the result would parse as neither.
+constexpr std::string_view kJemallocStatsOpts = "gmdablxeh";
+
+std::optional<std::string> parse_jemalloc_stats_opts(std::optional<std::string_view> requested) {
+    // The default omits the per-arena statistics: with one arena per CPU those tables dwarf
+    // everything else on a large machine. /memz?opts=blx keeps them and drops the bin, large
+    // and mutex tables instead.
+    if (!requested.has_value()) {
+        return std::string("a");
+    }
+    if (requested->find_first_not_of(kJemallocStatsOpts) != std::string_view::npos) {
+        return std::nullopt;
+    }
+    return std::string(*requested);
+}
+
 // Registered to handle "/memz", and prints out memory allocation statistics.
 void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     if (mem_tracker != nullptr) {
@@ -221,8 +253,24 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     (*output) << "Memory tracking is not available with address sanitizer builds.";
 #else
+    std::optional<std::string_view> requested;
+    if (auto it = args.find("opts"); it != args.end()) {
+        requested = it->second;
+    }
+    std::optional<std::string> stats_opts = parse_jemalloc_stats_opts(requested);
+    if (!stats_opts.has_value()) {
+        // Do not echo the rejected value: it reaches this page unescaped and would let a
+        // crafted link inject markup into the response.
+        (*output) << "ignoring opts: expected characters from '" << kJemallocStatsOpts << "'<br>";
+        stats_opts = parse_jemalloc_stats_opts(std::nullopt);
+    }
     std::string buf;
-    je_malloc_stats_print(malloc_stats_write_cb, &buf, "a");
+    je_malloc_stats_print(malloc_stats_write_cb, &buf, stats_opts->c_str());
+    if (buf.empty()) {
+        // malloc_stats_print() returns void and writes nothing when it fails to refresh the
+        // statistics, so an empty buffer is the only signal; the reason goes to be.out.
+        (*output) << "jemalloc produced no statistics, see be.out for a malloc_stats_print failure";
+    }
     boost::replace_all(buf, "\n", "<br>");
     (*output) << buf << "</pre>";
 #endif
@@ -324,9 +372,9 @@ void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringst
     (*output) << "</table>";
 }
 
-void add_default_path_handlers(WebPageHandler* web_page_handler, const GlobalEnv& global_env) {
-    const auto* global_env_ptr = &global_env;
-    auto* process_mem_tracker = global_env.process_mem_tracker();
+void add_default_path_handlers(WebPageHandler* web_page_handler, const RuntimeEnv& runtime_env) {
+    const auto* runtime_env_ptr = &runtime_env;
+    auto* process_mem_tracker = runtime_env.process_mem_tracker();
     // TODO(yingchun): logs_handler is not implemented yet, so not show it on navigate bar
     web_page_handler->register_page("/logs", "Logs", logs_handler, false /* is_on_nav_bar */);
     web_page_handler->register_page("/varz", "Configs", config_handler, true /* is_on_nav_bar */);
@@ -339,8 +387,8 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, const GlobalEnv
             true /* is_on_nav_bar */);
     web_page_handler->register_page(
             "/mem_tracker", "MemTracker",
-            [global_env_ptr, process_mem_tracker](auto&& PH1, auto&& PH2) {
-                return MemTrackerWebPageHandler::handle(*global_env_ptr, process_mem_tracker,
+            [runtime_env_ptr, process_mem_tracker](auto&& PH1, auto&& PH2) {
+                return MemTrackerWebPageHandler::handle(*runtime_env_ptr, process_mem_tracker,
                                                         std::forward<decltype(PH1)>(PH1),
                                                         std::forward<decltype(PH2)>(PH2));
             },

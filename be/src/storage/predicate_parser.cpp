@@ -20,9 +20,9 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/predicate_tree/predicate_tree.hpp"
 #include "storage/tablet_schema.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/predicate_tree/predicate_tree.hpp"
 
 namespace starrocks {
 
@@ -34,8 +34,11 @@ bool OlapPredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
 }
 
 bool OlapPredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    // field_index() reports a miss as size_t(-1), so an absent column reads as a huge index
+    // rather than a small one. Nothing can be pushed down for a column the tablet schema does
+    // not carry, and failing the one predicate beats aborting the process.
     const size_t index = _schema->field_index(slot_desc->col_name());
-    CHECK(index <= _schema->num_columns());
+    RETURN_IF(index >= _schema->num_columns(), false);
     const TabletColumn& column = _schema->column(index);
     return _schema->keys_type() == KeysType::PRIMARY_KEYS ||
            column.aggregation() == StorageAggregateType::STORAGE_AGGREGATE_NONE;
@@ -70,7 +73,14 @@ StatusOr<ColumnPredicate*> OlapPredicateParser::t_parse_thrift_cond(const Condit
     ColumnPredicate* pred = predicate_parser_detail::create_column_predicate(condition, type_info, index);
     RETURN_IF(pred == nullptr, Status::Unknown("unknown condition"));
 
-    if (type == TYPE_CHAR) {
+    // A length-less CHAR (col.length() == -1) reaches here from flat-JSON / variant subfield
+    // pushdown, e.g. CAST(json_col->'$.x' AS char), which materializes a synthetic CHAR scan
+    // column with no declared width. col.length() is int32; -1 converts to ~SIZE_MAX when passed
+    // to padding_zeros(size_t), so std::string::append() throws std::length_error. A real
+    // materialized CHAR column always has length in [1, 255], and a length-less CHAR is an
+    // unbounded string that must not be zero-padded, so only pad when the declared width is
+    // positive.
+    if (type == TYPE_CHAR && col.length() > 0) {
         pred->padding_zeros(col.length());
     }
     return pred;

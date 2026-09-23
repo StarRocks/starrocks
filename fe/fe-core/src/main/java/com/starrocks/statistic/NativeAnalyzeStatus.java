@@ -156,6 +156,11 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
     }
 
     @Override
+    public void setProperties(Map<String, String> properties) {
+        this.properties = properties;
+    }
+
+    @Override
     public LocalDateTime getStartTime() {
         return startTime;
     }

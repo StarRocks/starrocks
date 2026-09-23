@@ -171,6 +171,77 @@ public class TaskManagerTest {
         assertEquals(Constants.TaskRunState.SUCCESS, state);
     }
 
+    private static Task makeTask(TaskManager taskManager, String name, long id) {
+        Task task = new Task(name);
+        task.setId(id);
+        taskManager.replayCreateTask(task);
+        return task;
+    }
+
+    private static TaskRun makeRun(TaskManager taskManager, Task task, String queryId) {
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(queryId, System.currentTimeMillis());
+        return taskRun;
+    }
+
+    private static void addToHistory(TaskManager taskManager, Task task, String queryId) {
+        TaskRunStatus finished = new TaskRunStatus();
+        finished.setTaskId(task.getId());
+        finished.setTaskName(task.getName());
+        finished.setQueryId(queryId);
+        finished.setState(Constants.TaskRunState.SUCCESS);
+        taskManager.getTaskRunHistory().addHistory(finished);
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusDedupsARunFoundInTwoSources() {
+        // A run migrating from the running map into the history while getMatchedTaskRunStatus walks the
+        // sources is found in both: the running map still holds the RUNNING record, the history already
+        // holds the finished one.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_dedup", 1000L);
+
+        TaskRun runningTaskRun = makeRun(taskManager, task, "query_dedup");
+        runningTaskRun.getStatus().setState(Constants.TaskRunState.RUNNING);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(runningTaskRun);
+        addToHistory(taskManager, task, "query_dedup");
+
+        List<TaskRunStatus> taskRuns = taskManager.getMatchedTaskRunStatus(new TGetTasksParams());
+        assertEquals(1, taskRuns.size());
+        // The history is the source it migrated into, so it carries the final state.
+        assertEquals(Constants.TaskRunState.SUCCESS, taskRuns.get(0).getState());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusKeepsDistinctRunsOfTheSameTask() {
+        // One task id owns many runs, so only an equal query id may collapse two records.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_distinct", 1001L);
+
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, "query_pending"));
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, task, "query_running"));
+        addToHistory(taskManager, task, "query_history_1");
+        addToHistory(taskManager, task, "query_history_2");
+
+        assertEquals(4, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
+    @Test
+    public void getMatchedTaskRunStatusCollapsesRunsWithoutQueryId() {
+        // Only a record restored from persisted state can lack a query id, and nothing then tells two
+        // of them apart -- as the in-memory history, itself keyed by query id, already treats them. The
+        // two records below carry the two shapes of "no query id", which must not count as two runs.
+        TaskManager taskManager = new TaskManager();
+        Task task = makeTask(taskManager, "task_without_query_id", 1002L);
+        taskManager.getTaskRunScheduler().addPendingTaskRun(makeRun(taskManager, task, null));
+
+        // A second task, because the running map holds at most one run per task id.
+        Task otherTask = makeTask(taskManager, "other_task_without_query_id", 1003L);
+        taskManager.getTaskRunScheduler().addRunningTaskRun(makeRun(taskManager, otherTask, ""));
+
+        assertEquals(1, taskManager.getMatchedTaskRunStatus(new TGetTasksParams()).size());
+    }
+
     @Test
     public void testTaskRunPriority() {
         Queue<TaskRun> queue = Queues.newPriorityBlockingQueue();
@@ -1055,7 +1126,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldCancelLongRunningTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1093,7 +1163,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelTasksWithoutTimeout() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 5000);
@@ -1129,7 +1198,6 @@ public class TaskManagerTest {
 
     @Test
     public void removeExpiredTaskRunsShouldNotCancelNonExpiredTasks() {
-        TaskRunManager taskRunManager = new TaskRunManager(taskRunScheduler);
         TaskRun taskRun = new TaskRun();
         TaskRunStatus status = new TaskRunStatus();
         status.setCreateTime(System.currentTimeMillis() - 1000);
@@ -1270,7 +1338,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskTriggerImmediately() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1310,7 +1377,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenLastScheduleBeforeStart() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1348,7 +1414,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerMVTaskNoImmediateTriggerWhenNotExpired() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_mv");
         task.setSource(Constants.TaskSource.MV);
         TaskSchedule schedule = new TaskSchedule();
@@ -1386,7 +1451,6 @@ public class TaskManagerTest {
 
     @Test
     public void testRegisterSchedulerNonMVTaskNoImmediateTrigger() {
-        TaskManager taskManager = new TaskManager();
         Task task = new Task("test_ctas");
         task.setSource(Constants.TaskSource.CTAS);
         TaskSchedule schedule = new TaskSchedule();
@@ -1523,8 +1587,6 @@ public class TaskManagerTest {
             }
         };
 
-        TaskManager tm = new TaskManager();
-        TaskRunManager taskRunManager = tm.getTaskRunManager();
 
         // Simulate the dispatch scheduler callback logic from TaskManager.start()
         // This is the same guard that was added in the fix
@@ -1552,5 +1614,77 @@ public class TaskManagerTest {
         }
         Assertions.assertTrue(dispatched[0],
                 "Dispatch scheduler should proceed when leader");
+    }
+
+    @Test
+    public void testStopShutsDownSchedulersAndStartRebuilds() throws Exception {
+        // TaskManager owns two ScheduledExecutorService instances; stop() must shut both down
+        // so worker threads exit on demotion and start() must rebuild them for re-election.
+        // periodFutureMap holds futures scheduled on the old pool - it must be empty after
+        // stop() so a re-registered periodic task on the new leader does not collide with
+        // stale futures.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+
+        java.util.concurrent.ScheduledExecutorService periodBefore = mgr.periodScheduler;
+        java.util.concurrent.ScheduledExecutorService dispatchBefore = mgr.dispatchScheduler;
+
+        mgr.stop(5000L);
+        Assertions.assertTrue(periodBefore.isShutdown(), "periodScheduler must be shut down by stop()");
+        Assertions.assertTrue(dispatchBefore.isShutdown(), "dispatchScheduler must be shut down by stop()");
+        Assertions.assertTrue(periodBefore.isTerminated(),
+                "periodScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(dispatchBefore.isTerminated(),
+                "dispatchScheduler must be terminated after stop(timeoutMs)");
+        Assertions.assertTrue(mgr.periodFutureMap.isEmpty(), "periodFutureMap must be cleared by stop()");
+
+        // Second start() rebuilds both pools.
+        mgr.start();
+        Assertions.assertNotSame(periodBefore, mgr.periodScheduler,
+                "periodScheduler must be rebuilt on re-election");
+        Assertions.assertNotSame(dispatchBefore, mgr.dispatchScheduler,
+                "dispatchScheduler must be rebuilt on re-election");
+        Assertions.assertFalse(mgr.periodScheduler.isShutdown());
+        Assertions.assertFalse(mgr.dispatchScheduler.isShutdown());
+
+        mgr.stop();
+    }
+
+    @Test
+    public void testStopIsNoOpWhenNotStarted() {
+        // stop() guards with isStart.compareAndSet(true, false); a TaskManager that never
+        // started must not throw when stop is called.
+        TaskManager mgr = new TaskManager();
+        Assertions.assertDoesNotThrow(() -> mgr.stop());
+    }
+
+    @Test
+    public void testStopWithTimeoutLogsWhenSchedulerRefusesToTerminate() throws Exception {
+        // stop(timeoutMs) must call awaitTermination on both pools; when the await returns
+        // false (a worker ignored shutdownNow's interrupt) it logs a warning and proceeds
+        // rather than blocking forever. This test covers the LOG.warn branches by injecting
+        // a scheduler whose worker ignores interrupts long enough to outlast the budget.
+        TaskManager mgr = new TaskManager();
+        mgr.start();
+        // Replace periodScheduler with a pool whose single worker spins ignoring interrupt.
+        java.util.concurrent.ScheduledThreadPoolExecutor stuckSched =
+                new java.util.concurrent.ScheduledThreadPoolExecutor(1);
+        stuckSched.execute(() -> {
+            long deadline = System.currentTimeMillis() + 2000L;
+            while (System.currentTimeMillis() < deadline) {
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException ignored) {
+                    // simulate uninterruptible work
+                }
+            }
+        });
+        mgr.periodScheduler = stuckSched;
+
+        mgr.stop(50L);
+
+        Assertions.assertTrue(stuckSched.isShutdown(), "scheduler must be shutdown by stop");
+        // worker is still running but stop() returned within budget; cleanup
+        stuckSched.shutdownNow();
     }
 }

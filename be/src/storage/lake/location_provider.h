@@ -28,16 +28,6 @@ namespace starrocks::lake {
 static const char* const kMetadataDirectoryName = "meta";
 static const char* const kTxnLogDirectoryName = "log";
 static const char* const kSegmentDirectoryName = "data";
-// Legacy load_spill layout: <root>/load_spill/<load_id_uuid>/. Written by BE versions
-// before the txn_id-scoped layout was introduced; new code only reclaims it via
-// vacuum_load_spill() when its cleanup_legacy_load_spill flag is set.
-static const char* const kLoadSpillDirectoryName = "load_spill";
-// Active load_spill layout (flat). All spill files from Lake DeltaWriterImpl live
-// directly under <root>/load_spill_txns/ with names "<txn_id_hex>_<load_id>_<frag_id>_<seq>";
-// vacuum_load_spill() reclaims expired files by parsing the leading hex txn_id, so a
-// single paginated list over this dir is sufficient. Non-Lake callers (connector /
-// SpillPartitionChunkWriter) keep using kLoadSpillDirectoryName above.
-static const char* const kLoadSpillTxnsDirectoryName = "load_spill_txns";
 
 class LocationProvider {
 public:
@@ -75,10 +65,17 @@ public:
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
     }
 
+    // Version-1 metadata shared by every tablet of a partition created with
+    // enable_tablet_creation_optimization. A plain TabletMetadataPB, NOT a bundle -- and the same
+    // path as bundle_tablet_metadata_location(tablet_id, kInitialVersion), since both name tablet
+    // id 0. Never hand this object to a bundle parser.
     std::string tablet_initial_metadata_location(int64_t tablet_id) const {
         return join_path(metadata_root_location(tablet_id), tablet_initial_metadata_filename());
     }
 
+    // The aggregated partition's bundle for |version|: a BundleTabletMetadataPB with one page per
+    // tablet. Meaningful only for version >= 2; at kInitialVersion this collides with
+    // tablet_initial_metadata_location(), which holds a different format.
     std::string bundle_tablet_metadata_location(int64_t tablet_id, int64_t version) const {
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(0, version));
     }

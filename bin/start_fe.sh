@@ -60,6 +60,8 @@ FAILPOINT=
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
 MIN_JDK_VERSION=17
+# recommended jdk version; versions in [MIN_JDK_VERSION, RECOMMENDED_JDK_VERSION) are deprecated
+RECOMMENDED_JDK_VERSION=21
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -149,15 +151,16 @@ JAVA=$JAVA_HOME/bin/java
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 if [[ "$JAVA_VERSION" -lt $MIN_JDK_VERSION ]]; then
-    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $MIN_JDK_VERSION or higher"
+    echo "Error: JDK $JAVA_VERSION is not supported, please use JDK version $RECOMMENDED_JDK_VERSION or higher"
     exit -1
+elif [[ "$JAVA_VERSION" -lt $RECOMMENDED_JDK_VERSION ]]; then
+    echo "Warning: JDK $JAVA_VERSION is deprecated and support will be removed in a future release, please upgrade to JDK version $RECOMMENDED_JDK_VERSION or higher"
 fi
 
 final_java_opt=${JAVA_OPTS}
-# Compatible with scenarios upgraded from jdk11
+# JAVA_OPTS_FOR_JDK_11 is no longer supported, warn loudly if it is still set
 if [ ! -z "${JAVA_OPTS_FOR_JDK_11}" ] ; then
-    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_11 is not supported, JAVA_OPTS is the only place to set jvm parameters"
-    final_java_opt=${JAVA_OPTS_FOR_JDK_11}
+    warn_removed_java_opts "StarRocks FE" "JAVA_OPTS_FOR_JDK_11" "$STARROCKS_HOME/conf/fe.conf"
 fi
 
 if [ -z "$final_java_opt" ] ; then
@@ -167,6 +170,17 @@ if [ -z "$final_java_opt" ] ; then
     fi
     final_java_opt="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy"
     echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $final_java_opt"
+fi
+
+# JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started with
+# -Djava.security.manager=allow, which the FE needs to install the UDF security manager
+# while analyzing CREATE FUNCTION. JDK 24+ (JEP 486) rejects every value other than
+# 'disallow' and the JVM will not start at all, so only [18,24) gets the flag. Whatever
+# JAVA_OPTS already sets wins, including a deliberate -Djava.security.manager=disallow.
+if [[ "${JAVA_VERSION:-0}" -ge 18 && "${JAVA_VERSION:-0}" -lt 24 ]]; then
+    if [[ "$final_java_opt" != *"-Djava.security.manager="* ]]; then
+        final_java_opt="${final_java_opt} -Djava.security.manager=allow"
+    fi
 fi
 
 # Auto detect jvm -Xmx parameter in case $FE_ENABLE_AUTO_JVM_XMX_DETECT = true

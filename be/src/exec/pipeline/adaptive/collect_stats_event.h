@@ -16,8 +16,8 @@
 
 #include <vector>
 
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/event.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/event.h"
 
 namespace starrocks::pipeline {
 

@@ -1,0 +1,14 @@
+-- name: test_alter_table_column_comment_with_type @native
+create table t(k int, v int) primary key(k);
+show create table t;
+-- comment-only modify with the column type repeated takes the lightweight ModifyColumnComment path; it
+-- works on a primary key table's value column without a schema change job.
+alter table t modify column v int comment 'v';
+-- re-applying the same comment is idempotent and still succeeds (aligned with MODIFY COLUMN ... COMMENT).
+alter table t modify column v int comment 'v';
+-- the lightweight path also works on a primary key table's key column, which a regular MODIFY COLUMN rejects.
+alter table t modify column k int comment 'k';
+show create table t;
+create table d(k int, v int) duplicate key(k);
+alter table d modify column v int comment 'v';
+show create table d;

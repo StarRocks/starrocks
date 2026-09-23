@@ -50,6 +50,8 @@ import com.starrocks.alter.AlterJobExecutor;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService;
+import com.starrocks.alter.reshard.RangeDistributionMigrationService.RangeSpec;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
@@ -61,6 +63,7 @@ import com.starrocks.catalog.ColocateRange;
 import com.starrocks.catalog.ColocateRangeUtils;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -151,6 +154,7 @@ import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DisablePartitionRecoveryInfo;
 import com.starrocks.persist.DisableTableRecoveryInfo;
 import com.starrocks.persist.DropDbInfo;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.DropPartitionsInfo;
 import com.starrocks.persist.EditLog;
@@ -1219,6 +1223,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * The lake tablets of a new partition (ADD PARTITION, TRUNCATE TABLE, the temp partitions of
+     * INSERT OVERWRITE / OPTIMIZE) are created outside the table lock and pinned to the colocation
+     * meta group looked up at that time (see {@link #createLakeTablets}). A concurrent
+     * {@code ALTER TABLE ... SET ('colocate_with' = ...)} in that window would leave the new shards in a
+     * meta group the table no longer belongs to: the post-commit {@code updateLakeTableColocationInfo}
+     * only knows the table's current group. Fail the DDL so the caller retries against the new colocation;
+     * the shards created by the failed attempt are reclaimed by StarMgrMetaSyncer.
+     */
+    public void checkIfColocateMetaGroupChange(OlapTable olapTable, ColocateTableIndex.GroupId expectedGroupId,
+                                               String tableName) throws DdlException {
+        ColocateTableIndex.GroupId currentGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
+        if (!Objects.equals(currentGroupId, expectedGroupId)) {
+            throw new DdlException("Table[" + tableName + "]'s colocation has been changed. try again.");
+        }
+    }
+
     private static class PartitionInfoCheckResult {
         private final Map<Long, Range<PartitionKey>> idToRange;
         private final Map<Long, List<LiteralExpr>> idToLiteralExprValues;
@@ -1337,8 +1358,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getTabletInvertedIndex().deleteTablets(tabletIdSetForAll);
     }
 
-    private void checkPartitionNum(OlapTable olapTable) throws DdlException {
-        if (olapTable.getNumberOfPartitions() > Config.max_partition_number_per_table) {
+    private void checkPartitionNum(OlapTable olapTable, int newPartitionNum) throws DdlException {
+        if (olapTable.getNumberOfPartitions() + (long) newPartitionNum > Config.max_partition_number_per_table) {
             throw new DdlException("Table " + olapTable.getName() + " created partitions exceeded the maximum limit: " +
                     Config.max_partition_number_per_table + ". You can modify this restriction on by setting" +
                     " max_partition_number_per_table larger.");
@@ -1350,6 +1371,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         DistributionInfo distributionInfo;
         OlapTable olapTable = checkTableForAddPartitions(db, tableName);
         OlapTable copiedTable;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
 
         Locker locker = new Locker();
         locker.lockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
@@ -1362,8 +1384,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // check partition type
             checkPartitionType(partitionInfo);
 
-            // check partition num
-            checkPartitionNum(olapTable);
+            // resolve which of the requested partitions already exist, so that the partition num check below
+            // only counts the ones this batch would really add
+            checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
+
+            // check partition num; temp partitions are not held in idToPartition, so they are counted by
+            // neither side of the comparison
+            checkPartitionNum(olapTable,
+                    isTempPartition ? 0 : partitionDescs.size() - checkExistPartitionName.size());
 
             // get distributionInfo
             distributionInfo = getDistributionInfo(olapTable, distributionDesc).copy();
@@ -1371,9 +1399,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
             // check colocation
             checkColocation(db, olapTable, distributionInfo, partitionDescs);
+            // Snapshot the colocation meta group that the lock-free tablet creation below pins the new
+            // shards to; re-validated under the WRITE lock before commit.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
             copiedTable = AnalyzerUtils.getShadowCopyTable(olapTable);
             copiedTable.setDefaultDistributionInfo(distributionInfo);
-            checkExistPartitionName = CatalogUtils.checkPartitionNameExistForAddPartitions(olapTable, partitionDescs);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), olapTable.getId(), LockType.READ);
         }
@@ -1425,8 +1455,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     return;
                 }
 
+                // re-check the partition num: the count checked under the READ lock above is stale as soon as
+                // that lock is dropped, and this WRITE lock is the one the batch commits under
+                checkPartitionNum(olapTable, isTempPartition ? 0 : partitionsToAdd.size());
+
                 // check if meta changed
                 checkIfMetaChange(olapTable, copiedTable, tableName);
+                checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, tableName);
 
                 // get partition info
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
@@ -1755,6 +1790,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long id = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 id, partition.getId(), indexMap.get(olapTable.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         // set ShardGroupId to partition for rollback to old version
         physicalPartition.setShardGroupId(shardGroupId);
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
@@ -1888,6 +1926,25 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
      */
     public void addPhysicalPartition(String dbName, String tableName, String partitionName,
                                      int bucketNum) throws DdlException {
+        addPhysicalPartition(dbName, tableName, partitionName, bucketNum, 1);
+    }
+
+    /**
+     * Add {@code count} new physical partitions to an existing logical partition, each with the
+     * given bucket number, persisted in a single batch. Calling this with {@code count == 1} is
+     * equivalent to the 4-argument overload. Designed to be called via admin execute script for
+     * cross-cluster data replication scenarios that need to backfill many physical partitions on a
+     * random-distribution table in one call instead of one per scheduling cycle.
+     *
+     * @param dbName        the database name
+     * @param tableName     the table name
+     * @param partitionName the partition name (null for non-partitioned table)
+     * @param bucketNum     the bucket number (0 to use system default)
+     * @param count         the number of physical partitions to add (must be {@code >= 1} and
+     *                      {@code <= Config.max_partitions_in_one_batch})
+     */
+    public void addPhysicalPartition(String dbName, String tableName, String partitionName,
+                                     int bucketNum, int count) throws DdlException {
         Database db = getDb(dbName);
         if (db == null) {
             throw new DdlException("Database '" + dbName + "' does not exist");
@@ -1940,6 +1997,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw new DdlException("Bucket number exceeds maximum allowed: " + Config.max_bucket_number_per_partition);
         }
 
+        if (count < 1) {
+            throw new DdlException("Count must be at least 1");
+        }
+
+        if (count > Config.max_partitions_in_one_batch) {
+            throw new DdlException(String.format(
+                    "Count %d exceeds the maximum number of physical partitions allowed in one batch: %d. " +
+                            "You can modify this restriction by setting max_partitions_in_one_batch larger.",
+                    count, Config.max_partitions_in_one_batch));
+        }
+
         // Get compute resource
         long warehouseId = ConnectContext.get() != null
                 ? ConnectContext.get().getCurrentWarehouseId()
@@ -1948,13 +2016,13 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         final CRAcquireContext acquireContext = CRAcquireContext.of(warehouseId);
         final ComputeResource computeResource = warehouseManager.acquireComputeResource(acquireContext);
 
-        // Add one physical partition with the specified bucket number.
+        // Add `count` physical partitions with the specified bucket number, persisted in one batch.
         // The bucketNum is set on the shadow-copied table inside addSubPartitions,
         // so there is no concurrent safety issue with the original table object.
-        addSubPartitions(db, olapTable, partition, 1, bucketNum, computeResource);
+        addSubPartitions(db, olapTable, partition, count, bucketNum, computeResource);
 
-        LOG.info("Successfully added physical partition to partition '{}' in table '{}'",
-                partition.getName(), olapTable.getName());
+        LOG.info("Successfully added {} physical partition(s) to partition '{}' in table '{}'",
+                count, partition.getName(), olapTable.getName());
     }
 
     public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
@@ -2037,6 +2105,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long physicalPartitionId = GlobalStateMgr.getCurrentState().getNextId();
         PhysicalPartition physicalPartition = new PhysicalPartition(
                 physicalPartitionId, partitionId, indexMap.get(table.getBaseIndexMetaId()));
+        // Assigned here rather than in the constructor: the GTID generator may only be called on
+        // the leader, and constructors also run where a partition is rebuilt from stored metadata.
+        physicalPartition.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
         physicalPartition.setBucketNum(distributionInfo.getBucketNum());
 
         logicalPartition.addSubPartition(physicalPartition);
@@ -2226,59 +2297,169 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         Locker locker = new Locker();
         locker.lockDatabase(db.getId(), LockType.WRITE);
+        // Once logCreateTable returns, the creation is published: the applier has registered the table and
+        // the record is durable, so a later failure can no longer be undone by simply not registering it.
+        // These two say which of those states we are in, so the outer finally knows whether there is
+        // anything to roll back.
+        boolean journaled = false;
+        boolean createFinished = false;
         try {
-            if (!db.isExist()) {
-                throw new DdlException("Database has been dropped when creating table/mv/view");
+            try {
+                if (!db.isExist()) {
+                    throw new DdlException("Database has been dropped when creating table/mv/view");
+                }
+
+                if (db.isTableExist(table)) {
+                    if (!isSetIfNotExists) {
+                        table.delete(db.getId(), false);
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
+                                "table already exists");
+                    } else {
+                        LOG.info("Create table[{}] which already exists", table.getName());
+                        return;
+                    }
+                }
+
+                // NOTE: The table metadata has been prepared. From the journal record below onwards a
+                // failure is no longer free -- it has to be rolled back, see rollbackJournaledCreate.
+                LOG.info("Successfully create table: {}-{}, in database: {}-{}",
+                        table.getName(), table.getId(), db.getFullName(), db.getId());
+
+                CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo, wal -> {
+                    db.registerTableUnlocked(table);
+                });
+                journaled = true;
+                table.onCreate(db);
+            } catch (SerializeException e) {
+                // The record never became durable, so nothing was journaled; only the registration the
+                // applier had already performed has to be taken back.
+                journaled = false;
+                db.unRegisterTableUnlocked(table);
+                LOG.warn("create table failed", e);
+                ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
 
-            if (db.isTableExist(table)) {
-                if (!isSetIfNotExists) {
-                    table.delete(db.getId(), false);
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(),
-                            "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", table.getName());
+            // The rest of the creation runs with the database lock released, because for a materialized
+            // view it resolves every base table and analyzes the partition exprs -- remote calls when a
+            // base table lives in an external catalog. See Table#onCreateAfterUnlock.
+            table.onCreateAfterUnlock(db);
+            createFinished = true;
+
+            // The table is registered and visible while the step above runs, so a concurrent drop can
+            // complete inside that window and its cleanup then runs before this finishes re-publishing the
+            // relationships. Reported rather than prevented: what is left behind is bounded, in-memory and
+            // self-healing -- see Table#onCreateAfterUnlock for exactly what and why -- and preventing it
+            // would mean holding the lock across the connector calls this change exists to get out of it.
+            if (db.getTable(table.getId()) != table) {
+                LOG.warn("Table {}.{} (id {}) was dropped while its creation was still initializing. The "
+                                + "creation itself is committed and the drop is authoritative; some in-memory "
+                                + "relationships (base tables' related-MV sets, connector table info, global "
+                                + "constraints) may name it until they are rebuilt.",
+                        db.getFullName(), table.getName(), table.getId());
+            }
+        } finally {
+            if (journaled && !createFinished) {
+                rollbackJournaledCreate(db, table);
+            }
+        }
+    }
+
+    /**
+     * Undo a table creation that has already been journaled, because a later step of the same DDL failed.
+     * <p>
+     * Without this the caller is told the DDL failed while the table stays registered and durable, and for
+     * a materialized view it stays there without the refresh task that the create path would have added
+     * afterwards -- an object that exists, is never refreshed, and that nothing in the failure message
+     * mentions. Rolling back has to be a real drop, journaled like any other, because followers have
+     * already replayed the creation.
+     * <p>
+     * Best effort: it swallows its own failures, because the exception the caller is about to report is
+     * why the DDL failed and must not be replaced by a secondary one from the cleanup.
+     */
+    private void rollbackJournaledCreate(Database db, Table table) {
+        try {
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                // By identity, not by name: the lock was released in between, so the name may since belong
+                // to a different table, and dropping that one would be far worse than leaving ours behind.
+                if (db.getTable(table.getId()) != table) {
+                    LOG.info("skip rolling back the creation of table {}.{} (id {}): it is no longer the "
+                            + "table registered under that id", db.getFullName(), table.getName(), table.getId());
                     return;
                 }
+                DropInfo dropInfo = new DropInfo(db.getId(), table.getId(), -1L, true);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropTable(dropInfo, wal -> {
+                    if (table.isTemporaryTable()) {
+                        db.unprotectDropTemporaryTable(table.getId(), true, false);
+                        UUID sessionId = ((OlapTable) table).getSessionId();
+                        GlobalStateMgr.getCurrentState().getTemporaryTableMgr()
+                                .dropTemporaryTable(sessionId, db.getId(), table.getName());
+                    } else {
+                        db.unprotectDropTable(table.getId(), true, false);
+                    }
+                });
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
-
-            // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
-            LOG.info("Successfully create table: {}-{}, in database: {}-{}",
-                    table.getName(), table.getId(), db.getFullName(), db.getId());
-
-            CreateTableInfo createTableInfo = new CreateTableInfo(db.getFullName(), table, storageVolumeId);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateTable(createTableInfo, wal -> {
-                db.registerTableUnlocked(table);
-            });
-            table.onCreate(db);
-        } catch (SerializeException e) {
-            db.unRegisterTableUnlocked(table);
-            LOG.warn("create table failed", e);
-            ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), e.getMessage());
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
+            // Force, so the failed creation does not land in the recycle bin: a table the user was just
+            // told does not exist has no business showing up in SHOW RECOVER.
+            table.delete(db.getId(), false);
+            LOG.info("Rolled back the creation of table {}.{}, tableId: {}",
+                    db.getFullName(), table.getName(), table.getId());
+        } catch (Throwable t) {
+            LOG.warn("failed to roll back the creation of table {}.{}, tableId: {}; it may be left behind",
+                    db.getFullName(), table.getName(), table.getId(), t);
         }
     }
 
     public void replayCreateTable(CreateTableInfo info) {
         Table table = info.getTable();
         Database db = this.fullNameToDb.get(info.getDbName());
-        Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.WRITE);
         try {
-            db.registerTableUnlocked(table);
-            if (table.isTemporaryTable()) {
-                TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                UUID sessionId = ((OlapTable) table).getSessionId();
-                temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
+            Locker locker = new Locker();
+            locker.lockDatabase(db.getId(), LockType.WRITE);
+            try {
+                db.registerTableUnlocked(table);
+                if (table.isTemporaryTable()) {
+                    TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
+                    UUID sessionId = ((OlapTable) table).getSessionId();
+                    temporaryTableMgr.addTemporaryTable(sessionId, db.getId(), table.getName(), table.getId());
+                }
+            } finally {
+                locker.unLockDatabase(db.getId(), LockType.WRITE);
             }
+
+            // onReload runs outside the db lock. Registering the table and writing it to the catalog is what
+            // needs mutual exclusion; for an MV the reload is the single most expensive thing this thread
+            // does: onReload walks every base table through MetadataMgr.getTable, twice (analyzePartitionExprs
+            // and checkIsActiveOnLoadBlocking), and expands a hierarchical MV's whole dependency chain
+            // recursively. On a replaying follower the connector caches are cold, so those are real remote
+            // calls -- one slow external catalog used to hold this database's write lock for their entire
+            // duration, stalling every query against it as well as the replay thread.
+            //
+            // Safe here specifically because the table is *new*: before this journal entry nobody could see it
+            // at all, so the worst a reader can observe is a just-registered table whose derived state is not
+            // rebuilt yet, which for anything depending on it is indistinguishable from the entry not having
+            // been replayed. Nothing that was already correct is exposed half-updated -- which is exactly what
+            // would happen if an alter job moved its onReload out of the lock, since there the table is
+            // already serving queries.
+            //
+            // Note the register-then-reload order is unchanged, and Database.getTable is a plain map lookup,
+            // so a lock-free reader could already land between the two; releasing the lock first only widens
+            // that gap for readers that do take the lock, by the few instructions before
+            // MaterializedView.onReload marks itself inactive. From that point waitForReloaded (hierarchical
+            // reload, MVTaskRunProcessor) blocks whoever cannot tolerate a half-reloaded MV. Image loading
+            // leaves MVs in that same registered-but-not-reloaded state far longer and on purpose,
+            // asynchronously -- see GlobalStateMgr.processMvRelatedMeta.
             table.onReload();
         } catch (Throwable e) {
             LOG.error("replay create table failed: {}", table, e);
             // Rethrow, we should not eat the exception when replaying editlog.
             throw e;
-        } finally {
-            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
 
         if (!isCheckpointThread()) {
@@ -2356,11 +2537,27 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         int bucketNum = distributionInfo.getBucketNum();
+        // For meta-group colocate tables (hash colocate lake tables — the only groups that get a
+        // StarOS meta group), create the shards already joined to the colocation meta group (same
+        // effect as the later updateMetaGroup join), so the very first placement honors the
+        // colocation constraint. Otherwise the shards get generic placement first and are only
+        // migrated onto the colocate-aligned workers after their shard groups join the meta group
+        // (InsertOverwriteJobRunner post-commit / StarMgrMetaSyncer), which runs after the load
+        // has finished and therefore orphans the caches the load populated on the original
+        // workers.
+        // The join can only be honored once the meta group has buckets, i.e. once some shard group
+        // has joined it, which StarOS rejects otherwise. A table without any shard group yet cannot
+        // tell (its group may have been created empty, e.g. a colocate table created without any
+        // partition), so its first partition is created without the join and the post-commit join
+        // defines the buckets, as it always did for the first member of a meta group.
+        ColocateTableIndex.GroupId colocateGroupId = table.getShardGroupIds().isEmpty() ? null
+                : colocateTableIndex.getMetaGroupColocateGroupId(table.getId());
+        long metaGroupId = colocateGroupId == null ? 0 : colocateGroupId.grpId;
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
                 table.getPartitionFilePathInfo(physicalPartitionId),
                 table.getPartitionFileCacheInfo(physicalPartitionId),
                 shardGroupId,
-                null, properties, computeResource);
+                null, properties, metaGroupId, computeResource);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             if (distributionInfoType == DistributionInfo.DistributionInfoType.RANGE) {
@@ -3212,6 +3409,40 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
+    /**
+     * The sort key column positions for the index meta, or null to let the storage sort by the key columns.
+     * An mv whose sort key IS its key columns needs no explicit one. This comparison is only safe because a
+     * range-distributed incremental mv rejects ORDER BY (see
+     * {@code MaterializedViewAnalyzer#checkIvmSortKeySupported}): its sort keys would be a prefix of its key
+     * columns, and emitting them would change how the storage derives its tablet boundaries.
+     */
+    private static List<Integer> independentSortKeyIdxes(CreateMaterializedViewStatement stmt,
+                                                         List<Column> baseSchema) {
+        if (CollectionUtils.isEmpty(stmt.getSortKeys())) {
+            return null;
+        }
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
+        for (String sortKey : stmt.getSortKeys()) {
+            int idx = -1;
+            for (int i = 0; i < baseSchema.size(); i++) {
+                if (baseSchema.get(i).getName().equalsIgnoreCase(sortKey)) {
+                    idx = i;
+                    break;
+                }
+            }
+            // The analyzer already resolved every sort key against the schema it built.
+            Preconditions.checkState(idx >= 0, "sort key column %s not found in mv schema", sortKey);
+            sortKeyIdxes.add(idx);
+        }
+        List<Integer> keyColumnIdxes = Lists.newArrayList();
+        for (int i = 0; i < baseSchema.size(); i++) {
+            if (baseSchema.get(i).isKey()) {
+                keyColumnIdxes.add(i);
+            }
+        }
+        return sortKeyIdxes.equals(keyColumnIdxes) ? null : sortKeyIdxes;
+    }
+
     // TODO(murphy) refactor it into MVManager
     @Override
     public void createMaterializedView(CreateMaterializedViewStatement stmt)
@@ -3371,7 +3602,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         materializedView.setViewDefineSql(stmt.getInlineViewDef());
         materializedView.setSimpleDefineSql(stmt.getSimpleViewDef());
         materializedView.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
-        materializedView.setIvmDefineSql(stmt.getIvmViewDef());
+        if (!Strings.isNullOrEmpty(stmt.getIvmViewDef())) {
+            materializedView.setIvmDefineSql(stmt.getIvmViewDef());
+        }
         materializedView.setOriginalDBName(stmt.getOriginalDBName());
         // current refresh mode
         materializedView.setCurrentRefreshMode(stmt.getCurrentRefreshMode());
@@ -3390,10 +3623,15 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         // set base index meta
         int schemaVersion = 0;
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
-        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
+        // The short-key index covers the leading sort key columns, so it must be sized from the sort key
+        // the index meta ends up with -- sizing it from the key columns would cap it at __ROW_ID__ alone.
+        List<Integer> sortKeyIdxes = independentSortKeyIdxes(stmt, baseSchema);
+        short shortKeyColumnCount = sortKeyIdxes == null
+                ? GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null)
+                : GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null, sortKeyIdxes);
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
         materializedView.setIndexMeta(baseIndexMetaId, mvName, baseSchema, schemaVersion, schemaHash,
-                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
+                shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType(), null, sortKeyIdxes);
 
         // Assign unique ids for columns after index meta is set up, so that getBaseSchema() returns
         // the actual columns. The initUniqueId() call in the MV constructor is a no-op because it
@@ -3978,6 +4216,57 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
         }
 
+        // A rename can create the ambiguity that CREATE TABLE refuses: zstd_compression_columns is
+        // rendered as "<name>:<bytes>", and the parser resolves a whole token as a column name before
+        // splitting it, so a column renamed INTO that rendered form would make the table's own DDL name
+        // the wrong column. The property is not restated here and nothing else revalidates it.
+        // Gate on the nomination SET, not the page-size map: the set is what getCommonProperties
+        // renders, and the map is null whenever no nomination carries an explicit size -- which used
+        // to skip these checks entirely for the plain "zstd_compression_columns = v" case.
+        Set<ColumnId> zstdCompressionColumns = olapTable.getZstdCompressionColumnIds();
+        Map<ColumnId, Integer> zstdCompressionPageSizes = olapTable.getZstdCompressionPageSizes();
+        if (zstdCompressionColumns != null && !zstdCompressionColumns.isEmpty()) {
+            // A nominated column's name has to be writable into the property text at all. Renaming it
+            // to something carrying a delimiter does not fail here today, it fails later and silently:
+            // a comma splits the entry in two (naming other columns, or none), and leading/trailing
+            // whitespace is trimmed on the way back in, resolving to a different column.
+            if (zstdCompressionColumns.contains(column.getColumnId())) {
+                String unrepresentable = PropertyAnalyzer.zstdCompressionNameUnrepresentable(newColName);
+                if (unrepresentable != null) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": " + unrepresentable
+                                    + ". Remove the column from "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS
+                                    + " first, or pick another name.");
+                }
+            }
+        }
+        if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+            // Both roles move, so the check is against the whole post-rename schema rather than just
+            // the new name: renaming some other column INTO the rendered form breaks it, and so does
+            // renaming the nominated column so that IT renders as a column that was already there.
+            Set<String> postRenameNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (Column existing : olapTable.getBaseSchema()) {
+                postRenameNames.add(existing.getName().equalsIgnoreCase(colName) ? newColName : existing.getName());
+            }
+            for (Map.Entry<ColumnId, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                Column nominated = olapTable.getColumn(entry.getKey());
+                if (nominated == null || entry.getValue() == null || entry.getValue() <= 0) {
+                    continue;
+                }
+                String nominatedName = nominated.getName().equalsIgnoreCase(colName) ? newColName : nominated.getName();
+                String rendered = nominatedName + ":" + entry.getValue();
+                if (postRenameNames.contains(rendered)) {
+                    throw ErrorReportException.report(ErrorCode.ERR_COMMON_ERROR,
+                            "Cannot rename " + colName + " to " + newColName + ": the table would then have a column "
+                                    + "named '" + rendered + "', which is exactly how "
+                                    + PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS + " renders column "
+                                    + nominatedName + ", so the table's own DDL could not tell the two apart. "
+                                    + "Drop the page size from that entry first, or pick another name.");
+                }
+            }
+        }
+
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);
         GlobalStateMgr.getCurrentState().getEditLog().logColumnRename(columnRenameInfo, wal -> {
             olapTable.renameColumn(colName, newColName);
@@ -4397,7 +4686,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     // The caller need to hold the db write lock
     public void modifyTableReplicationNum(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
@@ -4446,7 +4735,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             throws DdlException {
         Locker locker = new Locker();
         Preconditions.checkArgument(locker.isDbWriteLockHeldByCurrentThread(db));
-        if (colocateTableIndex.isColocateTable(table.getId())) {
+        if (table.hasColocateGroup()) {
             throw new DdlException("table " + table.getName() + " is colocate table, cannot change replicationNum");
         }
 
@@ -4669,7 +4958,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (shadowTable == null) {
             throw new DdlException("the DB " + dbName + " table: " + tableName + " doesn't exist");
         }
-        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.READ)) {
+        // WRITE (not READ): the edit-log callback mutates TableProperty.hasForbiddenGlobalDict, a plain
+        // non-volatile boolean that optimizer rules read under a table READ lock. The replay path
+        // (replayModifyTableProperty) already takes WRITE here, so match it to serialize the mutation.
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), shadowTable.getId(), LockType.WRITE)) {
             Table table = getTable(db.getFullName(), tableName);
             if (table == null) {
                 throw new DdlException("the DB " + dbName + " table: " + tableName + " doesn't exist");
@@ -4695,6 +4987,74 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     }
                 });
             }
+        }
+    }
+
+    // Convenience wrapper used by the dictionary thrash guard: add one column to the persisted forbid set.
+    public void disableGlobalDictForColumn(long dbId, long tableId, String columnName) {
+        updateNoDictColumns(dbId, tableId, java.util.Collections.singleton(columnName),
+                java.util.Collections.emptySet(), true);
+    }
+
+    // Persist a column-level global-dictionary forbid change: newSet = (existing UNION add) MINUS drop.
+    // Idempotent (no-op + no journal write when the set is unchanged). Runs on the leader; the WRITE lock
+    // and edit log mirror setHasForbiddenGlobalDict above. Both the thrash guard (add one) and the
+    // ALTER TABLE ... DISABLE/ENABLE DICTIONARY clause (add/drop several) funnel through this.
+    public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop) {
+        updateNoDictColumns(dbId, tableId, add, drop, false);
+    }
+
+    // fromThrashGuard: this add was queued asynchronously by the dictionary thrash guard. If an explicit
+    // ALTER TABLE ... ENABLE DICTIONARY has cleared the column's in-memory forbid in the meantime, that
+    // ENABLE wins: the column must not be re-persisted here, otherwise the late guard write would silently
+    // resurrect a forbid the operator just removed. Both callers take the table WRITE lock below, so the
+    // "still forbidden?" check and any ENABLE clear are serialized.
+    public void updateNoDictColumns(long dbId, long tableId, Set<String> add, Set<String> drop, boolean fromThrashGuard) {
+        Database db = getDb(dbId);
+        if (db == null) {
+            return;
+        }
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, tableId, LockType.WRITE)) {
+            Table table = getTable(dbId, tableId);
+            if (!(table instanceof OlapTable olapTable)) {
+                return;
+            }
+            // ENABLE must clear the in-memory forbid for these columns even when the persisted set does not
+            // change (e.g. a thrash-guard add is still pending and has not been written yet). hasGlobalDict
+            // checks the in-memory set first, so clearing only on a persisted change would leave the column
+            // disabled. Followers do the same in replayModifyTableProperty. Clearing a non-forbidden column
+            // is a no-op.
+            if (drop != null && !drop.isEmpty()) {
+                IDictManager.getInstance().clearForbiddenColumns(tableId, drop);
+            }
+            Set<String> effectiveAdd = add;
+            if (fromThrashGuard && add != null && !add.isEmpty()) {
+                effectiveAdd = new HashSet<>();
+                for (String c : add) {
+                    if (IDictManager.getInstance().isColumnForbidden(tableId, c)) {
+                        effectiveAdd.add(c);
+                    }
+                }
+            }
+            Set<String> newSet = new HashSet<>(olapTable.getNoDictColumns());
+            boolean changed = false;
+            if (effectiveAdd != null) {
+                changed |= newSet.addAll(effectiveAdd);
+            }
+            if (drop != null) {
+                changed |= newSet.removeAll(drop);
+            }
+            if (!changed) {
+                return;
+            }
+            Map<String, String> property = new HashMap<>();
+            property.put(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS, String.join(",", newSet));
+            ModifyTablePropertyOperationLog info =
+                    new ModifyTablePropertyOperationLog(dbId, tableId, property);
+            GlobalStateMgr.getCurrentState().getEditLog().logModifyNoDictColumns(info, wal -> {
+                olapTable.setNoDictColumns(newSet);
+            });
+            LOG.info("persist no-dict columns, table:{} add:{} drop:{} result:{}", tableId, effectiveAdd, drop, newSet);
         }
     }
 
@@ -4767,6 +5127,26 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                     } else {
                         olapTable.setHasForbiddenGlobalDict(false);
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
+                    }
+                }
+            } else if (opCode == OperationType.OP_MODIFY_NO_DICT_COLUMNS) {
+                if (olapTable != null) {
+                    String cols = properties.get(PropertyAnalyzer.PROPERTIES_NO_DICT_COLUMNS);
+                    Set<String> set = new HashSet<>();
+                    if (cols != null && !cols.isEmpty()) {
+                        for (String c : cols.split(",")) {
+                            if (!c.isEmpty()) {
+                                set.add(c);
+                            }
+                        }
+                    }
+                    // Columns removed from the forbid set (an ENABLE) must also have their in-memory forbid
+                    // cleared, so hasGlobalDict stops short-circuiting on this FE.
+                    Set<String> dropped = new HashSet<>(olapTable.getNoDictColumns());
+                    dropped.removeAll(set);
+                    olapTable.setNoDictColumns(set);
+                    if (!dropped.isEmpty()) {
+                        IDictManager.getInstance().clearForbiddenColumns(olapTable.getId(), dropped);
                     }
                 }
             } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
@@ -5026,6 +5406,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         long tableId = MetaUtils.getSessionAwareTable(context, db, dbTbl).getId();
         Locker locker = new Locker();
         OlapTable olapTable = null;
+        ColocateTableIndex.GroupId metaGroupColocateGroupId;
         if (!locker.lockTableAndCheckDbExist(db, tableId, LockType.READ)) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -5050,6 +5431,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             copiedTbl = AnalyzerUtils.getShadowCopyTable(olapTable);
+            // Same as addPartitions: the new partitions' shards are pinned to this meta group outside the lock.
+            metaGroupColocateGroupId = colocateTableIndex.getMetaGroupColocateGroupId(olapTable.getId());
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         }
@@ -5137,6 +5520,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             if (metaChanged) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "]'s meta has been changed. try again.");
             }
+            checkIfColocateMetaGroupChange(olapTable, metaGroupColocateGroupId, copiedTbl.getName());
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
@@ -5547,6 +5931,17 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 }
             }
         }
+    }
+
+    public String getRangeDistributionTopology(String databaseName, String tableName) throws StarRocksException {
+        return new RangeDistributionMigrationService().getTopology(databaseName, tableName);
+    }
+
+    public long submitRangeDistributionSplit(String databaseName, String tableName,
+                                             Map<Long, List<RangeSpec>> parentTabletIdToRanges)
+            throws StarRocksException {
+        return new RangeDistributionMigrationService().submitSplit(
+                databaseName, tableName, parentTabletIdToRanges);
     }
 
     public void onEraseDatabase(long dbId) {

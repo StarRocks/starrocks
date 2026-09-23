@@ -63,7 +63,7 @@ Status ProjectNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _type_is_nullable.reserve(column_size);
 
     std::map<SlotId, bool> slot_null_mapping;
-    for (auto const& slot : row_desc().tuple_descriptors()[0]->slots()) {
+    for (auto const& slot : record_desc().slots()) {
         slot_null_mapping[slot->id()] = slot->is_nullable();
     }
 
@@ -185,11 +185,6 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-Status ProjectNode::reset(RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::reset(state));
-    return Status::OK();
-}
-
 void ProjectNode::close(RuntimeState* state) {
     if (is_closed()) {
         return;
@@ -199,31 +194,6 @@ void ProjectNode::close(RuntimeState* state) {
     ExprExecutor::close(_common_sub_expr_ctxs, state);
 
     ExecNode::close(state);
-}
-
-void ProjectNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>* expr_ctxs) {
-    for (const auto& ctx : (*expr_ctxs)) {
-        if (!ctx->root()->is_bound(_tuple_ids)) {
-            continue;
-        }
-
-        if (!ctx->root()->get_child(0)->is_slotref()) {
-            continue;
-        }
-
-        auto column = down_cast<ColumnRef*>(ctx->root()->get_child(0));
-
-        for (int i = 0; i < _slot_ids.size(); ++i) {
-            if (_slot_ids[i] == column->slot_id() && _expr_ctxs[i]->root()->is_slotref()) {
-                auto ref = down_cast<ColumnRef*>(_expr_ctxs[i]->root());
-                column->set_slot_id(ref->slot_id());
-                column->set_tuple_id(ref->tuple_id());
-                break;
-            }
-        }
-    }
-
-    ExecNode::push_down_predicate(state, expr_ctxs);
 }
 
 void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
@@ -241,52 +211,6 @@ void ProjectNode::push_down_tuple_slot_mappings(RuntimeState* state,
 
     for (auto& child : _children) {
         child->push_down_tuple_slot_mappings(state, _tuple_slot_mappings);
-    }
-}
-
-void ProjectNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
-    // accept runtime filters from parent if possible.
-    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
-
-    // check to see if runtime filters can be rewritten
-    auto& descriptors = _runtime_filter_collector.descriptors();
-    RuntimeFilterProbeCollector rewritten_collector;
-
-    auto iter = descriptors.begin();
-    while (iter != descriptors.end()) {
-        RuntimeFilterProbeDescriptor* rf_desc = iter->second;
-        if (!rf_desc->can_push_down_runtime_filter()) {
-            ++iter;
-            continue;
-        }
-        SlotId slot_id;
-        // bound to this tuple and probe expr is slot ref.
-        if (!rf_desc->is_bound(_tuple_ids) || !rf_desc->is_probe_slot_ref(&slot_id)) {
-            ++iter;
-            continue;
-        }
-        bool match = false;
-        for (int i = 0; i < _slot_ids.size(); i++) {
-            if (_slot_ids[i] == slot_id) {
-                // replace with new probe expr
-                ExprContext* new_probe_expr_ctx = _expr_ctxs[i];
-                rf_desc->replace_probe_expr_ctx(state, row_desc(), new_probe_expr_ctx);
-                match = true;
-                break;
-            }
-        }
-        if (match) {
-            rewritten_collector.add_descriptor(rf_desc);
-            iter = descriptors.erase(iter);
-        } else {
-            ++iter;
-        }
-    }
-
-    if (!rewritten_collector.empty()) {
-        // push down rewritten runtime filters to children
-        push_down_join_runtime_filter_to_children(state, &rewritten_collector);
-        rewritten_collector.close(state);
     }
 }
 

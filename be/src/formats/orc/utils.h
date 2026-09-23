@@ -21,7 +21,7 @@
 #include "cctz/civil_time.h"
 #include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "formats/orc/orc_mapping.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "types/date_value.h"
@@ -86,7 +86,10 @@ public:
                                                       int64_t nanoseconds) {
         cctz::time_point<cctz::sys_seconds> t = CCTZ_UNIX_EPOCH + cctz::seconds(seconds);
         const auto tp = cctz::convert(t, tz);
-        tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(), 0);
+        // Carry the sub-second through as microseconds (it used to be dropped to 0). As on the
+        // after-epoch path, nanoseconds is the floored sub-second in [0, NANOSECS_PER_SEC).
+        tv->from_timestamp(tp.year(), tp.month(), tp.day(), tp.hour(), tp.minute(), tp.second(),
+                           nanoseconds / NANOSECS_PER_USEC);
     }
     static void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone& tz, int64_t tzoffset, int64_t seconds,
                                     int64_t nanoseconds, bool is_instant) {

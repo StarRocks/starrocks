@@ -15,16 +15,13 @@
 #pragma once
 
 #include <cstdint>
-#include <functional>
-#include <future>
-#include <map>
-#include <optional>
+#include <memory>
 #include <string>
-#include <vector>
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "formats/file_commit_result.h"
 
 namespace starrocks::formats {
 
@@ -36,36 +33,13 @@ struct FileWriterOptions {
 
 class FileWriter {
 public:
-    struct FileStatistics {
-        int64_t record_count;
-        int64_t file_size;
-        std::optional<std::vector<int64_t>> split_offsets;
-        std::optional<std::map<int32_t, int64_t>> column_sizes;
-        std::optional<std::map<int32_t, int64_t>> value_counts;
-        std::optional<std::map<int32_t, int64_t>> null_value_counts;
-        std::optional<std::map<int32_t, std::string>> lower_bounds;
-        std::optional<std::map<int32_t, std::string>> upper_bounds;
-    };
-
-    struct CommitResult {
-        Status io_status;
-        std::string format;
-        FileStatistics file_statistics;
-        std::string location;
-        std::function<void()> rollback_action;
-        std::string extra_data;
-        std::string referenced_data_file;
-        CommitResult& set_extra_data(std::string extra_data);
-        CommitResult& set_referenced_data_file(std::string referenced_data_file);
-    };
-
     virtual ~FileWriter() = default;
     virtual Status init() = 0;
     virtual int64_t get_written_bytes() = 0;
     virtual int64_t get_allocated_bytes() = 0;
     virtual int64_t get_flush_batch_size() = 0;
     virtual Status write(Chunk* chunk) = 0;
-    virtual CommitResult close() = 0;
+    virtual FileCommitResult close() = 0;
 };
 
 struct WriterAndStream {

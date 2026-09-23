@@ -14,10 +14,13 @@
 
 #include "storage/lake/primary_key_compaction_policy.h"
 
+#include <algorithm>
+
 #include "common/config_compaction_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "gutil/strings/join.h"
 #include "storage/lake/update_manager.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks::lake {
 
@@ -139,6 +142,36 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
     return pick_rowsets(_tablet_metadata, nullptr);
 }
 
+// A cross-published rowset's segments are handed to every child by the split, so UNSHARE has to
+// rewrite them privately. A rowset that a partial-update rewrite already produced needs nothing:
+// SegmentRewriter's owned-only rewrites drop the rows this tablet does not own, so that output is
+// private and foreign-row-free the moment it is published. `shared` is therefore the whole signal,
+// and it terminates because the UNSHARE clears it -- unlike a rowset's range, which a tablet merge
+// stamps on every rowset it emits and nothing ever clears.
+static bool carries_shared_segment(const RowsetMetadataPB& rowset) {
+    return std::any_of(rowset.segment_metas().begin(), rowset.segment_metas().end(),
+                       [](const SegmentMetadataPB& segment) { return segment.shared(); });
+}
+
+StatusOr<std::vector<RowsetPtr>> UnshareCompactionPolicy::pick_rowsets() {
+    std::vector<RowsetPtr> input_rowsets;
+    for (int i = 0; i < _tablet_metadata->rowsets_size(); ++i) {
+        if (carries_shared_segment(_tablet_metadata->rowsets(i))) {
+            input_rowsets.emplace_back(
+                    std::make_shared<Rowset>(_tablet_mgr, _tablet_metadata, i, 0 /* compaction_segment_limit */));
+        }
+    }
+    return input_rowsets;
+}
+
+StatusOr<CompactionAlgorithm> UnshareCompactionPolicy::choose_compaction_algorithm(
+        const std::vector<RowsetPtr>& rowsets) {
+    if (rowsets.empty()) {
+        return CLOUD_NATIVE_INDEX_COMPACTION;
+    }
+    return CompactionPolicy::choose_compaction_algorithm(rowsets);
+}
+
 // Return true if segment number meet the requirement of min input
 bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
     int64_t total_segment_cnt = 0;
@@ -184,6 +217,31 @@ bool min_input_segment_check(const std::shared_ptr<const TabletMetadataPB>& tabl
         }
     }
     return false;
+}
+
+// Aggregate delete stats across all of a tablet's rowsets. Base compaction keys on both the
+// delete ratio (sum(num_dels)/sum(num_rows)) and the absolute delete-row count (sum(num_dels)):
+// on hot update/delete tables the deletes can be large in absolute terms -- driving delete-vector
+// size and space waste -- while the aggregate ratio stays low because many mostly-live rowsets
+// dilute it.
+struct TabletDeleteStats {
+    int64_t total_dels = 0;
+    int64_t total_rows = 0;
+    double ratio() const { return total_rows > 0 ? std::min(1.0, (double)total_dels / (double)total_rows) : 0.0; }
+};
+
+TabletDeleteStats tablet_delete_stats(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
+                                      UpdateManager* mgr) {
+    TabletDeleteStats stats;
+    for (const auto& rowset_pb : tablet_metadata->rowsets()) {
+        stats.total_rows += rowset_pb.num_rows();
+        if (rowset_pb.has_num_dels()) {
+            stats.total_dels += rowset_pb.num_dels();
+        } else {
+            stats.total_dels += mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
+        }
+    }
+    return stats;
 }
 
 // 2b. Decide whether a picked low-score level should be skipped to avoid low-value
@@ -401,8 +459,102 @@ StatusOr<std::vector<int64_t>> PrimaryCompactionPolicy::pick_rowset_indexes(
     return rowset_indexes;
 }
 
+StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_base_rowsets(
+        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    UpdateManager* mgr = _tablet_mgr->update_mgr();
+    // Base compaction is a full merge: collect ALL rowsets (like non-primary-key base compaction),
+    // then order them by absolute delete-row count (num_dels) descending. Both the delete-vector
+    // size and the reclaimable space scale with the absolute delete count -- not the ratio -- so
+    // when the result-bytes budget forces a subset, the rowsets holding the most delete marks are
+    // rewritten first. (Ordering by ratio would let a tiny fully-deleted rowset outrank a rowset
+    // holding orders of magnitude more delete marks, which is backwards for shrinking the delvec.)
+    std::vector<RowsetCandidate> candidates;
+    for (int i = 0, sz = tablet_metadata->rowsets_size(); i < sz; i++) {
+        const RowsetMetadataPB& rowset_pb = tablet_metadata->rowsets(i);
+        RowsetStat stat;
+        stat.num_rows = rowset_pb.num_rows();
+        stat.bytes = rowset_pb.data_size();
+        if (rowset_pb.has_num_dels()) {
+            stat.num_dels = rowset_pb.num_dels();
+        } else {
+            stat.num_dels = mgr->get_rowset_num_deletes(*tablet_metadata, rowset_pb);
+        }
+        candidates.emplace_back(&rowset_pb, stat, i);
+    }
+    std::sort(candidates.begin(), candidates.end(),
+              [](const RowsetCandidate& a, const RowsetCandidate& b) { return a.stat.num_dels > b.stat.num_dels; });
+
+    std::vector<RowsetPtr> input_rowsets;
+    const int64_t compaction_data_size_threshold =
+            static_cast<int64_t>((double)_get_data_size(tablet_metadata) * config::update_compaction_ratio_threshold);
+    size_t cur_compaction_result_bytes = 0;
+    for (const auto& candidate : candidates) {
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, candidate.rowset_index,
+                                                            0 /* compaction_segment_limit */));
+        if (has_dels != nullptr) {
+            has_dels->push_back(candidate.stat.num_dels > 0);
+        }
+        cur_compaction_result_bytes += candidate.read_bytes();
+        if (cur_compaction_result_bytes >
+            std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
+            break;
+        }
+        if (input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
+            break;
+        }
+    }
+    VLOG(2) << strings::Substitute(
+            "lake PrimaryCompactionPolicy pick_base_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
+            tablet_metadata->version(),
+            JoinMapped(
+                    input_rowsets, [&](const RowsetPtr& rowset) -> std::string { return std::to_string(rowset->id()); },
+                    "|"));
+    return input_rowsets;
+}
+
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
         const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, std::vector<bool>* has_dels) {
+    // Ordinary compaction cannot range-filter a separate-sort-key segment and would make sibling
+    // rows permanently private. Wait for the scheduled UNSHARE to remove them first.
+    //
+    // Wait on shared segments, never on a rowset's range: a tablet merge stamps its range onto every
+    // rowset it emits and nothing ever clears one, so waiting on that would stall this tablet's
+    // ordinary compaction for good -- ahead of the _force_base_compaction branch below, so an
+    // ALTER TABLE ... COMPACT could not break it either -- while FE schedules an UNSHARE only from a
+    // split. Nothing is left behind: a rewrite's output no longer holds foreign rows at all.
+    if (tablet_metadata->has_range() && TabletSchema::create(tablet_metadata->schema())->has_separate_sort_key()) {
+        const bool awaiting_unshare = std::any_of(tablet_metadata->rowsets().begin(), tablet_metadata->rowsets().end(),
+                                                  carries_shared_segment);
+        if (awaiting_unshare) {
+            VLOG(2) << "skip ordinary compaction while a split's shared segments await UNSHARE, tablet="
+                    << tablet_metadata->id() << " version=" << tablet_metadata->version();
+            return std::vector<RowsetPtr>{};
+        }
+    }
+
+    // Base compaction reclaims space from delete-bearing rowsets. Trigger it when a manual
+    // ALTER TABLE ... COMPACT requested a base compaction, or when the tablet has accumulated
+    // enough deletes to be worth reclaiming -- either as a fraction of its rows
+    // (lake_pk_compaction_base_delete_ratio_threshold) or in absolute delete-row count
+    // (lake_pk_compaction_base_delete_rows_threshold). The absolute-count trigger matters because
+    // on hot update/delete tables the deletes bloat the delete vectors and waste space long before
+    // the aggregate ratio -- diluted by many mostly-live rowsets -- crosses the ratio threshold.
+    // Otherwise run the normal size-tiered cumulative selection. When base compaction finds nothing
+    // to reclaim (no delete-bearing rowsets), fall through to cumulative so a forced compaction
+    // still merges small files.
+    const auto del_stats = tablet_delete_stats(tablet_metadata, _tablet_mgr->update_mgr());
+    // The total_dels > 0 guard short-circuits delete-free (e.g. append-only) tablets, including
+    // under a forced base compaction: there is nothing for base compaction to reclaim, so skip the
+    // second rowset walk in pick_base_rowsets and go straight to cumulative selection.
+    if (del_stats.total_dels > 0 &&
+        (_force_base_compaction || del_stats.ratio() >= config::lake_pk_compaction_base_delete_ratio_threshold ||
+         del_stats.total_dels >= config::lake_pk_compaction_base_delete_rows_threshold)) {
+        ASSIGN_OR_RETURN(auto base_rowsets, pick_base_rowsets(tablet_metadata, has_dels));
+        if (!base_rowsets.empty()) {
+            return base_rowsets;
+        }
+    }
+
     std::vector<RowsetPtr> input_rowsets;
     ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, has_dels));
     input_rowsets.reserve(rowset_indexes.size());

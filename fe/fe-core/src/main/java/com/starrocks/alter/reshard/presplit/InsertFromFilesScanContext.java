@@ -29,10 +29,15 @@ import java.util.Objects;
  * <p>This context is built BEFORE the load's {@code ExecPlan} exists, so it
  * carries the connector inputs directly rather than the planner's already-
  * built {@code FileScanNode}.
+ *
+ * <p>{@code loadTimeZone} is the load session timezone (the same value the BE
+ * query globals use). The meta-tier readers use it to reproduce the BE's
+ * offset for a UTC-adjusted timestamp; a non-fixed / null zone -> data tier.
  */
 public record InsertFromFilesScanContext(
         TableFunctionTable sourceTable,
-        ComputeResource computeResource) implements ScanContext {
+        ComputeResource computeResource,
+        String loadTimeZone) implements ScanContext {
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");

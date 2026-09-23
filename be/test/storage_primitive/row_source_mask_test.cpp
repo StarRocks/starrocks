@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primitive/row_source_mask.h"
+#include "storage_primitive/row_source_mask.h"
 
 #include <gtest/gtest.h>
 

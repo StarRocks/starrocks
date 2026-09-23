@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 
 namespace starrocks::pipeline {
 

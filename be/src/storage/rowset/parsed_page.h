@@ -37,10 +37,10 @@
 #include <memory>
 
 #include "cache/mem_cache/page_handle_fwd.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h" // ordinal_t
 #include "storage/rowset/page_decoder.h"
 #include "storage/rowset/page_pointer.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h" // ordinal_t
 
 namespace starrocks {
 class Slice;

@@ -14,7 +14,7 @@
 
 #include "aggregate_distinct_blocking_source_operator.h"
 
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 
 namespace starrocks::pipeline {
 

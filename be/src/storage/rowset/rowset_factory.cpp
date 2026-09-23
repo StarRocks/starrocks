@@ -39,7 +39,6 @@
 
 #include "gen_cpp/olap_file.pb.h"
 #include "rowset.h"
-#include "runtime/exec_env.h"
 #include "storage/rowset/horizontal_update_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/storage_engine.h"

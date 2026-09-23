@@ -56,6 +56,13 @@ public class LogicalWindowOperator extends LogicalOperator {
     private boolean useHashBasedPartition;
     private boolean isSkewed;
 
+    /**
+     * Feed the AnalyticNode from a single globally-ordered stream (gather + merging exchange +
+     * ordered-partition local exchange) instead of hash-shuffling the partition keys. Set by the
+     * [merge_sort] hint.
+     */
+    private boolean forceMergeSort;
+
     // Skew hint with explicit column and values: [skew|t.column(value1, value2, ...)]
     private ScalarOperator skewColumn;
     private ImmutableList<ScalarOperator> skewValues;
@@ -71,6 +78,7 @@ public class LogicalWindowOperator extends LogicalOperator {
         this.enforceSortColumns = ImmutableList.of();
         this.useHashBasedPartition = false;
         this.isSkewed = false;
+        this.forceMergeSort = false;
         this.skewColumn = null;
         this.skewValues = ImmutableList.of();
     }
@@ -101,6 +109,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     public boolean isSkewed() {
         return isSkewed;
+    }
+
+    public boolean isForceMergeSort() {
+        return forceMergeSort;
     }
 
     public ScalarOperator getSkewColumn() {
@@ -174,6 +186,7 @@ public class LogicalWindowOperator extends LogicalOperator {
                 && Objects.equals(analyticWindow, that.analyticWindow)
                 && Objects.equals(useHashBasedPartition, that.useHashBasedPartition)
                 && Objects.equals(isSkewed, that.isSkewed)
+                && Objects.equals(forceMergeSort, that.forceMergeSort)
                 && Objects.equals(skewColumn, that.skewColumn)
                 && Objects.equals(skewValues, that.skewValues)
                 && Objects.equals(inputIsBinary, that.inputIsBinary);
@@ -182,7 +195,7 @@ public class LogicalWindowOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), windowCall, partitionExpressions, orderByElements, analyticWindow,
-                useHashBasedPartition, isSkewed, skewColumn, skewValues, inputIsBinary);
+                useHashBasedPartition, isSkewed, forceMergeSort, skewColumn, skewValues, inputIsBinary);
     }
 
     public static Builder builder() {
@@ -206,8 +219,10 @@ public class LogicalWindowOperator extends LogicalOperator {
             builder.enforceSortColumns = windowOperator.enforceSortColumns;
             builder.useHashBasedPartition = windowOperator.useHashBasedPartition;
             builder.isSkewed = windowOperator.isSkewed;
+            builder.forceMergeSort = windowOperator.forceMergeSort;
             builder.skewColumn = windowOperator.skewColumn;
             builder.skewValues = windowOperator.skewValues;
+            builder.inputIsBinary = windowOperator.inputIsBinary;
             return this;
         }
 
@@ -243,6 +258,11 @@ public class LogicalWindowOperator extends LogicalOperator {
 
         public Builder setIsSkewed(boolean isSkewed) {
             builder.isSkewed = isSkewed;
+            return this;
+        }
+
+        public Builder setForceMergeSort(boolean forceMergeSort) {
+            builder.forceMergeSort = forceMergeSort;
             return this;
         }
 

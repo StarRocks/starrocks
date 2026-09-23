@@ -174,7 +174,13 @@ public class AsyncTaskQueue<T> {
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            LOG.warn("Thread interrupted while waiting for outputs in AsyncTaskQueue", e);
+            // Stop the stream. Otherwise the caller's retry loop in getOutputs() calls us again,
+            // await() throws immediately because the interrupt flag is set, and we busy-spin
+            // burning a core while logging on every iteration.
+            hasMoreOutput = false;
+            // No stack trace: interruption is an expected control-flow signal, and the trace is
+            // identical every time.
+            LOG.warn("Thread interrupted while waiting for outputs in AsyncTaskQueue");
         } finally {
             outputQueueLock.unlock();
         }

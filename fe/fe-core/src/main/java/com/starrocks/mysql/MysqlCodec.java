@@ -266,6 +266,7 @@ public class MysqlCodec {
             case VARCHAR:
                 return MysqlColType.MYSQL_TYPE_VAR_STRING;
             case VARBINARY:
+            case GEOGRAPHY:
                 return MysqlColType.MYSQL_TYPE_BLOB;
             default:
                 return MysqlColType.MYSQL_TYPE_STRING;
@@ -332,6 +333,7 @@ public class MysqlCodec {
             case HLL:
             case BITMAP:
             case VARBINARY:
+            case GEOGRAPHY:
                 ScalarType charType = ((ScalarType) type);
                 int charLength = charType.getLength();
                 if (charLength == -1) {
@@ -358,7 +360,7 @@ public class MysqlCodec {
         } else {
             return switch (type.getPrimitiveType()) {
                 // Because mysql does not have a large int type, mysql will treat it as hex after exceeding bigint
-                case CHAR, VARCHAR, HLL, BITMAP, LARGEINT, JSON -> CHARSET_UTF8;
+                case CHAR, VARCHAR, HLL, BITMAP, LARGEINT, JSON, FILE -> CHARSET_UTF8;
                 default -> CHARSET_BINARY;
             };
         }

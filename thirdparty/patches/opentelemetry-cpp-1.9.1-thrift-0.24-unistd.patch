@@ -1,0 +1,11 @@
+diff --git a/exporters/jaeger/src/TUDPTransport.h b/exporters/jaeger/src/TUDPTransport.h
+--- a/exporters/jaeger/src/TUDPTransport.h
++++ b/exporters/jaeger/src/TUDPTransport.h
+@@ -10,6 +10,7 @@
+ #  include <string.h>
+ #  include <sys/socket.h>
+ #  include <sys/types.h>
++#  include <unistd.h>
+ #endif
+ 
+ #include <opentelemetry/version.h>

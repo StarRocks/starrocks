@@ -391,7 +391,7 @@ int timestamp::get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, 
     static constexpr int64_t MAX_SECONDS = 9223372036;
     seconds_from_epoch = std::max(MIN_SECONDS, std::min(MAX_SECONDS, seconds_from_epoch));
     std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
-    return ctz.lookup(tp).offset;
+    return ctz.lookup_offset(tp).offset;
 }
 
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {

@@ -19,6 +19,7 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.reshard.presplit.PreSplitEstimates;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
@@ -113,6 +114,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.commons.collections4.CollectionUtils;
@@ -122,9 +124,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -142,6 +146,23 @@ public class InsertPlanner {
     private boolean forceReplicatedStorage = false;
     private boolean useOptimisticLock;
     private PlannerMetaLocker plannerMetaLocker;
+    /**
+     * Non-null on the optimistic path: the live tables the statement's copies were made from, revalidated
+     * after planning. Handed in by {@link StatementPlanner} when it took the snapshot under the lock it was
+     * already holding; otherwise taken at the top of {@link #plan}.
+     */
+    private Set<OlapTable> originalOlapTables;
+    /**
+     * The target table as the statement carried it in, so planning can hand the statement back unchanged.
+     * See {@link #plan} for why that matters.
+     */
+    private Table originalInsertTarget;
+    /**
+     * The version every attempt's copies are validated against. Taken from the snapshot when
+     * {@link StatementPlanner} made one, because it has to predate those copies -- between the snapshot and
+     * here the lock is already released and the authorization check has run.
+     */
+    private Long planStartTime;
 
     private List<Column> outputBaseSchema;
     private List<Column> outputFullSchema;
@@ -153,8 +174,16 @@ public class InsertPlanner {
     }
 
     public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock) {
+        this(plannerMetaLocker, optimisticLock, null);
+    }
+
+    public InsertPlanner(PlannerMetaLocker plannerMetaLocker, boolean optimisticLock,
+                         StatementPlanner.PlanningSnapshot snapshot) {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
+        this.originalOlapTables = snapshot == null ? null : snapshot.originalOlapTables();
+        this.originalInsertTarget = snapshot == null ? null : snapshot.originalWriteTarget();
+        this.planStartTime = snapshot == null ? null : snapshot.planStartTime();
     }
 
     private enum GenColumnDependency {
@@ -271,7 +300,86 @@ public class InsertPlanner {
         }
     }
 
+    /**
+     * On the optimistic path the statement is planned off private copies, and taking them replaces the
+     * target table on the statement itself ({@code OlapTableCollector.visitInsertStatement}). That copy must
+     * not outlive this call: a statement can be planned more than once -- {@code InsertOverwriteJobRunner}
+     * re-plans after creating the temporary partitions it will swap in -- and re-analysis does not resolve
+     * the target again, it reuses whatever the statement carries ({@code InsertAnalyzer}). Leaving a copy
+     * behind makes the second analysis look for those partitions in a table object that predates them.
+     */
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
+        if (!useOptimisticLock) {
+            return doPlan(insertStmt, session);
+        }
+        if (originalInsertTarget == null) {
+            originalInsertTarget = insertStmt.getTargetTable();
+        }
+        if (planStartTime == null) {
+            // Only when no snapshot was handed in; the lock is still held here, so this is the same
+            // "generated before the copy" ordering StatementPlanner uses.
+            planStartTime = OptimisticVersion.generate();
+        }
+        if (originalOlapTables == null) {
+            // Snapshot before anything below reads the target's schema or transforms the query: on this path
+            // the optimizer runs with the meta lock released, so every table the plan reaches has to be a
+            // private copy. Collecting it inside buildExecPlanWithRetry -- where it used to live -- was too
+            // late, because the logical plan built here would still point at the live objects.
+            originalOlapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
+        }
+        try {
+            return planWithRetry(insertStmt, session);
+        } finally {
+            insertStmt.setTargetTable(originalInsertTarget);
+        }
+    }
+
+    /**
+     * Plan with the meta lock released, then re-acquire it and check that nothing the plan was built on has
+     * changed underneath. An attempt is one whole pass of {@link #doPlan}: the output schema, the logical
+     * plan and the sink are all derived from the table objects of that attempt, so a retry that reused them
+     * would re-validate fresh copies while returning a plan built for the schema that was just rejected.
+     *
+     * <p>{@code planStartTime} is always generated <em>before</em> the copies it will be compared against,
+     * never after: a version that is too early only costs a spurious retry, while one that is too late makes
+     * a racing schema change sort before it and be accepted.
+     */
+    private ExecPlan planWithRetry(InsertStmt insertStmt, ConnectContext session) {
+        Set<OlapTable> olapTables = originalOlapTables;
+        Stopwatch watch = Stopwatch.createStarted();
+
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            if (i > 0) {
+                planStartTime = OptimisticVersion.generate();
+                // Re-analysis reuses the target the statement carries instead of resolving it again, so put
+                // the live table back first: the copy from the previous attempt is the stale schema that
+                // sent us here.
+                insertStmt.setTargetTable(originalInsertTarget);
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
+            }
+
+            // Release the lock during planning, and reacquire it before validating. A no-op when the caller
+            // already released it (StatementPlanner does, so that the authorization check runs off the lock
+            // too); either way the finally below leaves it held, as the caller expects.
+            plannerMetaLocker.unlock();
+            ExecPlan plan;
+            try {
+                plan = doPlan(insertStmt, session);
+            } finally {
+                try (Timer ignore = Tracers.watchScope("Lock")) {
+                    StatementPlanner.lock(plannerMetaLocker);
+                }
+            }
+            long validateAgainst = planStartTime;
+            if (olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, validateAgainst))) {
+                return plan;
+            }
+        }
+        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private ExecPlan doPlan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -280,7 +388,14 @@ public class InsertPlanner {
             inferOutputSchemaForPartialUpdate(insertStmt);
         } else {
             outputBaseSchema = targetTable.getBaseSchema();
-            outputFullSchema = targetTable.getFullSchema();
+            // Online OPTIMIZE rewrites a temporary partition and does not perform a schema change.
+            // Exclude stale schema-change shadow columns from the sink while retaining derived columns
+            // of normal synchronous materialized views, which are also kept in fullSchema. A completed
+            // OPTIMIZE may also leave same-named generated-column entries in fullSchema, so only emit one
+            // occurrence of each logical column and prefer the committed base-schema definition.
+            outputFullSchema = session.isOptimizeRewrite()
+                    ? getOptimizeOutputFullSchema(targetTable)
+                    : targetTable.getFullSchema();
         }
 
         if (targetTable.isIcebergTable()) {
@@ -347,25 +462,40 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
-            ExecPlan execPlan =
-                    useOptimisticLock ?
-                            buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation, targetTable) :
-                            buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
-                                    queryRelation,
-                                    targetTable);
+            ExecPlan execPlan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                    queryRelation, targetTable);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             long tableId = targetTable.getId();
+            // A shadow-rewrite INSERT (the internal online rewrite that materializes a range rollup or a
+            // schema-change shadow index) writes ONLY the target write index. Base columns outside that
+            // index's column set are carried in the tuple solely to satisfy the sink's base
+            // distribution/partition plumbing (BE validates their presence); they are never persisted nor
+            // used for range routing (per-index distribution exprs route by the target index's key). Relax
+            // their slot nullability so an omitted NOT-NULL base column that is default-filled with NULL is
+            // not rejected by the BE non-nullable data validation.
+            boolean shadowRewriteSubsetWrite =
+                    insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+            Set<String> shadowRewriteTargetIndexColumns = Collections.emptySet();
+            if (shadowRewriteSubsetWrite) {
+                MaterializedIndexMeta targetIndexMeta =
+                        ((OlapTable) targetTable).getIndexMetaByMetaId(insertStmt.getTargetWriteIndexId());
+                Preconditions.checkState(targetIndexMeta != null && !targetIndexMeta.getSchema().isEmpty(),
+                        "shadow-rewrite target write index %s not found", insertStmt.getTargetWriteIndexId());
+                shadowRewriteTargetIndexColumns = targetIndexMeta.getSchema().stream()
+                        .map(c -> c.getName().toLowerCase(Locale.ROOT)).collect(Collectors.toSet());
+            }
             for (Column column : outputFullSchema) {
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
-                slotDescriptor.setIsNullable(column.isAllowNull());
+                boolean nullable = column.isAllowNull() || (shadowRewriteSubsetWrite
+                        && !shadowRewriteTargetIndexColumns.contains(column.getName().toLowerCase(Locale.ROOT)));
+                slotDescriptor.setIsNullable(nullable);
                 if (column.getType().isVarchar() &&
                         IDictManager.getInstance().hasGlobalDict(tableId, column.getColumnId())) {
                     Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getColumnId());
@@ -443,6 +573,9 @@ public class InsertPlanner {
                 if (session.getTxnId() != 0) {
                     ((OlapTableSink) dataSink).setIsMultiStatementsTxn(true);
                 }
+                if (insertStmt.getTargetWriteIndexId() != null) {
+                    ((OlapTableSink) dataSink).setTargetWriteIndexId(insertStmt.getTargetWriteIndexId());
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);
@@ -456,6 +589,10 @@ public class InsertPlanner {
                     Load.checkMergeCondition(insertStmt.getMergingCondition(), olapTable, outputFullSchema,
                             ((OlapTableSink) dataSink).missAutoIncrementColumn());
                     olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(), session.getExecTimeout());
+                    // Same estimate pre-split sizes its tablet count from, reused to size the local-first
+                    // write set. Reading it here rather than inside the sink keeps the sink free of the
+                    // exec plan; complete() below is what consumes it.
+                    olapTableSink.setEstimatedWriteBytes(PreSplitEstimates.fromExecPlan(execPlan).totalBytes());
                     olapTableSink.complete(insertStmt.getMergingCondition());
                 } catch (StarRocksException e) {
                     throw new SemanticException(e.getMessage());
@@ -526,47 +663,24 @@ public class InsertPlanner {
         }
     }
 
-    /**
-     * The workhorse of InsertPlanner, which may takes a lot of time, so we would release the lock during planning
-     */
-    private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
-                                            List<ColumnRefOperator> outputColumns,
-                                            LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
-                                            QueryRelation queryRelation, Table targetTable) {
-        boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(session, insertStmt);
-        Stopwatch watch = Stopwatch.createStarted();
-
-        for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = OptimisticVersion.generate();
-            if (!isSchemaValid) {
-                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, session, plannerMetaLocker);
-            }
-
-            // Release the lock during planning, and reacquire the lock before validating
-            plannerMetaLocker.unlock();
-            ExecPlan plan;
-            try {
-                plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
-                        targetTable);
-            } finally {
-                try (Timer ignore2 = Tracers.watchScope("Lock")) {
-                    StatementPlanner.lock(plannerMetaLocker);
-                }
-            }
-            isSchemaValid =
-                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
-            if (isSchemaValid) {
-                return plan;
+    private List<Column> getOptimizeOutputFullSchema(Table targetTable) {
+        List<Column> outputSchema = new ArrayList<>(targetTable.getBaseSchema());
+        Set<String> outputColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+        targetTable.getBaseSchema().stream().map(Column::getName).forEach(outputColumnNames::add);
+        for (Column column : targetTable.getFullSchema()) {
+            if (!column.isShadowColumn() && outputColumnNames.add(column.getName())) {
+                outputSchema.add(column);
             }
         }
-        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
-                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+        return outputSchema;
     }
 
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
+        // Retractable IVM: pre-place the sink __op control column as a fixed trailing output before optimize,
+        // so it flows into the sink tuple by position; IvmRewriter binds its value to __ACTION__.
+        boolean ivmOpPreplaced = preplaceIvmLoadOpColumn(session, targetTable, outputColumns, columnRefFactory);
         PreOptimizePlanContext preOptimizePlanContext = preparePreOptimizePlanContext(
                 insertStmt, session.getSessionVariable(), targetTable, outputColumns, columnRefFactory, logicalPlan);
 
@@ -579,6 +693,11 @@ public class InsertPlanner {
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
             OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
             optimizerContext.setSourceTablesCount(sourceTablesCount);
+            if (session.getSessionVariable().isEnableIVMRefresh()) {
+                // Position i of outputColumns writes targetTable fullSchema[i]; IvmRewriter relies on
+                // this pairing to bind aggregates to MV state columns (bindStateColumnsForAggregate).
+                optimizerContext.getTvrOptContext().setIvmInsertOutputColumns(outputColumns);
+            }
             Optimizer optimizer = OptimizerFactory.create(optimizerContext);
             optimizedPlan = optimizer.optimize(
                     preOptimizePlanContext.root,
@@ -589,13 +708,41 @@ public class InsertPlanner {
         //8. Build fragment exec plan
         boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
                 || targetTable instanceof MysqlTable);
+        List<String> sinkColNames = queryRelation.getColumnOutputNames();
+        if (ivmOpPreplaced) {
+            sinkColNames = new ArrayList<>(sinkColNames);
+            sinkColNames.add(Load.LOAD_OP_COLUMN);
+        }
         ExecPlan execPlan;
         try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
             execPlan = PlanFragmentBuilder.createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+                    sinkColNames, TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
         }
         return execPlan;
+    }
+
+    // Pre-place the sink __op control column (Load.LOAD_OP_COLUMN) as a fixed trailing output for a
+    // retractable PRIMARY KEY IVM refresh: append it to outputColumns and outputFullSchema (last) so it
+    // gets a trailing tuple slot and OUTPUT expr; IvmRewriter binds its value to __ACTION__.
+    private boolean preplaceIvmLoadOpColumn(ConnectContext session, Table targetTable,
+                                            List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory) {
+        if (!session.getSessionVariable().isEnableIVMRefresh()
+                || !(targetTable instanceof OlapTable olapTable)
+                || olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
+            return false;
+        }
+        // Idempotent across optimistic-lock retries (buildExecPlanWithRetry runs this per attempt):
+        // strip a prior attempt's __op before re-appending, or the columns accumulate a duplicate.
+        outputColumns.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        outputColumns.add(columnRefFactory.create(Load.LOAD_OP_COLUMN, IntegerType.TINYINT, false));
+        Column opColumn = new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT);
+        opColumn.setIsAllowNull(false);
+        List<Column> extendedSchema = new ArrayList<>(outputFullSchema);
+        extendedSchema.removeIf(col -> Load.LOAD_OP_COLUMN.equalsIgnoreCase(col.getName()));
+        extendedSchema.add(opColumn);
+        outputFullSchema = extendedSchema;
+        return true;
     }
 
     private PreOptimizePlanContext preparePreOptimizePlanContext(InsertStmt insertStmt,
@@ -807,15 +954,30 @@ public class InsertPlanner {
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Optional<Column> optOriginColumn = outputFullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
+                if (optOriginColumn.isPresent()) {
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(outputFullSchema.indexOf(originColumn));
 
-                ColumnRefOperator columnRefOperator = columnRefFactory.create(
-                        targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
+                    ColumnRefOperator columnRefOperator = columnRefFactory.create(
+                            targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
 
-                outputColumns.add(columnRefOperator);
-                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                    outputColumns.add(columnRefOperator);
+                    columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                } else {
+                    // No same-named origin in the output schema. This is legitimate ONLY for a genuinely
+                    // new added column (e.g. a range ADD-key column); a MODIFY-COLUMN shadow always retains
+                    // its origin and takes the branch above. Preserve the invariant the original code
+                    // asserted (optOriginColumn.isPresent()) by materializing a default only when no
+                    // committed base column has this name -- otherwise a MODIFY shadow that lost its origin
+                    // would silently emit a wrong DEFAULT instead of failing fast.
+                    boolean genuinelyNewColumn =
+                            outputBaseSchema.stream().noneMatch(c -> c.nameEquals(originName, false));
+                    Preconditions.checkState(genuinelyNewColumn,
+                            "shadow column %s has no same-named origin but exists in the base schema",
+                            targetColumn.getName());
+                    // Materialize its CONST/NULL default instead of the origin-cast above.
+                    materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
+                }
                 continue;
             }
 
@@ -875,25 +1037,46 @@ public class InsertPlanner {
 
             // columnIdx >= outputColumns.size() mean this is a new add schema change column
             if (columnIdx >= outputColumns.size()) {
-                ScalarOperator scalarOperator = null;
-                Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL) {
-                    scalarOperator = ConstantOperator.createNull(targetColumn.getType());
-                } else if (defaultValueType == Column.DefaultValueType.CONST) {
-                    scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
-                } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                    throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
-                            + targetColumn.getDefaultExpr().getExpr());
-                }
-                ColumnRefOperator col = columnRefFactory
-                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
-                outputColumns.add(col);
-                columnRefMap.put(col, scalarOperator);
+                materializeShadowColumnDefault(columnRefFactory, outputColumns, columnRefMap, targetColumn);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
             }
         }
         return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    /**
+     * Materialize {@code targetColumn}'s CONST/NULL default as a fresh {@link ColumnRefOperator}, appended to
+     * {@code outputColumns} and mapped in {@code columnRefMap}. Used by {@link #fillShadowColumns} both for a
+     * plain new-add schema-change column and for a {@code __starrocks_shadow_}-prefixed column with no
+     * same-named origin (a genuinely new added column, e.g. a range ADD-key column).
+     */
+    private void materializeShadowColumnDefault(ColumnRefFactory columnRefFactory, List<ColumnRefOperator> outputColumns,
+                                                Map<ColumnRefOperator, ScalarOperator> columnRefMap, Column targetColumn) {
+        ScalarOperator scalarOperator;
+        Column.DefaultValueType defaultValueType = targetColumn.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.NULL) {
+            scalarOperator = ConstantOperator.createNull(targetColumn.getType());
+        } else if (defaultValueType == Column.DefaultValueType.CONST) {
+            // calculatedDefaultValue() evaluates a time-function default (e.g. CURRENT_TIMESTAMP) to the
+            // transaction time and returns a scalar literal's string, but it returns null for a complex
+            // expr-object default (ARRAY/MAP/STRUCT literal); getDefaultValue() renders that via toSql().
+            // Take whichever is non-null so a bundled non-key value column with a complex constant default
+            // is materialized as a VARCHAR constant (cast to the column type downstream) rather than NPEing.
+            String defaultValueStr = targetColumn.calculatedDefaultValue();
+            if (defaultValueStr == null) {
+                defaultValueStr = targetColumn.getDefaultValue();
+            }
+            scalarOperator = ConstantOperator.createVarchar(defaultValueStr);
+        } else {
+            // VARY (variable expr, e.g. uuid()) -- not materializable as a constant for the shadow rewrite.
+            throw new SemanticException("Column:" + targetColumn.getName() + " has unsupported default value:"
+                    + targetColumn.getDefaultExpr().getExpr());
+        }
+        ColumnRefOperator col = columnRefFactory
+                .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+        outputColumns.add(col);
+        columnRefMap.put(col, scalarOperator);
     }
 
     private OptExprBuilder castOutputColumnsTypeToTargetColumns(ColumnRefFactory columnRefFactory,

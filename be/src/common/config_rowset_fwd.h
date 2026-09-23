@@ -20,13 +20,12 @@
 #include "common/configbase.h"
 
 namespace starrocks::config {
-// Row interval between consecutive sort-key samples recorded by the segment
-// writer. Samples are consumed by tablet split and range-split parallel
-// compaction to accurately estimate row distribution for overlapping segments.
-// Setting to 0 disables sampling. The per-segment value is persisted in
-// SegmentMetadataPB.sort_key_sample_row_interval so that a runtime change
-// does not break cross-version readers.
-CONF_mInt64(segment_sort_key_sample_row_interval, "65536");
+// Upper bound on sort-key samples taken from one tablet when computing split boundaries. Matches FE
+// tablet_reshard_max_split_count (1024): a K-way split needs K-1 interior boundary points. Sampling
+// reads a bounded number of segment data pages when a tablet's short key index does not already
+// encode its whole sort key, so this also bounds that I/O. 0 disables sampling entirely -- split
+// boundaries then come from segment [min, max] only, which is coarser but always correct.
+CONF_mInt32(sort_key_max_samples_per_tablet, "1024");
 
 CONF_Bool(enable_transparent_data_encryption, "false");
 
@@ -35,6 +34,35 @@ CONF_mInt32(default_num_rows_per_column_file_block, "1024");
 
 // data and index page size, default is 64k
 CONF_Int32(data_page_size, "65536");
+
+// Gather every column's ordinal index into one run just before the footer, instead of leaving each
+// after its own column's data pages. A cold scan loads the ordinal index of every projected column
+// before it can read a data page; scattered, those cost a cache block and a round trip each, and at
+// the tail they share blocks and often the one the footer read already fetched. Nothing else moves
+// -- the short key index and the page zone maps keep the positions they have always had.
+//
+// A shared-nothing BE ignores this and keeps the original layout: there the scattered reads hit a
+// local disk. So does a partial-update rewrite, which copies an existing segment's prefix and
+// could only build a region covering the columns it appends. Vertical compaction does produce it.
+//
+// Cost: a one-column scan of a wide table pays roughly one extra remote block per segment, since
+// a hundred columns of ordinal index do not fit in the footer's block.
+//
+// Either layout is readable by any binary in either direction and the two coexist in one tablet,
+// so this can be flipped at any time without rewriting data.
+CONF_mBool(lake_enable_segment_tail_index_region, "true");
+
+// When true, high-cardinality string columns that fall back to plain encoding are written with
+// the PLAIN_ENCODING_DELTA_OFFSET column encoding, whose page offset trailer stores per-value
+// deltas (string lengths) instead of absolute offsets. Deltas are near-constant for fixed-ish
+// strings and compress far better than monotonically increasing absolute offsets, while the
+// uncompressed trailer keeps the same size. The format is identified by the column encoding
+// recorded in the segment metadata (not by any in-trailer flag), so a BE that does not know the
+// encoding fails to open the segment instead of misreading it. Only the write side is gated by
+// this config; default true. Set it to false while any BE that does not support the encoding is
+// still serving, and before downgrading to such a version, since segments already written with
+// the encoding stay unreadable there.
+CONF_mBool(enable_binary_plain_delta_offset, "true");
 
 // whether to enable the bitmap index memory cache
 CONF_mBool(enable_bitmap_index_memory_page_cache, "true");
@@ -71,6 +99,53 @@ CONF_Int32(dictionary_page_size, "1048576");
 
 CONF_Int32(small_dictionary_page_size, "4096");
 
+// compression dict column-level compression dictionary (a ZSTD dictionary). Master switch checked at the write
+// gate (segment_writer); when false, columns flagged use_zstd_compression fall back
+// to plain per-column ZSTD with no compression dict. Independent of the per-column
+// flag so it can be flipped at runtime as an operational safety valve.
+//
+// DEFAULT IS true: this switch ships only in builds that already contain the reader
+// (ColumnMetaPB.zstd_compression_dict_page, field 35, merged ahead of the write side),
+// and a dictionary page is only ever written for columns the user nominated through
+// the zstd_compression_columns table property -- a cluster that never sets the
+// property writes no dictionary pages regardless of this default.
+//
+// The one window that still needs care is a rolling upgrade FROM a release that
+// predates the reader: a compression dict data page is a ZSTD frame compressed
+// against a raw-content dictionary (dictID=0), so its frame header carries no signal
+// that a dictionary is required, and an old BE would decompress it WITHOUT the
+// dictionary and hit ZSTD corruption. During such an upgrade, do not add
+// zstd_compression_columns to any table (or set this to false) until every BE is
+// upgraded. WARNING: once a cluster has written compression dict segments it cannot
+// be downgraded below the reader build (old BEs cannot read or compact those
+// segments). Same reasoning covers cross-replica clone/replication during a
+// mixed-version window.
+CONF_mBool(enable_zstd_compression_dict, "true");
+
+// Bytes sampled from the first eligible data page to build the compression dict
+// ("first-page sampling" mode). ~one 64KB data page by default.
+CONF_mInt32(zstd_compression_dict_sample_bytes, "65536");
+
+// Minimum encoded_values size (bytes) of a data page for it to be used as the
+// dictionary sample. Guards against building a garbage dict from a tiny/near
+// empty first page and permanently marking the column dict-ready.
+CONF_mInt32(zstd_compression_dict_min_sample_bytes, "1024");
+
+// How much smaller the trial pages must get before the per-column compression
+// dictionary is kept, as a fraction. The writer compresses the first
+// kZstdDictTrialPages pages after the sample both ways and compares; below this
+// the dictionary is dropped for the whole column.
+//
+// A dictionary is not free: a page of its own per column per segment, a load per
+// segment on every read, and a decision that cannot be revisited once pages
+// reference it. So the default asks for a clear win rather than a measurable one.
+// Measured across 13 corpora x 3 page sizes: at 0.10 the dictionary is kept only
+// where it earns 10%+ (agent-log columns and replayed text at 64KB), and the cost
+// is turning down gains of 5-9% that cluster at 256KB pages, where a plain page
+// already captures most of the repetition. Lower it to about 0.05 to take those
+// too. Values below 0 are treated as 0.
+CONF_mDouble(zstd_compression_dict_min_gain, "0.10");
+
 // Just like dictionary_encoding_ratio, dictionary_encoding_ratio_for_non_string_column is used for
 // no-string column.
 CONF_Double(dictionary_encoding_ratio_for_non_string_column, "0");
@@ -95,6 +170,16 @@ CONF_mInt16(null_encoding, "0");
 CONF_mBool(enable_index_segment_level_zonemap_filter, "true");
 
 CONF_mBool(enable_index_page_level_zonemap_filter, "true");
+
+// Read-time rollback valve for constant-folding the zone map of a column that is physically
+// absent from a segment (the normal outcome of fast schema evolution `ALTER TABLE ADD COLUMN`).
+// Such a column reads through DefaultValueColumnIterator, where every row holds the same value,
+// so predicates can be evaluated exactly against a synthetic min==max zone map. Turning this off
+// restores the legacy behaviour: keep every row and mark every batch delete-partial-satisfied.
+// It is deliberately separate from enable_index_page_level_zonemap_filter, which only guards
+// SegmentIterator::_get_row_ranges_by_zone_map() and therefore cannot switch off the runtime
+// filter path (SegmentIterator::_try_to_update_ranges_by_runtime_filter).
+CONF_mBool(enable_default_value_column_zonemap_filter, "true");
 
 CONF_mBool(enable_index_bloom_filter, "true");
 

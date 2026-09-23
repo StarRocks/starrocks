@@ -28,7 +28,7 @@
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "gen_cpp/parquet_types.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace tparquet {
 class ColumnChunk;

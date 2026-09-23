@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class StmtExecutorNewTest extends StarRocksTestBase  {
@@ -52,17 +53,17 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     public void testIsExplainTrace() throws Exception {
         // Test case 1: Normal explain statement without trace
         StatementBase stmt = parse("explain select * from t1");
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainTrace());
 
         // Test case 2: Explain statement with trace
         stmt = parse("trace logs optimizer select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertTrue(stmt.isExplainTrace());
 
         // Test case 3: Normal statement (not explain)
         stmt = parse("select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainTrace());
     }
 
@@ -70,17 +71,17 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     public void testIsExplainAnalyze() throws Exception {
         // Test case 1: Normal explain statement
         StatementBase stmt = parse("explain select * from t1");
-        StmtExecutor executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainAnalyze());
 
         // Test case 2: Explain analyze statement
         stmt = parse("explain analyze select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertTrue(stmt.isExplainAnalyze());
 
         // Test case 3: Explain statement with different level
         stmt = parse("explain verbose select * from t1");
-        executor = new StmtExecutor(ctx, stmt);
+        new StmtExecutor(ctx, stmt);
         assertFalse(stmt.isExplainAnalyze());
     }
 
@@ -102,7 +103,7 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     }
 
     @Test
-    public void testGenerateExecPlanWithException() throws Exception {
+    public void testGenerateExecPlanForwardsWhenNotLeader() throws Exception {
         StatementBase stmt = parse("trace logs mv select * from non_existent_table");
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
         
@@ -111,13 +112,10 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
                 "generateExecPlan");
         method.setAccessible(true);
         
-        // This should not throw exception even if planning fails
-        try {
-            method.invoke(executor);
-        } catch (Exception e) {
-            // Exception is expected but should be handled gracefully
-            assertTrue(true);
-        }
+        // This harness starts no cluster, so the FE is not the leader and generateExecPlan() takes
+        // the forward-to-leader path: the whole planning block is skipped and null comes back
+        // without the unknown table ever being resolved.
+        assertNull(method.invoke(executor));
     }
 
     @Test

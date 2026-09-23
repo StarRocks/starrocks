@@ -48,9 +48,9 @@
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/types.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 
@@ -170,6 +170,53 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     ASSERT_OK(decoder.next_batch(SparseRange<>(0, 1), column.get()));
     ASSERT_EQ(column->debug_string(),
               "['first value', 'second value', 'third value', 'fourth value', 'fifth value', 'first value']");
+}
+
+TEST_F(BinaryPlainPageTest, TestGetOffsetsForZeroCopy) {
+    {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+
+        OwnedSlice page = builder.finish()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+        ASSERT_OK(decoder.init());
+
+        BinaryColumn::Offsets offsets;
+        decoder.get_offsets_for_zero_copy(offsets);
+
+        ASSERT_EQ(1, offsets.size());
+        EXPECT_EQ(0, offsets[0]);
+        EXPECT_FALSE(offsets.is_large());
+    }
+
+    {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+        Slice slices[] = {
+                "alpha",
+                "",
+                "bb",
+                "ccc",
+        };
+
+        ASSERT_EQ(4, builder.add((const uint8_t*)slices, 4));
+        OwnedSlice page = builder.finish()->build();
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page.slice());
+        ASSERT_OK(decoder.init());
+
+        BinaryColumn::Offsets offsets;
+        decoder.get_offsets_for_zero_copy(offsets);
+
+        ASSERT_EQ(5, offsets.size());
+        EXPECT_FALSE(offsets.is_large());
+        EXPECT_EQ(0, offsets[0]);
+        EXPECT_EQ(5, offsets[1]);
+        EXPECT_EQ(5, offsets[2]);
+        EXPECT_EQ(7, offsets[3]);
+        EXPECT_EQ(10, offsets[4]);
+    }
 }
 
 TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
@@ -303,6 +350,53 @@ TEST_F(BinaryPlainPageTest, TestNextBatchWithFilter) {
     }
 }
 
+// A predicate pushed down to a page may come with a sparse range (several non-adjacent sub-ranges of the same page,
+// merged by ScalarColumnIterator). The null flags belong to the page and are indexed by the in-page ordinal, so the
+// rows after a gap must take their own flags, not the flags of the rows that were skipped.
+TEST_F(BinaryPlainPageTest, TestNextBatchWithFilterSparseRangeWithNulls) {
+    PageBuilderOptions options;
+    options.data_page_size = 256 * 1024;
+    BinaryPlainPageBuilder builder(options);
+    Slice slices[] = {
+            "a_100", "b_200", "c_300", "d_400", "e_500",
+    };
+    ASSERT_EQ(5, builder.add((const uint8_t*)slices, 5));
+    OwnedSlice data_with_head = builder.finish()->build();
+    BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(data_with_head.slice());
+    ASSERT_TRUE(decoder.init().ok());
+
+    auto column = ChunkFactory::column_from_field_type(TYPE_VARCHAR, true);
+    std::unique_ptr<ColumnPredicate> predicate(new_column_ge_predicate(get_type_info(TYPE_VARCHAR), 0, "c_300"));
+    std::vector<const ColumnPredicate*> predicates{predicate.get()};
+
+    // read ordinal 0 and ordinals 3..4, skip 1..2
+    SparseRange<> range;
+    range.add(Range<>(0, 1));
+    range.add(Range<>(3, 5));
+    ASSERT_EQ(3, range.span_size());
+    std::vector<uint8_t> selection(3, 1);
+    std::vector<uint16_t> selected_idx(3);
+
+    // page-level null flags: ordinals 1, 2 and 4 are null. Walking them linearly over the 3 rows read would take
+    // {0, 1, 1} and wrongly mark "d_400" (ordinal 3) as null.
+    uint8_t null_data[] = {0, 1, 1, 0, 1};
+
+    Status st = decoder.next_batch_with_filter(column.get(), range, predicates, null_data, selection.data(),
+                                               selected_idx.data());
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    // ordinal 0 "a_100" < "c_300" -> 0; ordinal 3 "d_400" >= "c_300" and not null -> 1; ordinal 4 is null -> 0
+    ASSERT_EQ(0, selection[0]);
+    ASSERT_EQ(1, selection[1]);
+    ASSERT_EQ(0, selection[2]);
+
+    ASSERT_EQ(1, column->size());
+    auto nullable_col = down_cast<NullableColumn*>(column.get());
+    ASSERT_FALSE(nullable_col->has_null());
+    auto binary_col = down_cast<BinaryColumn*>(nullable_col->data_column_raw_ptr());
+    ASSERT_EQ("d_400", binary_col->immutable_data()[0]);
+}
+
 TEST_F(BinaryPlainPageTest, TestReadByRowids) {
     PageBuilderOptions options;
     options.data_page_size = 256 * 1024;
@@ -369,6 +463,110 @@ TEST_F(BinaryPlainPageTest, TestDictFilterSelectionLargeDictSize) {
     ASSERT_EQ(0, selection[65535]);
     ASSERT_EQ(1, selection[65536]);
     ASSERT_EQ(1, selection[kNumDictValues - 1]);
+}
+
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, test_delta_offset_roundtrip) {
+    std::vector<Slice> slices;
+    slices.emplace_back(""); // zero-length value -> delta 0
+    slices.emplace_back("a");
+    slices.emplace_back("persona,1");
+    slices.emplace_back("persona,1234567");
+    slices.emplace_back("bb");
+    std::string longstr(300, 'z');
+    slices.emplace_back(longstr);
+    slices.emplace_back("tail");
+    const size_t n = slices.size();
+
+    // delta == true exercises the PLAIN_ENCODING_DELTA_OFFSET path; false is the legacy
+    // absolute-offset path. Both must decode to identical values. The format is passed via the
+    // builder/decoder ctor flag (the on-disk count field stays a plain element count).
+    auto build_and_check = [&](bool delta) {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options, delta);
+        size_t added = builder.add(reinterpret_cast<const uint8_t*>(slices.data()), n);
+        ASSERT_EQ(n, added);
+        OwnedSlice owned = builder.finish()->build();
+        Slice page = owned.slice();
+
+        // The trailer's count field is a plain element count regardless of delta encoding.
+        uint32_t raw = decode_fixed32_le((const uint8_t*)page.data + page.size - sizeof(uint32_t));
+        ASSERT_EQ(n, raw);
+
+        BinaryPlainPageDecoder<TYPE_VARCHAR> decoder(page, delta);
+        ASSERT_OK(decoder.init());
+        ASSERT_EQ(n, decoder.count());
+
+        // full scan round-trip: every value must come back byte-identical
+        auto col = BinaryColumn::create();
+        size_t size = 1024;
+        ASSERT_OK(decoder.next_batch(&size, col.get()));
+        ASSERT_EQ(n, size);
+        for (size_t i = 0; i < n; i++) {
+            ASSERT_EQ(slices[i], col->immutable_data()[i]);
+        }
+
+        // point seek
+        auto col2 = BinaryColumn::create();
+        ASSERT_OK(decoder.seek_to_position_in_page(3));
+        size = 1;
+        ASSERT_OK(decoder.next_batch(&size, col2.get()));
+        ASSERT_EQ(1, size);
+        ASSERT_EQ(slices[3], col2->immutable_data()[0]);
+
+        // sparse range read crossing non-adjacent values
+        auto col3 = BinaryColumn::create();
+        ASSERT_OK(decoder.seek_to_position_in_page(0));
+        SparseRange<> r;
+        r.add(Range<>(0, 2));
+        r.add(Range<>(5, 7));
+        ASSERT_OK(decoder.next_batch(r, col3.get()));
+        ASSERT_EQ(4, col3->size());
+        ASSERT_EQ(slices[0], col3->immutable_data()[0]);
+        ASSERT_EQ(slices[1], col3->immutable_data()[1]);
+        ASSERT_EQ(slices[5], col3->immutable_data()[2]);
+        ASSERT_EQ(slices[6], col3->immutable_data()[3]);
+    };
+
+    build_and_check(false); // legacy absolute offsets
+    build_and_check(true);  // delta offsets must decode identically
+}
+
+// NOLINTNEXTLINE
+TEST_F(BinaryPlainPageTest, test_max_value_length_is_cached_and_correct) {
+    auto build_decoder = [](const std::vector<Slice>& slices, OwnedSlice* keep_alive) {
+        PageBuilderOptions options;
+        options.data_page_size = 256 * 1024;
+        BinaryPlainPageBuilder builder(options);
+        size_t count = slices.size();
+        builder.add(reinterpret_cast<const uint8_t*>(slices.data()), count);
+        *keep_alive = builder.finish()->build();
+        return BinaryPlainPageDecoder<TYPE_VARCHAR>(keep_alive->slice());
+    };
+
+    // Longest value is "StarRocks" (9 bytes); repeated calls must be stable and equal to the
+    // freshly-recomputed value (memoization must not change the answer).
+    {
+        std::vector<Slice> slices{"Hello", ",", "StarRocks", "ab"};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+        EXPECT_EQ(9U, decoder.max_value_length());
+    }
+
+    // All-empty dictionary: max length is the legitimate value 0; the -1 "not computed" sentinel
+    // must not be confused with a cached 0.
+    {
+        std::vector<Slice> slices{"", "", ""};
+        OwnedSlice owned;
+        auto decoder = build_decoder(slices, &owned);
+        ASSERT_OK(decoder.init());
+        EXPECT_EQ(0U, decoder.max_value_length());
+        EXPECT_EQ(0U, decoder.max_value_length());
+    }
 }
 
 } // namespace starrocks

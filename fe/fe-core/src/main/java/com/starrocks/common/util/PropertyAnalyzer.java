@@ -40,6 +40,7 @@ import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
@@ -93,7 +94,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCompactionStrategy;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -112,6 +112,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -139,6 +140,9 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_BF_COLUMNS = "bloom_filter_columns";
     public static final String PROPERTIES_BF_FPP = "bloom_filter_fpp";
+
+    // column-level compression dictionary (a ZSTD dictionary) columns
+    public static final String PROPERTIES_ZSTD_COMPRESSION_COLUMNS = "zstd_compression_columns";
 
     public static final String PROPERTIES_COLUMN_SEPARATOR = "column_separator";
     public static final String PROPERTIES_LINE_DELIMITER = "line_delimiter";
@@ -178,6 +182,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_FLAT_JSON_COLUMN_MAX = "flat_json.column.max";
 
+    public static final String PROPERTIES_FLAT_JSON_VERSION = "flat_json.version";
+
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN = "column";
     public static final String PROPERTIES_STORAGE_TYPE_COLUMN_WITH_ROW = "column_with_row";
 
@@ -205,6 +211,8 @@ public class PropertyAnalyzer {
     public static final String ENABLE_LOW_CARD_DICT_TYPE = "enable_low_card_dict";
     public static final String ABLE_LOW_CARD_DICT = "1";
     public static final String DISABLE_LOW_CARD_DICT = "0";
+    // Comma-separated column names whose low-cardinality global dict is forbidden (column-level).
+    public static final String PROPERTIES_NO_DICT_COLUMNS = "no_dict_columns";
 
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
@@ -747,7 +755,7 @@ public class PropertyAnalyzer {
             refreshMode = properties.get(PROPERTIES_MV_REFRESH_MODE);
             MaterializedView.RefreshMode parsed;
             try {
-                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase());
+                parsed = MaterializedView.RefreshMode.valueOf(refreshMode.toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 throw new IllegalArgumentException("Invalid refresh_mode: " + refreshMode +
                         ". Only INCREMENTAL, PCT are supported.");
@@ -1042,6 +1050,213 @@ public class PropertyAnalyzer {
         }
 
         return bfColumns;
+    }
+
+    // analyze the "zstd_compression_columns" property. Mirrors analyzeBloomFilterColumns, but:
+    //   - only CHAR/VARCHAR/STRING/JSON columns are supported;
+    //   - only value columns are allowed (key columns are forbidden);
+    //   - there is no fpp / compression companion property.
+    // Returns the set of column names that should use a compression dictionary (a ZSTD dictionary), or null if the
+    // property is not present.
+    // The page is also the unit of the page cache and of a point lookup, so the size
+    // is bounded on both ends. Below 4KB a page holds too little to compress. The
+    // ceiling is 1MB because that is the largest size measured to still keep point
+    // lookups in a sane range: on 44KB rows a 1MB page reads one row in ~127us,
+    // while a 4MB page takes ~375us, and on 9KB rows a 4MB page costs ~2.6ms --
+    // 45x the default page. Sizes past 1MB buy more ratio only on data whose rows
+    // are large AND near-duplicates of each other, and not enough of it to justify
+    // handing every point lookup that bill.
+    private static final int MIN_ZSTD_COMPRESSION_PAGE_SIZE = 4 * 1024;
+    private static final int MAX_ZSTD_COMPRESSION_PAGE_SIZE = 1024 * 1024;
+
+    private static List<String> zstdCompressionColumnSpecs(String[] specs) {
+        List<String> trimmed = Lists.newArrayListWithCapacity(specs.length);
+        for (String spec : specs) {
+            trimmed.add(spec.trim());
+        }
+        return trimmed;
+    }
+
+    private static int analyzeZstdCompressionPageSize(String columnName, String pageSizeStr)
+            throws AnalysisException {
+        if (Strings.isNullOrEmpty(pageSizeStr)) {
+            throw new AnalysisException(
+                    String.format("Invalid page size for column '%s': missing value after ':'", columnName));
+        }
+        long pageSize;
+        try {
+            pageSize = ParseUtil.analyzeDataVolume(pageSizeStr);
+        } catch (Exception e) {
+            throw new AnalysisException(
+                    String.format("Invalid page size '%s' for column '%s': %s", pageSizeStr, columnName,
+                            e.getMessage()));
+        }
+        if (pageSize < MIN_ZSTD_COMPRESSION_PAGE_SIZE || pageSize > MAX_ZSTD_COMPRESSION_PAGE_SIZE) {
+            throw new AnalysisException(String.format(
+                    "Invalid page size '%s' for column '%s': must be between %d and %d bytes", pageSizeStr,
+                    columnName, MIN_ZSTD_COMPRESSION_PAGE_SIZE, MAX_ZSTD_COMPRESSION_PAGE_SIZE));
+        }
+        return (int) pageSize;
+    }
+
+    public static Set<String> analyzeZstdCompressionColumns(Map<String, String> properties, List<Column> columns)
+            throws AnalysisException {
+        Map<String, Integer> pageSizes = analyzeZstdCompressionColumnPageSizes(properties, columns);
+        return pageSizes == null ? null : pageSizes.keySet();
+    }
+
+    // A column may carry an optional per-column data page size, written after the
+    // column name: "v:4m, j:256k, k". The page is the unit of decompression, so the
+    // size that pays off depends on how large the column's rows are relative to it:
+    // a column whose rows are bigger than a page loses all cross-row redundancy at
+    // 64KB and compresses several times better with a large page, while a column
+    // holding hundreds of rows per page gains nothing from a larger one and only
+    // pays for it on point lookups. That is why the size is per column and not a
+    // table-wide or cluster-wide setting.
+    // Returns column name -> page size in bytes (0 = leave at the BE default), or
+    // null when the property is not present.
+    private static Column findColumnIgnoreCase(List<Column> columns, String name) {
+        return columns.stream().filter(col -> col.getName().equalsIgnoreCase(name)).findFirst().orElse(null);
+    }
+
+    public static Map<String, Integer> analyzeZstdCompressionColumnPageSizes(Map<String, String> properties,
+                                                                             List<Column> columns)
+            throws AnalysisException {
+        Map<String, Integer> zstdCompressionPageSizes = null;
+        if (properties != null && properties.containsKey(PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+            zstdCompressionPageSizes = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+            String zstdCompressionColumnsStr = properties.get(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
+            if (Strings.isNullOrEmpty(zstdCompressionColumnsStr)) {
+                // an empty value means "no columns". The key still has to be consumed here,
+                // otherwise the caller rejects the leftover entry as an unknown property.
+                properties.remove(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
+                return zstdCompressionPageSizes;
+            }
+
+            String[] zstdCompressionColumnArr = zstdCompressionColumnsStr.split(COMMA_SEPARATOR);
+            Set<String> zstdCompressionColumnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String zstdCompressionColumnSpec : zstdCompressionColumnSpecs(zstdCompressionColumnArr)) {
+                // A column name may itself contain a colon, so the whole spec is tried as a name
+                // first and only split when there is no such column. Splitting first would take
+                // `v:4096` -- a real column on some tables -- to mean column `v` at a 4KB page.
+                String zstdCompressionColumn = zstdCompressionColumnSpec;
+                int pageSize = 0;
+                Column column = findColumnIgnoreCase(columns, zstdCompressionColumnSpec);
+                int colon = zstdCompressionColumnSpec.lastIndexOf(':');
+                if (column == null && colon >= 0) {
+                    String namePart = zstdCompressionColumnSpec.substring(0, colon).trim();
+                    Column withPageSize = findColumnIgnoreCase(columns, namePart);
+                    if (withPageSize != null) {
+                        column = withPageSize;
+                        zstdCompressionColumn = namePart;
+                        pageSize = analyzeZstdCompressionPageSize(namePart,
+                                zstdCompressionColumnSpec.substring(colon + 1).trim());
+                    }
+                }
+                if (column == null) {
+                    throw new AnalysisException(
+                            String.format("Invalid zstd compression column '%s': not exists", zstdCompressionColumn));
+                }
+
+                String rejection = zstdCompressionColumnRejection(column);
+                if (rejection != null) {
+                    throw new AnalysisException(
+                            String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, rejection));
+                }
+
+                // SHOW CREATE TABLE renders this property back as "<name>:<bytes>", and the parser
+                // above resolves a whole token as a column name before it splits one. If the rendered
+                // form is itself a column here, the emitted DDL would name that other column -- so
+                // CREATE TABLE LIKE, or pasting the property out of SHOW CREATE TABLE, would configure
+                // the wrong column at the wrong page size. Refuse the pair rather than emit text that
+                // does not mean what it says.
+                String collision = zstdCompressionRenderCollision(
+                        columns.stream().map(Column::getName).collect(Collectors.toList()),
+                        column.getName(), pageSize);
+                if (collision != null) {
+                    throw new AnalysisException(
+                            String.format("Invalid zstd compression column '%s': %s", zstdCompressionColumn, collision));
+                }
+
+                if (zstdCompressionColumnSet.contains(zstdCompressionColumn)) {
+                    throw new AnalysisException(String.format("Duplicate zstd compression column '%s'", zstdCompressionColumn));
+                }
+
+                zstdCompressionColumnSet.add(zstdCompressionColumn);
+                zstdCompressionPageSizes.put(column.getName(), pageSize);
+            }
+
+            properties.remove(PROPERTIES_ZSTD_COMPRESSION_COLUMNS);
+        }
+
+        return zstdCompressionPageSizes;
+    }
+
+    /**
+     * Why rendering {@code columnName} at {@code pageSize} back into the property would be ambiguous, or
+     * null if it would not. SHOW CREATE TABLE writes the entry as "&lt;name&gt;:&lt;bytes&gt;" and the parser
+     * resolves a whole token as a column name before it splits one, so if that rendered form is itself a
+     * column on this table, the emitted DDL names the other column at the default page size. Kept apart
+     * from the property text because the collision can also be created AFTER the property is set, by
+     * renaming or adding a column into the rendered name.
+     */
+    public static String zstdCompressionRenderCollision(List<String> columnNames, String columnName, int pageSize) {
+        if (pageSize <= 0) {
+            return null;
+        }
+        String rendered = columnName + ":" + pageSize;
+        if (columnNames.stream().noneMatch(rendered::equalsIgnoreCase)) {
+            return null;
+        }
+        return String.format("this table also has a column named '%s', which is exactly how SHOW CREATE TABLE "
+                + "would render this entry, so the two cannot be told apart. Rename one of them, or leave the "
+                + "page size off this column.", rendered);
+    }
+
+    /**
+     * Why {@code columnName} cannot appear in "zstd_compression_columns" at all, or null if it can. The
+     * property is a comma-separated list whose entries are trimmed before the names are resolved
+     * (see {@link #zstdCompressionColumnSpecs}), while the value is rendered from the raw names, so a
+     * name carrying either delimiter does not survive the round trip:
+     * <ul>
+     *   <li>a comma splits one nomination into two, which then name other columns or none;</li>
+     *   <li>leading or trailing whitespace is trimmed away on the way back in, which silently resolves
+     *       to a different column.</li>
+     * </ul>
+     * A colon is fine: the parser resolves a whole token as a name before it splits one, and the case
+     * where that is ambiguous is {@link #zstdCompressionRenderCollision}'s job.
+     *
+     * <p>Only reachable through RENAME COLUMN. Nominating such a column in the first place is
+     * impossible -- the value is split and trimmed before any name is looked up.
+     */
+    public static String zstdCompressionNameUnrepresentable(String columnName) {
+        if (columnName.indexOf(',') >= 0) {
+            return "the property is a comma-separated list, so a nominated column's name cannot contain a comma";
+        }
+        if (!columnName.equals(columnName.trim())) {
+            return "the property's entries are trimmed when they are read back, so a nominated column's name "
+                    + "cannot start or end with whitespace";
+        }
+        return null;
+    }
+
+    /**
+     * Why {@code column} may not be nominated in "zstd_compression_columns", or null if it may.
+     * Kept apart from the property text so that an ALTER changing a column's type or its keyness
+     * can re-check a column the property already names: the property survives such an ALTER, and
+     * a table left naming an ineligible column emits a SHOW CREATE TABLE that CREATE TABLE rejects.
+     */
+    public static String zstdCompressionColumnRejection(Column column) {
+        Type type = column.getType();
+        // zstd compression columns are only string(char/varchar/string) or json columns
+        if (!type.isStringType() && !type.isJsonType()) {
+            return String.format("unsupported type %s, only CHAR/VARCHAR/STRING/JSON are supported", type);
+        }
+        // only value columns can be compressed this way, not key columns.
+        if (column.isKey()) {
+            return "only value columns can be compressed this way";
+        }
+        return null;
     }
 
     public static double analyzeBloomFilterFpp(Map<String, String> properties) throws AnalysisException {
@@ -1683,22 +1898,6 @@ public class PropertyAnalyzer {
         return analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, true);
     }
 
-    public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
-        if (properties != null && properties.containsKey(PROPERTIES_PERSISTENT_INDEX_TYPE)) {
-            String type = properties.get(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
-            if (type.equalsIgnoreCase(TableProperty.LOCAL_INDEX_TYPE)) {
-                return TPersistentIndexType.LOCAL;
-            } else if (type.equalsIgnoreCase(TableProperty.CLOUD_NATIVE_INDEX_TYPE)) {
-                return TPersistentIndexType.CLOUD_NATIVE;
-            } else {
-                throw new AnalysisException("Invalid persistent index type: " + type);
-            }
-        }
-        return Config.enable_cloud_native_persistent_index_by_default ? TPersistentIndexType.CLOUD_NATIVE
-                : TPersistentIndexType.LOCAL;
-    }
-
     public static TCompactionStrategy analyzecompactionStrategy(Map<String, String> properties) throws AnalysisException {
         if (properties != null && properties.containsKey(PROPERTIES_COMPACTION_STRATEGY)) {
             String strategy = properties.get(PROPERTIES_COMPACTION_STRATEGY);
@@ -1819,6 +2018,31 @@ public class PropertyAnalyzer {
                     }
                 }
                 materializedView.setBloomFilterInfo(bfColumnIds, bfFpp);
+            }
+            // zstd_compression_columns. ALTER TABLE <mv> SET accepts this property and the view's
+            // DDL echoes it, so CREATE MATERIALIZED VIEW has to consume it too -- otherwise the
+            // emitted DDL cannot be replayed and fails as an unknown property.
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ZSTD_COMPRESSION_COLUMNS)) {
+                List<Column> baseSchema = materializedView.getColumns();
+                Map<String, Integer> zstdCompressionPageSizes =
+                        PropertyAnalyzer.analyzeZstdCompressionColumnPageSizes(properties, baseSchema);
+                Set<ColumnId> zstdCompressionColumnIds = null;
+                Map<ColumnId, Integer> zstdCompressionPageSizeIds = null;
+                if (zstdCompressionPageSizes != null && !zstdCompressionPageSizes.isEmpty()) {
+                    zstdCompressionColumnIds = Sets.newTreeSet(ColumnId.CASE_INSENSITIVE_ORDER);
+                    zstdCompressionPageSizeIds = Maps.newHashMap();
+                    for (Map.Entry<String, Integer> entry : zstdCompressionPageSizes.entrySet()) {
+                        ColumnId columnId = materializedView.getColumn(entry.getKey()).getColumnId();
+                        zstdCompressionColumnIds.add(columnId);
+                        if (entry.getValue() != null && entry.getValue() > 0) {
+                            zstdCompressionPageSizeIds.put(columnId, entry.getValue());
+                        }
+                    }
+                    if (zstdCompressionPageSizeIds.isEmpty()) {
+                        zstdCompressionPageSizeIds = null;
+                    }
+                }
+                materializedView.setZstdCompressionColumns(zstdCompressionColumnIds, zstdCompressionPageSizeIds);
             }
             // mv_rewrite_staleness second.
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {

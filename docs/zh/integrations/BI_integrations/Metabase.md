@@ -1,4 +1,5 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 description: "Metabase 支持对 StarRocks 中的内部数据和外部数据进行查询和可视化处理。"
 ---

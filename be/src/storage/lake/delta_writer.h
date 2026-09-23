@@ -130,6 +130,10 @@ public:
     // After cancellation, subsequent write/flush operations will fail quickly.
     void cancel(const Status& st);
 
+    // The status passed to the first `cancel()` call, or OK if never cancelled.
+    // Callers use it to report why the writer stopped working instead of a generic error.
+    [[nodiscard]] Status cancel_status() const;
+
     [[nodiscard]] int64_t partition_id() const;
 
     [[nodiscard]] int64_t tablet_id() const;
@@ -304,6 +308,13 @@ public:
         return *this;
     }
 
+    // See TOlapTableSink.enable_multi_node_write. Marks this writer as holding only part of the tablet's
+    // rows for the transaction, which keeps its (partial) txn log out of the metacache.
+    DeltaWriterBuilder& set_multi_node_write(bool multi_node_write) {
+        _multi_node_write = multi_node_write;
+        return *this;
+    }
+
     // Force the internal TabletWriter to build the vector index inline, overriding async
     // index_build_mode. Used by lake schema-change conversions (SortedSchemaChange) so the
     // shadow tablet's existing data is fully indexed within the ALTER, matching DirectSchemaChange.
@@ -335,6 +346,7 @@ private:
     BundleWritableFileContext* _bundle_writable_file_context{nullptr};
     GlobalDictByNameMaps* _global_dicts = nullptr;
     bool _is_multi_statements_txn = false;
+    bool _multi_node_write = false;
     std::shared_ptr<const TabletSchema> _tablet_schema;
     bool _force_build_vector_index_inline = false;
 };

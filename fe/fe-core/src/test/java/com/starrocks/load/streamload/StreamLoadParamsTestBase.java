@@ -45,6 +45,8 @@ public abstract class StreamLoadParamsTestBase {
                 buildFileFormatType(TFileFormatType.FORMAT_CSV_DEFLATE).getFileFormatType().orElse(null));
         assertEquals(TFileFormatType.FORMAT_CSV_ZSTD,
                 buildFileFormatType(TFileFormatType.FORMAT_CSV_ZSTD).getFileFormatType().orElse(null));
+        assertEquals(TFileFormatType.FORMAT_ARROW,
+                buildFileFormatType(TFileFormatType.FORMAT_ARROW).getFileFormatType().orElse(null));
     }
 
     protected abstract StreamLoadParams buildFileFormatType(TFileFormatType expected);

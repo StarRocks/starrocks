@@ -191,6 +191,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return shortKeyColumnCount;
     }
 
+    public void setShortKeyColumnCount(short shortKeyColumnCount) {
+        this.shortKeyColumnCount = shortKeyColumnCount;
+    }
+
     public int getSchemaVersion() {
         return schemaVersion;
     }

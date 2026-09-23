@@ -25,9 +25,9 @@
 #include "compute_env/workgroup/pipeline_executor_set.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_manager.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/driver_queue.h"
-#include "exec/pipeline/primitives/pipeline_metrics.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
 
 namespace starrocks::workgroup {
 

@@ -21,13 +21,13 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/sorting/sort_permute.h"
+#include "column/sorting/sorting.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_fwd.h"
 #include "common/runtime_profile.h"
 #include "compute_env/sorting/merge.h"
-#include "compute_env/sorting/sort_permute.h"
 #include "compute_env/sorting/sorted_chunks_merger.h"
-#include "compute_env/sorting/sorting.h"
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_heap_sort.h"
@@ -74,7 +74,9 @@ public:
         for (int32_t x : elements) {
             column->append_datum(Datum((int32_t)x));
         }
-        down_cast<NullableColumn*>(column.get())->update_has_null();
+        if (nullable) {
+            down_cast<NullableColumn*>(column.get())->update_has_null();
+        }
 
         return {std::move(column), std::move(expr)};
     }
@@ -419,7 +421,8 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         null_first.push_back(true);
         map[i] = i;
     }
-    ChunkPtr chunk1 = std::make_shared<Chunk>(columns, map);
+    // Chunk only takes its columns by rvalue, so the first chunk needs its own copy of the vector.
+    ChunkPtr chunk1 = std::make_shared<Chunk>(Columns(columns), map);
     ChunkPtr chunk2 = std::make_shared<Chunk>(std::move(columns), map);
 
     int64_t num_rows = 0;

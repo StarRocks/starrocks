@@ -176,7 +176,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(physicalPartition);
 
-                physicalPartition.getLatestIndex(anyLong);
+                physicalPartition.getQueryableIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();
@@ -264,7 +264,7 @@ public class DistributionPrunerRuleTest {
 
         new MockUp<MetaUtils>() {
             @Mock
-            public List<Column> getRangeDistributionColumns(OlapTable olapTable) {
+            public List<Column> getRangeDistributionColumns(OlapTable olapTable, long indexMetaId) {
                 return columns;
             }
         };
@@ -280,7 +280,7 @@ public class DistributionPrunerRuleTest {
                 partition.getSubPartitions();
                 result = Arrays.asList(physicalPartition);
 
-                physicalPartition.getLatestIndex(anyLong);
+                physicalPartition.getQueryableIndex(anyLong);
                 result = index;
 
                 partition.getDistributionInfo();

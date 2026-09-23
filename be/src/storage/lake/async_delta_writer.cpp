@@ -18,17 +18,24 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <string_view>
 #include <vector>
 
 #include "base/testutil/sync_point.h"
 #include "common/compiler_util.h"
 #include "common/util/stack_trace_mutex.h"
+#include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/load_spill_block_manager.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/storage_metrics.h"
 
 namespace starrocks::lake {
+
+namespace {
+constexpr const char* kClosedMsg = "AsyncDeltaWriter has been closed";
+constexpr const char* kNotOpenedOrClosedMsg = "AsyncDeltaWriterImpl not opened or has been closed";
+} // namespace
 
 class AsyncDeltaWriterImpl {
     friend class MergeBlockTask;
@@ -123,6 +130,8 @@ private:
 
     Status do_open();
     bool closed();
+    // Status to report for a task rejected because the writer has been closed.
+    Status closed_status(std::string_view generic_msg) const;
 
     std::unique_ptr<DeltaWriter> _writer{};
     bthread::ExecutionQueueId<TaskPtr> _queue_id{kInvalidQueueId};
@@ -143,6 +152,19 @@ inline bool AsyncDeltaWriterImpl::closed() {
     return _closed;
 }
 
+// The generic "closed" message says nothing about why the load stopped. The writer is closed by
+// `TabletsChannel::abort()`, and on the cancel path `TabletsChannel::cancel()` runs first and
+// records the reason sent by the load coordinator, which carries the root cause (e.g. the query
+// error that triggered the cancel). Prefer that reason, so a sender whose RPC races with the abort
+// reports the root cause instead of this derived error.
+inline Status AsyncDeltaWriterImpl::closed_status(std::string_view generic_msg) const {
+    auto cancel_status = _writer->cancel_status();
+    if (!cancel_status.ok()) {
+        return cancel_status;
+    }
+    return Status::InternalError(generic_msg);
+}
+
 class MergeBlockTask : public Runnable {
 public:
     MergeBlockTask(std::shared_ptr<AsyncDeltaWriterImpl::FinishTask> finish_task, AsyncDeltaWriterImpl* async_writer)
@@ -151,7 +173,7 @@ public:
     void run() override {
         auto delta_writer = _async_writer->_writer.get();
         if (_async_writer->closed()) {
-            _finish_task->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
+            _finish_task->cb(_async_writer->closed_status(kClosedMsg));
             return;
         }
         auto res = delta_writer->finish_with_txnlog(_finish_task->finish_mode);
@@ -185,7 +207,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
-            st.update(Status::InternalError("AsyncDeltaWriter has been closed"));
+            st.update(async_writer->closed_status(kClosedMsg));
         }
         const auto& task_ptr = *iter;
         num_tasks += 1;
@@ -266,7 +288,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
 inline Status AsyncDeltaWriterImpl::open() {
     std::lock_guard l(_mtx);
     if (_closed) {
-        return Status::InternalError("AsyncDeltaWriter has been closed");
+        return closed_status(kClosedMsg);
     }
     if (_opened) {
         return _status;
@@ -290,7 +312,11 @@ inline Status AsyncDeltaWriterImpl::do_open() {
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
     if (_block_merge_token == nullptr) {
-        _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
+        auto* executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+        if (UNLIKELY(executor == nullptr)) {
+            return Status::InternalError("LoadSpillBlockMergeExecutor init failed");
+        }
+        _block_merge_token = executor->create_token();
     }
     return _writer->open();
 }
@@ -303,7 +329,7 @@ inline void AsyncDeltaWriterImpl::write(const Chunk* chunk, const uint32_t* inde
     task->indexes_size = indexes_size;
     task->cb = std::move(cb); // Do NOT touch |cb| since here
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
-        task->cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+        task->cb(closed_status(kNotOpenedOrClosedMsg));
     }
 }
 
@@ -312,7 +338,7 @@ inline void AsyncDeltaWriterImpl::flush(Callback cb) {
     task->cb = std::move(cb); // Do NOT touch |cb| since here
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task->cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+        task->cb(closed_status(kNotOpenedOrClosedMsg));
     }
 }
 
@@ -325,7 +351,7 @@ inline void AsyncDeltaWriterImpl::finish(DeltaWriterFinishMode mode, FinishCallb
     // by the submitted tasks.
     if (int r = bthread::execution_queue_execute(_queue_id, task); r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
-        task->cb(Status::InternalError("AsyncDeltaWriterImpl not opened or has been closed"));
+        task->cb(closed_status(kNotOpenedOrClosedMsg));
     }
 }
 
@@ -468,6 +494,7 @@ StatusOr<AsyncDeltaWriterBuilder::AsyncDeltaWriterPtr> AsyncDeltaWriterBuilder::
                                           .set_bundle_writable_file_context(_bundle_writable_file_context)
                                           .set_global_dicts(_global_dicts)
                                           .set_is_multi_statements_txn(_is_multi_statements_txn)
+                                          .set_multi_node_write(_multi_node_write)
                                           .build());
     auto impl = new AsyncDeltaWriterImpl(std::move(writer));
     return std::make_unique<AsyncDeltaWriter>(impl);

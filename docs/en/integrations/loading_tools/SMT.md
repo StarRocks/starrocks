@@ -1,11 +1,12 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks."
 ---
 
 # StarRocks Migration Tool (SMT) 
 
-StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to load data from source databases through Flink into StarRocks. SMT mainly can:
+StarRocks Migration Tool (SMT) is a command-line tool that generates the SQL you need to load data from a source database into StarRocks through Flink. SMT mainly can:
 - Generate statements to create tables in StarRocks based on information of the source database and the target StarRocks cluster.
 - Generate SQL statements that can be executed in Flink's SQL client to submit Flink jobs for synchronizing data, which simplifies full or incremental data synchronization in the pipeline. Currently, SMT supports the following source databases:
 
@@ -20,6 +21,22 @@ StarRocks Migration Tool (SMT) is a data migration tool provided by StarRocks to
 | TiDB            | Supported                                         | Supported                   | Supported                          |
 
 Download link: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
+
+## What SMT does and does not do
+
+SMT generates SQL files and then exits. It reads the table definitions in your source database and writes two kinds of files to the `result` directory:
+
+- `starrocks-create.*.sql`: CREATE TABLE statements, which you run in StarRocks.
+- `flink-create.*.sql`: Flink SQL that defines a source table and a sink table and submits an `INSERT INTO ... SELECT` job, which you run in the Flink SQL client.
+
+SMT does not start, run, or connect to Flink, and it does not move any data. You still install and run a Flink cluster with the Flink CDC connector for your source database and the [Flink connector for StarRocks](../../loading/Flink-connector-starrocks.md), and you run the generated files yourself.
+
+### Synchronize data without SMT
+
+SMT is optional. Instead, you can:
+
+- Use a [Flink CDC pipeline](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/core-concept/data-pipeline/). A pipeline is defined in a single YAML file, creates the StarRocks tables itself, and runs the synchronization. See [Realtime synchronization from PostgreSQL](../../loading/Flink_cdc_postgres.md), or for MySQL, [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.6/docs/get-started/quickstart-for-1.20/mysql-to-starrocks/) in the Flink CDC documentation.
+- Create the StarRocks tables yourself, and write the Flink SQL with the [Flink connector for StarRocks](../../loading/Flink-connector-starrocks.md) as the sink. This works for any source that Flink can read.
 
 ## Steps to use SMT
 
@@ -224,6 +241,12 @@ As shown in the image, SMT can automatically generate CREATE TABLE statements of
 
 ## Synchronize PostgreSQL to StarRocks
 
+:::tip
+
+With Flink CDC 3.5 or later, a Flink CDC pipeline can synchronize PostgreSQL to StarRocks without SMT, and creates the StarRocks tables itself. For a step-by-step guide, see [Realtime synchronization from PostgreSQL](../../loading/Flink_cdc_postgres.md).
+
+:::
+
 ### Introduction
 
 Flink CDC connector and SMT can synchronize data from PostgreSQL within subsecond.
@@ -333,9 +356,9 @@ Flink CDC connector reads the WAL of PostgreSQL and Flink-connector-starrocks wr
 - How to enable PostgreSQL WAL?
 
    ```Bash
-   # Open connection permissions
-   echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
-   echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
+   # Allow the Flink hosts to connect. Replace 10.0.0.0/24 with their address range.
+   echo "host all all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
+   echo "host replication all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
    # Enable wal logical replication
    echo "wal_level = logical" >> postgresql.conf
    echo "max_wal_senders = 2" >> postgresql.conf

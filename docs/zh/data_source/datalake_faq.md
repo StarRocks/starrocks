@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "数据湖分析常见问题解答涵盖 catalog 配置、查询性能优化等问题。"
 ---
@@ -39,13 +40,13 @@ description: "数据湖分析常见问题解答涵盖 catalog 配置、查询性
 
 当前有三种解决方案：
 
-- 【推荐】开启 [Data Cache](../data_source/data_cache.md)。通过自动缓存远端数据到 BE（或 CN）节点，消除 HDFS 慢节点对查询的影响。
+- 【推荐】开启 [Data Cache](./data_cache/data_cache.md)。通过自动缓存远端数据到 BE（或 CN）节点，消除 HDFS 慢节点对查询的影响。
 - 【推荐】缩短 HDFS 客户端和 DataNode 之间的超时时间，适合 Data Cache 不起效果的场景。
 - 开启 [Hedged Read](https://hadoop.apache.org/docs/r2.8.3/hadoop-project-dist/hadoop-common/release/2.4.0/RELEASENOTES.2.4.0.html) 功能。开启后，如果当前从某个数据块读取数据比较慢，StarRocks 发起一个新的 Read 任务，与原来的 Read 任务并行，用于从目标数据块的副本上读取数据。不管哪个 Read 任务先返回结果，另外一个 Read 任务则会取消。**Hedged Read 可以加速数据读取速度，但是也会导致 Java 虚拟机（简称“JVM”）堆内存的消耗显著增加。因此，在物理机内存比较小的情况下，不建议开启 Hedged Read。**
 
 #### 【推荐】Data Cache
 
-参见 [Data Cache](../data_source/data_cache.md)。
+参见 [Data Cache](./data_cache/data_cache.md)。
 
 #### 【推荐】缩短 HDFS 客户端和 DataNode 之间的超时时间
 

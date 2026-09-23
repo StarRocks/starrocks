@@ -63,7 +63,7 @@ public class OptDistributionPruner {
         for (Long partitionId : selectedPartitionIds) {
             Partition partition = olapTable.getPartition(partitionId);
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                MaterializedIndex index = physicalPartition.getLatestIndex(selectedIndexMetaId);
+                MaterializedIndex index = physicalPartition.getQueryableIndex(selectedIndexMetaId);
                 Collection<Long> tabletIds = distributionPrune(index, partition.getDistributionInfo(),
                         scan, olapTable.getIdToColumn());
                 result.addAll(tabletIds);
@@ -93,7 +93,7 @@ public class OptDistributionPruner {
                 return pruner.prune();
             } else {
                 RangeDistributionPruner pruner = new RangeDistributionPruner(index.getTablets(),
-                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable()),
+                        MetaUtils.getRangeDistributionColumns((OlapTable) operator.getTable(), index.getMetaId()),
                         filters);
                 return pruner.prune();
             }

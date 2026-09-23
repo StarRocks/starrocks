@@ -16,14 +16,31 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletMeta;
+import com.starrocks.catalog.TabletRange;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.lake.LakeTablet;
+import com.starrocks.lake.Utils;
+import com.starrocks.proto.AggregatePublishVersionRequest;
+import com.starrocks.proto.TabletStatPB;
+import com.starrocks.proto.TxnInfoPB;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.proto.VectorIndexBuildInfoPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -38,9 +55,11 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class PublishVersionDaemonTest {
     public int oldValue;
@@ -244,6 +263,18 @@ public class PublishVersionDaemonTest {
             @Mock
             public ThreadPoolExecutor getTaskExecutor() {
                 return new SynchronousExecutor();
+            }
+        };
+
+        // Prevent AgentBatchTask from being dispatched to the shared background agent-task pool.
+        // Otherwise AgentBatchTask.run() would invoke methods on the @Mocked SystemInfoService
+        // (e.g. getBackend) from an uncontrolled daemon thread, racing with JMockit's mock
+        // lifecycle and causing flaky "Missing invocation" failures. This test only verifies
+        // publish bookkeeping, not agent task dispatch.
+        new MockUp<AgentTaskExecutor>() {
+            @Mock
+            public void submit(AgentBatchTask task) {
+                // no-op
             }
         };
 
@@ -582,41 +613,46 @@ public class PublishVersionDaemonTest {
     }
 
     @Test
-    public void testOnStoppedReleasesExecutorsAndDedupSets() throws Exception {
+    public void testOnStoppedReleasesExecutorsAndDedupSets() {
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        // Force lazy init of both executors through their getters; getDeleteTxnLogExecutor is private.
+        // Force lazy init of both executors through their getters.
         ThreadPoolExecutor taskExec = daemon.getTaskExecutor();
-        ThreadPoolExecutor deleteExec =
-                (ThreadPoolExecutor) MethodUtils.invokeMethod(daemon, true, "getDeleteTxnLogExecutor");
+        ThreadPoolExecutor deleteExec = daemon.getDeleteTxnLogExecutor();
         Assertions.assertNotNull(taskExec);
         Assertions.assertNotNull(deleteExec);
 
         // Populate both dedup sets so we can verify onStopped() clears them.
         Set<Long> publishing = Sets.newConcurrentHashSet();
         publishing.add(42L);
-        FieldUtils.writeField(daemon, "publishingTransactionIds", publishing, true);
+        daemon.publishingTransactionIds = publishing;
         Set<Long> batchTable = Sets.newConcurrentHashSet();
         batchTable.add(7L);
-        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", batchTable, true);
+        daemon.publishingLakeTransactionsBatchTableId = batchTable;
 
         daemon.onStopped();
 
         Assertions.assertTrue(taskExec.isShutdown(), "taskExecutor must be shut down");
         Assertions.assertTrue(deleteExec.isShutdown(), "deleteTxnLogExecutor must be shut down");
-        Assertions.assertNull(FieldUtils.readField(daemon, "taskExecutor", true));
-        Assertions.assertNull(FieldUtils.readField(daemon, "deleteTxnLogExecutor", true));
+        Assertions.assertTrue(taskExec.isTerminated(),
+                "taskExecutor must be terminated after onStopped() awaits drain");
+        Assertions.assertTrue(deleteExec.isTerminated(),
+                "deleteTxnLogExecutor must be terminated after onStopped() awaits drain");
+        Assertions.assertNull(daemon.taskExecutor,
+                "taskExecutor reference must be nulled after successful drain so getter rebuilds fresh");
+        Assertions.assertNull(daemon.deleteTxnLogExecutor,
+                "deleteTxnLogExecutor reference must be nulled after successful drain");
         Assertions.assertTrue(publishing.isEmpty(), "publishingTransactionIds must be cleared");
         Assertions.assertTrue(batchTable.isEmpty(), "publishingLakeTransactionsBatchTableId must be cleared");
     }
 
     @Test
-    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() throws Exception {
+    public void testOnStoppedTolerantOfNullExecutorsAndNullSets() {
         // Fresh instance: executors and dedup sets may both be null. onStopped must be no-op-safe.
         PublishVersionDaemon daemon = new PublishVersionDaemon();
-        FieldUtils.writeField(daemon, "taskExecutor", null, true);
-        FieldUtils.writeField(daemon, "deleteTxnLogExecutor", null, true);
-        FieldUtils.writeField(daemon, "publishingTransactionIds", null, true);
-        FieldUtils.writeField(daemon, "publishingLakeTransactionsBatchTableId", null, true);
+        daemon.taskExecutor = null;
+        daemon.deleteTxnLogExecutor = null;
+        daemon.publishingTransactionIds = null;
+        daemon.publishingLakeTransactionsBatchTableId = null;
         Assertions.assertDoesNotThrow(daemon::onStopped);
     }
 
@@ -673,5 +709,268 @@ public class PublishVersionDaemonTest {
         Assertions.assertDoesNotThrow(() -> PublishVersionDaemon.maybeLogSlowPublishPartition(
                 11L, 21L, 31L,
                 submitTimeMs, lambdaEntryMs, lockAcquiredMs, rpcStartMs, submitTimeMs + 3000));
+    }
+
+    // Regression for the file-bundling compaction-vs-rollup bug: a transaction whose touched-index set
+    // (publishedNormalIndexIds) misses a currently-visible NORMAL index (e.g. a rollup/MV index that a
+    // lake compaction did not touch) must carry that index's tablets forward, so the new version's bundle
+    // stays a complete whole-partition snapshot. SHADOW indexes are never carried forward.
+    @Test
+    public void testCollectFileBundlingCarryForwardTablets() {
+        TStorageMedium medium = TStorageMedium.HDD;
+        // base index (id=1): tablets 101,102 ; rollup index (id=2): tablets 201,202 ; shadow index (id=3): 301
+        MaterializedIndex baseIndex = new MaterializedIndex(1L, MaterializedIndex.IndexState.NORMAL);
+        baseIndex.addTablet(new LakeTablet(101L), new TabletMeta(1L, 2L, 3L, 1L, medium, true), false);
+        baseIndex.addTablet(new LakeTablet(102L), new TabletMeta(1L, 2L, 3L, 1L, medium, true), false);
+
+        MaterializedIndex rollupIndex = new MaterializedIndex(2L, MaterializedIndex.IndexState.NORMAL);
+        rollupIndex.addTablet(new LakeTablet(201L), new TabletMeta(1L, 2L, 3L, 2L, medium, true), false);
+        rollupIndex.addTablet(new LakeTablet(202L), new TabletMeta(1L, 2L, 3L, 2L, medium, true), false);
+
+        MaterializedIndex shadowIndex = new MaterializedIndex(3L, MaterializedIndex.IndexState.SHADOW);
+        shadowIndex.addTablet(new LakeTablet(301L), new TabletMeta(1L, 2L, 3L, 3L, medium, true), false);
+
+        List<MaterializedIndex> visibleIndexes = Lists.newArrayList(baseIndex, rollupIndex, shadowIndex);
+
+        // Compaction touched only the base index (id=1): the rollup index (id=2) must be carried forward,
+        // and the SHADOW index (id=3) must be excluded.
+        List<Tablet> carry = PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet(1L));
+        Assertions.assertNotNull(carry);
+        Assertions.assertEquals(Lists.newArrayList(201L, 202L),
+                carry.stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+
+        // Every visible NORMAL index already touched (normal load): nothing to carry forward.
+        Assertions.assertNull(PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet(1L, 2L)));
+
+        // Nothing touched: both NORMAL indexes carried forward, SHADOW still excluded.
+        List<Tablet> carryAll = PublishVersionDaemon.collectFileBundlingCarryForwardTablets(
+                visibleIndexes, Sets.newHashSet());
+        Assertions.assertEquals(Lists.newArrayList(101L, 102L, 201L, 202L),
+                carryAll.stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+    }
+
+    // The touched tablets (this publish's real transactions) and the carry-forward tablets (untouched but
+    // visible indexes) must go into ONE aggregate request; two separate aggregate publishes would each
+    // truncate-write the same meta/0_<version>.meta and drop one set. Because a batch can span several
+    // versions, the carry-forward emits one no-op empty transaction per real transaction so the untouched
+    // tablets advance across every version (the BE requires new_version == base_version + txns.size()).
+    @Test
+    public void testAggregatePublishWithCarryForwardBuildsSingleRequest() throws Exception {
+        List<List<Tablet>> capturedTablets = new ArrayList<>();
+        List<List<TxnInfoPB>> capturedTxnInfos = new ArrayList<>();
+        List<AggregatePublishVersionRequest> capturedRequests = new ArrayList<>();
+        List<Boolean> capturedPreferSharedInitialMetadata = new ArrayList<>();
+        AtomicInteger sendCount = new AtomicInteger(0);
+        List<AggregatePublishVersionRequest> sentRequests = new ArrayList<>();
+
+        new MockUp<Utils>() {
+            @Mock
+            public void createSubRequestForAggregatePublish(List<Tablet> tablets, List<TxnInfoPB> txnInfos,
+                    long baseVersion, long newVersion, Map<ComputeNode, List<Long>> nodeToTablets,
+                    ComputeResource computeResource, AggregatePublishVersionRequest request,
+                    boolean preferSharedInitialMetadata) {
+                capturedTablets.add(tablets);
+                capturedTxnInfos.add(txnInfos);
+                capturedRequests.add(request);
+                capturedPreferSharedInitialMetadata.add(preferSharedInitialMetadata);
+            }
+
+            @Mock
+            public void sendAggregatePublishVersionRequest(AggregatePublishVersionRequest request,
+                    long baseVersion, ComputeResource computeResource, Map<Long, Double> compactionScores,
+                    Map<Long, TabletRange> tabletRanges, Map<Long, TabletStatPB> tabletStats,
+                    List<VectorIndexBuildInfoPB> vectorIndexBuildInfos) {
+                sendCount.incrementAndGet();
+                sentRequests.add(request);
+            }
+        };
+
+        List<Tablet> touched = Lists.newArrayList(new LakeTablet(101L), new LakeTablet(102L));
+        List<Tablet> carryForward = Lists.newArrayList(new LakeTablet(201L), new LakeTablet(202L));
+        // A two-transaction batch (versions 5 and 6): base is version 4, new version is 6.
+        TxnInfoPB t1 = new TxnInfoPB();
+        t1.txnId = 1001L;
+        t1.commitTime = 111L;
+        t1.gtid = 9001L;
+        TxnInfoPB t2 = new TxnInfoPB();
+        t2.txnId = 1002L;
+        t2.commitTime = 222L;
+        t2.gtid = 9002L;
+        List<TxnInfoPB> txnInfos = Lists.newArrayList(t1, t2);
+
+        PublishVersionDaemon.aggregatePublishWithCarryForward(touched, txnInfos, carryForward,
+                4L, 6L, null, WarehouseManager.DEFAULT_RESOURCE, new java.util.HashMap<>(),
+                new java.util.HashMap<>(), new ArrayList<>(), true);
+
+        // The version-1 layout hint must reach BOTH batches: the carry-forward tablets belong to the
+        // same physical partition, so a hint that covered only the touched tablets would leave them
+        // probing a per-tablet key that was never written.
+        Assertions.assertEquals(List.of(true, true), capturedPreferSharedInitialMetadata);
+
+        // Exactly two sub-requests, both attached to the SAME request, sent exactly once.
+        Assertions.assertEquals(2, capturedRequests.size());
+        Assertions.assertSame(capturedRequests.get(0), capturedRequests.get(1));
+        Assertions.assertEquals(1, sendCount.get());
+        Assertions.assertSame(capturedRequests.get(0), sentRequests.get(0));
+
+        // First sub-request: the touched tablets with the real transactions unchanged.
+        Assertions.assertEquals(Lists.newArrayList(101L, 102L),
+                capturedTablets.get(0).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        Assertions.assertSame(txnInfos, capturedTxnInfos.get(0));
+
+        // Second sub-request: the carry-forward tablets with one no-op empty transaction per real transaction.
+        Assertions.assertEquals(Lists.newArrayList(201L, 202L),
+                capturedTablets.get(1).stream().map(Tablet::getId).sorted().collect(Collectors.toList()));
+        List<TxnInfoPB> carryTxnInfos = capturedTxnInfos.get(1);
+        Assertions.assertEquals(txnInfos.size(), carryTxnInfos.size());
+        for (int i = 0; i < carryTxnInfos.size(); i++) {
+            TxnInfoPB empty = carryTxnInfos.get(i);
+            Assertions.assertTrue(empty.noOpPublish, "carry-forward txn must be a no-op publish");
+            Assertions.assertEquals(-1L, empty.txnId, "carry-forward txn must carry the empty txn id");
+            Assertions.assertEquals(TxnTypePB.TXN_EMPTY, empty.txnType);
+            Assertions.assertFalse(empty.combinedTxnLog);
+            // commitTime / gtid are copied from the corresponding real transaction.
+            Assertions.assertEquals(txnInfos.get(i).commitTime, empty.commitTime);
+            Assertions.assertEquals(txnInfos.get(i).gtid, empty.gtid);
+        }
+    }
+
+    @Test
+    public void testRetryTooSoonBacksOffAfterAFailedAttempt() {
+        long now = 1_000_000L;
+        PartitionCommitInfo pci = new PartitionCommitInfo(1000L, 2, 0);
+
+        // Never attempted: publish immediately.
+        Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now));
+
+        // Last attempt failed just now: hold off, this is the loop that used to run at the
+        // PublishVersionDaemon tick rate against a stalled object store.
+        pci.markPublishFailed(now);
+        Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now));
+        Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now + 999));
+
+        // Once the interval has elapsed, retry.
+        Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now + 1000));
+
+        // A successful attempt is not a failure and must not gate anything.
+        pci.markPublishSucceeded(now);
+        Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(pci), now));
+    }
+
+    @Test
+    public void testRetryTooSoonUsesTheMostRecentFailureInTheBatch() {
+        long now = 1_000_000L;
+        // A batch carries one PartitionCommitInfo per transaction. An older stamp must not let a
+        // partition that just failed be resubmitted on the next tick.
+        PartitionCommitInfo old = new PartitionCommitInfo(1000L, 2, 0);
+        old.markPublishFailed(now - 60_000);
+        PartitionCommitInfo fresh = new PartitionCommitInfo(1000L, 3, 0);
+        fresh.markPublishFailed(now);
+
+        Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(old, fresh), now));
+        Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(fresh, old), now));
+        // Only the stale one left: no reason to wait.
+        Assertions.assertFalse(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(old), now));
+    }
+
+    private static TransactionState stateWith(long txnId, long tableId, PartitionCommitInfo... pcis) {
+        TableCommitInfo tableCommitInfo = new TableCommitInfo(tableId);
+        for (PartitionCommitInfo pci : pcis) {
+            tableCommitInfo.addPartitionCommitInfo(pci);
+        }
+        TransactionState state = new TransactionState(1000L, Lists.newArrayList(tableId), txnId, "label",
+                null, TransactionState.LoadJobSourceType.INSERT_STREAMING, null, 0, 60_000);
+        state.putIdToTableCommitInfo(tableId, tableCommitInfo);
+        return state;
+    }
+
+
+    @Test
+    public void testBatchHasPublishablePartition() {
+        long now = 1_000_000L;
+        long tableId = 55L;
+
+        // Fresh batch: publish it.
+        PartitionCommitInfo fresh = new PartitionCommitInfo(100L, 2, 0);
+        Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, fresh)), now));
+
+        // Single partition that just failed: the whole batch waits out the back-off instead of
+        // rebuilding itself on every daemon tick.
+        PartitionCommitInfo justFailed = new PartitionCommitInfo(101L, 2, 0);
+        justFailed.markPublishFailed(now);
+        Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, justFailed)), now));
+        Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, justFailed)), now + 1000));
+
+        // Everything published yet the batch is still ready means a previous cycle failed to
+        // finish it. It must still run, or the transactions stay COMMITTED forever.
+        PartitionCommitInfo published = new PartitionCommitInfo(102L, 2, 0);
+        published.markPublishSucceeded(now);
+        Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, published)), now));
+
+        // A published partition alongside one that just failed is not itself a reason to run.
+        Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, published, justFailed)), now));
+
+        // One backed-off partition plus one that is ready: the batch still has work.
+        Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(
+                Lists.newArrayList(stateWith(1L, tableId, justFailed), stateWith(2L, tableId, fresh)), now));
+    }
+
+    @Test
+    public void testRecordPublishFailureArmsBackoffAndThrottlesTheReport() {
+        PartitionCommitInfo a = new PartitionCommitInfo(200L, 2, 0);
+        PartitionCommitInfo b = new PartitionCommitInfo(200L, 3, 0);
+        RuntimeException ex = new RuntimeException("rejected");
+
+        PublishVersionDaemon.recordPublishFailure(Lists.newArrayList(a, b), "boom", ex);
+        // Every partition the attempt covered is stamped as failed, so the batch backs off.
+        Assertions.assertTrue(a.getLastPublishFailureTime() > 0);
+        Assertions.assertTrue(b.getLastPublishFailureTime() > 0);
+        // versionTime keeps meaning "when this partition became visible" and must not be negated.
+        Assertions.assertEquals(0, a.getVersionTime());
+        long firstStamp = a.getLastPublishFailureTime();
+        Assertions.assertTrue(PublishVersionDaemon.retryTooSoon(Lists.newArrayList(a, b), firstStamp));
+
+        // The report itself is throttled on the same anchor: a second failure right away must not
+        // log again, which is what keeps a rejecting executor from flooding fe.warn.log.
+        Assertions.assertFalse(a.shouldLogPublishError(firstStamp + 1, 10_000L));
+
+        // An empty list is possible if the batch lost its partitions; it must not throw.
+        PublishVersionDaemon.recordPublishFailure(Lists.newArrayList(), "boom", ex);
+    }
+
+    @Test
+    public void testFailedRepublishKeepsTheBatchBackedOff() {
+        long tableId = 66L;
+        long t1 = 1_000_000L;
+
+        // Cycle 1: partition A publishes, sibling B fails, so the batch as a whole fails.
+        PartitionCommitInfo a = new PartitionCommitInfo(400L, 2, 0);
+        PartitionCommitInfo b = new PartitionCommitInfo(401L, 2, 0);
+        a.markPublishSucceeded(t1);
+        b.markPublishFailed(t1);
+
+        // Cycle 2 after the back-off: A is republished and this time it is A that fails, while B
+        // succeeds. A now carries both the old success stamp and a fresh failure stamp.
+        long t2 = t1 + 2000;
+        a.markPublishFailed(t2);
+        b.markPublishSucceeded(t2);
+        Assertions.assertTrue(a.getVersionTime() > 0);
+        Assertions.assertTrue(a.getLastPublishFailureTime() > 0);
+
+        // Cycle 3: the batch must stay backed off. Reading versionTime alone would drop A from the
+        // unpublished set, leave it empty, and hand the batch back to the daemon on every tick,
+        // republishing B each time.
+        List<TransactionState> states = Lists.newArrayList(stateWith(1L, tableId, a, b));
+        Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(states, t2));
+        Assertions.assertFalse(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 999));
+        // Once A's back-off elapses the batch runs again.
+        Assertions.assertTrue(PublishVersionDaemon.batchHasPublishablePartition(states, t2 + 1000));
     }
 }

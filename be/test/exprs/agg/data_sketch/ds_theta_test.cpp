@@ -22,6 +22,7 @@
 #include "base/hash/unaligned_access.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_builder.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
@@ -29,6 +30,9 @@
 #include "common/util/thrift_util.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/aggregate_state_allocator.h"
+#include "exprs/agg/base_aggregate_test.h"
+#include "exprs/ds_theta_functions.h"
+#include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "testutil/function_utils.h"
 #include "types/bitmap_value.h"
@@ -104,4 +108,554 @@ TEST_F(DataSketchsThetaTest, TestSerializeDeserialize2) {
         ASSERT_EQ(theta4.estimate_cardinality(), 100);
     }
 }
+
+// Disjoint sets produce a merged sketch whose estimate is the sum of inputs
+// (within theta error). Guards against accidental serialization drift in the
+// Apache DataSketches compact theta format used on the wire.
+TEST_F(DataSketchsThetaTest, TestMergeDisjointSets) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta theta_a(&memory_usage);
+    DataSketchesTheta theta_b(&memory_usage);
+    for (int i = 0; i < 1000; i++) {
+        theta_a.update(i);
+    }
+    for (int i = 10000; i < 11000; i++) {
+        theta_b.update(i);
+    }
+    DataSketchesTheta merged(&memory_usage);
+    merged.merge(theta_a);
+    merged.merge(theta_b);
+    int64_t est = merged.estimate_cardinality();
+    // Apache DataSketches default lg_k=12 gives ~3.125% relative error at 95% CI;
+    // 10% bounds are very generous so flakiness is impossible.
+    EXPECT_NEAR(est, 2000, 200);
+}
+
+// Round-trip: serialize via DataSketchesTheta, deserialize via
+// wrapped_compact_theta_sketch, confirm Apache estimate matches our internal
+// estimate. Guards the wire format used by ds_theta_estimate scalar and
+// ds_theta_combine aggregate.
+TEST_F(DataSketchsThetaTest, TestCompactWireRoundTrip) {
+    int64_t memory_usage = 0;
+    DataSketchesTheta theta(&memory_usage);
+    for (int i = 0; i < 5000; i++) {
+        theta.update(i);
+    }
+    size_t sz = theta.serialize_size();
+    std::vector<uint8_t> buf(sz);
+    size_t actual = theta.serialize(buf.data());
+    ASSERT_EQ(sz, actual);
+
+    using alloc_type = DataSketchesTheta::alloc_type;
+    auto wrapped = datasketches::wrapped_compact_theta_sketch_alloc<alloc_type>::wrap(buf.data(), actual);
+    int64_t apache_est = static_cast<int64_t>(wrapped.get_estimate());
+    EXPECT_NEAR(apache_est, theta.estimate_cardinality(), 1);
+    EXPECT_NEAR(apache_est, 5000, 500);
+}
+// ---- Helpers ----------------------------------------------------------------
+
+// Serialize 'count' unique integers starting from 'start' into a compact theta sketch.
+static std::vector<uint8_t> make_sketch_bytes(int start, int count) {
+    int64_t mem = 0;
+    DataSketchesTheta theta(&mem);
+    for (int i = start; i < start + count; i++) theta.update(static_cast<uint64_t>(i));
+    std::vector<uint8_t> buf(theta.serialize_size());
+    size_t sz = theta.serialize(buf.data());
+    buf.resize(sz);
+    return buf;
+}
+
+// Serialize an *empty* compact theta sketch. Unlike a zero-length slice this carries a real
+// 8-byte header with is_empty() == true, which is what a union/intersection over empty inputs
+// produces and what upstream queries feed back into the set-op functions.
+static std::vector<uint8_t> make_empty_sketch_bytes() {
+    int64_t mem = 0;
+    auto sk = DataSketchesTheta::theta_union_type::builder(DataSketchesTheta::alloc_type(&mem)).build().get_result();
+    auto bytes = sk.serialize();
+    return std::vector<uint8_t>(bytes.begin(), bytes.end());
+}
+
+// Deserialize a compact theta sketch and return its cardinality estimate, or -1 on error.
+static double estimate_from_slice(Slice s) {
+    int64_t mem = 0;
+    DataSketchesTheta theta(&mem);
+    if (!theta.deserialize(s)) return -1.0;
+    return static_cast<double>(theta.estimate_cardinality());
+}
+
+static ColumnPtr make_binary_col(Slice s) {
+    auto col = BinaryColumn::create();
+    col->append(s);
+    return col;
+}
+
+// ---- Bug fix 1: zero-length operands to scalar set-op functions ---------
+
+// Before the fix, wrap() threw "at least 8 bytes expected, actual 0" on any
+// zero-length slice, turning queries into InternalError.  After the fix the
+// set-op semantics (∅∩X=∅, ∅\X=∅, X\∅=X) must hold without error.
+
+TEST_F(DataSketchsThetaTest, TestIntersectBothEmpty) {
+    Columns cols{make_binary_col(Slice()), make_binary_col(Slice())};
+    auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+    ASSERT_TRUE(result.ok()) << result.status().message();
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    ASSERT_GT(slice.size, 0u);
+    EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectOneEmpty) {
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+
+    // non-empty lhs, empty rhs → empty
+    {
+        Columns cols{make_binary_col(sk_slice), make_binary_col(Slice())};
+        auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+        ASSERT_TRUE(result.ok());
+        auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+        EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
+    }
+    // empty lhs, non-empty rhs → empty
+    {
+        Columns cols{make_binary_col(Slice()), make_binary_col(sk_slice)};
+        auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+        ASSERT_TRUE(result.ok());
+        auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+        EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
+    }
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBEmptyLhs) {
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+
+    Columns cols{make_binary_col(Slice()), make_binary_col(sk_slice)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBEmptyRhs) {
+    // X \ ∅ = X: result estimate must match the input sketch's estimate
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+
+    Columns cols{make_binary_col(sk_slice), make_binary_col(Slice())};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBSerializedEmptySketchRhs) {
+    // Same X \ ∅ = X law, but rhs is a serialized empty sketch instead of a zero-length slice.
+    // theta_a_not_b::compute() short-circuits this case and builds the result with the wrapped
+    // sketch's default-constructed allocator (null byte counter), so it must not reach compute().
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    auto empty = make_empty_sketch_bytes();
+    Slice empty_slice(reinterpret_cast<const char*>(empty.data()), empty.size());
+    ASSERT_GT(empty_slice.size, 0u);
+
+    Columns cols{make_binary_col(sk_slice), make_binary_col(empty_slice)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok()) << result.status().message();
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBSerializedEmptySketchLhs) {
+    // ∅ \ X = ∅, with lhs a serialized empty sketch instead of a zero-length slice.
+    // compute() answers this from the same shortcut path, and the sketch it returns carries the
+    // wrapped sketch's null-counter allocator -- which only blows up later, when serializing it.
+    auto empty = make_empty_sketch_bytes();
+    Slice empty_slice(reinterpret_cast<const char*>(empty.data()), empty.size());
+    ASSERT_GT(empty_slice.size, 0u);
+    auto sketch = make_sketch_bytes(0, 500);
+    Slice sk_slice(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+
+    Columns cols{make_binary_col(empty_slice), make_binary_col(sk_slice)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok()) << result.status().message();
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 0.0, 0.01);
+}
+
+// ---- Bug fix 2: malformed sketches must surface as errors, not empty results ----
+
+// Before the fix, corrupt input was silently swallowed: ds_theta_combine
+// returned a valid empty sketch for "garbage_not_a_sketch", making the
+// corruption completely invisible.  After the fix ctx->has_error() must be true.
+
+TEST_F(DataSketchsThetaTest, TestCombineRejectsMalformedInput) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    ASSERT_NE(nullptr, func);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    auto data_col = BinaryColumn::create();
+    data_col->append(Slice("not_a_valid_sketch"));
+    const Column* raw[] = {data_col.get()};
+    func->update_batch_single_state(local_ctx.get(), 1, raw, state->state());
+
+    EXPECT_TRUE(local_ctx->has_error());
+}
+
+TEST_F(DataSketchsThetaTest, TestCombineAcceptsValidInput) {
+    // Regression: valid input must not trip the error path.
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    auto sketch = make_sketch_bytes(0, 200);
+    auto data_col = BinaryColumn::create();
+    data_col->append(Slice(reinterpret_cast<const char*>(sketch.data()), sketch.size()));
+    const Column* raw[] = {data_col.get()};
+    func->update_batch_single_state(local_ctx.get(), 1, raw, state->state());
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = BinaryColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_GT(result_col->get_slice(0).size, 0u);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggRejectsMalformedInput) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    ASSERT_NE(nullptr, func);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    auto sketch_col = BinaryColumn::create();
+    sketch_col->append(Slice("garbage_not_a_sketch"));
+    auto flag_col = FixedLengthColumn<int32_t>::create();
+    flag_col->append(1); // is_anchor = 1
+    const Column* raw[] = {sketch_col.get(), flag_col.get()};
+    func->update_batch_single_state(local_ctx.get(), 1, raw, state->state());
+
+    EXPECT_TRUE(local_ctx->has_error());
+}
+
+// ---- NULL and empty-sketch input paths for scalar functions ---------------
+
+static ColumnPtr make_null_binary_col() {
+    auto data = BinaryColumn::create();
+    data->append(Slice());
+    auto nulls = NullColumn::create(1, 1); // 1 row, 1 null
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+TEST_F(DataSketchsThetaTest, TestEstimateNullInput) {
+    Columns cols{make_null_binary_col()};
+    auto result = DsThetaFunctions::ds_theta_estimate(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value()->is_null(0));
+}
+
+TEST_F(DataSketchsThetaTest, TestEstimateEmptySketchInput) {
+    // Zero-length VARBINARY (not SQL NULL) → estimate 0
+    Columns cols{make_binary_col(Slice())};
+    auto result = DsThetaFunctions::ds_theta_estimate(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    EXPECT_EQ(down_cast<const DoubleColumn*>(result.value().get())->get_data()[0], 0.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestUnionNullInput) {
+    auto sketch = make_sketch_bytes(0, 100);
+    Slice sk(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    Columns cols{make_null_binary_col(), make_binary_col(sk)};
+    auto result = DsThetaFunctions::ds_theta_union(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value()->is_null(0));
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectNullInput) {
+    auto sketch = make_sketch_bytes(0, 100);
+    Slice sk(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    Columns cols{make_null_binary_col(), make_binary_col(sk)};
+    auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value()->is_null(0));
+}
+
+TEST_F(DataSketchsThetaTest, TestANotBNullInput) {
+    auto sketch = make_sketch_bytes(0, 100);
+    Slice sk(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    Columns cols{make_null_binary_col(), make_binary_col(sk)};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    EXPECT_TRUE(result.value()->is_null(0));
+}
+
+// ---- ds_theta_combine: reset / serialize / merge round-trip ---------------
+
+TEST_F(DataSketchsThetaTest, TestCombineReset) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    // Update, then reset — state should be wiped.
+    auto sketch = make_sketch_bytes(0, 200);
+    auto data_col = BinaryColumn::create();
+    data_col->append(Slice(reinterpret_cast<const char*>(sketch.data()), sketch.size()));
+    const Column* raw[] = {data_col.get()};
+    func->update_batch_single_state(local_ctx.get(), 1, raw, state->state());
+    func->reset(local_ctx.get(), Columns{}, state->state());
+
+    // After reset, finalize should emit an empty result.
+    auto result_col = BinaryColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    ASSERT_FALSE(local_ctx->has_error());
+}
+
+TEST_F(DataSketchsThetaTest, TestCombineSerializeMergeRoundTrip) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+
+    auto sketch_a = make_sketch_bytes(0, 300);
+    auto sketch_b = make_sketch_bytes(1000, 300);
+
+    // State 1: feed sketch_a
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    {
+        auto col = BinaryColumn::create();
+        col->append(Slice(reinterpret_cast<const char*>(sketch_a.data()), sketch_a.size()));
+        const Column* raw[] = {col.get()};
+        func->update_batch_single_state(local_ctx.get(), 1, raw, state1->state());
+    }
+
+    // State 2: feed sketch_b
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    {
+        auto col = BinaryColumn::create();
+        col->append(Slice(reinterpret_cast<const char*>(sketch_b.data()), sketch_b.size()));
+        const Column* raw[] = {col.get()};
+        func->update_batch_single_state(local_ctx.get(), 1, raw, state2->state());
+    }
+
+    // Serialize both and merge into state3
+    MutableColumnPtr serde1 = BinaryColumn::create();
+    MutableColumnPtr serde2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde1.get());
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde2.get());
+
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde2.get(), state3->state(), 0);
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = BinaryColumn::create();
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_col.get());
+
+    // Union of two disjoint 300-element sets ≈ 600
+    Slice result = result_col->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(result), 600.0, 60.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestCombineConvertToSerializeFormat) {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::unique_ptr<FunctionContext> local_ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const AggregateFunction* func = get_aggregate_function("ds_theta_combine", TYPE_VARBINARY, TYPE_VARBINARY, false);
+
+    auto sketch = make_sketch_bytes(0, 200);
+    auto src_col = BinaryColumn::create();
+    src_col->append(Slice(reinterpret_cast<const char*>(sketch.data()), sketch.size()));
+    Columns src{src_col};
+
+    MutableColumnPtr dst = BinaryColumn::create();
+    func->convert_to_serialize_format(local_ctx.get(), src, 1, dst);
+
+    // convert_to_serialize_format is a pass-through — output should equal input
+    auto* out = down_cast<BinaryColumn*>(dst.get());
+    ASSERT_EQ(out->size(), 1u);
+    EXPECT_EQ(out->get_slice(0).size, sketch.size());
+}
+
+// ---- Happy-path tests: scalar set-op functions ----------------------------
+
+TEST_F(DataSketchsThetaTest, TestScalarEstimate) {
+    auto sketch = make_sketch_bytes(0, 1000);
+    Slice sk(reinterpret_cast<const char*>(sketch.data()), sketch.size());
+    Columns cols{make_binary_col(sk)};
+    auto result = DsThetaFunctions::ds_theta_estimate(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto* out = down_cast<const DoubleColumn*>(result.value().get());
+    EXPECT_NEAR(out->get_data()[0], 1000.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarUnionDisjoint) {
+    auto a = make_sketch_bytes(0, 500);
+    auto b = make_sketch_bytes(1000, 500);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_union(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 1000.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarIntersectOverlapping) {
+    // [0,1000) ∩ [500,1500) = [500,1000): ~500
+    auto a = make_sketch_bytes(0, 1000);
+    auto b = make_sketch_bytes(500, 1000);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_intersect(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestScalarANotBOverlapping) {
+    // [0,1000) \ [500,1500) = [0,500): ~500
+    auto a = make_sketch_bytes(0, 1000);
+    auto b = make_sketch_bytes(500, 1000);
+    Columns cols{make_binary_col(Slice(reinterpret_cast<const char*>(a.data()), a.size())),
+                 make_binary_col(Slice(reinterpret_cast<const char*>(b.data()), b.size()))};
+    auto result = DsThetaFunctions::ds_theta_a_not_b(ctx, cols);
+    ASSERT_TRUE(result.ok());
+    auto slice = down_cast<const BinaryColumn*>(result.value().get())->get_slice(0);
+    EXPECT_NEAR(estimate_from_slice(slice), 500.0, 100.0);
+}
+
+// ---- Happy-path tests: ds_theta_intersect_cond_agg ------------------------
+
+// Helper: build a FunctionContext and aggregate function for ds_theta_intersect_cond_agg.
+static std::unique_ptr<FunctionContext> make_cond_agg_ctx() {
+    std::vector<TypeDescriptor> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARBINARY),
+                                             TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    return std::unique_ptr<FunctionContext>(FunctionContext::create_test_context(std::move(arg_types), return_type));
+}
+
+// Feed rows into ds_theta_intersect_cond_agg one at a time.
+static void feed_row(FunctionContext* ctx, const AggregateFunction* func, AggDataPtr state,
+                     const std::vector<uint8_t>& sketch_bytes, int32_t is_anchor) {
+    auto sketch_col = BinaryColumn::create();
+    sketch_col->append(Slice(reinterpret_cast<const char*>(sketch_bytes.data()), sketch_bytes.size()));
+    auto flag_col = FixedLengthColumn<int32_t>::create();
+    flag_col->append(is_anchor);
+    const Column* raw[] = {sketch_col.get(), flag_col.get()};
+    func->update_batch_single_state(ctx, 1, raw, state);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggHappyPath) {
+    // anchor = [0,1000), window = [500,1500) → intersection ~500
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    ASSERT_NE(nullptr, func);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 1000), 1);   // anchor
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 1000), 0); // window
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggDisjointSets) {
+    // anchor = [0,500), window = [1000,1500) → intersection ~0
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(1000, 500), 0);
+
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 0.0, 50.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggMultipleRowsPerGroup) {
+    // Feed two anchor sketches and two window sketches; their unions are intersected.
+    // anchor = [0,500) ∪ [500,1000) = [0,1000)
+    // window = [500,1000) ∪ [1000,1500) = [500,1500)
+    // intersection = [500,1000) ~500
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 500), 1);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(500, 500), 0);
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(1000, 500), 0);
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggSerializeDeserializeRoundTrip) {
+    // Verify serialize → merge → finalize produces the same result as a direct finalize.
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+
+    // State 1: anchor rows
+    auto state1 = ManagedAggrState::create(local_ctx.get(), func);
+    feed_row(local_ctx.get(), func, state1->state(), make_sketch_bytes(0, 1000), 1);
+
+    // State 2: window rows
+    auto state2 = ManagedAggrState::create(local_ctx.get(), func);
+    feed_row(local_ctx.get(), func, state2->state(), make_sketch_bytes(500, 1000), 0);
+
+    // Serialize both partial states
+    MutableColumnPtr serde1 = BinaryColumn::create();
+    MutableColumnPtr serde2 = BinaryColumn::create();
+    func->serialize_to_column(local_ctx.get(), state1->state(), serde1.get());
+    func->serialize_to_column(local_ctx.get(), state2->state(), serde2.get());
+
+    // Merge into a third state
+    auto state3 = ManagedAggrState::create(local_ctx.get(), func);
+    func->merge(local_ctx.get(), serde1.get(), state3->state(), 0);
+    func->merge(local_ctx.get(), serde2.get(), state3->state(), 0);
+
+    ASSERT_FALSE(local_ctx->has_error()) << local_ctx->error_msg();
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state3->state(), result_col.get());
+    EXPECT_NEAR(result_col->get_data()[0], 500.0, 100.0);
+}
+
+TEST_F(DataSketchsThetaTest, TestIntersectCondAggReturnsZeroWithMissingGroup) {
+    // If only anchor rows are fed (no window), finalize must return 0 without error.
+    auto local_ctx = make_cond_agg_ctx();
+    const AggregateFunction* func =
+            get_aggregate_function("ds_theta_intersect_cond_agg", TYPE_VARBINARY, TYPE_DOUBLE, false);
+    auto state = ManagedAggrState::create(local_ctx.get(), func);
+
+    feed_row(local_ctx.get(), func, state->state(), make_sketch_bytes(0, 500), 1);
+
+    ASSERT_FALSE(local_ctx->has_error());
+    auto result_col = DoubleColumn::create();
+    func->finalize_to_column(local_ctx.get(), state->state(), result_col.get());
+    EXPECT_EQ(result_col->get_data()[0], 0.0);
+}
+
 } // namespace starrocks

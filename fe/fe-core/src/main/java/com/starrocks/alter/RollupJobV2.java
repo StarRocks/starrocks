@@ -94,7 +94,6 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.thrift.TColumn;
-import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -175,7 +174,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private Expr whereClause;
 
     // save all create rollup tasks
-    private AgentBatchTask rollupBatchTask = new AgentBatchTask();
+    // Package-private so same-package tests can verify the leader-handoff reset without reflection.
+    AgentBatchTask rollupBatchTask = new AgentBatchTask();
 
     // runtime variable for synchronization between cancel and runPendingJob
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
@@ -185,6 +185,26 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     // for deserialization
     public RollupJobV2() {
         super(JobType.ROLLUP);
+    }
+
+    @Override
+    protected void resetTransientState() {
+        // WAITING_TXN -> RUNNING is deliberately not journaled; map it back so the re-elected
+        // leader re-enters runWaitingTxnJob and re-sends every AlterReplicaTask.
+        if (jobState == JobState.RUNNING) {
+            jobState = JobState.WAITING_TXN;
+        }
+        // runWaitingTxnJob APPENDS to the batch - see SchemaChangeJobV2 for the double-add hazard.
+        rollupBatchTask = new AgentBatchTask();
+        createReplicaLatch = null;
+        waitingCreatingReplica.set(false);
+        isCancelling.set(false);
+        if (jobState == JobState.PENDING) {
+            watershedTxnId = -1;
+        }
+        // whereClause is deliberately KEPT: gsonPostProcess only restores it for PENDING jobs,
+        // so a true reload would silently lose the sync-MV filter (pre-existing reload bug);
+        // the surviving in-memory value is strictly better and every derived value is recomputed.
     }
 
     public RollupJobV2(long jobId, long dbId, long tableId, String tableName, long timeoutMs,
@@ -345,6 +365,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                         .setStorageType(TStorageType.COLUMN)
                         .setBloomFilterColumnNames(tbl.getBfColumnIds())
                         .setBloomFilterFpp(tbl.getBfFpp())
+                        .setZstdCompressionColumns(tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes())
                         .setIndexes(OlapTable.getIndexesBySchema(tbl.getCopiedIndexes(), rollupSchema))
                         .setSortKeyIndexes(null) // Rollup tablets does not have sort key
                         .setSortKeyUniqueIds(null)
@@ -642,7 +663,6 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         // initially, rollup index id and rollup index meta id are the same
         long rollupIndexId = rollupIndexMetaId;
         Map<Long, List<TColumn>> indexToThriftColumns = new HashMap<>();
-        Optional<TDescriptorTable> tDescTable = Optional.empty();
         try (AutoCloseableLock ignore =
                 new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(tbl.getId()), LockType.READ)) {
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
@@ -668,7 +688,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                     if (baseTColumn == null) {
                         baseTColumn = tbl.getIndexMetaByMetaId(baseIndexMetaId).getSchema()
                                 .stream()
-                                .map(Column::toThrift)
+                                .map(column -> {
+                                    TColumn tColumn = column.toThrift();
+                                    // BE rebuilds the base schema from these and diffs it against the
+                                    // rollup schema above, which does carry the per-column ZSTD fields.
+                                    // A base that reads as "no ZSTD" is a difference that is not there,
+                                    // and an otherwise linkable rollup rewrites all the data instead.
+                                    // Only those fields are filled in: is_bloom_filter_column and
+                                    // has_bitmap_index have the same effect here and predate this feature.
+                                    column.setIndexFlag(tColumn, List.of(), null,
+                                            tbl.getZstdCompressionColumnIds(), tbl.getZstdCompressionPageSizes());
+                                    return tColumn;
+                                })
                                 .collect(Collectors.toList());
                         indexToThriftColumns.put(baseIndexMetaId, baseTColumn);
                     }

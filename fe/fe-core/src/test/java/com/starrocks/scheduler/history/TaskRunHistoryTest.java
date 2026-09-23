@@ -20,7 +20,9 @@ import com.google.gson.JsonSyntaxException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -99,7 +101,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "get_json_string(history_content_json, 'dbName') = 'default_cluster:d1' " +
-                        "ORDER BY create_time DESC LIMIT 10000");
+                        "ORDER BY create_time DESC LIMIT 10000", anyInt);
             }
         };
         params.setDb("d1");
@@ -109,7 +111,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_state = 'SUCCESS'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -120,7 +122,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_name = 't1'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -132,7 +134,7 @@ public class TaskRunHistoryTest {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
                         "task_run_id = 'q1'" +
-                        " ORDER BY create_time DESC LIMIT 10000");
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
             }
         };
         params.setDb(null);
@@ -147,7 +149,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_name IN ('t1','t2')");
+                        "task_name IN ('t1','t2')", anyInt);
             }
         };
         history.lookupByTaskNames(dbName, taskNames);
@@ -158,7 +160,7 @@ public class TaskRunHistoryTest {
         new Expectations() {
             {
                 repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
-                        "task_run_id = 'q1' LIMIT 100");
+                        "task_run_id = 'q1' LIMIT 100", anyInt);
             }
         };
         history.lookup(params);
@@ -254,6 +256,40 @@ public class TaskRunHistoryTest {
         assertEquals(2, history.getInMemoryHistory().size());
     }
 
+    /**
+     * A failed archive INSERT must not drop the in-memory history. StmtExecutor swallows the
+     * failure by only recording it in the ConnectContext state, so the archive has to detect it:
+     * otherwise the finished task run is erased from both memory and the history table, and
+     * callers waiting for that task run (e.g. OptimizeJobV2) never see it finish.
+     */
+    @Test
+    public void testHistoryVacuumKeepsStateWhenInsertFailsSilently() {
+        new MockUp<TableKeeper>() {
+            @Mock
+            public boolean isReady() {
+                return true;
+            }
+        };
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() {
+                ConnectContext.get().getState()
+                        .setError("Tablet lost replicas. Check if any backend is down or not. tablet_id: 10093");
+            }
+        };
+
+        TaskRunHistory history = new TaskRunHistory();
+        TaskRunStatus run = new TaskRunStatus();
+        run.setExpireTime(System.currentTimeMillis() + 10000);
+        run.setQueryId("q1");
+        run.setTaskName("t1");
+        run.setState(Constants.TaskRunState.SUCCESS);
+        history.addHistory(run);
+
+        history.vacuum(true);
+        assertEquals(1, history.getInMemoryHistory().size());
+    }
+
     @Test
     public void testHistoryVacuumSkipArchive(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
@@ -340,7 +376,6 @@ public class TaskRunHistoryTest {
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
         String json = GsonUtils.GSON.toJson(status);
-        TaskRunStatus dst = GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
         Assertions.assertEquals(json, GsonUtils.GSON.toJson(status));
     }
     @Test
@@ -349,7 +384,7 @@ public class TaskRunHistoryTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("datacache", "{\"enable\": \"true\"}");
         status.setProperties(properties);
-        String json = GsonUtils.GSON.toJson(status);
+        GsonUtils.GSON.toJson(status);
         String res = MessageFormat.format("{0}", Strings.quote(status.toJSON()));
         Assertions.assertTrue(res.contains("\"datacache\":\"{\\\"enable\\\": \\\"true\\\"}\""));
     }
@@ -383,7 +418,7 @@ public class TaskRunHistoryTest {
         Collections.shuffle(taskRuns);
         new MockUp<SimpleExecutor>() {
             @Mock
-            public List<TResultBatch> executeDQL(String sql) {
+            public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
                 record.data = taskRuns;
                 String json = GsonUtils.GSON.toJson(record);
@@ -426,7 +461,7 @@ public class TaskRunHistoryTest {
 
         new MockUp<SimpleExecutor>() {
             @Mock
-            public List<TResultBatch> executeDQL(String sql) {
+            public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
                 record.data = taskRuns;
                 String json = GsonUtils.GSON.toJson(record);
@@ -447,5 +482,59 @@ public class TaskRunHistoryTest {
         for (int i = 0; i < 10; i++) {
             Assertions.assertEquals(9 - i, result.get(i).getCreateTime());
         }
+    }
+
+    @Test
+    public void testLookupEscapesSqlLiteral(@Mocked SimpleExecutor repo) {
+        TaskRunHistoryTable history = new TaskRunHistoryTable();
+
+        // A TASK_NAME value carrying single quotes must have them doubled so it cannot close the
+        // string literal and inject SQL into the privileged internal repository (root) query.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name = 't1'' OR ''1''=''1'" +
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
+            }
+        };
+        TGetTasksParams params = new TGetTasksParams();
+        params.setTask_name("t1' OR '1'='1");
+        history.lookup(params);
+
+        // Same hardening for the QUERY_ID predicate (maps to task_run_id).
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_run_id = 'q1'' UNION SELECT 1 -- '" +
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
+            }
+        };
+        TGetTasksParams params2 = new TGetTasksParams();
+        params2.setQuery_id("q1' UNION SELECT 1 -- ");
+        history.lookup(params2);
+
+        // And for the IN-list path used by lookupByTaskNames.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name IN ('a'',''b')", anyInt);
+            }
+        };
+        history.lookupByTaskNames("", Set.of("a','b"));
+
+        // Backslash must also be escaped: a value ending in '\' would otherwise escape the closing
+        // quote (StarRocks honors backslash escapes in string literals), so the following predicate
+        // could be smuggled out of the literal. Quote-doubling alone is not enough here.
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history WHERE TRUE AND  " +
+                        "task_name = 'x\\\\' AND  task_run_id = ' UNION SELECT 1 -- '" +
+                        " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number, anyInt);
+            }
+        };
+        TGetTasksParams params3 = new TGetTasksParams();
+        params3.setTask_name("x\\");
+        params3.setQuery_id(" UNION SELECT 1 -- ");
+        history.lookup(params3);
     }
 }

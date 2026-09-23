@@ -42,6 +42,7 @@
 #include <ctime>
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <set>
@@ -51,14 +52,13 @@
 #include <vector>
 
 #include "common/status.h"
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService_types.h"
 #include "gen_cpp/MasterService_types.h"
-#include "runtime/heartbeat_flags.h"
 #include "storage/cluster_id_mgr.h"
 #include "storage/kv_store.h"
 #include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_id_generator.h"
 #include "storage/tablet.h"
@@ -67,26 +67,21 @@ namespace bthread {
 class Executor;
 }
 
-namespace starrocks::lake {
-class LocalPkIndexManager;
-} // namespace starrocks::lake
-
 namespace starrocks {
 
 class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
+class StorageCleanupExecutor;
 class Tablet;
 class ReplicationTxnManager;
 class TAllocateAutoIncrementIdParam;
 class TAllocateAutoIncrementIdResult;
 class UpdateManager;
 class CompactionManager;
-class PublishVersionManager;
-class DictionaryCacheManager;
-class LoadSpillBlockMergeExecutor;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
+class ThreadPool;
 
 struct DeltaColumnGroupKey {
     int64_t tablet_id;
@@ -230,13 +225,7 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
-    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
-
-    DictionaryCacheManager* dictionary_cache_manager() { return _dictionary_cache_manager.get(); }
-
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
-
-    LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() { return _load_spill_block_merge_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -246,11 +235,23 @@ public:
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
 
-    UpdateManager* update_manager() { return _update_manager.get(); }
+    // Dedicated pool used by lake schema-change inner sub-tasks (currently only
+    // the ADD INDEX fast path's per-segment index building). Physically isolated
+    // from the alter_tablet outer pool to avoid pool-exhaustion deadlock.
+    // Capacity = alter_tablet_worker_count * lake_schema_change_per_tablet_parallelism.
+    ThreadPool* lake_schema_change_thread_pool() const { return _lake_schema_change_thread_pool.get(); }
 
-#ifdef USE_STAROS
-    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
-#endif
+    // Recompute and apply the lake_schema_change pool max size from the current
+    // values of `alter_tablet_worker_count` and
+    // `lake_schema_change_per_tablet_parallelism`. Invoked from the dynamic
+    // config update callback when either knob changes.
+    Status update_lake_schema_change_thread_pool_max();
+
+    StorageCleanupExecutor* storage_cleanup_executor() { return _storage_cleanup_executor.get(); }
+    Status update_storage_cleanup_thread_pool_max();
+    void wait_storage_cleanup_tasks();
+
+    UpdateManager* update_manager() { return _update_manager.get(); }
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
@@ -303,11 +304,6 @@ public:
 
     void decommission_disks(const std::vector<string>& decommissioned_disks);
 
-    void wake_finish_publish_vesion_thread() {
-        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
-        _finish_publish_version_cv.notify_one();
-    }
-
     void add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point);
 
     void wake_schedule_apply_thread() {
@@ -331,6 +327,7 @@ protected:
 private:
     // Friend class for testing
     friend class StorageEngineCompactionTest;
+    friend class StorageEngineCacheExpireTest;
     friend class TabletUpdatesTest;
 
     // Instance should be inited from `static open()`
@@ -359,6 +356,7 @@ private:
 
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
+    void _expire_caches(int64_t vector_cache_now);
     void* _update_cache_expire_thread_callback(void* arg);
     // update cache evict thread
     void* _update_cache_evict_thread_callback(void* arg);
@@ -393,9 +391,6 @@ private:
 
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
-
-    // finish publish version process function
-    void* _finish_publish_version_thread_callback(void* arg);
 
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
@@ -442,8 +437,6 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
-    // thread to check finish publish version task
-    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -480,9 +473,6 @@ private:
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
 
-    std::mutex _finish_publish_version_mutex;
-    std::condition_variable _finish_publish_version_cv;
-
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
@@ -498,8 +488,6 @@ private:
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
-    std::unique_ptr<LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
-
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
@@ -508,13 +496,16 @@ private:
 
     std::unique_ptr<SegmentFlushExecutor> _segment_flush_executor;
 
+    // Sub-task pool for lake schema-change inner parallelism (e.g. per-segment
+    // index building). Sized as alter_tablet_worker_count *
+    // lake_schema_change_per_tablet_parallelism. See storage_engine.cpp pool init.
+    std::unique_ptr<ThreadPool> _lake_schema_change_thread_pool;
+
+    std::unique_ptr<StorageCleanupExecutor> _storage_cleanup_executor;
+
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
-
-    std::unique_ptr<PublishVersionManager> _publish_version_manager;
-
-    std::unique_ptr<DictionaryCacheManager> _dictionary_cache_manager;
 
     std::unordered_map<int64_t, std::shared_ptr<AutoIncrementMeta>> _auto_increment_meta_map;
 
@@ -534,10 +525,6 @@ private:
     std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
                         std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
             _schedule_apply_tasks;
-
-#ifdef USE_STAROS
-    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
-#endif
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

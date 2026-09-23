@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.backup.Repository;
+import com.starrocks.backup.SnapshotTtl;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -30,7 +31,6 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.CancelBackupStmt;
@@ -70,6 +70,7 @@ public class BackupRestoreAnalyzer {
         private static final String PROP_BACKUP_TIMESTAMP = "backup_timestamp";
         private static final String PROP_META_VERSION = "meta_version";
         private static final String PROP_STARROCKS_META_VERSION = "starrocks_meta_version";
+        private static final String PROP_TTL = SnapshotTtl.PROP_TTL;
 
         public void analyze(StatementBase statement, ConnectContext session) {
             visit(statement, session);
@@ -225,6 +226,12 @@ public class BackupRestoreAnalyzer {
                         }
                         iterator.remove();
                         break;
+                    case PROP_TTL:
+                        // Parsed to reject a bad duration; the original text is what is kept.
+                        SnapshotTtl.parse(value);
+                        backupStmt.setTtl(value);
+                        iterator.remove();
+                        break;
                     default:
                         copiedProperties.put(next.getKey(), value);
                         break;
@@ -348,7 +355,6 @@ public class BackupRestoreAnalyzer {
             Map<String, String> copiedProperties = Maps.newHashMap(properties);
             long timeoutMs = Config.backup_job_default_timeout_ms;
             boolean allowLoad = false;
-            int replicationNum = RunMode.defaultReplicationNum();
             String backupTimestamp = null;
             int metaVersion = -1;
             int starrocksMetaVersion = -1;

@@ -3,4 +3,5 @@ label: '其他类型'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: other-data-types

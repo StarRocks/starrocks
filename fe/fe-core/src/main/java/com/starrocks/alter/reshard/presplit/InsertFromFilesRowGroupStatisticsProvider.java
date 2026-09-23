@@ -19,7 +19,6 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerFileStatus;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,8 +29,8 @@ import java.util.List;
  * list, opens each file's footer via the {@link MetaTierFormat} reader for the
  * table's format (Parquet or ORC), and concatenates per-stripe/row-group
  * statistics projected onto the request's sort key. Shared Hadoop-side wiring
- * (configuration build, broker → Hadoop file-status conversion) lives in
- * {@link PreSplitHadoopAccess}.
+ * (configuration build, broker → Hadoop file-status conversion, concurrent
+ * footer reads) lives in {@link PreSplitHadoopAccess}.
  */
 final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
 
@@ -41,10 +40,7 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         TableFunctionTable sourceTable = context.sourceTable();
         // FILES() reports one format for the whole table, so resolve the reader once.
         MetaTierFormat format = MetaTierFormat.fromTableFunctionFormat(sourceTable.getFormat());
-        // ParquetMetadataSampler.rejectCompositeSortKey runs upstream in tryPlan
-        // before this provider is invoked, so a single-element sort key is the
-        // contract by the time we get here.
-        Column sortKeyColumn = request.getSortKey().get(0);
+        List<Column> sortKeyColumns = request.getSortKey();
 
         Configuration hadoopConfig = PreSplitHadoopAccess.buildHadoopConfiguration(sourceTable.getProperties());
 
@@ -52,15 +48,14 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         // count) from total file bytes, and ParquetMetadataSampler computes
         // K-1 row-quantile cuts from the full per-stripe stats list — a
         // partial enumeration would bias the cuts toward the prefix.
-        List<RowGroupStatistics> aggregated = new ArrayList<>();
+        List<PreSplitHadoopAccess.FooterRead> footerReads = new ArrayList<>();
         for (TBrokerFileStatus brokerFileStatus : sourceTable.loadFileList()) {
-            if (brokerFileStatus.isDir) {
-                continue;
+            if (!brokerFileStatus.isDir) {
+                footerReads.add(new PreSplitHadoopAccess.FooterRead(
+                        format, PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus)));
             }
-            FileStatus hadoopFileStatus = PreSplitHadoopAccess.toHadoopFileStatus(brokerFileStatus);
-            aggregated.addAll(format.read(hadoopFileStatus, hadoopConfig, sortKeyColumn));
         }
-        return aggregated;
+        return PreSplitHadoopAccess.readFooters(footerReads, hadoopConfig, sortKeyColumns, context.loadTimeZone());
     }
 
     private static InsertFromFilesScanContext requireInsertFromFilesContext(SampleRequest request)

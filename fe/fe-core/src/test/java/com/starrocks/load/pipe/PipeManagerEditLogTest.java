@@ -46,7 +46,6 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -636,7 +635,6 @@ public class PipeManagerEditLogTest {
 
         PipeName pipeNameObj = new PipeName(PIPE_TEST_DB, pipeName);
         Pipe pipe = exceptionPipeManager.mayGetPipe(pipeNameObj).get();
-        Map<String, String> initialProps = new HashMap<>(pipe.getProperties());
 
         // 2. Prepare AlterPipeStmt with SetProperty
         String sql = "alter pipe " + pipeName + " set ('auto_ingest'='false')";

@@ -1,3 +1,0 @@
--- name: test_datacache_metrics
-
-select STATUS from default_catalog.information_schema.be_datacache_metrics limit 1;

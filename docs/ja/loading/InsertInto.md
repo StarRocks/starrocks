@@ -1,4 +1,5 @@
 ---
+sidebar_position: 70
 displayed_sidebar: docs
 description: "INSERT ステートメント（INSERT VALUES、INSERT INTO SELECT、INSERT OVERWRITE）を使用して StarRocks にデータをロードする方法。"
 ---
@@ -122,7 +123,7 @@ INSERT INTO VALUES コマンドを使用して、特定のテーブルに 1 行�
 
 > **注意**
 >
-> INSERT INTO VALUES を使用したデータの挿入は、小さなデータセットでデモを検証する必要がある場合にのみ適用されます。大規模なテストや運用環境には推奨されません。StarRocks に大量のデータをロードするには、[ロードオプション](Loading_intro.md)を参照して、シナリオに適した他のオプションを確認してください。
+> INSERT INTO VALUES を使用したデータの挿入は、小さなデータセットでデモを検証する必要がある場合にのみ適用されます。大規模なテストや運用環境には推奨されません。StarRocks に大量のデータをロードするには、[ロードオプション](./loading_introduction/loading_introduction.mdx)を参照して、シナリオに適した他のオプションを確認してください。
 
 次の例では、ラベル `insert_load_wikipedia` を使用して、データソーステーブル `source_wiki_edit` に 2 行を挿入します。ラベルは、データベース内の各データロードトランザクションの一意の識別ラベルです。
 
@@ -222,7 +223,7 @@ INSERT OVERWRITE VALUES コマンドを使用して、特定のテーブルを 1
 
 > **注意**
 >
-> INSERT OVERWRITE VALUES を使用したデータの上書きは、小さなデータセットでデモを検証する必要がある場合にのみ適用されます。大規模なテストや運用環境には推奨されません。StarRocks に大量のデータをロードするには、[ロードオプション](Loading_intro.md)を参照して、シナリオに適した他のオプションを確認してください。
+> INSERT OVERWRITE VALUES を使用したデータの上書きは、小さなデータセットでデモを検証する必要がある場合にのみ適用されます。大規模なテストや運用環境には推奨されません。StarRocks に大量のデータをロードするには、[ロードオプション](./loading_introduction/loading_introduction.mdx)を参照して、シナリオに適した他のオプションを確認してください。
 
 ソーステーブルとターゲットテーブルをクエリして、データが存在することを確認します。
 

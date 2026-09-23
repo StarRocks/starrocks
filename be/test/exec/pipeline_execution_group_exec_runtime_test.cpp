@@ -18,14 +18,14 @@
 #include <vector>
 
 #include "base/testutil/assert.h"
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/primitives/driver_executor.h"
-#include "exec/pipeline/primitives/execution_group_lifecycle.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/primitives/driver_executor.h"
+#include "exec_primitive/pipeline/primitives/execution_group_lifecycle.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

@@ -346,7 +346,11 @@ public class TabletScheduler extends LeaderDaemon {
             result.first = (res == AddResult.ADDED);
         } catch (InterruptedException e) {
             // heldLock has already been re-acquired by sleepUnlocked().
-            LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
+            // Re-assert the interrupt so the caller (e.g. TabletChecker / ColocateTableBalancer
+            // leader daemon being stopped on demotion) unwinds its cycle promptly instead of
+            // silently swallowing the cancel.
+            Thread.currentThread().interrupt();
+            LOG.warn("Interrupted while executing blockingAddTabletCtxToScheduler", e);
         }
 
         return result;
@@ -493,6 +497,26 @@ public class TabletScheduler extends LeaderDaemon {
      */
     @Override
     protected synchronized void onStopped() {
+        // Release every ctx BEFORE dropping the maps: a running ctx has already added a
+        // never-journaled CLONE replica to the LocalTablet / inverted index, which a restarted FE
+        // would not have (it only becomes durable when the clone finishes and journals). Clearing
+        // without releasing leaked those phantom replicas in this node's memory on every demotion.
+        // releaseResource also frees the path slots and removes the CLONE agent task; per-ctx
+        // best-effort so one bad ctx cannot wedge the demotion drain.
+        for (TabletSchedCtx ctx : runningTablets.values()) {
+            try {
+                ctx.releaseResource(this);
+            } catch (Throwable t) {
+                LOG.warn("failed to release running tablet ctx {} on demotion", ctx.getTabletId(), t);
+            }
+        }
+        for (TabletSchedCtx ctx : pendingTablets) {
+            try {
+                ctx.releaseResource(this);
+            } catch (Throwable t) {
+                LOG.warn("failed to release pending tablet ctx {} on demotion", ctx.getTabletId(), t);
+            }
+        }
         pendingTablets.clear();
         // shrink the backing array - PriorityQueue does not release capacity on clear()
         pendingTablets = new PriorityQueue<>();

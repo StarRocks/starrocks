@@ -14,13 +14,17 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.base.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.Subquery;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,32 +34,28 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Maps each target sort-key / partition column to the source column name to sample,
- * given a parsed {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}.
+ * Resolves the target-&gt;source column-name map (lower-cased target name -&gt; source column
+ * name) for directly mapped outputs of a parsed
+ * {@code INSERT INTO <range-dist target> SELECT ... FROM <single OLAP source>}. The sampler uses
+ * the map to project any index's sort key (base or rollup) and the partition columns by their
+ * source-table column names. Non-key target columns may be expressions over the source relation
+ * and are omitted from the map.
+ *
+ * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
+ * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
+ * names. A column the list omits simply never enters the map, which makes it a skip when it is a
+ * sort-key or partition column and a no-op otherwise.
  *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
  */
 final class InsertSelectSourceColumns {
-    private final List<String> sortKeySourceColumnNames;
-    private final List<String> partitionSourceColumnNames;
 
-    private InsertSelectSourceColumns(List<String> sortKeySourceColumnNames,
-                                      List<String> partitionSourceColumnNames) {
-        this.sortKeySourceColumnNames = sortKeySourceColumnNames;
-        this.partitionSourceColumnNames = partitionSourceColumnNames;
-    }
-
-    List<String> sortKeySourceColumnNames() {
-        return sortKeySourceColumnNames;
-    }
-
-    List<String> partitionSourceColumnNames() {
-        return partitionSourceColumnNames;
+    private InsertSelectSourceColumns() {
     }
 
     /**
-     * Resolves the source-column names for each sort-key and partition column of the target table.
+     * Resolves the target-&gt;source column-name map for the INSERT-SELECT projection.
      *
      * @param insertStmt          the parsed INSERT statement
      * @param selectRelation      the SELECT body of the INSERT
@@ -65,18 +65,26 @@ final class InsertSelectSourceColumns {
      * @param sourceAlias         the FROM-clause alias for the source relation, or {@code null}
      * @param sortKeyColumns      sort-key columns of the target (from MetaUtils)
      * @param partitionColumns    partition columns of the target
-     * @return resolved mapping, or {@code null} when the projection is ambiguous or unsafe
+     * @return the target-&gt;source column-name map, or {@code null} when the projection is
+     *         ambiguous or unsafe
      */
-    static InsertSelectSourceColumns resolve(
+    static Map<String, String> resolve(
             InsertStmt insertStmt, SelectRelation selectRelation,
-            OlapTable targetTable, OlapTable sourceTable,
+            OlapTable targetTable, Table sourceTable,
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
-        List<Column> targetCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
+        if (targetCols == null) {
+            return null;
+        }
         // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
-        List<Column> sourceCols = sourceTable.getVisibleColumnsWithoutGeneratedColumn();
+        List<Column> sourceCols = sourceTable instanceof OlapTable olapTable
+                ? olapTable.getVisibleColumnsWithoutGeneratedColumn()
+                : sourceTable.getFullVisibleSchema().stream()
+                        .filter(column -> !column.isGeneratedColumn())
+                        .toList();
 
         // Existence is checked via this map, never OlapTable.getColumn (which falls back to VirtualColumnRegistry).
         Map<String, String> sourceColumnMap = new HashMap<>();
@@ -88,11 +96,14 @@ final class InsertSelectSourceColumns {
         Map<String, String> targetToSource = new HashMap<>();
         if (isStar) {
             // A visible generated source column would add an output this mapping cannot see.
-            if (sourceTable.hasGeneratedColumn()) {
+            boolean hasGeneratedColumn = sourceTable instanceof OlapTable olapTable
+                    ? olapTable.hasGeneratedColumn()
+                    : sourceTable.getFullVisibleSchema().stream().anyMatch(Column::isGeneratedColumn);
+            if (hasGeneratedColumn) {
                 return null;
             }
             if (byName) {
-                // Exact-set match: reject source columns absent from the target, and vice versa.
+                // Exact-set match: reject source columns absent from the effective target, and vice versa.
                 if (!sourceColumnMap.keySet().equals(targetNames(targetCols))) {
                     return null;
                 }
@@ -114,28 +125,47 @@ final class InsertSelectSourceColumns {
         } else {
             List<String[]> outputs = new ArrayList<>(items.size());
             for (SelectListItem item : items) {
-                if (item.isStar() || !(item.getExpr() instanceof SlotRef slotRef)) {
+                if (item.isStar()) {
                     return null;
                 }
-                if (slotRef.getTblName() != null
-                        && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
-                    return null;
+                String outputName = item.getAlias();
+                String sourceName = null;
+                if (item.getExpr() instanceof SlotRef slotRef) {
+                    if (slotRef.getTblName() != null
+                            && !matchesSource(slotRef.getTblName(), normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
+                    sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
+                    if (sourceName == null) {
+                        return null;
+                    }
+                    if (outputName == null) {
+                        outputName = slotRef.getColName();
+                    }
+                } else {
+                    if (byName && outputName == null) {
+                        // The target position of an expression is unknown for BY NAME without an alias.
+                        return null;
+                    }
+                    if (!referencesOnlySource(item.getExpr(), sourceColumnMap, normalizedSourceName, sourceAlias)) {
+                        return null;
+                    }
                 }
-                String sourceName = sourceColumnMap.get(slotRef.getColName().toLowerCase());
-                if (sourceName == null) {
-                    return null;
-                }
-                String outputName = item.getAlias() != null ? item.getAlias() : slotRef.getColName();
                 outputs.add(new String[] {outputName, sourceName});
             }
             if (byName) {
+                Set<String> outputNames = new HashSet<>();
                 for (String[] output : outputs) {
-                    if (targetToSource.put(output[0].toLowerCase(), output[1]) != null) {
+                    String targetName = output[0].toLowerCase();
+                    if (!outputNames.add(targetName)) {
                         return null;   // duplicate output name
                     }
+                    if (output[1] != null) {
+                        targetToSource.put(targetName, output[1]);
+                    }
                 }
-                // Exact-set match: output names must be exactly the target non-generated columns.
-                if (!targetToSource.keySet().equals(targetNames(targetCols))) {
+                // Exact-set match: output names must be exactly the effective target columns.
+                if (!outputNames.equals(targetNames(targetCols))) {
                     return null;
                 }
             } else {
@@ -143,20 +173,100 @@ final class InsertSelectSourceColumns {
                     return null;
                 }
                 for (int i = 0; i < targetCols.size(); i++) {
-                    targetToSource.put(targetCols.get(i).getName().toLowerCase(), outputs.get(i)[1]);
+                    String sourceName = outputs.get(i)[1];
+                    if (sourceName != null) {
+                        targetToSource.put(targetCols.get(i).getName().toLowerCase(), sourceName);
+                    }
                 }
             }
         }
 
-        List<String> sortKeyNames = lookup(sortKeyColumns, targetToSource);
-        if (sortKeyNames == null) {
+        // A sort-key or partition column with no source mapping cannot be sampled -> skip pre-split.
+        // The executor derives both projections from the map at sample time (see mapToSource), so
+        // only the presence gate matters here.
+        if (lookup(sortKeyColumns, targetToSource) == null || lookup(partitionColumns, targetToSource) == null) {
             return null;
         }
-        List<String> partitionNames = lookup(partitionColumns, targetToSource);
-        if (partitionNames == null) {
-            return null;
+        return Map.copyOf(targetToSource);
+    }
+
+    /**
+     * The target columns the statement actually writes: the explicit target column list in the
+     * order it was written, or the whole base (non-generated) schema when there is no list. Both
+     * the by-position pairing and the BY NAME exact-set match are against these, so a partial or
+     * reordered list maps its outputs onto the columns it names instead of onto the schema.
+     *
+     * <p>Only resolves names, it does not validate the list: whether the list is admissible at all
+     * (no duplicate / unknown / generated name, every omitted column fillable, every visible
+     * index's sort key present) is {@link InsertPreSplitHook#targetColumnListIsPreSplitSafe}'s
+     * single job, and it has already run for every statement that reaches here. The {@code null}
+     * return below is therefore unreachable in practice and exists so that a name this method
+     * cannot resolve skips pre-split rather than NPEs.
+     */
+    private static List<Column> effectiveTargetColumns(InsertStmt insertStmt, OlapTable targetTable) {
+        List<Column> baseCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return baseCols;
         }
-        return new InsertSelectSourceColumns(sortKeyNames, partitionNames);
+        Map<String, Column> baseByName = new HashMap<>();
+        for (Column column : baseCols) {
+            baseByName.put(column.getName().toLowerCase(), column);
+        }
+        List<Column> effective = new ArrayList<>(targetColumnNames.size());
+        for (String name : targetColumnNames) {
+            Column column = baseByName.get(name.toLowerCase());
+            if (column == null) {
+                return null;
+            }
+            effective.add(column);
+        }
+        return effective;
+    }
+
+    /**
+     * Returns {@code true} when every reference inside a non-{@link SlotRef} projection resolves to
+     * the source relation the caller already resolved and authorized.
+     *
+     * <p>The hook runs pre-analysis, so nothing the analyzer would have rejected has been rejected
+     * yet when the reshard is submitted. Every SELECT item used to be a bare source column, which
+     * made that safe implicitly; now that expressions are admitted, the same invariant is enforced
+     * explicitly -- no subquery of any shape, and every slot names a visible source column with the
+     * source's own qualifier (or none). Otherwise a projection over an unauthorized table or an
+     * unknown column would reshard the target on behalf of a statement that never runs.
+     *
+     * <p>Function calls themselves stay allowed: the sampler never evaluates a non-key projection,
+     * it only projects the mapped source columns, so the expression's own semantics cannot skew the
+     * sampled row set.
+     */
+    private static boolean referencesOnlySource(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        List<Expr> rejected = new ArrayList<>();
+        expr.collectAll((Predicate<Expr>) e -> isForeignReference(
+                e, sourceColumnMap, normalizedSourceName, sourceAlias), rejected);
+        return rejected.isEmpty();
+    }
+
+    private static boolean isForeignReference(
+            Expr expr, Map<String, String> sourceColumnMap,
+            TableName normalizedSourceName, String sourceAlias) {
+        // Any subquery shape (scalar, IN-subquery, EXISTS holds its Subquery as a child) reads
+        // relations the hook never resolved or authorized.
+        if (expr instanceof Subquery) {
+            return true;
+        }
+        if (expr instanceof SlotRef slot) {
+            if (slot.getTblName() != null
+                    && !matchesSource(slot.getTblName(), normalizedSourceName, sourceAlias)) {
+                return true;
+            }
+            // A null column name (e.g. a struct-subfield slot) is not resolvable against the
+            // source schema here, so treat it as foreign rather than guessing.
+            return slot.getColName() == null
+                    || !sourceColumnMap.containsKey(slot.getColName().toLowerCase());
+        }
+        return false;
     }
 
     private static Set<String> targetNames(List<Column> targetCols) {
@@ -167,7 +277,14 @@ final class InsertSelectSourceColumns {
         return names;
     }
 
-    private static List<String> lookup(List<Column> columns, Map<String, String> targetToSource) {
+    /**
+     * Maps each target column to its source-table column name via {@code targetToSource}
+     * (keyed by lower-cased target name), or returns {@code null} when ANY column is absent from
+     * the map. The shared primitive for every "are these columns mappable to source names?" gate
+     * and for the executor's sample-time remap; package-private so those same-package callers
+     * share one implementation of the map-key convention.
+     */
+    static List<String> lookup(List<Column> columns, Map<String, String> targetToSource) {
         List<String> names = new ArrayList<>(columns.size());
         for (Column column : columns) {
             String sourceName = targetToSource.get(column.getName().toLowerCase());

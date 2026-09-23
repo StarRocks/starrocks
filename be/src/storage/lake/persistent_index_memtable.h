@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <condition_variable>
+#include <mutex>
+
 #include "base/phmap/btree.h"
 #include "common/thread/threadpool.h"
 #include "storage/lake/types_fwd.h"
@@ -46,18 +49,18 @@ public:
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
-                 int64_t version, uint32_t rowset_id);
+                 int64_t version, uint32_t del_rssid);
 
     // Erase from index, used when rebuild index.
     // |n| : key count
     // |keys| : key array as raw buffer
     // |filter| : used for filter keys that need to skip. `True` means need skip.
     // |version|: version of index values
-    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    // |del_rssid|: rssid stamped for these deletes (rowset_id + op_offset); used as the rebuild point
     Status erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
-                             uint32_t rowset_id);
+                             uint32_t del_rssid);
 
     // |version|: version of index values
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
@@ -79,6 +82,8 @@ public:
 
     Status flush();
 
+    void advance_max_rss_rowid(uint64_t max_rss_rowid);
+
     void clear();
 
     const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
@@ -92,6 +97,11 @@ public:
     void cancel() override;
 
     Status flush_status() const;
+
+    // Block until async flush (`run()`) or `cancel()` has published a result, or |timeout_us|
+    // elapses. OK means `release_sstable()` can take the SST. A memtable that was flushed
+    // synchronously before being queued as inactive returns immediately.
+    Status wait_for_flush(int64_t timeout_us);
 
 private:
     Status flush(WritableFile* wf, uint64_t* filesize, PersistentIndexSstableRangePB* range_pb);
@@ -110,6 +120,7 @@ private:
     Status _flush_status = Status::OK();
     // flush state mutex
     mutable std::mutex _flush_mutex;
+    std::condition_variable _flush_cv;
 };
 
 } // namespace starrocks::lake

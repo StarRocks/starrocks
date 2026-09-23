@@ -46,23 +46,23 @@ Subqueries also support scalar quantum queries. It can be divided into irrelevan
 1. Uncorrelated scalar quantum query with predicate = sign. For example, output information about the person with the highest wage.
 
     ```sql
-    SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
+    SELECT name FROM employees WHERE salary = (SELECT MAX(salary) FROM employees);
     ```
 
 2. Uncorrelated scalar quantum queries with predicates `>`, `<` etc. For example, output information about people who are paid more than average.
 
     ```sql
-    SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
+    SELECT name FROM employees WHERE salary > (SELECT AVG(salary) FROM employees);
     ```
 
 3. Related scalar quantum queries. For example, output the highest salary information for each department.
 
     ```sql
-    SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
+    SELECT name FROM employees a WHERE salary = (SELECT MAX(salary) FROM employees b WHERE b.Department= a.Department);
     ```
 
 4. Scalar quantum queries are used as parameters of ordinary functions.
 
     ```sql
-    SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
+    SELECT name FROM employees WHERE salary = abs((SELECT MAX(salary) FROM employees));
     ```

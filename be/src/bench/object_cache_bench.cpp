@@ -27,8 +27,8 @@
 #include "common/configbase.h"
 #include "common/system/disk_info.h"
 #include "common/system/mem_info.h"
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 
 namespace starrocks {
@@ -101,7 +101,7 @@ void ObjectCacheBench::init_env() {
         CpuInfo::init();
         DiskInfo::init();
         MemInfo::init();
-        GlobalEnv* env = GlobalEnv::GetInstance();
+        RuntimeEnv* env = RuntimeEnv::GetInstance();
         Status st = env->init();
         is_init = true;
         LOG(INFO) << "int env: " << st;

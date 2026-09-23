@@ -26,9 +26,9 @@
 #include "fmt/format.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gutil/strings/join.h"
-#include "runtime/exec_env.h"
 #include "storage/data_dir.h"
 #include "storage/replication_txn_manager.h"
+#include "storage/storage_cleanup_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
@@ -318,9 +318,10 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     g_publish_latency << publish_latency;
     if (st.ok()) {
         if (is_replication_txn) {
-            (void)ExecEnv::GetInstance()->delete_file_thread_pool()->submit_func([transaction_id]() {
+            auto submit_status = StorageEngine::instance()->storage_cleanup_executor()->submit([transaction_id]() {
                 StorageEngine::instance()->replication_txn_manager()->clear_txn(transaction_id);
             });
+            LOG_IF(WARNING, !submit_status.ok()) << "failed to submit replication txn cleanup: " << submit_status;
         }
         VLOG(1) << "publish_version success. txn_id: " << transaction_id << " gtid: " << publish_version_req.gtid
                 << " #partition:" << num_partition << " #tablet:" << tablet_tasks.size() << " time:" << publish_latency

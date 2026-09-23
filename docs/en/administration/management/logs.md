@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "Overview of StarRocks logging: FE and BE log file types, content, configuration, log rolling and retention strategies for troubleshooting and performance..."
 ---
@@ -20,6 +21,8 @@ The main FE logs include the startup process, cluster state changes, DML/DQL req
 - `sys_log_roll_num`: Controls the number of retained log files to prevent unlimited growth from consuming too much disk space. Default is 10
 - `sys_log_roll_interval`: Specifies the rotation frequency. Default is `DAY`, meaning logs are rotated daily
 - `sys_log_delete_age`: Controls how long to keep old log files before deletion. Default is 7 day
+- `sys_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `sys_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 - `sys_log_roll_mode`: Log rotation mode. Default is `SIZE-MB-1024`, meaning a new log file will be created when the current one reaches 1024 MB. Together with sys_log_roll_interval, this indicates that FE logs can be rotated either daily or based on file size
 - `sys_log_enable_compress`: Controls whether log compression is enabled. Default is false, meaning compression is disabled
 
@@ -89,6 +92,8 @@ The purpose of `fe.profile.log` is to record detailed query execution informatio
 - `profile_log_roll_num`: Controls the number of retained profile log files to prevent unlimited growth and excessive disk usage. Default is 5
 - `profile_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 5 files are retained, and older files are deleted
 - `profile_log_delete_age`: Controls how long old files are kept before deletion. Default is 1 day
+- `profile_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `profile_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 
 ### `fe.internal.log`
 
@@ -109,6 +114,8 @@ This log is especially useful for analyzing StarRocks’ internal statistics col
 - `internal_log_roll_num`: Number of files to retain. Default is 90
 - `internal_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 90 files are retained, and older files are deleted
 - `internal_log_delete_age`: Controls how long old files are kept before deletion. Default is 7 days
+- `internal_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `internal_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 
 ### `fe.audit.log`
 
@@ -125,8 +132,31 @@ This is StarRocks’ query audit log, which records detailed information about a
 - `audit_log_roll_num`: Number of files to retain. Default is 90
 - `audit_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 90 files are retained, and older files are deleted
 - `audit_log_delete_age`: Controls how long old files are kept before deletion. Default is 7 days
+- `audit_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `audit_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 - `audit_log_json_format`: Whether to log in JSON format. Default is false
 - `audit_log_enable_compress`: Whether compression is enabled
+
+#### AI execution fields
+
+When AI execution statistics are available, the following fields describe observed, completed AI tasks. Tasks still in flight are not included. These statistics follow query reporting semantics: failures, cancellation, asynchronous reporting, and mixed-version execution can leave partial observations. They are not an exactly-once billing record.
+
+| Field | Description |
+| --- | --- |
+| `AITaskCount` | Completed AI tasks, including failed or cancelled tasks. SQL NULL inputs and inputs rejected before task creation are not counted. |
+| `AIRequestCount` | Accepted HTTP submissions for the completed tasks, including accepted retries. Rejected submissions are not counted. |
+| `AIRetryCount` | Accepted retry submissions for the completed tasks. |
+| `AITimeoutCount` | Observed HTTP timeout and task-deadline events in the AI response-processing path. This is not a count of all cancelled tasks. |
+| `AIErrorCount` | Tasks ending in a row-level failure. Lifecycle cancellation is excluded; failed attempts followed by a successful retry are not terminal errors. |
+| `AIHttpTimeNs` | Sum of elapsed nanoseconds from accepted HTTP submission to transport callback. Excludes retry backoff, response parsing, and completion-queue time. |
+| `AIPromptTokens` | Sum of valid provider-reported prompt token usage. |
+| `AICompletionTokens` | Sum of valid provider-reported completion token usage. |
+| `AITotalTokens` | Sum of valid provider-reported total token usage; not calculated from prompt and completion tokens. |
+| `AIPromptUsageCount` | Number of responses containing valid prompt token usage, including explicitly reported zero. |
+| `AICompletionUsageCount` | Number of responses containing valid completion token usage, including explicitly reported zero. |
+| `AITotalUsageCount` | Number of responses containing valid total token usage, including explicitly reported zero. |
+
+Each token field has its own coverage count. Missing or invalid usage is unknown, not zero. A token field is omitted when no valid usage was observed; an explicitly reported zero is logged as `0`. Coverage can be partial, so compare each token sum with its corresponding usage count. AI fields are omitted when no AI statistics are available. Only numeric counters are recorded; these fields contain no prompts, responses, model credentials, or provider error strings.
 
 ### `fe.big_query.log`
 
@@ -142,6 +172,8 @@ This is StarRocks’ dedicated Big Query log file, used to monitor and analyze q
 - `big_query_log_modules`: Types of internal log modules. Default is query
 - `big_query_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 10 files are retained, and older files are deleted
 - `big_query_log_delete_age`: Controls how long old files are kept before deletion. Default is 7 days
+- `big_query_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `big_query_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 
 ### `fe.dump.log`
 
@@ -163,6 +195,8 @@ SET enable_query_dump = true;
 - `dump_log_modules`: Types of internal log modules. Default is query
 - `dump_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 10 files are retained, and older files are deleted
 - `dump_log_delete_age`: Controls how long old files are kept before deletion. Default is 7 days
+- `dump_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `dump_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 
 ### `fe.features.log`
 This is StarRocks’ query plan feature log, used to collect and record feature information of query execution plans. It mainly serves machine learning and query optimization analysis. Key purposes include:
@@ -187,6 +221,8 @@ enable_query_cost_prediction = false  // Disabled by default
 - `feature_log_roll_num`: Number of files to retain. Default is 5
 - `feature_log_roll_interval`: Specifies the rotation frequency. Default is DAY, meaning daily rotation. When rotation conditions are met, the latest 5 files are retained, and older files are deleted
 - `feature_log_delete_age`: Controls how long old files are kept before deletion. Default is 3 days
+- `feature_log_roll_file_index`: Rollover file index strategy (`min`, `max`, or `nomax`). Default is `min`
+- `feature_log_delete_count`: Hard cap on the number of retained rolled files, enforced by the Delete action. Default is `-1` (disabled).
 - `feature_log_roll_size_mb`: Log rotation size. Default is 1024 MB, meaning a new file is created every 1 GB
 
 ## BE/CN Logging in detail

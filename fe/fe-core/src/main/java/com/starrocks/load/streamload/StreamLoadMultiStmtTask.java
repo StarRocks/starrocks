@@ -26,6 +26,7 @@ import com.starrocks.http.rest.ActionStatus;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -371,10 +372,24 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         if (context.getExecutionId() == null) {
             context.setExecutionId(loadId);
         }
-        // Also propagate compute resource so the txn carries the same resource context.
-        if (context.getCurrentComputeResource() == null) {
-            context.setCurrentComputeResource(computeResource);
+        // Bind the context to the task's warehouse and compute resource before the transaction is
+        // created: TransactionStmtExecutor.beginStmt stores context.getCurrentComputeResource() in
+        // the TransactionState, and createPartition, updateImmutablePartition and publish derive
+        // tablet locations and nodes from it. In shared-data mode getCurrentComputeResource() never
+        // returns null: it acquires a resource from the context's warehouse (the default one for
+        // this private context) and re-acquires whenever the resource's warehouse differs from the
+        // context's, so a null check left the transaction on the default warehouse while the load's
+        // coordinator runs on the task's warehouse.
+        if (RunMode.isSharedDataMode()) {
+            context.setCurrentWarehouseId(computeResource.getWarehouseId());
         }
+        context.setCurrentComputeResource(computeResource);
+        // The transaction's timeout is the task's (the HTTP "timeout" header), as for a classic
+        // stream load: TransactionStmtExecutor.beginStmt takes it from context.getExecTimeout(),
+        // i.e. the session's query_timeout, and the transaction is visible to the transaction
+        // timeout checker from the first load. commitStmt's lock and publish waits follow the
+        // same value. Set it after the warehouse binding, which replaces the session variables.
+        context.getSessionVariable().setQueryTimeoutS((int) Math.max(1L, timeoutMs / 1000L));
 
         TransactionStmtExecutor.beginStmt(context, new BeginStmt(NodePosition.ZERO),
                 TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING, label);
@@ -427,20 +442,49 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
         String commitErrorMsg = null;
         try {
             LOG.info("commit {} sub tasks", taskMaps.size());
+            // Fire every table's channel first. prepareChannel only dispatches the
+            // coordinator (Coordinator.exec() is non-blocking); issuing them up front lets
+            // the per-table flushes overlap on the BEs instead of running one-at-a-time. The
+            // blocking join happens below in waitCoordFinish, so splitting the fire and the
+            // wait bounds total commit latency by the slowest table rather than the sum. New
+            // loads are rejected once the task is COMMITING, so taskMaps is stable across the
+            // two iterations below.
+            List<StreamLoadTask> dispatched = Lists.newArrayList();
             for (StreamLoadTask task : taskMaps.values()) {
                 task.prepareChannel(0, task.getTableName(), headers, resp);
                 if (!resp.stateOK()) {
                     commitErrorMsg = "prepareChannel failed";
-                    return;
+                    break;
                 }
+                dispatched.add(task);
+            }
+            // Wait for every dispatched coordinator and add its result to the transaction.
+            // Run this even when a prepare failed above: the loads already dispatched must be
+            // added via loadData so the rollback path aborts them with their tablet infos --
+            // otherwise the explicit transaction would carry no items and rollbackStmt would
+            // take its empty-item branch, skipping abortTransaction. A per-task result keeps
+            // an earlier prepare failure from poisoning the wait check below.
+            for (StreamLoadTask task : dispatched) {
                 if (task.checkNeedPrepareTxn()) {
-                    task.waitCoordFinish(resp);
-                }
-                if (!resp.stateOK()) {
-                    commitErrorMsg = "waitCoordFinish failed";
-                    return;
+                    TransactionResult waitResp = new TransactionResult();
+                    task.waitCoordFinish(waitResp);
+                    if (!waitResp.stateOK()) {
+                        if (commitErrorMsg == null) {
+                            commitErrorMsg = "waitCoordFinish failed";
+                            resp.setErrorMsg(waitResp.msg);
+                        }
+                        // waitCoordFinish already aborted the shared transaction on failure
+                        // (cancelTask -> abortTransaction). Stop draining: calling loadData for
+                        // a later table after the transaction is aborted would add it to an
+                        // already-aborted transaction. The remaining dispatched coordinators are
+                        // cancelled by the rollback path (tryRollbackNow -> cancelCoordinatorOnly).
+                        break;
+                    }
                 }
                 TransactionStmtExecutor.loadData(dbId, task.getTable().getId(), task.getTxnStateItem(), context);
+            }
+            if (commitErrorMsg != null) {
+                return;
             }
             TransactionStmtExecutor.commitStmt(context, new CommitStmt(NodePosition.ZERO));
             if (context.getState().isError()) {
@@ -818,17 +862,58 @@ public class StreamLoadMultiStmtTask extends AbstractStreamLoadTask {
                 if (!checkLoadAllowed(resp)) {
                     return null;
                 }
-                task = taskMaps.putIfAbsent(table.getName(), newTask);
+                task = taskMaps.get(table.getName());
                 if (task == null) {
+                    // Register the transaction with DatabaseTransactionMgr and add this table to it
+                    // before the sub-task exists, as the INSERT path of an explicit transaction does
+                    // before it executes. The BE looks the transaction up there while it writes
+                    // (createPartition for automatic partitioning, updateImmutablePartition for
+                    // automatic bucketing); a transaction that only reaches DatabaseTransactionMgr at
+                    // commit fails those lookups with "txn %d not exist". It also lets a failed
+                    // sub-task abort the shared transaction (StreamLoadTask.cancelTask). If this
+                    // throws, nothing is added to taskMaps and executeLoadTask aborts the transaction.
+                    TransactionStmtExecutor.activateTable(dbId, table.getId(), context);
                     task = newTask;
+                    taskMaps.put(table.getName(), task);
+                    boolean isFirstSubTask = taskMaps.size() == 1;
                     LOG.info("Add stream load task {}", task.getShowInfo());
                     task.tryBegin(0, 1, txnId);
+                    if (isFirstSubTask) {
+                        decideCombinedTxnLogFromFirstTable(table);
+                    }
                 }
             } finally {
                 writeUnlock();
             }
         }
         return task.tryLoad(0, tableName, resp);
+    }
+
+    // The first table to join the multi-statement stream load decides, once and for all, whether
+    // the transaction aggregates its txn logs (combined txn log). A file_bundling lake table already
+    // writes one bundled data file plus one aggregated metadata file per partition version, so it
+    // also aggregates its per-tablet txn logs into a single file per partition, matching the
+    // single-table load path where DatabaseTransactionMgr sets
+    // useCombinedTxnLog = combinedTxnLog || fileBundling.
+    //
+    // The decision is frozen after the first table because the transaction carries a single
+    // useCombinedTxnLog flag that every sub-task's sink and the publish path use uniformly. A
+    // multi-statement transaction is created (beginStmt) before any target table is known, and each
+    // sub-task's sink is planned during its own load; flipping the flag once a later table joins
+    // would make publish look for combined logs an earlier sub-task never wrote (or per-tablet logs
+    // a later sub-task did not write), wedging publish. So a later file_bundling table does not turn
+    // aggregation on if the first table did not, and a later non-file_bundling table keeps writing
+    // combined logs if the first table did -- both are correct, only the file count differs.
+    private void decideCombinedTxnLogFromFirstTable(OlapTable table) {
+        if (!table.isFileBundling()) {
+            return;
+        }
+        ExplicitTxnState explicitTxnState =
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getExplicitTxnState(txnId);
+        if (explicitTxnState == null || explicitTxnState.getTransactionState() == null) {
+            return;
+        }
+        explicitTxnState.getTransactionState().setUseCombinedTxnLog(true);
     }
 
     @Override

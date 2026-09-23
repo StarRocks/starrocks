@@ -61,16 +61,16 @@ PROPERTIES (
 );
 ```
 
-为表 `sales_records` 中的 `item_id` 列创建 bitmap 索引，索引名称为 `index`。
+为表 `sales_records` 中的 `item_id` 列创建 bitmap 索引，索引名称为 `index3`。
 
 ```SQL
-CREATE INDEX index ON sales_records (item_id) USING BITMAP COMMENT '';
+CREATE INDEX index3 ON sales_records (item_id) USING BITMAP COMMENT '';
 ```
 
 或
 
 ```SQL
-CREATE INDEX index ON sales_records (item_id);
+CREATE INDEX index3 ON sales_records (item_id);
 ```
 
 ## 相关操作

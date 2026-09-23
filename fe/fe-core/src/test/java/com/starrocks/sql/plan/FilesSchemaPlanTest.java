@@ -22,6 +22,10 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.BeforeAll;
@@ -96,6 +100,37 @@ public class FilesSchemaPlanTest extends PlanTestBase {
         assertEquals(PrimitiveType.BIGINT, t.getColumn("x").getType().getPrimitiveType());
         assertNotNull(t.getColumn("y"));
         assertEquals(PrimitiveType.VARCHAR, t.getColumn("y").getType().getPrimitiveType());
+    }
+
+    /**
+     * Verifies that FILES() row count is estimated from file sizes rather than hardcoded to 1.
+     *
+     * fake:// produces two files: 1024 + 2048 = 3072 bytes total.
+     * With explicit 'schema' property present, RowCountEstimator falls back to
+     * connector_row_size_estimate_bytes (default 256), giving 3072 / 256 = 12 rows.
+     *
+     * Uses the optimizer layer directly (no fragment build) to avoid Hadoop FS init for fake://.
+     */
+    @Test
+    public void testFilesRowCountEstimation() throws Exception {
+        String sql = "SELECT * FROM FILES(" +
+                "  'path' = 'fake://bucket/dir/'," +
+                "  'format' = 'parquet'," +
+                "  'schema' = 'x BIGINT, y VARCHAR(64)')";
+        Statistics stats = optimizerStatsForQuery(sql);
+        // fake:// files: 1024 + 2048 = 3072 bytes; connector_row_size_estimate_bytes=256 → 12 rows
+        assertEquals(12L, (long) stats.getOutputRowCount(),
+                "Row count should be file-size-based, not hardcoded to 1");
+    }
+
+    /** Runs the query through the CBO optimizer and returns the root node's statistics. */
+    private static Statistics optimizerStatsForQuery(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        LogicalPlan logicalPlan =
+                UtFrameUtils.getQueryLogicalPlan(connectContext, columnRefFactory, (QueryStatement) stmt);
+        OptExpression optExpr = UtFrameUtils.getQueryOptExpression(connectContext, columnRefFactory, logicalPlan);
+        return optExpr.getStatistics();
     }
 
     @Test

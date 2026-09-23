@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
+import com.starrocks.sql.ast.QueryPeriod;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -238,7 +239,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
                     if (!item.getExcludedColumns().isEmpty()) {
                         tmp += " EXCLUDE ( ";
                         tmp += item.getExcludedColumns().stream()
-                                .map(col -> "\"" + col + "\"")
+                                .map(ParseUtil::backquote)
                                 .collect(Collectors.joining(","));
                         tmp += " ) ";
                     }
@@ -344,10 +345,7 @@ public class AST2SQLVisitor extends AST2StringVisitor {
 
         // ORDER BY clause
         if (queryRelation.hasOrderByClause()) {
-            java.util.List<com.starrocks.sql.ast.OrderByElement> sortClause = queryRelation.getOrderBy();
-            String orderByStr = Joiner.on(", ").join(
-                    sortClause.stream().map(this::visit).collect(java.util.stream.Collectors.toList()));
-            sqlBuilder.append(" ORDER BY ").append(orderByStr).append(" ");
+            sqlBuilder.append(" ORDER BY ").append(visitOrderByClause(queryRelation)).append(" ");
         }
 
         // LIMIT clause
@@ -388,6 +386,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         return sqlBuilder.toString();
     }
 
+    // "AS OF <expr>" is the only typed form that exists: QueryPeriod's constructor always takes an end and
+    // never a start, and the StarRocks parser records the BETWEEN/FROM..TO/ALL forms as raw text instead of
+    // building a period. Fail loudly rather than emit SQL that has quietly lost the clause.
+    private String buildQueryPeriod(QueryPeriod queryPeriod) {
+        Expr end = queryPeriod.getEnd().orElseThrow(
+                () -> new IllegalStateException("Cannot render a query period without an end bound"));
+        return "FOR " + queryPeriod.getPeriodType().name() + " AS OF " + visit(end);
+    }
+
     @Override
     public String visitTable(TableRelation node, Void outerScope) {
         StringBuilder sqlBuilder = new StringBuilder();
@@ -396,11 +403,22 @@ public class AST2SQLVisitor extends AST2StringVisitor {
         if (StringUtils.isNotEmpty(node.getQueryPeriodString())) {
             sqlBuilder.append(" ");
             sqlBuilder.append(StringUtils.trim(node.getQueryPeriodString()));
+        } else if (node.getQueryPeriod() != null) {
+            // The raw clause text is only recorded by the StarRocks parser (it is also what gets pushed
+            // down to MySQL external tables). Other producers - the Trino dialect - build the typed period
+            // alone, so render that here: without it a serialize/reparse round trip would drop the time
+            // travel clause and silently read the latest snapshot.
+            sqlBuilder.append(" ").append(buildQueryPeriod(node.getQueryPeriod()));
         }
 
         if (node.getPartitionNames() != null) {
             List<String> partitionNames = node.getPartitionNames().getPartitionNames();
             if (partitionNames != null && !partitionNames.isEmpty()) {
+                // Temporary and formal partitions are separate namespaces, so dropping the qualifier
+                // does not merely lose formatting: it names a different partition.
+                if (node.getPartitionNames().isTemp()) {
+                    sqlBuilder.append(" TEMPORARY");
+                }
                 sqlBuilder.append(" PARTITION (");
                 sqlBuilder.append(partitionNames.stream().map(c -> "`" + c + "`")
                         .collect(Collectors.joining(", ")));
@@ -497,7 +515,13 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     public String visitArrayExpr(ArrayExpr node, Void context) {
         StringBuilder sb = new StringBuilder();
         Type type = AnalyzerUtils.replaceNullType2Boolean(node.getType());
-        sb.append(type.toString());
+        // The type prefix exists to preserve an element type the literal alone would not reproduce, as in
+        // ARRAY<DATE>['2020-01-01']. When the element type is still NULL the literal never carried a type
+        // of its own -- it was inferred from context -- and printing the BOOLEAN stand-in freezes a type
+        // the original did not have, which changes function overload resolution on the way back in.
+        if (type.equals(node.getType())) {
+            sb.append(type.toString());
+        }
         sb.append('[');
         sb.append(node.getChildren().stream().map(this::visit).collect(Collectors.joining(", ")));
         sb.append(']');
@@ -584,9 +608,9 @@ public class AST2SQLVisitor extends AST2StringVisitor {
     }
 
     @Override
-    public String visitValues(ValuesRelation node, Void scope) {
+    protected String visitValueRows(ValuesRelation node) {
         if (!options.isEnableDigest()) {
-            return super.visitValues(node, scope);
+            return super.visitValueRows(node);
         }
 
         if (node.isNullValues()) {
@@ -603,6 +627,15 @@ public class AST2SQLVisitor extends AST2StringVisitor {
             sqlBuilder.append(rowBuilder);
         }
         return sqlBuilder.toString();
+    }
+
+    @Override
+    public String visitValues(ValuesRelation node, Void scope) {
+        if (!options.isEnableDigest()) {
+            return super.visitValues(node, scope);
+        }
+        // The digest form is deliberately unparenthesized and keeps only the first row.
+        return visitValueRows(node);
     }
 
     @Override

@@ -17,7 +17,6 @@ package com.starrocks.catalog;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
@@ -191,8 +190,6 @@ public class CatalogUtilsTest extends StarRocksTestBase {
                         "\"replication_num\" = \"1\"\n" +
                         ");");
 
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test_catalog_utils");
-        OlapTable table = (OlapTable) db.getTable("tbl_list");
 
         // Add a temp partition with txn prefix (simulating insert overwrite)
         String addTempStmt = "alter table test_catalog_utils.tbl_list add temporary partition txn100_p_bj " +

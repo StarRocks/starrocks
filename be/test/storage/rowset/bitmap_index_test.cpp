@@ -41,16 +41,16 @@
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/column_viewer.h"
+#include "exec/exec_env.h"
 #include "fs/fs_memory.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/key_coder.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/types.h"
+#include "storage_primitive/key_coder.h"
 
 namespace starrocks {
 
@@ -576,7 +576,7 @@ TEST_F(BitmapIndexTest, test_dict_ngram_index) {
 // Verify that BitmapIndexReader with owned_mem_tracker=false does NOT affect the
 // bitmap_index_mem_tracker during construction, load, or destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;
@@ -620,7 +620,7 @@ TEST_F(BitmapIndexTest, test_owned_mem_tracker_false_no_tracking) {
 // Verify that BitmapIndexReader with owned_mem_tracker=true (default) properly tracks
 // memory via bitmap_index_mem_tracker during construction, load, and destruction.
 TEST_F(BitmapIndexTest, test_owned_mem_tracker_true_tracks_memory) {
-    auto* tracker = GlobalEnv::GetInstance()->bitmap_index_mem_tracker();
+    auto* tracker = RuntimeEnv::GetInstance()->bitmap_index_mem_tracker();
     int64_t baseline = tracker != nullptr ? tracker->consumption() : 0;
 
     size_t num_rows = 10;

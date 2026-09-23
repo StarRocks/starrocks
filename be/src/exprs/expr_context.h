@@ -49,7 +49,6 @@ class OlapScanNode;
 class Chunk;
 
 class Expr;
-class MemPool;
 class MemTracker;
 class RuntimeState;
 class ObjectPool;
@@ -78,7 +77,7 @@ public:
 
     /// Creates a copy of this ExprContext. Open() must be called first. The copy contains
     /// clones of each FunctionContext, which share the fragment-local state of the
-    /// originals but have their own MemPool and thread-local state. Clone() should be used
+    /// originals but have their own thread-local state. Clone() should be used
     /// to create an ExprContext for each execution thread that needs to evaluate
     /// 'root'. Note that clones are already opened. '*new_context' must be initialized by
     /// the caller to NULL.
@@ -136,9 +135,6 @@ private:
     /// FunctionContexts for each registered expression. The FunctionContexts are created
     /// and owned by this ExprContext.
     std::vector<FunctionContext*> _fn_contexts;
-
-    /// Pool backing fn_contexts_. Counts against the runtime state's UDF mem tracker.
-    std::unique_ptr<MemPool> _pool;
 
     RuntimeState* _runtime_state = nullptr;
     /// The expr tree this context is for.

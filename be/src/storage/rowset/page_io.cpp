@@ -51,9 +51,9 @@
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "common/status.h"
+#include "compute_env/staros/starlet_filesystem.h"
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
-#include "fs/fs_starlet.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/raw_container_checked.h"
@@ -65,7 +65,8 @@ namespace starrocks {
 using strings::Substitute;
 
 Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min_space_saving,
-                                  const std::vector<Slice>& body, faststring* compressed_body) {
+                                  const std::vector<Slice>& body, faststring* compressed_body,
+                                  const compression::ZstdCDict* cdict) {
     size_t uncompressed_size = Slice::compute_total_size(body);
     auto cleanup = MakeScopedCleanup([&]() { compressed_body->clear(); });
     if (codec != nullptr && codec->exceed_max_input_size(uncompressed_size)) {
@@ -77,8 +78,16 @@ Status PageIO::compress_page_body(const BlockCompressionCodec* codec, double min
         compression_options.lz4_acceleration = config::lz4_acceleration;
         if (use_compression_pool(codec->type())) {
             Slice compressed_slice;
-            RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body, nullptr,
-                                            compression_options));
+            // ZSTD always uses the compression pool, so the dictionary write path lives here.
+            // A non-null cdict takes the dictionary overload; ZstdBlockCompression ignores
+            // BlockCompressionOptions, so nothing is lost by not passing them.
+            if (cdict != nullptr) {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, cdict));
+            } else {
+                RETURN_IF_ERROR(codec->compress(body, &compressed_slice, true, uncompressed_size, compressed_body,
+                                                nullptr, compression_options));
+            }
         } else {
             compressed_body->resize(codec->max_compressed_len(uncompressed_size));
             Slice compressed_slice(*compressed_body);
@@ -259,7 +268,14 @@ static Status decompress_if_needed(const PageReadOptions& opts, const PageFooter
 
     Slice compressed_body(page_slice->data, body_size);
     Slice decompressed_body(decompressed->data(), decompressed_size);
-    RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    // Reference the per-column dictionary when the page has one. A frame that does
+    // not reference a dictionary decodes the same either way, so this is safe for
+    // plain pages and for value-dictionary pages in the same column.
+    if (opts.dict != nullptr) {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body, opts.dict));
+    } else {
+        RETURN_IF_ERROR(opts.codec->decompress(compressed_body, &decompressed_body));
+    }
 
     if (decompressed_body.size != decompressed_size) {
         return Status::Corruption(strings::Substitute("Bad page: uncompressed size mismatch ($0 vs $1), file=$2",

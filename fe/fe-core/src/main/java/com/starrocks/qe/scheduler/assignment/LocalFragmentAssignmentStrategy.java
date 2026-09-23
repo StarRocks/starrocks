@@ -224,7 +224,6 @@ public class LocalFragmentAssignmentStrategy implements FragmentAssignmentStrate
         }
         
         workerIdToBucketSeqs.forEach((workerId, bucketSeqsOfWorker) -> {
-            ComputeNode worker = workerProvider.getWorkerById(workerId);
 
             // 2. split how many scanRange one instance should scan
             List<List<Integer>> bucketSeqsPerInstance = ListUtil.splitBySize(bucketSeqsOfWorker, expectedInstanceNum);

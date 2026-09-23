@@ -17,6 +17,7 @@
 #include <utility>
 
 #include "base/failpoint/fail_point.h"
+#include "base/logging.h"
 #include "base/testutil/assert.h"
 #include "column/chunk_factory.h"
 #include "column/datum_convert.h"
@@ -36,10 +37,10 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
+#include "storage_primitive/schema_helper.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/schema_test_helper.h"
 #include "testutil/tablet_test_helper.h"
-#include "util/logging.h"
 
 namespace starrocks {
 
@@ -202,8 +203,8 @@ void SchemaChangeTest::test_convert_to_varchar(LogicalType type, int type_size, 
     auto src_tablet_schema = gen_tablet_schema("c1", logical_type_to_string(type), "REPLACE", type_size);
     auto dst_tablet_schema = gen_tablet_schema("c2", "VARCHAR", "REPLACE", 255);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum(val);
     Datum dst_datum;
@@ -219,8 +220,8 @@ void SchemaChangeTest::test_convert_from_varchar(LogicalType type, int type_size
     auto src_tablet_schema = gen_tablet_schema("c1", "VARCHAR", "REPLACE", 255);
     auto dst_tablet_schema = gen_tablet_schema("c2", logical_type_to_string(type), "REPLACE", type_size);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum(Slice((char*)val.data(), val.size()));
     Datum dst_datum;
@@ -321,8 +322,8 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
     auto src_tablet_schema = gen_tablet_schema("c1", "FLOAT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DOUBLE", "REPLACE", 8);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum((float)(1.2345));
     Datum dst_datum;
@@ -339,8 +340,8 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     auto src_tablet_schema = gen_tablet_schema("c1", "DATETIME", "REPLACE", 8);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28 16:07:00";
@@ -365,8 +366,8 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     auto src_tablet_schema = gen_tablet_schema("c1", "DATE", "REPLACE", 3);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATETIME", "REPLACE", 8);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
     Datum src_datum;
     std::string origin_val = "2021-09-28";
     tm time_tm;
@@ -389,8 +390,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE V2", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -411,8 +412,8 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
     auto src_tablet_schema = gen_tablet_schema("c1", "INT", "REPLACE", 4);
     auto dst_tablet_schema = gen_tablet_schema("c2", "DATE", "REPLACE", 3);
 
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string origin_val = "2021-09-28";
@@ -438,8 +439,8 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -462,8 +463,8 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     std::string str = "test string";
@@ -488,8 +489,8 @@ TEST_F(SchemaChangeTest, convert_int_to_count) {
     ChunkPtr dst_chunk = ChunkFactory::new_chunk(ChunkHelper::convert_schema(dst_tablet_schema), 4096);
     Column* src_col = src_chunk->get_column_raw_ptr_by_index(0);
     Column* dst_col = dst_chunk->get_column_raw_ptr_by_index(0);
-    Field f1 = ChunkHelper::convert_field(0, src_tablet_schema->column(0));
-    Field f2 = ChunkHelper::convert_field(0, dst_tablet_schema->column(0));
+    Field f1 = StorageSchemaHelper::convert_field(0, src_tablet_schema->column(0));
+    Field f2 = StorageSchemaHelper::convert_field(0, dst_tablet_schema->column(0));
 
     Datum src_datum;
     src_datum.set_int32(2);
@@ -722,7 +723,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     TExpr t_expr;
     t_expr.nodes = nodes;
 
-    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals());
+    chunk_changer.init_runtime_state(TQueryOptions(), TQueryGlobals(), nullptr);
 
     ExprContext* ctx = nullptr;
 
@@ -933,6 +934,127 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
 
     (void)_tablet_mgr->drop_tablet(base_tablet_id);
     (void)_tablet_mgr->drop_tablet(new_tablet_id);
+}
+
+// A column whose on-disk encoding changed must force a direct schema change. A linked
+// schema change hard-links the existing segments, so an ALTER that only toggles
+// zstd_compression_columns (or changes its page size) would report success while the
+// data stays encoded the old way.
+TEST_F(SchemaChangeTest, zstd_compression_change_forces_direct_schema_change) {
+    auto make_schema = [](bool use_zstd, uint32_t page_size) {
+        TabletSchemaPB pb;
+        pb.set_keys_type(DUP_KEYS);
+        pb.set_num_short_key_columns(1);
+        auto* k = pb.add_column();
+        k->set_unique_id(0);
+        k->set_name("k");
+        k->set_type("INT");
+        k->set_is_key(true);
+        k->set_is_nullable(false);
+        k->set_length(4);
+        k->set_index_length(4);
+        k->set_aggregation("NONE");
+        auto* v = pb.add_column();
+        v->set_unique_id(1);
+        v->set_name("v");
+        v->set_type("VARCHAR");
+        v->set_is_key(false);
+        v->set_is_nullable(true);
+        v->set_length(65535);
+        v->set_aggregation("NONE");
+        v->set_use_zstd_compression(use_zstd);
+        v->set_zstd_compression_page_size(page_size);
+        return TabletSchema::create(pb);
+    };
+
+    auto check = [&](const TabletSchemaCSPtr& base, const TabletSchemaCSPtr& altered, bool* sc_sorting,
+                     bool* sc_directly) {
+        std::vector<std::string> base_column_names{"k", "v"};
+        ChunkChanger chunk_changer(base, altered, base_column_names, TAlterJobType::SCHEMA_CHANGE);
+        for (int i = 0; i < altered->num_columns(); ++i) {
+            chunk_changer.get_mutable_column_mapping(i)->ref_column = i;
+        }
+        std::unique_ptr<TExpr> where_expr;
+        ASSERT_OK(SchemaChangeUtils::parse_request(base, altered, &chunk_changer, MaterializedViewParamMap(),
+                                                   where_expr, false, sc_sorting, sc_directly, nullptr));
+    };
+
+    auto plain = make_schema(false, 0);
+    auto zstd = make_schema(true, 0);
+    auto zstd_big_page = make_schema(true, 1024 * 1024);
+
+    ASSERT_FALSE(plain->column(1).use_zstd_compression());
+    ASSERT_TRUE(zstd->column(1).use_zstd_compression());
+    ASSERT_EQ(0u, zstd->column(1).zstd_compression_page_size());
+    ASSERT_EQ(1024u * 1024u, zstd_big_page->column(1).zstd_compression_page_size());
+
+    // turning the property on
+    bool sc_sorting = false;
+    bool sc_directly = false;
+    check(plain, zstd, &sc_sorting, &sc_directly);
+    ASSERT_FALSE(sc_sorting);
+    ASSERT_TRUE(sc_directly);
+
+    // turning it off again
+    sc_sorting = false;
+    sc_directly = false;
+    check(zstd, plain, &sc_sorting, &sc_directly);
+    ASSERT_TRUE(sc_directly);
+
+    // keeping it on but changing only the page size
+    sc_sorting = false;
+    sc_directly = false;
+    check(zstd, zstd_big_page, &sc_sorting, &sc_directly);
+    ASSERT_TRUE(sc_directly);
+
+    // no change at all still allows the linked path
+    sc_sorting = false;
+    sc_directly = false;
+    check(zstd_big_page, make_schema(true, 1024 * 1024), &sc_sorting, &sc_directly);
+    ASSERT_FALSE(sc_directly);
+}
+
+// TabletColumn hand-writes its copy/move constructors and swap(). A field left out of
+// them is dropped every time a TabletSchema is built from a TabletSchemaPB, because
+// _init_from_pb copies each column into the schema -- which silently turned the
+// per-column page size back into the BE default on every real tablet.
+TEST_F(SchemaChangeTest, tablet_column_copy_preserves_zstd_page_size) {
+    ColumnPB pb;
+    pb.set_unique_id(1);
+    pb.set_name("v");
+    pb.set_type("VARCHAR");
+    pb.set_is_key(false);
+    pb.set_is_nullable(true);
+    pb.set_length(65535);
+    pb.set_aggregation("NONE");
+    pb.set_use_zstd_compression(true);
+    pb.set_zstd_compression_page_size(1024 * 1024);
+
+    TabletColumn origin;
+    origin.init_from_pb(pb);
+    ASSERT_EQ(1024u * 1024u, origin.zstd_compression_page_size());
+
+    TabletColumn copied(origin);
+    ASSERT_EQ(1024u * 1024u, copied.zstd_compression_page_size());
+
+    TabletColumn assigned;
+    assigned = origin;
+    ASSERT_EQ(1024u * 1024u, assigned.zstd_compression_page_size());
+
+    TabletColumn moved(std::move(copied));
+    ASSERT_EQ(1024u * 1024u, moved.zstd_compression_page_size());
+
+    TabletColumn other;
+    other.swap(&moved);
+    ASSERT_EQ(1024u * 1024u, other.zstd_compression_page_size());
+    ASSERT_EQ(0u, moved.zstd_compression_page_size());
+
+    // and two columns that differ only in page size are not the same column
+    ColumnPB smaller_pb = pb;
+    smaller_pb.set_zstd_compression_page_size(64 * 1024);
+    TabletColumn smaller;
+    smaller.init_from_pb(smaller_pb);
+    ASSERT_TRUE(origin != smaller);
 }
 
 } // namespace starrocks

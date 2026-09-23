@@ -61,6 +61,8 @@ vectorized_functions = [
     #   cosine function
     [10102, "cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
     [10103, "cosine_similarity_norm", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, true>"],
+    [10104, "inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
+    [10105, "approx_inner_product", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::inner_product<TYPE_FLOAT>"],
     [10106, "approx_cosine_similarity", True, False, "FLOAT", ["ARRAY_FLOAT", "ARRAY_FLOAT"], "MathFunctions::cosine_similarity<TYPE_FLOAT, false>"],
 
     [10110, "ceil", True, False, "BIGINT", ["DOUBLE"], "MathFunctions::ceil"],
@@ -189,6 +191,7 @@ vectorized_functions = [
     [10323, "hex", True, False, "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
+    [10318, "blake3", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::blake3"],
     [10316, "hex_decode_binary", True, False, "VARBINARY", ['VARCHAR'], "StringFunctions::unhex"],
     [10317, "hex_decode_string", True, False, "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
 
@@ -487,6 +490,11 @@ vectorized_functions = [
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
     [30603, 'from_binary', True, True, 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
      'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+    # dict_encode(value, dict_slot_id): translate a constant to its global dictionary code (resolved
+    # once from BE runtime state), so a dict-aware comparison can run on codes. BE-only.
+    [30700, 'dict_encode', True, False, 'INT', ['VARCHAR', 'INT'], 'DictFunctions::dict_encode',
+     'DictFunctions::dict_encode_prepare', 'DictFunctions::dict_encode_close'],
 
     # 50xxx: timestamp functions
     [50008, 'year', True, False, 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
@@ -859,6 +867,12 @@ vectorized_functions = [
     [91003, 'bitmap_to_binary', False, True, 'VARBINARY', ['BITMAP'], 'BitmapFunctions::bitmap_to_binary'],
     [91004, 'bitmap_from_binary', False, False, 'BITMAP', ['VARBINARY'], 'BitmapFunctions::bitmap_from_binary'],
 
+    # data sketches theta scalar functions
+    [91100, 'ds_theta_union', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_union'],
+    [91101, 'ds_theta_intersect', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_intersect'],
+    [91102, 'ds_theta_a_not_b', False, False, 'VARBINARY', ['VARBINARY', 'VARBINARY'], 'DsThetaFunctions::ds_theta_a_not_b'],
+    [91103, 'ds_theta_estimate', False, False, 'DOUBLE', ['VARBINARY'], 'DsThetaFunctions::ds_theta_estimate'],
+
     # hash function
     [100010, 'murmur_hash3_32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::murmur_hash3_32'],
     [100028, 'xx_hash32', True, False, 'INT', ['VARCHAR', '...'], 'HashFunctions::xx_hash32'],
@@ -1057,6 +1071,30 @@ vectorized_functions = [
      "GeoFunctions::st_circle_prepare", "GeoFunctions::st_from_wkt_close"],
     [120014, "ST_Contains", False, False, "BOOLEAN", ["VARCHAR", "VARCHAR"], "GeoFunctions::st_contains",
      "GeoFunctions::st_contains_prepare", "GeoFunctions::st_contains_close"],
+    [120020, "ST_GeogFromText", False, False, "GEOGRAPHY", ["VARCHAR"],
+     "GeoFunctions::st_geog_from_text"],
+    [120021, "ST_GeogFromText", False, False, "GEOGRAPHY", ["VARCHAR", "INT"],
+     "GeoFunctions::st_geog_from_text"],
+    [120030, "ST_GeogFromWKB", False, False, "GEOGRAPHY", ["VARBINARY"],
+     "GeoFunctions::st_geog_from_wkb"],
+    [120031, "ST_GeogFromWKB", False, False, "GEOGRAPHY", ["VARBINARY", "INT"],
+     "GeoFunctions::st_geog_from_wkb"],
+    [120040, "ST_AsText", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_text"],
+    [120050, "ST_AsWKT", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_text"],
+    [120060, "ST_AsBinary", False, False, "VARBINARY", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_wkb"],
+    [120070, "ST_AsWKB", False, False, "VARBINARY", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_as_wkb"],
+    [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_x"],
+    [120081, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_y"],
+    [120082, "ST_GeometryType", False, False, "VARCHAR", ["GEOGRAPHY"],
+     "GeoFunctions::st_geography_type"],
+    [120083, "ST_Distance", False, False, "DOUBLE", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_distance"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
@@ -1588,4 +1626,88 @@ vectorized_functions = [
 
     # ai functions
     [200000, 'ai_query', True, False, 'VARCHAR', ['VARCHAR', 'JSON'], "AiFunctions::ai_query"]
+]
+
+# AI functions are registered as FE metadata independently from ordinary builtins. They are
+# dispatched asynchronously by AIProject and intentionally bypass the ordinary synchronous
+# BE builtin descriptor table.
+def ai_metadata(capability, prompt_kind, result_kind, input_arguments, model_argument=-1,
+                provider_argument=-1, null_as_empty_arguments=(), blank_as_null_arguments=()):
+    # Argument roles are explicit: FIDs identify overloads and do not encode their semantics.
+    return {
+        'model_source': 'PROVIDER' if provider_argument >= 0 else 'SYSTEM',
+        'capability': capability,
+        'prompt_kind': prompt_kind,
+        'result_kind': result_kind,
+        'input_arguments': list(input_arguments),
+        'model_argument': model_argument,
+        'provider_argument': provider_argument,
+        'null_as_empty_arguments': list(null_as_empty_arguments),
+        'blank_as_null_arguments': list(blank_as_null_arguments),
+    }
+
+
+ai_vectorized_functions = [
+    [200100, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
+    [200101, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [0])],
+    [200102, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_complete',
+     ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
+    [200103, 'ai_complete', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_complete', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], model_argument=0)],
+    [200110, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR'],
+     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [0])],
+    [200111, 'ai_sentiment', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_sentiment', ai_metadata('CHAT', 'SENTIMENT', 'SENTIMENT', [1], model_argument=0)],
+    [200112, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [0, 1])],
+    [200113, 'ai_classify', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_classify', ai_metadata('CHAT', 'CLASSIFY', 'JSON', [1, 2], model_argument=0)],
+    [200114, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [0, 1])],
+    [200115, 'ai_extract', True, False, 'JSON', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_extract', ai_metadata('CHAT', 'EXTRACT', 'JSON', [1, 2], model_argument=0)],
+    [200116, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR'],
+     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [0])],
+    [200117, 'ai_fix_grammar', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_fix_grammar', ai_metadata('CHAT', 'FIX_GRAMMAR', 'STRING', [1], model_argument=0)],
+    [200118, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [0, 1])],
+    [200119, 'ai_redact', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ARRAY_VARCHAR'],
+     'AiFunctions::ai_redact', ai_metadata('CHAT', 'REDACT', 'STRING', [1, 2], model_argument=0)],
+    [200120, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [0, 1, 2],
+                                           null_as_empty_arguments=[1], blank_as_null_arguments=[2])],
+    [200121, 'ai_translate', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_translate', ai_metadata('CHAT', 'TRANSLATE', 'STRING', [1, 2, 3], model_argument=0,
+                                           null_as_empty_arguments=[2], blank_as_null_arguments=[3])],
+    [200122, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [0, 1])],
+    [200123, 'ai_similarity', True, False, 'FLOAT', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_similarity', ai_metadata('CHAT', 'SIMILARITY', 'SIMILARITY', [1, 2], model_argument=0)],
+    [200124, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR'],
+     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [0])],
+    [200125, 'ai_summarize', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_summarize', ai_metadata('CHAT', 'SUMMARIZE', 'STRING', [1], model_argument=0)],
+    [200126, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [0, 1])],
+    [200127, 'ai_filter', True, False, 'BOOLEAN', ['VARCHAR', 'VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_filter', ai_metadata('CHAT', 'FILTER', 'BOOLEAN', [1, 2], model_argument=0)],
+    [200130, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
+    [200131, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'ANY_MAP'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [0])],
+    [200132, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'], 'AiFunctions::ai_embed',
+     ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
+    [200133, 'ai_embed', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_embed', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], model_argument=0)],
+    [200140, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
+    [200141, 'ai_custom_query', True, False, 'VARCHAR', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_custom_query', ai_metadata('CHAT', 'PASSTHROUGH', 'STRING', [1], provider_argument=0)],
+    [200142, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR'],
+     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
+    [200143, 'ai_custom_embedding', True, False, 'ARRAY_FLOAT', ['VARCHAR', 'VARCHAR', 'ANY_MAP'],
+     'AiFunctions::ai_custom_embedding', ai_metadata('TEXT_EMBEDDING', 'PASSTHROUGH', 'EMBEDDING', [1], provider_argument=0)],
 ]

@@ -1,0 +1,36 @@
+-- name: test_regexp_extract_all_zero_len
+set query_timeout = 30;
+-- result:
+-- !result
+SELECT regexp_extract_all('bbb', '(a*)', 1);
+-- result:
+["","","",""]
+-- !result
+SELECT regexp_extract_all('a1b2', '(\\d*)', 1);
+-- result:
+["","1","","2",""]
+-- !result
+SELECT regexp_extract_all(s, p, 1) FROM (SELECT 'bbb' AS s, '(a*)' AS p) t;
+-- result:
+["","","",""]
+-- !result
+SELECT regexp_extract_all('bbb', 'a*', 0);
+-- result:
+["","","",""]
+-- !result
+SELECT regexp_extract_all('', '(a*)', 1);
+-- result:
+[""]
+-- !result
+SELECT regexp_extract_all('abc', '($)', 1);
+-- result:
+[""]
+-- !result
+SELECT regexp_extract_all('abc', '$', 0);
+-- result:
+[""]
+-- !result
+SELECT regexp_extract_all('a1b2c3', '([0-9])', 1);
+-- result:
+["1","2","3"]
+-- !result

@@ -121,7 +121,14 @@ public class HiveStatisticsProviderTest {
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assertions.assertEquals(1, statistics.getOutputRowCount(), 0.001);
-        Assertions.assertEquals(0, statistics.getColumnStatistics().size());
+        // No HMS partition row stats → early-return path.
+        // Partition column: NDV = exact count of distinct partition values (2: "1" and "2").
+        // Data column: type-fraction NDV, rowCount=1 → max(1.0, 1*0.3) = 1.0.
+        Assertions.assertEquals(2, statistics.getColumnStatistics().size());
+        Assertions.assertEquals(2.0,
+                statistics.getColumnStatistics().get(partColumnRefOperator).getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(1.0,
+                statistics.getColumnStatistics().get(dataColumnRefOperator).getDistinctValuesCount(), 0.001);
 
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1", "col1=2"));
         statistics = statisticsProvider.getTableStatistics(
@@ -178,8 +185,32 @@ public class HiveStatisticsProviderTest {
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2), 100);
         Assertions.assertEquals(100, statistics.getOutputRowCount(), 0.001);
         Assertions.assertEquals(2, statistics.getColumnStatistics().size());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(partColumnRefOperator).isUnknown());
-        Assertions.assertTrue(statistics.getColumnStatistics().get(dataColumnRefOperator).isUnknown());
+        // createUnknownStatistics now uses Tier-3 type-fraction instead of unknown()
+        ColumnStatistic partColStat = statistics.getColumnStatistics().get(partColumnRefOperator);
+        ColumnStatistic dataColStat = statistics.getColumnStatistics().get(dataColumnRefOperator);
+        Assertions.assertFalse(partColStat.isUnknown());
+        Assertions.assertFalse(dataColStat.isUnknown());
+        // Partition column: exact NDV from 2 distinct partition values ("1", "2")
+        Assertions.assertEquals(2, partColStat.getDistinctValuesCount(), 0.001);
+        // Data column: INT type fraction = 0.3, rowCount=100 → NDV = 30
+        Assertions.assertEquals(30, dataColStat.getDistinctValuesCount(), 0.001);
+    }
+
+    @Test
+    public void testCreateUnknownStatistics_missingColumnFallsBackToUnknown() throws AnalysisException {
+        HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+
+        // "col_nonexistent" does not exist in the table schema → addFallbackColumnStats column==null path
+        ColumnRefOperator missingRef = new ColumnRefOperator(99, IntegerType.INT, "col_nonexistent", true);
+
+        Statistics statistics = statisticsProvider.createUnknownStatistics(
+                hiveTable, Lists.newArrayList(missingRef),
+                Lists.newArrayList(hivePartitionKey1), 50);
+
+        Assertions.assertEquals(1, statistics.getColumnStatistics().size());
+        Assertions.assertTrue(statistics.getColumnStatistics().get(missingRef).isUnknown());
     }
 
     @Test
@@ -195,7 +226,7 @@ public class HiveStatisticsProviderTest {
         PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         long res = statisticsProvider.getEstimatedRowCount(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
-        Assertions.assertEquals(10, res);
+        Assertions.assertEquals(4, res);
     }
 
     @Test

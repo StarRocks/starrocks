@@ -15,10 +15,15 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
+import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.sql.ast.BrokerDesc;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.vector.LongColumnVector;
@@ -52,6 +57,78 @@ class BrokerLoadRowGroupStatisticsProviderTest {
 
         Assertions.assertFalse(rowGroupStatistics.isEmpty());
         Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
+    void compositeSortKeyProjectsAllColumns() throws Exception {
+        Path parquetPath = PresplitTestSupport.writeCompositeParquetFixture(tempDirectory, /*rowCount=*/ 16);
+
+        SampleRequest request = compositeSampleRequest(
+                List.of(parquetFileGroup()),
+                List.of(List.of(brokerFileStatus(parquetPath))));
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        for (RowGroupStatistics rg : rowGroupStatistics) {
+            // arity 2 proves the provider forwarded the FULL sort-key list, not get(0).
+            Assertions.assertEquals(2, rg.getMinTuple().getValues().size());
+            Assertions.assertEquals(2, rg.getMaxTuple().getValues().size());
+        }
+    }
+
+    @Test
+    void derivedColumnFileGroupFallsBackToDataTier() throws Exception {
+        // SET sort_key = <expr> maps the sort key, so the raw footer column diverges from the loaded
+        // value. The meta path must reject it before reading footers (reusing the data tier's guard)
+        // and fall back rather than emit skewed boundaries.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        BrokerFileGroup derivedGroup = Mockito.mock(BrokerFileGroup.class);
+        Mockito.when(derivedGroup.getFileFormat()).thenReturn("parquet");
+        Mockito.when(derivedGroup.getColumnExprList()).thenReturn(List.of(
+                new ImportColumnDesc("sort_key", Mockito.mock(Expr.class))));
+
+        SampleRequest request = bigintSampleRequest(
+                List.of(derivedGroup), List.of(List.of(brokerFileStatus(parquetPath))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void identityColumnListWithDisjointPathColumnProducesStatistics() throws Exception {
+        // COLUMNS (sort_key, dt) COLUMNS FROM PATH AS (dt): the sort key is still read verbatim from
+        // the file, so its footer statistics describe exactly the values the load inserts. The meta
+        // tier must read them rather than defer -- this is the ordinary partition-directory load.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+        BrokerFileGroup pathColumnGroup = Mockito.mock(BrokerFileGroup.class);
+        Mockito.when(pathColumnGroup.getFileFormat()).thenReturn("parquet");
+        Mockito.when(pathColumnGroup.getColumnsFromPath()).thenReturn(List.of("dt"));
+        Mockito.when(pathColumnGroup.getColumnExprList()).thenReturn(List.of(
+                new ImportColumnDesc("sort_key"), new ImportColumnDesc("dt")));
+
+        SampleRequest request = bigintSampleRequest(
+                List.of(pathColumnGroup), List.of(List.of(brokerFileStatus(parquetPath))));
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
+    void pathColumnSupplyingTheSortKeyFallsBackToDataTier() throws Exception {
+        // The sort key itself comes from the directory name, so no footer carries it.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        BrokerFileGroup keyFromPathGroup = Mockito.mock(BrokerFileGroup.class);
+        Mockito.when(keyFromPathGroup.getFileFormat()).thenReturn("parquet");
+        Mockito.when(keyFromPathGroup.getColumnsFromPath()).thenReturn(List.of("sort_key"));
+        Mockito.when(keyFromPathGroup.getColumnExprList())
+                .thenReturn(List.of(new ImportColumnDesc("sort_key")));
+
+        SampleRequest request = bigintSampleRequest(
+                List.of(keyFromPathGroup), List.of(List.of(brokerFileStatus(parquetPath))));
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
     @Test
@@ -139,7 +216,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         SampleRequest request = new SampleRequest(
                 new InsertFromFilesScanContext(
                         Mockito.mock(com.starrocks.catalog.TableFunctionTable.class),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -163,7 +240,7 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         brokerBackedDesc,
                         List.of(parquetFileGroup()),
                         List.of(List.of(brokerFileStatus(parquetPath))),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
@@ -178,12 +255,59 @@ class BrokerLoadRowGroupStatisticsProviderTest {
                         /*brokerDesc=*/ null,
                         List.of(parquetFileGroup()),
                         List.of(List.<TBrokerFileStatus>of()),
-                        Mockito.mock(ComputeResource.class)),
+                        Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void serialAndParallelFooterReadsProduceIdenticalStatistics() throws Exception {
+        // Broker Load shares the INSERT-from-FILES concurrent footer reader, so reading footers
+        // concurrently must not change the result: same aggregated row count and same row-group
+        // count whether parallelism is 1 (serial) or > 1 (concurrent), across file groups.
+        List<BrokerFileGroup> fileGroups = List.of(parquetFileGroup(), parquetFileGroup());
+        List<List<TBrokerFileStatus>> fileStatuses = List.of(
+                List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                        brokerFileStatus(writeBigintParquet(24, 1000L))),
+                List.of(brokerFileStatus(writeBigintParquet(40, 2000L))));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<RowGroupStatistics> serial = provider.fetch(bigintSampleRequest(fileGroups, fileStatuses));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<RowGroupStatistics> parallel = provider.fetch(bigintSampleRequest(fileGroups, fileStatuses));
+
+            Assertions.assertEquals(80L, totalRowCount(parallel));
+            Assertions.assertEquals(totalRowCount(serial), totalRowCount(parallel));
+            Assertions.assertEquals(serial.size(), parallel.size(),
+                    "same row-group count regardless of parallelism");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void unreadableFileInParallelReadFallsBackToDataTier() throws Exception {
+        // A corrupt file among valid ones: the concurrent footer read must surface the per-file
+        // failure rather than swallow it in a worker thread, so the pipeline still falls back.
+        Path good = writeBigintParquet(16, 0L);
+        java.nio.file.Path corrupt = tempDirectory.resolve("broker-corrupt.parquet");
+        Files.write(corrupt, "not a parquet file".getBytes());
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(parquetFileGroup()),
+                    List.of(List.of(brokerFileStatus(good), brokerFileStatus(new Path(corrupt.toUri())))));
+            Assertions.assertThrows(StarRocksException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
     }
 
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
@@ -216,8 +340,21 @@ class BrokerLoadRowGroupStatisticsProviderTest {
         Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
         return new SampleRequest(
                 new BrokerLoadScanContext(
-                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class)),
+                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE,
+                /*seed=*/ 0L);
+    }
+
+    private SampleRequest compositeSampleRequest(
+            List<BrokerFileGroup> fileGroups, List<List<TBrokerFileStatus>> fileStatusesPerGroup) {
+        BrokerDesc brokerDesc = Mockito.mock(BrokerDesc.class);
+        Mockito.when(brokerDesc.hasBroker()).thenReturn(false);
+        Mockito.when(brokerDesc.getProperties()).thenReturn(new HashMap<>());
+        return new SampleRequest(
+                new BrokerLoadScanContext(
+                        brokerDesc, fileGroups, fileStatusesPerGroup, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(new Column("tenant", VarcharType.VARCHAR), new Column("position", IntegerType.BIGINT)),
                 Long.MAX_VALUE,
                 /*seed=*/ 0L);
     }

@@ -87,21 +87,21 @@ CREATE TABLE AS SELECT (CTAS) 文を使用して、同期または非同期で�
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT * FROM order;
+AS SELECT * FROM `order`;
 ```
 
 例 2: テーブル `order` の `k1`、`k2`、`k3` 列を同期的にクエリし、クエリ結果に基づいて新しいテーブル `order_new` を作成し、その後クエリ結果を新しいテーブルに挿入します。さらに、新しいテーブルの列名を `a`、`b`、`c` に設定します。
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-AS SELECT k1, k2, k3 FROM order;
+AS SELECT k1, k2, k3 FROM `order`;
 ```
 
 または
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
+AS SELECT k1 AS a, k2 AS b, k3 AS c FROM `order`;
 ```
 
 例 3: テーブル `employee` の `salary` 列の最大値を同期的にクエリし、クエリ結果に基づいて新しいテーブル `employee_new` を作成し、その後クエリ結果を新しいテーブルに挿入します。さらに、新しいテーブルの列名を `salary_max` に設定します。

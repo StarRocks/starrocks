@@ -15,8 +15,8 @@
 #include "storage/lake/add_index_schema_change.h"
 
 #include <memory>
+#include <utility>
 
-#include "agent/agent_server.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
@@ -31,10 +31,10 @@
 #include "fs/fs.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
+#include "platform/key_cache.h"
+#include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/index_file_writer.h"
@@ -45,6 +45,7 @@
 #include "storage/rowset/bitmap_index_writer.h"
 #include "storage/rowset/bloom_filter_index_writer.h"
 #include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/segment.h"
 #include "storage/tablet_index.h"
 #include "storage/tablet_schema.h"
@@ -76,21 +77,51 @@ static void fill_slice_buffer(const BinaryT& bin, size_t start_row, size_t run_l
 // variable-length string columns materialize a local Slice[] because the
 // writer expects a Slice-stride array for string CppTypes.
 template <typename Writer>
-Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size) {
+Status feed_index_from_column(Writer* writer, const Column& col, size_t start_row, size_t run_len, size_t type_size,
+                              size_t char_pad_len = 0) {
     if (run_len == 0) return Status::OK();
 
     // Binary / LargeBinary: sidestep the raw_data flow entirely; we need a
     // Slice array anchored at start_row.
     std::vector<Slice> slice_buf;
+    // Backing store for CHAR re-padding; must outlive the writer->add_values()
+    // calls below, so it lives at function scope.
+    std::string pad_storage;
+    // For a CHAR column the on-disk page decoder strnlen-trims the trailing
+    // '\0' padding when reading values back (BinaryPlainPageDecoder<TYPE_CHAR>
+    // / BinaryDictPageDecoder<TYPE_CHAR>), so the Slices materialized here are
+    // UNPADDED (e.g. "guangzhou", size=9). The standard segment-write index
+    // path builds its dictionary from the in-memory column padded to the
+    // declared column width, and the query predicate pads CHAR literals the
+    // same way — so an unpadded fast-path dictionary/bloom would never match at
+    // query time (bitmap over-prunes to an empty result; bloom yields false
+    // negatives / missing rows). Re-pad each slice back to `char_pad_len` bytes
+    // with '\0' so the fast-path index is byte-identical to the standard path.
+    // char_pad_len is 0 for non-CHAR columns (VARCHAR is variable-length and is
+    // not trimmed by the decoder), leaving those paths untouched.
+    auto repad_char = [&]() {
+        if (char_pad_len == 0) return;
+        pad_storage.assign(run_len * char_pad_len, '\0');
+        for (size_t i = 0; i < run_len; ++i) {
+            const size_t sz = std::min<size_t>(slice_buf[i].size, char_pad_len);
+            if (sz > 0) {
+                memcpy(pad_storage.data() + i * char_pad_len, slice_buf[i].data, sz);
+            }
+            slice_buf[i].data = pad_storage.data() + i * char_pad_len;
+            slice_buf[i].size = char_pad_len;
+        }
+    };
     auto get_pdata = [&](const Column& data_col) -> StatusOr<const uint8_t*> {
         if (auto* bin = dynamic_cast<const BinaryColumn*>(&data_col); bin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*bin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         if (auto* lbin = dynamic_cast<const LargeBinaryColumn*>(&data_col); lbin != nullptr) {
             DCHECK_EQ(type_size, sizeof(Slice));
             fill_slice_buffer(*lbin, start_row, run_len, &slice_buf);
+            repad_char();
             return reinterpret_cast<const uint8_t*>(slice_buf.data());
         }
         RawDataVisitor data_visitor;
@@ -135,34 +166,51 @@ Status feed_index_from_column(Writer* writer, const Column& col, size_t start_ro
 
 AddIndexSchemaChange::AddIndexSchemaChange(TabletManager* tablet_mgr, int64_t txn_id, VersionedTablet base_tablet,
                                            VersionedTablet new_tablet, std::vector<TabletIndexPB> indexes_to_build,
-                                           int64_t alter_version)
+                                           int64_t alter_version, TabletSchemaPtr authoritative_schema,
+                                           ThreadPool* lake_schema_change_pool)
         : _tablet_mgr(tablet_mgr),
+          _lake_schema_change_pool(lake_schema_change_pool),
           _txn_id(txn_id),
           _base_tablet(std::move(base_tablet)),
           _new_tablet(std::move(new_tablet)),
           _indexes_to_build(std::move(indexes_to_build)),
-          _alter_version(alter_version) {}
+          _alter_version(alter_version),
+          _authoritative_schema(std::move(authoritative_schema)) {}
 
 AddIndexSchemaChange::~AddIndexSchemaChange() = default;
 
 Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
     DCHECK(op_add_index != nullptr);
+    if (_authoritative_schema == nullptr) {
+        // Not defensive boilerplate: every column-set decision below reads this
+        // schema, and silently substituting the tablet metadata schema is exactly
+        // the bug this parameter exists to prevent.
+        return Status::InternalError("AddIndexSchemaChange: authoritative schema is null");
+    }
     op_add_index->set_alter_version(_alter_version);
     for (const auto& ix : _indexes_to_build) {
         op_add_index->add_new_indexes()->CopyFrom(ix);
     }
 
-    auto* exec_env = ExecEnv::GetInstance();
-    if (exec_env == nullptr || exec_env->agent_server() == nullptr) {
-        return Status::InternalError("AddIndexSchemaChange: ExecEnv or agent_server not available");
-    }
-    auto* pool = exec_env->agent_server()->get_lake_schema_change_thread_pool();
-    SegmentTaskRunner runner(pool, config::lake_schema_change_per_tablet_parallelism);
+    SegmentTaskRunner runner(_lake_schema_change_pool, config::lake_schema_change_per_tablet_parallelism);
 
     auto base_metadata = _base_tablet.metadata();
     if (base_metadata == nullptr) {
         return Status::InternalError("AddIndexSchemaChange: base tablet metadata is null");
     }
+
+    // run() executes on the alter-worker thread, which has the per-alter
+    // SCHEMA_CHANGE_TASK mem tracker installed on TLS (see
+    // EngineAlterTabletTask::execute). The per-segment index build below,
+    // however, runs on lake_schema_change pool worker threads that do NOT
+    // inherit that TLS tracker — so without re-installing it, the build's
+    // allocations (esp. the whole-segment BITMAP index accumulated until
+    // finish()) would be charged to the process-root tracker and, with no
+    // check_mem_limit, could drive the process toward OOM instead of failing
+    // cleanly. Capture the tracker here and re-install it inside each pool
+    // task, mirroring the legacy inline DirectSchemaChange path. May be the
+    // process-root tracker (or null in bare unit tests); both are safe.
+    MemTracker* mem_tracker = CurrentThread::mem_tracker();
 
     for (const auto& rowset : base_metadata->rowsets()) {
         for (int seg_idx = 0; seg_idx < rowset.segment_metas_size(); ++seg_idx) {
@@ -171,16 +219,28 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
             // reference would dangle if we captured by reference and the
             // metadata got mutated during the run (e.g. defensive).
             RowsetMetadataPB rowset_copy = rowset;
-            Status submit_st = runner.submit(
-                    [this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index]() -> Status {
-                        IndexDeltaGroupEntryPB entry;
-                        RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
-                        std::lock_guard<std::mutex> lg(_op_mtx);
-                        auto* se = op_add_index->add_segment_entries();
-                        se->set_segment_id(rssid);
-                        se->mutable_entry()->Swap(&entry);
-                        return Status::OK();
-                    });
+            Status submit_st = runner.submit([this, rowset_copy = std::move(rowset_copy), seg_idx, rssid, op_add_index,
+                                              mem_tracker]() -> Status {
+                // Re-install the alter's schema-change mem tracker on this
+                // pool worker thread so the index build is accounted for and
+                // subject to the same limit as the legacy path. RAII-restored
+                // on task exit, leaving the pool thread's TLS clean.
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker);
+                IndexDeltaGroupEntryPB entry;
+                RETURN_IF_ERROR(build_idg_for_segment(rowset_copy, seg_idx, rssid, &entry));
+                if (entry.keys_size() == 0) {
+                    // Every index was skipped on this segment because its column
+                    // is physically absent (see classify_index_for_segment). No
+                    // .idx file was written, so publishing an entry would point
+                    // readers at payloads that do not exist.
+                    return Status::OK();
+                }
+                std::lock_guard<std::mutex> lg(_op_mtx);
+                auto* se = op_add_index->add_segment_entries();
+                se->set_segment_id(rssid);
+                se->mutable_entry()->Swap(&entry);
+                return Status::OK();
+            });
             if (!submit_st.ok()) {
                 // Submission failure short-circuits: wait for pending tasks
                 // to drain, then report the submit error (which takes
@@ -192,6 +252,15 @@ Status AddIndexSchemaChange::run(TxnLogPB_OpAddIndex* op_add_index) {
         }
     }
     Status run_st = runner.wait();
+    if (const auto skipped = _skipped_pairs.load(std::memory_order_relaxed); skipped > 0 && run_st.ok()) {
+        // One line per tablet, not per segment. Says the alter succeeded with
+        // partial index coverage, which is otherwise invisible: the alter reports
+        // FINISHED and queries stay correct, so nothing else signals it.
+        LOG(INFO) << "ADD INDEX fast path: tablet=" << _new_tablet.id() << " txn_id=" << _txn_id << " skipped "
+                  << skipped << " (segment, index) pair(s) whose column is absent from the segment; those rows "
+                  << "read as the column default and carry no index until rewritten under a schema that has one. "
+                  << "Per-segment detail at VLOG(2).";
+    }
     if (!run_st.ok()) {
         // Best-effort remove any .idx files already written by tasks that
         // succeeded before the first failure. The caller (schema_change.cpp)
@@ -221,6 +290,86 @@ void AddIndexSchemaChange::cleanup_written_idx_files() {
             LOG(WARNING) << "AddIndexSchemaChange cleanup: failed to delete orphan .idx " << p << ": " << st;
         }
     }
+}
+
+StatusOr<AddIndexSchemaChange::IndexDisposition> AddIndexSchemaChange::classify_index_for_segment(
+        Segment* segment, const TabletIndexPB& ix, const TabletColumn** out_column) const {
+    DCHECK(segment != nullptr);
+    DCHECK(out_column != nullptr);
+    *out_column = nullptr;
+
+    if (ix.col_unique_id_size() == 0) {
+        return Status::InternalError("TabletIndex has no columns");
+    }
+    // Multi-column indexes (GIN, VECTOR) aren't supported in this initial
+    // slice. BITMAP / NGRAMBF / bloom are single-column only.
+    if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
+        return Status::NotSupported("multi-column non-GIN index unsupported");
+    }
+    const int col_uid = ix.col_unique_id(0);
+    const int32_t col_ordinal = _authoritative_schema->field_index(col_uid);
+    if (col_ordinal < 0) {
+        // FE asked us to index a column that is missing from the schema FE itself
+        // attached to the request. FE and BE disagree about the column set; that
+        // is not a legitimate absence, so fail instead of skipping.
+        return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
+    }
+    const auto& column = _authoritative_schema->column(static_cast<size_t>(col_ordinal));
+    *out_column = &column;
+
+    if (segment->column_with_uid(column.unique_id()) != nullptr) {
+        return IndexDisposition::kBuild;
+    }
+
+    // The column is in the schema but has no bytes in this segment - the normal
+    // outcome of a metadata-only ADD COLUMN, which rewrites no historical
+    // segment. Reads synthesize such a column from its default (or null) through
+    // Segment::new_column_iterator_or_default().
+    //
+    // Skipping the index on this segment is both safe and the only option.
+    //
+    // Safe: a query reading an absent column gets a DefaultValueColumnIterator,
+    // which reports has_original_bloom_filter_index() / has_ngram_bloom_filter_index()
+    // false, and Segment::new_bitmap_index_iterator() yields no iterator when the
+    // column has no reader. No index of this segment is ever consulted for that
+    // column, so the skip costs pruning and never correctness.
+    //
+    // How long the gap lasts depends on which schema a later rewrite resolves, and
+    // it is NOT always temporary:
+    //   - PRIMARY KEY table: TabletManager::get_output_rowset_schema short-circuits
+    //     on keys_type and always resolves metadata->schema(), so coverage always
+    //     converges.
+    //   - Rowset not pinned in rowset_to_schema (table never fast-evolved, or no
+    //     write followed the ADD COLUMN): compaction resolves metadata->schema(),
+    //     which carries the index flag, and SegmentWriter builds the index inline.
+    //     Coverage converges.
+    //   - Non-PK rowset pinned to an OLDER historical schema (the next write after
+    //     the ADD COLUMN archived the then-current schema and pinned every existing
+    //     rowset to it): apply_add_index deliberately leaves those pins alone, and
+    //     get_output_rowset_schema resolves the pinned schema, which has neither the
+    //     added column nor its index flag. Compacting such a rowset ON ITS OWN does
+    //     not advance anything -- the output rowset is pinned to that same resolved
+    //     schema (txn_log_applier.cpp -> meta_file.cpp), so the state is a fixed
+    //     point. It converges only once such a rowset is compacted TOGETHER with one
+    //     pinned to the indexed schema (any write after this alter), because
+    //     get_output_rowset_schema takes the highest schema_version among its
+    //     inputs. Size-tiered compaction picks rowsets by level, so a large old
+    //     rowset and the small new ones start in different levels and only meet as
+    //     levels merge; a partition that stops receiving writes can stay
+    //     index-free indefinitely.
+    // See MetaFileTest.test_apply_add_index_old_pin_is_a_compaction_fixed_point.
+    //
+    // Only option: a bloom filter must carry exactly one filter per data page of
+    // the source column, because ColumnReader::bloom_filter addresses them by
+    // page id. A column with no reader has no data pages to align to, so there is
+    // no well-formed payload to fabricate.
+    if (!column.has_default_value() && !column.is_nullable()) {
+        return Status::Corruption(strings::Substitute(
+                "ADD INDEX fast path: column $0 (unique_id $1) is absent from segment $2 but has neither a default "
+                "value nor nullability to read it as. tablet=$3",
+                column.name(), col_uid, segment->file_name(), _new_tablet.id()));
+    }
+    return IndexDisposition::kSkip;
 }
 
 Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowset_meta, uint32_t seg_idx_in_rowset,
@@ -254,10 +403,64 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
-    auto tablet_schema = _new_tablet.get_schema();
+    // Open under the authoritative schema -- it is the LOGICAL schema of this
+    // alter, and the only one guaranteed to name the indexed column -- but do NOT
+    // seed the shared metacache with the result.
+    //
+    // Segment::_create_column_readers() walks the schema it is given rather than
+    // the footer, so a Segment opened here has readers only for the columns this
+    // alter's schema knows about. That is fine for a one-shot index build, and
+    // wrong as a shared object: after a metadata-only DROP COLUMN d, FE's schema
+    // no longer has d, yet the segment physically holds d and rowsets pinned to an
+    // older historical schema still read it. A query landing on a cached Segment
+    // opened without d would find no reader, fall through to the default-value
+    // iterator, and return NULL/default for a column that has real data. The
+    // logical schema of an alter and the physical read schema of a shared Segment
+    // are different things; only the latter may be cached.
+    //
+    // fill_meta_cache=false still returns an already-cached Segment when one
+    // exists. Its schema is whatever a reader opened it with -- the rowset's pin,
+    // which equals the write schema -- so it has a reader for the indexed column
+    // exactly when the segment physically carries it, which is what classification
+    // below needs.
     ASSIGN_OR_RETURN(auto segment,
                      _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint, read_opts,
-                                               /*fill_meta_cache*/ true, tablet_schema));
+                                               /*fill_meta_cache*/ false, _authoritative_schema));
+
+    // 1b. Decide, per index, whether this segment can carry it. A column added by
+    //     a metadata-only ALTER has no bytes in segments written before the ALTER,
+    //     so those segments legitimately carry no index for it. Classify BEFORE
+    //     allocating the .idx file: when nothing can be built here we must leave
+    //     no file behind and no IDG entry for the caller to publish.
+    std::vector<std::pair<const TabletIndexPB*, const TabletColumn*>> to_build;
+    to_build.reserve(_indexes_to_build.size());
+    int64_t skipped = 0;
+    for (const auto& ix : _indexes_to_build) {
+        const TabletColumn* column = nullptr;
+        ASSIGN_OR_RETURN(auto disposition, classify_index_for_segment(segment.get(), ix, &column));
+        if (disposition == IndexDisposition::kSkip) {
+            ++skipped;
+            // Deliberately VLOG, not LOG(INFO): this branch is the EXPECTED outcome
+            // for every historical segment of a table whose indexed column was added
+            // by ALTER, so an INFO line here means one line per (segment, index) --
+            // potentially millions during a single alter on a large table, for a
+            // benign condition. run() logs one aggregate line per tablet instead.
+            VLOG(2) << "ADD INDEX fast path: skipping index type " << static_cast<int>(ix.index_type()) << " on column "
+                    << column->name() << " (unique_id " << column->unique_id() << "): absent from segment " << seg_name
+                    << ". tablet=" << _new_tablet.id() << " txn_id=" << _txn_id;
+            continue;
+        }
+        to_build.emplace_back(&ix, column);
+    }
+    if (skipped > 0) {
+        _skipped_pairs.fetch_add(skipped, std::memory_order_relaxed);
+    }
+    if (to_build.empty()) {
+        // Nothing to write for this segment. Leave `out_entry` untouched so the
+        // caller drops it instead of publishing an entry that promises index
+        // payloads no .idx file holds.
+        return Status::OK();
+    }
 
     // 2. Allocate the .idx file. Default WritableFileOptions leave
     //    skip_fill_local_cache=false so writes populate local cache,
@@ -288,21 +491,10 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
     //    IndexFileWriter. Unsupported types are a soft failure at this
     //    phase (NotSupported); the caller will abort the txn log and the
     //    .idx file will be garbage-collected as an orphan.
-    for (const auto& ix : _indexes_to_build) {
-        if (ix.col_unique_id_size() == 0) {
-            return Status::InternalError("TabletIndex has no columns");
-        }
-        // Multi-column indexes (GIN, VECTOR) aren't supported in this
-        // initial slice. BITMAP / NGRAMBF / bloom are single-column only.
-        if (ix.col_unique_id_size() > 1 && ix.index_type() != IndexType::GIN) {
-            return Status::NotSupported("multi-column non-GIN index unsupported");
-        }
-        int col_uid = ix.col_unique_id(0);
-        int32_t col_ordinal = tablet_schema->field_index(col_uid);
-        if (col_ordinal < 0) {
-            return Status::InternalError(strings::Substitute("column with unique_id $0 not found in schema", col_uid));
-        }
-        const auto& column = tablet_schema->column(static_cast<size_t>(col_ordinal));
+    for (const auto& [ix_ptr, column_ptr] : to_build) {
+        const auto& ix = *ix_ptr;
+        const auto& column = *column_ptr;
+        const int col_uid = ix.col_unique_id(0);
 
         ColumnIndexMetaPB meta;
         switch (ix.index_type()) {
@@ -337,11 +529,15 @@ Status AddIndexSchemaChange::build_idg_for_segment(const RowsetMetadataPB& rowse
 
     RETURN_IF_ERROR(idx_writer.finalize());
 
-    // 4. Populate the IDG entry that the caller will hang off OpAddIndex.
-    for (const auto& ix : _indexes_to_build) {
+    // 4. Populate the IDG entry that the caller will hang off OpAddIndex. Keys
+    //    describe what this .idx file actually holds, so they come from the
+    //    classified set - not from _indexes_to_build. Advertising a key whose
+    //    payload was skipped would move the failure from this alter to every
+    //    later reader that looks the key up.
+    for (const auto& built : to_build) {
         auto* k = out_entry->add_keys();
-        k->set_col_unique_id(ix.col_unique_id(0));
-        k->set_index_type(ix.index_type());
+        k->set_col_unique_id(built.first->col_unique_id(0));
+        k->set_index_type(built.first->index_type());
     }
     out_entry->set_index_file(idx_filename);
     out_entry->set_version(_alter_version);
@@ -366,6 +562,12 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     // is cheap to open, and sharing would complicate the add_values /
     // add_nulls run accounting when multiple builders consume from the same
     // source.
+    // Deliberately the NON-defaulting iterator. classify_index_for_segment() has
+    // already established that this segment physically holds the column, so a
+    // NotFound here means that check and reality diverged and we want to hear
+    // about it. Falling back to new_column_iterator_or_default() would instead
+    // build an index over synthesized default values -- an index describing rows
+    // the segment does not contain.
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
 
     // Open a RandomAccessFile over the segment data for the column iterator.
@@ -400,15 +602,43 @@ Status AddIndexSchemaChange::build_bitmap_for_column(Segment* segment, const Tab
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
     constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bitmap dictionary matches the
+    // standard-path dictionary and the query predicate (see
+    // feed_index_from_column). 0 = no padding (non-CHAR).
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
     while (true) {
+        // Back-pressure: the bitmap writer accumulates the entire per-segment
+        // index (distinct-value dict + a roaring posting list per value) in
+        // memory until finish(), so check the schema-change mem limit each
+        // batch and abort cleanly rather than risk an OOM. The tracker was
+        // installed on this thread's TLS by run()'s task wrapper. Mirrors
+        // legacy DirectSchemaChange (schema_change.cpp). Null-guarded so bare
+        // unit tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         col->reset_column();
         size_t n = kBatch;
         Status st = col_iter->next_batch(&n, col.get());
-        if (st.is_end_of_file() || n == 0) {
+        if (!st.ok() && !st.is_end_of_file()) return st;
+        if (n > 0) {
+            RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size, char_pad_len));
+        }
+        // A short read is the iterator's end-of-column signal: it means the
+        // last data page was consumed by this call. Keep looping only on a
+        // full batch, so we never ask an exhausted iterator for more rows.
+        if (st.is_end_of_file() || n < kBatch) {
             break;
         }
-        if (!st.ok()) return st;
-        RETURN_IF_ERROR(feed_index_from_column(bitmap_writer.get(), *col, 0, n, type_size));
+    }
+
+    // Final memory check: the loop-top check does not cover the last batch's
+    // growth, and finish() below materializes/serializes the whole accumulated
+    // index. Check once more here so the largest peak still fails cleanly
+    // instead of risking an OOM in finish().
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
     }
 
     // Write the bitmap blob to the shared target file and emit the
@@ -479,6 +709,7 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     std::unique_ptr<BloomFilterIndexWriter> bf_writer;
     RETURN_IF_ERROR(BloomFilterIndexWriter::create(bf_opts, type_info, &bf_writer));
 
+    // Non-defaulting iterator on purpose; see the note in build_bitmap_for_column.
     ASSIGN_OR_RETURN(auto col_iter, segment->new_column_iterator(column, /*path=*/nullptr));
 
     // Mirror build_bitmap_for_column: bundled rowsets pack multiple logical
@@ -506,24 +737,79 @@ Status AddIndexSchemaChange::build_bloom_for_column(Segment* segment, const Tabl
     RETURN_IF_ERROR(col_iter->init(col_iter_opts));
     RETURN_IF_ERROR(col_iter->seek_to_first());
 
+    // The query read path (ColumnReader::bloom_filter) addresses bloom filters
+    // by DATA-PAGE index: it maps a row range to this column's covering data
+    // pages and calls read_bloom_filter(page_id), assuming bloom filter #p
+    // covers exactly the rows of data page #p. That is the contract the normal
+    // segment-write path honors (ScalarColumnWriter::finish_current_page()
+    // flushes exactly one bloom filter per data page). The IDG fast path must
+    // therefore emit one bloom filter per data page, aligned to the source
+    // column's persisted page boundaries.
+    //
+    // Flushing one bloom filter per fixed 4096-row batch instead leaves
+    // #bloom_filters = ceil(num_rows / 4096), which does NOT equal #data_pages
+    // for the default 64KB data_page_size (a page rarely holds exactly 4096
+    // rows). read_bloom_filter(page_id) then either indexes past the last
+    // bloom filter -> out-of-bounds read -> SIGSEGV, or returns a bloom filter
+    // built for a different row range -> false-negative pruning -> missing rows.
+    //
+    // col_iter->init() above already loaded this column's ordinal index, so the
+    // reader can report its data-page layout. column_with_uid() returns the very
+    // same ColumnReader the iterator reads through (both keyed by unique_id).
+    auto* col_reader = const_cast<ColumnReader*>(segment->column_with_uid(column.unique_id()));
+    if (col_reader == nullptr) {
+        return Status::InternalError(
+                strings::Substitute("build_bloom_for_column: no column reader for column $0", column.name()));
+    }
+    const int32_t num_pages = col_reader->num_data_pages();
+
     auto col = ColumnHelper::create_column(TypeDescriptor(column.type()), column.is_nullable());
-    constexpr size_t kBatch = 4096;
     const size_t type_size = type_info->size();
-    while (true) {
-        col->reset_column();
-        size_t n = kBatch;
-        Status st = col_iter->next_batch(&n, col.get());
-        if (st.is_end_of_file() || n == 0) {
-            break;
+    // CHAR is stored '\0'-padded and strnlen-trimmed on read; re-pad to the
+    // declared width so the fast-path bloom matches the standard-path bloom and
+    // the query predicate (see feed_index_from_column). 0 = no padding.
+    const size_t char_pad_len = (column.type() == TYPE_CHAR) ? static_cast<size_t>(column.length()) : 0;
+    for (int32_t page = 0; page < num_pages; ++page) {
+        // Back-pressure: the bloom writer keeps one finished filter per data
+        // page (plus the current page's distinct-value working set) in memory
+        // until finish(), so check the schema-change mem limit each page and
+        // abort cleanly rather than risk an OOM. The tracker was installed on
+        // this thread's TLS by run()'s task wrapper. Mirrors legacy
+        // DirectSchemaChange (schema_change.cpp). Null-guarded so bare unit
+        // tests (no TLS tracker) don't dereference null.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
         }
-        if (!st.ok()) return st;
-        // BloomFilterIndexWriter shares the add_values/add_nulls signature
-        // with BitmapIndexWriter; reuse the common feeder so Binary / string
-        // columns get the Slice-buffer treatment automatically.
-        RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size));
-        // BloomFilterIndexWriter accumulates per-page filters; flush at
-        // chunk boundaries so memory stays bounded even for large columns.
+        // [first_ordinal, last_ordinal] is the inclusive row range of data page
+        // `page` — exactly what the read path will resolve for read_bloom_filter(page).
+        auto [first_ordinal, last_ordinal] = col_reader->get_page_range(static_cast<size_t>(page));
+        RETURN_IF_ERROR(col_iter->seek_to_ordinal(first_ordinal));
+        size_t remaining = static_cast<size_t>(last_ordinal - first_ordinal + 1);
+        while (remaining > 0) {
+            col->reset_column();
+            size_t n = remaining;
+            Status st = col_iter->next_batch(&n, col.get());
+            if (st.is_end_of_file() || n == 0) {
+                break;
+            }
+            if (!st.ok()) return st;
+            // BloomFilterIndexWriter shares the add_values/add_nulls signature
+            // with BitmapIndexWriter; reuse the common feeder so Binary / string
+            // columns get the Slice-buffer treatment automatically. Multiple
+            // next_batch calls accumulate into the SAME pending bloom filter.
+            RETURN_IF_ERROR(feed_index_from_column(bf_writer.get(), *col, 0, n, type_size, char_pad_len));
+            remaining -= n;
+        }
+        // Emit exactly one bloom filter for this data page (mirrors
+        // finish_current_page()), so read_bloom_filter(page) lines up 1:1.
         RETURN_IF_ERROR(bf_writer->flush());
+    }
+
+    // Final memory check: the per-page check does not cover the last page's
+    // growth, and finish() below serializes all accumulated per-page filters.
+    // Check once more here so a last-page overshoot still fails cleanly.
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
     }
 
     RETURN_IF_ERROR(bf_writer->finish(target_wfile, out_meta));

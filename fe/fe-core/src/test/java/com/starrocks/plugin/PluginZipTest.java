@@ -122,7 +122,7 @@ public class PluginZipTest {
     public void testDownloadAndValidateZipIOException() {
         PluginZip util = new PluginZip("http://io-exception", null);
         try {
-            Path zipPath = util.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
+            util.downloadRemoteZip(PluginTestUtil.getTestPath(TARGET_DIR));
         } catch (Exception e) {
             assertTrue(e instanceof IOException);
         }

@@ -37,14 +37,18 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -55,8 +59,10 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -86,6 +92,21 @@ public class LocalMetaStoreTest {
         FeConstants.runningUnitTest = true;
 
         UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
+
+        // StatisticsMetaManager waits Config.statistic_manager_sleep_time_sec (60s) after the cluster comes
+        // up and then creates the _statistics_ database and its nine tables, each through
+        // LocalMetastore.createTable -> onCreate. Cases here observe process-wide side effects of table
+        // creation - testCreateTableIfNotExists counts onCreate through a JVM-wide MockUp,
+        // testTruncateInTheMiddleOfDatabaseDropped compares global tablet counts - so whenever this class
+        // outlives that delay, as it does on a loaded runner, the burst lands inside a case and breaks it
+        // (the onCreate count reads 9 instead of 0). Quiesce the daemon once here.
+        StatisticsMetaManager statisticsMetaManager = (StatisticsMetaManager) Deencapsulation.getField(
+                GlobalStateMgr.getCurrentState(), "statisticsMetaManager");
+        Assertions.assertTrue(statisticsMetaManager.isRunning(),
+                "the statistics daemon must be up before it is stopped; otherwise a later start() would "
+                        + "clear the stop request and resurrect the racing table creation");
+        statisticsMetaManager.setStop();
+        LeaderDaemon.awaitQuiesced(List.of(statisticsMetaManager), 30_000L);
 
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -138,6 +159,26 @@ public class LocalMetaStoreTest {
         olapTable.replacePartition(db.getId(), "t1", "t1_100");
 
         Assertions.assertEquals(newPartition.getId(), olapTable.getPartition("t1").getId());
+    }
+
+    @Test
+    public void testVersionEpochAssignedWhenCreatingPartitions() throws Exception {
+        String tableName = "t_version_epoch_ut";
+        starRocksAssert.useDatabase("test").withTable("CREATE TABLE test." + tableName + "(k1 int)"
+                    + " DISTRIBUTED BY RANDOM BUCKETS 3 PROPERTIES('replication_num' = '1')");
+
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), tableName);
+        Partition partition = table.getPartitions().iterator().next();
+        Assertions.assertTrue(partition.getDefaultPhysicalPartition().getVersionEpoch() > 0);
+
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        localMetastore.addSubPartitions(db, table, partition, 1, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+            Assertions.assertTrue(physicalPartition.getVersionEpoch() > 0);
+        }
     }
 
     @Test
@@ -310,6 +351,187 @@ public class LocalMetaStoreTest {
 
         Assertions.assertNull(db.getTable(tableId));
         Assertions.assertNull(db.getTable(tableName));
+    }
+
+    /**
+     * The two halves of the create contract, pinned on the property rather than on where the calls sit:
+     * onCreate runs inside the database write lock because it has to be atomic with the journal record,
+     * onCreateAfterUnlock runs with no FE metadata lock held at all because for a materialized view it
+     * resolves every base table through the connector.
+     */
+    @Test
+    public void testOnCreateAfterUnlockRunsWithoutAnyMetadataLock() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000011L, "lock_depth_probe", false);
+
+        try {
+            localMetastore.onCreate(db, table, "", true);
+
+            Assertions.assertTrue(table.getDepthInOnCreate() > 0,
+                    "onCreate must run under the database write lock, saw depth " + table.getDepthInOnCreate());
+            Assertions.assertEquals(0, table.getDepthInOnCreateAfterUnlock(),
+                    "onCreateAfterUnlock must not run with any FE metadata lock held");
+            Assertions.assertSame(table, db.getTable(1000011L));
+        } finally {
+            db.dropTable("lock_depth_probe", true, true);
+        }
+    }
+
+    /**
+     * A failure after the creation has been journaled has to be rolled back. Without it the caller is told
+     * the DDL failed while the table stays registered and durable -- and for a materialized view, without
+     * the refresh task the create path would have added afterwards.
+     */
+    @Test
+    public void testFailureAfterUnlockRollsBackTheJournaledCreate() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000012L, "rollback_probe", true);
+
+        Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+
+        Assertions.assertEquals(0, table.getDepthInOnCreateAfterUnlock(),
+                "the failing hook must have run outside the lock");
+        Assertions.assertNull(db.getTable(1000012L), "a failed create must not leave the table registered");
+        Assertions.assertNull(db.getTable("rollback_probe"));
+    }
+
+    /**
+     * IF NOT EXISTS returns before anything is journaled, so neither half of the new contract may run: not
+     * the post-unlock hook, and not the rollback -- the table that is already there belongs to someone else.
+     * The probe is built to fail if its hook is ever reached, so this cannot pass by accident.
+     */
+    @Test
+    public void testExistingTableWithIfNotExistsIsLeftAlone() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable existing = new LockDepthProbeTable(1000013L, "exists_probe", false);
+        localMetastore.onCreate(db, existing, "", true);
+
+        try {
+            LockDepthProbeTable second = new LockDepthProbeTable(1000014L, "exists_probe", true);
+            localMetastore.onCreate(db, second, "", true);
+
+            Assertions.assertEquals(-1, second.getDepthInOnCreateAfterUnlock(),
+                    "nothing was journaled, so the post-unlock half must not run");
+            Assertions.assertSame(existing, db.getTable("exists_probe"), "the existing table must be untouched");
+            Assertions.assertNull(db.getTable(1000014L));
+        } finally {
+            db.dropTable("exists_probe", true, true);
+        }
+    }
+
+    @Test
+    public void testExistingTableWithoutIfNotExistsFails() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable existing = new LockDepthProbeTable(1000015L, "exists_probe_strict", false);
+        localMetastore.onCreate(db, existing, "", true);
+
+        try {
+            LockDepthProbeTable second = new LockDepthProbeTable(1000016L, "exists_probe_strict", true);
+            Assertions.assertThrows(DdlException.class,
+                    () -> localMetastore.onCreate(db, second, "", false));
+
+            Assertions.assertEquals(-1, second.getDepthInOnCreateAfterUnlock());
+            Assertions.assertSame(existing, db.getTable("exists_probe_strict"));
+        } finally {
+            db.dropTable("exists_probe_strict", true, true);
+        }
+    }
+
+    /**
+     * The database can be dropped between the global-lock check and the database lock, which is the whole
+     * reason the second check exists. Nothing is journaled at that point, so the failure is free.
+     */
+    @Test
+    public void testCreateFailsWhenTheDatabaseWasDroppedUnderneath() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000019L, "dropped_db_probe", true);
+
+        db.setExist(false);
+        try {
+            Assertions.assertThrows(DdlException.class,
+                    () -> localMetastore.onCreate(db, table, "", true));
+            Assertions.assertEquals(-1, table.getDepthInOnCreateAfterUnlock(),
+                    "nothing was journaled, so the post-unlock half must not run");
+            Assertions.assertNull(db.getTable(1000019L));
+        } finally {
+            db.setExist(true);
+        }
+    }
+
+    /**
+     * The rollback identifies its table by id, not by name, because the lock was released in between -- so
+     * when a concurrent drop got there first it must journal nothing rather than drop whatever now answers to
+     * that name. Counted rather than inferred: exactly one drop record, the concurrent one.
+     */
+    @Test
+    public void testRollbackSkipsATableThatIsAlreadyGone() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        AtomicInteger dropRecords = new AtomicInteger();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropTable(Invocation invocation, DropInfo info, WALApplier walApplier) {
+                dropRecords.incrementAndGet();
+                invocation.proceed(info, walApplier);
+            }
+        };
+
+        LockDepthProbeTable table = new LockDepthProbeTable(1000017L, "rollback_raced_probe", true);
+        table.setWhileUnlocked(database -> {
+            try {
+                // A concurrent DROP completing inside the window the post-unlock hook opened.
+                database.dropTable("rollback_raced_probe", true, true);
+            } catch (DdlException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+
+        Assertions.assertNull(db.getTable(1000017L));
+        Assertions.assertEquals(1, dropRecords.get(),
+                "the rollback must not journal a second drop for a table that is already gone");
+    }
+
+    /**
+     * The rollback is best effort: whatever it fails on, the exception the caller sees has to stay the one
+     * that made the DDL fail, or the report names the cleanup instead of the cause.
+     */
+    @Test
+    public void testRollbackFailureDoesNotReplaceTheOriginalError() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropTable(DropInfo info, WALApplier walApplier) {
+                throw new IllegalStateException("journal is unavailable");
+            }
+        };
+
+        LockDepthProbeTable table = new LockDepthProbeTable(1000018L, "rollback_broken_probe", true);
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+        Assertions.assertTrue(e.getMessage().contains("probe failure after the database lock was released"),
+                "the cleanup's own failure must not replace the original: " + e.getMessage());
+
+        // The rollback could not run, so take the table back out by hand rather than leaving it for the
+        // next test in this JVM.
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            db.unRegisterTableUnlocked(table);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
     }
 
     @Test
@@ -565,5 +787,203 @@ public class LocalMetaStoreTest {
         Assertions.assertTrue(bucketEx.getMessage().contains("non-negative"));
 
         starRocksAssert.dropTable("test.add_pp_err");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatch() throws Exception {
+        // Create a non-partitioned table with random distribution
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_batch(k1 INT, k2 VARCHAR(50), v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_batch");
+        Assertions.assertEquals(1, table.getPhysicalPartitions().size());
+
+        long originalMutableBucketNum = table.getMutableBucketNum();
+        Partition partition = table.getPartitions().iterator().next();
+
+        // Batch-add 3 physical partitions, each with bucketNum = 4, in a single call
+        metastore.addPhysicalPartition("test", "add_pp_batch", null, 4, 3);
+        Assertions.assertEquals(4, table.getPhysicalPartitions().size());
+        Assertions.assertEquals(4, partition.getSubPartitions().size());
+
+        // The 3 newly added (non-default) physical partitions should each have bucketNum = 4
+        int newPartitionCount = 0;
+        for (PhysicalPartition p : partition.getSubPartitions()) {
+            if (p.getId() != partition.getDefaultPhysicalPartition().getId()) {
+                newPartitionCount++;
+                Assertions.assertEquals(4, p.getBucketNum());
+            }
+        }
+        Assertions.assertEquals(3, newPartitionCount);
+
+        // The original table's mutableBucketNum must not be modified (concurrency-safe)
+        Assertions.assertEquals(originalMutableBucketNum, table.getMutableBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_batch");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountOne() throws Exception {
+        // The 5-arg overload with count = 1 must behave exactly like the 4-arg form
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_one(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 8 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database db = metastore.getDb("test");
+        OlapTable table = (OlapTable) db.getTable("add_pp_one");
+        Partition partition = table.getPartitions().iterator().next();
+
+        metastore.addPhysicalPartition("test", "add_pp_one", null, 6, 1);
+        Assertions.assertEquals(2, table.getPhysicalPartitions().size());
+
+        PhysicalPartition newPartition = partition.getSubPartitions().stream()
+                .filter(p -> p.getId() != partition.getDefaultPhysicalPartition().getId())
+                .findFirst().orElseThrow();
+        Assertions.assertEquals(6, newPartition.getBucketNum());
+
+        starRocksAssert.dropTable("test.add_pp_one");
+    }
+
+    @Test
+    public void testAddPhysicalPartitionBatchCountValidation() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_pp_count(k1 INT, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 4 " +
+                        "PROPERTIES ('replication_num' = '1')");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+
+        // count < 1 is rejected
+        DdlException zeroEx = Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 0));
+        Assertions.assertTrue(zeroEx.getMessage().contains("at least 1"));
+        Assertions.assertThrows(DdlException.class, () ->
+                metastore.addPhysicalPartition("test", "add_pp_count", null, 0, -1));
+
+        // count > max_partitions_in_one_batch is rejected; the message names the config and value
+        long originalLimit = Config.max_partitions_in_one_batch;
+        try {
+            Config.max_partitions_in_one_batch = 2;
+            DdlException overEx = Assertions.assertThrows(DdlException.class, () ->
+                    metastore.addPhysicalPartition("test", "add_pp_count", null, 0, 3));
+            Assertions.assertTrue(overEx.getMessage().contains("max_partitions_in_one_batch"));
+        } finally {
+            Config.max_partitions_in_one_batch = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_pp_count");
+    }
+
+    @Test
+    public void testAddPartitionsRejectedWhenBatchWouldExceedPerTableLimit() throws Exception {
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_limit");
+        Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            // one existing partition, limit 2: a batch of 3 new partitions must be rejected up front
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                            + "START (\"2021-01-02\") END (\"2021-01-05\") EVERY (INTERVAL 1 DAY)"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+
+            // a batch that still fits is accepted
+            starRocksAssert.alterTable("ALTER TABLE test.add_partition_limit ADD PARTITIONS "
+                    + "START (\"2021-01-02\") END (\"2021-01-03\") EVERY (INTERVAL 1 DAY)");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_limit");
+    }
+
+    @Test
+    public void testAddTempPartitionsNotCountedAgainstPerTableLimit() throws Exception {
+        // Temp partitions live outside idToPartition, so getNumberOfPartitions() never sees them. Counting a
+        // temp batch against the limit would break INSERT OVERWRITE / partition merge on a table at the limit.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_temp_partition_limit(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_temp_partition_limit");
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 1;
+            starRocksAssert.alterTable("ALTER TABLE test.add_temp_partition_limit ADD TEMPORARY PARTITION tp20210101 "
+                    + "VALUES [(\"2021-01-01\"), (\"2021-01-02\"))");
+            Assertions.assertEquals(1, table.getNumberOfPartitions());
+            Assertions.assertNotNull(table.getPartition("tp20210101", true));
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_temp_partition_limit");
+    }
+
+    @Test
+    public void testAddPartitionsRecheckesPerTableLimitUnderWriteLock() throws Exception {
+        // The first partition num check runs under the READ lock, which is dropped while the tablets are
+        // built. Another committer landing in that window makes the checked count stale, so the limit has to
+        // be re-checked under the WRITE lock that actually commits the batch.
+        starRocksAssert.useDatabase("test").withTable(
+                "CREATE TABLE test.add_partition_race(dt DATE NOT NULL, v1 INT) " +
+                        "ENGINE=olap DUPLICATE KEY(dt) " +
+                        "PARTITION BY RANGE(dt) (PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02'))) " +
+                        "DISTRIBUTED BY HASH(dt) BUCKETS 3 PROPERTIES ('replication_num' = '1')");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "add_partition_race");
+
+        AtomicBoolean injected = new AtomicBoolean(false);
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Invocation invocation, Database db, OlapTable olapTable,
+                                 List<PhysicalPartition> partitions, ComputeResource computeResource)
+                    throws Exception {
+                // stand in for a concurrent committer that fills the table up while this batch holds no lock
+                if (injected.compareAndSet(false, true)) {
+                    starRocksAssert.alterTable("ALTER TABLE test.add_partition_race ADD PARTITION p20210102 "
+                            + "VALUES [(\"2021-01-02\"), (\"2021-01-03\"))");
+                }
+                invocation.proceed(db, olapTable, partitions, computeResource);
+            }
+        };
+
+        long originalLimit = Config.max_partition_number_per_table;
+        try {
+            Config.max_partition_number_per_table = 2;
+            Exception e = Assertions.assertThrows(Exception.class, () -> starRocksAssert.alterTable(
+                    "ALTER TABLE test.add_partition_race ADD PARTITION p20210103 "
+                            + "VALUES [(\"2021-01-03\"), (\"2021-01-04\"))"));
+            Assertions.assertTrue(e.getMessage().contains("max_partition_number_per_table"),
+                    "unexpected message: " + e.getMessage());
+            Assertions.assertTrue(injected.get(), "the concurrent committer never ran");
+            Assertions.assertEquals(2, table.getNumberOfPartitions());
+        } finally {
+            Config.max_partition_number_per_table = originalLimit;
+        }
+
+        starRocksAssert.dropTable("test.add_partition_race");
     }
 }

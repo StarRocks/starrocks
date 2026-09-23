@@ -21,8 +21,8 @@
 #include "base/hash/hash_std.hpp"
 #include "base/uid_util.h"
 #include "common/status.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/fragment_lifecycle.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/fragment_lifecycle.h"
 
 namespace starrocks::pipeline {
 

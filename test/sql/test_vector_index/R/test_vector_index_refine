@@ -1,7 +1,4 @@
 -- name: test_vector_index_refine @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 CREATE TABLE __refine_rows (
   k1 bigint NULL
 ) ENGINE=OLAP
@@ -19,7 +16,7 @@ CREATE TABLE t_ivfpq (
   INDEX idx (v) USING VECTOR (
     "index_type" = "ivfpq", "dim" = "4", "metric_type" = "l2_distance",
     "is_vector_normed" = "false", "nbits" = "8", "nlist" = "16", "M_IVFPQ" = "2",
-    "index_build_threshold" = "1")
+    "index_build_threshold" = "16")
 ) ENGINE=OLAP
 DUPLICATE KEY(id)
 DISTRIBUTED BY HASH(id) BUCKETS 1
@@ -197,8 +194,5 @@ DROP TABLE IF EXISTS t_novi;
 -- result:
 -- !result
 DROP TABLE IF EXISTS __refine_rows;
--- result:
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 -- result:
 -- !result

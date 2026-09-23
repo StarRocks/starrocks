@@ -22,9 +22,9 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/utility/defer_op.h"
-#include "fs/fs_starlet.h"
-#include "staros_integration/staros_worker.h"
-#include "staros_integration/staros_worker_runtime.h"
+#include "compute_env/staros/starlet_filesystem.h"
+#include "compute_env/staros/staros_worker.h"
+#include "compute_env/staros/staros_worker_runtime.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 
@@ -92,5 +92,18 @@ TEST_F(StarletLocationProviderTest, test_get_real_location) {
 
     EXPECT_EQ("/root/path/for/test/abc", _provider->real_location(fmt::format("staros://{}/abc", tablet_id)).value());
 }
+
+// `shutdown_staros_worker()` can retire the global worker while a lake operation is still
+// resolving a path. The lookup must report a status instead of dereferencing it. See issue #78883.
+TEST_F(StarletLocationProviderTest, test_real_location_after_worker_release) {
+    auto backup_worker = get_staros_worker();
+    auto defer = DeferOp([backup_worker] { set_staros_worker_for_test(backup_worker); });
+    set_staros_worker_for_test(nullptr);
+
+    auto real_or = _provider->real_location(build_starlet_uri(12345, "/abc"));
+    ASSERT_FALSE(real_or.ok());
+    EXPECT_TRUE(real_or.status().is_service_unavailable()) << real_or.status();
+}
+
 } // namespace starrocks::lake
 #endif // USE_STAROS
