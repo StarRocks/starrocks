@@ -261,6 +261,15 @@ if (WITH_CONNECTOR_LANCE)
     )
     target_compile_definitions(connector_lance_test PRIVATE
             LANCE_TEST_DATASET="${CMAKE_BINARY_DIR}/lance-rust/testdata/rows.lance")
-    target_link_libraries(connector_lance_test ConnectorLance ${CONNECTOR_HIVE_TEST_LINK_LIBS} hdfs jvm)
+    # Keep the native reader's BE dependency closure ahead of thirdparty archives.
+    # CMake otherwise appends transitive archives after their static providers.
+    target_link_libraries(connector_lance_test
+            ConnectorLance FormatOrc FormatCore ComputeEnv Cache StoragePrimitive
+            ExecPrimitive Expr Geo Runtime Platform FileSystem IO ColumnSortCore
+            ChunkCore ColumnCore Types Common Base Gutil StarRocksGen
+            ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+            ${STARROCKS_STATIC_LINK_LIBS}
+            ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+            ${WL_START_GROUP} gmock gtest ${WL_END_GROUP} jvm)
     set_target_properties(connector_lance_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
