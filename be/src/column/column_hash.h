@@ -88,11 +88,11 @@ inline uint64_t crc_hash_uint64(uint64_t value, uint64_t seed) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
     return _mm_crc32_u64(seed, value);
 #elif defined(__x86_64__)
-    return starrocks::crc32c::Extend(seed, (const char*)&value, sizeof(uint64_t));
+    return ~starrocks::crc32c::Extend(~seed, (const char*)&value, sizeof(uint64_t));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     return __crc32cd(seed, value);
 #elif defined(__aarch64__)
-    return starrocks::crc32c::Extend(seed, (const char*)&value, sizeof(uint64_t));
+    return ~starrocks::crc32c::Extend(~seed, (const char*)&value, sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
@@ -103,14 +103,14 @@ inline uint64_t crc_hash_uint128(uint64_t value0, uint64_t value1, uint64_t seed
     uint64_t hash = _mm_crc32_u64(seed, value0);
     hash = _mm_crc32_u64(hash, value1);
 #elif defined(__x86_64__)
-    uint64_t hash = starrocks::crc32c::Extend(seed, (const char*)&value0, sizeof(uint64_t));
-    hash = starrocks::crc32c::Extend(hash, (const char*)&value1, sizeof(uint64_t));
+    uint64_t hash = ~starrocks::crc32c::Extend(~seed, (const char*)&value0, sizeof(uint64_t));
+    hash = ~starrocks::crc32c::Extend(~hash, (const char*)&value1, sizeof(uint64_t));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
     uint64_t hash = __crc32cd(seed, value0);
     hash = __crc32cd(hash, value1);
 #elif defined(__aarch64__)
-    uint64_t hash = starrocks::crc32c::Extend(seed, (const char*)&value0, sizeof(uint64_t));
-    hash = starrocks::crc32c::Extend(hash, (const char*)&value1, sizeof(uint64_t));
+    uint64_t hash = ~starrocks::crc32c::Extend(~seed, (const char*)&value0, sizeof(uint64_t));
+    hash = ~starrocks::crc32c::Extend(~hash, (const char*)&value1, sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
