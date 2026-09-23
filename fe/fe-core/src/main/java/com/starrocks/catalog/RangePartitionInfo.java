@@ -65,6 +65,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
@@ -90,12 +91,20 @@ public class RangePartitionInfo extends PartitionInfo {
     // temp partition id -> partition range
     private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
 
-    // Sorted views of idToRange / idToTempRange keyed by each range's lower endpoint, which is unique because the
-    // ranges in one map never overlap. Not serialized: rebuilt after load and restore.
-    private transient ConcurrentSkipListMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> rangeIndex =
-            new ConcurrentSkipListMap<>();
-    private transient ConcurrentSkipListMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> tempRangeIndex =
-            new ConcurrentSkipListMap<>();
+    // Orders ranges by lower endpoint, putting an empty range before a non-empty one that starts at the same key.
+    // That tie only happens for an automatic partition table's shadow range [k, k): it does not overlap [k, x), so
+    // both may exist, and VALUES LESS THAN derives its lower bound from the shadow's upper endpoint. Two non-empty
+    // ranges cannot share a lower endpoint (they would intersect), and a map holds at most one shadow, so this
+    // orders every pair of distinct ranges strictly.
+    private static final Comparator<Range<PartitionKey>> BY_LOWER_THEN_EMPTY =
+            Comparator.comparing((Range<PartitionKey> range) -> range.lowerEndpoint())
+                    .thenComparing(Range::isEmpty, Comparator.reverseOrder());
+
+    // Sorted views of idToRange / idToTempRange. Not serialized: rebuilt after load and restore.
+    private transient ConcurrentSkipListMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex =
+            new ConcurrentSkipListMap<>(BY_LOWER_THEN_EMPTY);
+    private transient ConcurrentSkipListMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> tempRangeIndex =
+            new ConcurrentSkipListMap<>(BY_LOWER_THEN_EMPTY);
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -178,7 +187,7 @@ public class RangePartitionInfo extends PartitionInfo {
     // create a new range and check it.
     private Range<PartitionKey> createAndCheckNewRange(
             Map<ColumnId, Column> schema, PartitionKeyDesc partKeyDesc,
-            NavigableMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> sortedRanges)
+            NavigableMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> sortedRanges)
             throws AnalysisException, DdlException {
         List<Column> partitionColumns = getPartitionColumns(schema);
         // create upper values for new range
@@ -197,7 +206,9 @@ public class RangePartitionInfo extends PartitionInfo {
         // newRangeUpper can qualify.
         Range<PartitionKey> lastRange = null;
         Range<PartitionKey> currentRange;
-        var below = sortedRanges.lowerEntry(newRangeUpper);
+        // The probe is the empty range at newRangeUpper, so it sorts before any range starting there: lowerEntry
+        // returns the greatest range whose lower endpoint is below newRangeUpper.
+        var below = sortedRanges.lowerEntry(Range.closedOpen(newRangeUpper, newRangeUpper));
         if (below == null) {
             currentRange = rangeOf(sortedRanges.firstEntry());
         } else if (rangeOf(below).upperEndpoint().compareTo(newRangeUpper) >= 0) {
@@ -211,8 +222,9 @@ public class RangePartitionInfo extends PartitionInfo {
         return checkNewRange(partitionColumns, partKeyDesc, newRangeUpper, lastRange, currentRange);
     }
 
-    private static Range<PartitionKey> rangeOf(Map.Entry<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> entry) {
-        return entry == null ? null : entry.getValue().getValue();
+    private static Range<PartitionKey> rangeOf(
+            Map.Entry<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> entry) {
+        return entry == null ? null : entry.getKey();
     }
 
     private Range<PartitionKey> checkNewRange(List<Column> partitionColumns, PartitionKeyDesc partKeyDesc,
@@ -285,7 +297,8 @@ public class RangePartitionInfo extends PartitionInfo {
                                              boolean isTemp) throws DdlException {
         Map<Long, Range<PartitionKey>> newRanges = Maps.newHashMap();
         // linear copy; later descs in the batch must see the earlier ones
-        TreeMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> tmpRanges = new TreeMap<>(rangeIndex(isTemp));
+        TreeMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> tmpRanges =
+                new TreeMap<>(rangeIndex(isTemp));
         for (Pair<Partition, PartitionDesc> entry : partitionList) {
             Partition partition = entry.first;
             long partitionId = partition.getId();
@@ -293,7 +306,7 @@ public class RangePartitionInfo extends PartitionInfo {
                 Range<PartitionKey> range =
                         checkAndCreateRange(schema, (SingleRangePartitionDesc) entry.second, tmpRanges);
                 newRanges.put(partitionId, range);
-                tmpRanges.put(range.lowerEndpoint(), Maps.immutableEntry(partitionId, range));
+                tmpRanges.put(range, Maps.immutableEntry(partitionId, range));
             } catch (IllegalArgumentException e) {
                 // Range.closedOpen may throw this if (lower > upper)
                 throw new DdlException("Invalid key range: " + e.getMessage());
@@ -304,7 +317,7 @@ public class RangePartitionInfo extends PartitionInfo {
 
     private Range<PartitionKey> checkAndCreateRange(
             Map<ColumnId, Column> schema, SingleRangePartitionDesc desc,
-            NavigableMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> ranges)
+            NavigableMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> ranges)
             throws DdlException {
         PartitionKeyDesc partitionKeyDesc = desc.getPartitionKeyDesc();
         try {
@@ -481,15 +494,15 @@ public class RangePartitionInfo extends PartitionInfo {
         return -1;
     }
 
-    private NavigableMap<PartitionKey, Map.Entry<Long, Range<PartitionKey>>> rangeIndex(boolean isTemp) {
+    private NavigableMap<Range<PartitionKey>, Map.Entry<Long, Range<PartitionKey>>> rangeIndex(boolean isTemp) {
         return isTemp ? tempRangeIndex : rangeIndex;
     }
 
     private void rebuildRangeIndexes() {
         rangeIndex.clear();
         tempRangeIndex.clear();
-        idToRange.forEach((id, range) -> rangeIndex.put(range.lowerEndpoint(), Maps.immutableEntry(id, range)));
-        idToTempRange.forEach((id, range) -> tempRangeIndex.put(range.lowerEndpoint(), Maps.immutableEntry(id, range)));
+        idToRange.forEach((id, range) -> rangeIndex.put(range, Maps.immutableEntry(id, range)));
+        idToTempRange.forEach((id, range) -> tempRangeIndex.put(range, Maps.immutableEntry(id, range)));
     }
 
     private void setRangeInternal(long partitionId, boolean isTemp, Range<PartitionKey> range) {
@@ -497,15 +510,15 @@ public class RangePartitionInfo extends PartitionInfo {
             // re-setting an existing partition moves it: drop the entry under its old lower endpoint
             Range<PartitionKey> previous = idToTempRange.put(partitionId, range);
             if (previous != null) {
-                tempRangeIndex.remove(previous.lowerEndpoint());
+                tempRangeIndex.remove(previous);
             }
-            tempRangeIndex.put(range.lowerEndpoint(), Maps.immutableEntry(partitionId, range));
+            tempRangeIndex.put(range, Maps.immutableEntry(partitionId, range));
         } else {
             Range<PartitionKey> previous = idToRange.put(partitionId, range);
             if (previous != null) {
-                rangeIndex.remove(previous.lowerEndpoint());
+                rangeIndex.remove(previous);
             }
-            rangeIndex.put(range.lowerEndpoint(), Maps.immutableEntry(partitionId, range));
+            rangeIndex.put(range, Maps.immutableEntry(partitionId, range));
         }
     }
 
@@ -513,12 +526,12 @@ public class RangePartitionInfo extends PartitionInfo {
         if (isTemp) {
             Range<PartitionKey> removed = idToTempRange.remove(partitionId);
             if (removed != null) {
-                tempRangeIndex.remove(removed.lowerEndpoint());
+                tempRangeIndex.remove(removed);
             }
         } else {
             Range<PartitionKey> removed = idToRange.remove(partitionId);
             if (removed != null) {
-                rangeIndex.remove(removed.lowerEndpoint());
+                rangeIndex.remove(removed);
             }
         }
     }
@@ -526,9 +539,9 @@ public class RangePartitionInfo extends PartitionInfo {
     public void moveRangeFromTempToFormal(long tempPartitionId) {
         Range<PartitionKey> range = idToTempRange.remove(tempPartitionId);
         if (range != null) {
-            tempRangeIndex.remove(range.lowerEndpoint());
+            tempRangeIndex.remove(range);
             idToRange.put(tempPartitionId, range);
-            rangeIndex.put(range.lowerEndpoint(), Maps.immutableEntry(tempPartitionId, range));
+            rangeIndex.put(range, Maps.immutableEntry(tempPartitionId, range));
         }
     }
 
