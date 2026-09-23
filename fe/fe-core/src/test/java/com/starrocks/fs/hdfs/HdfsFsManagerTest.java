@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.io.File;
@@ -227,6 +228,19 @@ public class HdfsFsManagerTest {
 
     @Test
     public void testAzureFileSystemCache() throws StarRocksException, IOException {
+        // The cache-key behavior does not require a live Azure client. Constructing the real
+        // ABFS/WASB implementations with fake endpoints can block on external network activity,
+        // making this unit test hit the suite's five-minute timeout. Return a fresh mock for every
+        // actual FileSystem.get() call: cache hits still return the same HdfsFs, while distinct
+        // authorities still cause separate calls and therefore receive distinct FileSystem mocks.
+        try (MockedStatic<FileSystem> fileSystemMock = Mockito.mockStatic(FileSystem.class)) {
+            fileSystemMock.when(() -> FileSystem.get(Mockito.any(), Mockito.any()))
+                    .thenAnswer(invocation -> Mockito.mock(FileSystem.class));
+            verifyAzureFileSystemCacheKeys();
+        }
+    }
+
+    private void verifyAzureFileSystemCacheKeys() throws StarRocksException, IOException {
         // Test ADLS Gen2 schemes (abfs/abfss) with ADLS2 credentials
         Map<String, String> adlsProperties = new HashMap<>();
         adlsProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, "c2hhcmVkS2V5");  // base64 encoded
