@@ -748,6 +748,70 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_cursor_with_contracti
     check_ready(1, value_col->size());
 }
 
+// The readiness scan must stay amortized even though the Analytor re-initializes the window state on
+// every chunk while the first row is still waiting.
+//
+// PRE_PROCESSING() runs `_reset_window_state()` -> `reset()` whenever the current row is still global
+// position 0 (be/src/exec/analytor.cpp:50). A `lead ... IGNORE NULLS` row with no future non-null yet
+// keeps `_current_row_position` pinned there, so `reset()` is re-invoked once per arriving chunk for the
+// whole wait. If `reset()` discards the memoized scan cursor, every chunk restarts the forward scan just
+// after the current row and rescans the entire buffered NULL prefix, i.e. O(rows^2) for a long NULL run.
+//
+// Chunk arrival is modelled by growing `available_end` over a pre-built column, as in the readiness
+// tests above; the scan never looks past `available_end`.
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_scan_is_amortized_across_resets) {
+    constexpr int64_t kChunkRows = 64;
+    constexpr int64_t kChunks = 64;
+    constexpr int64_t kRows = kChunkRows * kChunks;
+    const int64_t offset = 1;
+
+    // Entirely NULL, so the first row never becomes ready and the wait spans every chunk.
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    for (int64_t i = 0; i < kRows; ++i) {
+        data_col->append(0);
+        null_col->append(1);
+    }
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+
+    Columns args = build_lead_lag_args(value_col, offset, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    auto* lead_state = reinterpret_cast<LeadLagState<TYPE_INT, true>*>(state->state());
+
+    // The waiting row is the first row of the partition; frame_end = current + offset + 1.
+    constexpr int64_t kCurrentRow = 0;
+    const int64_t frame_end = kCurrentRow + offset + 1;
+
+    int64_t scanned_rows = 0;
+    int64_t cursor_initializations = 0;
+    for (int64_t chunk = 1; chunk <= kChunks; ++chunk) {
+        const int64_t available_end = chunk * kChunkRows;
+
+        // What the Analytor does before it re-examines the first row of the first partition.
+        lead_func->reset(ctx, args, state->state());
+
+        const bool cursor_lost = lead_state->lead_ready_current_row == INT64_MIN;
+        if (cursor_lost) {
+            ++cursor_initializations;
+        }
+        // A lost cursor restarts the forward scan just after the current row.
+        const int64_t scan_start = cursor_lost ? kCurrentRow + 1 : lead_state->lead_ready_scan_end;
+
+        ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, /*partition_start=*/0, available_end,
+                                                       frame_end - 1, frame_end, /*partition_is_complete=*/false));
+        scanned_rows += lead_state->lead_ready_scan_end - scan_start;
+    }
+
+    // Each buffered row is scanned once, so the whole wait costs O(rows). Restarting the scan on every
+    // chunk instead costs ~kRows * kChunks / 2.
+    ASSERT_LE(scanned_rows, 2 * kRows)
+            << "readiness scan is not amortized: scanned " << scanned_rows << " rows while buffering " << kRows;
+    // The cursor is initialized once per partition, not once per chunk.
+    ASSERT_EQ(1, cursor_initializations);
+}
+
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_complete_partition_uses_default) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -1264,9 +1328,10 @@ TPlanNode make_lag_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset
     return tnode;
 }
 
-// lead(<slot>, offset, NULL) IGNORE NULLS, ROWS UNBOUNDED PRECEDING AND <offset> FOLLOWING,
-// single partition.
-TPlanNode make_lead_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset) {
+// lead(<slot>, offset, NULL) IGNORE NULLS, ROWS UNBOUNDED PRECEDING AND <offset> FOLLOWING.
+// A non-negative `partition_slot_id` adds PARTITION BY on that slot; otherwise the whole input is one
+// partition.
+TPlanNode make_lead_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset, SlotId partition_slot_id = -1) {
     const TTypeDesc int_type = make_scalar_ttype(TPrimitiveType::INT);
     TExpr fn_call;
     TExprNode agg;
@@ -1307,6 +1372,11 @@ TPlanNode make_lead_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offse
     anode.__set_window(window);
     anode.__set_buffered_tuple_id(in_tuple_id);
     anode.analytic_functions.push_back(fn_call);
+    if (partition_slot_id >= 0) {
+        TExpr partition_expr;
+        partition_expr.nodes.push_back(make_slot_ref(in_tuple_id, partition_slot_id, int_type));
+        anode.__set_partition_exprs(std::vector<TExpr>{partition_expr});
+    }
 
     TPlanNode tnode;
     tnode.__set_node_id(0);
@@ -1346,6 +1416,28 @@ std::vector<OptInt> ref_lead_ignore_nulls(const std::vector<OptInt>& in, int64_t
         }
     }
     return out;
+}
+
+// Reference for a partitioned input: lead is evaluated independently inside each partition.
+std::vector<OptInt> ref_lead_ignore_nulls_per_partition(const std::vector<std::vector<OptInt>>& partitions,
+                                                        int64_t offset) {
+    std::vector<OptInt> out;
+    for (const auto& partition : partitions) {
+        const auto partition_out = ref_lead_ignore_nulls(partition, offset);
+        out.insert(out.end(), partition_out.begin(), partition_out.end());
+    }
+    return out;
+}
+
+// A nullable INT column of partition keys (never NULL) matching the slot ref's nullable type.
+ColumnPtr build_partition_key_column(const std::vector<int32_t>& keys, size_t begin, size_t count) {
+    auto data = Int32Column::create();
+    auto nulls = NullColumn::create();
+    for (size_t i = 0; i < count; ++i) {
+        data->append(keys[begin + i]);
+        nulls->append(0);
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
 }
 
 ColumnPtr build_nullable_int_column(const std::vector<OptInt>& vals, size_t begin, size_t count) {
@@ -1426,18 +1518,25 @@ std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t o
     return out;
 }
 
-// Drive the real Analytor and return the lead output for each input row (in input order).
+// Drive the real Analytor and return the lead output for each input row (in input order). A non-empty
+// `partition_keys` (one key per input row, in contiguous runs) adds PARTITION BY on that key.
 std::vector<OptInt> run_analytor_lead(const std::vector<OptInt>& input, int64_t offset, bool streaming,
-                                      int64_t chunk_rows) {
+                                      int64_t chunk_rows, const std::vector<int32_t>& partition_keys = {}) {
     config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
     // Small eviction batch so the future streaming path actually evicts/contracts during these tests.
     config::pipeline_analytic_removable_chunk_num = 2;
+
+    const bool partitioned = !partition_keys.empty();
+    CHECK(!partitioned || partition_keys.size() == input.size());
 
     ObjectPool pool;
     TDescriptorTableBuilder dtb;
     {
         TTupleDescriptorBuilder in_tuple;
         in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("v").build());
+        if (partitioned) {
+            in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("p").build());
+        }
         in_tuple.build(&dtb);
         TTupleDescriptorBuilder out_tuple;
         out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lead_v").build());
@@ -1453,9 +1552,11 @@ std::vector<OptInt> run_analytor_lead(const std::vector<OptInt>& input, int64_t 
     const TupleId out_tuple_id = 1;
     const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
     const SlotId res_slot_id = desc_tbl->get_tuple_descriptor(out_tuple_id)->slots()[0]->id();
+    const SlotId part_slot_id =
+            partitioned ? desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[1]->id() : static_cast<SlotId>(-1);
     TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
 
-    TPlanNode tnode = make_lead_tnode(in_tuple_id, col_slot_id, offset);
+    TPlanNode tnode = make_lead_tnode(in_tuple_id, col_slot_id, offset, part_slot_id);
     RuntimeProfile profile("Analytor");
     auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
     CHECK(analytor->prepare(state, &pool, &profile).ok());
@@ -1483,6 +1584,9 @@ std::vector<OptInt> run_analytor_lead(const std::vector<OptInt>& input, int64_t 
         const size_t n = std::min<size_t>(chunk_rows, input.size() - fed);
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(build_nullable_int_column(input, fed, n), col_slot_id);
+        if (partitioned) {
+            chunk->append_column(build_partition_key_column(partition_keys, fed, n), part_slot_id);
+        }
         CHECK(analytor->process(state, chunk).ok());
         fed += n;
         while (ChunkPtr o = analytor->poll_chunk_buffer()) collect(o);
@@ -1601,6 +1705,51 @@ TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_matches_reference_and_legacy) {
                 expect_equal(streaming, expected, "streaming " + tag);
                 expect_equal(streaming, legacy, "streaming-vs-legacy " + tag);
             }
+        }
+    }
+}
+
+// The `lead ... IGNORE NULLS` readiness cursor deliberately survives `reset()`, so it also survives the
+// `reset()` that `_reset_state_for_next_partition()` performs at a partition boundary. It must therefore
+// be invalidated on the partition change itself, or a later partition would inherit the earlier
+// partition's scan progress and non-null count. Every partition here opens with a long NULL run, which is
+// exactly when the cursor accumulates state worth leaking.
+TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_multi_partition) {
+    const std::vector<std::vector<OptInt>> partitions{
+            // All NULL: the wait lasts the whole partition and every row falls back to the default.
+            {std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt},
+            // Single row.
+            {std::nullopt},
+            // Long NULL prefix with the only non-nulls at the very end.
+            {std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, 201, 202},
+            // Dense, so its results resolve immediately after the NULL-heavy partitions before it.
+            {301, 302, 303},
+            // Alternating.
+            {std::nullopt, 401, std::nullopt, 402, std::nullopt},
+    };
+
+    std::vector<OptInt> input;
+    std::vector<int32_t> keys;
+    for (size_t p = 0; p < partitions.size(); ++p) {
+        for (const OptInt& v : partitions[p]) {
+            input.push_back(v);
+            keys.push_back(static_cast<int32_t>(p));
+        }
+    }
+
+    const int64_t offsets[] = {1, 2};
+    // Chunk sizes that split partitions mid-way, align with them, and hold several at once.
+    const int64_t chunk_sizes[] = {1, 2, 5, 8, 64};
+
+    for (int64_t offset : offsets) {
+        const auto expected = ref_lead_ignore_nulls_per_partition(partitions, offset);
+        for (int64_t chunk_rows : chunk_sizes) {
+            const std::string tag = "offset=" + std::to_string(offset) + " chunk_rows=" + std::to_string(chunk_rows);
+            const auto legacy = run_analytor_lead(input, offset, /*streaming=*/false, chunk_rows, keys);
+            const auto streaming = run_analytor_lead(input, offset, /*streaming=*/true, chunk_rows, keys);
+            expect_equal(legacy, expected, "legacy " + tag);
+            expect_equal(streaming, expected, "streaming " + tag);
+            expect_equal(streaming, legacy, "streaming-vs-legacy " + tag);
         }
     }
 }

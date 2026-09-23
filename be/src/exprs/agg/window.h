@@ -542,6 +542,10 @@ struct LeadLagState<LT, true> {
     int64_t lead_ready_current_row = INT64_MIN;
     int64_t lead_ready_scan_end = 0;
     int64_t lead_ready_non_null_count = 0;
+    // The partition the cursor above was built in, in local coordinates. It tells a
+    // new partition apart from a re-entry into the current one, because `reset()` does not clear the
+    // cursor. See `is_window_result_ready`.
+    int64_t lead_ready_partition_start = 0;
     bool default_value_is_constant = false;
 };
 
@@ -765,11 +769,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         if constexpr (ignoreNulls) {
             this->data(state).target_not_null_index = INT64_MIN;
             this->data(state).non_null_count = 0;
-            if constexpr (!isLag) { // LEAD
-                this->data(state).lead_ready_current_row = INT64_MIN;
-                this->data(state).lead_ready_scan_end = 0;
-                this->data(state).lead_ready_non_null_count = 0;
-            }
+            // The `lead_ready_*` scan cursor is deliberately NOT cleared here. While the first row of the
+            // first partition waits for a future non-null, `_current_row_position` stays put and the
+            // analytor re-runs PRE_PROCESSING() -> reset() for every arriving chunk
         }
     }
 
@@ -807,8 +809,15 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             // Both current_row and search_end move forward within a partition. Keep the number of
             // non-nulls in (lead_ready_current_row, lead_ready_scan_end), retract rows that leave
             // the window, and only scan newly available rows. This makes the total scan linear.
-            const auto is_cache_not_initialized = lead_state.lead_ready_current_row == INT64_MIN;
-            if (is_cache_not_initialized) { // First time after reset
+            //
+            // The cursor outlives `reset()`, so a new partition must be recognised here. Both
+            // `partition_start` and the stored copy are local, post-eviction positions shifted by the
+            // same amounts (see `reset_state_for_contraction`), and a later partition always starts
+            // after an earlier one, so the comparison cannot alias across partitions.
+            const bool is_cache_not_initialized = lead_state.lead_ready_current_row == INT64_MIN ||
+                                                  lead_state.lead_ready_partition_start != partition_start;
+            if (is_cache_not_initialized) { // Fresh state, or the first row of a new partition
+                lead_state.lead_ready_partition_start = partition_start;
                 lead_state.lead_ready_current_row = current_row;
                 lead_state.lead_ready_scan_end = current_row + 1;
                 lead_state.lead_ready_non_null_count = 0;
@@ -861,11 +870,22 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 DCHECK_GE(this->data(state).target_not_null_index, 0);
             }
             if constexpr (!isLag) { // LEAD
-                if (this->data(state).lead_ready_current_row != INT64_MIN) {
-                    this->data(state).lead_ready_current_row -= count;
-                    this->data(state).lead_ready_scan_end -= count;
-                    DCHECK_GE(this->data(state).lead_ready_current_row, 0);
-                    DCHECK_GT(this->data(state).lead_ready_scan_end, this->data(state).lead_ready_current_row);
+                auto& lead_data = this->data(state);
+                if (lead_data.lead_ready_current_row != INT64_MIN) {
+                    lead_data.lead_ready_current_row -= count;
+                    lead_data.lead_ready_scan_end -= count;
+                    // Shifted with the cursor so it stays comparable to `Analytor::_partition.start`,
+                    // which the same eviction shifts by the same amount. It may go negative once the
+                    // rows at the start of the partition are gone, exactly as `_partition.start` does.
+                    lead_data.lead_ready_partition_start -= count;
+                    if (lead_data.lead_ready_current_row < 0) {
+                        // The row the cursor is anchored to has been evicted. Eviction never passes the
+                        // row being evaluated, so this only happens to a cursor left behind by a
+                        // finished partition; drop it instead of carrying a meaningless position.
+                        lead_data.lead_ready_current_row = INT64_MIN;
+                    } else {
+                        DCHECK_GT(lead_data.lead_ready_scan_end, lead_data.lead_ready_current_row);
+                    }
                 }
             }
         }
