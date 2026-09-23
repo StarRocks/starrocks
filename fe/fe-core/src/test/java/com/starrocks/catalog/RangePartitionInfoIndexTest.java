@@ -38,6 +38,7 @@ import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,7 +67,10 @@ public class RangePartitionInfoIndexTest {
      */
     static void assertIndexMatches(RangePartitionInfo info, boolean isTemp) {
         List<Map.Entry<Long, Range<PartitionKey>>> expected = Lists.newArrayList(info.getIdToRange(isTemp).entrySet());
-        expected.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR);
+        // RANGE_MAP_ENTRY_COMPARATOR only looks at the lower endpoint, which leaves the order of an empty shadow
+        // range and the partition starting at the same key undefined. Break that tie the way the index does.
+        expected.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR
+                .thenComparing(e -> e.getValue().isEmpty(), Comparator.reverseOrder()));
         List<Map.Entry<Long, Range<PartitionKey>>> actual = info.getSortedRangeMap(isTemp);
         Assertions.assertEquals(expected.size(), actual.size(), "index size, temp=" + isTemp);
         for (int i = 0; i < expected.size(); i++) {
@@ -584,27 +588,84 @@ public class RangePartitionInfoIndexTest {
     }
 
     @Test
-    public void testUnboundedRangeBehaviourIsUnchanged() throws Exception {
-        // Guava ranges without a lower endpoint cannot be indexed. Confirm this is NOT a regression: the pre-index
-        // code hit the same IllegalStateException through RANGE_MAP_ENTRY_COMPARATOR.
-        List<Column> c = intColumns();
+    public void testShadowPartitionSharesLowerEndpointWithFirstPartition() throws Exception {
+        // An auto-partitioned table's shadow range is the EMPTY range [0000-00-00, 0000-00-00). An empty range does
+        // not overlap [0000-00-00, x), so both may legally exist while sharing a lower endpoint -- and VALUES LESS
+        // THAN derives its lower bound from the predecessor's upper endpoint, which is exactly the shadow key.
+        List<Column> c = Lists.newArrayList(new Column("dt", new ScalarType(PrimitiveType.DATE), true, null, "", ""));
         RangePartitionInfo info = new RangePartitionInfo(c);
-        info.addPartition(1L, false, intRange(c, 100, 200), null, (short) 1, null);
+        info.createAutomaticShadowPartition(c, 7L, "1");
+        PartitionKey shadowKey = info.getIdToRange(false).get(7L).lowerEndpoint();
 
+        Range<PartitionKey> added = info.handleNewSinglePartitionDesc(
+                MetaUtils.buildIdToColumn(c), lessThan(c, "2024-01-01"), 100L, false);
+        Assertions.assertEquals(0, added.lowerEndpoint().compareTo(shadowKey),
+                "the new partition's lower endpoint is the shadow key");
+        Assertions.assertFalse(added.isEmpty(), "the new partition is not empty");
+
+        // Both partitions must survive in the index, with the empty shadow ordered first.
+        assertBothIndexesMatch(info);
+        Assertions.assertEquals(Lists.newArrayList(7L, 100L),
+                info.getSortedRangeMap(false).stream().map(Map.Entry::getKey).collect(Collectors.toList()));
+        Assertions.assertEquals(Lists.newArrayList(7L, 100L), info.getSortedPartitions(true));
+
+        // Dropping the shadow must not evict the partition that shares its lower endpoint.
+        info.dropPartition(7L);
+        assertBothIndexesMatch(info);
+        Assertions.assertEquals(Lists.newArrayList(100L),
+                info.getSortedRangeMap(false).stream().map(Map.Entry::getKey).collect(Collectors.toList()));
+    }
+
+    @Test
+    public void testLowerUnboundedRangeIsRejectedOnFirstInsert() throws Exception {
+        List<Column> c = intColumns();
         for (Range<PartitionKey> unbounded : Lists.newArrayList(
-                Range.lessThan(intKey(c, 20)), Range.<PartitionKey>all())) {
-            // old path: sorting two entries invokes the comparator, which calls lowerEndpoint()
+                Range.lessThan(intKey(c, 20)), Range.atMost(intKey(c, 20)), Range.<PartitionKey>all())) {
+            // The old map accepted this first range, and sorting a singleton never called the comparator.
             Map<Long, Range<PartitionKey>> raw = new LinkedHashMap<>();
             raw.put(1L, unbounded);
+            List<Map.Entry<Long, Range<PartitionKey>>> singleton = Lists.newArrayList(raw.entrySet());
+            Assertions.assertDoesNotThrow(() -> singleton.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR));
+
+            // Intentional behavior change: the index calls lowerEndpoint() even on its first insertion.
+            // Normal partition creation uses closedOpen with an explicit lower key, including MINVALUE.
+            for (boolean isTemp : new boolean[] {false, true}) {
+                RangePartitionInfo info = new RangePartitionInfo(c);
+                Assertions.assertThrows(IllegalStateException.class,
+                        () -> info.addPartition(1L, isTemp, unbounded, null, (short) 1, null));
+            }
+
+            // Sorting multiple entries already failed in the old implementation.
             raw.put(2L, intRange(c, 100, 200));
             List<Map.Entry<Long, Range<PartitionKey>>> list = Lists.newArrayList(raw.entrySet());
             Assertions.assertThrows(IllegalStateException.class,
-                    () -> list.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR), "old sort should already throw");
-            // new path: the index put calls lowerEndpoint() too
-            Assertions.assertThrows(IllegalStateException.class,
-                    () -> info.addPartition(2L, false, unbounded, null, (short) 1, null), "index put should throw");
+                    () -> list.sort(RangeUtils.RANGE_MAP_ENTRY_COMPARATOR));
+            for (boolean isTemp : new boolean[] {false, true}) {
+                RangePartitionInfo info = new RangePartitionInfo(c);
+                info.addPartition(2L, isTemp, intRange(c, 100, 200), null, (short) 1, null);
+                Assertions.assertThrows(IllegalStateException.class,
+                        () -> info.addPartition(1L, isTemp, unbounded, null, (short) 1, null));
+            }
         }
+    }
 
+    @Test
+    public void testFirstLessThanPartitionHasLowerBound() throws Exception {
+        List<Column> c = intColumns();
+        for (boolean isTemp : new boolean[] {false, true}) {
+            RangePartitionInfo info = new RangePartitionInfo(c);
+            Range<PartitionKey> range = info.handleNewSinglePartitionDesc(
+                    MetaUtils.buildIdToColumn(c), lessThan(c, "20"), 1L, isTemp);
+            Assertions.assertTrue(range.hasLowerBound());
+            Assertions.assertEquals(Range.closedOpen(minKey(c), intKey(c, 20)), range);
+            Assertions.assertEquals(Lists.newArrayList(Maps.immutableEntry(1L, range)), info.getSortedRangeMap(isTemp));
+            assertBothIndexesMatch(info);
+        }
+    }
+
+    @Test
+    public void testUpperUnboundedRangeBehaviourIsUnchanged() throws Exception {
+        List<Column> c = intColumns();
         // A range with a lower endpoint but no upper endpoint indexes fine; only reading its upper endpoint fails,
         // which the pre-index scan did as well.
         RangePartitionInfo atLeastInfo = new RangePartitionInfo(c);
