@@ -80,7 +80,7 @@ protected:
         } else if (is_txn_log(name) || is_txn_slog(name) || is_txn_vlog(name) || is_combined_txn_log(name)) {
             full_path = join_path(join_path(kTestDir, kTxnLogDirectoryName), name);
         } else if (is_segment(name) || is_delvec(name) || is_del(name) || is_sst(name) || is_vector_index(name) ||
-                   is_idx(name) || is_lcrm(name)) {
+                   is_idx(name) || is_lcrm(name) || is_cols(name)) {
             full_path = join_path(join_path(kTestDir, kSegmentDirectoryName), name);
         } else {
             CHECK(false) << name;
@@ -321,6 +321,47 @@ TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_lcrm) {
 
     EXPECT_FALSE(file_exist(orphan_lcrm));  // reclaimed (fix)
     EXPECT_TRUE(file_exist(inflight_lcrm)); // protected (safety)
+}
+
+// An ADD INDEX rewrite can finish writing a .cols and then fail to persist its
+// txn log, or be cancelled before publish. Only the full orphan scan can find
+// that file; published and in-flight overlays must remain protected.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full_reclaims_orphan_cols) {
+    const std::string orphan_cols = gen_cols_filename(2);
+    const std::string live_cols = gen_cols_filename(3);
+    const std::string inflight_cols = gen_cols_filename(10);
+    create_data_file(orphan_cols);
+    create_data_file(live_cols);
+    create_data_file(inflight_cols);
+
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    metadata->set_id(66611);
+    metadata->set_version(6);
+    metadata->set_commit_time(99);
+    auto& dcg = (*metadata->mutable_dcg_meta()->mutable_dcgs())[0];
+    dcg.add_column_files(live_cols);
+    dcg.add_unique_column_ids()->add_column_ids(1);
+    dcg.add_versions(6);
+    // The same reference protection is needed for cross-published overlays.
+    dcg.add_shared_files(true);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.set_tablet_id(66611);
+    request.set_min_active_txn_id(10);
+    request.set_grace_timestamp(100);
+    request.set_min_check_version(0);
+    request.set_max_check_version(5);
+
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    ASSERT_EQ(0, response.status().status_code()) << response.status().ShortDebugString();
+    EXPECT_FALSE(file_exist(orphan_cols));
+    EXPECT_TRUE(file_exist(live_cols));
+    EXPECT_TRUE(file_exist(inflight_cols));
 }
 
 // Ensure full vacuum does not fail when initial metadata 0_1.meta exists and

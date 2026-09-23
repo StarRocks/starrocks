@@ -13,7 +13,7 @@ CREATE TABLE t_pu_then_bitmap (
     c4 int,
     c5 int
 ) PRIMARY KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3
+DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
@@ -58,29 +58,6 @@ select * from t_pu_then_bitmap order by k1;
 4	20	4	4	4	4
 5	20	5	5	5	5
 -- !result
-update t_pu_then_bitmap set v1 = 888 where k1 = 3;
--- result:
--- !result
-select count(*) from t_pu_then_bitmap where v1 = 888;
--- result:
-1
--- !result
-select count(*) from t_pu_then_bitmap where v1 = 30;
--- result:
-0
--- !result
-select count(*) from t_pu_then_bitmap where v1 = 777;
--- result:
-2
--- !result
-select * from t_pu_then_bitmap order by k1;
--- result:
-1	777	1	1	1	1
-2	777	2	2	2	2
-3	888	3	3	3	3
-4	20	4	4	4	4
-5	20	5	5	5	5
--- !result
 set enable_profile = true;
 -- result:
 -- !result
@@ -104,6 +81,29 @@ select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapInde
 -- result:
 1
 -- !result
+update t_pu_then_bitmap set v1 = 888 where k1 = 3;
+-- result:
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 888;
+-- result:
+1
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 30;
+-- result:
+0
+-- !result
+select count(*) from t_pu_then_bitmap where v1 = 777;
+-- result:
+2
+-- !result
+select * from t_pu_then_bitmap order by k1;
+-- result:
+1	777	1	1	1	1
+2	777	2	2	2	2
+3	888	3	3	3	3
+4	20	4	4	4	4
+5	20	5	5	5	5
+-- !result
 CREATE TABLE t_pu_then_bloom (
     k1 int,
     s1 varchar(32),
@@ -112,7 +112,7 @@ CREATE TABLE t_pu_then_bloom (
     c4 int,
     c5 int
 ) PRIMARY KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3
+DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 -- result:
 -- !result
@@ -163,20 +163,23 @@ set enable_profile = true;
 set enable_async_profile = false;
 -- result:
 -- !result
-[UC]select count(*) from t_pu_then_bloom where s1 = 'zz';
+select count(*) from t_pu_then_bloom where s1 = 'mm';
+-- result:
+0
+-- !result
 create table profile_lines_bloom properties("replication_num"="1") as
     select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
 -- result:
 -- !result
 select assert_true(count(1) > 0)
     from profile_lines_bloom
-    where line like '%- BloomFilterFilter:%';
+    where line like '%- BloomFilterFilterRows:%';
 -- result:
 1
 -- !result
-select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
     from profile_lines_bloom
-    where line like '%- BloomFilterFilter:%';
+    where line like '%- BloomFilterFilterRows:%';
 -- result:
 1
 -- !result

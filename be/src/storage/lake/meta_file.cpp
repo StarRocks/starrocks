@@ -730,11 +730,12 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
     //    no columns — so the query path picks up the rewritten overlay (which
     //    carries the index inlined) without any reader-side change.
     //
-    //    Ordering note: publish applies txn logs in version order, so an
-    //    overlay written by a partial update AFTER this alter version is
-    //    applied after this call and correctly supersedes the layer added
-    //    here; that `.cols` is written with the flags bumped above, so it
-    //    carries the index too.
+    //    Loads can publish between the alter's read snapshot and its commit
+    //    version. Their newer DCGs must keep serving those columns: the
+    //    rewritten file contains snapshot values, even though it is published
+    //    later. Such columns keep their current overlay and its existing index
+    //    coverage until a later rewrite builds the newly requested index.
+    size_t superseded_dcg_columns = 0;
     for (const auto& dcg : op.dcg_entries()) {
         if (!dcg.has_segment_id() || !dcg.has_column_file() || dcg.col_unique_ids_size() == 0) {
             LOG(WARNING) << "apply_add_index: incomplete dcg entry, skipping. tablet=" << _tablet_meta->id();
@@ -745,6 +746,7 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
         // filename here is fixed in the log, so a second append_dcg would
         // strip the column ids off the identical older entry and orphan a
         // file the newer entry still points at.
+        std::unordered_set<ColumnUID> updated_columns;
         const auto& dcg_map = _tablet_meta->dcg_meta().dcgs();
         if (auto it = dcg_map.find(dcg.segment_id()); it != dcg_map.end()) {
             const auto& files = it->second.column_files();
@@ -753,10 +755,40 @@ Status MetaFileBuilder::apply_add_index(const TxnLogPB_OpAddIndex& op) {
                           << " rssid=" << dcg.segment_id() << " file=" << dcg.column_file();
                 continue;
             }
+            const auto& current = it->second;
+            for (int i = 0; i < current.unique_column_ids_size(); ++i) {
+                if (i < current.versions_size() && current.versions(i) > op.alter_version()) {
+                    const auto& ids = current.unique_column_ids(i).column_ids();
+                    updated_columns.insert(ids.begin(), ids.end());
+                }
+            }
         }
         std::vector<ColumnUID> uids(dcg.col_unique_ids().begin(), dcg.col_unique_ids().end());
+        std::erase_if(uids, [&](ColumnUID uid) { return updated_columns.contains(uid); });
+        superseded_dcg_columns += dcg.col_unique_ids_size() - uids.size();
+        if (uids.empty()) {
+            // Every rewritten column was updated after the snapshot. The file
+            // is unused on this tablet, but a cross-published sibling may still
+            // reference it. Preserve ownership and avoid duplicating the orphan
+            // when the same operation is applied again.
+            const auto& orphans = _tablet_meta->orphan_files();
+            if (std::none_of(orphans.begin(), orphans.end(),
+                             [&](const auto& file) { return file.name() == dcg.column_file(); })) {
+                auto* orphan = _tablet_meta->add_orphan_files();
+                orphan->set_name(dcg.column_file());
+                orphan->set_size(dcg.file_size());
+                orphan->set_version(_tablet_meta->version());
+                orphan->set_shared(dcg.shared());
+            }
+            continue;
+        }
         append_dcg(dcg.segment_id(), {{dcg.column_file(), dcg.encryption_meta()}}, {std::move(uids)}, {dcg.file_size()},
                    {dcg.shared()});
+    }
+    if (superseded_dcg_columns > 0) {
+        LOG(INFO) << "apply_add_index: preserved " << superseded_dcg_columns
+                  << " concurrently updated DCG columns; their index coverage is unchanged. tablet="
+                  << _tablet_meta->id() << " alter_version=" << op.alter_version();
     }
     return Status::OK();
 }

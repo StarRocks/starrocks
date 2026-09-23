@@ -535,8 +535,11 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
     }
     size_t footer_size_hint = 16 * 1024;
     LakeIOOptions read_opts{.fill_data_cache = false};
+    // The current tablet schema may omit columns still present in this
+    // rowset's historical physical schema. As in build_idg_for_segment, this
+    // one-shot open must not seed a shared Segment with missing column readers.
     ASSIGN_OR_RETURN(auto base_segment, _tablet_mgr->load_segment(seg_fileinfo, seg_idx_in_rowset, &footer_size_hint,
-                                                                  read_opts, /*fill_meta_cache*/ true, read_schema));
+                                                                  read_opts, /*fill_meta_cache*/ false, read_schema));
     const size_t num_rows = base_segment->num_rows();
 
     // 2. Open one iterator per overlaid column over the DCG layer that
@@ -624,6 +627,11 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
     size_t written_rows = 0;
     auto chunk = ChunkFactory::new_chunk(chunk_schema, kBatch);
     while (written_rows < num_rows) {
+        // Inlined bitmap indexes accumulate until finalize, just like the
+        // sidecar builder. Enforce the alter's limit on this pool worker too.
+        if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+            RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+        }
         chunk->reset();
         size_t n = std::min(kBatch, num_rows - written_rows);
         for (size_t i = 0; i < col_iters.size(); i++) {
@@ -643,6 +651,10 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
         written_rows += n;
     }
 
+    // The last batch can cross the limit before finalize serializes the index.
+    if (auto* mem_tracker = CurrentThread::mem_tracker(); mem_tracker != nullptr) {
+        RETURN_IF_ERROR(mem_tracker->check_mem_limit("AddIndexSchemaChange"));
+    }
     uint64_t segment_file_size = 0;
     uint64_t index_size = 0;
     uint64_t footer_position = 0;

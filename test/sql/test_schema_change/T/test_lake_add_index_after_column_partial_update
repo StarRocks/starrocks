@@ -29,7 +29,7 @@ CREATE TABLE t_pu_then_bitmap (
     c4 int,
     c5 int
 ) PRIMARY KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3
+DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
 insert into t_pu_then_bitmap values
@@ -50,18 +50,12 @@ select count(*) from t_pu_then_bitmap where v1 = 10;
 select count(*) from t_pu_then_bitmap where v1 = 30;
 select * from t_pu_then_bitmap order by k1;
 
--- a further column-mode update lands on top of the rewritten overlay
-update t_pu_then_bitmap set v1 = 888 where k1 = 3;
-select count(*) from t_pu_then_bitmap where v1 = 888;
-select count(*) from t_pu_then_bitmap where v1 = 30;
-select count(*) from t_pu_then_bitmap where v1 = 777;
-select * from t_pu_then_bitmap order by k1;
-
 -- Correct results alone do not prove the fix: before it, results were already
 -- correct — the column just scanned unindexed. Assert the bitmap path actually
--- ran on the rewritten overlay. The data predates the alter and lives in a DCG,
--- so a working bitmap here can only come from the index inlined into the
--- rewritten `.cols`.
+-- ran on the rewritten overlay BEFORE any subsequent write can rebuild it.
+-- One bucket and one initial rowset put all five rows in the same segment;
+-- the partial update overlays v1 for that whole segment. No untouched segment
+-- or post-alter update can supply the bitmap used by this assertion.
 set enable_profile = true;
 set enable_async_profile = false;
 [UC]select count(*) from t_pu_then_bitmap where v1 = 777;
@@ -74,6 +68,13 @@ select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BitmapInde
     from profile_lines_bitmap
     where line like '%- BitmapIndexFilterRows%';
 
+-- a further column-mode update lands on top of the rewritten overlay
+update t_pu_then_bitmap set v1 = 888 where k1 = 3;
+select count(*) from t_pu_then_bitmap where v1 = 888;
+select count(*) from t_pu_then_bitmap where v1 = 30;
+select count(*) from t_pu_then_bitmap where v1 = 777;
+select * from t_pu_then_bitmap order by k1;
+
 -- ============ BLOOM: column-mode update, then fast-path bloom_filter_columns ============
 CREATE TABLE t_pu_then_bloom (
     k1 int,
@@ -83,7 +84,7 @@ CREATE TABLE t_pu_then_bloom (
     c4 int,
     c5 int
 ) PRIMARY KEY(k1)
-DISTRIBUTED BY HASH(k1) BUCKETS 3
+DISTRIBUTED BY HASH(k1) BUCKETS 1
 PROPERTIES ("replication_num" = "1");
 
 insert into t_pu_then_bloom values
@@ -103,20 +104,23 @@ select count(*) from t_pu_then_bloom where s1 = 'cc';
 select count(*) from t_pu_then_bloom where s1 = 'aa';
 select * from t_pu_then_bloom order by k1;
 
--- update to a value the rewritten bloom has never seen
--- Same profile-based proof for the bloom path on the rewritten overlay.
+-- Probe an absent value strictly inside the rewritten page's [bb, zz] range.
+-- Zone maps must keep this page, while its bloom filter can reject all rows.
+-- Require actual filtered rows: the BloomFilterFilter timer also runs when
+-- the column has no bloom filter and therefore cannot prove index coverage.
 set enable_profile = true;
 set enable_async_profile = false;
-[UC]select count(*) from t_pu_then_bloom where s1 = 'zz';
+select count(*) from t_pu_then_bloom where s1 = 'mm';
 create table profile_lines_bloom properties("replication_num"="1") as
     select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
 select assert_true(count(1) > 0)
     from profile_lines_bloom
-    where line like '%- BloomFilterFilter:%';
-select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilter: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    where line like '%- BloomFilterFilterRows:%';
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- BloomFilterFilterRows: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
     from profile_lines_bloom
-    where line like '%- BloomFilterFilter:%';
+    where line like '%- BloomFilterFilterRows:%';
 
+-- A later update must preserve correctness above the indexed overlay.
 SET partial_update_mode = 'column';
 update t_pu_then_bloom set s1 = 'yy' where k1 = 4;
 select count(*) from t_pu_then_bloom where s1 = 'yy';

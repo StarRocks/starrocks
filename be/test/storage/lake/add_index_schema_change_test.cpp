@@ -1979,6 +1979,109 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_inlined_
     EXPECT_TRUE(reader->has_bitmap_index()) << "rewritten .cols must inline the bitmap index";
 }
 
+// An all-overlaid build bypasses the base index builders and their memory
+// checks. Its SegmentWriter also accumulates the bitmap until finalize, so it
+// must enforce the alter's limit on the pool worker and clean up the new file.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_pool_thread_trips_mem_limit_and_cleans_file) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/100);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    const auto original_cols = write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/100, /*value_base=*/1000);
+    version = put_metadata_at_next_version(md);
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("dcg_sc_test").set_min_threads(0).set_max_threads(1).build(&pool));
+    auto vt = versioned_at(tablet_id, version);
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema(), pool.get());
+
+    // BE_TEST does not account mallocs, so exceed the limit explicitly. The
+    // worker can observe this only if run() installs the caller's tracker.
+    MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "dcg_sc_test", nullptr);
+    sc_tracker.consume(sc_tracker.limit() + 1);
+    TxnLogPB_OpAddIndex op;
+    Status st;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+        st = sc.run(&op);
+    }
+    sc_tracker.release(sc_tracker.consumption());
+    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st;
+    EXPECT_EQ(0, op.segment_entries_size());
+    EXPECT_EQ(0, op.dcg_entries_size());
+
+    const auto dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
+    std::vector<std::string> cols_files;
+    ASSERT_OK(fs->iterate_dir(dir, [&](std::string_view name) {
+        if (name.size() > 5 && name.substr(name.size() - 5) == ".cols") {
+            cols_files.emplace_back(name);
+        }
+        return true;
+    }));
+    ASSERT_EQ(1, cols_files.size());
+    EXPECT_EQ(original_cols, cols_files.front());
+}
+
+// A metadata-only DROP followed by a write can leave an old rowset pinned to a
+// wider physical schema. Opening its base file to anchor the DCG rewrite must
+// not replace that physical schema with the tablet's current logical schema.
+TEST_F(AddIndexSchemaChangeTest, dcg_overlay_does_not_seed_metacache_with_current_schema) {
+    auto base_metadata = create_base_tablet_metadata();
+    auto tablet_id = base_metadata->id();
+    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+    auto base_schema = TabletSchema::create(base_metadata->schema());
+    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/6);
+
+    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+    auto md = std::make_shared<TabletMetadata>(*ro_md);
+    const uint32_t rssid = rssid_of(*md, 0, 0);
+    write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/6, /*value_base=*/1000);
+
+    const auto original_schema = md->schema();
+    (*md->mutable_historical_schemas())[original_schema.id()] = original_schema;
+    (*md->mutable_rowset_to_schema())[md->rowsets(0).id()] = original_schema.id();
+    auto* current_schema = md->mutable_schema();
+    current_schema->clear_column();
+    for (const auto& col : original_schema.column()) {
+        if (col.unique_id() != _c3_uid) {
+            current_schema->add_column()->CopyFrom(col);
+        }
+    }
+    current_schema->set_id(next_id());
+    current_schema->set_schema_version(original_schema.schema_version() + 1);
+    version = put_metadata_at_next_version(md);
+
+    auto vt = versioned_at(tablet_id, version);
+    const auto& segment_meta = vt.metadata()->rowsets(0).segment_metas(0);
+    FileInfo seg_fi{.path = _tablet_manager->segment_location(tablet_id, segment_meta.filename())};
+    if (segment_meta.has_bundle_file_offset()) {
+        seg_fi.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    ASSERT_TRUE(_tablet_manager->metacache()->lookup_segment(seg_fi.cache_key()) == nullptr);
+
+    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema());
+    TxnLogPB_OpAddIndex op;
+    ASSERT_OK(sc.run(&op));
+    ASSERT_EQ(1, op.dcg_entries_size());
+    EXPECT_TRUE(_tablet_manager->metacache()->lookup_segment(seg_fi.cache_key()) == nullptr);
+
+    // A reader using the original schema must still see c3's stored values,
+    // instead of receiving an already-cached Segment without its reader.
+    size_t footer_hint = 16 * 1024;
+    ASSIGN_OR_ABORT(auto reader_seg, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
+                                                                  LakeIOOptions{.fill_data_cache = false},
+                                                                  /*fill_meta_cache=*/true, base_schema));
+    EXPECT_TRUE(reader_seg->column_with_uid(_c3_uid) != nullptr);
+}
+
 // Same path through a bloom filter: build_dcg_write_schema must flip
 // is_bf_column (not has_bitmap_index) for BLOOM_FILTER so SegmentWriter emits a
 // bloom filter into the `.cols` footer.
