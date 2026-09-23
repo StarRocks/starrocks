@@ -30,7 +30,6 @@ import com.starrocks.sql.ast.OrderByPair;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -69,18 +68,7 @@ public class SchemaChangeProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(schemaChangeHandler);
 
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-
-        List<List<Comparable>> schemaChangeJobInfos = schemaChangeHandler.getAlterJobInfosByDb(db);
-        for (List<Comparable> infoStr : schemaChangeJobInfos) {
-            List<String> oneInfo = new ArrayList<String>(TITLE_NAMES.size());
-            for (Comparable element : infoStr) {
-                oneInfo.add(element.toString());
-            }
-            result.addRow(oneInfo);
-        }
-        return result;
+        return ProcUtils.toProcResult(TITLE_NAMES, schemaChangeHandler.getAlterJobInfosByDb(db));
     }
 
     public static int analyzeColumn(String columnName) throws AnalysisException {
