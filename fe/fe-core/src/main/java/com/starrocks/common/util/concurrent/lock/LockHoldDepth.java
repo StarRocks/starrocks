@@ -20,18 +20,21 @@ package com.starrocks.common.util.concurrent.lock;
  * <p>This is the one fact a caller several frames deep cannot otherwise obtain. {@link Locker} is a
  * per-acquisition object -- {@code new Locker()} appears at every lock site -- and it delegates to
  * the global {@link LockManager}, which is keyed by {@code rid} and knows nothing about "the
- * current thread". So a method like {@code MetadataMgr#getTable}, several frames below whoever took
- * the lock, has no way to ask whether it is inside a critical section. Static analysis cannot answer
- * it either: the FE is interfaces all the way down, and virtual dispatch blows the reachable set up
- * until the result is a suppression file. The information is dynamic, so it is tracked dynamically.
+ * current thread". So a method like {@code MetadataMgr#getTableStatistics}, seven or eight frames
+ * below whoever took the lock, has no way to ask whether it is inside a critical section. Static
+ * analysis cannot answer it either: the FE is interfaces all the way down, and virtual dispatch
+ * blows the reachable set up until the result is a suppression file. The information is dynamic, so
+ * it is tracked dynamically.
  *
  * <h3>Why the counter is maintained unconditionally</h3>
  *
- * There is no switch to skip the bookkeeping behind. A depth that is only sometimes right is worse
- * than no depth: a caller would read 0 while a critical section was open, see nothing, and look
- * clean. The cost is one {@link ThreadLocal} read plus an {@code int} increment on each side of a
- * lock acquisition, next to a {@code ConcurrentHashMap} lookup and a possible park in
- * {@link LockManager}.
+ * It would be tempting to skip the bookkeeping while
+ * {@link BlockingCallValidator} is switched off. That would make the switch a lie: turn the check
+ * on at runtime while a critical section is open and the depth would read 0 -- the check would
+ * report nothing and look clean. A depth that is only sometimes right is worse than no depth, so
+ * both ends are maintained always. The cost is one {@link ThreadLocal} read plus an {@code int}
+ * increment on each side of a lock acquisition, next to a {@code ConcurrentHashMap} lookup and a
+ * possible park in {@link LockManager}.
  *
  * <h3>Accuracy</h3>
  *
@@ -41,7 +44,7 @@ package com.starrocks.common.util.concurrent.lock;
  * touching the lock table when the rid is not held, and {@code MultiUserLock} throws only where no
  * refcount was decremented -- so it must not lower it.
  * <p>
- * Of the two ways to be wrong, too low is the dangerous one. Too high makes a caller report
+ * Of the two ways to be wrong, too low is the dangerous one. Too high makes the check report
  * violations that were not committed: noisy, and visible. Too low makes it wave real ones through
  * without a word, which is indistinguishable from the code being correct. So the count errs high:
  * it is clamped at zero rather than going negative, and a genuine lock leak leaves it raised --
@@ -65,13 +68,18 @@ public final class LockHoldDepth {
 
     /**
      * Record that this thread has just released one. Called only after the release succeeded, and
-     * clamped at zero so a stray extra call cannot make the depth negative and blind the next lock
-     * this thread takes.
+     * clamped at zero so a stray extra call cannot make the depth negative and blind the check for
+     * the next lock this thread takes.
      */
     static void exit() {
         int[] depth = DEPTH.get();
         if (depth[0] > 0) {
             depth[0]--;
+        }
+        if (depth[0] == 0) {
+            // Leaving the outermost critical section: whatever external call this thread made while inside
+            // it is no longer anyone's slow lock, and the thread may go back to a pool.
+            BlockingCallUnderLock.clearForCurrentThread();
         }
     }
 
@@ -91,5 +99,6 @@ public final class LockHoldDepth {
      */
     public static void reset() {
         DEPTH.get()[0] = 0;
+        BlockingCallUnderLock.clearForCurrentThread();
     }
 }
