@@ -561,6 +561,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：UDF を有効にするかどうか。
 - 導入時期：-
 
+### `enable_virtual_columns`
+
+- デフォルト：true
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：ネイティブテーブルで `_tablet_id_` などの仮想カラムを提供するかどうか。仮想カラムはクエリ実行時に計算される読み取り専用のメタデータカラムで、格納されません。`false` に設定すると、仮想カラムを参照するクエリはカラムを解決できずにエラーとなります。詳細は [仮想カラム](../../../table_design/virtual_columns.md) を参照してください。
+- 導入時期：-
+
 ### `expr_children_limit`
 
 - デフォルト：10000
