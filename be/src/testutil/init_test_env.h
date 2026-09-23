@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
+#include <thread>
+
 #include "butil/file_util.h"
 #include "cache/datacache.h"
 #include "column/column_helper.h"
@@ -62,6 +65,12 @@ int init_test_env(int argc, char** argv) {
     config::l0_snapshot_size = 1048576;
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
+    // Dozens of thread pools size themselves from CpuInfo::num_cores() (exec_env.cpp
+    // alone has ~10 such sites), so on a big host a unit-test process builds pools sized for the whole
+    // machine and then tears them down again -- pure overhead for tests that run almost no concurrent
+    // work. CpuInfo::init() below honours config::num_cores when it is > 0, so cap it here. Never raise
+    // it above what the host actually has.
+    config::num_cores = std::min<int32_t>(8, std::max(1U, std::thread::hardware_concurrency()));
 
     FLAGS_alsologtostderr = true;
     init_glog(argv[0], true);
