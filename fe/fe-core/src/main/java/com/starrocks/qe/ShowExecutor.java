@@ -105,6 +105,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
+import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
@@ -1679,12 +1680,17 @@ public class ShowExecutor {
 
             List<List<String>> rows;
             try {
-                // Only SchemaChangeProc support where/order by/limit syntax
+                // The grammar accepts where/order by/limit for every alter type and the analyzer
+                // validates them, so a proc dir that cannot apply them drops the user's predicate
+                // without a word. Every dir reachable from here implements fetchResultByFilter.
                 if (procNodeI instanceof SchemaChangeProcDir) {
                     rows = ((SchemaChangeProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
                             statement.getOrderPairs(), statement.getLimitElement()).getRows();
                 } else if (procNodeI instanceof OptimizeProcDir) {
                     rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
+                            statement.getOrderPairs(), statement.getLimitElement()).getRows();
+                } else if (procNodeI instanceof RollupProcDir) {
+                    rows = ((RollupProcDir) procNodeI).fetchResultByFilter(statement.getFilterMap(),
                             statement.getOrderPairs(), statement.getLimitElement()).getRows();
                 } else {
                     rows = procNodeI.fetchResult().getRows();
