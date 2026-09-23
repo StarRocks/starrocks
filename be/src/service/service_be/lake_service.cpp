@@ -368,6 +368,9 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     auto thread_pool_token = ConcurrencyLimitedThreadPoolToken(thread_pool, thread_pool->max_threads() * 2);
     auto latch = BThreadCountDownLatch(task_num);
     bthread::Mutex response_mtx;
+    // The txn logs every tablet task of this request retired, deleted as one batch once they are
+    // all done. Guarded by response_mtx.
+    std::vector<std::string> txn_log_files_to_delete;
     scoped_refptr<Trace> trace_gurad = scoped_refptr<Trace>(new Trace());
     Trace* trace = trace_gurad.get();
     TRACE_TO(trace, "got request. txn_ids=$0 base_version=$1 new_version=$2 #tablets=$3 #task_num=$4",
@@ -452,13 +455,22 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                     }
 
                     StatusOr<TabletMetadataPtr> res;
+                    // Collected here rather than deleted inside publish_version, so the tablets of
+                    // one request share a single batched delete instead of one request per tablet.
+                    std::vector<std::string> tablet_files_to_delete;
                     if (std::chrono::system_clock::now() < timeout_deadline) {
                         res = lake::publish_version(_tablet_mgr, tablet_info, base_version, new_version, txns,
                                                     skip_write_tablet_metadata, publish_property, fe_built_version,
-                                                    base_version_order);
+                                                    base_version_order, &tablet_files_to_delete);
                     } else {
                         auto t = MilliSecondsSinceEpochFromTimePoint(timeout_deadline);
                         res = Status::TimedOut(fmt::format("reached deadline={}/timeout={}", t, timeout_ms));
+                    }
+                    if (!tablet_files_to_delete.empty()) {
+                        std::lock_guard l(response_mtx);
+                        txn_log_files_to_delete.insert(txn_log_files_to_delete.end(),
+                                                       std::make_move_iterator(tablet_files_to_delete.begin()),
+                                                       std::make_move_iterator(tablet_files_to_delete.end()));
                     }
                     if (res.ok()) {
                         auto metadata = std::move(res).value();
@@ -709,6 +721,11 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
     }
 
     latch.wait();
+    // Every tablet task is done, so nothing else appends: one delete for the whole request.
+    TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::publish_version:txn_log_files_to_delete", &txn_log_files_to_delete);
+    if (!txn_log_files_to_delete.empty()) {
+        lake::delete_files_async(std::move(txn_log_files_to_delete));
+    }
     auto cost = butil::gettimeofday_us() - start_ts;
     auto is_slow = cost >= config::lake_publish_version_slow_log_ms * 1000;
     if (is_slow) {

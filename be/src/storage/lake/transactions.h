@@ -61,11 +61,19 @@ class PublishTabletInfo;
 // |publish_property| is what the table has set for this publish, and is empty when the request
 // carried nothing -- which an FE too old to send it and a table that has never set one look alike.
 // Empty leaves the tablet on the values it already has rather than clearing them.
+// |collected_files_to_delete| lets the caller batch the deletes instead of paying for them per tablet. A
+// single-txn publish retires one txn log per tablet, so deleting from here issues one object-store
+// delete request carrying one key for every tablet of the request; a caller that publishes many
+// tablets at once passes a collector and submits them as one batched delete when they are all done.
+// The paths are appended only on success, exactly the set this publish would otherwise have deleted
+// itself, and all of them live under the tablet root, so a whole request's worth shares one
+// FileSystem. Pass nullptr to keep deleting from here.
 StatusOr<TabletMetadataPtr> publish_version(
         TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info, int64_t base_version, int64_t new_version,
         std::span<const TxnInfoPB> txns, bool skip_write_tablet_metadata,
         std::optional<PublishPropertyPBRef> publish_property, int64_t fe_built_version = 0,
-        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst);
+        InitialMetadataOrder base_version_order = InitialMetadataOrder::kPerTabletFirst,
+        std::vector<std::string>* collected_files_to_delete = nullptr);
 
 // Publish a batch new versions of transaction logs.
 //

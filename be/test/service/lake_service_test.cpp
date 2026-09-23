@@ -964,6 +964,57 @@ TEST_F(LakeServiceTest, test_publish_version_async_table_no_vi_ids_reports_no_bu
             << "no vector_index_ids -> nothing to build this version -> build_needed=false";
 }
 
+TEST_F(LakeServiceTest, test_publish_version_batches_txn_log_deletes) {
+    // A publish of a single transaction retires one txn log per tablet. They are deleted as one
+    // batch for the whole request rather than one delete per tablet.
+    constexpr size_t kNumTablets = 3;
+    std::vector<int64_t> tablet_ids;
+    for (size_t i = 0; i < kNumTablets; i++) {
+        auto metadata = lake::generate_simple_tablet_metadata(DUP_KEYS);
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(metadata));
+        tablet_ids.emplace_back(metadata->id());
+    }
+
+    auto txn_id = next_id();
+    for (auto tablet_id : tablet_ids) {
+        auto log = generate_write_txn_log(0, 0, 0);
+        log.set_tablet_id(tablet_id);
+        log.set_txn_id(txn_id);
+        ASSERT_OK(_tablet_mgr->put_txn_log(log));
+    }
+
+    std::atomic<int> batch_count{0};
+    std::atomic<size_t> batched_files{0};
+    SyncPoint::GetInstance()->SetCallBack("LakeServiceImpl::publish_version:txn_log_files_to_delete", [&](void* arg) {
+        batch_count.fetch_add(1);
+        batched_files.store(static_cast<std::vector<std::string>*>(arg)->size());
+    });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("LakeServiceImpl::publish_version:txn_log_files_to_delete");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    PublishVersionRequest request;
+    PublishVersionResponse response;
+    request.set_base_version(1);
+    request.set_new_version(2);
+    request.add_txn_ids(txn_id);
+    for (auto tablet_id : tablet_ids) {
+        request.add_tablet_ids(tablet_id);
+    }
+    _lake_service.publish_version(nullptr, &request, &response, nullptr);
+    ASSERT_EQ(0, response.failed_tablets_size());
+
+    EXPECT_EQ(1, batch_count.load()) << "the whole request must delete its txn logs in one batch";
+    EXPECT_EQ(kNumTablets, batched_files.load()) << "every tablet's txn log must be in that batch";
+
+    StorageEngine::instance()->wait_storage_cleanup_tasks();
+    for (auto tablet_id : tablet_ids) {
+        EXPECT_FALSE(fs::path_exist(_tablet_mgr->txn_log_location(tablet_id, txn_id)));
+    }
+}
+
 TEST_F(LakeServiceTest, test_publish_version_for_write_batch) {
     // Empty TxnLog
     {

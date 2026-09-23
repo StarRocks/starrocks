@@ -298,7 +298,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
                                             bool skip_write_tablet_metadata,
                                             std::optional<PublishPropertyPBRef> publish_property,
-                                            int64_t fe_built_version, InitialMetadataOrder base_version_order) {
+                                            int64_t fe_built_version, InitialMetadataOrder base_version_order,
+                                            std::vector<std::string>* collected_files_to_delete) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
@@ -749,7 +750,16 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         tablet_mgr->cache_bundled_metadata_partition_marker(tablet_info.get_tablet_id_in_metadata());
     }
 
-    delete_files_async(std::move(files_to_delete));
+    // Hand the retired txn logs to the caller when it asked to batch them, so a request covering
+    // many tablets pays for one delete instead of one per tablet. Both paths delete the same set,
+    // and only when the publish succeeded.
+    if (collected_files_to_delete != nullptr) {
+        collected_files_to_delete->insert(collected_files_to_delete->end(),
+                                          std::make_move_iterator(files_to_delete.begin()),
+                                          std::make_move_iterator(files_to_delete.end()));
+    } else {
+        delete_files_async(std::move(files_to_delete));
+    }
 
     return new_metadata;
 }
