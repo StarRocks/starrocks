@@ -28,6 +28,7 @@
 #include "base/utility/defer_op.h"
 #include "butil/time.h"
 #include "column/column.h"
+#include "column/column_viewer.h"
 #include "column/const_column.h"
 #include "column/flat_json/json_flattener.h"
 #include "column/map_column.h"
