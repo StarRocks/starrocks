@@ -197,6 +197,7 @@ option(WITH_CONNECTOR_BENCHMARK "Build the benchgen-backed benchmark connector" 
 option(WITH_CONNECTOR_ELASTICSEARCH "Build the Elasticsearch connector" ON)
 option(WITH_CONNECTOR_JDBC "Build the JDBC connector" ON)
 option(WITH_CONNECTOR_MYSQL "Build the MySQL connector" ON)
+option(WITH_CONNECTOR_LANCE "Build the Lance Rust reader" ON)
 
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
