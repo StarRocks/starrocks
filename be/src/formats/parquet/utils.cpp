@@ -25,6 +25,7 @@
 #include "gutil/casts.h"
 #include "simd/simd.h"
 #include "util/hash_util.hpp"
+#include "util/murmur_hash3.h"
 
 namespace starrocks::parquet {
 
@@ -154,7 +155,9 @@ std::string ParquetUtils::get_file_cache_key(CacheType type, const std::string& 
     std::string key;
     key.resize(14);
     char* data = key.data();
-    uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
+    // MurmurHash3 explicitly, NOT HashUtil::hash64(): see the comment in CacheInputStream.
+    uint64_t hash_value = 0;
+    murmur_hash3_x64_64(filename.data(), static_cast<int>(filename.size()), 0, &hash_value);
     memcpy(data, &hash_value, sizeof(hash_value));
     const std::string& prefix = cache_key_prefix[type];
     memcpy(data + 8, prefix.data(), prefix.size());
