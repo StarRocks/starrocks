@@ -95,6 +95,15 @@ under the License.
         <lz4-java.version>1.10.1</lz4-java.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
+        <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
+             (ASM frame merge AIOOBE on delta-kernel Metadata, VerifyError on iceberg REST catalog
+             classes). 1.49.4 cannot redefine sealed JDK classes (java.net.InetAddress on JDK 19+),
+             so tests must not JMockit-mock those; use Mockito for them instead. -->
+        <jmockit.version>1.49.4</jmockit.version>
+        <!-- Mockito 5.x ships a Byte Buddy that understands Java 21 class files;
+             keep byte-buddy and byte-buddy-agent on the version mockito-core declares -->
+        <mockito.version>5.23.0</mockito.version>
+        <bytebuddy.version>1.17.7</bytebuddy.version>
         <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
         <httpcore5.version>5.4.3</httpcore5.version>
@@ -423,8 +432,28 @@ under the License.
             <dependency>
                 <groupId>com.github.hazendaz.jmockit</groupId>
                 <artifactId>jmockit</artifactId>
-                <version>1.49.4</version>
+                <version>${jmockit.version}</version>
                 <scope>test</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <!-- assertj-core also pulls byte-buddy; pin both artifacts so Maven's
+                 nearest-wins mediation cannot hand Mockito a pre-Java-21 Byte Buddy -->
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${bytebuddy.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy-agent</artifactId>
+                <version>${bytebuddy.version}</version>
             </dependency>
 
             <dependency>
@@ -1323,10 +1352,12 @@ under the License.
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+            <!-- 4.0.12+ bundles an ASM that reads Java 21 class files; the Groovy debug shell
+                 (GroovyUDSServer) fails with "Unsupported class file major version 65" on older builds -->
             <dependency>
                 <groupId>org.apache.groovy</groupId>
                 <artifactId>groovy-groovysh</artifactId>
-                <version>4.0.9</version>
+                <version>4.0.33</version>
             </dependency>
 
             <dependency>
