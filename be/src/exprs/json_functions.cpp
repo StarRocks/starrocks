@@ -630,11 +630,8 @@ static bool fused_resolve_field(Container&& container, std::string_view seg, fas
 template <LogicalType ResultType>
 JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw, const NativeJsonState* fs,
                                                                JsonGetThreadState* ts, ColumnBuilder<ResultType>& out) {
-    // Step 1: bare-scalar / empty / whitespace-only guard. Mirrors JsonValue::parse_json_or_string:
-    //   empty           -> JSON empty-string
-    //   whitespace-only -> JSON string of the whitespace
-    // Quoted root strings also use the fallback: ondemand::document cannot expose them as value.
-    // All three need the legacy from_string code path; we delegate to _fallback_extract_one.
+    // Bare scalars use parse_json_or_string semantics. Quoted root strings also need the
+    // fallback because ondemand::document cannot expose a scalar as ondemand::value.
     if (UNLIKELY(raw.size > kJSONLengthLimit)) {
         out.append_null();
         return ExtractResult::Handled;
@@ -785,9 +782,8 @@ StatusOr<ColumnPtr> JsonFunctions::_get_json_value(FunctionContext* context, con
     auto* fstate = get_native_json_state(context);
     auto* tstate = get_json_thread_state(context);
 
-    // Strict mode (allow_throw_exception=true, e.g. INSERT with strict_mode) needs every
-    // parse error surfaced as a Status. The fused path swallows simdjson errors into NULL
-    // (per-row), so route the whole call through _string_json which honors allow_throw.
+    // ALLOW_THROW_EXCEPTION requires full-document validation. Ordinary extraction only
+    // validates values needed for the path and may ignore malformed unselected values.
     const bool strict_mode = context != nullptr && context->allow_throw_exception();
 
     const bool can_fast = !strict_mode && fstate != nullptr && tstate != nullptr && !fstate->fast_path_disabled &&

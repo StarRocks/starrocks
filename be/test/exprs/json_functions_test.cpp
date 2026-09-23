@@ -2314,7 +2314,10 @@ struct DiffJsonCase {
     std::string path;
 };
 
-ColumnPtr run_get_json_string_with_flag(bool fast_path_enabled, const DiffJsonCase& tc) {
+using JsonGetter = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+
+ColumnPtr run_get_json_string_with_flag(bool fast_path_enabled, const DiffJsonCase& tc,
+                                        JsonGetter getter = JsonFunctions::get_json_string) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     auto json_col = BinaryColumn::create();
     auto path_col = BinaryColumn::create();
@@ -2335,7 +2338,7 @@ ColumnPtr run_get_json_string_with_flag(bool fast_path_enabled, const DiffJsonCa
             JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
     set_json_fast_path_disabled_for_test(ctx.get(), !fast_path_enabled);
 
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
+    ColumnPtr result = getter(ctx.get(), columns).value();
 
     EXPECT_TRUE(
             JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -2358,6 +2361,49 @@ void assert_diff_get_json_string(const DiffJsonCase& tc) {
 }
 
 } // namespace
+
+TEST_F(JsonFunctionsTest, diff_get_json_all_result_types) {
+    const std::vector<std::string> values{"null",
+                                          "true",
+                                          "false",
+                                          "0",
+                                          "-1",
+                                          "127.9",
+                                          "-128.9",
+                                          "32767.9",
+                                          "2147483647.9",
+                                          "9223372036854775807",
+                                          "9223372036854775808",
+                                          "18446744073709551615",
+                                          "18446744073709551616",
+                                          "1.25",
+                                          "-0.0",
+                                          "1e100",
+                                          R"("hello")",
+                                          R"("123")",
+                                          R"("1e100")",
+                                          R"("a\nb")",
+                                          R"("\u0061")",
+                                          "[]",
+                                          "[1,null,true]",
+                                          "{}",
+                                          R"({"x":1,"y":["a",null]})"};
+    DiffJsonCase tc{"typed_values", {}, "$.a"};
+    for (const auto& value : values) {
+        tc.json_rows.emplace_back(R"({"other":0,"a":)" + value + "}");
+    }
+    for (JsonGetter getter :
+         {JsonFunctions::get_json_int, JsonFunctions::get_json_double, JsonFunctions::get_json_string,
+          JsonFunctions::get_json_bool, JsonFunctions::json_query_from_string}) {
+        auto legacy = run_get_json_string_with_flag(false, tc, getter);
+        auto fused = run_get_json_string_with_flag(true, tc, getter);
+        ASSERT_EQ(legacy->size(), fused->size());
+        for (size_t i = 0; i < values.size(); ++i) {
+            SCOPED_TRACE(values[i]);
+            ASSERT_EQ(legacy->debug_item(i), fused->debug_item(i));
+        }
+    }
+}
 
 TEST_F(JsonFunctionsTest, diff_get_json_root_and_reset_paths) {
     for (const auto& tc : std::vector<DiffJsonCase>{
