@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.SlotDescriptor;
 import com.starrocks.planner.SlotId;
+import com.starrocks.proto.GeoEdgeAlgorithmPB;
 import com.starrocks.proto.GeoTypeDescPB;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -107,15 +108,22 @@ public class NativeGeoTypeTest {
 
     @Test
     public void testRejectMissingMetadataAndWrongEdge() {
-        ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
-        TTypeDesc thrift = TypeSerializer.toThrift(type);
-        thrift.types.get(0).scalar_type.geo.setEdge_algorithm(TGeoEdgeAlgorithm.PLANAR);
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
-        thrift.types.get(0).scalar_type.unsetGeo();
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
-        PTypeDesc proto = TypeSerializer.toProtobuf(type);
-        proto.types.get(0).scalarType.geo = null;
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            TTypeDesc thrift = TypeSerializer.toThrift(type);
+            thrift.types.get(0).scalar_type.geo.setEdge_algorithm(
+                    primitive == PrimitiveType.GEOGRAPHY ? TGeoEdgeAlgorithm.PLANAR : TGeoEdgeAlgorithm.SPHERICAL);
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
+            thrift.types.get(0).scalar_type.unsetGeo();
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
+            PTypeDesc proto = TypeSerializer.toProtobuf(type);
+            proto.types.get(0).scalarType.geo.edgeAlgorithm = primitive == PrimitiveType.GEOGRAPHY
+                    ? GeoEdgeAlgorithmPB.GEO_EDGE_ALGORITHM_PLANAR
+                    : GeoEdgeAlgorithmPB.GEO_EDGE_ALGORITHM_SPHERICAL;
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+            proto.types.get(0).scalarType.geo = null;
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+        }
     }
 
     @Test
