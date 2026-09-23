@@ -2446,6 +2446,41 @@ TEST_F(JsonFunctionsTest, json_query_many_damaged_values) {
     }
 }
 
+TEST_F(JsonFunctionsTest, json_query_many_constant_and_null_input) {
+    auto data = BinaryColumn::create();
+    data->append(R"({"a":1,"b":null})");
+    const std::vector<ColumnPtr> inputs{ConstColumn::create(data, 4096), ColumnHelper::create_const_null_column(4096)};
+    for (const auto& input : inputs) {
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
+        Columns columns{input};
+        for (const auto& path : {"$.a", "$.b", "$.missing"}) {
+            auto column = BinaryColumn::create();
+            column->append(path);
+            columns.emplace_back(ConstColumn::create(column, 4096));
+        }
+        context->set_constant_columns(columns);
+        ASSERT_OK(JsonFunctions::json_query_many_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL));
+        auto result = JsonFunctions::json_query_many_from_string(context.get(), columns);
+        ASSERT_OK(JsonFunctions::json_query_many_close(context.get(), FunctionContext::FRAGMENT_LOCAL));
+        ASSERT_TRUE(result.ok());
+        ASSERT_TRUE(result.value()->is_constant());
+        ASSERT_EQ(4096, result.value()->size());
+        ASSERT_EQ(1, ColumnHelper::get_data_column(result.value().get())->size());
+        if (input->only_null()) {
+            ASSERT_EQ(4096, ColumnHelper::count_nulls(result.value()));
+        } else {
+            ColumnViewer<TYPE_JSON> viewer(result.value());
+            auto object = viewer.value(4095)->to_vslice();
+            ASSERT_EQ(1, object.get("0").getInt());
+            ASSERT_TRUE(object.get("1").isNull());
+            ASSERT_TRUE(object.get("2").isNone());
+        }
+    }
+    auto empty = run_json_many({}, {"$.a", "$.b"});
+    ASSERT_TRUE(empty.ok());
+    ASSERT_EQ(0, empty.value()->size());
+}
+
 TEST_F(JsonFunctionsTest, json_query_many_concurrent_context) {
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
     Columns constants{nullptr};

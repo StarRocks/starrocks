@@ -2026,6 +2026,10 @@ public class ExpressionTest extends PlanTestBase {
             assertContains(repeated, "json_query_from_string(");
             String independent = getFragmentPlan("select " + first + ", " + second.replace("v4", "v5") + " from t1");
             Assertions.assertFalse(independent.contains("json_query_many_from_string("));
+            String lambda = getFragmentPlan("select array_map(x -> "
+                    + "cast(json_query(parse_json(x), '$.a') as bigint) + "
+                    + "cast(json_query(parse_json(x), '$.b') as bigint), [cast(v4 as varchar)]) from t1");
+            Assertions.assertEquals(1, StringUtils.countMatches(lambda, "json_query_many_from_string("));
             connectContext.getSessionVariable().setEnableJsonExtractFusion(false);
             String off = getFragmentPlan("select " + first + ", " + second + " from t1");
             Assertions.assertEquals(1, StringUtils.countMatches(off, "parse_json("));
