@@ -39,9 +39,12 @@ import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
+=======
+>>>>>>> 2afdae9 ([Refactor] Build a proc dir's result in one place (#79622))
 import java.util.HashMap;
 import java.util.List;
 
@@ -175,18 +178,7 @@ public class RollupProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(materializedViewHandler);
 
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-
-        List<List<Comparable>> rollupJobInfos = materializedViewHandler.getAlterJobInfosByDb(db);
-        for (List<Comparable> infoStr : rollupJobInfos) {
-            List<String> oneInfo = new ArrayList<String>(TITLE_NAMES.size());
-            for (Comparable element : infoStr) {
-                oneInfo.add(element.toString());
-            }
-            result.addRow(oneInfo);
-        }
-        return result;
+        return ProcUtils.toProcResult(TITLE_NAMES, materializedViewHandler.getAlterJobInfosByDb(db));
     }
 
     @Override
