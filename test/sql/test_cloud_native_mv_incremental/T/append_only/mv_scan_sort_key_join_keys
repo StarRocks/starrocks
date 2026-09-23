@@ -66,8 +66,11 @@ PROPERTIES ("refresh_mode" = "INCREMENTAL")
 AS SELECT dt, a, SUM(v) AS v FROM skp GROUP BY dt, a;
 REFRESH MATERIALIZED VIEW mv_skp WITH SYNC MODE;
 
--- no ORDER BY, so the sort key IS __ROW_ID__ and the join already carries it
+-- no ORDER BY, so the sort key IS __ROW_ID__ and the join already carries it. That equality stays
+-- EQ: __ROW_ID__ is the mv's primary key and the encode of any group key tuple is non-null, NULLs
+-- among the keys included.
 INSERT INTO skp VALUES ('2026-03-11 00:00:00',2,5);
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_skp', '__ROW_ID__ = ', 'MaterializedView: true')
 function: assert_explain_not_contains('REFRESH MATERIALIZED VIEW mv_skp', '<=>')
 REFRESH MATERIALIZED VIEW mv_skp WITH SYNC MODE;
 SELECT dt, a, v FROM mv_skp ORDER BY dt, a;
@@ -218,4 +221,34 @@ SELECT dt, a, b, v FROM mv_osk ORDER BY dt, a;
 SET enable_materialized_view_rewrite = false;
 SELECT COUNT(*) AS diff FROM (SELECT dt, a, b, v FROM mv_osk EXCEPT SELECT dt, a, b, SUM(v) FROM osk GROUP BY dt, a, b) t;
 SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, b, SUM(v) FROM osk GROUP BY dt, a, b EXCEPT SELECT dt, a, b, v FROM mv_osk) t;
+SET enable_materialized_view_rewrite = true;
+
+-- name: test_ivm_mv_scan_sort_key_join_on_an_aggregate_key_base @cloud
+-- An AGGREGATE KEY base: the delta arrives pre-merged by the base's own SUM, so the mv side of the
+-- join is reached by a different delta shape than the DUPLICATE KEY cases take.
+CREATE TABLE agb (dt DATETIME NOT NULL, a INT NOT NULL, b INT NOT NULL, v BIGINT SUM)
+AGGREGATE KEY(dt, a, b)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+INSERT INTO agb VALUES
+  ('2026-10-10 00:00:00',1,10,100),('2026-10-11 00:00:00',2,20,200);
+CREATE MATERIALIZED VIEW mv_agb
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(a) BUCKETS 2
+ORDER BY (b, a)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT dt, a, b, SUM(v) AS v FROM agb GROUP BY dt, a, b;
+REFRESH MATERIALIZED VIEW mv_agb WITH SYNC MODE;
+SELECT dt, a, b, v FROM mv_agb ORDER BY dt, a;
+
+INSERT INTO agb VALUES ('2026-10-11 00:00:00',2,20,7);
+function: assert_explain_contains('REFRESH MATERIALIZED VIEW mv_agb', 'b <=> ', 'a <=> ')
+REFRESH MATERIALIZED VIEW mv_agb WITH SYNC MODE;
+-- 200+7: the base pre-merged the two rows and the mv merged that onto its own state
+SELECT dt, a, b, v FROM mv_agb ORDER BY dt, a;
+
+SET enable_materialized_view_rewrite = false;
+SELECT COUNT(*) AS diff FROM (SELECT dt, a, b, v FROM mv_agb EXCEPT SELECT dt, a, b, SUM(v) FROM agb GROUP BY dt, a, b) t;
+SELECT COUNT(*) AS diff_reverse FROM (SELECT dt, a, b, SUM(v) FROM agb GROUP BY dt, a, b EXCEPT SELECT dt, a, b, v FROM mv_agb) t;
 SET enable_materialized_view_rewrite = true;
