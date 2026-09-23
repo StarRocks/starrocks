@@ -786,6 +786,8 @@ public class MetadataMgr {
         if (connectorBasicStats == null) {
             return hasInternalStats ? internalStatistics : null;
         }
+        // Connector row counts already include partition pruning.
+        session.setObtainedFromInternalStatistics(false);
         if (internalStatistics == null) {
             return connectorBasicStats;
         }

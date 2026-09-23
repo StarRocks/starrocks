@@ -15,10 +15,14 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -33,9 +37,13 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.Histogram;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -547,6 +555,104 @@ public class MetadataMgrTest {
 
         // Row count comes from the connector (queried snapshot), not the stale collected stats.
         Assertions.assertEquals(999999, merged.getOutputRowCount(), 0.001);
+    }
+
+    @Test
+    public void testPartialAnalyzeStatisticsRouting(@Mocked com.starrocks.catalog.Table table) throws Exception {
+        ColumnRefOperator collected = new ColumnRefOperator(1, IntegerType.INT, "collected", true);
+        ColumnRefOperator uncollected = new ColumnRefOperator(2, IntegerType.INT, "uncollected", true);
+        ColumnStatistic known = ColumnStatistic.builder().setMinValue(1).setMaxValue(100)
+                .setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(50).build();
+        Statistics partial = Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistic(collected, known)
+                .addColumnStatistic(uncollected, ColumnStatistic.unknown()).build();
+        Statistics full = Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistic(collected, known).addColumnStatistic(uncollected, known).build();
+        Statistics connector = Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(collected, known).addColumnStatistic(uncollected, known).build();
+        Statistics[] internalResult = {partial};
+        Statistics[] connectorResult = {connector};
+        boolean[] blocked = {false};
+        int[] connectorCalls = {0};
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public boolean statisticTableBlackListCheck(long tableId) {
+                return blocked[0];
+            }
+        };
+        ConnectorMetadata metadata = new ConnectorMetadata() {
+            @Override
+            public Statistics getTableStatistics(OptimizerContext session, com.starrocks.catalog.Table externalTable,
+                                                Map<ColumnRefOperator, Column> columns, List<PartitionKey> partitionKeys,
+                                                ScalarOperator predicate, long limit, TvrVersionRange versionRange) {
+                connectorCalls[0]++;
+                return connectorResult[0];
+            }
+        };
+        MetadataMgr mgr = new MetadataMgr(GlobalStateMgr.getCurrentState().getLocalMetastore(),
+                new TemporaryTableMgr(), null, null) {
+            @Override
+            public Statistics getTableStatisticsFromInternalStatistics(com.starrocks.catalog.Table externalTable,
+                                                                       Map<ColumnRefOperator, Column> columns) {
+                return internalResult[0];
+            }
+
+            @Override
+            public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+                return Optional.of(metadata);
+            }
+        };
+        boolean wasRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            for (int scenario = 0; scenario < 6; scenario++) {
+                OptimizerContext session = new OptimizerContext(UtFrameUtils.createDefaultCtx());
+                internalResult[0] = scenario == 1 ? full : partial;
+                connectorResult[0] = scenario == 2 ? null : connector;
+                blocked[0] = scenario == 3;
+                session.getSessionVariable().setDisableTableStatsFromMetadataForSingleTable(scenario >= 4);
+                session.setSourceTablesCount(scenario == 4 ? 1 : 2);
+                connectorCalls[0] = 0;
+                Statistics result = mgr.getTableStatistics(session, "external", table, Map.of(), List.of(), null);
+                boolean usesConnector = scenario == 0 || scenario == 5;
+                Assertions.assertEquals(usesConnector ? 100 : 1000, result.getOutputRowCount(), 0.001,
+                        "scenario " + scenario);
+                Assertions.assertEquals(!usesConnector, session.isObtainedFromInternalStatistics(),
+                        "partition pruning must follow the row-count source; scenario " + scenario);
+                Assertions.assertEquals(scenario == 0 || scenario == 2 || scenario == 5 ? 1 : 0,
+                        connectorCalls[0], "scenario " + scenario);
+                Assertions.assertSame(known, result.getColumnStatistic(collected));
+                if (usesConnector) {
+                    Assertions.assertSame(known, result.getColumnStatistic(uncollected));
+                } else {
+                    Assertions.assertSame(internalResult[0], result);
+                }
+            }
+        } finally {
+            FeConstants.runningUnitTest = wasRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testBackfillPreservesHistogramAndMissingColumn() {
+        ColumnRefOperator withHistogram = new ColumnRefOperator(1, IntegerType.INT, "histogram", true);
+        ColumnRefOperator missing = new ColumnRefOperator(2, IntegerType.INT, "missing", true);
+        Histogram histogram = new Histogram(List.of(), Map.of("7", 5L));
+        ColumnStatistic unknownWithHistogram = ColumnStatistic.buildFrom(ColumnStatistic.unknown())
+                .setHistogram(histogram).build();
+        ColumnStatistic connectorColumn = ColumnStatistic.builder().setMinValue(1).setMaxValue(20)
+                .setNullsFraction(0).setAverageRowSize(4).setDistinctValuesCount(10).build();
+        Statistics internal = Statistics.builder().setOutputRowCount(1000)
+                .addColumnStatistic(withHistogram, unknownWithHistogram)
+                .addColumnStatistic(missing, ColumnStatistic.unknown()).build();
+        Statistics connector = Statistics.builder().setOutputRowCount(100)
+                .addColumnStatistic(withHistogram, connectorColumn).build();
+        Statistics merged = MetadataMgr.backfillUnknownColumnsFromConnector(internal, connector);
+        Assertions.assertSame(histogram, merged.getColumnStatistic(withHistogram).getHistogram());
+        Assertions.assertEquals(20, merged.getColumnStatistic(withHistogram).getMaxValue(), 0.001);
+        Assertions.assertTrue(merged.getColumnStatistic(missing).isUnknown());
+        Assertions.assertSame(unknownWithHistogram, internal.getColumnStatistic(withHistogram));
+        Assertions.assertNull(connectorColumn.getHistogram());
     }
 
     private void dropCatalogIfExists(String catalogName) {
