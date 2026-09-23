@@ -41,6 +41,11 @@ import java.util.Set;
  * source-table column names. Non-key target columns may be expressions over the source relation
  * and are omitted from the map.
  *
+ * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
+ * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
+ * names. A column the list omits simply never enters the map, which makes it a skip when it is a
+ * sort-key or partition column and a no-op otherwise.
+ *
  * <p>Returns {@code null} whenever the projection cannot be cleanly and safely mapped
  * (caller then silently skips pre-split).
  */
@@ -70,7 +75,10 @@ final class InsertSelectSourceColumns {
             List<Column> sortKeyColumns, List<Column> partitionColumns) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
-        List<Column> targetCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
+        if (targetCols == null) {
+            return null;
+        }
         // Use VISIBLE columns: the base schema may include hidden columns that SELECT * does not output.
         List<Column> sourceCols = sourceTable instanceof OlapTable olapTable
                 ? olapTable.getVisibleColumnsWithoutGeneratedColumn()
@@ -95,7 +103,7 @@ final class InsertSelectSourceColumns {
                 return null;
             }
             if (byName) {
-                // Exact-set match: reject source columns absent from the target, and vice versa.
+                // Exact-set match: reject source columns absent from the effective target, and vice versa.
                 if (!sourceColumnMap.keySet().equals(targetNames(targetCols))) {
                     return null;
                 }
@@ -156,7 +164,7 @@ final class InsertSelectSourceColumns {
                         targetToSource.put(targetName, output[1]);
                     }
                 }
-                // Exact-set match: output names must be exactly the target non-generated columns.
+                // Exact-set match: output names must be exactly the effective target columns.
                 if (!outputNames.equals(targetNames(targetCols))) {
                     return null;
                 }
@@ -180,6 +188,40 @@ final class InsertSelectSourceColumns {
             return null;
         }
         return Map.copyOf(targetToSource);
+    }
+
+    /**
+     * The target columns the statement actually writes: the explicit target column list in the
+     * order it was written, or the whole base (non-generated) schema when there is no list. Both
+     * the by-position pairing and the BY NAME exact-set match are against these, so a partial or
+     * reordered list maps its outputs onto the columns it names instead of onto the schema.
+     *
+     * <p>Only resolves names, it does not validate the list: whether the list is admissible at all
+     * (no duplicate / unknown / generated name, every omitted column fillable, every visible
+     * index's sort key present) is {@link InsertPreSplitHook#targetColumnListIsPreSplitSafe}'s
+     * single job, and it has already run for every statement that reaches here. The {@code null}
+     * return below is therefore unreachable in practice and exists so that a name this method
+     * cannot resolve skips pre-split rather than NPEs.
+     */
+    private static List<Column> effectiveTargetColumns(InsertStmt insertStmt, OlapTable targetTable) {
+        List<Column> baseCols = targetTable.getBaseSchemaWithoutGeneratedColumn();
+        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
+        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
+            return baseCols;
+        }
+        Map<String, Column> baseByName = new HashMap<>();
+        for (Column column : baseCols) {
+            baseByName.put(column.getName().toLowerCase(), column);
+        }
+        List<Column> effective = new ArrayList<>(targetColumnNames.size());
+        for (String name : targetColumnNames) {
+            Column column = baseByName.get(name.toLowerCase());
+            if (column == null) {
+                return null;
+            }
+            effective.add(column);
+        }
+        return effective;
     }
 
     /**

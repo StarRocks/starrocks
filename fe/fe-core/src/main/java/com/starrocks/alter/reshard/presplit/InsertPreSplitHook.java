@@ -413,35 +413,6 @@ public final class InsertPreSplitHook {
         return union;
     }
 
-    /**
-     * Whether the target column list names every base (non-generated) column
-     * exactly once, in schema order — i.e. it is semantically identical to
-     * omitting the list. Used by the INSERT-from-table source, whose column
-     * mapping assumes the full base schema in order; partial / reordered lists
-     * are not yet supported there.
-     *
-     * <p>Returns true when there is no target column list or when the list is a
-     * full, in-order identity list.
-     *
-     * <p>Package-private (not private) so the unit test can drive it directly.
-     */
-    static boolean targetColumnListIsFullIdentity(InsertStmt insertStmt, OlapTable target) {
-        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
-            return true;
-        }
-        List<Column> baseColumns = target.getBaseSchemaWithoutGeneratedColumn();
-        if (targetColumnNames.size() != baseColumns.size()) {
-            return false;
-        }
-        for (int i = 0; i < baseColumns.size(); i++) {
-            if (!targetColumnNames.get(i).equalsIgnoreCase(baseColumns.get(i).getName())) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static SelectRelation extractSelectRelation(InsertStmt insertStmt) {
         if (insertStmt.getQueryStatement() == null) {
             return null;
