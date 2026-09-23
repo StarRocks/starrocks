@@ -26,26 +26,11 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-<<<<<<< HEAD
+#include "storage/utils.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/executor.h"
-=======
-#include "storage/utils.h"
-
-#ifdef USE_STAROS
-DECLARE_int64(fslib_s3_max_single_part_size);
-DECLARE_int64(fslib_s3_min_upload_part_size);
-DECLARE_int64(fslib_gs_max_single_part_size);
-DECLARE_int64(fslib_azure_storage_max_single_part_size);
-DECLARE_int64(fslib_azure_storage_min_upload_part_size);
-#endif
-
-namespace brpc {
-DECLARE_int32(max_connection_pool_size);
-} // namespace brpc
->>>>>>> 87a3a88 ([UT] Cut the fixed per-process cost of BE unit tests (#79543))
 
 namespace starrocks {
 
