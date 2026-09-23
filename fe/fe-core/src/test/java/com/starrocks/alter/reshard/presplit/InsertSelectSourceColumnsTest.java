@@ -922,15 +922,30 @@ public class InsertSelectSourceColumnsTest {
     }
 
     @Test
-    public void filesStarByNameToleratesExtraFileColumns() {
-        // INSERT INTO t BY NAME SELECT * FROM FILES(...): a file carrying fields the target does not
-        // have is the ordinary case -- BY NAME simply does not read them. EXACT rejects it
-        // (starByNameExtraSourceColumnReturnsNull above).
+    public void filesStarByNameDeclinesAFileWiderThanTheTarget() {
+        // INSERT INTO t BY NAME SELECT * FROM FILES(...) where the file also carries "extra".
+        // BY NAME makes the query's OUTPUT names the target column names, and `SELECT *` over FILES
+        // outputs every file column, so InsertAnalyzer fails this statement with
+        // "Unknown column 'extra' in 't'". Pre-split runs BEFORE analysis, so admitting it would
+        // reshard the target for a load that never runs.
         List<Column> targetCols = Arrays.asList(col("k"), col("v"));
 
         Map<String, String> result = resolvePerColumn(
                 insertStmt(true), starRelation(), targetCols,
                 filesTable(col("v"), col("k"), col("extra")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void filesStarByNameAdmitsAFileNarrowerThanTheTarget() {
+        // The other direction stays admitted: every file column IS a target column, and the target
+        // columns the file omits are simply defaulted by the load.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("w"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), starRelation(), targetCols, filesTable(col("v"), col("k")),
                 Collections.singletonList(col("k")), Collections.emptyList());
 
         Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
@@ -1001,6 +1016,22 @@ public class InsertSelectSourceColumnsTest {
                 Collections.singletonList(col("k")), Collections.emptyList());
 
         Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void filesExplicitListByNameDeclinesAnOutputThatIsNoTargetColumn() {
+        // INSERT INTO t BY NAME SELECT k, v AS not_a_target_col FROM FILES(...): only k needs to map
+        // for the sort key, but BY NAME turns "not_a_target_col" into a target column name and
+        // InsertAnalyzer rejects it with "Unknown column". A partial output set is legitimate here;
+        // an output naming nothing on the target is not.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), bareRelation(bareItem("k"), bareItem("v", null, "not_a_target_col")),
+                targetCols, filesTable(col("k"), col("v")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertNull(result);
     }
 
     @Test
