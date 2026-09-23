@@ -63,6 +63,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import javax.net.ssl.HostnameVerifier;
 import javax.net.ssl.SSLContext;
@@ -92,6 +93,10 @@ public class EsRestClient {
 
     private final String authHeader;
     private final String[] nodes;
+    // Index of the node that served the last successful request. New requests start from this node
+    // instead of always starting from nodes[0], so a dead first node won't block every request
+    // for a connection timeout. AtomicInteger makes this shared state thread-safe.
+    private final AtomicInteger currentNodeIndex = new AtomicInteger(0);
 
     private boolean sslEnabled;
 
@@ -220,7 +225,11 @@ public class EsRestClient {
         } else {
             client = NETWORK_CLIENT;
         }
-        for (int i = 0; i < nodes.length; i++) {
+        // Start from the node that served the last successful request and wrap around,
+        // so a dead node[0] does not make every request wait for its timeout first.
+        int startIndex = currentNodeIndex.get();
+        for (int attempt = 0; attempt < nodes.length; attempt++) {
+            int i = (startIndex + attempt) % nodes.length;
             // maybe should add HTTP schema to the address
             // actually, at this time we can only process http protocol
             // NOTE. nodes[i] may have some spaces.
@@ -246,7 +255,9 @@ public class EsRestClient {
             try {
                 response = client.newCall(request).execute();
                 if (response.isSuccessful()) {
-                    return response.body().string();
+                    currentNodeIndex.set(i);
+                    String result = response.body().string();
+                    return result;
                 }
             } catch (IOException e) {
                 LOG.warn("request node [{}] [{}] failures {}, try next nodes", node, path, e);

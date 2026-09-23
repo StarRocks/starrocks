@@ -46,6 +46,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class EsRestClientTest {
 
@@ -227,6 +229,82 @@ public class EsRestClientTest {
         Assertions.assertEquals(2, captured.size());
         Assertions.assertEquals(deadPort, captured.get(0).url().port());
         Assertions.assertEquals(9200, captured.get(1).url().port());
+    }
+
+    @Test
+    public void testGetMappingRemembersLastWorkingNode() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        List<Request> captured = Collections.synchronizedList(new ArrayList<>());
+        int deadPort = 19200;
+        AtomicInteger deadHits = new AtomicInteger();
+        mockOkHttpClient(request -> {
+            captured.add(request);
+            if (request.url().port() == deadPort) {
+                deadHits.incrementAndGet();
+                throw new IOException("connection refused");
+            }
+            String index = request.url().pathSegments().get(0);
+            String body = mappings.get(index);
+            Assertions.assertNotNull(body, "unexpected mapping request for index: " + index);
+            return body;
+        });
+
+        EsRestClient client = new EsRestClient(
+                new String[] {"http://127.0.0.1:" + deadPort, "http://127.0.0.1:9200"}, "", "");
+
+        // First request fails over from the dead node[0] to the healthy node[1] and remembers it.
+        Assertions.assertEquals(mappings.get("index_user"), client.getMapping("index_user"));
+        Assertions.assertEquals(1, deadHits.get());
+        Assertions.assertEquals(2, captured.size());
+
+        // Subsequent requests must start directly from the remembered healthy node and never
+        // hit the dead node[0] again, avoiding its connection timeout on every request.
+        Assertions.assertEquals(mappings.get("index_order"), client.getMapping("index_order"));
+        Assertions.assertEquals(mappings.get("index_product"), client.getMapping("index_product"));
+        Assertions.assertEquals(1, deadHits.get(), "dead node[0] should not be retried once a working node is remembered");
+        Assertions.assertEquals(4, captured.size());
+    }
+
+    @Test
+    public void testGetMappingWrapsAroundWhenRememberedNodeFails() throws IOException {
+        Map<String, String> mappings = loadIndexMappings();
+        int port0 = 19200;
+        int port1 = 9200;
+        AtomicBoolean node0Down = new AtomicBoolean(true);
+        AtomicBoolean node1Down = new AtomicBoolean(false);
+        List<Integer> triedPorts = Collections.synchronizedList(new ArrayList<>());
+        mockOkHttpClient(request -> {
+            int port = request.url().port();
+            triedPorts.add(port);
+            if (port == port0 && node0Down.get()) {
+                throw new IOException("node0 down");
+            }
+            if (port == port1 && node1Down.get()) {
+                throw new IOException("node1 down");
+            }
+            String index = request.url().pathSegments().get(0);
+            String body = mappings.get(index);
+            Assertions.assertNotNull(body, "unexpected mapping request for index: " + index);
+            return body;
+        });
+
+        EsRestClient client = new EsRestClient(
+                new String[] {"http://127.0.0.1:" + port0, "http://127.0.0.1:" + port1}, "", "");
+
+        // First request: node[0] fails, node[1] serves the request and gets remembered.
+        Assertions.assertEquals(mappings.get("index_user"), client.getMapping("index_user"));
+
+        // Now node[0] recovers and the remembered node[1] goes down.
+        node0Down.set(false);
+        node1Down.set(true);
+
+        // Second request must start from the remembered node[1], fail, then wrap around to node[0].
+        Assertions.assertEquals(mappings.get("index_order"), client.getMapping("index_order"));
+        Assertions.assertEquals(4, triedPorts.size());
+        Assertions.assertEquals(port0, triedPorts.get(0).intValue());
+        Assertions.assertEquals(port1, triedPorts.get(1).intValue());
+        Assertions.assertEquals(port1, triedPorts.get(2).intValue());
+        Assertions.assertEquals(port0, triedPorts.get(3).intValue());
     }
 
     @Test
