@@ -146,6 +146,13 @@ public:
 
     uint32_t segment_id() const { return _segment_id; }
 
+    // Bytes of standalone index files (the vector index .vi) produced by finalize_columns().
+    // They are included in the index_size reported by finalize()/finalize_columns() but do
+    // NOT live in the segment file, so a caller that derives the column-data bytes as
+    // "segment file size - index_size" must add them back, or the result goes negative for
+    // segments whose .vi is larger than their data.
+    uint64_t standalone_index_size() const { return _standalone_index_size; }
+
     const DictColumnsValidMap& global_dict_columns_valid_info() { return _global_dict_columns_valid_info; }
 
     const std::string& segment_path() const;
@@ -187,6 +194,9 @@ private:
     SegmentFooterPB _footer;
     std::unique_ptr<ShortKeyIndexBuilder> _index_builder;
     std::vector<std::unique_ptr<ColumnWriter>> _column_writers;
+    // Accumulated size of standalone index files written by finalize_columns(); see
+    // standalone_index_size().
+    uint64_t _standalone_index_size = 0;
     std::vector<uint32_t> _column_indexes;
     bool _has_key = true;
     std::vector<uint32_t> _sort_column_indexes;
