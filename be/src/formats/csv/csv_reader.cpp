@@ -17,6 +17,7 @@
 #include <unordered_set>
 
 #include "base/string/trim.h"
+#include "runtime/current_thread.h"
 
 namespace starrocks {
 
@@ -544,7 +545,9 @@ Status CSVReader::_expand_buffer() {
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
     DCHECK_EQ(_storage.data(), _buff.position()) << "should compact buffer before expand";
-    _storage.resize(new_capacity);
+    // The buffer doubles up to kMaxBufferSize, so a single record without a row delimiter can make
+    // this ask for gigabytes at once.
+    TRY_CATCH_BAD_ALLOC(_storage.resize(new_capacity));
     CSVBuffer new_buff(_storage.data(), _storage.size());
     new_buff.add_limit(_buff.available());
     DCHECK_EQ(_storage.data(), new_buff.position());
@@ -560,7 +563,7 @@ Status CSVReader::_expand_buffer_loosely() {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
-    _storage.resize(new_capacity);
+    TRY_CATCH_BAD_ALLOC(_storage.resize(new_capacity));
     CSVBuffer new_buff(_storage.data(), _storage.size());
     new_buff.set_position_offset(_buff.position_offset());
     new_buff.set_limit_offset(_buff.limit_offset());

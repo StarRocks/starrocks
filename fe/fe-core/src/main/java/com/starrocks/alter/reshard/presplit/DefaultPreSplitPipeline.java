@@ -247,7 +247,7 @@ public final class DefaultPreSplitPipeline implements PreSplitPipeline {
                 DEFAULT_POLL_INTERVAL, Clock.systemUTC(), loadComputeResource, derivedBoundarySource);
     }
 
-    private static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
+    static RowGroupStatisticsProvider rowGroupStatisticsProviderFor(LoadKind loadKind) {
         return switch (loadKind) {
             case INSERT_FROM_FILES -> new InsertFromFilesRowGroupStatisticsProvider();
             case BROKER_LOAD -> new BrokerLoadRowGroupStatisticsProvider();

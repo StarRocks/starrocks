@@ -3081,6 +3081,17 @@ public class Config extends ConfigBase {
             "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
     public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
 
+    // A collection query reads one partition under the scan caps above into constant-size sketches and in
+    // practice returns in well under a second. Without a ceiling of its own each one inherits whatever is
+    // left of statistic_collect_query_timeout - the budget for the entire job - so a single stuck query can
+    // spend it all and leave every partition after it uncollected. The default is a tenth of the default job
+    // budget: far above anything the scan caps can produce, while still bounding one query's share of the
+    // job. Mutable so a cold or distant object store can be given more room without a restart.
+    @ConfField(mutable = true, comment = "Per-query timeout for external-table analyze collection queries; " +
+            "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
+            "additionally bounded by statistic_collect_query_timeout.")
+    public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
+
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
      * This may reduce network transmission in following case:
@@ -5198,11 +5209,11 @@ public class Config extends ConfigBase {
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
     @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
-            + "Pre-Split meta tier reads concurrently from a FILES() source. Footer reads are "
-            + "independent per file and the sampler sorts the aggregated stats, so concurrency only "
-            + "cuts the wall time of the pre-split hook (each footer is a remote round-trip; a "
-            + "many-file source otherwise serializes hundreds of round-trips). 1 disables "
-            + "concurrency.")
+            + "Pre-Split meta tier reads concurrently from a file-backed load source (FILES() or "
+            + "Broker Load). Footer reads are independent per file and the sampler sorts the "
+            + "aggregated stats, so concurrency only cuts the wall time of the pre-split hook "
+            + "(each footer is a remote round-trip; a many-file source otherwise serializes "
+            + "hundreds of round-trips). 1 disables concurrency.")
     public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
 
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
@@ -5332,4 +5343,52 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
     public static String ai_default_embedding_provider = "";
+
+    /**
+     * How the FE reacts when a metadata lock is requested on an object the internal catalog does
+     * not own -- a database from an external catalog, or a placeholder table id such as the
+     * {@code -1} BaseTableInfo default. Such an id names nothing the lock manager can protect: it
+     * either never collides (a lock nobody else can take) or collides with everything (every
+     * external base table on one lock).
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with a stack and lets the
+     * operation proceed, {@code error} refuses it. Mutable, so a deployment can start at
+     * {@code warn}, confirm its logs are clean and tighten to {@code error} without a restart.
+     * Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_target_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when it contacts an external system -- a Hive metastore, a JDBC source, an
+     * Iceberg REST catalog, a thrift peer -- while holding an FE metadata lock. The lock's hold
+     * time then becomes that system's round-trip time, and every waiter pays it: transaction
+     * publish takes the table lock with a 1000ms {@code tryLock}, so one slow call inside a
+     * critical section fails a load rather than merely delaying a query.
+     *
+     * The check sits at the last layer the FE owns before a socket is used, so a cache hit never
+     * reaches it: every violation reported is a request that really went out.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the offending caller's
+     * stack and lets the call proceed, {@code error} refuses it. Unlike
+     * {@link #lock_target_validation_mode} this rule ships knowing its violation set is not yet
+     * empty, so {@code warn} is the only sane default: it turns those sites from a reviewer's
+     * memory into a log you can aggregate by transport. Mutable, so a deployment can tighten to
+     * {@code error} without a restart once its logs are clean. Unrecognized values behave as
+     * {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
+     * call site</b>. Throttling per site rather than globally keeps a busy violating site from
+     * crowding out every other one, and a site that has not been seen before always logs its first
+     * occurrence. Violation counts stay exact regardless of what the throttle drops.
+     *
+     * Set to 0 to log every violation while investigating.
+     */
+    @ConfField(mutable = true)
+    public static long lock_invariant_violation_log_interval_ms = 10000;
+
 }
