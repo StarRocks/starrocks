@@ -611,4 +611,32 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableOptimizerRuleDebug(false);
         }
     }
+
+    @Test
+    public void testRewriteGroupingSetsByCteKeepsHaving() throws Exception {
+        boolean old = connectContext.getSessionVariable().isEnableRewriteGroupingsetsToUnionAll();
+        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(true);
+        try {
+            // The rewrite replaces the aggregation with a CTE/union-all tree. The HAVING predicate it
+            // carried has to survive on top of the union, otherwise the query silently returns the
+            // rows it was supposed to filter out.
+            String plan = getFragmentPlan("select v1, v2, sum(v3) from t0 "
+                    + "group by grouping sets((v1),(v2)) having sum(v3) > 100");
+            assertContains(plan, "UNION");
+            assertContains(plan, "> 100");
+
+            plan = getFragmentPlan("select v1, v2, sum(v3) from t0 group by rollup(v1, v2) having sum(v3) > 100");
+            assertContains(plan, "> 100");
+
+            plan = getFragmentPlan("select v1, v2, sum(v3) from t0 group by cube(v1, v2) having sum(v3) > 100");
+            assertContains(plan, "> 100");
+
+            plan = getFragmentPlan("select v1, v2, sum(v3) from t0 "
+                    + "group by grouping sets((v1),(v2)) having sum(v3) > 100 limit 5");
+            assertContains(plan, "> 100");
+            assertContains(plan, "limit: 5");
+        } finally {
+            connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(old);
+        }
+    }
 }
