@@ -94,7 +94,6 @@ public class LanceScanNode extends ScanNode {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        hdfsScanRange.setUse_lance_jni_reader(true);
         hdfsScanRange.setFull_path(lanceTable.getUri());
         // The reader takes its dataset URI from TLanceTable; full_path identifies the range to the scheduler.
         // A single range scans the entire dataset, including every fragment.

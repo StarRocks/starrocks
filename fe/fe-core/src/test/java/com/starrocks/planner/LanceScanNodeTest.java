@@ -63,7 +63,7 @@ public class LanceScanNodeTest {
         scan.setupScanRangeLocations();
         Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
         THdfsScanRange range = scan.getScanRangeLocations(0).get(0).scan_range.hdfs_scan_range;
-        Assertions.assertTrue(range.isUse_lance_jni_reader());
+        Assertions.assertFalse(range.isSetUse_lance_jni_reader());
         Assertions.assertFalse(range.isSetLance_split_info());
         Assertions.assertEquals("file:///tmp/vectors.lance", range.getFull_path());
         Assertions.assertTrue(scan.isConnectorScanNode());
