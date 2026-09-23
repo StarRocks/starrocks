@@ -24,7 +24,6 @@ import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.columns.ExternalPredicateColumnsStorage;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
-import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,7 +92,7 @@ public class TableKeeper {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
     }
 
-    public void createTable() throws ExecutionControl.UserException {
+    public void createTable() {
         SimpleExecutor.getRepoExecutor().executeDDL(createTableSql);
     }
 
