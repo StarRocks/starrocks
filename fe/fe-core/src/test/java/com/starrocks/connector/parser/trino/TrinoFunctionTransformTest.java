@@ -368,7 +368,7 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "CAST(json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b') AS VARCHAR)");
 
         sql = "select json_extract_scalar(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b');";
-        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
+        assertPlanContains(sql, "CAST(json_query_from_string('{\"a\": {\"b\": 1}}', '$.a.b') AS VARCHAR)");
     }
 
     @Test

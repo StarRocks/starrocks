@@ -1972,6 +1972,22 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testJsonFusionSwitchAndCast() throws Exception {
+        boolean previous = connectContext.getSessionVariable().isEnableJsonExtractFusion();
+        try {
+            String sql = "select cast(json_query(parse_json(cast(v4 as varchar)), '$.a') as tinyint) from t1";
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(true);
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "CAST(json_query_from_string(", "AS TINYINT");
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(false);
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "CAST(json_query(parse_json(", "AS TINYINT");
+        } finally {
+            connectContext.getSessionVariable().setEnableJsonExtractFusion(previous);
+        }
+    }
+
+    @Test
     public void testJsonQuery() throws Exception {
         String sql = "select parse_json('{\"a\": true}')->\"a\"->\"b\"->\"c\"->\"d\"";
         String plan = getFragmentPlan(sql);

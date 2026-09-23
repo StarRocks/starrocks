@@ -2359,6 +2359,71 @@ void assert_diff_get_json_string(const DiffJsonCase& tc) {
 
 } // namespace
 
+TEST_F(JsonFunctionsTest, diff_get_json_root_and_reset_paths) {
+    for (const auto& tc : std::vector<DiffJsonCase>{
+                 {"root_string", {R"("hello")", R"("a\nb")", R"("\u0061")"}, "$"},
+                 {"root_array", {R"([1,2])"}, "$[1]"},
+                 {"reset_root", {R"({"a":{"b":2},"b":1})"}, "$.a.$.b"},
+                 {"reset_after_missing", {R"({"b":1})"}, "$.missing.$.b"},
+                 {"reset_array", {R"([[1],[2]])"}, "$[1].$[0][0]"},
+         }) {
+        SCOPED_TRACE(tc.name);
+        assert_diff_get_json_string(tc);
+    }
+}
+
+TEST_F(JsonFunctionsTest, parse_json_constant_respects_allow_throw_exception) {
+    for (bool strict : {false, true}) {
+        TQueryOptions options;
+        options.__set_allow_throw_exception(strict);
+        RuntimeState state(TUniqueId(), options, TQueryGlobals(), nullptr);
+        std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+        ctx->set_runtime_state(&state);
+        auto input = BinaryColumn::create();
+        input->append(R"({"a":invalid})");
+        auto result = JsonFunctions::parse_json(ctx.get(), {ConstColumn::create(input, 3)});
+        if (strict) {
+            ASSERT_FALSE(result.ok());
+        } else {
+            ASSERT_TRUE(result.ok());
+            ASSERT_EQ(3, ColumnHelper::count_nulls(result.value()));
+        }
+    }
+}
+
+TEST_F(JsonFunctionsTest, fused_extraction_validation_mode) {
+    using Getter = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+    for (Getter getter : {JsonFunctions::get_json_int, JsonFunctions::get_json_double, JsonFunctions::get_json_string,
+                          JsonFunctions::get_json_bool, JsonFunctions::json_query_from_string}) {
+        for (bool strict : {false, true}) {
+            TQueryOptions options;
+            options.__set_allow_throw_exception(strict);
+            options.__set_enable_json_extract_fusion(true);
+            RuntimeState state(TUniqueId(), options, TQueryGlobals(), nullptr);
+            std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+            ctx->set_runtime_state(&state);
+            auto input = BinaryColumn::create();
+            input->append(R"({"a":1,"b":invalid})");
+            input->append(R"({"bad":notjson,"a":1})");
+            input->append(R"({"a":1,"b":"\q"})");
+            auto path = BinaryColumn::create();
+            path->append("$.a");
+            Columns columns{input, ConstColumn::create(path, input->size())};
+            ctx->set_constant_columns(columns);
+            ASSERT_OK(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+            auto result = getter(ctx.get(), columns);
+            if (strict) {
+                ASSERT_FALSE(result.ok());
+            } else {
+                ASSERT_TRUE(result.ok());
+                ASSERT_EQ(input->size(), result.value()->size());
+                ASSERT_EQ(0, ColumnHelper::count_nulls(result.value()));
+            }
+            ASSERT_OK(JsonFunctions::native_json_path_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL));
+        }
+    }
+}
+
 TEST_F(JsonFunctionsTest, diff_get_json_string_simple_paths) {
     std::vector<DiffJsonCase> cases = {
             {"int_leaf", {R"({"k":1})"}, "$.k"},

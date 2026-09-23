@@ -49,10 +49,9 @@ enum class JsonPathShape : uint8_t {
     HasIndex,    // Field + ArrayIndex steps (chained selectors OK)
 };
 
-// Per-driver mutable state for the fused get_json_* path. Created in
-// native_json_path_prepare(scope==THREAD_LOCAL); freed in native_json_path_close(THREAD_LOCAL).
+// Mutable scratch shared by calls on one OS thread. Columns own copies of extracted values.
 struct JsonGetThreadState {
-    simdjson::ondemand::parser parser; // reused across all rows in this driver
+    simdjson::ondemand::parser parser; // reused across calls on this OS thread
     faststring padded_scratch;         // input copy + SIMDJSON_PADDING zero tail
     faststring unescape_scratch;       // backs value_get_string_safe outputs
     faststring key_scratch;            // backs field_unescaped_key_safe during object descent

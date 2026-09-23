@@ -6358,6 +6358,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // Serialize to thrift object
     // used for rest api
+    public boolean isEnableJsonExtractFusion() {
+        return enableJsonExtractFusion;
+    }
+
+    public void setEnableJsonExtractFusion(boolean value) {
+        enableJsonExtractFusion = value;
+    }
+
     public TQueryOptions toThrift() {
         TQueryOptions tResult = new TQueryOptions();
         tResult.setCatalog(catalog);

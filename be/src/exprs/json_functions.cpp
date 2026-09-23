@@ -301,6 +301,9 @@ StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Co
         Slice slice = viewer.value(0);
         auto json = JsonValue::parse(slice);
         if (!json.ok()) {
+            if (context != nullptr && context->allow_throw_exception()) {
+                return json.status();
+            }
             for (int row = 0; row < num_rows; ++row) {
                 result.append_null();
             }
@@ -458,7 +461,7 @@ static JsonGetThreadState* get_json_thread_state(FunctionContext* /*context*/) {
     // them at this chunk boundary (this accessor runs once per chunk, not per row), so a one-off huge document
     // does not pin memory. The reset fires only after an oversized document; the check itself is trivial.
     constexpr size_t kRetainCapBytes = 1 << 20; // 1 MB
-    if (ts.parser.capacity() > kRetainCapBytes) {
+    if (ts.parser.capacity() > kRetainCapBytes || ts.leaf_builder.buffer()->capacity() > kRetainCapBytes) {
         ts.parser = simdjson::ondemand::parser{};
         ts.padded_scratch.clear();
         ts.padded_scratch.shrink_to_fit();
@@ -466,6 +469,7 @@ static JsonGetThreadState* get_json_thread_state(FunctionContext* /*context*/) {
         ts.unescape_scratch.shrink_to_fit();
         ts.key_scratch.clear();
         ts.key_scratch.shrink_to_fit();
+        ts.leaf_builder = vpack::Builder{};
     }
     return &ts;
 }
@@ -480,6 +484,13 @@ void JsonFunctions::_plan_fast_moves(const JsonPath& path, NativeJsonState* stat
         // Skip the root anchor "$" with NONE selector at index 0.
         if (i == 0 && p.key == "$" && p.array_selector && p.array_selector->type == ArraySelectorType::NONE) {
             continue;
+        }
+
+        // A noninitial root anchor resets traversal, including the earlier missing-field checks.
+        if (i > 1 && p.key == "$") {
+            state->fast_shape = JsonPathShape::Unsupported;
+            state->fast_moves.clear();
+            return;
         }
 
         const auto sel_type = p.array_selector ? p.array_selector->type : ArraySelectorType::INVALID;
@@ -622,7 +633,7 @@ JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw,
     // Step 1: bare-scalar / empty / whitespace-only guard. Mirrors JsonValue::parse_json_or_string:
     //   empty           -> JSON empty-string
     //   whitespace-only -> JSON string of the whitespace
-    //   first non-ws byte not in {'{','[','"'} -> whole input becomes JSON string
+    // Quoted root strings also use the fallback: ondemand::document cannot expose them as value.
     // All three need the legacy from_string code path; we delegate to _fallback_extract_one.
     if (UNLIKELY(raw.size > kJSONLengthLimit)) {
         out.append_null();
@@ -636,7 +647,7 @@ JsonFunctions::ExtractResult JsonFunctions::_fused_extract_one(const Slice& raw,
         return ExtractResult::FallbackRow;
     }
     char first = *ws_end;
-    if (first != '{' && first != '[' && first != '"') {
+    if (first != '{' && first != '[') {
         return ExtractResult::FallbackRow;
     }
 
