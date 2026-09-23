@@ -459,6 +459,7 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        connector/paimon/paimon_blob_converter_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
