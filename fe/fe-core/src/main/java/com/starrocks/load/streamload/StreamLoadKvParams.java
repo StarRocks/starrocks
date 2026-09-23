@@ -236,6 +236,15 @@ public class StreamLoadKvParams implements StreamLoadParams {
             case "row":
                 mode = TPartialUpdateMode.ROW_MODE;
                 break;
+            case "flexible":
+            case "flexible_row":
+                // These parameters come from merge commit and transaction stream load, neither of which plans
+                // a flexible partial update. Refuse the value rather than ignore it: planned as a plain partial
+                // update of the union of the columns, the load would overwrite the columns a row omits with
+                // NULL.
+                throw new RuntimeException("partial_update_mode=" + partialUpdateMode
+                        + " is not supported by merge commit or transaction stream load; use stream load with "
+                        + "enable_flexible_partial_update enabled instead");
         }
         return Optional.ofNullable(mode);
     }

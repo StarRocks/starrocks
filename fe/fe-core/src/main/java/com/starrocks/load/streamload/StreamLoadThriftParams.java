@@ -143,6 +143,14 @@ public class StreamLoadThriftParams implements StreamLoadParams {
         return request.isSetPartial_update_mode() ? Optional.of(request.getPartial_update_mode()) : Optional.empty();
     }
 
+    // Set by the BE stream load handler for partial_update_mode=flexible and flexible_row; the storage mode of
+    // either is in partial_update_mode.
+    @Override
+    public Optional<Boolean> isFlexiblePartialUpdate() {
+        return request.isSetFlexible_partial_update() ? Optional.of(request.isFlexible_partial_update())
+                : Optional.empty();
+    }
+
     @Override
     public Optional<String> getPayloadCompressionType() {
         return request.isSetPayload_compression_type() ?

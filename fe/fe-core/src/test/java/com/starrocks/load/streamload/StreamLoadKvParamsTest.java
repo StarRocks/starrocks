@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
@@ -61,6 +62,7 @@ import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WHERE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -375,5 +377,45 @@ public class StreamLoadKvParamsTest extends StreamLoadParamsTestBase {
 
         assertNotEquals(params1.hashCode(), params3.hashCode());
         assertNotEquals(params1, params3);
+    }
+
+    // Merge commit and transaction stream load read these parameters and plan no flexible partial update, so
+    // partial_update_mode=flexible / flexible_row is refused, whatever the config, rather than ignored (planned
+    // as a plain partial update of the union of the columns, the load would overwrite the columns a row omits
+    // with NULL). The other tokens behave as before, and an unknown token is still ignored.
+    @Test
+    public void testFlexiblePartialUpdateModeRejected() {
+        boolean saved = Config.enable_flexible_partial_update;
+        try {
+            for (boolean enabled : new boolean[] {false, true}) {
+                Config.enable_flexible_partial_update = enabled;
+                Map<String, String> m = new HashMap<>();
+                m.put(HTTP_PARTIAL_UPDATE, "true");
+                m.put(HTTP_FORMAT, "json");
+                for (String token : new String[] {"flexible", "flexible_row"}) {
+                    m.put(HTTP_PARTIAL_UPDATE_MODE, token);
+                    StreamLoadKvParams params = new StreamLoadKvParams(m);
+                    RuntimeException e = assertThrows(RuntimeException.class, params::getPartialUpdateMode);
+                    assertTrue(e.getMessage().contains("partial_update_mode=" + token), e.getMessage());
+                    assertTrue(e.getMessage().contains("enable_flexible_partial_update"), e.getMessage());
+                    assertFalse(params.isFlexiblePartialUpdate().isPresent());
+                }
+
+                m.put(HTTP_PARTIAL_UPDATE_MODE, "column");
+                assertEquals(TPartialUpdateMode.COLUMN_UPSERT_MODE,
+                        new StreamLoadKvParams(m).getPartialUpdateMode().orElse(null));
+                m.put(HTTP_PARTIAL_UPDATE_MODE, "auto");
+                assertEquals(TPartialUpdateMode.AUTO_MODE, new StreamLoadKvParams(m).getPartialUpdateMode().orElse(null));
+                m.put(HTTP_PARTIAL_UPDATE_MODE, "row");
+                assertEquals(TPartialUpdateMode.ROW_MODE, new StreamLoadKvParams(m).getPartialUpdateMode().orElse(null));
+                // Matching stays exact: a miscased token is an unknown token, which is ignored.
+                m.put(HTTP_PARTIAL_UPDATE_MODE, "Flexible");
+                assertFalse(new StreamLoadKvParams(m).getPartialUpdateMode().isPresent());
+                m.put(HTTP_PARTIAL_UPDATE_MODE, "bogus");
+                assertFalse(new StreamLoadKvParams(m).getPartialUpdateMode().isPresent());
+            }
+        } finally {
+            Config.enable_flexible_partial_update = saved;
+        }
     }
 }
