@@ -420,6 +420,7 @@ set(EXEC_FILES
         ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
+        ./util/hash_util_test.cpp
         ./util/json_util_test.cpp
         ./util/json_flattener_test.cpp
         ./util/md5_test.cpp

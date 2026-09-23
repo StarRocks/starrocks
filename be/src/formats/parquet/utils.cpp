@@ -19,18 +19,13 @@
 
 #include <cstring>
 
-<<<<<<< HEAD
-=======
-#include "base/hash/hash_std.hpp"
-#include "base/hash/murmur_hash3.h"
-#include "base/simd/simd.h"
->>>>>>> 9b21b3a ([BugFix] Pin the DataCache key hash to MurmurHash3 (#79262))
 #include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "simd/simd.h"
 #include "util/hash_util.hpp"
+#include "util/murmur_hash3.h"
 
 namespace starrocks::parquet {
 

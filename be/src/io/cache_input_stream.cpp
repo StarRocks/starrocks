@@ -18,19 +18,12 @@
 
 #include <utility>
 
-<<<<<<< HEAD:be/src/io/cache_input_stream.cpp
 #include "common/config.h"
-=======
-#include "base/hash/hash_std.hpp"
-#include "base/hash/murmur_hash3.h"
-#include "common/config_network_fwd.h"
-#include "common/runtime_profile.h"
-#include "common/system/backend_options.h"
->>>>>>> 9b21b3a ([BugFix] Pin the DataCache key hash to MurmurHash3 (#79262)):be/src/cache/scan/cache_input_stream.cpp
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
 #include "service/backend_options.h"
 #include "util/hash_util.hpp"
+#include "util/murmur_hash3.h"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
 
