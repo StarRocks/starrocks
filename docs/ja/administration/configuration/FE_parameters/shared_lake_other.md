@@ -383,6 +383,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Compute Engine にバインドされているサービスアカウントを使用するかどうか。
 - 導入時期：v3.5.1
 
+### `group_provider`
+
+- デフォルト：Empty
+- タイプ：String[]
+- 単位：-
+- 変更可能：Yes
+- 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
+- 導入時期：v3.5
+
 ### `hdfs_file_system_expire_seconds`
 
 - デフォルト：300
@@ -930,6 +939,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
 
+### `authentication_ldap_simple_group_source`
+
+- デフォルト：group_provider
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：LDAP で認証されたユーザーのグループの取得元に関するクラスター全体のデフォルト値。有効な値：`group_provider`（設定された Group Provider のみ。以前のバージョンと同じ動作）、`memberof`（ユーザー自身の LDAP エントリーのグループメンバーシップ属性のみ）、`both`（両方の和集合）。同名の security integration プロパティがこの値を上書きします。不正な値は `group_provider` として扱われ、ERROR レベルで記録されます。これにより、入力ミスによってすべての LDAP ユーザーがログインできなくなることを防ぎます。
+- 導入時期：v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- デフォルト：memberOf
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性名のクラスター全体のデフォルト値。`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。同名の security integration プロパティがこの値を上書きします。
+- 導入時期：v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - デフォルト：Empty string
@@ -954,7 +981,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
+- 説明：ユーザーエントリー上でログイン名を保持する属性の名前で、検索バインドモードの検索フィルターの構築に使われます。`uid` は OpenLDAP に適しています。Active Directory では `sAMAccountName` を設定してください。AD のエントリーの RDN は表示名であり、`uid` は管理者が設定しない限り空だからです。この選択により `authentication_ldap_simple_bind_dn_pattern` は使えなくなります。詳細は [Security Integration](../../user_privs/authentication/security_integration.md) の同名プロパティを参照してください。
 - 導入時期：-
 
 ### `backup_clean_check_interval_seconds`

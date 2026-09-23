@@ -2547,6 +2547,26 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
+     * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
+     * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
+     * A security integration property of the same name overrides this value.
+     * This is a policy switch rather than a per-server setting, so a cluster-wide default is useful:
+     * turning memberOf on everywhere is a single ADMIN SET FRONTEND CONFIG.
+     */
+    @ConfField(mutable = true, comment = "where the groups of an LDAP authenticated user come from: " +
+            "group_provider (default) | memberof | both")
+    public static String authentication_ldap_simple_group_source = "group_provider";
+
+    /**
+     * Name of the attribute on the user entry that carries its group membership.
+     * "memberOf" fits Active Directory and OpenLDAP with the memberof overlay;
+     * Sun/Oracle Directory Server and 389-DS use "isMemberOf".
+     */
+    @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
+            "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
+    public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
