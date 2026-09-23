@@ -64,7 +64,7 @@ This topic introduces the following types of BE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Controls when the hash-join probe turns on software prefetch, as a fraction of the L2 cache size: prefetch is enabled only once the join hash table grows past `join_probe_prefetch_l2_ratio × L2`. For smaller tables prefetch is disabled, since it slows the probe down there. Lower the value to enable prefetch on smaller tables, raise it to restrict it to larger ones; `0` always prefetches. The default 0.4 is where prefetch was first measured to be net positive.
+- Description: Controls when the hash-join probe turns on software prefetch, as a fraction of the L2 cache size: prefetch is enabled only once the join hash table grows past `join_probe_prefetch_l2_ratio × L2`. For smaller tables prefetch is disabled, since it slows the probe down there. Lower the value to enable prefetch on smaller tables, raise it to restrict it to larger ones; `0` always prefetches. The default 0.4 is where prefetch was first measured to be net positive. Negative or non-finite ratios disable prefetch.
 - Introduced in: -
 
 ### clear_udf_cache_when_start

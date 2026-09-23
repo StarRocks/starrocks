@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cmath>
+
 #include "base/simd/gather.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/system/cpu_info.h"
@@ -40,7 +42,10 @@ inline uint32_t join_probe_prefetch_dist() {
 inline bool join_should_prefetch_buckets(uint32_t bucket_size) {
     static const size_t l2 = CpuInfo::get_l2_cache_size();
     const size_t first_bytes = static_cast<size_t>(bucket_size) * sizeof(uint32_t);
-    return first_bytes >= static_cast<size_t>(static_cast<double>(l2) * config::join_probe_prefetch_l2_ratio);
+    const double threshold = static_cast<double>(l2) * config::join_probe_prefetch_l2_ratio;
+    // Invalid ratios disable prefetch. Keep fractional-byte truncation without
+    // converting an unbounded or non-finite double to an integer.
+    return threshold >= 0 && static_cast<double>(first_bytes) >= std::floor(threshold);
 }
 
 // ------------------------------------------------------------------------------------

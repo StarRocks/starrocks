@@ -16,7 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+#include <vector>
+
 #include "base/testutil/assert.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
@@ -1139,6 +1143,96 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
         auto null_column = ColumnHelper::as_raw_column<NullableColumn>(chunk->columns()[i])->null_column();
         for (size_t j = 0; j < 2; j++) {
             ASSERT_EQ(null_column->immutable_data()[j], 1);
+        }
+    }
+}
+
+TEST_F(JoinHashMapTest, JoinPrefetchRatioBoundaries) {
+    const double saved_ratio = config::join_probe_prefetch_l2_ratio;
+    DeferOp restore([&] { config::join_probe_prefetch_l2_ratio = saved_ratio; });
+    const double l2 = CpuInfo::get_l2_cache_size();
+
+    // A 16-slot array occupies 64 bytes; fractional bytes round down.
+    for (double threshold : {0.0, 63.0, 64.0, 64.5}) {
+        config::join_probe_prefetch_l2_ratio = threshold / l2;
+        EXPECT_TRUE(join_should_prefetch_buckets(16));
+    }
+    config::join_probe_prefetch_l2_ratio = 65.5 / l2;
+    EXPECT_FALSE(join_should_prefetch_buckets(16));
+    for (double ratio : {-1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(),
+                         -std::numeric_limits<double>::infinity(), std::numeric_limits<double>::max()}) {
+        config::join_probe_prefetch_l2_ratio = ratio;
+        EXPECT_FALSE(join_should_prefetch_buckets(16));
+    }
+}
+
+TEST_F(JoinHashMapTest, LinearChainedPrefetchPreservesMatches) {
+    const int32_t saved_dist = config::hash_map_prefetch_dist;
+    const double saved_ratio = config::join_probe_prefetch_l2_ratio;
+    DeferOp restore([&] {
+        config::hash_map_prefetch_dist = saved_dist;
+        config::join_probe_prefetch_l2_ratio = saved_ratio;
+    });
+    std::vector<int32_t> build_keys(97);
+    std::vector<uint8_t> build_nulls(build_keys.size());
+    for (size_t i = 1; i < build_keys.size(); ++i) {
+        build_keys[i] = i % 23;
+        build_nulls[i] = (i % 5 == 0);
+    }
+    std::vector<int32_t> probe_keys(37);
+    std::vector<uint8_t> probe_nulls(probe_keys.size());
+    for (size_t i = 0; i < probe_keys.size(); ++i) {
+        probe_keys[i] = i;
+        probe_nulls[i] = (i % 7 == 0);
+    }
+
+    auto check = [&]<bool BuildChained>(bool nullable) {
+        using Method = TLinearChainedJoinHashMap<TYPE_INT, BuildChained>;
+        JoinHashTableItems table;
+        table.row_count = build_keys.size() - 1;
+        Method::build_prepare(nullptr, &table);
+        const auto build_is_null = nullable ? std::make_optional(ImmBuffer<uint8_t>(build_nulls)) : std::nullopt;
+        const auto probe_is_null = nullable ? std::make_optional(ImmBuffer<uint8_t>(probe_nulls)) : std::nullopt;
+        Method::construct_hash_table(&table, ImmBuffer<int32_t>(build_keys), build_is_null);
+        HashTableProbeState probe;
+        probe.probe_row_count = probe_keys.size();
+        probe.buckets.resize(probe_keys.size());
+        probe.next.resize(probe_keys.size());
+        Method::lookup_init(table, &probe, ImmBuffer<int32_t>(build_keys), ImmBuffer<int32_t>(probe_keys),
+                            probe_is_null);
+        for (size_t i = 0; i < probe_keys.size(); ++i) {
+            size_t expected = 0;
+            if (!nullable || !probe_nulls[i]) {
+                for (size_t j = 1; j < build_keys.size(); ++j) {
+                    expected += (!nullable || !build_nulls[j]) && build_keys[j] == probe_keys[i];
+                }
+            }
+            if constexpr (BuildChained) {
+                size_t matches = 0;
+                for (uint32_t j = probe.next[i]; j != 0; j = table.next[j]) {
+                    ASSERT_LT(j, build_keys.size());
+                    ASSERT_LT(matches, build_keys.size()); // Detect a cyclic chain.
+                    EXPECT_EQ(build_keys[j], probe_keys[i]);
+                    if (nullable) EXPECT_EQ(build_nulls[j], 0);
+                    ++matches;
+                }
+                EXPECT_EQ(matches, expected);
+            } else {
+                EXPECT_EQ(probe.next[i], expected != 0 ? 1 : 0);
+            }
+        }
+    };
+    for (int32_t dist : {-1, 0, 1, 16, 32, std::numeric_limits<int32_t>::max()}) {
+        config::hash_map_prefetch_dist = dist;
+        EXPECT_EQ(join_probe_prefetch_dist(), dist > 0 ? static_cast<uint32_t>(dist) : 0);
+        for (double ratio : {0.0, 0.4, std::numeric_limits<double>::quiet_NaN()}) {
+            config::join_probe_prefetch_l2_ratio = ratio;
+            for (bool nullable : {false, true}) {
+                SCOPED_TRACE(::testing::Message()
+                             << "distance=" << dist << " ratio=" << ratio << " nullable=" << nullable);
+                check.template operator()<true>(nullable);
+                check.template operator()<false>(nullable);
+            }
         }
     }
 }

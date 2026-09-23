@@ -31,7 +31,7 @@
 //      interleaving, not by a fixed distance; the tunable is the coroutine
 //      count `interleaving_group_size`, not a lookahead.  It is gated by
 //      `cache_miss_serious()` (join_hash_table_descriptor.h), a STAIRCASE of
-//      hard-coded byte thresholds (16/32/64/128 MiB) crossed with chain depth.
+//      thresholds at 1/2/4/8 times the detected L3, crossed with chain depth.
 //
 // Two benches, one harness (a real pre-built JoinHashTable probed to
 // completion):
@@ -44,15 +44,12 @@
 //                           lookup_init distance, swept via the new config,
 //                           on LINEAR_CHAINED with the chain walk minimized.
 //
-// Two questions, the reason the hard-coded staircase is not trusted:
+// Two questions measured by the coroutine sweep:
 //
 //   (A) Crossover.  For each (footprint, depth, hit_rate), does the coroutine
 //       path (group_size > 0) beat the plain walk (group_size = 0), and where?
-//       The current gate claims the boundary is at 16/32/64/128 MiB of
-//       `probe_bytes` crossed with keys_per_bucket; re-derive the real boundary
-//       and express it against CpuInfo L2/L3 instead of magic bytes (the method
-//       selector in join_hash_table.cpp already keys on CpuInfo, this gate does
-//       not).
+//       Compare the measured boundary against the L3-relative thresholds of
+//       `probe_bytes` crossed with keys_per_bucket.
 //
 //   (B) Absolute lookup cost.  ns per probe row and ns per chain node, read by
 //       residency band (footprint vs detected L2/L3), for each prefetch config.
@@ -82,6 +79,7 @@
 
 #include <benchmark/benchmark.h>
 
+#include <algorithm>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -236,8 +234,9 @@ static std::vector<ChunkPtr> probe_chunks(int64_t total_rows, int64_t num_distin
     for (int64_t c = 0; c < num_chunks; ++c) {
         auto col = Int64Column::create();
         auto& data = col->get_data();
-        data.resize(kBenchChunkSize);
-        for (int i = 0; i < kBenchChunkSize; ++i) {
+        const auto chunk_rows = std::min<int64_t>(kBenchChunkSize, total_rows - c * kBenchChunkSize);
+        data.resize(chunk_rows);
+        for (int64_t i = 0; i < chunk_rows; ++i) {
             data[i] = coin(rng) < hit_rate_pct ? hit(rng) : miss(rng);
         }
         auto chunk = std::make_shared<Chunk>();
@@ -279,7 +278,7 @@ static int64_t drive_probe(JoinHashTable& ht, RuntimeState* rs, const std::vecto
                 }
                 benchmark::DoNotOptimize(result.get());
             }
-            total += kBenchChunkSize;
+            total += pc->num_rows();
         }
         benchmark::ClobberMemory();
     }
@@ -480,17 +479,18 @@ BENCHMARK(BM_JoinBucketPrefetch)->Apply(RegisterBucketArgs)->Unit(benchmark::kMi
 // all threads, and per-thread throughput = that / num_threads.
 inline constexpr int64_t kConcProbeRowsPerThread = 4'000'000;
 
-static void probe_stream_once(JoinHashTable& ht, RuntimeState* rs, const std::vector<ChunkPtr>& pchunks) {
+static Status probe_stream_once(JoinHashTable& ht, RuntimeState* rs, const std::vector<ChunkPtr>& pchunks) {
     for (const auto& pc : pchunks) {
         ChunkPtr probe_chunk = pc;
         Columns key_cols{probe_chunk->columns()[0]};
         bool has_remain = true;
         while (has_remain) {
             ChunkPtr result = std::make_shared<Chunk>();
-            (void)ht.probe(rs, key_cols, &probe_chunk, &result, &has_remain);
+            RETURN_IF_ERROR(ht.probe(rs, key_cols, &probe_chunk, &result, &has_remain));
             benchmark::DoNotOptimize(result.get());
         }
     }
+    return Status::OK();
 }
 
 // args: {group_size, num_threads}
@@ -524,10 +524,17 @@ static void BM_JoinProbeConcurrent(benchmark::State& state) {
     for (auto _ : state) {
         std::vector<std::thread> workers;
         workers.reserve(num_threads);
+        std::vector<Status> statuses(num_threads);
         for (int t = 0; t < num_threads; ++t) {
-            workers.emplace_back([&, t] { probe_stream_once(clones[t], harness.state(), streams[t]); });
+            workers.emplace_back([&, t] { statuses[t] = probe_stream_once(clones[t], harness.state(), streams[t]); });
         }
         for (auto& w : workers) w.join();
+        for (const auto& status : statuses) {
+            if (!status.ok()) {
+                state.SkipWithError(status.to_string().c_str());
+                return;
+            }
+        }
         total_rows += static_cast<int64_t>(num_threads) * kConcProbeRowsPerThread;
     }
 
