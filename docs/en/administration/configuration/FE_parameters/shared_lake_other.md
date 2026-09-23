@@ -1835,3 +1835,21 @@ This topic introduces the following types of FE configurations:
 - Description: Hard ceiling on the per-hop frontier size honored by the semantic-context graph_expand TVF / REST endpoint. A caller-supplied `maxFrontier` is clamped to this value at the FE boundary. The product of depth and frontier bounds the worst-case IN-list size shipped to the BE per hop.
 - Introduced in:
 
+
+### `enable_row_ttl`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Admission gate for row TTL. While this is `false`, row TTL cannot be added to a table that does not already have it, table creation included. It does not stop cleanup on a table that is already configured, does not prevent that table from changing its expiration expression, and does not block `ALTER TABLE ... DROP ROW TTL`: the gate guards the entrance only. Row TTL applies to primary key tables in shared-data clusters. See [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md).
+- Introduced in:
+
+### `default_row_ttl_check_interval_second`
+
+- Default: 86400
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How often a table with row TTL is examined for expired rows, used when the table does not set `row_ttl_check_interval_second` itself. It is read afresh on every round rather than frozen into the table, so a change here reaches every table that never set its own interval.
+- Introduced in:

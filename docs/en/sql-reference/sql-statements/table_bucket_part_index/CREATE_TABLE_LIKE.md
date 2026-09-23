@@ -42,6 +42,10 @@ LIKE [database.]<source_table_name>
 - `distribution_desc`: the bucketing method. For more information, see [CREATE TABLE](./CREATE_TABLE.md#distribution_desc).
 - `PROPERTIES`: the properties of the table. All the table properties are supported. For more information, see [ALTER TABLE](ALTER_TABLE.md#modify-table-properties).
 
+:::note
+Row TTL is not copied. Row TTL costs continuous background cleanup, so a copy takes it only by asking for it: name the row TTL properties in the new table's own `PROPERTIES` clause. See [CREATE TABLE](CREATE_TABLE.md).
+:::
+
 ## Examples
 
 Suppose there is a table `orders` in database `test1`.

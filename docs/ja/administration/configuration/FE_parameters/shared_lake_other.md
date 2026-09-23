@@ -1794,3 +1794,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：semantic-context の graph_expand TVF / REST エンドポイントで許可される 1 ホップあたりのフロンティアサイズの上限（ハードリミット）。呼び出し側が指定した `maxFrontier` は FE 境界でこの値にクランプされます。depth と frontier の積が、1 ホップあたり BE に送られる最悪ケースの IN リストサイズを制限します。
 - 導入時期：
+
+### `enable_row_ttl`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：行レベル TTL の受け入れゲート。`false` の間は、まだ行レベル TTL が設定されていないテーブルに追加できません。テーブル作成時も同様です。すでに設定済みのテーブルのクリーンアップを止めることはなく、そのテーブルが有効期限の式を変更することも妨げず、`ALTER TABLE ... DROP ROW TTL` も遮りません。このゲートが守るのは入口だけです。行レベル TTL は共有データクラスタの主キーテーブルに適用されます。[CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) を参照してください。
+- 導入時期：
+
+### `default_row_ttl_check_interval_second`
+
+- デフォルト：86400
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：行レベル TTL が設定されたテーブルで期限切れの行を確認する間隔。テーブル自身が `row_ttl_check_interval_second` を設定していない場合に使われます。テーブルに固定されるのではなく毎回の処理で都度読み取られるため、この値を変更すると、自身の間隔を設定していないすべてのテーブルに反映されます。
+- 導入時期：

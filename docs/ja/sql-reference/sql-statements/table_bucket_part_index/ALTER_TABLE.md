@@ -883,13 +883,49 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size` (v3.2 以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13 以降でサポート)
+- 行レベル TTL 関連のプロパティ
 
 :::note
 
-- ほとんどの場合、一度に1つのプロパティのみを修正することが許可されています。これらのプロパティが同じプレフィックスを持つ場合にのみ、一度に複数のプロパティを修正することができます。現在、`dynamic_partition.` と `binlog.` のみがサポートされています。
+- ほとんどの場合、一度に1つのプロパティのみを修正することが許可されています。これらのプロパティが同じプレフィックスを持つ場合にのみ、一度に複数のプロパティを修正することができます。現在、`dynamic_partition.`、`binlog.`、`row_ttl_` のみがサポートされています。
 - 上記の列に対する操作にマージすることによってプロパティを修正することもできます。詳細は [以下の例](#examples) を参照してください。
 
 :::
+
+### 行レベル TTL
+
+行レベル TTL は、パーティション単位ではなく行単位で期限切れを判定します。3 つのプロパティについては [CREATE TABLE](CREATE_TABLE.md) を参照してください。
+
+構文：
+
+```sql
+-- 行レベル TTL の追加または変更
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("row_ttl_expire_at" = "<expression>"
+    [, "row_ttl_check_interval_second" = "<int_value>"]
+    [, "row_ttl_time_zone" = "<string_value>"])
+
+-- 行レベル TTL の削除
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROW TTL
+```
+
+3 つのキーは 1 つのステートメントでまとめて設定できます。テーブルの初回設定ではそれが必要です。有効期限の式がなければ、確認間隔もタイムゾーンも意味を持たないためです。これらを他のテーブルプロパティと同じステートメントに混ぜることはできません。
+
+`DROP ROW TTL` は 3 つのプロパティをまとめて削除します。空の値を残すのではなく、テーブルは行レベル TTL を持たない状態に戻るため、`SHOW CREATE TABLE` にも痕跡は残りません。`IF EXISTS` はありません。行レベル TTL が設定されていないテーブルで実行しても静かに成功します。
+
+テーブルに行レベル TTL が設定されている間は、有効期限の式が指定しているカラムを削除、名前変更、変更することはできません。解除するには、`row_ttl_expire_at` を別のカラムに向ける（制約がそのカラムに移ります）か、`DROP ROW TTL` を実行します。
+
+FE 設定項目 `enable_row_ttl` は入口だけを守ります。`false` の間は、まだ行レベル TTL を持たないテーブルに追加できませんが、すでに持っているテーブルは有効期限の式を変更できますし、`DROP ROW TTL` も引き続き使えます。
+
+```sql
+ALTER TABLE orders SET ("row_ttl_expire_at" = "created_at + INTERVAL 30 DAY",
+                        "row_ttl_check_interval_second" = "3600",
+                        "row_ttl_time_zone" = "Asia/Shanghai");
+
+ALTER TABLE orders SET ("row_ttl_check_interval_second" = "600");
+
+ALTER TABLE orders DROP ROW TTL;
+```
 
 ### スワップ
 

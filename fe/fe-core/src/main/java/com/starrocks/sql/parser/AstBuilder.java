@@ -206,6 +206,7 @@ import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.DropRowTtlClause;
 import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
@@ -5507,6 +5508,12 @@ public class AstBuilder extends com.starrocks.sql.parser.StarRocksBaseVisitor<Pa
     public ParseNode visitDropMVColumnClause(com.starrocks.sql.parser.StarRocksParser.DropMVColumnClauseContext context) {
         String columnName = getIdentifierName(context.identifier());
         return new DropMVColumnClause(columnName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropRowTtlClause(
+            com.starrocks.sql.parser.StarRocksParser.DropRowTtlClauseContext context) {
+        return new DropRowTtlClause(createPos(context));
     }
 
     @Override

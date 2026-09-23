@@ -44,6 +44,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.epack.alter.AlterJobExecutorEPack;
@@ -556,6 +557,11 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
     private void alterSessionVariables(Map<String, String> properties,
                                        TableProperty tableProperty,
                                        List<Runnable> appliers) {
+        // Caught before the `session.` prefix complaint below, which would otherwise send the user
+        // off to prefix a table property that no prefix would make valid.
+        if (RowTtlPropertyAnalyzer.containsRowTtlProperty(properties)) {
+            throw new SemanticException("Row TTL is not supported on materialized views");
+        }
         // analyze properties
         List<SetListItem> setListItems = Lists.newArrayList();
         for (Map.Entry<String, String> entry : properties.entrySet()) {

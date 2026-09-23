@@ -1834,3 +1834,21 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: semantic-context graph_expand TVF / REST 接口所允许的每跳前沿（frontier）大小上限（硬上限）。调用方传入的 `maxFrontier` 会在 FE 侧被夹到该值。depth 与 frontier 的乘积限定了每跳下发给 BE 的最坏情况 IN 列表大小。
 - 引入版本:
+
+### `enable_row_ttl`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 行级 TTL 的准入开关。为 `false` 时，不能在尚未配置行级 TTL 的表上新增该配置，建表时也不行。它不会停止已配置表的清理，不会阻止该表修改其过期表达式，也不会拦截 `ALTER TABLE ... DROP ROW TTL`：这个开关只把守入口。行级 TTL 适用于存算分离集群中的主键表，参见 [CREATE TABLE](../../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md)。
+- 引入版本:
+
+### `default_row_ttl_check_interval_second`
+
+- 默认值: 86400
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 配置了行级 TTL 的表检查过期行的周期，在表自身未设置 `row_ttl_check_interval_second` 时使用。该值每轮清理实时读取，不会固化到表上，因此修改它会对所有未自设周期的表生效。
+- 引入版本:

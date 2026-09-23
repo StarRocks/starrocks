@@ -50,6 +50,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
 import com.starrocks.common.util.Util;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
@@ -88,6 +89,8 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -790,6 +793,26 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlCondition);
                 table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
+            }
+
+            // row TTL. A query dump carries the DDL of a table from another cluster, so neither the
+            // cluster switch nor the shared-data check says anything about it; leaving the keys in
+            // the property map hands them to the unknown-property check below, which already lets a
+            // dump through.
+            if (!FeConstants.isReplayFromQueryDump && RowTtlPropertyAnalyzer.containsRowTtlProperty(properties)) {
+                Map<String, String> rowTtlProperties = new HashMap<>();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_ROW_TTL_PREFIX)) {
+                        rowTtlProperties.put(entry.getKey(), entry.getValue());
+                    }
+                }
+                // A table being created has no row TTL yet, so carrying these properties means
+                // enabling it, which is what the cluster-wide switch guards.
+                RowTtlPropertyAnalyzer.checkAdmission(Collections.emptyMap(), rowTtlProperties);
+                RowTtlPropertyAnalyzer.analyze(table, Collections.emptyMap(), rowTtlProperties);
+                // Stored exactly as written so that the DDL printed by SHOW CREATE TABLE replays.
+                table.getTableProperty().getProperties().putAll(rowTtlProperties);
+                properties.keySet().removeAll(rowTtlProperties.keySet());
             }
 
             // analyze time drift constraint

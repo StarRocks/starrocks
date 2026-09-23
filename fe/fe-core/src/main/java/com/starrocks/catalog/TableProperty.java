@@ -69,6 +69,7 @@ import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
 
 import java.io.IOException;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -1176,6 +1177,17 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public void modifyTableProperties(String key, String value) {
         properties.put(key, value);
+    }
+
+    /**
+     * Removes the named keys outright, leaving no empty value behind.
+     *
+     * <p>On the replay path this runs before {@link #buildProperty}, so a typed field that
+     * {@code buildProperty} derives from the raw map is rebuilt correctly without the key. A typed
+     * field it does not rebuild is the caller's to reset, since this touches only the raw map.
+     */
+    public void removeTableProperties(Collection<String> keys) {
+        keys.forEach(properties::remove);
     }
 
     public Map<String, String> getProperties() {

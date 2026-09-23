@@ -48,6 +48,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
@@ -85,6 +86,7 @@ import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropPartitionColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.DropRowTtlClause;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IndexDef.IndexType;
@@ -221,7 +223,10 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
 
         if (properties.size() != 1
                 && !(TableProperty.isSamePrefixProperties(properties, TableProperty.DYNAMIC_PARTITION_PROPERTY_PREFIX)
-                || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX))) {
+                || TableProperty.isSamePrefixProperties(properties, TableProperty.BINLOG_PROPERTY_PREFIX)
+                // The check interval and the time zone mean nothing without an expiration expression,
+                // so a table's first row TTL configuration has to arrive as one statement.
+                || TableProperty.isSamePrefixProperties(properties, PropertyAnalyzer.PROPERTIES_ROW_TTL_PREFIX))) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only set one table property at a time");
         }
 
@@ -259,6 +264,15 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER)) {
             PropertyAnalyzer.analyzeLoadInitialOpenPartitionNumber(properties, false);
+        } else if (RowTtlPropertyAnalyzer.containsRowTtlProperty(properties)) {
+            if (!(table instanceof OlapTable)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                        "Row TTL is only supported on shared-data primary key tables");
+            }
+            OlapTable rowTtlTable = (OlapTable) table;
+            Map<String, String> currentRowTtl = RowTtlPropertyAnalyzer.currentProperties(rowTtlTable);
+            RowTtlPropertyAnalyzer.checkAdmission(currentRowTtl, properties);
+            RowTtlPropertyAnalyzer.analyze(rowTtlTable, currentRowTtl, properties);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
@@ -2073,6 +2087,20 @@ public class AlterTableClauseAnalyzer implements AstVisitorExtendInterface<Void,
         return getIcebergTable().getPartitionColumnNamesWithTransform().stream()
                 .map(expr -> expr.toLowerCase(Locale.ROOT))
                 .collect(Collectors.toSet());
+    }
+
+    @Override
+    public Void visitDropRowTtlClause(DropRowTtlClause clause, ConnectContext context) {
+        // The two applicability conditions are checked even here: a table that cannot carry row TTL
+        // is a mistake worth naming, rather than something to wave through as "nothing to remove".
+        // Whether the table actually has row TTL configured is decided at execution, where a table
+        // that never had it returns quietly.
+        if (!(table instanceof OlapTable)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                    "Row TTL is only supported on shared-data primary key tables");
+        }
+        RowTtlPropertyAnalyzer.checkTableMayCarryRowTtl((OlapTable) table);
+        return null;
     }
 
     @Override

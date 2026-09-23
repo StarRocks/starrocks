@@ -4687,6 +4687,24 @@ public class Config extends ConfigBase {
     public static boolean lake_enable_light_weight_tablet_creation = false;
 
     /**
+     * Admission gate for row TTL. While false, row TTL cannot be newly enabled on a table that does
+     * not already have it, table creation included. It never stops cleanup on a table that is
+     * already configured, never blocks changing that table's expiration expression, and never
+     * blocks DROP ROW TTL: the gate guards the entrance only, so turning it off does not lock
+     * anyone in.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_row_ttl = false;
+
+    /**
+     * How often a table with row TTL is examined for expired rows, used when the table does not set
+     * row_ttl_check_interval_second itself. Read afresh on every round instead of being frozen into
+     * the table, so a change here reaches every table that never set its own interval.
+     */
+    @ConfField(mutable = true)
+    public static int default_row_ttl_check_interval_second = 86400; // 1 day
+
+    /**
      * timeout for external table commit
      */
     @ConfField(mutable = true)

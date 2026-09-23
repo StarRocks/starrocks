@@ -882,13 +882,49 @@ SET ("key" = "value")
 - `colocate_with`
 - `bucket_size`（从3.2起支持）
 - `base_compaction_forbidden_time_ranges`（从v3.2.13起支持）
+- 行级 TTL 相关属性
 
 :::note
 
-- 在大多数情况下，只允许一次修改一个属性。只有在这些属性具有相同前缀时，才可以一次修改多个属性。目前，仅支持`dynamic_partition.`和`binlog.`。
+- 在大多数情况下，只允许一次修改一个属性。只有在这些属性具有相同前缀时，才可以一次修改多个属性。目前，仅支持`dynamic_partition.`、`binlog.`和`row_ttl_`。
 - 还可以通过合并到上述列操作中来修改属性。请参见[以下示例](#examples)。
 
 :::
+
+### 行级 TTL
+
+行级 TTL 按行过期，而不是按分区。它的三个属性见 [CREATE TABLE](CREATE_TABLE.md)。
+
+语法：
+
+```sql
+-- 新增或修改行级 TTL
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("row_ttl_expire_at" = "<expression>"
+    [, "row_ttl_check_interval_second" = "<int_value>"]
+    [, "row_ttl_time_zone" = "<string_value>"])
+
+-- 移除行级 TTL
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROW TTL
+```
+
+三个键可以在同一条语句里一起设置，首次配置必须如此：没有过期表达式，检查周期和时区都没有意义。它们不能与其它表属性混在同一条语句里。
+
+`DROP ROW TTL` 会把三个属性一起删除，表回到完全没有行级 TTL 的状态，而不是留下空值，因此 `SHOW CREATE TABLE` 不会留下痕迹。没有 `IF EXISTS`：在没有配置行级 TTL 的表上执行它会静默成功。
+
+表上配置了行级 TTL 时，过期表达式指名的那一列不能删除、改名或修改。解除方式有两种：把 `row_ttl_expire_at` 指向另一列（限制随之转移到新列），或执行 `DROP ROW TTL`。
+
+FE 配置项 `enable_row_ttl` 只把守入口。它为 `false` 时，不能在尚未配置行级 TTL 的表上新增该配置，但已配置的表仍可修改其过期表达式，`DROP ROW TTL` 也照常可用。
+
+```sql
+ALTER TABLE orders SET ("row_ttl_expire_at" = "created_at + INTERVAL 30 DAY",
+                        "row_ttl_check_interval_second" = "3600",
+                        "row_ttl_time_zone" = "Asia/Shanghai");
+
+ALTER TABLE orders SET ("row_ttl_check_interval_second" = "600");
+
+ALTER TABLE orders DROP ROW TTL;
+```
 
 ### 原子替换
 

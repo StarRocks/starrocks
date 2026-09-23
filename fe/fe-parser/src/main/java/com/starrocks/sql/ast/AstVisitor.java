@@ -900,6 +900,10 @@ public interface AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    default R visitDropRowTtlClause(DropRowTtlClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     default R visitAlterTableAutoIncrementClause(AlterTableAutoIncrementClause clause, C context) {
         return visitNode(clause, context);
     }

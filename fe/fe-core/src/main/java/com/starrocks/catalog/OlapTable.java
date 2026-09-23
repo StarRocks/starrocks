@@ -3381,6 +3381,16 @@ public class OlapTable extends Table {
         if (!Strings.isNullOrEmpty(partitionRetentionCondition)) {
             properties.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
+
+        // row TTL, whichever of its keys the table set. Matched by prefix so that adding a key
+        // needs no change here; a key outside the set cannot be on a table, because setting one is
+        // refused.
+        for (Map.Entry<String, String> rowTtlEntry : tableProperties.entrySet()) {
+            if (rowTtlEntry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_ROW_TTL_PREFIX)
+                    && !Strings.isNullOrEmpty(rowTtlEntry.getValue())) {
+                properties.put(rowTtlEntry.getKey(), rowTtlEntry.getValue());
+            }
+        }
         return properties;
     }
 

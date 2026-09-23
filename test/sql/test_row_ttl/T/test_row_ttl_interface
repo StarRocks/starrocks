@@ -1,0 +1,131 @@
+-- name: test_row_ttl_interface @cloud
+-- The row TTL user surface on a shared-data primary key table: which expressions
+-- are accepted, what SHOW CREATE TABLE prints back, which column operations the
+-- configuration locks out, and what DROP ROW TTL leaves behind.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "true");
+
+-- The four accepted expression forms.
+CREATE TABLE t_col (
+    k INT NOT NULL,
+    expire_at DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "expire_at");
+
+CREATE TABLE t_col_interval (
+    k INT NOT NULL,
+    event_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "event_time + INTERVAL 7 DAY");
+
+CREATE TABLE t_ts (
+    k INT NOT NULL,
+    created_at_ms BIGINT
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at_ms, 3)");
+
+CREATE TABLE t_ts_interval (
+    k INT NOT NULL,
+    created_at BIGINT
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY",
+           "row_ttl_check_interval_second" = "3600",
+           "row_ttl_time_zone" = "Asia/Shanghai");
+
+-- Only the keys a table actually set are printed.
+SHOW CREATE TABLE t_col;
+SHOW CREATE TABLE t_ts_interval;
+
+-- Round trip: the printed DDL has to rebuild the same table, including a
+-- backquoted column name and an expression carrying an INTERVAL.
+CREATE TABLE `t_quoted` (
+    `k` INT NOT NULL,
+    `expire at` DATETIME
+) PRIMARY KEY(`k`) DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR");
+SHOW CREATE TABLE t_quoted;
+
+-- Rebuilt from the DDL printed above; the two have to print the same row TTL back.
+CREATE TABLE `t_roundtrip` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire at` datetime NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR"
+);
+SHOW CREATE TABLE t_roundtrip;
+
+-- CREATE TABLE LIKE does not carry row TTL over, but an explicit request does.
+CREATE TABLE t_like LIKE t_ts_interval;
+SHOW CREATE TABLE t_like;
+CREATE TABLE t_like_explicit PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at, 0)") LIKE t_ts_interval;
+SHOW CREATE TABLE t_like_explicit;
+
+-- Rejected expressions.
+CREATE TABLE t_bad (k INT NOT NULL, created_at BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "created_at");
+CREATE TABLE t_bad (k INT NOT NULL, c DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "INTERVAL 7 DAY + c");
+CREATE TABLE t_bad (k INT NOT NULL, c BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "to_datetime(c, 2)");
+CREATE TABLE t_bad (k INT NOT NULL, c BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "to_datetime_ntz(c)");
+CREATE TABLE t_bad (k INT NOT NULL, c DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_check_interval_second" = "3600");
+CREATE TABLE t_bad (k INT, c DATETIME) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "c");
+-- An engine that would never act on the properties is named as such.
+CREATE TABLE t_bad (k INT, c DATETIME) ENGINE=mysql
+PROPERTIES("host" = "127.0.0.1", "port" = "3306", "user" = "u", "password" = "p",
+           "database" = "d", "table" = "t", "row_ttl_expire_at" = "c");
+-- A key that only looks like one of the three. row_ttl_check_interval is the name
+-- the property had two days ago, so it is the misspelling people actually write.
+CREATE TABLE t_bad (k INT NOT NULL, ts DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "ts", "row_ttl_check_interval" = "3600");
+
+-- ALTER: the three keys travel together, and nothing else may ride along.
+CREATE TABLE t_alter (
+    k INT NOT NULL,
+    expire_at DATETIME,
+    other_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1;
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "expire_at",
+                         "row_ttl_check_interval_second" = "600",
+                         "row_ttl_time_zone" = "UTC");
+SHOW CREATE TABLE t_alter;
+ALTER TABLE t_alter SET ("row_ttl_check_interval_second" = "1200");
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "expire_at", "replication_num" = "1");
+ALTER TABLE t_alter SET ("row_ttl_check_intervall" = "60");
+
+-- The named column is locked while row TTL is configured.
+ALTER TABLE t_alter DROP COLUMN expire_at;
+ALTER TABLE t_alter RENAME COLUMN expire_at TO renamed_at;
+ALTER TABLE t_alter MODIFY COLUMN expire_at DATE;
+
+-- Repointing the expression moves the lock.
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "other_time");
+ALTER TABLE t_alter DROP COLUMN expire_at;
+ALTER TABLE t_alter DROP COLUMN other_time;
+
+-- DROP ROW TTL removes all three keys and releases the column.
+ALTER TABLE t_alter DROP ROW TTL;
+SHOW CREATE TABLE t_alter;
+ALTER TABLE t_alter DROP COLUMN other_time;
+-- Running it again on a table with no row TTL is quiet.
+ALTER TABLE t_alter DROP ROW TTL;
+-- A table that cannot carry row TTL is named as such.
+CREATE TABLE t_dup (k INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1;
+ALTER TABLE t_dup DROP ROW TTL;
+
+-- TTL is a new keyword but stays usable as an ordinary name.
+CREATE TABLE ttl (k INT NOT NULL, ttl DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "ttl");
+SHOW CREATE TABLE ttl;
+
+DROP DATABASE db_${uuid0} FORCE;

@@ -44,6 +44,10 @@ LIKE [database.]<source_table_name>
 - `distribution_desc`：分桶方式。更多信息，参见 [CREATE TABLE](CREATE_TABLE.md#distribution_desc)。
 - `PROPERTIES`：表的属性。支持所有表属性。更多信息，参见 [ALTER TABLE](ALTER_TABLE.md#修改表的属性)。
 
+:::note
+行级 TTL 不会被复制。行级 TTL 需要持续的后台清理，因此不会随一次拷贝悄悄扩散；副本需要行级 TTL 时，在新表自己的 `PROPERTIES` 中显式写出。参见 [CREATE TABLE](CREATE_TABLE.md)。
+:::
+
 ## 示例
 
 假设数据库 `test1` 下有表 `orders`。

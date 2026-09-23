@@ -1,0 +1,384 @@
+-- name: test_row_ttl_interface @cloud
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "true");
+-- result:
+-- !result
+CREATE TABLE t_col (
+    k INT NOT NULL,
+    expire_at DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "expire_at");
+-- result:
+-- !result
+CREATE TABLE t_col_interval (
+    k INT NOT NULL,
+    event_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "event_time + INTERVAL 7 DAY");
+-- result:
+-- !result
+CREATE TABLE t_ts (
+    k INT NOT NULL,
+    created_at_ms BIGINT
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at_ms, 3)");
+-- result:
+-- !result
+CREATE TABLE t_ts_interval (
+    k INT NOT NULL,
+    created_at BIGINT
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY",
+           "row_ttl_check_interval_second" = "3600",
+           "row_ttl_time_zone" = "Asia/Shanghai");
+-- result:
+-- !result
+SHOW CREATE TABLE t_col;
+-- result:
+t_col	CREATE TABLE `t_col` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire_at` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_expire_at" = "expire_at",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+SHOW CREATE TABLE t_ts_interval;
+-- result:
+t_ts_interval	CREATE TABLE `t_ts_interval` (
+  `k` int(11) NOT NULL COMMENT "",
+  `created_at` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_check_interval_second" = "3600",
+"row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY",
+"row_ttl_time_zone" = "Asia/Shanghai",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE `t_quoted` (
+    `k` INT NOT NULL,
+    `expire at` DATETIME
+) PRIMARY KEY(`k`) DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR");
+-- result:
+-- !result
+SHOW CREATE TABLE t_quoted;
+-- result:
+t_quoted	CREATE TABLE `t_quoted` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire at` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE `t_roundtrip` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire at` datetime NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR"
+);
+-- result:
+-- !result
+SHOW CREATE TABLE t_roundtrip;
+-- result:
+t_roundtrip	CREATE TABLE `t_roundtrip` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire at` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_expire_at" = "`expire at` + INTERVAL 1 HOUR",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE t_like LIKE t_ts_interval;
+-- result:
+-- !result
+SHOW CREATE TABLE t_like;
+-- result:
+t_like	CREATE TABLE `t_like` (
+  `k` int(11) NOT NULL COMMENT "",
+  `created_at` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE t_like_explicit PROPERTIES("row_ttl_expire_at" = "to_datetime(created_at, 0)") LIKE t_ts_interval;
+-- result:
+-- !result
+SHOW CREATE TABLE t_like_explicit;
+-- result:
+t_like_explicit	CREATE TABLE `t_like_explicit` (
+  `k` int(11) NOT NULL COMMENT "",
+  `created_at` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_expire_at" = "to_datetime(created_at, 0)",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, created_at BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "created_at");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column created_at is bigint(20). An INT or BIGINT column has to hold a Unix timestamp and be wrapped with to_datetime(created_at[, scale]).')
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, c DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "INTERVAL 7 DAY + c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: row_ttl_expire_at only accepts a trailing `+ INTERVAL <n> <unit>`. Expected <column>, <column> + INTERVAL <n> <unit>, to_datetime(<column>[, scale]), or to_datetime(<column>[, scale]) + INTERVAL <n> <unit>.')
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, c BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "to_datetime(c, 2)");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: to_datetime scale 2 is not supported, it has to be 0 (seconds), 3 (milliseconds) or 6 (microseconds).')
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, c BIGINT) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "to_datetime_ntz(c)");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: to_datetime_ntz is not supported here; use to_datetime with row_ttl_time_zone = 'UTC'.")
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, c DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_check_interval_second" = "3600");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Cannot set row_ttl_check_interval_second or row_ttl_time_zone on a table without row_ttl_expire_at. Set the expiration expression in the same statement.')
+-- !result
+CREATE TABLE t_bad (k INT, c DATETIME) DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Row TTL is only supported on primary key tables.')
+-- !result
+CREATE TABLE t_bad (k INT, c DATETIME) ENGINE=mysql
+PROPERTIES("host" = "127.0.0.1", "port" = "3306", "user" = "u", "password" = "p",
+           "database" = "d", "table" = "t", "row_ttl_expire_at" = "c");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Row TTL is not supported on mysql tables.')
+-- !result
+CREATE TABLE t_bad (k INT NOT NULL, ts DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "ts", "row_ttl_check_interval" = "3600");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Unknown table property row_ttl_check_interval. The row TTL properties are row_ttl_expire_at, row_ttl_check_interval_second, row_ttl_time_zone.')
+-- !result
+CREATE TABLE t_alter (
+    k INT NOT NULL,
+    expire_at DATETIME,
+    other_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1;
+-- result:
+-- !result
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "expire_at",
+                         "row_ttl_check_interval_second" = "600",
+                         "row_ttl_time_zone" = "UTC");
+-- result:
+-- !result
+SHOW CREATE TABLE t_alter;
+-- result:
+t_alter	CREATE TABLE `t_alter` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire_at` datetime NULL COMMENT "",
+  `other_time` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_check_interval_second" = "600",
+"row_ttl_expire_at" = "expire_at",
+"row_ttl_time_zone" = "UTC",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE t_alter SET ("row_ttl_check_interval_second" = "1200");
+-- result:
+-- !result
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "expire_at", "replication_num" = "1");
+-- result:
+E: (5064, 'Getting analyzing error. Detail message: Can only set one table property at a time.')
+-- !result
+ALTER TABLE t_alter SET ("row_ttl_check_intervall" = "60");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Unknown table property row_ttl_check_intervall. The row TTL properties are row_ttl_expire_at, row_ttl_check_interval_second, row_ttl_time_zone.')
+-- !result
+ALTER TABLE t_alter DROP COLUMN expire_at;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column expire_at cannot be dropped because row_ttl_expire_at refers to it. Point row_ttl_expire_at at another column, or run ALTER TABLE t_alter DROP ROW TTL first.')
+-- !result
+ALTER TABLE t_alter RENAME COLUMN expire_at TO renamed_at;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column expire_at cannot be renamed because row_ttl_expire_at refers to it. Point row_ttl_expire_at at another column, or run ALTER TABLE t_alter DROP ROW TTL first.')
+-- !result
+ALTER TABLE t_alter MODIFY COLUMN expire_at DATE;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column expire_at cannot be modified because row_ttl_expire_at refers to it. Point row_ttl_expire_at at another column, or run ALTER TABLE t_alter DROP ROW TTL first.')
+-- !result
+ALTER TABLE t_alter SET ("row_ttl_expire_at" = "other_time");
+-- result:
+-- !result
+ALTER TABLE t_alter DROP COLUMN expire_at;
+-- result:
+-- !result
+ALTER TABLE t_alter DROP COLUMN other_time;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column other_time cannot be dropped because row_ttl_expire_at refers to it. Point row_ttl_expire_at at another column, or run ALTER TABLE t_alter DROP ROW TTL first.')
+-- !result
+ALTER TABLE t_alter DROP ROW TTL;
+-- result:
+-- !result
+SHOW CREATE TABLE t_alter;
+-- result:
+t_alter	CREATE TABLE `t_alter` (
+  `k` int(11) NOT NULL COMMENT "",
+  `other_time` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ALTER TABLE t_alter DROP COLUMN other_time;
+-- result:
+-- !result
+ALTER TABLE t_alter DROP ROW TTL;
+-- result:
+-- !result
+CREATE TABLE t_dup (k INT) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1;
+-- result:
+-- !result
+ALTER TABLE t_dup DROP ROW TTL;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Row TTL is only supported on primary key tables.')
+-- !result
+CREATE TABLE ttl (k INT NOT NULL, ttl DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "ttl");
+-- result:
+-- !result
+SHOW CREATE TABLE ttl;
+-- result:
+ttl	CREATE TABLE `ttl` (
+  `k` int(11) NOT NULL COMMENT "",
+  `ttl` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"row_ttl_expire_at" = "ttl",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+DROP DATABASE db_${uuid0} FORCE;
+-- result:
+-- !result

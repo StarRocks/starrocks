@@ -44,6 +44,10 @@ LIKE [database.]<source_table_name>
 - `distribution_desc`: バケッティングの手法。詳細は [CREATE TABLE](./CREATE_TABLE.md#distribution_desc) を参照してください。
 - `PROPERTIES`: テーブルのプロパティ。すべてのテーブルプロパティがサポートされています。詳細は [ALTER TABLE](ALTER_TABLE.md#modify-table-properties) を参照してください。
 
+:::note
+行レベル TTL はコピーされません。行レベル TTL には継続的なバックグラウンドのクリーンアップが伴うため、一度のコピーで静かに広がることはありません。コピー先で行レベル TTL が必要な場合は、新しいテーブル自身の `PROPERTIES` に明示的に書いてください。[CREATE TABLE](CREATE_TABLE.md) を参照してください。
+:::
+
 ## 例
 
 データベース `test1` にテーブル `orders` があるとします。

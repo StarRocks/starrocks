@@ -1,0 +1,72 @@
+-- name: test_row_ttl_admission @cloud @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "true");
+-- result:
+-- !result
+CREATE TABLE t (
+    k INT NOT NULL,
+    expire_at DATETIME,
+    other_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "expire_at");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "false");
+-- result:
+-- !result
+ALTER TABLE t SET ("row_ttl_expire_at" = "other_time");
+-- result:
+-- !result
+ALTER TABLE t SET ("row_ttl_check_interval_second" = "900");
+-- result:
+-- !result
+CREATE TABLE t_new (k INT NOT NULL, expire_at DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "expire_at");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Row TTL is disabled. Set the FE configuration enable_row_ttl to true before enabling row TTL on a table.')
+-- !result
+CREATE TABLE t_plain (k INT NOT NULL, expire_at DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1;
+-- result:
+-- !result
+ALTER TABLE t_plain SET ("row_ttl_expire_at" = "expire_at");
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Row TTL is disabled. Set the FE configuration enable_row_ttl to true before enabling row TTL on a table.')
+-- !result
+ALTER TABLE t DROP ROW TTL;
+-- result:
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NOT NULL COMMENT "",
+  `expire_at` datetime NULL COMMENT "",
+  `other_time` datetime NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"cloud_native_fast_schema_evolution_v2" = "true",
+"compression" = "LZ4",
+"datacache.enable" = "true",
+"enable_async_write_back" = "false",
+"enable_persistent_index" = "true",
+"file_bundling" = "true",
+"light_weight_tablet_creation" = "false",
+"persistent_index_type" = "CLOUD_NATIVE",
+"replication_num" = "1",
+"storage_volume" = "builtin_storage_volume"
+);
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "false");
+-- result:
+-- !result
+DROP DATABASE db_${uuid0} FORCE;
+-- result:
+-- !result

@@ -882,13 +882,49 @@ Currently, StarRocks supports modifying the following table properties:
 - `colocate_with`
 - `bucket_size` (supported since 3.2)
 - `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
+- Row TTL related properties
 
 :::note
 
-- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.` and `binlog.` are supported.
+- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.`, `binlog.` and `row_ttl_` are supported.
 - You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
 
 :::
+
+### Row TTL
+
+Row TTL expires individual rows instead of whole partitions. Its three properties are described in [CREATE TABLE](CREATE_TABLE.md).
+
+Syntax:
+
+```sql
+-- Add or change row TTL
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("row_ttl_expire_at" = "<expression>"
+    [, "row_ttl_check_interval_second" = "<int_value>"]
+    [, "row_ttl_time_zone" = "<string_value>"])
+
+-- Remove row TTL
+ALTER TABLE [<db_name>.]<tbl_name> DROP ROW TTL
+```
+
+The three keys may be set in one statement, which the first configuration of a table needs: the check interval and the time zone mean nothing without an expiration expression. They cannot be mixed with any other table property.
+
+`DROP ROW TTL` removes all three properties at once, leaving the table with no row TTL rather than with blank values, so `SHOW CREATE TABLE` keeps no trace of it. There is no `IF EXISTS`: running it on a table that has no row TTL succeeds quietly.
+
+While a table has row TTL, the column its expiration expression names cannot be dropped, renamed or modified. To free it, either point `row_ttl_expire_at` at another column, which moves the restriction to that column, or run `DROP ROW TTL`.
+
+The FE configuration item `enable_row_ttl` guards the entrance only. While it is `false`, row TTL cannot be added to a table that does not have it, but a table that already has it can still change its expiration expression, and `DROP ROW TTL` keeps working.
+
+```sql
+ALTER TABLE orders SET ("row_ttl_expire_at" = "created_at + INTERVAL 30 DAY",
+                        "row_ttl_check_interval_second" = "3600",
+                        "row_ttl_time_zone" = "Asia/Shanghai");
+
+ALTER TABLE orders SET ("row_ttl_check_interval_second" = "600");
+
+ALTER TABLE orders DROP ROW TTL;
+```
 
 ### Swap
 

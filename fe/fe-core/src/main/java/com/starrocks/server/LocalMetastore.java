@@ -120,6 +120,7 @@ import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
@@ -4296,6 +4297,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         if (currentColumn != null) {
             throw ErrorReportException.report(ErrorCode.ERR_DUP_FIELDNAME, newColName);
         }
+        // Checked here rather than while the statement is analyzed, because analysis holds no lock
+        // and row TTL could be configured on the column in between. This runs under the caller's
+        // write lock.
+        RowTtlPropertyAnalyzer.checkColumnNotUsedByRowTtl(olapTable, colName, "renamed");
 
         ColumnRenameInfo columnRenameInfo = new ColumnRenameInfo(db.getId(), table.getId(), colName, newColName);
         GlobalStateMgr.getCurrentState().getEditLog().logColumnRename(columnRenameInfo, wal -> {
@@ -4430,6 +4435,46 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         PropertyAnalyzer.analyzeLocation(properties, true);
         appliers.add(() -> {
             table.setLocation(location);
+        });
+    }
+
+    /**
+     * Removes every row TTL property the table carries, which also releases the column its
+     * expiration expression named. A table that has none returns without writing a log entry, so
+     * that DROP ROW TTL is always safe to run.
+     */
+    public void dropRowTtl(Database db, OlapTable table) {
+        Set<String> configured = RowTtlPropertyAnalyzer.currentProperties(table).keySet();
+        if (configured.isEmpty()) {
+            return;
+        }
+        Set<String> removed = new HashSet<>(configured);
+        ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
+        info.setRemovedProperties(removed);
+        TableProperty tableProperty = table.getTableProperty();
+        GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info, wal -> {
+            tableProperty.removeTableProperties(removed);
+            LOG.info("dropped row TTL properties {} from table {}", removed, table.getName());
+        });
+    }
+
+    private void alterRowTtl(OlapTable table,
+                             Map<String, String> properties,
+                             List<Runnable> appliers) {
+        Map<String, String> rowTtlProperties = new HashMap<>();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_ROW_TTL_PREFIX)) {
+                rowTtlProperties.put(entry.getKey(), entry.getValue());
+            }
+        }
+        RowTtlPropertyAnalyzer.analyze(table, RowTtlPropertyAnalyzer.currentProperties(table), rowTtlProperties);
+        properties.keySet().removeAll(rowTtlProperties.keySet());
+
+        TableProperty tableProperty = table.getTableProperty();
+        appliers.add(() -> {
+            // Stored exactly as written, so the DDL printed by SHOW CREATE TABLE replays.
+            tableProperty.modifyTableProperties(rowTtlProperties);
+            LOG.info("set row TTL properties {} on table {}", rowTtlProperties, table.getName());
         });
     }
 
@@ -4682,6 +4727,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_LABELS_LOCATION)) {
             alterLabelsLocation(table, properties, appliers);
+        }
+        if (RowTtlPropertyAnalyzer.containsRowTtlProperty(propertiesToPersist)) {
+            alterRowTtl(table, properties, appliers);
         }
         if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             alterPartitionTTL(table, properties, appliers);
@@ -5208,6 +5256,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 tableProperty.modifyTableProperties(properties);
+                // Removals are applied before buildProperty so that a key which has gone away is
+                // already absent when the typed fields are rebuilt from the raw map.
+                tableProperty.removeTableProperties(info.getRemovedProperties());
                 tableProperty.buildProperty(opCode);
                 if (PublishProperty.declaresAny(properties)) {
                     // The putAll above stored the unset literal as a value; reading the entry the way

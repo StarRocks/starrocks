@@ -20,8 +20,10 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 public class ModifyTablePropertyOperationLog implements Writable {
 
@@ -33,6 +35,14 @@ public class ModifyTablePropertyOperationLog implements Writable {
     private Map<String, String> properties = new HashMap<>();
     @SerializedName(value = "comment")
     private String comment;
+
+    /**
+     * Properties this operation removes outright, as opposed to the ones it sets. Replay merges
+     * {@code properties} into the table, which cannot express a key going away, so a key that has
+     * to disappear is named here instead.
+     */
+    @SerializedName(value = "removedProperties")
+    private Set<String> removedProperties;
 
     public ModifyTablePropertyOperationLog(long dbId, long tableId) {
         this.dbId = dbId;
@@ -59,6 +69,14 @@ public class ModifyTablePropertyOperationLog implements Writable {
 
     public String getComment() {
         return comment;
+    }
+
+    public Set<String> getRemovedProperties() {
+        return removedProperties == null ? Collections.emptySet() : removedProperties;
+    }
+
+    public void setRemovedProperties(Set<String> removedProperties) {
+        this.removedProperties = removedProperties;
     }
 
     public void setComment(String comment) {

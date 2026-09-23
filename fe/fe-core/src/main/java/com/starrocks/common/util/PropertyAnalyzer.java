@@ -222,6 +222,15 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_TIME_DRIFT_CONSTRAINT = "time_drift_constraint";
     public static final String PROPERTIES_LOAD_INITIAL_OPEN_PARTITION_NUMBER = "load_initial_open_partition_number";
 
+    // Row TTL. All three share the ROW_TTL prefix so that ALTER can carry them in one statement:
+    // the other two are meaningless without an expiration expression, so the first configuration of
+    // a table has to set them together.
+    public static final String PROPERTIES_ROW_TTL_PREFIX = "row_ttl_";
+    public static final String PROPERTIES_ROW_TTL_EXPIRE_AT = PROPERTIES_ROW_TTL_PREFIX + "expire_at";
+    public static final String PROPERTIES_ROW_TTL_CHECK_INTERVAL_SECOND =
+            PROPERTIES_ROW_TTL_PREFIX + "check_interval_second";
+    public static final String PROPERTIES_ROW_TTL_TIME_ZONE = PROPERTIES_ROW_TTL_PREFIX + "time_zone";
+
     // default: same as cluster query_timeout
     public static final String PROPERTIES_TABLE_QUERY_TIMEOUT = "table_query_timeout";
 
@@ -1774,6 +1783,11 @@ public class PropertyAnalyzer {
                                            Map<String, String> properties,
                                            boolean isNonPartitioned,
                                            Map<Expr, Expr> exprAdjustedMap) throws DdlException {
+        // Caught here rather than in the session-variable fallback below, which would otherwise ask
+        // the user to add a `session.` prefix to a table property that no prefix would make valid.
+        if (RowTtlPropertyAnalyzer.containsRowTtlProperty(properties)) {
+            throw new DdlException("Row TTL is not supported on materialized views");
+        }
         try {
             // replicated storage
             materializedView.setEnableReplicatedStorage(

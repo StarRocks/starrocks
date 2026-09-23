@@ -1,0 +1,34 @@
+-- name: test_row_ttl_admission @cloud @sequential
+-- The enable_row_ttl gate guards the entrance only. Kept in its own case because
+-- it flips a cluster-wide FE configuration.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "true");
+CREATE TABLE t (
+    k INT NOT NULL,
+    expire_at DATETIME,
+    other_time DATETIME
+) PRIMARY KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("row_ttl_expire_at" = "expire_at");
+
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "false");
+
+-- A table that already has row TTL keeps changing it, and can still drop it.
+ALTER TABLE t SET ("row_ttl_expire_at" = "other_time");
+ALTER TABLE t SET ("row_ttl_check_interval_second" = "900");
+
+-- A table that does not have it cannot take it, table creation included.
+CREATE TABLE t_new (k INT NOT NULL, expire_at DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("row_ttl_expire_at" = "expire_at");
+CREATE TABLE t_plain (k INT NOT NULL, expire_at DATETIME) PRIMARY KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1;
+ALTER TABLE t_plain SET ("row_ttl_expire_at" = "expire_at");
+
+-- And dropping is never gated.
+ALTER TABLE t DROP ROW TTL;
+SHOW CREATE TABLE t;
+
+ADMIN SET FRONTEND CONFIG ("enable_row_ttl" = "false");
+DROP DATABASE db_${uuid0} FORCE;

@@ -32,6 +32,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.RowTtlPropertyAnalyzer;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
@@ -191,6 +192,14 @@ public class CreateTableAnalyzer {
 
         if ((stmt instanceof CreateTemporaryTableStmt) && !engineName.equalsIgnoreCase("olap")) {
             throw new SemanticException("temporary table only support olap engine");
+        }
+
+        // Only the OLAP engine reads the row TTL properties. Every other engine keeps the keys it
+        // recognises and drops the rest without complaint, so the table would be created carrying an
+        // expiration rule that nothing ever acts on, and SHOW CREATE TABLE would not even print it back.
+        if (!engineName.equalsIgnoreCase(EngineType.OLAP.name())
+                && RowTtlPropertyAnalyzer.containsRowTtlProperty(stmt.getProperties())) {
+            throw new SemanticException("Row TTL is not supported on %s tables", engineName.toLowerCase());
         }
 
         stmt.setEngineName(engineName.toLowerCase());

@@ -21,6 +21,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableOperation;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
@@ -79,6 +80,14 @@ public class CreateTableLikeAnalyzer {
             parsedCreateTableStmt.setTableRef(new TableRef(normalizedName, null, tablePos));
             if (stmt.isSetIfNotExists()) {
                 parsedCreateTableStmt.setIfNotExists();
+            }
+            // CREATE TABLE LIKE works by replaying the source table's DDL, which carries its row
+            // TTL along. Row TTL costs continuous cleanup, so it is not inherited by a copy; a copy
+            // that wants it says so in its own PROPERTIES, which is why this runs before they are
+            // applied.
+            if (parsedCreateTableStmt.getProperties() != null) {
+                parsedCreateTableStmt.getProperties().keySet()
+                        .removeIf(key -> key.startsWith(PropertyAnalyzer.PROPERTIES_ROW_TTL_PREFIX));
             }
             if (stmt.getProperties() != null) {
                 parsedCreateTableStmt.updateProperties(stmt.getProperties());

@@ -998,6 +998,56 @@ After `light_weight_tablet_creation` is set to `true`:
 
 This property follows the FE config `lake_enable_light_weight_tablet_creation` (Default: `false`) unless explicitly set at CREATE TABLE time.
 
+### Row TTL
+
+Row TTL expires individual rows instead of whole partitions. A row is expired once the moment its expiration expression names has passed, and expired rows are removed in the background.
+
+Row TTL is supported only on primary key tables in shared-data clusters, and it has to be turned on cluster-wide first: while the FE configuration item `enable_row_ttl` is `false`, row TTL cannot be added to a table that does not already have it, table creation included.
+
+```SQL
+PROPERTIES (
+    "row_ttl_expire_at" = "<expression>",
+    "row_ttl_check_interval_second" = "<int_value>",
+    "row_ttl_time_zone" = "<string_value>"
+)
+```
+
+- `row_ttl_expire_at` (Required to use row TTL): The moment at which a row expires. The expression takes one of four forms, where `<column>` is the time column:
+
+  ```SQL
+  <column>
+  <column> + INTERVAL <n> <unit>
+  to_datetime(<column>[, <scale>])
+  to_datetime(<column>[, <scale>]) + INTERVAL <n> <unit>
+  ```
+
+  - The form decides what the time column may hold. `<column>` on its own, with or without an interval, reads a `DATE` or `DATETIME` column as a wall-clock time. `to_datetime(<column>)` reads an `INT` or `BIGINT` column as a Unix timestamp. Every other column type is rejected, and so is an `AUTO_INCREMENT` column, which holds row numbers rather than times.
+  - `<unit>` is one of `YEAR`, `QUARTER`, `MONTH`, `WEEK`, `DAY`, `HOUR`, `MINUTE` and `SECOND`. `<n>` is an integer between 1 and 2147483647.
+  - `<scale>` is `0`, `3` or `6`, meaning seconds, milliseconds and microseconds. It defaults to `0`.
+  - The time column may be a generated column, part of the primary key, or a partitioning column.
+  - Rows whose time column is NULL never expire.
+
+- `row_ttl_check_interval_second` (Optional): How often this table is examined for expired rows, in seconds. Must be a positive integer. If it is not specified, the FE configuration item `default_row_ttl_check_interval_second` is used, and it is read afresh on every round rather than frozen into the table.
+
+- `row_ttl_time_zone` (Optional): The time zone the expiration moment is computed in. The values are the same as those of the session variable `time_zone`: a region name such as `Asia/Shanghai`, an offset such as `+08:00`, or `CST`. If it is not specified, the cluster's `time_zone` is read afresh on every round.
+
+  The time zone matters most for a `DATE` or `DATETIME` time column, where it decides the frame of reference the comparison is made in. StarRocks `DATETIME` carries no time zone of its own, so nothing else records which zone the column was written in. For a Unix timestamp column the origin is unambiguous, and the time zone is used only for the calendar arithmetic of `DAY` and larger units.
+
+:::note
+When the time column is a generated column, a partial update in column mode on that table has to supply every source column of every generated column, or the load is rejected. This is existing engine behavior rather than something row TTL introduces, but anyone using a generated column as the time column will meet it.
+:::
+
+#### Examples
+
+```SQL
+"row_ttl_expire_at" = "expire_at"
+"row_ttl_expire_at" = "event_time + INTERVAL 7 DAY"
+"row_ttl_expire_at" = "to_datetime(created_at_ms, 3)"
+"row_ttl_expire_at" = "to_datetime(created_at, 0) + INTERVAL 30 DAY"
+```
+
+To change or remove row TTL after the table exists, see [ALTER TABLE](ALTER_TABLE.md).
+
 ## Examples
 
 ### Aggregate table with Hash bucketing and columnar storage
