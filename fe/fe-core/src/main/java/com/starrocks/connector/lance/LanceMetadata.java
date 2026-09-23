@@ -206,7 +206,7 @@ public class LanceMetadata implements ConnectorMetadata {
                 throw new StarRocksConnectorException("Invalid Lance dataset schema");
             }
             LanceTable table = new LanceTable(remoteId("table:" + identifier), tblName, columns,
-                    result.get("location").getAsString(), catalogName);
+                    result.get("location").getAsString(), catalogName, dbName);
             table.setRestCatalog(properties.get("lance.catalog.uri"),
                     properties.getOrDefault("lance.catalog.bearer-token-file", ""), id, result.get("version").getAsLong());
             return table;

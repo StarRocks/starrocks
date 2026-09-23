@@ -78,6 +78,9 @@ public class LanceRestMetadataTest {
         assertNull(metadata.getDb(null, "missing"));
         assertNull(metadata.getTable(null, "ns", "missing"));
         LanceTable first = (LanceTable) metadata.getTable(null, "ns.a%2Eb", "first");
+        assertEquals("remote", first.getCatalogName());
+        assertEquals("ns.a%2Eb", first.getCatalogDBName());
+        assertEquals("ns.a%2Eb", first.toThrift(List.of()).getDbName());
         assertEquals(first.getId(), metadata.getTable(null, "ns.a%2Eb", "first").getId());
         assertNotEquals(first.getId(), metadata.getTable(null, "ns.a%2Eb", "second").getId());
         assertEquals(TypeFactory.createUnifiedDecimalType(20, 0), first.getColumn("id").getType());
