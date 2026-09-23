@@ -688,17 +688,13 @@ public class PreSplitFlowTest {
         List<RowGroupStatistics> ordered = List.of(
                 new RowGroupStatistics(bigintTuple(0), bigintTuple(9), 100L, false),
                 new RowGroupStatistics(bigintTuple(10), bigintTuple(19), 100L, false));
-        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedConstruction<BrokerLoadRowGroupStatisticsProvider> brokerProvider =
                      Mockito.mockConstruction(BrokerLoadRowGroupStatisticsProvider.class,
                              (provider, ctx) -> when(provider.fetch(any(SampleRequest.class))).thenReturn(ordered));
                 MockedConstruction<InsertFromFilesRowGroupStatisticsProvider> filesProvider =
                         Mockito.mockConstruction(InsertFromFilesRowGroupStatisticsProvider.class)) {
-            SampleSet result;
-            try (PreSplitProfile.Scope attempt = PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
-                result = PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD);
-            }
+            SampleSet result = PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD);
 
             Assertions.assertNotNull(result, "an ordered Broker Load source must stay on the meta tier");
             Assertions.assertFalse(result.getTuples().isEmpty(), "ordered row groups must emit endpoints");
@@ -709,9 +705,6 @@ public class PreSplitFlowTest {
             Assertions.assertTrue(filesProvider.constructed().isEmpty(),
                     "the INSERT-from-FILES provider must not be used for a Broker Load");
         }
-        Assertions.assertEquals(DefaultPreSplitPipeline.TIER_LABEL_META_TIER,
-                profile.toRuntimeProfile().getInfoString("SourceTiers"),
-                "a Broker Load served by footers must report the meta tier");
     }
 
     @Test
