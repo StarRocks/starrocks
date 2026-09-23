@@ -3,6 +3,7 @@ Version history
 
 **Unreleased**
 
+- Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
   the schema in which the transient view used to canonicalize view/MV definitions is created.
   Lets a locked-down migration user be granted the required privileges on a single schema
