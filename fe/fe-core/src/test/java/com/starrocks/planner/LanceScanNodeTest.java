@@ -84,7 +84,7 @@ public class LanceScanNodeTest {
                 return List.of(1L);
             }
         };
-        scan.setupScanRangeLocations(null, null);
+        scan.setupScanRangeLocations();
         THdfsScanRange range = scan.getScanRangeLocations(0).get(0).scan_range.hdfs_scan_range;
         Assertions.assertEquals(table.getRestCatalogInfo(), new String(range.getLance_split_info(), StandardCharsets.UTF_8));
         Assertions.assertFalse(new String(range.getLance_split_info(), StandardCharsets.UTF_8).contains("storage_options"));
