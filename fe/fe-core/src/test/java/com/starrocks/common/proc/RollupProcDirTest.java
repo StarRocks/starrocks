@@ -26,7 +26,8 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,11 +67,12 @@ public class RollupProcDirTest {
         infos.add(job(2, "tb2", "RUNNING"));
         infos.add(job(3, "tb1", "FINISHED"));
 
-        new Expectations(handler) {
-            {
-                handler.getAlterJobInfosByDb(db);
-                minTimes = 0;
-                result = infos;
+        // MaterializedViewHandler extends Thread (via FrontendDaemon), which JMockit refuses to
+        // partially mock, so stub the method with a MockUp instead of Expectations.
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
+                return infos;
             }
         };
     }
