@@ -340,6 +340,7 @@ if (WITH_CONNECTOR_JDBC)
             jdbc/type_checker_manager.cpp
             jdbc/type_checker_xml_loader.cpp
     )
+
     target_link_libraries(ConnectorJDBC PUBLIC
             ConnectorPrimitive
             Expr
@@ -361,12 +362,14 @@ if (WITH_CONNECTOR_JDBC)
 endif()
 
 if (WITH_CONNECTOR_LANCE)
+    add_subdirectory(lance)
     ADD_BE_LIB(ConnectorLance
             lance/lance_connector.cpp
+            lance/lance_native_reader.cpp
     )
 
     target_link_libraries(ConnectorLance PUBLIC
-            ConnectorHive
+            FormatCore
             ConnectorPrimitive
             Expr
             Runtime
@@ -378,4 +381,5 @@ if (WITH_CONNECTOR_LANCE)
             Gutil
             StarRocksGen
     )
+    target_link_libraries(ConnectorLance PRIVATE lance_rust arrow)
 endif()

@@ -125,8 +125,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
         jstring key = env->NewStringUTF(it.first.c_str());
         jstring value = env->NewStringUTF(it.second.c_str());
         // skip encoded object
-        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end() &&
-            !it.first.starts_with("lance.cloud.") && it.first != "lance_dataset_uri") {
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
             message.append(it.first);
             message.append("->");
             message.append(it.second);

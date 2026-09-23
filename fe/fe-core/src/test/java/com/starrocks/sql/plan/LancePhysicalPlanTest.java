@@ -89,8 +89,8 @@ public class LancePhysicalPlanTest extends PlanTestBase {
         Assertions.assertEquals("vectors", thrift.getHdfs_scan_node().getTable_name());
         Assertions.assertTrue(thrift.getHdfs_scan_node().getSql_predicates().contains("id > 10"));
         Assertions.assertEquals(1, scan.getScanRangeLocations(0).size());
-        Assertions.assertTrue(scan.getScanRangeLocations(0).get(0).getScan_range()
-                .getHdfs_scan_range().isUse_lance_jni_reader());
+        Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getScan_range()
+                .getHdfs_scan_range().isSetUse_lance_jni_reader());
         Assertions.assertEquals(THdfsFileFormat.LANCE, scan.getScanRangeLocations(0).get(0).getScan_range()
                 .getHdfs_scan_range().getFile_format());
         Assertions.assertFalse(scan.getScanRangeLocations(0).get(0).getScan_range()
