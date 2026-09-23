@@ -309,11 +309,7 @@ namespace {
 // arch-exclusive).
 const std::vector<CpuInfo::FlagMapping>& test_vocabulary() {
     static const std::vector<CpuInfo::FlagMapping> mappings = {
-            {"alpha", 1LL << 0},
-            {"beta", 1LL << 1},
-            {"beta2", 1LL << 2},
-            {"betaextra", 1LL << 3},
-            {"gamma", 1LL << 4},
+            {"alpha", 1LL << 0}, {"beta", 1LL << 1}, {"beta2", 1LL << 2}, {"betaextra", 1LL << 3}, {"gamma", 1LL << 4},
     };
     return mappings;
 }
@@ -343,10 +339,11 @@ TEST(CpuInfoParsingAlgorithm, UnknownTokensAreIgnored) {
 
 TEST(CpuInfoParsingAlgorithm, HeterogeneousCoreIntersection) {
     // Core 0 is feature-rich, core 1 is feature-poor: only the common subset must survive.
-    std::string stream_data = "processor   : 0\n"
-                               "Features    : alpha beta gamma\n\n"
-                               "processor   : 1\n"
-                               "Features    : alpha gamma\n";
+    std::string stream_data =
+            "processor   : 0\n"
+            "Features    : alpha beta gamma\n\n"
+            "processor   : 1\n"
+            "Features    : alpha gamma\n";
     std::istringstream iss(stream_data);
     int64_t flags = CpuInfo::TEST_intersect_procfs_features(iss, test_vocabulary());
     EXPECT_EQ((1LL << 0) | (1LL << 4), flags) << "Non-common 'beta' must be excluded via intersection";
@@ -400,7 +397,7 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
 
     // 2. Fail-closed verification (P2):
     // When sysctl queries fail, unknown capability state must fail closed (0 flags).
-    auto mock_sysctl_fail_all = [](const char * /*name*/) -> bool { return false; };
+    auto mock_sysctl_fail_all = [](const char* /*name*/) -> bool { return false; };
     int64_t flags_fail_closed = CpuInfo::TEST_init_arm_darwin(mock_sysctl_fail_all);
     EXPECT_EQ(0, flags_fail_closed) << "Darwin detection must fail closed if capabilities cannot be verified";
 
