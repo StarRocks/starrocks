@@ -26,6 +26,7 @@
 #include "storage/persistent_index_load_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
+#include "storage/utils.h"
 #include "testutil/assert.h"
 #include "testutil/scoped_updater.h"
 #include "testutil/sync_point.h"
@@ -93,7 +94,10 @@ TEST_F(UpdateConfigActionTest, test_update_number_tablet_writer_threads) {
     {
         auto st = action.update_config("number_tablet_writer_threads", "0");
         CHECK_OK(st);
-        ASSERT_EQ(CpuInfo::num_cores() / 2, pool->max_threads());
+        // Ask the same helper the hook uses rather than restating its formula: 0 means "derive from
+        // the core count", and that derivation has a floor of 16, so a plain CpuInfo::num_cores() / 2
+        // only matches on hosts with at least 32 cores.
+        ASSERT_EQ(caculate_delta_writer_thread_num(0), pool->max_threads());
     }
 }
 
