@@ -30,6 +30,7 @@
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "exprs/agg/approx_top_k.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/maxmin.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
