@@ -576,7 +576,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointAccessors) {
     EXPECT_DOUBLE_EQ(12.5, ColumnHelper::get_const_value<TYPE_DOUBLE>(constant_x));
 
     auto null = GeoFunctions::st_geography_x(nullptr, {geography({nullptr})}).value();
-    EXPECT_TRUE(null->only_null());
+    EXPECT_TRUE(null->is_null(0));
 
     auto line = geography({"LINESTRING (0 0, 1 1)"});
     auto line_x = GeoFunctions::st_geography_x(nullptr, {line});
@@ -601,7 +601,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyTypeReportsEveryFamily) {
     }
 
     auto null = GeoFunctions::st_geography_type(nullptr, {geography({nullptr})}).value();
-    EXPECT_TRUE(null->only_null());
+    EXPECT_TRUE(null->is_null(0));
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyPointDistance) {
@@ -617,7 +617,7 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointDistance) {
     EXPECT_TRUE(empty->is_null(0));
     auto null =
             GeoFunctions::st_geography_distance(nullptr, {geography({nullptr}), geography({"POINT (0 0)"})}).value();
-    EXPECT_TRUE(null->only_null());
+    EXPECT_TRUE(null->is_null(0));
 
     auto unsupported = GeoFunctions::st_geography_distance(
             nullptr, {geography({"LINESTRING (0 0, 1 1)"}), geography({"POINT (0 0)"})});
