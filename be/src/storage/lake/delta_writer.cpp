@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 #include <fmt/format.h>
 
+#include <boost/algorithm/string/predicate.hpp>
 #include <memory>
 #include <shared_mutex>
 #include <utility>
@@ -28,6 +29,7 @@
 #include "common/config_lake_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/system/master_info.h"
 #include "compute_env/load_spill/load_spill_block_manager.h"
 #include "fs/bundle_file.h"
@@ -123,8 +125,9 @@ public:
                              bool miss_auto_increment_column, int64_t db_id, int64_t table_id,
                              int64_t immutable_tablet_size, MemTracker* mem_tracker, int64_t max_buffer_size,
                              int64_t schema_id, const PartialUpdateMode& partial_update_mode,
-                             const std::map<string, string>* column_to_expr_value, PUniqueId load_id,
-                             RuntimeProfile* profile, BundleWritableFileContext* bundle_writable_file_context,
+                             bool flexible_partial_update, const std::map<string, string>* column_to_expr_value,
+                             PUniqueId load_id, RuntimeProfile* profile,
+                             BundleWritableFileContext* bundle_writable_file_context,
                              GlobalDictByNameMaps* global_dicts, bool is_multi_statements_txn, bool multi_node_write,
                              std::shared_ptr<const TabletSchema> tablet_schema, bool force_build_vector_index_inline)
             : _tablet_manager(tablet_manager),
@@ -142,6 +145,7 @@ public:
               _merge_condition(std::move(merge_condition)),
               _miss_auto_increment_column(miss_auto_increment_column),
               _partial_update_mode(partial_update_mode),
+              _flexible_partial_update(flexible_partial_update),
               _column_to_expr_value(column_to_expr_value),
               _load_id(std::move(load_id)),
               _profile(profile),
@@ -253,6 +257,9 @@ private:
 
     bool is_partial_update() const;
 
+    // Flexible partial update: record the load's per-row column-set dictionary in the txn meta.
+    Status fold_column_set_dict(TxnLogPB_OpWrite* op_write) const;
+
     Status merge_blocks_to_segments();
 
     bool should_enable_load_spill() const;
@@ -292,9 +299,16 @@ private:
     // _write_schema->num_columns() < _tablet_schema->num_columns() means this is a partial update
     std::shared_ptr<const TabletSchema> _write_schema;
 
-    // Subscripts in _tablet_schema for each column in _write_schema
-    // Would be empty if the _write_schema is the same as _tablet_schema, otherwise
-    // _write_column_ids.size() == _write_schema->num_columns()
+    // Subscripts in _tablet_schema for each column in _write_schema.
+    // Empty when _write_schema equals _tablet_schema. Otherwise it holds one entry per REAL tablet
+    // column of _write_schema, in the same order, so _write_column_ids[i] describes _write_schema
+    // column i.
+    //
+    // A flexible partial update breaks the "sizes are equal" form of that: _write_schema carries a
+    // trailing synthetic "__cset__" set-id column that maps to no tablet column and therefore has no
+    // entry here, so num_columns() is one LARGER. Code that walks _write_schema and indexes into this
+    // vector is only safe because "__cset__" is appended LAST and skipped by uid -- moving it
+    // anywhere else would silently misalign every column after it (wrong column ids, not a crash).
     std::vector<int32_t> _write_column_ids;
 
     // Converted from |_write_schema|.
@@ -315,6 +329,10 @@ private:
 
     PartialUpdateMode _partial_update_mode;
     bool _partial_schema_with_sort_key_conflict = false;
+    // Flexible partial update: the explicit PTabletWriterOpenRequest.flexible_partial_update flag threaded
+    // in through DeltaWriterBuilder::set_flexible_partial_update (never inferred from the slot names).
+    // When true FE has injected the hidden "__cset__" slot directly before "__op".
+    bool _flexible_partial_update = false;
 
     int64_t _last_write_ts = 0;
 
@@ -508,10 +526,14 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         }
         _write_schema_for_mem_table = MemTable::convert_schema(_write_schema, _slots);
 
-        DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns());
+        // A flexible partial update appends a synthetic "__cset__" column to _write_schema that maps to
+        // no tablet column, so _write_schema may hold one column more than the tablet schema and
+        // _write_column_ids is exactly one shorter than _write_schema.
+        const size_t synthetic_columns = _flexible_partial_update ? 1 : 0;
+        DCHECK_LE(_write_schema->num_columns(), _tablet_schema->num_columns() + synthetic_columns);
         DCHECK_GE(_write_schema_for_mem_table.num_fields(), _write_schema->num_columns());
         if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
-            DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
+            DCHECK_EQ(_write_column_ids.size() + synthetic_columns, _write_schema->num_columns());
         }
 
         if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_partial_update() &&
@@ -689,6 +711,12 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
             string msg;
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 msg = "partial update on table with sort key must provide all sort key columns";
+            } else if (_flexible_partial_update) {
+                // A flexible partial update is COLUMN_UPDATE_MODE but inserts, so it reaches this check
+                // for the OPPOSITE reason to a plain column update: not because it touches the sort key,
+                // but because it does NOT provide it and still needs to place a new row.
+                msg = "flexible partial update that inserts rows on a table with a sort key must "
+                      "provide all sort key columns";
             } else {
                 msg = "column mode partial update on table with sort key cannot update sort key column";
             }
@@ -771,11 +799,34 @@ Status DeltaWriterImpl::init_write_schema() {
     const auto has_op_column = (this->_slots->size() > 0 && this->_slots->back()->col_name() == "__op");
     const auto write_columns = has_op_column ? _slots->size() - 1 : _slots->size();
 
-    // maybe partial update, change to partial tablet schema
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && write_columns < _tablet_schema->num_columns()) {
+    // Flexible partial update: _flexible_partial_update is the explicit PTabletWriterOpenRequest flag, and
+    // when it is set FE has injected the hidden "__cset__" SMALLINT slot directly before "__op". FE plans
+    // it only for primary key tables and without merge_condition; reject anything else here, before any
+    // data is written, because the apply has no flexible-aware path for it.
+    if (_flexible_partial_update) {
+        if (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS) {
+            return Status::NotSupported("flexible partial update is only supported on primary key tables");
+        }
+        if (!_merge_condition.empty()) {
+            return Status::NotSupported("flexible partial update combined with merge_condition is not supported");
+        }
+    }
+
+    // maybe partial update, change to partial tablet schema.
+    // A flexible load always takes this branch: when it lists every column of the table, write_columns
+    // (which counts "__cset__" but not "__op") is not below num_columns, yet "__cset__" must still be
+    // appended to _write_schema -- MemTable::convert_schema expects it there, and without it the memtable
+    // chunk would have one column fewer than _slots.
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+        (write_columns < _tablet_schema->num_columns() || _flexible_partial_update)) {
         _write_column_ids.reserve(write_columns);
         for (auto i = 0; i < write_columns; ++i) {
             const auto& slot_col_name = (*_slots)[i]->col_name();
+            // "__cset__" is not a tablet column: it stays out of _write_column_ids (which keeps meaning
+            // the real columns this load writes) and is appended to the write schema below.
+            if (_flexible_partial_update && slot_col_name == LOAD_CSET_COLUMN) {
+                continue;
+            }
             int32_t index = _tablet_schema->field_index(slot_col_name);
             if (index < 0) {
                 return Status::InvalidArgument(strings::Substitute("Invalid column name: $0", slot_col_name));
@@ -785,8 +836,19 @@ Status DeltaWriterImpl::init_write_schema() {
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         _partial_schema_with_sort_key_conflict = starrocks::DeltaWriter::is_partial_update_with_sort_key_conflict(
-                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns());
-        _write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
+                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns(),
+                /*column_mode_inserts_rows=*/_flexible_partial_update);
+        auto write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
+        if (_flexible_partial_update) {
+            // The per-row set-id travels into the written segment as a real column under a reserved
+            // unique id, LAST, so it shifts no real column (see _write_column_ids).
+            TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, LogicalType::TYPE_SMALLINT, /*is_nullable=*/false);
+            cset_col.set_name(LOAD_CSET_COLUMN);
+            cset_col.set_unique_id(kCsetReservedColumnUid);
+            cset_col.set_length(sizeof(int16_t));
+            write_schema->append_column(cset_col);
+        }
+        _write_schema = write_schema;
     }
 
     auto sort_key_idxes = _write_schema->sort_key_idxes();
@@ -808,7 +870,54 @@ Status DeltaWriterImpl::init_write_schema() {
 }
 
 bool DeltaWriterImpl::is_partial_update() const {
-    return _write_schema->num_columns() < _tablet_schema->num_columns();
+    // A flexible load is a partial update even when the union of its column sets covers every column:
+    // _write_schema (those columns plus "__cset__") is then not narrower than the tablet schema, but each
+    // row still writes only the columns it declares.
+    return _flexible_partial_update || _write_schema->num_columns() < _tablet_schema->num_columns();
+}
+
+Status DeltaWriterImpl::fold_column_set_dict(TxnLogPB_OpWrite* op_write) const {
+    // The dictionary was interned by the json scanner under this txn_id -- in this process, or on the
+    // sender's node and shipped here on the eos request (LakeTabletsChannel::add_chunk). The segments
+    // written above carry each row's set-id in "__cset__", so a missing dictionary cannot be read as "no
+    // column sets": applied as a plain partial update, the load would overwrite every column a row did
+    // not declare with its NULL placeholder. Fail the load instead.
+    auto dict = FlexiblePartialUpdateRegistry::instance()->get(_txn_id);
+    if (dict == nullptr || dict->size() == 0) {
+        if (op_write->rowset().num_rows() > 0) {
+            return Status::InternalError(fmt::format(
+                    "flexible partial update: the per-row column-set dictionary of txn {} is missing on this node",
+                    _txn_id));
+        }
+        // Nothing was written, so there is no set-id to decode.
+        return Status::OK();
+    }
+    auto* txn_meta = op_write->mutable_txn_meta();
+    for (const auto& names : dict->snapshot()) {
+        auto* set_pb = txn_meta->add_distinct_column_sets();
+        for (const auto& name : names) {
+            // The dictionary holds the source column names of the load, matched to the table columns
+            // case-insensitively by FE, while TabletSchema::field_index is case-sensitive: resolve the
+            // same way FE did, or a load whose `columns` header differs in case from the table would
+            // silently never apply that column.
+            auto idx = static_cast<int32_t>(_tablet_schema->field_index(name));
+            if (idx < 0) {
+                for (int32_t i = 0; i < _tablet_schema->num_columns(); ++i) {
+                    if (boost::iequals(_tablet_schema->column(i).name(), name)) {
+                        idx = i;
+                        break;
+                    }
+                }
+            }
+            // A source column that is not a table column (a skipped field of the load) writes nothing.
+            if (idx < 0) {
+                continue;
+            }
+            set_pb->add_column_unique_ids(_tablet_schema->column(idx).unique_id());
+        }
+    }
+    txn_meta->set_flexible_partial_update(true);
+    return Status::OK();
 }
 
 Status DeltaWriterImpl::merge_blocks_to_segments() {
@@ -965,6 +1074,18 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
             op_write->mutable_txn_meta()->CopyFrom(*rowset_txn_meta);
             for (auto i = 0; i < _write_schema->columns().size(); ++i) {
                 const auto& tablet_column = _write_schema->column(i);
+                // The synthetic "__cset__" column is physical in the written segment but maps to no
+                // tablet column, so it stays out of partial_update_column_ids / unique_ids, which keep
+                // meaning the union of the columns the rows write.
+                if (_flexible_partial_update && tablet_column.unique_id() == kCsetReservedColumnUid) {
+                    continue;
+                }
+                // Indexing _write_column_ids with a _write_schema subscript lines up only because
+                // "__cset__" is the LAST column, so the skip above fires at the one index without an
+                // entry. Moving it earlier would not crash; it would emit the wrong column id for every
+                // column after it.
+                DCHECK_LT(i, static_cast<int>(_write_column_ids.size()))
+                        << "the synthetic __cset__ column must be last in _write_schema";
                 op_write->mutable_txn_meta()->add_partial_update_column_ids(_write_column_ids[i]);
                 op_write->mutable_txn_meta()->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
@@ -980,6 +1101,9 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
                 for (auto& [name, value] : (*_column_to_expr_value)) {
                     op_write->mutable_txn_meta()->mutable_column_to_expr_value()->insert({name, value});
                 }
+            }
+            if (_flexible_partial_update) {
+                RETURN_IF_ERROR(fold_column_set_dict(op_write));
             }
         }
         // handle condition update
@@ -1392,11 +1516,12 @@ StatusOr<DeltaWriterBuilder::DeltaWriterPtr> DeltaWriterBuilder::build() {
         return Status::InvalidArgument(
                 fmt::format("tablet_schema id {} mismatches schema_id {}", _tablet_schema->id(), _schema_id));
     }
-    auto impl = new DeltaWriterImpl(
-            _tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition, _miss_auto_increment_column,
-            _db_id, _table_id, _immutable_tablet_size, _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
-            _column_to_expr_value, _load_id, _profile, _bundle_writable_file_context, _global_dicts,
-            _is_multi_statements_txn, _multi_node_write, _tablet_schema, _force_build_vector_index_inline);
+    auto impl = new DeltaWriterImpl(_tablet_mgr, _tablet_id, _txn_id, _partition_id, _slots, _merge_condition,
+                                    _miss_auto_increment_column, _db_id, _table_id, _immutable_tablet_size,
+                                    _mem_tracker, _max_buffer_size, _schema_id, _partial_update_mode,
+                                    _flexible_partial_update, _column_to_expr_value, _load_id, _profile,
+                                    _bundle_writable_file_context, _global_dicts, _is_multi_statements_txn,
+                                    _multi_node_write, _tablet_schema, _force_build_vector_index_inline);
     return std::make_unique<DeltaWriter>(impl);
 }
 

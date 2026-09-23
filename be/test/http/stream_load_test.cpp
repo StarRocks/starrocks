@@ -178,6 +178,30 @@ public:
         }
     }
 
+    // One partial_update_mode header probe. `partial_update` / `format` are the sibling headers the
+    // parser consults for the auto token; nullptr leaves the header out of the request.
+    struct PartialUpdateModeCase {
+        const char* mode;
+        const char* partial_update;
+        const char* format;
+        bool expect_ok;
+        bool expect_mode_set;
+        TPartialUpdateMode::type expect_mode;
+        bool expect_flexible;
+        // Substring of the failure message, only when !expect_ok.
+        const char* expect_message;
+    };
+    void run_partial_update_mode_case(const PartialUpdateModeCase& tc);
+    // Makes the mocked FE return a plan whose table sink is marked flexible, as a flexible-aware FE does.
+    static void mark_plan_flexible(TStreamLoadPutResult* result) {
+        auto& sink = result->params.fragment.output_sink.olap_table_sink;
+        sink.__set_flexible_partial_update(true);
+        result->params.fragment.output_sink.__isset.olap_table_sink = true;
+        result->params.fragment.__isset.output_sink = true;
+        result->params.__isset.fragment = true;
+        result->__isset.params = true;
+    }
+
 private:
     ExecEnv _env;
     ComputeEnv _compute_env;
@@ -189,6 +213,67 @@ private:
     MetricRegistry _metrics{"stream_load_action_test"};
     bool _owns_platform_env = false;
 };
+
+void StreamLoadActionTest::run_partial_update_mode_case(const PartialUpdateModeCase& tc) {
+    k_response_str = "";
+    k_stream_load_put_result = TStreamLoadPutResult();
+    if (tc.expect_flexible) {
+        mark_plan_flexible(&k_stream_load_put_result);
+    }
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StreamLoadAction::_process_put::rpc_timeout");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    // Fires right before the plan request goes to FE, i.e. only after every header was accepted.
+    bool captured = false;
+    TStreamLoadPutRequest put_request;
+    SyncPoint::GetInstance()->SetCallBack("StreamLoadAction::_process_put::rpc_timeout", [&](void* arg) {
+        put_request = *static_cast<TStreamLoadPutRequest*>(arg);
+        captured = true;
+    });
+
+    HttpRequest request(_evhttp_req);
+    request._params.emplace(HTTP_DB_KEY, "db");
+    request._params.emplace(HTTP_TABLE_KEY, "tbl");
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+    request._headers.emplace(HTTP_PARTIAL_UPDATE_MODE, tc.mode);
+    if (tc.partial_update != nullptr) {
+        request._headers.emplace(HTTP_PARTIAL_UPDATE, tc.partial_update);
+    }
+    if (tc.format != nullptr) {
+        request._headers.emplace(HTTP_FORMAT_KEY, tc.format);
+    }
+    request.set_handler(&action);
+
+    if (!tc.expect_ok) {
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.mode;
+        // Rejected while parsing headers, before the plan request was built.
+        ASSERT_FALSE(captured) << tc.mode;
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ("Fail", doc["Status"].GetString()) << tc.mode;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expect_message))
+                << tc.mode << " -> " << doc["Message"].GetString();
+        return;
+    }
+
+    ASSERT_EQ(0, action.on_header(&request)) << tc.mode << " -> " << k_response_str;
+    action.handle(&request);
+    ASSERT_TRUE(captured) << tc.mode;
+    EXPECT_EQ(tc.expect_mode_set, put_request.__isset.partial_update_mode) << tc.mode;
+    if (tc.expect_mode_set) {
+        EXPECT_EQ(tc.expect_mode, put_request.partial_update_mode) << tc.mode;
+    }
+    EXPECT_EQ(tc.expect_flexible, put_request.__isset.flexible_partial_update) << tc.mode;
+    if (tc.expect_flexible) {
+        EXPECT_TRUE(put_request.flexible_partial_update) << tc.mode;
+    }
+}
 
 TEST_F(StreamLoadActionTest, no_auth) {
     StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
@@ -952,6 +1037,95 @@ TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
     ASSERT_NE(nullptr, ctx);
     EXPECT_EQ(6, ctx->body_bytes);
     EXPECT_EQ(2097152, ctx->put_result.params.query_options.mem_limit);
+}
+
+// partial_update_mode keeps matching the tokens exactly (case-sensitive), and an unknown value is still
+// ignored. The flexible / flexible_row tokens are refused while enable_flexible_partial_update is off rather
+// than ignored: ignored, a load whose rows each declare other columns would run as a plain partial update of
+// the union of the columns and overwrite the columns a row omits with NULL.
+TEST_F(StreamLoadActionTest, partial_update_mode_flexible_disabled) {
+    const bool saved = config::enable_flexible_partial_update;
+    config::enable_flexible_partial_update = false;
+    DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
+
+    PartialUpdateModeCase test_cases[] = {
+            {"row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, false, nullptr},
+            {"column", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPSERT_MODE, false, nullptr},
+            {"auto", "true", "json", true, true, TPartialUpdateMode::AUTO_MODE, false, nullptr},
+            {"unknown_mode", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
+            {"Flexible", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
+            {"flexible", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
+             "partial_update_mode=flexible requires enable_flexible_partial_update"},
+            {"flexible_row", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
+             "partial_update_mode=flexible_row requires enable_flexible_partial_update"},
+    };
+    for (const auto& tc : test_cases) {
+        ASSERT_NO_FATAL_FAILURE(run_partial_update_mode_case(tc)) << tc.mode;
+    }
+}
+
+// With enable_flexible_partial_update on: flexible is column mode plus the flexible bit, flexible_row is row
+// mode plus the flexible bit, and every other token behaves as before.
+TEST_F(StreamLoadActionTest, partial_update_mode_flexible_enabled) {
+    const bool saved = config::enable_flexible_partial_update;
+    config::enable_flexible_partial_update = true;
+    DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
+
+    PartialUpdateModeCase test_cases[] = {
+            {"flexible", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPDATE_MODE, true, nullptr},
+            {"flexible_row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, true, nullptr},
+            {"row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, false, nullptr},
+            {"column", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPSERT_MODE, false, nullptr},
+            // auto never gets the flexible bit.
+            {"auto", "true", "json", true, true, TPartialUpdateMode::AUTO_MODE, false, nullptr},
+            {"unknown_mode", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
+            {"Flexible", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
+    };
+    for (const auto& tc : test_cases) {
+        ASSERT_NO_FATAL_FAILURE(run_partial_update_mode_case(tc)) << tc.mode;
+    }
+}
+
+// An FE that does not know about flexible partial update ignores the flexible bit and returns a plain partial
+// update plan, which would overwrite the columns a row omits with NULL. The load is refused unless the plan's
+// table sink says it is flexible.
+TEST_F(StreamLoadActionTest, flexible_partial_update_requires_a_flexible_plan) {
+    const bool saved = config::enable_flexible_partial_update;
+    config::enable_flexible_partial_update = true;
+    DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
+    constexpr const char* kRefused = "the FE did not plan this load as a flexible partial update";
+
+    for (bool flexible_plan : {false, true}) {
+        k_stream_load_put_result = TStreamLoadPutResult();
+        if (flexible_plan) {
+            mark_plan_flexible(&k_stream_load_put_result);
+        }
+        k_response_str = "";
+        StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                                _batch_write_mgr.get());
+        HttpRequest request(_evhttp_req);
+        request._params.emplace(HTTP_DB_KEY, "db");
+        request._params.emplace(HTTP_TABLE_KEY, "tbl");
+        request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+        request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
+        request._headers.emplace(HTTP_PARTIAL_UPDATE_MODE, "flexible");
+        request._headers.emplace(HTTP_PARTIAL_UPDATE, "true");
+        request._headers.emplace(HTTP_FORMAT_KEY, "json");
+        request.set_handler(&action);
+        // The plan is requested while the headers are processed, so a refused plan fails on_header.
+        EXPECT_EQ(flexible_plan ? 0 : -1, action.on_header(&request)) << k_response_str;
+        if (flexible_plan) {
+            action.handle(&request);
+        }
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_TRUE(doc.HasMember("Message")) << k_response_str;
+        const bool refused = std::strstr(doc["Message"].GetString(), kRefused) != nullptr;
+        EXPECT_EQ(!flexible_plan, refused) << "flexible_plan=" << flexible_plan << " -> " << k_response_str;
+        if (!flexible_plan) {
+            EXPECT_STREQ("Fail", doc["Status"].GetString());
+        }
+    }
 }
 
 } // namespace starrocks

@@ -27,6 +27,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
 #include "compute_env/load_path/load_path_state_helper.h"
@@ -74,7 +75,35 @@ Status JsonScanner::open() {
 
     const TBrokerRangeDesc& range = _scan_range.ranges[0];
 
+    // A flexible partial update is signalled ONLY by the explicit
+    // TBrokerScanRangeParams.flexible_partial_update flag the FE scan node sets; the slot names are
+    // never inspected to infer it. When the flag is set the FE has also injected the hidden "__cset__"
+    // set-id slot, which the readers fill per row (see JsonReader).
+    const bool is_flexible =
+            _scan_range.params.__isset.flexible_partial_update && _scan_range.params.flexible_partial_update;
+    if (is_flexible) {
+        const bool has_cset_slot =
+                std::any_of(_src_slot_descriptors.begin(), _src_slot_descriptors.end(),
+                            [](const SlotDescriptor* s) { return s != nullptr && s->col_name() == LOAD_CSET_COLUMN; });
+        if (!has_cset_slot) {
+            return Status::InternalError(strings::Substitute(
+                    "flexible partial update is set on the scan range but the plan carries no hidden '$0' slot",
+                    LOAD_CSET_COLUMN));
+        }
+    }
+
     if (range.__isset.jsonpaths) {
+        // Flexible partial update relies on the object-order construction path
+        // (_construct_row_without_jsonpath), where _parsed_columns is the per-row presence
+        // bitmap that yields the set-id. With explicit jsonpaths every slot is filled by
+        // path extraction (missing path => null), so presence-vs-explicit-null cannot be
+        // distinguished. Reject the combination with a clear error rather than silently
+        // mis-classifying omitted columns as NULL writes.
+        if (is_flexible) {
+            return Status::NotSupported(
+                    "flexible partial update (heterogeneous per-row columns) is not supported together with "
+                    "jsonpaths; omit jsonpaths so that per-row column presence can be detected");
+        }
         RETURN_IF_ERROR(parse_json_paths(range.jsonpaths, &_json_paths));
     }
     if (range.__isset.json_root) {
@@ -296,6 +325,13 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _range_desc(range_desc),
           _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
     _meta_col_by_slot_id = build_stream_source_meta_columns(_scanner->_scan_range.params.stream_source_meta_columns);
+    // The load is a flexible partial update iff the FE scan node set the explicit
+    // TBrokerScanRangeParams.flexible_partial_update flag (distinct from the pre-existing, unrelated
+    // flexible_column_mapping used by the parquet/avro/csv scanners). Only then is the hidden "__cset__"
+    // set-id slot looked up; a non-flexible load never inspects slot names for it. JsonScanner::open()
+    // has already verified that the flag comes with a "__cset__" slot.
+    _flexible_partial_update = _scanner->_scan_range.params.__isset.flexible_partial_update &&
+                               _scanner->_scan_range.params.flexible_partial_update;
     int index = 0;
     for (size_t i = 0; i < _slot_descs.size(); ++i) {
         const auto& desc = _slot_descs[i];
@@ -306,10 +342,38 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
             _op_col_index = index;
         } else if (auto m = _meta_col_by_slot_id.find(desc->id()); m != _meta_col_by_slot_id.end()) {
             _meta_col_by_index.emplace(index, m->second);
+        } else if (_flexible_partial_update && UNLIKELY(desc->col_name() == LOAD_CSET_COLUMN)) {
+            _cset_col_index = index;
         }
         index++;
         _slot_desc_dict.emplace(desc->col_name(), desc);
         _type_desc_dict.emplace(desc->col_name(), _type_descs[i]);
+    }
+    // The flag was validated against the slots in JsonScanner::open(); a flexible reader without the
+    // "__cset__" slot is a programming error, never a data error.
+    DCHECK(!_flexible_partial_update || _cset_col_index >= 0);
+
+    // Build the chunk-column-index -> mask-column-name table (every real column except the
+    // synthetic "__op" and "__cset__"), and look up the per-load set-id dictionary by
+    // txn_id. Only when flexible; otherwise this path is byte-for-byte the legacy one.
+    if (_flexible_partial_update) {
+        _cset_mask_col_names.assign(index, std::string());
+        int idx = 0;
+        for (size_t i = 0; i < _slot_descs.size(); ++i) {
+            const auto& desc = _slot_descs[i];
+            if (desc == nullptr) {
+                continue;
+            }
+            if (idx != _op_col_index && idx != _cset_col_index) {
+                _cset_mask_col_names[idx] = desc->col_name();
+            }
+            idx++;
+        }
+        // Hold a reference for as long as this reader interns into the dictionary; the sink of this plan
+        // holds its own (OlapTableSink::prepare .. close_wait), so the entry survives the readers and is
+        // released once every holder is done. Balanced in the destructor.
+        _cset_txn_id = _scanner->_params.txn_id;
+        _cset_dict = FlexiblePartialUpdateRegistry::instance()->retain(_cset_txn_id);
     }
 }
 
@@ -330,6 +394,10 @@ Status JsonReader::open() {
 
 JsonReader::~JsonReader() {
     (void)close();
+    if (_cset_dict != nullptr) {
+        _cset_dict.reset();
+        FlexiblePartialUpdateRegistry::instance()->release(_cset_txn_id);
+    }
 }
 
 Status JsonReader::close() {
@@ -609,8 +677,41 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
         return Status::DataQualityError(err_msg);
     }
 
+    // Flexible partial update: compute this row's set-id from the present columns.
+    // _parsed_columns is exactly the per-row presence bitmap (a key being physically
+    // present in the JSON object), independent of whether its VALUE is null -- so it
+    // distinguishes "omitted" (presence false => not in the set => don't touch) from
+    // "explicit JSON null" (presence true, value null => set NULL). The set-id is written
+    // into the "__cset__" column below; the omitted columns still get their null-fill
+    // placeholder (which the storage layer never applies because presence gates it).
+    ColumnSetId set_id = kInvalidColumnSetId;
+    if (_flexible_partial_update && _cset_col_index >= 0) {
+        _row_present_cols.clear();
+        for (int i = 0; i < chunk->num_columns(); i++) {
+            if (_parsed_columns[i] && i != _op_col_index && i != _cset_col_index &&
+                i < static_cast<int>(_cset_mask_col_names.size()) && !_cset_mask_col_names[i].empty()) {
+                _row_present_cols.push_back(_cset_mask_col_names[i]);
+            }
+        }
+        set_id = _cset_dict->intern(_row_present_cols);
+        // Out of set-id space (more than kMaxColumnSets distinct column sets in one load). Reject the row
+        // like any other malformed row: no set-id can describe it, and borrowing an existing one would
+        // apply that set's columns instead of this row's.
+        if (UNLIKELY(set_id == kInvalidColumnSetId)) {
+            return Status::NotSupported(strings::Substitute(
+                    "flexible partial update exceeded the per-load column-set limit ($0)", kMaxColumnSets));
+        }
+    }
+
     // append null (or synthetic metadata) to the columns without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
+        if (UNLIKELY(i == _cset_col_index)) {
+            // The __cset__ set-id column is always materialized (it is never "present" in
+            // the JSON object), regardless of _parsed_columns[i].
+            auto* column = chunk->get_column_raw_ptr_by_index(i);
+            column->append_datum(Datum(static_cast<int16_t>(set_id)));
+            continue;
+        }
         if (!_parsed_columns[i]) {
             auto* column = chunk->get_column_raw_ptr_by_index(i);
             if (UNLIKELY(i == _op_col_index)) {

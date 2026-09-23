@@ -39,6 +39,7 @@ class Tablet;
 class MetaFileBuilder;
 class UpdateManager;
 struct AutoIncrementPartialUpdateState;
+struct FlexibleInsertMask;
 using IndexEntry = DynamicCache<uint64_t, LakePersistentIndex>::Entry;
 
 class PersistentIndexBlockCache {
@@ -95,13 +96,13 @@ public:
     Status _read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema, Tablet* tablet,
                                   const std::shared_ptr<FileSystem>& fs, uint32_t seg,
                                   const std::vector<uint32_t>& insert_rowids, const std::vector<uint32_t>& update_cids,
-                                  ChunkPtr* out_chunk);
+                                  const FlexibleInsertMask& flexible_insert_mask, ChunkPtr* out_chunk);
 
     Status _handle_column_upsert_mode(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
                                       const TabletMetadataPtr& metadata, Tablet* tablet, LakePersistentIndex& index,
                                       MetaFileBuilder* builder, int64_t base_version, uint32_t rowset_id,
                                       const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
-                                      uint32_t* new_del_rebuild_rssid);
+                                      const FlexibleInsertMask& flexible_insert_mask, uint32_t* new_del_rebuild_rssid);
 
     Status _handle_delete_files(const TxnLogPB_OpWrite& op_write, int64_t txn_id, const TabletMetadataPtr& metadata,
                                 Tablet* tablet, LakePersistentIndex& index, IndexEntry* index_entry,

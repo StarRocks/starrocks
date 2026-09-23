@@ -155,6 +155,12 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
                                  std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) {
     SCOPED_TIMER(_open_timer);
     COUNTER_UPDATE(_open_counter, 1);
+    // FE plans a flexible partial update only for shared-data tables, and the shared-nothing writers do
+    // not understand the hidden per-row column-set column: applied here, the load would overwrite the
+    // columns a row did not declare.
+    if (params.flexible_partial_update()) {
+        return Status::NotSupported("flexible partial update is only supported on shared-data primary key tables");
+    }
     std::unique_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     _txn_id = params.txn_id();
     _index_id = params.index_id();

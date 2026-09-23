@@ -7,6 +7,7 @@ set(EXEC_FILES
         ./agent/heartbeat_server_test.cpp
         ./agent/resource_group_usage_recorder_test.cpp
         ./common/uri_test.cpp
+        ./common/flexible_partial_update_test.cpp
         ./connector_sink/iceberg_table_sink_test.cpp
         ./platform/fs_broker_test.cpp
         ./exec/pipeline/schedule/observer_test.cpp
@@ -287,6 +288,7 @@ SET(DW_TEST_FILES
     ./storage/lake/metacache_test.cpp
     ./storage/lake/meta_file_test.cpp
     ./storage/lake/lake_proto_normalizer_test.cpp
+    ./storage/lake/flexible_partial_update_test.cpp
     ./storage/lake/partial_update_test.cpp
     ./storage/lake/partial_update_vector_index_test.cpp
     ./storage/lake/persistent_index_memtable_test.cpp

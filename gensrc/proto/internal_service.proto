@@ -232,6 +232,10 @@ message PTabletWriterOpenRequest {
     // for multi olap table sink
     optional int64 sink_id = 36 [default = 0];
     optional bytes encryption_meta = 37;
+    // Flexible partial update: the incoming chunks carry the hidden per-row column-set id column
+    // "__cset__" (immediately before "__op"), and the writer must record the per-load column-set
+    // dictionary in the rowset. Mirrors TOlapTableSink.flexible_partial_update.
+    optional bool flexible_partial_update = 38;
 };
 
 message PTabletWriterOpenResult {
@@ -259,6 +263,21 @@ message PTabletWriterAddBatchRequest {
     repeated int64 partition_ids = 8;
 };
 
+// Flexible partial update: the per-load column-set dictionary. Each row of a flexible load declares
+// its own subset of columns; the distinct subsets are interned into a dense set-id space by the JSON
+// scanner, and the set-id of each row travels in the hidden "__cset__" column. The dictionary maps a
+// set-id (the index in `sets`) to the sorted column NAMES of that set. The sender ships it on the eos
+// add-chunk request so that tablet writers on other nodes can record it in the rowset.
+// Declared before PTabletWriterAddChunkRequest so jprotobuf resolves the type in its top-down parse.
+message PColumnSetPB {
+    repeated string column_names = 1;
+}
+
+message PColumnSetDictPB {
+    // index == set-id
+    repeated PColumnSetPB sets = 1;
+}
+
 message PTabletWriterAddChunkRequest {
     optional PUniqueId id = 1;
     optional int64 index_id = 2;
@@ -281,6 +300,9 @@ message PTabletWriterAddChunkRequest {
     optional bool wait_all_sender_close = 11 [default = false];
     // for multi olap table sink
     optional int64 sink_id = 12 [default = 0];
+    // Flexible partial update: the per-load column-set dictionary. Set only on the eos request of a
+    // flexible load, because the dictionary is complete only once the scan has ended.
+    optional PColumnSetDictPB column_set_dict = 13;
 };
 
 message PTabletWriterAddChunksRequest {

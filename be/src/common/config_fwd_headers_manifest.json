@@ -453,6 +453,7 @@
         "send_channel_buffer_limit",
         "enable_http_stream_load_limit",
         "enable_stream_load_verbose_log",
+        "enable_flexible_partial_update",
         "enable_load_spill",
         "load_spill_max_chunk_bytes",
         "load_spill_max_merge_bytes",

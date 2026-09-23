@@ -14,6 +14,8 @@
 
 #include "storage/lake/update_manager.h"
 
+#include <algorithm>
+
 #include "base/container/lru_cache.h"
 #include "base/debug/trace.h"
 #include "base/failpoint/fail_point.h"
@@ -472,8 +474,12 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     bool skip_early_sst_compact = false;
     const bool is_row_mode_partial_update =
             op_write.has_txn_meta() && op_write.rewrite_segments_meta_size() > 0 && op_write.rowset().num_rows() > 0;
-    const bool use_parallel_partial_update =
-            is_row_mode_partial_update && local_segments > 1 && use_cloud_native_pk_index(*metadata);
+    // A flexible partial update (flexible_row) publishes its segments one by one: a segment whose rows repeat
+    // a key of an earlier segment of this load must read that segment's merged row as the current value of
+    // the columns its own rows do not declare, which only exists once the earlier segment is in the index.
+    const bool flexible_partial_update = op_write.has_txn_meta() && op_write.txn_meta().flexible_partial_update();
+    const bool use_parallel_partial_update = is_row_mode_partial_update && local_segments > 1 &&
+                                             use_cloud_native_pk_index(*metadata) && !flexible_partial_update;
 
     // 2. Process segments in batches. In parallel mode, each batch runs Phase 1 (parallel
     // load+rewrite) then Phase 2 (sequential _do_update), releasing upserts per batch to
@@ -753,7 +759,8 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
 Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tschema,
                                              Tablet* tablet, const std::shared_ptr<FileSystem>& fs, uint32_t seg,
                                              const std::vector<uint32_t>& insert_rowids,
-                                             const std::vector<uint32_t>& update_cids, ChunkPtr* out_chunk) {
+                                             const std::vector<uint32_t>& update_cids,
+                                             const FlexibleInsertMask& flexible_insert_mask, ChunkPtr* out_chunk) {
     auto full_schema = ChunkHelper::convert_schema(tschema);
     auto full_chunk = ChunkFactory::new_chunk(full_schema, insert_rowids.size());
 
@@ -791,6 +798,73 @@ Status UpdateManager::_read_chunk_for_upsert(const TxnLogPB_OpWrite& op_write, c
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(insert_rowids.data(), insert_rowids.size(), mut_col));
+        }
+    }
+
+    // Flexible partial update: the update file holds a NULL placeholder in every cell its row did not
+    // declare. An inserted row gets the column's default there instead, the same value a plain partial
+    // update inserts for a column it does not write.
+    if (flexible_insert_mask.valid()) {
+        if (seg >= flexible_insert_mask.set_ids_by_segment.size()) {
+            return Status::InternalError(
+                    fmt::format("flexible partial update: no column-set ids for update segment {}", seg));
+        }
+        const auto& set_ids = flexible_insert_mask.set_ids_by_segment[seg];
+        const auto& column_sets = flexible_insert_mask.distinct_column_sets;
+        std::vector<int16_t> row_set_ids(insert_rowids.size());
+        for (size_t i = 0; i < insert_rowids.size(); ++i) {
+            if (insert_rowids[i] >= set_ids.size()) {
+                return Status::InternalError(
+                        fmt::format("flexible partial update: rowid {} out of range of update segment {} ({} rows)",
+                                    insert_rowids[i], seg, set_ids.size()));
+            }
+            row_set_ids[i] = set_ids[insert_rowids[i]];
+            if (row_set_ids[i] < 0 || static_cast<size_t>(row_set_ids[i]) >= column_sets.size()) {
+                return Status::InternalError(
+                        fmt::format("flexible partial update: column-set id {} out of range ({} sets)", row_set_ids[i],
+                                    column_sets.size()));
+            }
+        }
+        for (uint32_t cid : update_cids) {
+            const TabletColumn& tablet_column = tschema->column(cid);
+            if (tablet_column.is_key()) {
+                continue;
+            }
+            const auto uid = static_cast<ColumnUID>(tablet_column.unique_id());
+            std::vector<uint32_t> uncovered; // positions within this batch
+            for (size_t i = 0; i < row_set_ids.size(); ++i) {
+                const auto& column_set = column_sets[row_set_ids[i]];
+                if (std::find(column_set.begin(), column_set.end(), uid) == column_set.end()) {
+                    uncovered.push_back(static_cast<uint32_t>(i));
+                }
+            }
+            if (uncovered.empty()) {
+                continue;
+            }
+            bool has_default_value = tablet_column.has_default_value();
+            std::string default_value = has_default_value ? tablet_column.default_value() : "";
+            auto it = op_write.txn_meta().column_to_expr_value().find(tablet_column.name());
+            if (it != op_write.txn_meta().column_to_expr_value().end()) {
+                has_default_value = true;
+                default_value = it->second;
+            }
+            auto mut_col = full_chunk->get_column_raw_ptr_by_id(cid);
+            auto default_col = mut_col->clone_empty();
+            if (has_default_value) {
+                const TypeInfoPtr& type_info = get_type_info(tablet_column);
+                auto default_value_iter = std::make_unique<DefaultValueColumnIterator>(
+                        true, default_value, tablet_column.is_nullable(), type_info, tablet_column.length(),
+                        (int)uncovered.size());
+                ColumnIteratorOptions iter_opts;
+                RETURN_IF_ERROR(default_value_iter->init(iter_opts));
+                RETURN_IF_ERROR(
+                        default_value_iter->fetch_values_by_rowid(nullptr, uncovered.size(), default_col.get()));
+            } else {
+                default_col->append_default(uncovered.size());
+            }
+            RETURN_ERROR_IF_FALSE(default_col->size() == uncovered.size(),
+                                  "flexible partial update: default values do not match the uncovered rows");
+            RETURN_IF_EXCEPTION(mut_col->update_rows(*default_col, uncovered.data()));
         }
     }
 
@@ -837,8 +911,14 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                                  LakePersistentIndex& index, MetaFileBuilder* builder,
                                                  int64_t base_version, uint32_t rowset_id,
                                                  const std::vector<std::vector<uint32_t>>& insert_rowids_by_segment,
+                                                 const FlexibleInsertMask& flexible_insert_mask,
                                                  uint32_t* new_del_rebuild_rssid) {
-    if (op_write.txn_meta().partial_update_mode() != PartialUpdateMode::COLUMN_UPSERT_MODE) {
+    // A flexible partial update runs in COLUMN_UPDATE_MODE but, like every other partial update of a load,
+    // inserts the rows whose key is not in the table yet, with the defaults of the columns they do not
+    // declare (see _read_chunk_for_upsert).
+    const auto mode = op_write.txn_meta().partial_update_mode();
+    const bool flexible_upsert = mode == PartialUpdateMode::COLUMN_UPDATE_MODE && flexible_insert_mask.valid();
+    if (mode != PartialUpdateMode::COLUMN_UPSERT_MODE && !flexible_upsert) {
         return Status::OK();
     }
 
@@ -930,7 +1010,7 @@ Status UpdateManager::_handle_column_upsert_mode(const TxnLogPB_OpWrite& op_writ
                                                       insert_rowids.begin() + batch_end);
             ChunkPtr full_chunk;
             RETURN_IF_ERROR(_read_chunk_for_upsert(op_write, tschema, tablet, fs, seg, batch_insert_rowids, update_cids,
-                                                   &full_chunk));
+                                                   flexible_insert_mask, &full_chunk));
 
             RETURN_IF_ERROR(writer.append_chunk(*full_chunk));
             total_rows += full_chunk->num_rows();
@@ -1101,6 +1181,8 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     RssidFileInfoContainer rssid_fileinfo_container;
     rssid_fileinfo_container.add_rssid_to_file(*metadata);
     std::vector<std::vector<uint32_t>> insert_rowids_by_segment;
+    // Stays empty unless the load is a flexible partial update.
+    FlexibleInsertMask flexible_insert_mask;
 
     RowsetUpdateStateParams params{
             .op_write = op_write,
@@ -1112,7 +1194,7 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     {
         ColumnModePartialUpdateHandler handler(base_version, txn_id, _update_mem_tracker);
-        RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment));
+        RETURN_IF_ERROR(handler.execute(params, builder, &insert_rowids_by_segment, &flexible_insert_mask));
     }
 
     const uint32_t rowset_id = metadata->next_rowset_id();
@@ -1125,7 +1207,8 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
 
     // 1. handle inserted rows: for COLUMN_UPSERT_MODE, build full segments with only inserted rows and append to meta
     RETURN_IF_ERROR(_handle_column_upsert_mode(op_write, txn_id, metadata, tablet, index, builder, base_version,
-                                               rowset_id, insert_rowids_by_segment, &new_del_rebuild_rssid));
+                                               rowset_id, insert_rowids_by_segment, flexible_insert_mask,
+                                               &new_del_rebuild_rssid));
 
     // 2. handle delete files and generate delvecs for existing rssids only
     RETURN_IF_ERROR(_handle_delete_files(op_write, txn_id, metadata, tablet, index, index_entry, builder, base_version,

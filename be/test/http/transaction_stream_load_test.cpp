@@ -142,6 +142,22 @@ public:
         }
     }
 
+    // One partial_update_mode header probe. `partial_update` / `format` are the sibling headers the
+    // parser consults for the auto token; nullptr leaves the header out of the request.
+    struct PartialUpdateModeCase {
+        const char* mode;
+        const char* partial_update;
+        const char* format;
+        bool expect_ok;
+        bool expect_mode_set;
+        TPartialUpdateMode::type expect_mode;
+        bool expect_flexible;
+        // Expected "Status" (TStatusCode name) and a substring of "Message", only when !expect_ok.
+        const char* expect_status;
+        const char* expect_message;
+    };
+    void run_partial_update_mode_case(const PartialUpdateModeCase& tc);
+
 protected:
     ExecEnv _env;
     ComputeEnv _compute_env;
@@ -152,6 +168,69 @@ protected:
     MetricRegistry _metrics{"transaction_stream_load_action_test"};
     bool _owns_platform_env = false;
 };
+
+void TransactionStreamLoadActionTest::run_partial_update_mode_case(const PartialUpdateModeCase& tc) {
+    k_response_str = "";
+    TransactionStreamLoadAction action(&_env, &_stream_load_orchestrator, _transaction_mgr.get());
+    auto ctx = new StreamLoadContext(_env.load_stream_mgr());
+    ctx->ref();
+    ctx->db = "db";
+    ctx->table = "tbl";
+    ctx->label = "partial_update_mode";
+    ctx->body_sink = std::make_shared<StreamLoadPipe>();
+    bool remove_from_stream_context_mgr = false;
+    DeferOp defer([&]() {
+        if (remove_from_stream_context_mgr) {
+            _env.stream_context_mgr()->remove(ctx->label);
+        }
+        if (ctx->unref()) {
+            delete ctx;
+        }
+    });
+    ASSERT_OK((_env.stream_context_mgr())->put(ctx->label, ctx));
+    remove_from_stream_context_mgr = true;
+
+    HttpRequest request(_evhttp_req);
+    request.set_handler(&action);
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "3");
+    request._headers.emplace(HTTP_DB_KEY, ctx->db);
+    request._headers.emplace(HTTP_TABLE_KEY, ctx->table);
+    request._headers.emplace(HTTP_LABEL_KEY, ctx->label);
+    request._headers.emplace(HTTP_PARTIAL_UPDATE_MODE, tc.mode);
+    if (tc.partial_update != nullptr) {
+        request._headers.emplace(HTTP_PARTIAL_UPDATE, tc.partial_update);
+    }
+    if (tc.format != nullptr) {
+        request._headers.emplace(HTTP_FORMAT_KEY, tc.format);
+    }
+
+    if (!tc.expect_ok) {
+        ASSERT_EQ(-1, action.on_header(&request)) << tc.mode;
+        rapidjson::Document doc;
+        doc.Parse(k_response_str.c_str());
+        ASSERT_STREQ(tc.expect_status, doc["Status"].GetString()) << tc.mode;
+        ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expect_message))
+                << tc.mode << " -> " << doc["Message"].GetString();
+        return;
+    }
+
+    ASSERT_EQ(0, action.on_header(&request)) << tc.mode << " -> " << k_response_str;
+    // Releases the context lock and sends the reply, as the real request flow does.
+    action.handle(&request);
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("OK", doc["Status"].GetString()) << tc.mode << " -> " << k_response_str;
+    // _exec_plan_fragment caches the parsed plan request on the context.
+    EXPECT_EQ(tc.expect_mode_set, ctx->request.__isset.partial_update_mode) << tc.mode;
+    if (tc.expect_mode_set) {
+        EXPECT_EQ(tc.expect_mode, ctx->request.partial_update_mode) << tc.mode;
+    }
+    EXPECT_EQ(tc.expect_flexible, ctx->request.__isset.flexible_partial_update) << tc.mode;
+    if (tc.expect_flexible) {
+        EXPECT_TRUE(ctx->request.flexible_partial_update) << tc.mode;
+    }
+}
 
 // `need_auth() == false` for both handlers is pinned in handler_required_privilege_test.cpp
 // (BeHandlerNeedAuthTest.transaction_endpoints_skip_framework_auth). This file focuses on
@@ -1345,6 +1424,32 @@ TEST_F(TransactionStreamLoadActionTest, on_header_numeric_headers_rejected) {
         doc.Parse(k_response_str.c_str());
         ASSERT_NE(nullptr, std::strstr(doc["Message"].GetString(), tc.expected_message.c_str()))
                 << tc.header << ": " << tc.value << " -> " << doc["Message"].GetString();
+    }
+}
+
+// Transaction stream load does not plan a flexible partial update, so it refuses partial_update_mode=flexible /
+// flexible_row whatever enable_flexible_partial_update says, instead of ignoring the value and running a plain
+// partial update that overwrites the columns a row omits with NULL. The other tokens behave as before, an
+// unknown one is still ignored, and none of them sets the flexible bit.
+TEST_F(TransactionStreamLoadActionTest, partial_update_mode_flexible_rejected) {
+    const bool saved = config::enable_flexible_partial_update;
+    DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
+
+    PartialUpdateModeCase test_cases[] = {
+            {"row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, false, nullptr, nullptr},
+            {"column", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPSERT_MODE, false, nullptr, nullptr},
+            {"auto", "true", "json", true, true, TPartialUpdateMode::AUTO_MODE, false, nullptr, nullptr},
+            {"unknown_mode", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr, nullptr},
+            {"flexible", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false, "NOT_IMPLEMENTED_ERROR",
+             "partial_update_mode=flexible is not supported by transaction stream load"},
+            {"flexible_row", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
+             "NOT_IMPLEMENTED_ERROR", "partial_update_mode=flexible_row is not supported by transaction stream load"},
+    };
+    for (bool enabled : {false, true}) {
+        config::enable_flexible_partial_update = enabled;
+        for (const auto& tc : test_cases) {
+            ASSERT_NO_FATAL_FAILURE(run_partial_update_mode_case(tc)) << tc.mode << " enabled=" << enabled;
+        }
     }
 }
 

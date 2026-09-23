@@ -191,6 +191,14 @@ CONF_mBool(enable_http_stream_load_limit, "false");
 
 CONF_mBool(enable_stream_load_verbose_log, "false");
 
+// Experimental. Accept flexible partial update loads on this node: a JSON stream load with
+// partial_update_mode=flexible or flexible_row, where each row updates only the columns present in it
+// and the omitted columns keep their current value. Shared-data primary key tables only, and the FE
+// config of the same name must be enabled too. Turn it on only after every BE/CN of the cluster runs
+// a version that supports it: a node that does not understand the per-row column sets would apply
+// such a load as a plain partial update and overwrite the omitted columns with NULL.
+CONF_mBool(enable_flexible_partial_update, "false");
+
 CONF_mInt32(get_txn_status_internal_sec, "10");
 
 CONF_mBool(enable_load_spill, "true");

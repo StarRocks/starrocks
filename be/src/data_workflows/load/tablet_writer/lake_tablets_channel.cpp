@@ -17,6 +17,7 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+#include <atomic>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +29,7 @@
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
@@ -319,6 +321,9 @@ private:
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     std::shared_ptr<OlapTableSchemaParam> _schema;
+    // Flexible partial update: set once this channel received the per-load column-set dictionary on an
+    // eos request and took its registry reference (released in the destructor).
+    std::atomic<bool> _cset_dict_retained{false};
 
     std::vector<Sender> _senders;
 
@@ -421,6 +426,9 @@ LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, cons
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
+    if (_cset_dict_retained.load()) {
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
 }
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
@@ -620,6 +628,29 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 
     // Submit `AsyncDeltaWriter::finish()` tasks if needed
     if (request.eos()) {
+        // Flexible partial update: record the per-row column-set dictionary the sender shipped on its
+        // eos request in this node's registry (keyed by _txn_id) BEFORE the finish() loop below, which
+        // is where the delta writers fold it into RowsetTxnMetaPB.distinct_column_sets. A writer on a
+        // node other than the scanner's would otherwise find no dictionary and fail the load. Several
+        // senders' eos requests may each carry a snapshot, in any order; merge_snapshot() extends the
+        // dictionary and rejects a snapshot that disagrees with it.
+        if (request.has_column_set_dict() && request.column_set_dict().sets_size() > 0) {
+            std::vector<std::vector<std::string>> sets;
+            sets.reserve(request.column_set_dict().sets_size());
+            for (const auto& set_pb : request.column_set_dict().sets()) {
+                sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+            }
+            // Hold a reference for the life of this channel (released in the destructor) so the entry
+            // outlives every writer that folds it; senders' eos requests may arrive concurrently, so
+            // take it exactly once.
+            if (!_cset_dict_retained.exchange(true)) {
+                FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
+            }
+            auto st = FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->merge_snapshot(sets);
+            if (!st.ok()) {
+                context->update_status(st);
+            }
+        }
         int unfinished_senders = _close_sender(request.partition_ids().data(), request.partition_ids().size());
         if (unfinished_senders > 0) {
             count_down_latch.count_down(_delta_writers.size());
@@ -1010,6 +1041,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
                                               .set_partial_update_mode(params.partial_update_mode())
+                                              .set_flexible_partial_update(params.flexible_partial_update())
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .set_load_id(params.id())
                                               .set_profile(_profile)

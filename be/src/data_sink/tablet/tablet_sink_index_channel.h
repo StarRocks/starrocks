@@ -130,6 +130,9 @@ struct AddChunksChannelSpec {
     bool enable_colocate_mv_index = false;
     // Looked up at eos time only. Owned by OlapTableSink, borrowed here.
     const std::unordered_map<int64_t, std::set<int64_t>>* index_id_to_partition_ids = nullptr;
+    // Flexible partial update (TOlapTableSink.flexible_partial_update): the eos request carries the
+    // load's per-row column-set dictionary.
+    bool flexible_partial_update = false;
 };
 
 // One batched send unit: a chunk plus the tablet_ids it routes to per index.

@@ -325,11 +325,33 @@ static Status read_chunk_from_update_file(const ChunkIteratorPtr& iter, const Ch
 // corresponding source rows keep their previous values. Equal values let the new row
 // win, matching the existing upsert/row-mode condition-update semantics (see
 // UpdateManager::_process_single_chunk_update_with_condition).
+Status ColumnModePartialUpdateHandler::_update_source_chunk(
+        const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
+        const std::vector<ColumnUID>& selective_unique_update_column_ids, StreamChunkContainer container,
+        int32_t condition_idx_in_partial_schema) {
+    if (_is_flexible()) {
+        // execute() rejects a flexible load with a merge condition.
+        DCHECK_LT(condition_idx_in_partial_schema, 0);
+        return _update_source_chunk_by_upt_flexible(upt_id_to_rowid_pairs, partial_schema,
+                                                    selective_unique_update_column_ids, container);
+    }
+    return _update_source_chunk_by_upt(upt_id_to_rowid_pairs, partial_schema, container,
+                                       condition_idx_in_partial_schema);
+}
+
 Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidToRowidPairs& upt_id_to_rowid_pairs,
                                                                    const Schema& partial_schema,
                                                                    StreamChunkContainer container,
                                                                    int32_t condition_idx_in_partial_schema) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_us");
+    // The update files of a flexible load carry a NULL placeholder in every cell a row did not declare;
+    // overlaying them here would overwrite those columns of the row. They are applied only through
+    // _update_source_chunk_by_upt_flexible.
+    if (_is_flexible()) {
+        return Status::InternalError(
+                fmt::format("flexible partial update of tablet {} reached the plain column-mode merge, txn_id: {}",
+                            _rowset_ptr->tablet_id(), _txn_id));
+    }
     // build iterators
     OlapReaderStatistics stats;
     ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
@@ -410,6 +432,132 @@ Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt(const UptidTo
     return Status::OK();
 }
 
+Status ColumnModePartialUpdateHandler::_update_source_chunk_by_upt_flexible(
+        const UptidToRowidPairs& upt_id_to_rowid_pairs, const Schema& partial_schema,
+        const std::vector<ColumnUID>& selective_unique_update_column_ids, StreamChunkContainer container) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("pcu_update_source_by_upt_flexible_us");
+    const size_t num_value_cols = partial_schema.num_fields();
+    RETURN_ERROR_IF_FALSE(num_value_cols == selective_unique_update_column_ids.size());
+
+    // set id -> whether that set covers each value column of this batch (by position in partial_schema).
+    std::unordered_map<ColumnUID, size_t> uid_to_value_pos;
+    uid_to_value_pos.reserve(num_value_cols);
+    for (size_t c = 0; c < num_value_cols; ++c) {
+        uid_to_value_pos.emplace(selective_unique_update_column_ids[c], c);
+    }
+    std::vector<std::vector<bool>> set_covers(_flexible_column_sets.size(), std::vector<bool>(num_value_cols, false));
+    for (size_t s = 0; s < _flexible_column_sets.size(); ++s) {
+        for (ColumnUID uid : _flexible_column_sets[s]) {
+            auto it = uid_to_value_pos.find(uid);
+            if (it != uid_to_value_pos.end()) {
+                set_covers[s][it->second] = true;
+            }
+        }
+    }
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_RETURN(auto segment_iters, _rowset_ptr->get_each_segment_iterator(partial_schema, true, &stats));
+    RETURN_ERROR_IF_FALSE(segment_iters.size() == _rowset_ptr->num_segments());
+    int64_t cells_overlaid = 0;
+    // Ascending upt_id, like the plain merge: when several update files hold the same source row, the
+    // later one wins for each column it covers.
+    for (const auto& each : upt_id_to_rowid_pairs) {
+        const uint32_t upt_id = each.first;
+        // See _update_source_chunk_by_upt: a lost update-file segment produces no rowid pairs.
+        if (segment_iters[upt_id] == nullptr) {
+            LOG(WARNING) << "flexible column-mode partial update skips a null update-file segment iterator, tablet: "
+                         << _rowset_ptr->tablet_id() << ", upt_id: " << upt_id;
+            continue;
+        }
+        ChunkUniquePtr upt_chunk = ChunkFactory::new_chunk(partial_schema, DEFAULT_CHUNK_SIZE);
+        DeferOp iter_defer([&]() {
+            if (segment_iters[upt_id] != nullptr) {
+                segment_iters[upt_id]->close();
+            }
+        });
+        RETURN_IF_ERROR(read_chunk_from_update_file(segment_iters[upt_id], upt_chunk));
+        // A whole .upt file lands in one chunk, because the upt rowids below index into it. Check
+        // before append_selective() reads its offsets.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*upt_chunk, "column mode partial update upt file chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
+        const size_t upt_chunk_size = upt_chunk->memory_usage();
+        _tracker->consume(upt_chunk_size);
+        DeferOp tracker_defer([&]() { _tracker->release(upt_chunk_size); });
+
+        if (upt_id >= _flexible_set_ids.size()) {
+            return Status::InternalError(
+                    fmt::format("flexible partial update: no column-set ids for update segment {}", upt_id));
+        }
+        const auto& set_ids = _flexible_set_ids[upt_id];
+        if (set_ids.size() != upt_chunk->num_rows()) {
+            return Status::InternalError(
+                    fmt::format("flexible partial update: update segment {} has {} rows but {} column-set ids", upt_id,
+                                upt_chunk->num_rows(), set_ids.size()));
+        }
+        // The pairs whose source row is in this streamed range, rebased onto it as split_rowid_pairs()
+        // does for the plain merge.
+        std::vector<std::pair<uint32_t, uint32_t>> pairs; // (source rowid in container, upt rowid)
+        std::vector<int16_t> pair_set_ids;
+        pairs.reserve(each.second.size());
+        pair_set_ids.reserve(each.second.size());
+        for (const auto& [source_rowid, upt_rowid] : each.second) {
+            if (!container.contains(source_rowid)) {
+                continue;
+            }
+            if (upt_rowid >= set_ids.size()) {
+                return Status::InternalError(
+                        fmt::format("flexible partial update: upt rowid {} out of range of update segment {} ({} rows)",
+                                    upt_rowid, upt_id, set_ids.size()));
+            }
+            const int16_t set_id = set_ids[upt_rowid];
+            if (set_id < 0 || static_cast<size_t>(set_id) >= set_covers.size()) {
+                return Status::InternalError(fmt::format(
+                        "flexible partial update: column-set id {} out of range ({} sets)", set_id, set_covers.size()));
+            }
+            pairs.emplace_back(source_rowid - container.start_rowid, upt_rowid);
+            pair_set_ids.push_back(set_id);
+        }
+        if (pairs.empty()) {
+            continue;
+        }
+
+        // Overlay each value column only at the rows whose set covers it. The other cells keep the value
+        // already in the range: the current value of the row, never the update file's placeholder.
+        for (size_t c = 0; c < num_value_cols; ++c) {
+            std::vector<std::pair<uint32_t, uint32_t>> covered;
+            covered.reserve(pairs.size());
+            for (size_t i = 0; i < pairs.size(); ++i) {
+                if (set_covers[pair_set_ids[i]][c]) {
+                    covered.push_back(pairs[i]);
+                }
+            }
+            if (covered.empty()) {
+                continue;
+            }
+            // update_rows() expects the destination rowids in ascending order.
+            std::sort(covered.begin(), covered.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            std::vector<uint32_t> src_rowids(covered.size());
+            std::vector<uint32_t> upt_rowids(covered.size());
+            for (size_t i = 0; i < covered.size(); ++i) {
+                src_rowids[i] = covered[i].first;
+                upt_rowids[i] = covered[i].second;
+            }
+            const auto& upt_col = upt_chunk->get_column_by_index(c);
+            auto selected = upt_col->clone_empty();
+            TRY_CATCH_BAD_ALLOC(selected->append_selective(*upt_col, upt_rowids.data(), 0, upt_rowids.size()));
+            RETURN_IF_EXCEPTION(container.chunk_ptr->get_column_by_index(c)->as_mutable_raw_ptr()->update_rows(
+                    *selected, src_rowids.data()));
+            cells_overlaid += static_cast<int64_t>(covered.size());
+        }
+        // Same as the plain merge: the result can outgrow the column limit even though both inputs fit.
+        RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(*container.chunk_ptr,
+                                                             "column mode partial update merged source chunk",
+                                                             _rowset_ptr->tablet_id(), _txn_id));
+    }
+    TRACE_COUNTER_INCREMENT("pcu_flexible_cells_overlaid", cells_overlaid);
+    return Status::OK();
+}
+
 template <typename T>
 static std::vector<T> append_fixed_batch(const std::vector<T>& base_array, size_t offset, size_t batch_size) {
     std::vector<T> new_array;
@@ -454,7 +602,8 @@ StatusOr<int32_t> ColumnModePartialUpdateHandler::_locate_condition_idx_in_parti
 }
 
 Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& params, MetaFileBuilder* builder,
-                                               std::vector<std::vector<uint32_t>>* insert_rowids_by_segment) {
+                                               std::vector<std::vector<uint32_t>>* insert_rowids_by_segment,
+                                               FlexibleInsertMask* flexible_insert_mask) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pcu_execute_us");
     // 1. load update state first
     RETURN_IF_ERROR(_load_update_state(params));
@@ -495,6 +644,39 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
     // one .col file), and compare_at is then performed inline inside _update_source_chunk_by_upt
     // against the already-read source/upt chunks.
     ASSIGN_OR_RETURN(int32_t condition_cid, _resolve_condition_cid(txn_meta, *params.tablet_schema));
+
+    // Flexible partial update: every row of the update files updates only the columns of its own
+    // column set (RowsetTxnMetaPB.distinct_column_sets, indexed by the row's hidden "__cset__" value).
+    // Decided once, here; from now on _is_flexible() routes every merge through the per-row mask.
+    if (txn_meta.flexible_partial_update()) {
+        // The delta writer records the flag only together with a non-empty dictionary and rejects a merge
+        // condition, and FE keeps flexible loads off range-distributed tables, whose shared segments would
+        // put the update rows of this tablet at an offset the column-set ids below do not have.
+        if (txn_meta.distinct_column_sets_size() == 0) {
+            return Status::InternalError(
+                    fmt::format("flexible partial update of tablet {} carries no column sets, txn_id: {}",
+                                params.tablet->id(), _txn_id));
+        }
+        if (condition_cid >= 0) {
+            return Status::NotSupported("flexible partial update combined with merge_condition is not supported");
+        }
+        if (params.metadata->has_range()) {
+            return Status::NotSupported("flexible partial update is not supported on range-distributed tables");
+        }
+        _flexible_column_sets.reserve(txn_meta.distinct_column_sets_size());
+        for (const auto& set_pb : txn_meta.distinct_column_sets()) {
+            _flexible_column_sets.emplace_back(set_pb.column_unique_ids().begin(), set_pb.column_unique_ids().end());
+        }
+        _flexible_set_ids.resize(_rowset_ptr->num_segments());
+        for (uint32_t i = 0; i < _rowset_ptr->num_segments(); i++) {
+            ASSIGN_OR_RETURN(_flexible_set_ids[i], _rowset_ptr->read_column_set_ids(static_cast<int>(i)));
+        }
+        if (flexible_insert_mask != nullptr) {
+            flexible_insert_mask->distinct_column_sets = _flexible_column_sets;
+            flexible_insert_mask->set_ids_by_segment = _flexible_set_ids;
+        }
+    }
+
     const size_t BATCH_HANDLE_COLUMN_CNT =
             (condition_cid >= 0 && !update_column_ids.empty())
                     ? update_column_ids.size()
@@ -588,8 +770,9 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
                             DeferOp tracker_defer([&]() { _tracker->release(source_chunk_size); });
 
                             // 3.4 read from update segments and apply rows in this source range.
-                            RETURN_IF_ERROR(_update_source_chunk_by_upt(*upt_pairs_ptr, partial_schema, container,
-                                                                        condition_idx_in_partial_schema));
+                            RETURN_IF_ERROR(_update_source_chunk(*upt_pairs_ptr, partial_schema,
+                                                                 selective_unique_update_column_ids, container,
+                                                                 condition_idx_in_partial_schema));
                             padding_char_columns(partial_schema, partial_tschema, container.chunk_ptr);
                             RETURN_IF_ERROR(ChunkHelper::reject_if_over_capacity(
                                     *container.chunk_ptr, "column mode partial update padded source chunk",

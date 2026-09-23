@@ -27,6 +27,7 @@
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
@@ -93,6 +94,24 @@ PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<s
             if (it != _spec.index_id_to_partition_ids->end()) {
                 for (auto pid : it->second) {
                     sub->add_partition_ids(pid);
+                }
+            }
+        }
+        // Flexible partial update: the eos request carries the load's per-row column-set dictionary
+        // (column-NAME sets, index == set-id), read from this process's registry by txn_id. The json
+        // scanners of this plan intern into it, and eos is sent only after the scan has ended, so the
+        // snapshot covers every set-id of the rows this channel sent. Names rather than unique ids,
+        // because the writer owns the tablet schema and translates them.
+        if (opts.eos && _spec.flexible_partial_update) {
+            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(s.txn_id);
+                dict != nullptr && dict->size() > 0) {
+                auto snapshot = dict->snapshot();
+                auto* dict_pb = sub->mutable_column_set_dict();
+                for (const auto& names : snapshot) {
+                    auto* set_pb = dict_pb->add_sets();
+                    for (const auto& name : names) {
+                        set_pb->add_column_names(name);
+                    }
                 }
             }
         }
@@ -171,6 +190,7 @@ Status NodeChannel::init(RuntimeState* state) {
     spec.load_id = &_parent->_load_id;
     spec.enable_colocate_mv_index = _enable_colocate_mv_index;
     spec.index_id_to_partition_ids = &_parent->_index_id_partition_ids;
+    spec.flexible_partial_update = _parent->_flexible_partial_update;
     spec.indexes.reserve(_index_tablets_map.size());
     for (const auto& [index_id, tablets] : _index_tablets_map) {
         PerIndexSpec s;
@@ -242,6 +262,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+    }
+    // Flexible partial update: forward TOlapTableSink.flexible_partial_update to the tablet writer as
+    // the explicit PTabletWriterOpenRequest.flexible_partial_update flag; the writer never infers it from the
+    // slot names. Left unset for non-flexible loads so the request is byte-identical to before.
+    if (_parent->_flexible_partial_update) {
+        request.set_flexible_partial_update(true);
     }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
