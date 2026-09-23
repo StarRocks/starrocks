@@ -397,7 +397,7 @@ TEST(ArmCpuInfoDarwin, SysctlProbing) {
 
     // 2. Fail-closed verification (P2):
     // When sysctl queries fail, unknown capability state must fail closed (0 flags).
-    auto mock_sysctl_fail_all = [](const char* /*name*/) -> bool { return false; };
+    auto mock_sysctl_fail_all = [](const char * /*name*/) -> bool { return false; };
     int64_t flags_fail_closed = CpuInfo::TEST_init_arm_darwin(mock_sysctl_fail_all);
     EXPECT_EQ(0, flags_fail_closed) << "Darwin detection must fail closed if capabilities cannot be verified";
 
