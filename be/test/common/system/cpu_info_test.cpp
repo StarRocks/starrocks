@@ -132,7 +132,7 @@ TEST(ArmCpuInfoParsing, StrictTokenMatching) {
     // Compound flag string containing substrings like "sve2", "sveaes", "svepmull"
     // Must NOT spuriously enable "sve", "aes", or "pmull" if the standalone tokens are absent.
     std::string compound_flags = "fp asimd sve2 sveaes svepmull";
-    auto flags = CpuInfo::TEST_parse_cpu_flags(compound_flags);
+    auto flags = CpuInfo::TEST_parse_flags(compound_flags, CpuInfo::TEST_flag_mappings());
     EXPECT_TRUE(flags & CpuInfo::ARM_NEON);
     EXPECT_TRUE(flags & CpuInfo::ARM_SVE2);
     EXPECT_FALSE(flags & CpuInfo::ARM_SVE) << "Compound 'sve2' must not trigger 'sve'";
@@ -146,7 +146,7 @@ TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
             "fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics fphp asimdhp cpuid asimdrdm jscvt fcma lrcpc dcpop "
             "sha3 sm3 sm4 asimddp sha512 sve asimdfhm dit uscat ilrcpc flagm ssbs sb paca pacg dcpodp flagm2 frint "
             "sve2";
-    int64_t flags = CpuInfo::TEST_parse_cpu_flags(cpuinfo_features);
+    int64_t flags = CpuInfo::TEST_parse_flags(cpuinfo_features, CpuInfo::TEST_flag_mappings());
     EXPECT_TRUE(flags & CpuInfo::ARM_NEON);
     EXPECT_TRUE(flags & CpuInfo::ARM_CRC32);
     EXPECT_TRUE(flags & CpuInfo::ARM_PMULL);
@@ -164,12 +164,12 @@ TEST(ArmCpuInfoParsing, ProcCpuinfoFeaturesFallback) {
 
     // Minimal /proc/cpuinfo line
     std::string minimal_features = "fp asimd evtstrm";
-    int64_t min_flags = CpuInfo::TEST_parse_cpu_flags(minimal_features);
+    int64_t min_flags = CpuInfo::TEST_parse_flags(minimal_features, CpuInfo::TEST_flag_mappings());
     EXPECT_EQ(int64_t(CpuInfo::ARM_NEON), min_flags);
 
     // Features line without any recognized StarRocks flags
     std::string no_flags = "fp evtstrm cpuid";
-    EXPECT_EQ(0, CpuInfo::TEST_parse_cpu_flags(no_flags));
+    EXPECT_EQ(0, CpuInfo::TEST_parse_flags(no_flags, CpuInfo::TEST_flag_mappings()));
 }
 
 TEST(ArmCpuInfoParsing, AuxvalMapping) {
@@ -257,14 +257,16 @@ TEST(ArmCpuInfoParsing, ProcfsTruncatedStreamFailClosed) {
 }
 
 TEST(ArmCpuInfoParsing, AuxvalPriorityOverProcfsFallback) {
-    const int64_t aux_flags = CpuInfo::ARM_NEON | CpuInfo::ARM_CRC32;
-    const int64_t procfs_flags = CpuInfo::ARM_NEON | CpuInfo::ARM_CRC32 | CpuInfo::ARM_SVE | CpuInfo::ARM_SVE2;
+    // Plain bit literals, not CpuInfo::ARM_* constants: this test verifies arch-agnostic
+    // precedence-selection logic and must keep compiling on every architecture.
+    const int64_t aux_flags = (1LL << 0) | (1LL << 1);
+    const int64_t procfs_flags = (1LL << 0) | (1LL << 1) | (1LL << 2) | (1LL << 3);
 
     // When getauxval() is available, aux_flags are authoritative
     int64_t resolved = CpuInfo::TEST_resolve_arm_flags(true, aux_flags, procfs_flags);
     EXPECT_EQ(aux_flags, resolved);
-    EXPECT_FALSE(resolved & CpuInfo::ARM_SVE);
-    EXPECT_FALSE(resolved & CpuInfo::ARM_SVE2);
+    EXPECT_FALSE(resolved & (1LL << 2));
+    EXPECT_FALSE(resolved & (1LL << 3));
 
     // Even when aux_flags is 0 (minimal core), if getauxval is available, it does not fall back to procfs
     EXPECT_EQ(0, CpuInfo::TEST_resolve_arm_flags(true, 0, procfs_flags));
@@ -275,6 +277,71 @@ TEST(ArmCpuInfoParsing, AuxvalPriorityOverProcfsFallback) {
 
     // When neither is available, flags are 0
     EXPECT_EQ(0, CpuInfo::TEST_resolve_arm_flags(false, 0, 0));
+}
+
+namespace {
+// Synthetic vocabulary for algorithm-level tests. Deliberately NOT CpuInfo::ARM_*/x86 constants:
+// these tests verify the tokenizer and multi-core-intersection algorithms themselves, so they
+// must keep compiling and passing on every host and target architecture, independent of which
+// real vocabulary this binary was built with (see Task 3, which makes the real vocabularies
+// arch-exclusive).
+const std::vector<CpuInfo::FlagMapping>& test_vocabulary() {
+    static const std::vector<CpuInfo::FlagMapping> mappings = {
+            {"alpha", 1LL << 0},
+            {"beta", 1LL << 1},
+            {"beta2", 1LL << 2},
+            {"betaextra", 1LL << 3},
+            {"gamma", 1LL << 4},
+    };
+    return mappings;
+}
+} // namespace
+
+TEST(CpuInfoParsingAlgorithm, TokenizesAndMatchesExactly) {
+    int64_t flags = CpuInfo::TEST_parse_flags("alpha beta", test_vocabulary());
+    EXPECT_TRUE(flags & (1LL << 0));
+    EXPECT_TRUE(flags & (1LL << 1));
+    EXPECT_EQ((1LL << 0) | (1LL << 1), flags);
+}
+
+TEST(CpuInfoParsingAlgorithm, CompoundTokensDoNotMatchSubstrings) {
+    // "beta2" and "betaextra" are distinct tokens from "beta" and must not be treated as
+    // containing it -- matching must be exact-token, not substring.
+    int64_t flags = CpuInfo::TEST_parse_flags("alpha beta2 betaextra", test_vocabulary());
+    EXPECT_TRUE(flags & (1LL << 0));
+    EXPECT_FALSE(flags & (1LL << 1)) << "'beta2'/'betaextra' must not spuriously match 'beta'";
+    EXPECT_TRUE(flags & (1LL << 2));
+    EXPECT_TRUE(flags & (1LL << 3));
+}
+
+TEST(CpuInfoParsingAlgorithm, UnknownTokensAreIgnored) {
+    int64_t flags = CpuInfo::TEST_parse_flags("alpha unknown_token gamma", test_vocabulary());
+    EXPECT_EQ((1LL << 0) | (1LL << 4), flags);
+}
+
+TEST(CpuInfoParsingAlgorithm, HeterogeneousCoreIntersection) {
+    // Core 0 is feature-rich, core 1 is feature-poor: only the common subset must survive.
+    std::string stream_data = "processor   : 0\n"
+                               "Features    : alpha beta gamma\n\n"
+                               "processor   : 1\n"
+                               "Features    : alpha gamma\n";
+    std::istringstream iss(stream_data);
+    int64_t flags = CpuInfo::TEST_intersect_procfs_features(iss, test_vocabulary());
+    EXPECT_EQ((1LL << 0) | (1LL << 4), flags) << "Non-common 'beta' must be excluded via intersection";
+}
+
+TEST(CpuInfoParsingAlgorithm, NoFeaturesLinesYieldsZero) {
+    std::string stream_data = "processor   : 0\nmodel name  : Synthetic Core\n";
+    std::istringstream iss(stream_data);
+    EXPECT_EQ(0, CpuInfo::TEST_intersect_procfs_features(iss, test_vocabulary()));
+}
+
+TEST(CpuInfoParsingAlgorithm, FailsClosedOnBadStream) {
+    std::string stream_data = "processor   : 0\nFeatures    : alpha beta\n";
+    std::istringstream iss(stream_data);
+    iss.setstate(std::ios::badbit);
+    EXPECT_EQ(0, CpuInfo::TEST_intersect_procfs_features(iss, test_vocabulary()))
+            << "A bad stream must fail closed and return 0, never a partial/stale result";
 }
 
 TEST(ArmCpuInfoDarwin, SysctlProbing) {

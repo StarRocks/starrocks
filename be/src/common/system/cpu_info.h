@@ -132,9 +132,20 @@ public:
     // Return value: the cpu instruction sets that are not supported in the current running env.
     static std::vector<std::string> unsupported_cpu_flags_from_current_env();
 
+    struct FlagMapping {
+        std::string_view name;
+        int64_t flag;
+    };
+
     // For TEST only
     static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
-    static int64_t TEST_parse_cpu_flags(const std::string& values) { return _parse_cpu_flags(values); }
+    static const std::vector<FlagMapping>& TEST_flag_mappings() { return _flag_mappings(); }
+    static int64_t TEST_parse_flags(const std::string& values, const std::vector<FlagMapping>& mappings) {
+        return _parse_flags(values, mappings);
+    }
+    static int64_t TEST_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
+        return _intersect_procfs_features(stream, mappings);
+    }
     static int64_t TEST_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
         return _init_arm_auxval(hwcap, hwcap2);
     }
@@ -152,13 +163,15 @@ private:
     static int64_t _init_arm_darwin(const std::function<bool(const char*)>& check_sysctl);
     static int64_t _resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags);
 
-    struct FlagMapping {
-        std::string_view name;
-        int64_t flag;
-    };
-
+    // This build's single feature vocabulary (see cpu_info.cpp). Exactly one definition exists
+    // per compiled binary -- x86 and ARM64 tokens are never in the same table.
     static const std::vector<FlagMapping>& _flag_mappings();
-    static int64_t _parse_cpu_flags(const std::string& values);
+
+    // Arch-independent parsing primitives -- table-driven so unit tests can exercise the
+    // tokenizer and multi-core-intersection algorithms on any host using synthetic data,
+    // independent of which vocabulary this binary was actually built with.
+    static int64_t _parse_flags(const std::string& values, const std::vector<FlagMapping>& mappings);
+    static int64_t _intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings);
 
     static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
     static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;

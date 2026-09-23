@@ -143,11 +143,11 @@ const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
     return mappings;
 }
 
-int64_t CpuInfo::_parse_cpu_flags(const string& values) {
+int64_t CpuInfo::_parse_flags(const string& values, const std::vector<FlagMapping>& mappings) {
     int64_t flags = 0;
     for (StringPiece token : strings::Split(values, " ", strings::SkipWhitespace())) {
         const std::string_view token_view(token.data(), token.size());
-        for (const auto& flag_mapping : _flag_mappings()) {
+        for (const auto& flag_mapping : mappings) {
             if (token_view == flag_mapping.name) {
                 flags |= flag_mapping.flag;
                 break;
@@ -200,7 +200,7 @@ int64_t CpuInfo::_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
     return flags;
 }
 
-int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
+int64_t CpuInfo::_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
     std::string line;
     std::string name;
     std::string value;
@@ -215,7 +215,7 @@ int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
             trim(name);
             trim(value);
             if (name == "Features") {
-                int64_t core_flags = _parse_cpu_flags(value);
+                int64_t core_flags = _parse_flags(value, mappings);
                 if (first_features_line) {
                     intersection_flags = core_flags;
                     first_features_line = false;
@@ -229,6 +229,10 @@ int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
         return 0; // Fail closed on truncated or corrupted stream
     }
     return intersection_flags;
+}
+
+int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
+    return _intersect_procfs_features(stream, _flag_mappings());
 }
 
 int64_t CpuInfo::_init_arm_darwin(const std::function<bool(const char*)>& check_sysctl) {
@@ -326,7 +330,7 @@ void CpuInfo::init() {
             trim(name);
             trim(value);
             if (name.compare("flags") == 0) {
-                hardware_flags_ |= _parse_cpu_flags(value);
+                hardware_flags_ |= _parse_flags(value, _flag_mappings());
             } else if (name.compare("cpu MHz") == 0) {
                 // Every core will report a different speed.  We'll take the max, assuming
                 // that when impala is running, the core will not be in a lower power state.
