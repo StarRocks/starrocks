@@ -163,9 +163,7 @@ TEST_F(LanceConnectorTest, ForwardsCatalogCloudProperties) {
         LanceDataSourceProvider provider(nullptr, _plan);
         auto source = provider.create_data_source(_range);
         ASSERT_OK(source->open(_state.get()));
-        EXPECT_EQ(type == TCloudType::AWS     ? "AWS"
-                  : type == TCloudType::AZURE ? "AZURE"
-                                              : "DEFAULT",
+        EXPECT_EQ(type == TCloudType::AWS ? "AWS" : type == TCloudType::AZURE ? "AZURE" : "DEFAULT",
                   _params.at("lance.cloud_type"));
         EXPECT_EQ("test-token", _params.at("lance.cloud.credential"));
         source->close(_state.get());
