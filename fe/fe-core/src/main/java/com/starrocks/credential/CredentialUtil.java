@@ -45,6 +45,7 @@ public class CredentialUtil {
         doMask(properties, CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS1_OAUTH2_CREDENTIAL);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY);
+        doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN);
         doMask(properties, CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET);
 
         // Mask for gcs's credential
