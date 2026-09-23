@@ -5,7 +5,7 @@ displayed_sidebar: docs
 
 # StarRocks Migration Tool (SMT)
 
-StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツールで、Flink を通じてソースデータベースから StarRocks にデータをロードします。SMT の主な機能は次のとおりです:
+StarRocks Migration Tool (SMT) は、Flink を通じてソースデータベースから StarRocks にデータをロードするために必要な SQL を生成するコマンドラインツールです。SMT の主な機能は次のとおりです:
 - ソースデータベースとターゲットの StarRocks クラスターの情報に基づいて、StarRocks にテーブルを作成するためのステートメントを生成します。
 - Flink の SQL クライアントで実行可能な SQL ステートメントを生成し、データ同期のための Flink ジョブを送信します。これにより、パイプラインでのフルまたは増分データ同期が簡素化されます。現在、SMT は以下のソースデータベースをサポートしています:
 
@@ -20,6 +20,22 @@ StarRocks Migration Tool (SMT) は、StarRocks が提供するデータ移行ツ
 | TiDB              | サポート                                               | サポート       | サポート       |
 
 ダウンロードリンク: https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
+
+## SMT でできること・できないこと
+
+SMT は SQL ファイルを生成して終了します。ソースデータベースのテーブル定義を読み取り、`result` ディレクトリに 2 種類のファイルを書き出します。
+
+- `starrocks-create.*.sql`: StarRocks で実行する CREATE TABLE ステートメント。
+- `flink-create.*.sql`: ソーステーブルとシンクテーブルを定義し、`INSERT INTO ... SELECT` ジョブを送信する Flink SQL。Flink SQL クライアントで実行します。
+
+SMT は Flink を起動、実行、または Flink に接続することはなく、データも移動しません。ソースデータベース用の Flink CDC コネクタと [StarRocks 用 Flink コネクタ](../../loading/Flink-connector-starrocks.md)を備えた Flink クラスターを別途インストールして実行し、生成されたファイルを自分で実行する必要があります。
+
+### SMT を使用せずにデータを同期する
+
+SMT は必須ではありません。代わりに次の方法を使用できます。
+
+- [Flink CDC パイプライン](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/core-concept/data-pipeline/)を使用する。パイプラインは 1 つの YAML ファイルで定義され、StarRocks のテーブルを自動的に作成して同期を実行します。[PostgreSQL からのリアルタイム同期](../../loading/Flink_cdc_postgres.md)を参照してください。MySQL の場合は、Flink CDC ドキュメントの [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.6/docs/get-started/quickstart-for-1.20/mysql-to-starrocks/) を参照してください。
+- StarRocks のテーブルを自分で作成し、[StarRocks 用 Flink コネクタ](../../loading/Flink-connector-starrocks.md)をシンクとして Flink SQL を記述する。この方法は、Flink が読み取れるあらゆるソースで使用できます。
 
 ## SMT の使用手順
 
@@ -224,6 +240,12 @@ Flink CDC コネクタと SMT を使用すると、MySQL からサブセカン�
 
 ## PostgreSQL から StarRocks への同期
 
+:::tip
+
+Flink CDC 3.5 以降では、Flink CDC パイプラインを使用すると SMT なしで PostgreSQL を StarRocks に同期でき、StarRocks のテーブルも自動的に作成されます。手順については、[PostgreSQL からのリアルタイム同期](../../loading/Flink_cdc_postgres.md) を参照してください。
+
+:::
+
 ### 概要
 
 Flink CDC コネクタと SMT を使用すると、PostgreSQL からサブセカンドでデータを同期できます。
@@ -333,9 +355,9 @@ Flink CDC コネクタは PostgreSQL の WAL を読み取り、Flink-connector-s
 - PostgreSQL WAL を有効にする方法
 
    ```Bash
-   # 接続権限を開く
-   echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
-   echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
+   # Flink ホストからの接続を許可します。10.0.0.0/24 をそのホストのアドレス範囲に置き換えてください。
+   echo "host all all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
+   echo "host replication all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
    # WAL 論理レプリケーションを有効にする
    echo "wal_level = logical" >> postgresql.conf
    echo "max_wal_senders = 2" >> postgresql.conf
