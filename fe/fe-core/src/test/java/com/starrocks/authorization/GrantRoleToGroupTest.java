@@ -117,6 +117,58 @@ public class GrantRoleToGroupTest {
         Assertions.assertEquals(0, roleIds.size());
     }
 
+    /**
+     * A GRANT written with a different case than the directory returns must still match: an LDAP `cn`
+     * is case-insensitive in the directory, so requiring an exact match made such a grant silently
+     * ineffective. Only the lookup is relaxed - the stored key keeps the case it was granted with.
+     */
+    @Test
+    public void testGroupNameLookupIsCaseInsensitive() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        for (int i = 1; i <= 2; i++) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role cr" + i, ctx), ctx);
+        }
+        Long r1Id = authorizationMgr.getRoleIdByNameAllowNull("cr1");
+        Long r2Id = authorizationMgr.getRoleIdByNameAllowNull("cr2");
+
+        // Granted with the lower-case spelling.
+        GrantRoleStmt grantRoleStmt =
+                new GrantRoleStmt(List.of("cr1"), "sr analysts", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        // The directory hands us the group in its own case, and it still matches.
+        Assertions.assertEquals(Set.of(r1Id), authorizationMgr.getRoleIdListByGroup("SR Analysts"));
+        Assertions.assertEquals(Set.of(r1Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+        // A different group name still does not match.
+        Assertions.assertTrue(authorizationMgr.getRoleIdListByGroup("sr analyst").isEmpty());
+
+        // A second grant that spells the same group differently must land in the existing entry instead of
+        // creating a second one, otherwise the directory group would be split over two records that no single
+        // REVOKE can reach.
+        GrantRoleStmt otherCase =
+                new GrantRoleStmt(List.of("cr2"), "SR Analysts", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(otherCase, ctx);
+        authorizationMgr.grantRole(otherCase);
+
+        // One entry holding both roles, reachable under either spelling.
+        Assertions.assertEquals(Set.of(r1Id, r2Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+        Assertions.assertEquals(Set.of(r1Id, r2Id), authorizationMgr.getRoleIdListByGroup("SR Analysts"));
+
+        // And a revoke spelled a third way still reaches it.
+        RevokeRoleStmt revokeOtherCase =
+                new RevokeRoleStmt(List.of("cr1"), "SR ANALYSTS", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeOtherCase, ctx);
+        authorizationMgr.revokeRole(revokeOtherCase);
+        Assertions.assertEquals(Set.of(r2Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+    }
+
     @Test
     public void testSerDer() throws Exception {
         EditLog editLog = spy(new EditLog(null));
