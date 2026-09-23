@@ -296,9 +296,8 @@ final class PreSplitFlow {
      * catch turns into the same data-tier fallback.
      *
      * <p>Returns {@code null} — the caller then falls back to the exact data tier — for any shape
-     * the footer path cannot serve: a load kind without Parquet footers, a rollup target
-     * (secondary-index sort keys the footer path does not carry), a partition source column absent
-     * from the sort key, or too few usable footer statistics.
+     * the footer path cannot serve: a load kind without Parquet footers, a partition source column
+     * absent from the sort key, or too few usable footer statistics.
      */
     static SampleSet runMetaTierMultiPartitionSampler(OlapTable table, Prepared prepared, LoadKind loadKind) {
         if (loadKind != LoadKind.INSERT_FROM_FILES && loadKind != LoadKind.BROKER_LOAD) {

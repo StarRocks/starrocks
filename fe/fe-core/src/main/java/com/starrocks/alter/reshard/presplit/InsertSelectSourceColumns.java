@@ -41,7 +41,7 @@ import java.util.Set;
  * name) for directly mapped outputs of a parsed
  * {@code INSERT INTO <range-dist target> SELECT ... FROM <single source relation>}, where the
  * source is one OLAP / Iceberg table or one {@code FILES(...)} call. The sampler uses the map to
- * project any index's sort key (base or rollup) and the partition columns by their source column
+ * project the sort key and the partition columns by their source column
  * names. Non-key target columns may be expressions over the source relation and are omitted from
  * the map. A column fed by a literal ({@code '20260917' AS dt}) is recorded separately, as the
  * literal's SQL: the sampler projects the literal itself in place of a source column, for a
@@ -270,7 +270,7 @@ final class InsertSelectSourceColumns {
     }
 
     /**
-     * Whether a sort key (the base index's or a rollup's) can be sampled: every column is backed by
+     * Whether the sort key can be sampled: every column is backed by
      * a source column or fed by a literal, and at least one is backed by a source column. A literal
      * column is fine anywhere in the key -- every sampled tuple carries the same value there, and the
      * cuts come from the columns that vary -- but a key made only of literals is degenerate: every
