@@ -445,10 +445,29 @@ under the License.
             <artifactId>okhttp</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>mockwebserver</artifactId>
+            <scope>test</scope>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio -->
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
+        </dependency>
+
+        <!-- used by JWTTokenProvider (bot/system JWT client-credentials flow) to trace the
+             outbound token-fetch HTTP call when Brave/Zipkin tracing is enabled -->
+        <dependency>
+            <groupId>io.zipkin.brave</groupId>
+            <artifactId>brave-instrumentation-http</artifactId>
+            <version>5.13.7</version>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.brave</groupId>
+            <artifactId>brave-instrumentation-okhttp3</artifactId>
+            <version>5.13.7</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->

@@ -32,6 +32,7 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -139,7 +140,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     @Override
                     public Table reload(IcebergTableName key, Table oldValue) {
                         try {
-                            return delegate.getTable(new ConnectContext(), key.dbName, key.tableName);
+                            // Caffeine's async reload runs on the cache's own executor, never on a
+                            // request thread — there is no user ConnectContext to fall back on here.
+                            return delegate.getTable(StatisticUtils.buildBotContext(), key.dbName, key.tableName);
                         } catch (Exception e) {
                             LOG.warn("refresh table {}.{} failed", key.dbName, key.tableName, e);
                             return oldValue;
@@ -156,8 +159,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            ConnectContext context = new ConnectContext();
+                            ConnectContext context = StatisticUtils.buildBotContext();
                             context.setOnlyReadIcebergCache(true);
+                            if (context.getAuthToken() == null && getSecurityType() == IcebergRESTCatalog.Security.JWT) {
+                                throw new StarRocksConnectorException(
+                                        "No bot token available for JWT REST catalog partition load %s.%s",
+                                        key.dbName, key.tableName);
+                            }
                             Table nativeTable = getTable(context, key.dbName, key.tableName);
                             IcebergTable icebergTable =
                                     IcebergTable.builder()
@@ -225,6 +233,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return delegate.getIcebergCatalogType();
+    }
+
+    @Override
+    public IcebergRESTCatalog.Security getSecurityType() {
+        return delegate.getSecurityType();
     }
 
     @Override
@@ -496,7 +509,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     continue;
                 }
 
-                refreshTable(identifier.dbName, identifier.tableName, new ConnectContext(), backgroundExecutor);
+                refreshTable(identifier.dbName, identifier.tableName, StatisticUtils.buildBotContext(), backgroundExecutor);
             } catch (Exception e) {
                 LOG.warn("refresh {}.{} metadata cache failed, msg : ", identifier.dbName,
                         identifier.tableName, e);

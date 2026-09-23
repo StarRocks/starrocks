@@ -122,6 +122,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.logging.log4j.LogManager;
@@ -1511,7 +1512,8 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
             // For hive catalog, the metastore client always throws (wrapping NoSuchObjectException as the
@@ -1525,7 +1527,8 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getTableWithIdentifier(scope.getContext(), baseTableInfo);
         } catch (Exception e) {
@@ -1541,7 +1544,8 @@ public class MvUtils {
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(ConnectContext.get())) {
+        ConnectContext callerCtx = ConnectContext.get() != null ? ConnectContext.get() : StatisticUtils.buildBotContext();
+        try (ConnectContext.ContextScope scope = ConnectContext.enterOnlyReadIcebergCacheScope(callerCtx)) {
             return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(scope.getContext(), baseTableInfo);
         }
     }
