@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <array>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -77,6 +78,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    void update_metrics(RuntimeState* state) override;
 
     bool has_output() const override;
     bool is_finished() const override;
@@ -94,6 +96,7 @@ private:
     const int32_t _degree_of_parallelism;
     Status _finish_status;
     bool _is_finished = false;
+    std::array<RuntimeProfile::Counter*, 12> _ai_counters{};
 };
 
 class AISourceOperatorFactory final : public SourceOperatorFactory {

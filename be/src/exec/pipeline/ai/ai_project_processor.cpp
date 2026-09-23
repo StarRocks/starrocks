@@ -61,6 +61,7 @@ struct AIProjectProcessor::Lane {
     TerminalKind terminal_kind = TerminalKind::NONE;
     size_t outstanding_callbacks = 0;
     size_t submissions_in_progress = 0;
+    AIExecutionStatistics statistics;
     bool building = false;
     bool source_finished = false;
     QueryContextLifetimeWeakPtr query_lifetime;
@@ -446,9 +447,10 @@ Status AIProjectProcessor::_prepare_and_submit(RuntimeState* state, int32_t driv
                 // the barrier and observer valid without retaining the
                 // processor or the active subchunk directly.
                 callback = [lane, ignore_row_failures = _config.on_error == "ignore", task_id = submission.task_id,
-                            output_index = submission.output_index,
-                            row_index = submission.row_index](AITaskResult result) mutable noexcept {
-                    _complete_task(lane, ignore_row_failures, task_id, output_index, row_index, std::move(result));
+                            output_index = submission.output_index, row_index = submission.row_index](
+                                   AITaskResult result, const AIExecutionStatistics& statistics) mutable noexcept {
+                    _complete_task(lane, ignore_row_failures, task_id, output_index, row_index, std::move(result),
+                                   statistics);
                 };
             };
             _memory.run_in_physical_scope([](void* opaque) { (*static_cast<decltype(build_callback)*>(opaque))(); },
@@ -546,17 +548,17 @@ void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& l
                                                   const Status& status) {
     if (status.is_cancelled()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED});
+                       AILifecycleCancelled{.reason = AILifecycleReason::CANCELLED}, {});
         return;
     }
     if (status.is_time_out()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::DEADLINE});
+                       AILifecycleCancelled{.reason = AILifecycleReason::DEADLINE}, {});
         return;
     }
     if (status.is_shutdown() || status.is_service_unavailable()) {
         _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                       AILifecycleCancelled{.reason = AILifecycleReason::SHUTDOWN});
+                       AILifecycleCancelled{.reason = AILifecycleReason::SHUTDOWN}, {});
         return;
     }
 
@@ -565,11 +567,12 @@ void AIProjectProcessor::_complete_submit_failure(const std::shared_ptr<Lane>& l
         failure_class = AISanitizedFailureClass::LOCAL_RESOURCE;
     }
     _complete_task(lane, ignore_row_failures, task_id, output_index, row_index,
-                   AISanitizedRowFailure{.failure_class = failure_class});
+                   AISanitizedRowFailure{.failure_class = failure_class}, {});
 }
 
 void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool ignore_row_failures, uint64_t task_id,
-                                        size_t output_index, size_t row_index, AITaskResult result) noexcept {
+                                        size_t output_index, size_t row_index, AITaskResult result,
+                                        const AIExecutionStatistics& statistics) noexcept {
     bool notify = false;
     {
         // Destroy result-owned async memory before releasing the callback
@@ -577,6 +580,10 @@ void AIProjectProcessor::_complete_task(const std::shared_ptr<Lane>& lane, bool 
         AITaskResult local_result(std::move(result));
         try {
             std::lock_guard lock(lane->mutex);
+            // Terminal task accounting remains visible even if cancellation
+            // already discarded this lane's output. Publish it before the
+            // callback barrier can drain and the source profile can close.
+            lane->statistics.add(statistics);
             ActiveSubchunk* subchunk = lane->active.get();
             if (!lane->source_finished && subchunk != nullptr && output_index < subchunk->outputs.size() &&
                 row_index < subchunk->outputs[output_index].rows.size()) {
@@ -806,6 +813,14 @@ bool AIProjectProcessor::pending_finish(int32_t driver_sequence) const {
     const std::shared_ptr<Lane>& lane = lane_or.value();
     std::lock_guard lock(lane->mutex);
     return lane->submissions_in_progress > 0 || lane->outstanding_callbacks > 0;
+}
+
+AIExecutionStatistics AIProjectProcessor::statistics(int32_t driver_sequence) const {
+    auto lane_or = _lane(driver_sequence);
+    if (!lane_or.ok()) return {};
+    const std::shared_ptr<Lane>& lane = lane_or.value();
+    std::lock_guard lock(lane->mutex);
+    return lane->statistics;
 }
 
 Status AIProjectProcessor::set_source_finished(int32_t driver_sequence) {
