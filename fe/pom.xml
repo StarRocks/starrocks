@@ -81,15 +81,9 @@ under the License.
         <fastutil.version>8.5.15</fastutil.version>
         <async-profiler.version>4.0</async-profiler.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
-<<<<<<< HEAD
         <hbase.version>3.0.0</hbase.version>
         <lz4-java.version>1.11.1</lz4-java.version>
-        <bouncycastle.version>1.84</bouncycastle.version>
-=======
-        <hbase.version>2.6.2</hbase.version>
-        <lz4-java.version>1.10.1</lz4-java.version>
         <bouncycastle.version>1.85</bouncycastle.version>
->>>>>>> 71a466d ([BugFix] Bump Apache Ranger to 2.9.0 and BouncyCastle to 1.85 (backport #79331) (#79342))
         <thrift.version>0.24.0</thrift.version>
         <httpcore5.version>5.4.3</httpcore5.version>
     </properties>
