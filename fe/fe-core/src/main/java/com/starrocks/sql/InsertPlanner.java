@@ -181,7 +181,7 @@ public class InsertPlanner {
         this.useOptimisticLock = optimisticLock;
         this.plannerMetaLocker = plannerMetaLocker;
         this.originalOlapTables = snapshot == null ? null : snapshot.originalOlapTables();
-        this.originalInsertTarget = snapshot == null ? null : snapshot.originalInsertTarget();
+        this.originalInsertTarget = snapshot == null ? null : snapshot.originalWriteTarget();
         this.planStartTime = snapshot == null ? null : snapshot.planStartTime();
     }
 
