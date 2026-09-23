@@ -54,7 +54,7 @@ public class GuardedPaimonCatalogTest {
     private static final Set<String> LOCAL_METHODS = Set.of(
             "options", "catalogLoader", "caseSensitive", "supportsListObjectsPaged",
             "supportsListByPattern", "supportsListTableByType", "supportsVersionManagement",
-            "invalidateTable");
+            "supportsPartitionModification", "invalidateTable");
 
     private String savedMode;
 
@@ -211,12 +211,13 @@ public class GuardedPaimonCatalogTest {
             guarded.supportsListByPattern();
             guarded.supportsListTableByType();
             guarded.supportsVersionManagement();
+            guarded.supportsPartitionModification();
             guarded.invalidateTable(Identifier.create("db", "tbl"));
         } finally {
             locker.unLockDatabase(INTERNAL_DB_ID, LockType.READ);
         }
         Assertions.assertEquals(0, LockInvariantViolations.totalViolations());
-        Assertions.assertEquals(8, LOCAL_METHODS.size(), "update this test when the local set changes");
+        Assertions.assertEquals(9, LOCAL_METHODS.size(), "update this test when the local set changes");
     }
 
     /**

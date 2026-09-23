@@ -23,15 +23,20 @@ import org.apache.paimon.catalog.Database;
 import org.apache.paimon.catalog.DelegateCatalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.catalog.PropertyChange;
+import org.apache.paimon.catalog.TableQueryAuthResult;
+import org.apache.paimon.consumer.ConsumerInfo;
 import org.apache.paimon.function.Function;
 import org.apache.paimon.function.FunctionChange;
 import org.apache.paimon.partition.Partition;
 import org.apache.paimon.partition.PartitionStatistics;
+import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.rest.responses.GetTagResponse;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.schema.SchemaChange;
 import org.apache.paimon.table.Instant;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.TableSnapshot;
+import org.apache.paimon.utils.SnapshotNotExistException;
 import org.apache.paimon.view.View;
 import org.apache.paimon.view.ViewChange;
 
@@ -59,7 +64,7 @@ import javax.annotation.Nullable;
  *
  * <h3>Why it extends DelegateCatalog rather than being a proxy</h3>
  *
- * A {@link java.lang.reflect.Proxy} would cover all 62 methods in a dozen lines instead of the
+ * A {@link java.lang.reflect.Proxy} would cover all 79 methods in a dozen lines instead of the
  * boilerplate below, and it was rejected: {@code PrivilegedCatalog.tryToCreate}, which the FE calls
  * on the catalog it builds, asks {@code DelegateCatalog.rootCatalog(catalog) instanceof
  * AbstractCatalog} and then casts. {@code rootCatalog} unwraps through {@link DelegateCatalog} and
@@ -74,7 +79,7 @@ import javax.annotation.Nullable;
  * reaching this layer means a request is about to go out.
  *
  * <p>Not guarded, first reason -- it answers from configuration or does nothing here:
- * {@code options}, {@code catalogLoader}, {@code caseSensitive}, the four {@code supports*}
+ * {@code options}, {@code catalogLoader}, {@code caseSensitive}, the five {@code supports*}
  * predicates, {@code invalidateTable}.
  *
  * <p>Not guarded, second reason -- <b>a known blind spot, taken deliberately</b>: the view, repair
@@ -174,6 +179,12 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
+    public Table getTableById(String tableId) throws Catalog.TableIdNotExistException {
+        goingRemote();
+        return wrapped.getTableById(tableId);
+    }
+
+    @Override
     public List<String> listTables(String databaseName) throws Catalog.DatabaseNotExistException {
         goingRemote();
         return wrapped.listTables(databaseName);
@@ -202,6 +213,12 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
+    public List<Table> listTableDetails(String databaseName) throws Catalog.DatabaseNotExistException {
+        goingRemote();
+        return wrapped.listTableDetails(databaseName);
+    }
+
+    @Override
     public PagedList<Identifier> listTablesPagedGlobally(
             @Nullable String databaseNamePattern,
             @Nullable String tableNamePattern,
@@ -223,6 +240,15 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
             boolean ignoreIfExists) throws Catalog.TableAlreadyExistException, Catalog.DatabaseNotExistException {
         goingRemote();
         wrapped.createTable(identifier, schema, ignoreIfExists);
+    }
+
+    @Override
+    public void replaceTable(
+            Identifier identifier,
+            Schema newSchema,
+            boolean ignoreIfNotExists) throws Catalog.TableNotExistException {
+        goingRemote();
+        wrapped.replaceTable(identifier, newSchema, ignoreIfNotExists);
     }
 
     @Override
@@ -281,6 +307,26 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
             @Nullable String partitionNamePattern) throws Catalog.TableNotExistException {
         goingRemote();
         return wrapped.listPartitionsPaged(identifier, maxResults, pageToken, partitionNamePattern);
+    }
+
+    @Override
+    public List<Partition> listPartitionsByNames(
+            Identifier identifier,
+            List<Map<String, String>> partitions) throws Catalog.TableNotExistException {
+        goingRemote();
+        return wrapped.listPartitionsByNames(identifier, partitions);
+    }
+
+    @Override
+    public PagedList<Partition> listPartitionsByFilterPaged(
+            Identifier identifier,
+            Predicate predicate,
+            @Nullable Integer maxResults,
+            @Nullable String pageToken,
+            @Nullable String partitionNamePattern) throws Catalog.TableNotExistException {
+        goingRemote();
+        return wrapped.listPartitionsByFilterPaged(
+                identifier, predicate, maxResults, pageToken, partitionNamePattern);
     }
 
     @Override
@@ -391,13 +437,19 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
+    public boolean supportsPartitionModification() {
+        return wrapped.supportsPartitionModification();
+    }
+
+    @Override
     public boolean commitSnapshot(
             Identifier identifier,
             @Nullable String tableUuid,
+            @Nullable String baseSnapshotUuid,
             Snapshot snapshot,
             List<PartitionStatistics> statistics) throws Catalog.TableNotExistException {
         goingRemote();
-        return wrapped.commitSnapshot(identifier, tableUuid, snapshot, statistics);
+        return wrapped.commitSnapshot(identifier, tableUuid, baseSnapshotUuid, snapshot, statistics);
     }
 
     @Override
@@ -430,6 +482,21 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
+    public void rollbackTo(
+            Identifier identifier,
+            Instant instant,
+            @Nullable Long fromSnapshot) throws Catalog.TableNotExistException {
+        goingRemote();
+        wrapped.rollbackTo(identifier, instant, fromSnapshot);
+    }
+
+    @Override
+    public void rollbackSchema(Identifier identifier, long schemaId) throws Catalog.TableNotExistException {
+        goingRemote();
+        wrapped.rollbackSchema(identifier, schemaId);
+    }
+
+    @Override
     public void createBranch(
             Identifier identifier,
             String branch,
@@ -437,6 +504,27 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
             throws Catalog.TableNotExistException, Catalog.BranchAlreadyExistException, Catalog.TagNotExistException {
         goingRemote();
         wrapped.createBranch(identifier, branch, fromTag);
+    }
+
+    @Override
+    public void createBranch(
+            Identifier identifier,
+            String branch,
+            @Nullable String fromTag,
+            boolean ignoreIfExists)
+            throws Catalog.TableNotExistException, Catalog.BranchAlreadyExistException, Catalog.TagNotExistException {
+        goingRemote();
+        wrapped.createBranch(identifier, branch, fromTag, ignoreIfExists);
+    }
+
+    @Override
+    public void renameBranch(
+            Identifier identifier,
+            String fromBranch,
+            String toBranch)
+            throws Catalog.BranchNotExistException, Catalog.BranchAlreadyExistException {
+        goingRemote();
+        wrapped.renameBranch(identifier, fromBranch, toBranch);
     }
 
     @Override
@@ -458,11 +546,76 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
+    public void createTag(
+            Identifier identifier,
+            String tagName,
+            @Nullable Long snapshotId,
+            @Nullable String timeRetained,
+            boolean ignoreIfExists)
+            throws Catalog.TableNotExistException, SnapshotNotExistException, Catalog.TagAlreadyExistException {
+        goingRemote();
+        wrapped.createTag(identifier, tagName, snapshotId, timeRetained, ignoreIfExists);
+    }
+
+    @Override
+    public void deleteTag(
+            Identifier identifier,
+            String tagName) throws Catalog.TableNotExistException, Catalog.TagNotExistException {
+        goingRemote();
+        wrapped.deleteTag(identifier, tagName);
+    }
+
+    @Override
+    public GetTagResponse getTag(
+            Identifier identifier,
+            String tagName) throws Catalog.TableNotExistException, Catalog.TagNotExistException {
+        goingRemote();
+        return wrapped.getTag(identifier, tagName);
+    }
+
+    @Override
+    public PagedList<String> listTagsPaged(
+            Identifier identifier,
+            @Nullable Integer maxResults,
+            @Nullable String pageToken,
+            @Nullable String tagNamePrefix) throws Catalog.TableNotExistException {
+        goingRemote();
+        return wrapped.listTagsPaged(identifier, maxResults, pageToken, tagNamePrefix);
+    }
+
+    @Override
+    public PagedList<ConsumerInfo> listConsumersPaged(
+            Identifier identifier,
+            @Nullable Integer maxResults,
+            @Nullable String pageToken) throws Catalog.TableNotExistException {
+        goingRemote();
+        return wrapped.listConsumersPaged(identifier, maxResults, pageToken);
+    }
+
+    @Override
+    public void resetConsumer(
+            Identifier identifier,
+            String consumerId,
+            @Nullable Long nextSnapshotId) throws Catalog.TableNotExistException {
+        goingRemote();
+        wrapped.resetConsumer(identifier, consumerId, nextSnapshotId);
+    }
+
+    @Override
     public void createPartitions(
             Identifier identifier,
             List<Map<String, String>> partitions) throws Catalog.TableNotExistException {
         goingRemote();
         wrapped.createPartitions(identifier, partitions);
+    }
+
+    @Override
+    public void createPartitions(
+            Identifier identifier,
+            List<Map<String, String>> partitions,
+            boolean ignoreIfExists) throws Catalog.TableNotExistException {
+        goingRemote();
+        wrapped.createPartitions(identifier, partitions, ignoreIfExists);
     }
 
     @Override
@@ -548,7 +701,7 @@ public class GuardedPaimonCatalog extends DelegateCatalog {
     }
 
     @Override
-    public List<String> authTableQuery(
+    public TableQueryAuthResult authTableQuery(
             Identifier identifier,
             @Nullable List<String> select) throws Catalog.TableNotExistException {
         goingRemote();
