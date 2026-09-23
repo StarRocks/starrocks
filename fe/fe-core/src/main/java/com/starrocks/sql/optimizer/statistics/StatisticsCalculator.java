@@ -2222,6 +2222,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 .map(ScalarOperator::<ColumnRefOperator>cast)
                 .distinct()
                 .collect(Collectors.toList());
+
+        // Without statistics on the partition columns, computeGroupByStatistics falls back to default group-by
+        // coefficients that would fabricate a confident, tight per-partition size (and range) from no information.
+        // Prefer the conservative unpartitioned estimate instead.
+        if (partitionColumns.stream().anyMatch(column -> inputStatistics.getColumnStatistic(column).isUnknown())) {
+            return rowCount;
+        }
+
         double partitionCount = computeGroupByStatistics(partitionColumns, inputStatistics, new HashMap<>());
         return rowCount / Math.max(1, partitionCount);
     }

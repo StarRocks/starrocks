@@ -1473,4 +1473,36 @@ public class StatisticsCalculatorTest {
         Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
         Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
     }
+
+    @Test
+    public void testPartitionedRowNumberStatisticsWithUnknownPartitionStats() {
+        ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
+        ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
+        CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        // No statistics are provided for the partition column pk, so its ColumnStatistic is unknown.
+        Statistics.Builder childStats = Statistics.builder();
+        childStats.setOutputRowCount(1000);
+        childStats.addColumnStatistic(pk, ColumnStatistic.unknown());
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childStats.build());
+
+        LogicalWindowOperator windowOperator = new LogicalWindowOperator.Builder()
+                .setWindowCall(ImmutableMap.of(rn, rowNumber))
+                .setPartitionExpressions(Lists.newArrayList(pk))
+                .build();
+        GroupExpression groupExpression = new GroupExpression(windowOperator, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        // With unknown partition stats we fall back to the conservative unpartitioned estimate instead of
+        // fabricating a tight per-partition size from the default group-by coefficients.
+        ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
+        Assertions.assertFalse(rowNumberStatistic.isUnknown());
+        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(1000, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(1000, rowNumberStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
+    }
 }
