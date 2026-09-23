@@ -14,6 +14,7 @@
 
 #include "connector/lance/lance_connector.h"
 
+#include "base/testutil/sync_point.h"
 #include "connector/hive/scanner/jni_scanner.h"
 #include "runtime/descriptors_ext.h"
 #include "runtime/runtime_state.h"
@@ -100,6 +101,7 @@ Status LanceDataSource::open(RuntimeState* state) {
     }
     _scanner_ctx.scan_range = &_scan_range;
 
+    TEST_SYNC_POINT_CALLBACK("LanceDataSource::open:scanner", &_scanner);
     RETURN_IF_ERROR(_scanner->init(state, &_scanner_ctx));
     RETURN_IF_ERROR(_scanner->open(state));
     return Status::OK();
