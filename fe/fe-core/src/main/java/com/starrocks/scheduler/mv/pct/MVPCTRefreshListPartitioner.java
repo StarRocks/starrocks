@@ -75,7 +75,11 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.connector.iceberg.IcebergPartitionUtils.getIcebergTablePartitionPredicateExpr;
+=======
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+>>>>>>> b017dce ([BugFix] Keep foreign key constraints and MV refresh base table resolution off connector I/O under the metadata lock (#79172))
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     private final ListPartitionDiffer differ;
@@ -118,7 +122,19 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public boolean syncAddOrDropPartitions() throws LockTimeoutException {
-        // collect mv partition items with lock
+        differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
+        // Collect the base tables' partitions before taking the lock: for a base table in an external catalog
+        // this goes through the connector, and the lock below is on the mv alone, so it never protected the
+        // base tables anyway. The range partitioner and MVTimelinessArbiter already collect them unlocked.
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = differ.syncBaseTablePartitionInfos();
+        if (refBaseTablePartitionMap == null) {
+            // both signals the locked path used to emit: the differ's prepare log and the caller's warning
+            logMVPrepare(mv, "Partitioned mv collect base table infos failed");
+            logger.warn("compute list partition diff failed, result is null");
+            return false;
+        }
+
+        // the mv's own partition cells are read under the lock, a concurrent DDL can mutate them
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -129,8 +145,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         PartitionDiffResult result;
         try {
-            differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
-            result = differ.computePartitionDiff(null);
+            result = differ.computePartitionDiff(null, refBaseTablePartitionMap);
             if (result == null) {
                 logger.warn("compute list partition diff failed, result is null");
                 return false;
