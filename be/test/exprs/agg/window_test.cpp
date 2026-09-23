@@ -806,8 +806,8 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_scan_is_amortized_acr
 
     // Each buffered row is scanned once, so the whole wait costs O(rows). Restarting the scan on every
     // chunk instead costs ~kRows * kChunks / 2.
-    ASSERT_LE(scanned_rows, 2 * kRows)
-            << "readiness scan is not amortized: scanned " << scanned_rows << " rows while buffering " << kRows;
+    ASSERT_LE(scanned_rows, 2 * kRows) << "readiness scan is not amortized: scanned " << scanned_rows
+                                       << " rows while buffering " << kRows;
     // The cursor is initialized once per partition, not once per chunk.
     ASSERT_EQ(1, cursor_initializations);
 }
