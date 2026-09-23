@@ -63,6 +63,7 @@
 #include "storage/tablet_manager.h"
 #include "storage_primitive/storage_ids.h"
 #include "storage_primitive/storage_version.h"
+#include "storage_primitive/vector_search_option.h"
 #include "types/date_value.h"
 #include "types/datum.h"
 #include "types/logical_type.h"
@@ -86,6 +87,13 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     // init filtered_output_columns
     for (const auto& col_name : tnode.olap_scan_node.unused_output_column_name) {
         _unused_output_columns.emplace_back(col_name);
+    }
+
+    // Decode the ANN query vector once for the whole fragment instance; every ChunkSource this
+    // node creates shares the result.
+    if (tnode.olap_scan_node.__isset.vector_search_options &&
+        tnode.olap_scan_node.vector_search_options.enable_use_ann) {
+        RETURN_IF_ERROR(decode_vector_query_vector(tnode.olap_scan_node.vector_search_options, &_query_vector));
     }
 
     if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {

@@ -191,6 +191,15 @@ public class Config extends ConfigBase {
     public static int audit_log_roll_num = 90;
     @ConfField
     public static String[] audit_log_modules = {"slow_query", "query"};
+    /**
+     * Ship the ANN query vector to the BE as little-endian float32 rather than one decimal string
+     * per dimension. The FE parses the vector either way, so this only decides whether the parsed
+     * result is shipped or formatted back to text for the BE to parse again. Turn it off to fall
+     * back to the text form; that path formats every element and is slower by construction.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_vector_query_binary = true;
+
     @ConfField(mutable = true)
     public static long qe_slow_log_ms = 5000;
     @ConfField(mutable = true)

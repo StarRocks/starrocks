@@ -37,6 +37,7 @@ ADD_BE_LIB(StoragePrimitive
     conjunctive_predicates.cpp
     disjunctive_predicates.cpp
     edit_version.cpp
+    vector_search_option.cpp
     empty_iterator.cpp
     flat_json_config.cpp
     key_coder.cpp

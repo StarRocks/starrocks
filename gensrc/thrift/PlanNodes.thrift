@@ -850,6 +850,12 @@ struct TVectorSearchOptions {
   // constrains where an existing split cuts -- it does not select a split strategy, and is orthogonal
   // to use_prepared_physical_split_scan.
   15: optional bool split_at_segment_boundary;
+  // The query vector as little-endian float32, which is also the BE's in-memory layout. The FE
+  // fills this instead of `query_vector` (ordinal 4): the supported upgrade order is BE/CN first
+  // and FE second, so a BE is never older than the FE talking to it and never needs the text form.
+  // `query_vector` serves the reverse case -- a new BE against an old FE mid-upgrade -- and must
+  // not be removed nor its ordinal reused.
+  16: optional binary query_vector_f32;
 }
 
 // One (indexed column, query string) unit of a BM25 full-text ranking scan. v1 always carries exactly

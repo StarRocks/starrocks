@@ -942,8 +942,8 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _vector_index_ctx->k = std::max<int64_t>(1, _vector_index_ctx->k);
 #ifdef WITH_TENANN
         _vector_index_ctx->query_view = tenann::PrimitiveSeqView{
-                .data = reinterpret_cast<uint8_t*>(_opts.vector_search_option->query_vector.data()),
-                .size = static_cast<uint32_t>(_opts.vector_search_option->query_vector.size()),
+                .data = reinterpret_cast<const uint8_t*>(_opts.vector_search_option->query_vector->data()),
+                .size = static_cast<uint32_t>(_opts.vector_search_option->query_vector->size()),
                 .elem_type = tenann::PrimitiveType::kFloatType};
 #endif
     }
@@ -3606,7 +3606,7 @@ Status SegmentIterator::_apply_bm25_scoring() {
 
 FloatColumn::MutablePtr SegmentIterator::_brute_force_distance_column(const Column* vector_column) {
     DCHECK(_vector_index_ctx != nullptr);
-    const auto& query_vec = _opts.vector_search_option->query_vector;
+    const auto& query_vec = *_opts.vector_search_option->query_vector;
     const size_t dim = query_vec.size();
     const size_t num_rows = vector_column->size();
 

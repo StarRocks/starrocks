@@ -27,7 +27,8 @@ import com.starrocks.thrift.TStorageType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
-import java.util.Arrays;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -64,7 +65,7 @@ public class OlapScanNodeTest {
         opts.setLimitK(10);
         opts.setDistanceColumnName("distance");
         opts.setDistanceSlotId(1);
-        opts.setQueryVector(Arrays.asList("1.0", "2.0", "3.0"));
+        opts.setQueryVector(new float[] {1.0f, 2.0f, 3.0f});
         opts.setResultOrder(true);
         opts.setPredicateRange(-1.5);
         scanNode.setVectorSearchOptions(opts);
@@ -78,8 +79,14 @@ public class OlapScanNodeTest {
         Assertions.assertEquals(10, msg.lake_scan_node.getVector_search_options().getVector_limit_k());
         Assertions.assertEquals("distance",
                 msg.lake_scan_node.getVector_search_options().getVector_distance_column_name());
-        Assertions.assertEquals(Arrays.asList("1.0", "2.0", "3.0"),
-                msg.lake_scan_node.getVector_search_options().getQuery_vector());
+        // The query vector now travels as little-endian float32, not one decimal string per element.
+        Assertions.assertFalse(msg.lake_scan_node.getVector_search_options().isSetQuery_vector());
+        ByteBuffer wire = msg.lake_scan_node.getVector_search_options().bufferForQuery_vector_f32()
+                .order(ByteOrder.LITTLE_ENDIAN);
+        Assertions.assertEquals(3 * Float.BYTES, wire.remaining());
+        Assertions.assertEquals(1.0f, wire.getFloat());
+        Assertions.assertEquals(2.0f, wire.getFloat());
+        Assertions.assertEquals(3.0f, wire.getFloat());
         Assertions.assertTrue(msg.lake_scan_node.getVector_search_options().isHas_vector_range());
         Assertions.assertEquals(-1.5, msg.lake_scan_node.getVector_search_options().getVector_range());
     }

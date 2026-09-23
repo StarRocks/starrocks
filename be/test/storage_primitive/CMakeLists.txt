@@ -39,6 +39,7 @@ set(STORAGE_PRIMITIVE_TEST_FILES
     row_source_mask_buffer_test.cpp
     row_source_mask_test.cpp
     storage_value_types_test.cpp
+    vector_search_option_test.cpp
     tablet_column_test.cpp
     tablet_info_test.cpp
     tablet_column_util_test.cpp

@@ -15,6 +15,7 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include <chrono>
+#include <optional>
 #include <thread>
 
 #include "common/util/table_metrics.h"
@@ -182,6 +183,47 @@ TEST_F(OlapScanOperatorTest, test_finish_sequence) {
     scan_node.close(&_runtime_state);
 
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// The ANN query vector is decoded once here, for the whole fragment instance: a ChunkSource is
+// created per scan range, so decoding it in _init_reader_params re-parsed the same decimal text
+// once per tablet. init() is the single-threaded hook that runs before any ChunkSource exists.
+TEST_F(OlapScanOperatorTest, init_decodes_query_vector_once) {
+    auto make_node = [&](std::optional<std::vector<std::string>> elements, Status* init_status) {
+        TPlanNode tnode = _tnode;
+        TOlapScanNode olap_scan_node;
+        olap_scan_node.__set_tuple_id(1);
+        if (elements.has_value()) {
+            TVectorSearchOptions vec_opts;
+            vec_opts.__set_enable_use_ann(true);
+            vec_opts.__set_query_vector(*elements);
+            olap_scan_node.__set_vector_search_options(vec_opts);
+        }
+        tnode.__set_olap_scan_node(olap_scan_node);
+        auto node = std::make_unique<OlapScanNode>(&_object_pool, tnode, *_tbl);
+        *init_status = node->init(tnode, &_runtime_state);
+        return node;
+    };
+
+    Status st;
+    auto node = make_node(std::vector<std::string>{"0.5", "-0.25", "1024"}, &st);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_NE(nullptr, node->query_vector());
+    EXPECT_EQ(std::vector<float>({0.5f, -0.25f, 1024.0f}), *node->query_vector());
+    // Handed out by pointer: every ChunkSource shares this one buffer.
+    EXPECT_EQ(node->query_vector().get(), node->query_vector().get());
+    node->close(&_runtime_state);
+
+    // Not an ANN scan -> nothing decoded.
+    auto plain = make_node(std::nullopt, &st);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ(nullptr, plain->query_vector());
+    plain->close(&_runtime_state);
+
+    // A malformed element fails the fragment at init instead of aborting later per tablet.
+    auto bad = make_node(std::vector<std::string>{"0.1", "not-a-float"}, &st);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
+    bad->close(&_runtime_state);
 }
 
 TEST_F(OlapScanOperatorTest, legacy_scan_registers_vector_index_counters) {

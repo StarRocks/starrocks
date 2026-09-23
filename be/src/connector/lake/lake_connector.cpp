@@ -557,19 +557,10 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
         _params.split_at_segment_boundary = vector_options.split_at_segment_boundary;
         _params.vector_search_option->vector_distance_column_name = _vector_distance_column_name;
         _params.vector_search_option->k = vector_options.vector_limit_k;
-        for (const std::string& str : vector_options.query_vector) {
-            // std::stof throws std::out_of_range / std::invalid_argument on a value that overflows
-            // float or is not a number, and the throw is uncaught here, so a query vector element the
-            // planner produced from a wrong-typed or out-of-range literal (e.g. 1e308, which exceeds
-            // FLT_MAX) aborts the BE. Parse without throwing and reject the query cleanly instead.
-            StringParser::ParseResult parse_result;
-            float value = StringParser::string_to_float<float>(str.data(), str.size(), &parse_result);
-            if (parse_result != StringParser::PARSE_SUCCESS) {
-                return Status::InvalidArgument(
-                        fmt::format("invalid query vector element for vector search: '{}'", str));
-            }
-            _params.vector_search_option->query_vector.push_back(value);
-        }
+        // Decoded once in LakeDataSourceProvider::init() -- which ConnectorScanNode::init() always
+        // runs before it creates any data source -- and shared by every tablet of this fragment.
+        DCHECK(_provider->query_vector() != nullptr);
+        _params.vector_search_option->query_vector = _provider->query_vector();
         if (_runtime_state->query_options().__isset.ann_params) {
             _params.vector_search_option->query_params = _runtime_state->query_options().ann_params;
         }
@@ -2094,6 +2085,11 @@ Status LakeDataSourceProvider::init(ObjectPool* pool, RuntimeState* state) {
         // repeat calls, so re-opening after an inline close would leave function state stale.
         RETURN_IF_ERROR(ExprExecutor::prepare(_partition_conjunct_ctxs, state));
         RETURN_IF_ERROR(ExprExecutor::open(_partition_conjunct_ctxs, state));
+    }
+    // Decode the ANN query vector once for the whole fragment instance; every data source this
+    // provider creates shares the result.
+    if (_t_lake_scan_node.__isset.vector_search_options && _t_lake_scan_node.vector_search_options.enable_use_ann) {
+        RETURN_IF_ERROR(decode_vector_query_vector(_t_lake_scan_node.vector_search_options, &_query_vector));
     }
     return Status::OK();
 }

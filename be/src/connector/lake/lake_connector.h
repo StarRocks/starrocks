@@ -393,6 +393,11 @@ public:
 
     size_t next_uniq_id() const { return starrocks::next_uniq_id(_t_lake_scan_node); }
 
+    // The ANN query vector, decoded once in init(). Null unless this scan uses a vector index.
+    // It lives here rather than in LakeDataSource because a data source is created per scan range,
+    // and the vector is the same for every one of them.
+    const std::shared_ptr<const std::vector<float>>& query_vector() const { return _query_vector; }
+
     bool is_asc_hint() const override {
         if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
             return _t_lake_scan_node.output_asc_hint;
@@ -440,6 +445,7 @@ private:
     std::vector<ExprContext*> _partition_conjunct_ctxs;
     // RuntimeState captured during init() for partition-conjunct evaluation.
     RuntimeState* _runtime_state = nullptr;
+    std::shared_ptr<const std::vector<float>> _query_vector;
 };
 
 } // namespace starrocks::connector

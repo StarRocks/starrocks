@@ -887,6 +887,9 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
 
     starrocks::connector::LakeDataSourceProvider provider(plan_node);
     provider.set_lake_tablet_manager(_tablet_mgr);
+    // ConnectorScanNode::init() runs this before any data source exists; it is what decodes the
+    // query vector that every scan range then shares.
+    ASSERT_OK(provider.init(runtime_state->obj_pool(), runtime_state.get()));
     provider.set_filtered_above_iterator(true);
 
     TInternalScanRange internal_scan_range;
@@ -924,8 +927,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     ASSERT_NE(params.vector_search_option, nullptr);
     EXPECT_EQ(params.vector_search_option->k, 10);
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
-    ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
-    EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+    ASSERT_EQ(params.vector_search_option->query_vector->size(), 3);
+    EXPECT_FLOAT_EQ((*params.vector_search_option->query_vector)[0], 0.1f);
     EXPECT_TRUE(params.vector_search_option->has_vector_range);
     EXPECT_DOUBLE_EQ(params.vector_search_option->vector_range, -1.5);
 }
@@ -2037,6 +2040,51 @@ TEST_F(LakeDataSourceTest, provider_reads_prepared_split_flag) {
     EXPECT_FALSE(make_provider(false)->_enable_lake_prepared_physical_split_scan);
     // Flag never set (__isset false) -> disabled, matching an old FE that does not send it.
     EXPECT_FALSE(make_provider(std::nullopt)->_enable_lake_prepared_physical_split_scan);
+}
+
+// The query vector is decoded once by the provider (per fragment instance), not by each data
+// source: a data source is created per scan range, so decoding there re-parsed the same decimal
+// text once per tablet. Verify the decode, the empty case, the error path, and that every caller
+// gets the same buffer rather than a copy.
+TEST_F(LakeDataSourceTest, provider_decodes_query_vector_once) {
+    ObjectPool pool;
+    auto rs = create_runtime_state_for_test();
+
+    auto make_provider = [&](std::optional<std::vector<std::string>> elements, Status* init_status) {
+        TPlanNode plan_node;
+        plan_node.__set_node_id(0);
+        TLakeScanNode lake_scan_node;
+        lake_scan_node.__set_tuple_id(0);
+        if (elements.has_value()) {
+            TVectorSearchOptions vec_opts;
+            vec_opts.__set_enable_use_ann(true);
+            vec_opts.__set_query_vector(*elements);
+            lake_scan_node.__set_vector_search_options(vec_opts);
+        }
+        plan_node.__set_lake_scan_node(lake_scan_node);
+        auto provider = std::make_unique<connector::LakeDataSourceProvider>(plan_node);
+        provider->set_lake_tablet_manager(_tablet_mgr);
+        *init_status = provider->init(&pool, rs.get());
+        return provider;
+    };
+
+    // Decoded during init, before any data source exists.
+    Status st;
+    auto provider = make_provider(std::vector<std::string>{"0.5", "-0.25", "1024"}, &st);
+    ASSERT_TRUE(st.ok()) << st;
+    ASSERT_NE(nullptr, provider->query_vector());
+    EXPECT_EQ(std::vector<float>({0.5f, -0.25f, 1024.0f}), *provider->query_vector());
+    // Handed out by pointer: every scan range shares this one buffer.
+    EXPECT_EQ(provider->query_vector().get(), provider->query_vector().get());
+
+    // No vector search on this scan -> nothing decoded.
+    auto plain = make_provider(std::nullopt, &st);
+    ASSERT_TRUE(st.ok()) << st;
+    EXPECT_EQ(nullptr, plain->query_vector());
+
+    // A malformed element fails the fragment at init instead of aborting later per tablet.
+    make_provider(std::vector<std::string>{"0.1", "not-a-float"}, &st);
+    EXPECT_TRUE(st.is_invalid_argument()) << st;
 }
 
 // get_split_tasks forwards to the tablet reader, but the reader is null until the data

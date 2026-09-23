@@ -15,18 +15,24 @@
 #pragma once
 
 #include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "common/global_types.h"
+#include "common/status.h"
 
 namespace starrocks {
+
+class TVectorSearchOptions;
 
 struct VectorSearchOption {
 public:
     int64_t k;
 
-    std::vector<float> query_vector;
+    // Shared and immutable: the query vector is a property of the plan and the same for every
+    // tablet, so one decoded copy is shared by every VectorSearchOption of the fragment.
+    std::shared_ptr<const std::vector<float>> query_vector;
 
     std::string vector_distance_column_name;
 
@@ -56,5 +62,9 @@ public:
 
     VectorSearchOption() = default;
 };
+
+// Decode the ANN query vector out of the plan, once per fragment instance, for the owner to share
+// with every scan range.
+Status decode_vector_query_vector(const TVectorSearchOptions& options, std::shared_ptr<const std::vector<float>>* out);
 
 } // namespace starrocks

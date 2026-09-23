@@ -245,7 +245,7 @@ TEST(StorageValueTypesTest, TypeUtilsStorageFormatSemantics) {
 TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     VectorSearchOption option;
     option.k = 10;
-    option.query_vector = {1.0F, 2.0F};
+    option.query_vector = std::make_shared<const std::vector<float>>(std::vector<float>{1.0F, 2.0F});
     option.vector_distance_column_name = "distance";
     option.use_vector_index = true;
     option.vector_column_id = 3;
@@ -259,9 +259,9 @@ TEST(StorageValueTypesTest, VectorSearchOptionStoresAssignedValues) {
     option.k_factor = 1.5;
 
     EXPECT_EQ(10, option.k);
-    ASSERT_EQ(2, option.query_vector.size());
-    EXPECT_FLOAT_EQ(1.0F, option.query_vector[0]);
-    EXPECT_FLOAT_EQ(2.0F, option.query_vector[1]);
+    ASSERT_EQ(2, option.query_vector->size());
+    EXPECT_FLOAT_EQ(1.0F, (*option.query_vector)[0]);
+    EXPECT_FLOAT_EQ(2.0F, (*option.query_vector)[1]);
     EXPECT_EQ("distance", option.vector_distance_column_name);
     EXPECT_TRUE(option.use_vector_index);
     EXPECT_EQ(3, option.vector_column_id);

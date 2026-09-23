@@ -16,7 +16,10 @@ package com.starrocks.common;
 
 import com.starrocks.thrift.TVectorSearchOptions;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 public class VectorSearchOptions {
@@ -39,7 +42,8 @@ public class VectorSearchOptions {
 
     private double predicateRange = -1;
     private boolean hasPredicateRange = false;
-    private List<String> queryVector = new ArrayList<>();
+    // The decoded query vector: the only representation the FE keeps, and the one it ships.
+    private float[] queryVector = new float[0];
 
     public boolean isEnableUseANN() {
         return enableUseANN;
@@ -77,7 +81,11 @@ public class VectorSearchOptions {
         this.limitK = limitK;
     }
 
-    public void setQueryVector(List<String> queryVector) {
+    public float[] getQueryVector() {
+        return queryVector;
+    }
+
+    public void setQueryVector(float[] queryVector) {
         this.queryVector = queryVector;
     }
 
@@ -90,13 +98,37 @@ public class VectorSearchOptions {
         this.resultOrder = isAsc ? RESULT_ORDER_ASC : RESULT_ORDER_DESC;
     }
 
+    /** The wire form: little-endian float32, which is also the BE's in-memory layout. */
+    private static byte[] toLittleEndianBytes(float[] vector) {
+        ByteBuffer buf = ByteBuffer.allocate(vector.length * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        for (float v : vector) {
+            buf.putFloat(v);
+        }
+        return buf.array();
+    }
+
+    /** The text wire form, one decimal string per dimension. Only reached with the switch off. */
+    private static List<String> toDecimalStrings(float[] vector) {
+        List<String> out = new ArrayList<>(vector.length);
+        for (float v : vector) {
+            out.add(Float.toString(v));
+        }
+        return out;
+    }
+
     public TVectorSearchOptions toThrift() {
         TVectorSearchOptions opts = new TVectorSearchOptions();
         opts.setEnable_use_ann(true);
         opts.setVector_limit_k(limitK);
         opts.setVector_distance_column_name(distanceColumnName);
         opts.setVector_slot_id(distanceSlotId);
-        opts.setQuery_vector(queryVector);
+        // A BE only needs the text form when an operator turns the binary form off: BE/CN is
+        // always upgraded before the FE, so a BE is never older than the FE talking to it.
+        if (Config.enable_vector_query_binary) {
+            opts.setQuery_vector_f32(toLittleEndianBytes(queryVector));
+        } else {
+            opts.setQuery_vector(toDecimalStrings(queryVector));
+        }
         opts.setVector_range(predicateRange);
         opts.setHas_vector_range(hasPredicateRange);
         opts.setResult_order(resultOrder);
@@ -116,7 +148,7 @@ public class VectorSearchOptions {
                 "Distance Column: <" + distanceSlotId + ":" + distanceColumnName + ">, " +
                 "LimitK: " + limitK + ", " +
                 "Order: " + (resultOrder == RESULT_ORDER_ASC ? "ASC" : "DESC") + ", " +
-                "Query Vector: " + queryVector + ", " +
+                "Query Vector: " + Arrays.toString(queryVector) + ", " +
                 "Predicate Range: " + (hasPredicateRange ? Double.toString(predicateRange) : "N/A") +
                 "\n";
     }

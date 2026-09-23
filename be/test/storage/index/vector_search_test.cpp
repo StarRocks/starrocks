@@ -835,7 +835,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_l2_distance_fallback) {
 
     auto vector_search_opt = std::make_shared<VectorSearchOption>();
     vector_search_opt->use_vector_index = true;
-    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->query_vector = std::make_shared<const std::vector<float>>(std::vector<float>{1.0f, 1.0f, 1.0f});
     vector_search_opt->k = 3;
     vector_search_opt->k_factor = 1.0;
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
@@ -920,7 +920,7 @@ TEST_F(BruteForceVectorFallbackTest, test_refine_distance_missing_vi_skips_brute
 
     auto vector_search_opt = std::make_shared<VectorSearchOption>();
     vector_search_opt->use_vector_index = true;
-    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->query_vector = std::make_shared<const std::vector<float>>(std::vector<float>{1.0f, 1.0f, 1.0f});
     vector_search_opt->k = 3;
     vector_search_opt->k_factor = 1.0;
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
@@ -979,7 +979,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_vector_column_not_pruned) 
 
     auto vector_search_opt = std::make_shared<VectorSearchOption>();
     vector_search_opt->use_vector_index = true;
-    vector_search_opt->query_vector = {1.0f, 0.0f, 0.0f};
+    vector_search_opt->query_vector = std::make_shared<const std::vector<float>>(std::vector<float>{1.0f, 0.0f, 0.0f});
     vector_search_opt->k = 2;
     vector_search_opt->k_factor = 1.0;
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
@@ -1042,7 +1042,7 @@ TEST_F(BruteForceVectorFallbackTest, test_brute_force_with_vector_range_filter) 
 
     auto vector_search_opt = std::make_shared<VectorSearchOption>();
     vector_search_opt->use_vector_index = true;
-    vector_search_opt->query_vector = {1.0f, 1.0f, 1.0f};
+    vector_search_opt->query_vector = std::make_shared<const std::vector<float>>(std::vector<float>{1.0f, 1.0f, 1.0f});
     vector_search_opt->k = 4;
     vector_search_opt->k_factor = 1.0;
     vector_search_opt->vector_distance_column_name = "__vector_approx_l2_distance";
@@ -1143,7 +1143,7 @@ std::shared_ptr<TabletSchema> build_read_schema_with_metric(const std::string& m
 VectorSearchOptionPtr make_vector_search_opt(int slot_id, int num_columns, const std::vector<float>& query) {
     auto opt = std::make_shared<VectorSearchOption>();
     opt->use_vector_index = true;
-    opt->query_vector = query;
+    opt->query_vector = std::make_shared<const std::vector<float>>(query);
     opt->k = 10;
     opt->k_factor = 1.0;
     opt->vector_distance_column_name = "__vector_approx_l2_distance";
@@ -2136,7 +2136,7 @@ protected:
 
         auto vs = std::make_shared<VectorSearchOption>();
         vs->use_vector_index = true;
-        vs->query_vector = cfg.query;
+        vs->query_vector = std::make_shared<const std::vector<float>>(cfg.query);
         vs->k = 3;
         vs->k_factor = cfg.k_factor;
         vs->vector_distance_column_name = "__vector_approx_l2_distance";

@@ -84,6 +84,11 @@ public:
 
     const TOlapScanNode& thrift_olap_scan_node() const { return _olap_scan_node; }
 
+    // The ANN query vector, decoded once in init(). Null unless this scan uses a vector index.
+    // It lives here rather than in OlapChunkSource because a ChunkSource is created per scan range,
+    // and the vector is the same for every one of them.
+    const std::shared_ptr<const std::vector<float>>& query_vector() const { return _query_vector; }
+
     int estimated_max_concurrent_chunks() const;
 
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
@@ -170,6 +175,7 @@ private:
 
 private:
     TOlapScanNode _olap_scan_node;
+    std::shared_ptr<const std::vector<float>> _query_vector;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
     std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;

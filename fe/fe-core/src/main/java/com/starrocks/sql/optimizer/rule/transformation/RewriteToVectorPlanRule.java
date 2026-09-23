@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Enums;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
@@ -45,6 +46,7 @@ import com.starrocks.type.FloatType;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,10 +97,10 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         int dim =
                 Integer.parseInt(info.index.getProperties().get(VectorIndexParams.CommonIndexParamKey.DIM.name().toLowerCase()));
-        if (info.vectorQuery.size() != dim) {
+        if (info.vectorQuery.length != dim) {
             throw new SemanticException(
                     String.format("The vector query size (%s) is not equal to the vector index dimension (%d)",
-                            info.vectorQuery, dim));
+                            Arrays.toString(info.vectorQuery), dim));
         }
 
         // Refine only matters for a quantized index (its index distance is lossy); for a non-quantized
@@ -225,7 +227,6 @@ public class RewriteToVectorPlanRule extends TransformationRule {
 
         return scalarOperator;
     }
-
 
     /**
      * Check if the operator matches the specific vector function call.
@@ -409,8 +410,7 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         }
 
         // 4. Parse query vector values.
-        List<String> vectorQuery = new ArrayList<>();
-        extractValuesFromConstantArray(inCallOperator, vectorQuery);
+        float[] vectorQuery = extractQueryVector(inCallOperator);
 
         return Optional.of(
                 new VectorFuncInfo(index, colRefArgument, outColRef, inCallOperator, metricType, vectorQuery, isAscending));
@@ -472,32 +472,74 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return child instanceof ConstantOperator && child.getType() != null && child.getType().isStringType();
     }
 
-    private void extractValuesFromConstantArray(ScalarOperator scalarOperator, List<String> vectorQuery) {
-        if (scalarOperator instanceof ColumnRefOperator) {
+    /**
+     * The query vector behind the distance call, as float32.
+     *
+     * <p>Descends the operator tree and takes every constant leaf in order. It recognises no shapes
+     * of its own: whether a query may use the vector index is isConstantArrayFloat's decision.
+     */
+    private static float[] extractQueryVector(CallOperator call) {
+        List<Float> values = new ArrayList<>();
+        collectQueryVector(call, values);
+        float[] vector = new float[values.size()];
+        for (int i = 0; i < vector.length; i++) {
+            vector[i] = values.get(i);
+        }
+        return vector;
+    }
+
+    private static void collectQueryVector(ScalarOperator op, List<Float> out) {
+        if (op instanceof ColumnRefOperator) {
             return;
         }
-
-        // CAST(StringLiteral AS ARRAY<FLOAT>) form: parse the string as a comma-separated
-        // float list and append each value. Used by prepared-statement vector queries.
-        if (isCastStringToArrayFloat(scalarOperator)) {
-            ConstantOperator stringConst = (ConstantOperator) scalarOperator.getChild(0);
-            String literal = String.valueOf(stringConst.getValue());
-            parseStringAsFloatList(literal, vectorQuery);
+        // The prepared-statement form: the FE only ever has the text, because FoldConstantsRule
+        // cannot fold CAST(StringLiteral AS ARRAY<FLOAT>) -- ConstantOperator.castTo has no array
+        // branch. An implicit cast may sit above it, so test for it at every level.
+        if (isCastStringToArrayFloat(op)) {
+            parseStringAsFloatArray(String.valueOf(((ConstantOperator) op.getChild(0)).getValue()), out);
             return;
         }
-
-        if (scalarOperator instanceof ConstantOperator) {
-            vectorQuery.add(String.valueOf(((ConstantOperator) scalarOperator).getValue()));
+        if (op instanceof ConstantOperator) {
+            out.add(constantToFloat((ConstantOperator) op));
             return;
         }
-
-        for (ScalarOperator child : scalarOperator.getChildren()) {
-            extractValuesFromConstantArray(child, vectorQuery);
+        for (ScalarOperator child : op.getChildren()) {
+            collectQueryVector(child, out);
         }
     }
 
-    /** Parse {@code "[f1, f2, ..., fN]"} into N decimal-string tokens appended to {@code out}. */
-    private static void parseStringAsFloatList(String literal, List<String> out) {
+    /**
+     * A constant leaf as float32.
+     *
+     * <p>A folded element stores a double and only needs narrowing. An element is not always folded
+     * -- {@code cast(1.1 as int)} survives because ConstantOperator.castTo runs
+     * Integer.parseInt("1.1") and gives up -- and such a leaf still holds its original type, so
+     * parse its text instead.
+     */
+    private static float constantToFloat(ConstantOperator constant) {
+        Object value = constant.getValue();
+        if (value instanceof Double) {
+            return (float) (double) (Double) value;
+        }
+        try {
+            return (float) Double.parseDouble(String.valueOf(value));
+        } catch (NumberFormatException e) {
+            throw new SemanticException("Invalid float in vector array literal: '" + value + "'");
+        }
+    }
+
+    /**
+     * Parse {@code "[f1, f2, ..., fN]"} and append the values.
+     *
+     * <p>Narrowing the correctly-rounded double is not a second rounding error: binary64 carries 53
+     * significant bits and safe double rounding into binary32 needs 2*24+2 = 50, so
+     * {@code (float) Double.parseDouble(s)} is bit-identical to {@code Float.parseFloat(s)}.
+     *
+     * <p>The finiteness check runs on the float32 result, so an element such as {@code 3.5e38} --
+     * finite as a double, but past FLT_MAX -- is rejected rather than becoming {@code +inf}.
+     */
+    @VisibleForTesting
+    static void parseStringAsFloatArray(String literal, List<Float> out) {
         if (literal == null) {
             throw new SemanticException("Vector array literal cannot be null");
         }
@@ -532,13 +574,14 @@ public class RewriteToVectorPlanRule extends TransformationRule {
             } catch (NumberFormatException e) {
                 throw new SemanticException("Invalid float in vector array literal: '" + tok + "'");
             }
+            float value = (float) parsed;
             // BE cast_expr rejects NaN/Inf when casting string to float; mirror that here so
             // `CAST(? AS ARRAY<FLOAT>)` has identical semantics regardless of whether the
             // rewrite rule fires (cf. be/src/exprs/cast_expr.cpp string -> float).
-            if (!Double.isFinite(parsed)) {
+            if (!Float.isFinite(value)) {
                 throw new SemanticException("Non-finite float in vector array literal: '" + tok + "'");
             }
-            out.add(tok);
+            out.add(value);
             if (i < n && body.charAt(i) == ',') {
                 i++;
                 expectAnother = true;
@@ -563,12 +606,12 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         private final CallOperator vectorFuncCallOperator;
         private final VectorIndexParams.MetricsType metricType;
         // The constant vector argument value of the <approx_distance> function
-        private final List<String> vectorQuery;
+        private final float[] vectorQuery;
         private final boolean isAscending;
 
         public VectorFuncInfo(Index index, ColumnRefOperator inColumnRef, ColumnRefOperator outColumnRef,
                               CallOperator vectorFuncCallOperator,
-                              VectorIndexParams.MetricsType metricType, List<String> vectorQuery, boolean isAscending) {
+                              VectorIndexParams.MetricsType metricType, float[] vectorQuery, boolean isAscending) {
             this.index = index;
             this.inColumnRef = inColumnRef;
             this.outColumnRef = outColumnRef;
