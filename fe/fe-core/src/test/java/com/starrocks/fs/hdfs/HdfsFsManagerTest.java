@@ -266,6 +266,18 @@ public class HdfsFsManagerTest {
             String wasbPath3 = "wasb://container2@account.blob.core.windows.net/path1/file.parquet";
             String wasbPath4 = "wasb://container3@account.blob.core.windows.net/path1/file.parquet";
             testFileSystemCache(blobProperties, Pair.create(wasbPath1, wasbPath2), Pair.create(wasbPath3, wasbPath4));
+<<<<<<< HEAD
+=======
+
+            // Test wasbs:// scheme (Azure Blob Storage with SSL)
+            String wasbsPath1 = "wasbs://container1@account.blob.core.windows.net/path1/file.parquet";
+            String wasbsPath2 = "wasbs://container1@account.blob.core.windows.net/path2/file.parquet";
+            String wasbsPath3 = "wasbs://container2@account.blob.core.windows.net/path1/file.parquet";
+            String wasbsPath4 = "wasbs://container3@account.blob.core.windows.net/path1/file.parquet";
+            testFileSystemCache(blobProperties, Pair.create(wasbsPath1, wasbsPath2), Pair.create(wasbsPath3, wasbsPath4));
+        }
+    }
+>>>>>>> 09c9186 ([UT] Keep HdfsFsManagerTest Azure cache test offline (#79563))
 
             // Test wasbs:// scheme (Azure Blob Storage with SSL)
             String wasbsPath1 = "wasbs://container1@account.blob.core.windows.net/path1/file.parquet";
