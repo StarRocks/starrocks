@@ -574,12 +574,6 @@ ALTER USER 'jack' SET PROPERTIES ('session.query_timeout' = '600');
 * 默认值：true
 * 引入版本：v3.3.0
 
-### enable_global_late_materialization
-
-* **默认值**：false
-* **类型**：Boolean
-* **描述**：是否启用全局延迟物化，将部分列的读取推迟到查询执行的后续阶段。可通过 `SET enable_global_late_materialization = true` 显式启用。如果升级期间集群中同时存在使用不同 Iceberg 行定位方式的版本，应保持该功能关闭。默认值不会覆盖已有的会话设置或持久化的全局设置。
-
 ### enable_global_runtime_filter
 
 * 描述：Global runtime filter 开关。Runtime Filter（简称 RF）在运行时对数据进行过滤，过滤通常发生在 Join 阶段。当多表进行 Join 时，往往伴随着谓词下推等优化手段进行数据过滤，以减少 Join 表的数据扫描以及 shuffle 等阶段产生的 IO，从而提升查询性能。StarRocks 中有两种 RF，分别是 Local RF 和 Global RF。Local RF 应用于 Broadcast Hash Join 场景。Global RF 应用于 Shuffle Join 场景。
