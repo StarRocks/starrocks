@@ -23,16 +23,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -62,43 +56,6 @@ public class OptimizeProcDir implements ProcDirInterface {
         return schemaChangeHandler.getOptimizeJobInfosByDb(db);
     }
 
-    boolean filterResult(String columnName, Comparable element, HashMap<String, Expr> filter) throws AnalysisException {
-        if (filter == null) {
-            return true;
-        }
-        Expr subExpr = filter.get(columnName.toLowerCase());
-        if (subExpr == null) {
-            return true;
-        }
-        BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-        if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryType.EQ) {
-            return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
-        }
-        if (subExpr.getChild(1) instanceof DateLiteral) {
-            Long leftVal = (new DateLiteral(DateUtils.parseStrictDateTime((String) element), DateType.DATETIME)).getLongValue();
-
-            Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
-            switch (binaryPredicate.getOp()) {
-                case EQ:
-                case EQ_FOR_NULL:
-                    return leftVal.equals(rightVal);
-                case GE:
-                    return leftVal >= rightVal;
-                case GT:
-                    return leftVal > rightVal;
-                case LE:
-                    return leftVal <= rightVal;
-                case LT:
-                    return leftVal < rightVal;
-                case NE:
-                    return !leftVal.equals(rightVal);
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
-        }
-        return true;
-    }
-
     public ProcResult fetchResultByFilter(HashMap<String, Expr> filter, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
         Preconditions.checkNotNull(db);
@@ -120,7 +77,7 @@ public class OptimizeProcDir implements ProcDirInterface {
                 }
                 boolean isNeed = true;
                 for (int i = 0; i < infoStr.size(); i++) {
-                    isNeed = filterResult(TITLE_NAMES.get(i), infoStr.get(i), filter);
+                    isNeed = ProcUtils.filterResult(TITLE_NAMES.get(i), infoStr.get(i), filter);
                     if (!isNeed) {
                         break;
                     }

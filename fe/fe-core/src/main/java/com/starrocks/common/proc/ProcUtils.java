@@ -14,13 +14,70 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 
 public class ProcUtils {
+
+    /**
+     * Decide whether one cell of one row survives a SHOW statement's WHERE clause.
+     *
+     * The filter map is keyed by lower-cased column name and was built by the statement's analyzer,
+     * which is also where a date column's right-hand side was cast to DATETIME. That cast is what
+     * this reads: a right side that is still a StringLiteral can only be compared for equality,
+     * while a DateLiteral gets the full set of operators. A column the filter does not mention, or
+     * a shape neither branch recognises, passes - filtering is opt-in per column.
+     */
+    public static boolean filterResult(String columnName, Comparable<?> element, Map<String, Expr> filter)
+            throws AnalysisException {
+        if (filter == null) {
+            return true;
+        }
+        Expr subExpr = filter.get(columnName.toLowerCase());
+        if (subExpr == null) {
+            return true;
+        }
+        BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
+        if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryType.EQ) {
+            return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
+        }
+        if (subExpr.getChild(1) instanceof DateLiteral) {
+            LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
+            Long leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
+            Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
+            switch (binaryPredicate.getOp()) {
+                case EQ:
+                case EQ_FOR_NULL:
+                    return leftVal.equals(rightVal);
+                case GE:
+                    return leftVal >= rightVal;
+                case GT:
+                    return leftVal > rightVal;
+                case LE:
+                    return leftVal <= rightVal;
+                case LT:
+                    return leftVal < rightVal;
+                case NE:
+                    return !leftVal.equals(rightVal);
+                default:
+                    Preconditions.checkState(false, "No defined binary operator.");
+            }
+        }
+        return true;
+    }
 
     /**
      * Resolve a column name against a proc dir's title list, for the ORDER BY of a SHOW statement.

@@ -15,10 +15,19 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class ProcUtilsTest {
 
@@ -51,5 +60,54 @@ public class ProcUtilsTest {
     @Test
     public void testAnalyzeColumnOnAnEmptyList() {
         Assertions.assertThrows(AnalysisException.class, () -> ProcUtils.analyzeColumn(List.of(), "JobId"));
+    }
+
+    @Test
+    public void testFilterResultPassesWhatItDoesNotFilter() throws AnalysisException {
+        // Filtering is opt-in per column: no filter at all, or a filter that does not mention this
+        // column, keeps the row. Every column of every row goes through here, so this is the path
+        // almost all of them take.
+        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t1", null));
+        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t1", Map.of()));
+        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t1", Map.of("state", eq("FINISHED"))));
+    }
+
+    @Test
+    public void testFilterResultOnAStringColumn() throws AnalysisException {
+        Map<String, Expr> filter = Map.of("tablename", eq("t1"));
+        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t1", filter));
+        Assertions.assertFalse(ProcUtils.filterResult("TableName", "t2", filter));
+        // The key is lower-cased by the analyzer, and the lookup lower-cases the title to match.
+        Assertions.assertTrue(ProcUtils.filterResult("TABLENAME", "t1", filter));
+    }
+
+    @Test
+    public void testFilterResultOnADateColumn() throws AnalysisException {
+        // The analyzer casts a date predicate's right-hand side to DATETIME; that cast is what
+        // opens up the comparison operators here.
+        String cell = "2020-06-15 12:00:00";
+        Assertions.assertTrue(ProcUtils.filterResult("CreateTime", cell, dateFilter(BinaryType.GT, "2020-01-01 00:00:00")));
+        Assertions.assertFalse(ProcUtils.filterResult("CreateTime", cell, dateFilter(BinaryType.GT, "2099-01-01 00:00:00")));
+        Assertions.assertTrue(ProcUtils.filterResult("CreateTime", cell, dateFilter(BinaryType.LT, "2099-01-01 00:00:00")));
+        Assertions.assertTrue(ProcUtils.filterResult("CreateTime", cell, dateFilter(BinaryType.EQ, cell)));
+        Assertions.assertFalse(ProcUtils.filterResult("CreateTime", cell, dateFilter(BinaryType.NE, cell)));
+    }
+
+    @Test
+    public void testFilterResultLeavesAnUnrecognisedShapeAlone() throws AnalysisException {
+        // A string right-hand side with an operator other than = matches neither branch. It passes
+        // rather than throwing: the analyzer is what rejects predicates it does not support.
+        Map<String, Expr> filter = Map.of("tablename",
+                new BinaryPredicate(BinaryType.GT, new SlotRef(null, "TableName"), new StringLiteral("t1")));
+        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t2", filter));
+    }
+
+    private static Expr eq(String value) {
+        return new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "col"), new StringLiteral(value));
+    }
+
+    private static Map<String, Expr> dateFilter(BinaryType op, String value) {
+        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), DateType.DATETIME);
+        return Map.of("createtime", new BinaryPredicate(op, new SlotRef(null, "CreateTime"), right));
     }
 }
