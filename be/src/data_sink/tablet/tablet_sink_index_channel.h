@@ -130,8 +130,8 @@ struct AddChunksChannelSpec {
     bool enable_colocate_mv_index = false;
     // Looked up at eos time only. Owned by OlapTableSink, borrowed here.
     const std::unordered_map<int64_t, std::set<int64_t>>* index_id_to_partition_ids = nullptr;
-    // Flexible partial update (TOlapTableSink.flexible_partial_update): the eos request carries the
-    // load's per-row column-set dictionary.
+    // Flexible partial update (TOlapTableSink.flexible_partial_update): the requests carry the entries of
+    // the load's per-row column-set dictionary that their rows use for the first time.
     bool flexible_partial_update = false;
 };
 
@@ -166,11 +166,15 @@ public:
     // whatever scope was active at build() time.
     // The caller must serialize the chunk into requests(0)->mutable_chunk()
     // afterwards when chunk->num_rows() > 0.
+    // Not const: a flexible partial update ships each dictionary entry once, with the first request built
+    // after the entry was interned.
     PTabletWriterAddChunksRequest build(const std::vector<std::vector<int64_t>>& tablet_ids,
-                                        const AddChunksSendOptions& opts) const;
+                                        const AddChunksSendOptions& opts);
 
 private:
     AddChunksChannelSpec _spec;
+    // Flexible partial update: the number of column-set dictionary entries the requests built so far carry.
+    size_t _column_sets_sent = 0;
 };
 
 // Owns the in-progress per-index tablet_ids for the current (un-enqueued) batch.

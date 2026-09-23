@@ -32,8 +32,10 @@ namespace starrocks {
 // column sets of a load into a per-load dictionary, which hands out a dense set-id per set, and writes
 // each row's set-id into the hidden "__cset__" column. FE injects that column into the plan immediately
 // before "__op", so "__op" stays the last column. The delta writer keeps "__cset__" in the written
-// segments under a reserved unique id and records the dictionary (translated to column unique ids) in
-// RowsetTxnMetaPB.distinct_column_sets, and the publish decodes each row's column set from the two.
+// segments under a reserved unique id, with the set-ids of its own dictionary, which also holds the
+// unions of the rows it merges (see FlexibleRowMerger). It records that dictionary (translated to column
+// unique ids) in RowsetTxnMetaPB.distinct_column_sets, and the publish decodes each row's column set from
+// the two.
 //
 // The scanner-side dictionary holds column NAMES: the scanner only knows slot names, and the writer,
 // which owns the tablet schema, translates names to unique ids.
@@ -71,19 +73,17 @@ public:
         return _sets.size();
     }
 
-    // A copy of the dictionary, index == set-id.
-    std::vector<std::vector<std::string>> snapshot() const {
-        std::lock_guard<std::mutex> l(_mu);
-        return _sets;
-    }
+    // A copy of the entries from set-id `first_set_id` on, index == set-id - first_set_id.
+    std::vector<std::vector<std::string>> snapshot(size_t first_set_id = 0) const;
 
-    // Merges a snapshot that the load's sender shipped over the wire. Set-ids are assigned by position, so
-    // they match the sender's exactly; the receiver never interns. The sender only ever appends to its
-    // dictionary, so every snapshot it sends extends the previous ones: entries this dictionary already
-    // holds must match the snapshot position by position, and the snapshot's extra entries are appended.
-    // Several senders' eos requests may carry snapshots in any order, which is why this merges instead of
-    // replacing. A mismatch means two dictionaries with different set-id spaces met, and is an error.
-    Status merge_snapshot(const std::vector<std::vector<std::string>>& sets);
+    // Merges the entries of set-ids [first_set_id, first_set_id + sets.size()) that the load's sender shipped
+    // over the wire. Set-ids are assigned by position, so they match the sender's exactly; the receiver
+    // never interns. The sender only ever appends to its dictionary, so entries this dictionary already holds
+    // must match, and the others are appended. Several senders may ship overlapping ranges in any order, but
+    // each sender ships its ranges in order and every range starts at most at the end of what it shipped
+    // before, so a range never starts beyond this dictionary's end. A mismatch means two dictionaries with
+    // different set-id spaces met, and is an error.
+    Status merge(size_t first_set_id, const std::vector<std::vector<std::string>>& sets);
 
 private:
     static std::string canonical_key(const std::vector<std::string>& sorted_names);
@@ -98,16 +98,18 @@ private:
 using ColumnSetDictPtr = std::shared_ptr<ColumnSetDict>;
 
 // Process-wide registry from txn_id to the load's ColumnSetDict. It carries the dictionary from the JSON
-// scanner, which interns into it, to the sink, which ships it to the tablet writers on the eos request,
-// and on each writer node from the tablets channel, which receives it, to the delta writers, which record
-// it in the rowset. txn_id is the key because it is the one load identifier that the scanner
-// (TBrokerScanRangeParams.txn_id), the sink and the writers all see.
+// scanner, which interns into it, to the sink, which ships its new entries to the tablet writers with the
+// chunks that use them, and on each writer node from the tablets channel, which receives them, to the
+// delta writers, which decode the set-ids when their memtables flush. txn_id is the key because it is the
+// one load identifier that the scanner (TBrokerScanRangeParams.txn_id), the sink and the writers all see.
+// A load must have ONE scanner-side dictionary, or two nodes would give the same set-id to different sets:
+// FE plans flexible partial update only for stream load, whose scan runs on a single node.
 //
 // An entry is reference-counted by its holders, because several pipelines of one node share a txn_id and
 // none of them can tell it is the last: every json reader of the load, the sink of each plan (which must
-// outlive the readers because it ships the dictionary on eos), and every tablets channel that received
-// the dictionary (its writers read it when they finish). Each holder calls retain() when it starts using
-// the entry and release() when it is done, and the entry is dropped with the last release().
+// outlive the readers because it ships the entries of the last chunks), and every tablets channel that
+// received entries (its writers read them until they finish). Each holder calls retain() when it starts
+// using the entry and release() when it is done, and the entry is dropped with the last release().
 class FlexiblePartialUpdateRegistry {
 public:
     static FlexiblePartialUpdateRegistry* instance();

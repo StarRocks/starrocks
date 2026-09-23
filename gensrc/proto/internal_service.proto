@@ -263,19 +263,21 @@ message PTabletWriterAddBatchRequest {
     repeated int64 partition_ids = 8;
 };
 
-// Flexible partial update: the per-load column-set dictionary. Each row of a flexible load declares
-// its own subset of columns; the distinct subsets are interned into a dense set-id space by the JSON
-// scanner, and the set-id of each row travels in the hidden "__cset__" column. The dictionary maps a
-// set-id (the index in `sets`) to the sorted column NAMES of that set. The sender ships it on the eos
-// add-chunk request so that tablet writers on other nodes can record it in the rowset.
+// Flexible partial update: entries of the per-load column-set dictionary. Each row of a flexible load
+// declares its own subset of columns; the distinct subsets are interned into a dense set-id space by the
+// JSON scanner, and the set-id of each row travels in the hidden "__cset__" column. The dictionary maps a
+// set-id to the sorted column NAMES of that set. The sender ships the entries a channel has not sent yet
+// with the add-chunk request whose rows need them, because the tablet writers decode the set-ids when
+// their memtables flush.
 // Declared before PTabletWriterAddChunkRequest so jprotobuf resolves the type in its top-down parse.
 message PColumnSetPB {
     repeated string column_names = 1;
 }
 
 message PColumnSetDictPB {
-    // index == set-id
+    // The entry of set-id first_set_id + i.
     repeated PColumnSetPB sets = 1;
+    optional int32 first_set_id = 2;
 }
 
 message PTabletWriterAddChunkRequest {
@@ -300,8 +302,8 @@ message PTabletWriterAddChunkRequest {
     optional bool wait_all_sender_close = 11 [default = false];
     // for multi olap table sink
     optional int64 sink_id = 12 [default = 0];
-    // Flexible partial update: the per-load column-set dictionary. Set only on the eos request of a
-    // flexible load, because the dictionary is complete only once the scan has ended.
+    // Flexible partial update: the entries of the per-load column-set dictionary that the sender has not
+    // sent to this node yet. Set only on the requests of a flexible load whose rows use new set-ids.
     optional PColumnSetDictPB column_set_dict = 13;
 };
 

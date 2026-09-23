@@ -62,8 +62,22 @@ AddChunksBatchPayload AddChunksBatchAccumulator::take_batch(ChunkUniquePtr chunk
 }
 
 PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<std::vector<int64_t>>& tablet_ids,
-                                                             const AddChunksSendOptions& opts) const {
+                                                             const AddChunksSendOptions& opts) {
     PTabletWriterAddChunksRequest req;
+    // Flexible partial update: the entries of the load's per-row column-set dictionary (column-NAME sets)
+    // that no earlier request of this channel carried, read from this process's registry by txn_id. The json
+    // scanners of this plan intern a row's set before the row reaches the sink, so the entries up to the
+    // dictionary's current size cover every set-id of this request, and the tablet writers need them before
+    // their memtables flush. Requests reach a node in order, so every entry arrives before the rows that use
+    // it. Names rather than unique ids, because the writer owns the tablet schema and translates them.
+    const size_t first_new_set = _column_sets_sent;
+    std::vector<std::vector<std::string>> new_sets;
+    if (_spec.flexible_partial_update && !_spec.indexes.empty()) {
+        if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(_spec.indexes[0].txn_id); dict != nullptr) {
+            new_sets = dict->snapshot(first_new_set);
+            _column_sets_sent += new_sets.size();
+        }
+    }
     if (_spec.load_id != nullptr) {
         req.mutable_id()->CopyFrom(*_spec.load_id);
     }
@@ -97,21 +111,15 @@ PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<s
                 }
             }
         }
-        // Flexible partial update: the eos request carries the load's per-row column-set dictionary
-        // (column-NAME sets, index == set-id), read from this process's registry by txn_id. The json
-        // scanners of this plan intern into it, and eos is sent only after the scan has ended, so the
-        // snapshot covers every set-id of the rows this channel sent. Names rather than unique ids,
-        // because the writer owns the tablet schema and translates them.
-        if (opts.eos && _spec.flexible_partial_update) {
-            if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(s.txn_id);
-                dict != nullptr && dict->size() > 0) {
-                auto snapshot = dict->snapshot();
-                auto* dict_pb = sub->mutable_column_set_dict();
-                for (const auto& names : snapshot) {
-                    auto* set_pb = dict_pb->add_sets();
-                    for (const auto& name : names) {
-                        set_pb->add_column_names(name);
-                    }
+        // Every index's tablets channel on the node receives the entries: each merges them into the node's
+        // registry before it writes the rows, whichever of them processes the request first.
+        if (!new_sets.empty()) {
+            auto* dict_pb = sub->mutable_column_set_dict();
+            dict_pb->set_first_set_id(static_cast<int32_t>(first_new_set));
+            for (const auto& names : new_sets) {
+                auto* set_pb = dict_pb->add_sets();
+                for (const auto& name : names) {
+                    set_pb->add_column_names(name);
                 }
             }
         }

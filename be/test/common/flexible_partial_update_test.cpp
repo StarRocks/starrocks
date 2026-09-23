@@ -38,10 +38,10 @@ constexpr int64_t kReleaseTxnId = 0x5DC6'0000'0000'0002LL;
 
 // A sender's snapshot is loaded by position: index == set-id, each entry canonicalized exactly like
 // intern() so the same set resolves to the sender's id no matter how it ordered its keys.
-PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_assigns_ids_by_position) {
+PARALLEL_TEST(FlexiblePartialUpdateTest, merge_assigns_ids_by_position) {
     ColumnSetDict dict;
     // Entries arrive neither sorted nor de-duplicated; an empty set is a legal column-set too.
-    ASSERT_OK(dict.merge_snapshot({{"v2", "v1"}, {"v3", "v1", "v3"}, {}}));
+    ASSERT_OK(dict.merge(0, {{"v2", "v1"}, {"v3", "v1", "v3"}, {}}));
     ASSERT_EQ(3u, dict.size());
 
     auto sets = dict.snapshot();
@@ -61,14 +61,14 @@ PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_assigns_ids_by_position)
     EXPECT_EQ(4u, dict.size());
 }
 
-// A sender only ever appends to its dictionary, so the snapshots its eos requests carry extend one
-// another; they may arrive in any order and more than once.
-PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_extends_a_prefix) {
+// A sender only ever appends to its dictionary, so the entries it ships extend one another; they may
+// arrive in any order and more than once.
+PARALLEL_TEST(FlexiblePartialUpdateTest, merge_extends_a_prefix) {
     {
         // The same snapshot twice changes nothing.
         ColumnSetDict dict;
-        ASSERT_OK(dict.merge_snapshot({{"v1"}}));
-        ASSERT_OK(dict.merge_snapshot({{"v1"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}}));
         EXPECT_EQ(1u, dict.size());
         EXPECT_EQ(0, dict.intern({"v1"}));
     }
@@ -76,9 +76,9 @@ PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_extends_a_prefix) {
         // A longer snapshot appends what the shorter one did not have; the shorter one arriving last is a
         // no-op.
         ColumnSetDict dict;
-        ASSERT_OK(dict.merge_snapshot({{"v1"}}));
-        ASSERT_OK(dict.merge_snapshot({{"v1"}, {"v2", "v3"}}));
-        ASSERT_OK(dict.merge_snapshot({{"v1"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}, {"v2", "v3"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}}));
         ASSERT_EQ(2u, dict.size());
         EXPECT_EQ(1, dict.intern({"v3", "v2"}));
     }
@@ -87,26 +87,45 @@ PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_extends_a_prefix) {
         ColumnSetDict dict;
         EXPECT_EQ(0, dict.intern({"v1"}));
         EXPECT_EQ(1, dict.intern({"v2"}));
-        ASSERT_OK(dict.merge_snapshot(dict.snapshot()));
+        ASSERT_OK(dict.merge(0, dict.snapshot()));
         EXPECT_EQ(2u, dict.size());
     }
     {
         // An empty snapshot leaves an empty dictionary empty, and a later non-empty one still populates it.
         ColumnSetDict dict;
-        ASSERT_OK(dict.merge_snapshot({}));
+        ASSERT_OK(dict.merge(0, std::vector<std::vector<std::string>>{}));
         EXPECT_EQ(0u, dict.size());
-        ASSERT_OK(dict.merge_snapshot({{"v1"}}));
+        ASSERT_OK(dict.merge(0, {{"v1"}}));
         EXPECT_EQ(1u, dict.size());
     }
 }
 
+// A sender ships every entry once, with the first request whose rows use it, so each of its ranges starts
+// where its previous one ended; the ranges of several senders overlap and arrive in any order.
+PARALLEL_TEST(FlexiblePartialUpdateTest, merge_extends_by_ranges) {
+    ColumnSetDict dict;
+    ASSERT_OK(dict.merge(0, {{"v1"}, {"v2"}}));
+    ASSERT_OK(dict.merge(2, {{"v3"}}));
+    // Another sender, overlapping.
+    ASSERT_OK(dict.merge(1, {{"v2"}, {"v3"}, {"v4"}}));
+    ASSERT_EQ(4u, dict.size());
+    EXPECT_EQ((Names{"v4"}), dict.snapshot(3)[0]);
+    EXPECT_EQ(2u, dict.snapshot(2).size());
+    EXPECT_TRUE(dict.snapshot(4).empty());
+    // A range that starts beyond the end would leave set-ids without entries.
+    EXPECT_FALSE(dict.merge(6, {{"v7"}}).ok());
+    // A range that disagrees with the entries it overlaps comes from another set-id space.
+    EXPECT_FALSE(dict.merge(3, {{"v9"}}).ok());
+    EXPECT_EQ(4u, dict.size());
+}
+
 // Two dictionaries with different set-id spaces must never be combined: a row's set-id would then name
 // another row's columns.
-PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_rejects_a_different_id_space) {
+PARALLEL_TEST(FlexiblePartialUpdateTest, merge_rejects_a_different_id_space) {
     {
         ColumnSetDict dict;
         EXPECT_EQ(0, dict.intern({"local"}));
-        EXPECT_FALSE(dict.merge_snapshot({{"v1"}, {"v2"}}).ok());
+        EXPECT_FALSE(dict.merge(0, {{"v1"}, {"v2"}}).ok());
         // The dictionary is unchanged.
         ASSERT_EQ(1u, dict.size());
         EXPECT_EQ((Names{"local"}), dict.snapshot()[0]);
@@ -114,7 +133,7 @@ PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_rejects_a_different_id_s
     {
         // The same set at two positions cannot come from one sender.
         ColumnSetDict dict;
-        EXPECT_FALSE(dict.merge_snapshot({{"v1"}, {"v1"}}).ok());
+        EXPECT_FALSE(dict.merge(0, {{"v1"}, {"v1"}}).ok());
     }
     {
         // More sets than a set-id can address.
@@ -123,7 +142,7 @@ PARALLEL_TEST(FlexiblePartialUpdateTest, merge_snapshot_rejects_a_different_id_s
         for (size_t i = 0; i < sets.size(); ++i) {
             sets[i] = {"c" + std::to_string(i)};
         }
-        EXPECT_FALSE(dict.merge_snapshot(sets).ok());
+        EXPECT_FALSE(dict.merge(0, sets).ok());
         EXPECT_EQ(0u, dict.size());
     }
 }

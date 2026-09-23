@@ -58,26 +58,41 @@ ColumnSetId ColumnSetDict::intern(std::vector<std::string> names) {
     return id;
 }
 
-Status ColumnSetDict::merge_snapshot(const std::vector<std::vector<std::string>>& sets) {
-    if (sets.size() > kMaxColumnSets) {
+std::vector<std::vector<std::string>> ColumnSetDict::snapshot(size_t first_set_id) const {
+    std::lock_guard<std::mutex> l(_mu);
+    if (first_set_id >= _sets.size()) {
+        return {};
+    }
+    return {_sets.begin() + first_set_id, _sets.end()};
+}
+
+Status ColumnSetDict::merge(size_t first_set_id, const std::vector<std::vector<std::string>>& sets) {
+    if (first_set_id + sets.size() > kMaxColumnSets) {
         return Status::InvalidArgument(fmt::format("column-set dictionary has {} entries, more than the limit {}",
-                                                   sets.size(), kMaxColumnSets));
+                                                   first_set_id + sets.size(), kMaxColumnSets));
     }
     std::lock_guard<std::mutex> l(_mu);
+    if (first_set_id > _sets.size()) {
+        return Status::InternalError(
+                fmt::format("flexible partial update: column-set dictionary entries from set-id {} arrived before "
+                            "set-id {}",
+                            first_set_id, _sets.size()));
+    }
     for (size_t i = 0; i < sets.size(); ++i) {
+        const size_t id = first_set_id + i;
         auto names = sets[i];
         canonicalize(&names);
-        if (i < _sets.size()) {
-            if (_sets[i] != names) {
+        if (id < _sets.size()) {
+            if (_sets[id] != names) {
                 return Status::InternalError(
-                        fmt::format("flexible partial update: column-set dictionaries disagree on set-id {}", i));
+                        fmt::format("flexible partial update: column-set dictionaries disagree on set-id {}", id));
             }
             continue;
         }
         std::string key = canonical_key(names);
-        if (!_index.emplace(std::move(key), static_cast<ColumnSetId>(i)).second) {
+        if (!_index.emplace(std::move(key), static_cast<ColumnSetId>(id)).second) {
             return Status::InternalError(
-                    fmt::format("flexible partial update: column-set dictionary repeats a set at set-id {}", i));
+                    fmt::format("flexible partial update: column-set dictionary repeats a set at set-id {}", id));
         }
         _sets.emplace_back(std::move(names));
     }

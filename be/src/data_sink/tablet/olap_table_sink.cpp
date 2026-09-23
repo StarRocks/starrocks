@@ -274,10 +274,10 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _state = state;
-    // A flexible partial update ships the per-row column-set dictionary its json scanners intern on the
-    // eos request (AddChunksRequestBuilder). The scanners release their references as they finish, which
-    // can be before the eos is built, so the sink holds one from prepare (before any scanner runs) until
-    // close_wait. See FlexiblePartialUpdateRegistry.
+    // A flexible partial update ships the entries of the per-row column-set dictionary its json scanners
+    // intern with the requests whose rows use them (AddChunksRequestBuilder). The scanners release their
+    // references as they finish, which can be before the last requests are built, so the sink holds one
+    // from prepare (before any scanner runs) until close_wait. See FlexiblePartialUpdateRegistry.
     if (_flexible_partial_update && !_cset_dict_retained) {
         FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
         _cset_dict_retained = true;
