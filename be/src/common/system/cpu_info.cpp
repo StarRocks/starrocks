@@ -317,6 +317,7 @@ void CpuInfo::init() {
         if (file.is_open()) {
             std::stringstream buffer;
             buffer << file.rdbuf();
+            file.peek();
             if (file.bad() || (file.fail() && !file.eof())) {
                 LOG(ERROR) << "I/O error reading /proc/cpuinfo; CPU feature detection may be incomplete";
                 cpuinfo_content.clear();
