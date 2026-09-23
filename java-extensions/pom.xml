@@ -62,7 +62,11 @@
         <kryo.version>4.0.2</kryo.version>
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <lz4-java.version>1.10.1</lz4-java.version>
+<<<<<<< HEAD
         <zookeeper.version>3.8.6</zookeeper.version>
+=======
+        <httpclient5.version>5.6.4</httpclient5.version>
+>>>>>>> 3c30cab ([BugFix][CVE] Bump Apache HttpClient5 to 5.6.4 (#79538))
         <httpcore5.version>5.4.3</httpcore5.version>
         <bouncycastle.version>1.85</bouncycastle.version>
         <thrift.version>0.24.0</thrift.version>
