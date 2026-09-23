@@ -15,6 +15,11 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.concurrent.lock.BlockingCallValidator;
+>>>>>>> 5a7c6c5 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#79178))
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -162,6 +167,9 @@ public class PaimonConnector implements Connector {
 
     public Catalog getPaimonNativeCatalog() {
         if (paimonNativeCatalog == null) {
+            // Inside the null check for the same reason as iceberg: a hit returns a field, only
+            // the build contacts the metastore or the warehouse path's file system.
+            BlockingCallValidator.validateNotUnderLock("paimon", catalogName);
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             CatalogContext context = CatalogContext.create(getPaimonOptions(), configuration);

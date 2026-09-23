@@ -4888,4 +4888,115 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_hudi_lib_internal_metadata_table = true;
+<<<<<<< HEAD
+=======
+
+    /**
+     * http_request function settings
+     * Admin-enforced SSL verification for http_request function.
+     * If true, SSL peer and host verification cannot be disabled via session variables.
+     */
+    @ConfField(mutable = true, comment = "Enforce SSL verification for http_request function (cannot be disabled by users)")
+    public static boolean http_request_ssl_verification_required = true;
+
+    /**
+     * http_request function SSRF protection settings
+     * Security level: 1=TRUSTED (allow all), 2=PUBLIC (block private IPs),
+     * 3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)
+     */
+    @ConfField(mutable = true, comment = "HTTP request security level for SSRF protection: " +
+            "1=TRUSTED (allow all), 2=PUBLIC (block private IPs), " +
+            "3=RESTRICTED (require allowlist, default), 4=PARANOID (block all requests)")
+    public static int http_request_security_level = 3;
+
+    @ConfField(mutable = true, comment = "Comma-separated list of allowed IPv4 addresses for http_request function. " +
+            "Example: '192.168.1.1' or '10.0.0.1,172.16.0.1'")
+    public static String http_request_ip_allowlist = "";
+
+    @ConfField(mutable = true, comment = "Comma-separated list of regex patterns for allowed hostnames in http_request function")
+    public static String http_request_host_allowlist_regexp = "";
+
+    @ConfField(mutable = true, comment = "Allow private IPs (127.x, 10.x, 192.168.x, 172.16-31.x) if in allowlist. " +
+            "Default false for security. Set true to allow internal service calls.")
+    public static boolean http_request_allow_private_in_allowlist = false;
+
+    @ConfField(mutable = true, comment = "The maximum number of low-cardinality dictionary-optimized columns listed " +
+            "in the dict_col field of each scan node in EXPLAIN VERBOSE output. When a scan node has more applied " +
+            "dictionary columns than this value, the list is truncated and followed by an ellipsis. Values less than " +
+            "or equal to 0 are treated as 0, which truncates the list entirely.")
+    public static int explain_dict_column_size = 5;
+
+    @ConfField(mutable = true, comment = "Safety net for the failpoint pause mode. A thread parked " +
+            "at a failpoint armed with ADMIN ENABLE FAILPOINT ... WITH PAUSE resumes after this many " +
+            "seconds even if ADMIN DISABLE FAILPOINT is never issued, so a forgotten pause cannot " +
+            "wedge a node until it is restarted. Values below 1 are clamped to 1. The value is also " +
+            "sent to BEs/CNs with the arming request, so an FE pause and a BE pause always share one " +
+            "timeout.")
+    public static int failpoint_pause_timeout_second = 300;
+
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_complete calls")
+    public static String ai_default_chat_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for prompt-only SYSTEM ai_complete calls")
+    public static String ai_default_chat_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
+    public static String ai_default_chat_provider = "";
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
+    public static String ai_default_embedding_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    public static String ai_default_embedding_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    public static String ai_default_embedding_provider = "";
+
+    /**
+     * How the FE reacts when a metadata lock is requested on an object the internal catalog does
+     * not own -- a database from an external catalog, or a placeholder table id such as the
+     * {@code -1} BaseTableInfo default. Such an id names nothing the lock manager can protect: it
+     * either never collides (a lock nobody else can take) or collides with everything (every
+     * external base table on one lock).
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with a stack and lets the
+     * operation proceed, {@code error} refuses it. Mutable, so a deployment can start at
+     * {@code warn}, confirm its logs are clean and tighten to {@code error} without a restart.
+     * Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_target_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when it contacts an external system -- a Hive metastore, a JDBC source, an
+     * Iceberg REST catalog, a thrift peer -- while holding an FE metadata lock. The lock's hold
+     * time then becomes that system's round-trip time, and every waiter pays it: transaction
+     * publish takes the table lock with a 1000ms {@code tryLock}, so one slow call inside a
+     * critical section fails a load rather than merely delaying a query.
+     *
+     * The check sits at the last layer the FE owns before a socket is used, so a cache hit never
+     * reaches it: every violation reported is a request that really went out.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the offending caller's
+     * stack and lets the call proceed, {@code error} refuses it. Unlike
+     * {@link #lock_target_validation_mode} this rule ships knowing its violation set is not yet
+     * empty, so {@code warn} is the only sane default: it turns those sites from a reviewer's
+     * memory into a log you can aggregate by transport. Mutable, so a deployment can tighten to
+     * {@code error} without a restart once its logs are clean. Unrecognized values behave as
+     * {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
+     * call site</b>. Throttling per site rather than globally keeps a busy violating site from
+     * crowding out every other one, and a site that has not been seen before always logs its first
+     * occurrence. Violation counts stay exact regardless of what the throttle drops.
+     *
+     * Set to 0 to log every violation while investigating.
+     */
+    @ConfField(mutable = true)
+    public static long lock_invariant_violation_log_interval_ms = 10000;
+
+>>>>>>> 5a7c6c5 ([BugFix] Keep CREATE TABLE/MV metadata reload off connector I/O under the database lock (#79178))
 }

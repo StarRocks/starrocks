@@ -1449,6 +1449,15 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
     }
 
+    private static void removeConnectorRelatedMaterializedView(BaseTableInfo baseTableInfo, MvId mvId) {
+        GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
+                removeConnectorTableInfo(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(),
+                        baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build());
+    }
+
     private void onDropImpl(Database db, boolean replay) {
         MvId mvId = new MvId(db.getId(), getId());
 
@@ -1461,18 +1470,38 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         // 2. Remove from base tables
         List<BaseTableInfo> baseTableInfos = getBaseTableInfos();
         for (BaseTableInfo baseTableInfo : ListUtils.emptyIfNull(baseTableInfos)) {
+            if (!baseTableInfo.isInternalCatalog()) {
+                // An external base table is not resolved here, on purpose. The authoritative record of this
+                // relationship is ConnectorTblMetaInfoMgr, not the Table object: MetadataMgr#getTable
+                // re-applies the entry onto whatever instance the connector cache hands back, see
+                // ConnectorTableInfo#seTableInfoForConnectorTable. So resolving the table only to strip one
+                // cached projection of that entry is a connector round trip bought for nothing -- and every
+                // caller of onDrop holds the database write lock (Database#unprotectDropTable), including the
+                // rollback of a failed CREATE, where the catalog is by definition the one that just failed.
+                //
+                // Dropping the authoritative entry is the whole job, and it is also exactly what this code
+                // already fell back to whenever the resolve threw, which is the case an unreachable external
+                // system produced anyway.
+                //
+                // Known gap, deliberately left: a Table instance the connector already has cached keeps this
+                // MvId until it is evicted, because ConnectorTableInfo#seTableInfoForConnectorTable only ever
+                // adds. Making it reconcile instead was tried and does not work yet -- the store is looked up
+                // by Table#getTableIdentifier, which does not reliably match the identifier the relationship
+                // was recorded under, so "no entry" cannot be read as "no related MVs" without emptying sets
+                // that are the only copy (it breaks mv rewrite over external tables outright). What is left
+                // behind is the same shape as the create-side window documented on Table#onCreateAfterUnlock:
+                // not persisted, and skipped by every consumer that resolves the id -- and not seen at all by
+                // AnalyzerUtils.CopyUnsafeTablesCollector, which returns before counting for a table in an
+                // external catalog. Fixing the keying is its own change.
+                removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
+                continue;
+            }
+
             Optional<Table> baseTableOpt;
             try {
+                // Internal catalog only: a local metastore lookup, not I/O.
                 baseTableOpt = MvUtils.getTableWithIdentifier(baseTableInfo);
             } catch (Exception e) {
-                if (!(baseTableInfo.isInternalCatalog())) {
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                    baseTableInfo.getDbName(),
-                                    baseTableInfo.getTableIdentifier(),
-                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                            Sets.newHashSet(mvId)).build());
-                }
                 LOG.error("Failed to get base table: {}", baseTableInfo, e);
                 continue;
             }
@@ -1482,12 +1511,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 baseTable.removeRelatedMaterializedView(mvId);
                 if (!baseTable.isNativeTableOrMaterializedView()) {
                     // remove relatedMaterializedViews for connector table
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().
-                            removeConnectorTableInfo(baseTableInfo.getCatalogName(),
-                                    baseTableInfo.getDbName(),
-                                    baseTableInfo.getTableIdentifier(),
-                                    ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                            Sets.newHashSet(mvId)).build());
+                    removeConnectorRelatedMaterializedView(baseTableInfo, mvId);
                 }
             }
         }
@@ -1511,13 +1535,25 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Suppressed here, and done in {@link #onCreateAfterUnlock} instead. {@link Table#onCreate} runs under
+     * the database write lock and an MV reload is the single most expensive thing on the create path:
+     * {@link #onReloadImplHeavy} analyzes the partition exprs and {@link #checkIsActiveOnLoadBlocking}
+     * resolves every base table, both of which go through {@code MetadataMgr#getTable} and are remote calls
+     * for an external base table. Every waiter on that database's lock used to pay for them.
+     */
+    @Override
+    protected void reloadOnCreate() {
+    }
+
+    /**
      * This is method is called in mv creating, if error is met, throw exception to fail the creating operation.
+     * Runs after {@link com.starrocks.server.LocalMetastore#onCreate} has released the database write lock;
+     * a failure here rolls the creation back, see {@link Table#onCreateAfterUnlock}.
      * @param database database where the table is created
      * @throws DdlException
      */
     @Override
-    public void onCreate(Database database) throws DdlException {
-        super.onCreate(database);
+    public void onCreateAfterUnlock(Database database) throws DdlException {
         onReload(false, isActive(), true);
     }
 

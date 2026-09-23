@@ -41,10 +41,12 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
@@ -331,6 +333,187 @@ public class LocalMetaStoreTest {
 
         Assertions.assertNull(db.getTable(tableId));
         Assertions.assertNull(db.getTable(tableName));
+    }
+
+    /**
+     * The two halves of the create contract, pinned on the property rather than on where the calls sit:
+     * onCreate runs inside the database write lock because it has to be atomic with the journal record,
+     * onCreateAfterUnlock runs with no FE metadata lock held at all because for a materialized view it
+     * resolves every base table through the connector.
+     */
+    @Test
+    public void testOnCreateAfterUnlockRunsWithoutAnyMetadataLock() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000011L, "lock_depth_probe", false);
+
+        try {
+            localMetastore.onCreate(db, table, "", true);
+
+            Assertions.assertTrue(table.getDepthInOnCreate() > 0,
+                    "onCreate must run under the database write lock, saw depth " + table.getDepthInOnCreate());
+            Assertions.assertEquals(0, table.getDepthInOnCreateAfterUnlock(),
+                    "onCreateAfterUnlock must not run with any FE metadata lock held");
+            Assertions.assertSame(table, db.getTable(1000011L));
+        } finally {
+            db.dropTable("lock_depth_probe", true, true);
+        }
+    }
+
+    /**
+     * A failure after the creation has been journaled has to be rolled back. Without it the caller is told
+     * the DDL failed while the table stays registered and durable -- and for a materialized view, without
+     * the refresh task the create path would have added afterwards.
+     */
+    @Test
+    public void testFailureAfterUnlockRollsBackTheJournaledCreate() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000012L, "rollback_probe", true);
+
+        Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+
+        Assertions.assertEquals(0, table.getDepthInOnCreateAfterUnlock(),
+                "the failing hook must have run outside the lock");
+        Assertions.assertNull(db.getTable(1000012L), "a failed create must not leave the table registered");
+        Assertions.assertNull(db.getTable("rollback_probe"));
+    }
+
+    /**
+     * IF NOT EXISTS returns before anything is journaled, so neither half of the new contract may run: not
+     * the post-unlock hook, and not the rollback -- the table that is already there belongs to someone else.
+     * The probe is built to fail if its hook is ever reached, so this cannot pass by accident.
+     */
+    @Test
+    public void testExistingTableWithIfNotExistsIsLeftAlone() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable existing = new LockDepthProbeTable(1000013L, "exists_probe", false);
+        localMetastore.onCreate(db, existing, "", true);
+
+        try {
+            LockDepthProbeTable second = new LockDepthProbeTable(1000014L, "exists_probe", true);
+            localMetastore.onCreate(db, second, "", true);
+
+            Assertions.assertEquals(-1, second.getDepthInOnCreateAfterUnlock(),
+                    "nothing was journaled, so the post-unlock half must not run");
+            Assertions.assertSame(existing, db.getTable("exists_probe"), "the existing table must be untouched");
+            Assertions.assertNull(db.getTable(1000014L));
+        } finally {
+            db.dropTable("exists_probe", true, true);
+        }
+    }
+
+    @Test
+    public void testExistingTableWithoutIfNotExistsFails() throws Exception {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable existing = new LockDepthProbeTable(1000015L, "exists_probe_strict", false);
+        localMetastore.onCreate(db, existing, "", true);
+
+        try {
+            LockDepthProbeTable second = new LockDepthProbeTable(1000016L, "exists_probe_strict", true);
+            Assertions.assertThrows(DdlException.class,
+                    () -> localMetastore.onCreate(db, second, "", false));
+
+            Assertions.assertEquals(-1, second.getDepthInOnCreateAfterUnlock());
+            Assertions.assertSame(existing, db.getTable("exists_probe_strict"));
+        } finally {
+            db.dropTable("exists_probe_strict", true, true);
+        }
+    }
+
+    /**
+     * The database can be dropped between the global-lock check and the database lock, which is the whole
+     * reason the second check exists. Nothing is journaled at that point, so the failure is free.
+     */
+    @Test
+    public void testCreateFailsWhenTheDatabaseWasDroppedUnderneath() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+        LockDepthProbeTable table = new LockDepthProbeTable(1000019L, "dropped_db_probe", true);
+
+        db.setExist(false);
+        try {
+            Assertions.assertThrows(DdlException.class,
+                    () -> localMetastore.onCreate(db, table, "", true));
+            Assertions.assertEquals(-1, table.getDepthInOnCreateAfterUnlock(),
+                    "nothing was journaled, so the post-unlock half must not run");
+            Assertions.assertNull(db.getTable(1000019L));
+        } finally {
+            db.setExist(true);
+        }
+    }
+
+    /**
+     * The rollback identifies its table by id, not by name, because the lock was released in between -- so
+     * when a concurrent drop got there first it must journal nothing rather than drop whatever now answers to
+     * that name. Counted rather than inferred: exactly one drop record, the concurrent one.
+     */
+    @Test
+    public void testRollbackSkipsATableThatIsAlreadyGone() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        AtomicInteger dropRecords = new AtomicInteger();
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropTable(Invocation invocation, DropInfo info, WALApplier walApplier) {
+                dropRecords.incrementAndGet();
+                invocation.proceed(info, walApplier);
+            }
+        };
+
+        LockDepthProbeTable table = new LockDepthProbeTable(1000017L, "rollback_raced_probe", true);
+        table.setWhileUnlocked(database -> {
+            try {
+                // A concurrent DROP completing inside the window the post-unlock hook opened.
+                database.dropTable("rollback_raced_probe", true, true);
+            } catch (DdlException e) {
+                throw new RuntimeException(e);
+            }
+        });
+
+        Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+
+        Assertions.assertNull(db.getTable(1000017L));
+        Assertions.assertEquals(1, dropRecords.get(),
+                "the rollback must not journal a second drop for a table that is already gone");
+    }
+
+    /**
+     * The rollback is best effort: whatever it fails on, the exception the caller sees has to stay the one
+     * that made the DDL fail, or the report names the cleanup instead of the cause.
+     */
+    @Test
+    public void testRollbackFailureDoesNotReplaceTheOriginalError() {
+        Database db = connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test");
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logDropTable(DropInfo info, WALApplier walApplier) {
+                throw new IllegalStateException("journal is unavailable");
+            }
+        };
+
+        LockDepthProbeTable table = new LockDepthProbeTable(1000018L, "rollback_broken_probe", true);
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> localMetastore.onCreate(db, table, "", true));
+        Assertions.assertTrue(e.getMessage().contains("probe failure after the database lock was released"),
+                "the cleanup's own failure must not replace the original: " + e.getMessage());
+
+        // The rollback could not run, so take the table back out by hand rather than leaving it for the
+        // next test in this JVM.
+        Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.WRITE);
+        try {
+            db.unRegisterTableUnlocked(table);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
+        }
     }
 
     @Test

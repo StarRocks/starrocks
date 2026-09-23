@@ -720,13 +720,70 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * This method is called right after the calling of {@link com.starrocks.server.LocalMetastore#onCreate)}.
+     * This method is called by {@link com.starrocks.server.LocalMetastore#onCreate}, still under the
+     * database write lock, right after the create-table journal record has been written.
      * If error occurs, DdlException should be thrown to abort the creation of the table.
      * @param database database where the table is created
      * @throws DdlException thrown if any error occurs during onCreate
      */
     public void onCreate(Database database) throws DdlException  {
+        reloadOnCreate();
+    }
+
+    /**
+     * The reload {@link #onCreate} performs, split out as its own step because {@code onCreate} runs under
+     * the database write lock: a subclass whose reload contacts external systems overrides this to do
+     * nothing and does the work in {@link #onCreateAfterUnlock} instead. See
+     * {@link MaterializedView#reloadOnCreate}.
+     */
+    protected void reloadOnCreate() {
         onReload();
+    }
+
+    /**
+     * The part of table creation that must not run under the database write lock, called by
+     * {@link com.starrocks.server.LocalMetastore#onCreate} once it has released that lock.
+     *
+     * <p>At this point the table is registered and the creation is journaled, so what runs here is
+     * observable by other threads and cannot be undone by simply not registering the table. Throwing from
+     * here aborts the DDL, and {@code LocalMetastore#onCreate} then rolls the creation back with a real,
+     * journaled drop -- the same contract as throwing from {@link #onCreate}, only the undo is more
+     * expensive. Whatever a reader can observe in between is the same thing it can observe between the
+     * journal record and {@code onReload} on a replaying follower, which registers first and reloads
+     * afterwards for the same reason.
+     *
+     * <h3>A concurrent drop is tolerated, not prevented</h3>
+     *
+     * A reader is not all that can arrive in this window: a concurrent {@code DROP} takes the database write
+     * lock, unregisters the table and runs its cleanup, and this method can then finish and re-publish
+     * relationships the drop has just taken down -- for an MV, the base tables' related-MV sets, the
+     * connector table info, and the global constraints. Closing that window means holding the database lock
+     * across the connector calls this split exists to get out of it, and the leftover does not justify that:
+     *
+     * <ul>
+     *   <li><b>It is not persisted.</b> {@link #gsonPostProcess} resets {@code relatedMaterializedViews} to
+     *       an empty set on load, {@code ConnectorTblMetaInfoMgr} and {@code GlobalConstraintManager} are
+     *       built fresh in {@code GlobalStateMgr}, so every one of these is rebuilt from scratch at image
+     *       load. The inconsistency is bounded by the time to the next restart or checkpoint.</li>
+     *   <li><b>It does not break a reader.</b> Everything that walks these sets resolves the id through the
+     *       catalog and skips it when it is gone -- {@code AlterJobMgr#invalidateRelatedMaterializedViews},
+     *       {@code AlterMVJobExecutor}, {@code LakeTableSchemaChangeJob}; {@code LoadJobMVListener} removes
+     *       the dangling entry as it walks, so writes to the base table heal it without a restart.</li>
+     *   <li><b>What it does cost</b>, until then: {@code AnalyzerUtils.CopyUnsafeTablesCollector} counts the
+     *       related-MV set without resolving it, so a dangling entry inflates that count and can push a
+     *       table over {@code skip_whole_phase_lock_mv_limit}; and a stale
+     *       {@code GlobalConstraintManager} entry keeps the dropped object reachable. Both are bounded, and
+     *       the race is rare enough that neither is worth a lock held across a connector round trip.</li>
+     * </ul>
+     *
+     * {@code LocalMetastore#onCreate} logs a warning naming the table when it detects this, so an operator
+     * seeing one of the effects above can tie it to the cause instead of guessing.
+     *
+     * @param database database where the table is created
+     * @throws DdlException thrown if any error occurs, aborting (and rolling back) the creation
+     */
+    public void onCreateAfterUnlock(Database database) throws DdlException {
+        // Do nothing by default.
     }
 
     /**
