@@ -220,11 +220,10 @@ Status JsonScanner::_construct_default_exprs_for_absent_key() {
         // unwraps a string, so the destination would parse the contents as JSON again and a string
         // default could come back as an array. The complex types have no conversion to text at all.
         // Leaving the column at NULL is the behavior it had before this option existed.
-        if ((root->type().type == TYPE_JSON || root->type().is_complex_type()) &&
-            root->type() != slot_desc->type()) {
+        if ((root->type().type == TYPE_JSON || root->type().is_complex_type()) && root->type() != slot_desc->type()) {
             LOG(WARNING) << "not filling the default of column " << slot_desc->col_name()
-                         << " because this load reads it as " << slot_desc->type().debug_string()
-                         << " rather than " << root->type().debug_string();
+                         << " because this load reads it as " << slot_desc->type().debug_string() << " rather than "
+                         << root->type().debug_string();
             continue;
         }
 
