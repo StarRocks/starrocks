@@ -685,18 +685,28 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
     }
 
     protected boolean lakePublishVersion() {
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
-            OlapTable table = getTableOrThrow();
-            boolean useAggregatePublish = table.isFileBundling();
+        // The publishes below are BRPCs to the CNs, so the table lock only covers the catalog reads they
+        // need. Held across the round trip it makes every waiter on the table pay for it, and transaction
+        // publish takes the same lock with a 1000ms tryLock -- one slow publish there is a failed load.
+        // Same shape as LakeTableSchemaChangeJob.lakePublishVersion.
+        try {
+            boolean useAggregatePublish;
+            try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                OlapTable table = getTableOrThrow();
+                useAggregatePublish = table.isFileBundling();
+            }
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
                 AggregatePublishVersionRequest request = new AggregatePublishVersionRequest();
-                PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
-                Preconditions.checkState(physicalPartition != null, partitionId);
-                List<MaterializedIndex> allMaterializedIndex = physicalPartition
-                        .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
                 List<Tablet> allOtherPartitionTablets = new ArrayList<>();
-                for (MaterializedIndex index : allMaterializedIndex) {
-                    allOtherPartitionTablets.addAll(index.getTablets());
+                try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.READ)) {
+                    OlapTable table = getTableOrThrow();
+                    PhysicalPartition physicalPartition = table.getPhysicalPartition(partitionId);
+                    Preconditions.checkState(physicalPartition != null, partitionId);
+                    List<MaterializedIndex> allMaterializedIndex = physicalPartition
+                            .getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
+                    for (MaterializedIndex index : allMaterializedIndex) {
+                        allOtherPartitionTablets.addAll(index.getTablets());
+                    }
                 }
                 long commitVersion = commitVersionMap.get(partitionId);
 
