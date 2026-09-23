@@ -118,11 +118,7 @@ import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
->>>>>>> fdc249b ([BugFix] Apply WHERE/ORDER BY/LIMIT to SHOW ALTER TABLE ROLLUP and MATERIALIZED VIEW (#79281))
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;

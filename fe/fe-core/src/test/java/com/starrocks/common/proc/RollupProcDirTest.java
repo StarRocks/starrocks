@@ -17,16 +17,17 @@ package com.starrocks.common.proc;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import mockit.Expectations;
+import com.starrocks.common.util.OrderByPair;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -66,11 +67,12 @@ public class RollupProcDirTest {
         infos.add(job(2, "tb2", "RUNNING"));
         infos.add(job(3, "tb1", "FINISHED"));
 
-        new Expectations(handler) {
-            {
-                handler.getAlterJobInfosByDb(db);
-                minTimes = 0;
-                result = infos;
+        // MaterializedViewHandler extends Thread (via FrontendDaemon), which JMockit refuses to
+        // partially mock, so stub the method with a MockUp instead of Expectations.
+        new MockUp<MaterializedViewHandler>() {
+            @Mock
+            public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
+                return infos;
             }
         };
     }

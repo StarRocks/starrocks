@@ -24,18 +24,18 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJobV2;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
+import com.starrocks.common.util.OrderByPair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -76,7 +76,7 @@ public class RollupProcDir implements ProcDirInterface {
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {
             LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
-            Long leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
+            Long leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
             Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             switch (binaryPredicate.getOp()) {
                 case EQ:

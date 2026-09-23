@@ -29,12 +29,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
-=======
 import com.starrocks.common.proc.RollupProcDir;
->>>>>>> fdc249b ([BugFix] Apply WHERE/ORDER BY/LIMIT to SHOW ALTER TABLE ROLLUP and MATERIALIZED VIEW (#79281))
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
