@@ -68,12 +68,16 @@ final class InsertSelectSourceColumns {
          */
         EXACT,
         /**
-         * Pair up whatever columns correspond and leave the rest alone. Right for a
-         * {@code FILES(...)} source: a file wider than the target is the normal case for
-         * {@code BY NAME} (the extra fields are simply not read), and a file narrower than the
-         * target leaves the missing columns NULL rather than failing. Neither says anything about
-         * the columns that ARE paired, and an unpaired sort-key or partition column is still
-         * caught by this method's final presence gate.
+         * Pair up whatever columns correspond and leave the target columns the source does not
+         * supply alone. Right for a {@code FILES(...)} source, where a file NARROWER than the
+         * target is ordinary: the columns it omits are defaulted, which says nothing about the
+         * columns that ARE paired, and an unpaired sort-key or partition column is still caught by
+         * this method's final presence gate.
+         *
+         * <p>It is not a licence to admit anything the analyzer would reject. Under {@code BY NAME}
+         * the query's output names BECOME the target column names, so an output the target does not
+         * have -- a field of a file wider than the target, or an alias naming no target column --
+         * still fails analysis, and pre-split must not reshard for a load that never runs.
          */
         PER_COLUMN
     }
@@ -130,6 +134,19 @@ final class InsertSelectSourceColumns {
             if (byName) {
                 // EXACT: reject source columns absent from the effective target, and vice versa.
                 if (pairing == SchemaPairing.EXACT && !sourceColumnMap.keySet().equals(targetNames(targetCols))) {
+                    return null;
+                }
+                // PER_COLUMN still may not admit a file WIDER than the target. Under BY NAME
+                // InsertAnalyzer sets the target column names to the query's OUTPUT names, and a
+                // `SELECT *` over FILES outputs every file column, so a field the target does not
+                // have fails analysis with "Unknown column '<f>' in '<t>'". Only
+                // enable_push_down_schema trims `*` down to the target names first
+                // (expandStarColumns); that flag is parsed in analyzeProperties, which runs AFTER
+                // this hook, so it always reads false here and the default mode is the one to
+                // assume. A file NARROWER than the target stays fine -- the columns it does not
+                // supply are simply defaulted.
+                if (pairing == SchemaPairing.PER_COLUMN
+                        && !targetNames(targetCols).containsAll(sourceColumnMap.keySet())) {
                     return null;
                 }
                 for (Column targetCol : targetCols) {
@@ -200,6 +217,13 @@ final class InsertSelectSourceColumns {
                 }
                 // EXACT: output names must be exactly the effective target columns.
                 if (pairing == SchemaPairing.EXACT && !outputNames.equals(targetNames(targetCols))) {
+                    return null;
+                }
+                // PER_COLUMN accepts a PARTIAL output set -- a target column no output names is
+                // simply defaulted -- but every output name must still BE a target column. BY NAME turns
+                // each output name into a target column name, so one that names nothing on the
+                // target fails analysis the same way a wide `SELECT *` does.
+                if (pairing == SchemaPairing.PER_COLUMN && !targetNames(targetCols).containsAll(outputNames)) {
                     return null;
                 }
             } else {
