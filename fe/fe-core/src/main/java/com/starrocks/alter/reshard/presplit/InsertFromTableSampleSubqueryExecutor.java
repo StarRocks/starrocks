@@ -19,7 +19,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.common.StarRocksException;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-table path.
@@ -55,8 +54,8 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                 context.wherePredicateSql(),
                 context.sourceTotalBytes(),
                 context.computeResource(),
-                identsOf(mapToSource(request.getSortKey(), context.targetToSourceColumnNames())),
-                partitionProjections(request.getPartitionSourceColumns(), context),
+                projections(request.getSortKey(), context),
+                projections(request.getPartitionSourceColumns(), context),
                 request.getSortKey(),
                 request.getPartitionSourceColumns(),
                 context.sourceTotalRows(),
@@ -74,33 +73,22 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
     }
 
     /**
-     * Projects each partition column by its source column, or -- when the SELECT feeds it a literal --
-     * by that literal cast to the column type. Throws on a column backed by neither, like
-     * {@link #mapToSource}.
+     * Projects target columns (the sort key or the partition columns): each by the
+     * source-table column that backs it, or -- when the SELECT feeds it a literal -- by that literal
+     * cast to the column type ({@link InsertSelectSourceColumns#projections}). Throws (-&gt; the
+     * sample fails -&gt; the load proceeds without pre-split) if a column is backed by neither, so a
+     * boundary is never computed against the wrong source column. {@code prepare} gates this at
+     * admission time; the throw remains as the fail-safe for a metadata race between prepare and
+     * sampling.
      */
-    private static List<String> partitionProjections(
-            List<Column> partitionColumns, InsertFromTableScanContext context) throws StarRocksException {
-        List<String> projections = InsertSelectSourceColumns.partitionProjections(
-                partitionColumns, context.targetToSourceColumnNames(), context.targetToConstantPartitionSql());
+    private static List<String> projections(
+            List<Column> targetColumns, InsertFromTableScanContext context) throws StarRocksException {
+        List<String> projections = InsertSelectSourceColumns.projections(
+                targetColumns, context.targetToSourceColumnNames(), context.targetToConstantSql());
         if (projections == null) {
-            throw new StarRocksException(ERROR_PREFIX + "a partition column has neither a source column nor a constant");
+            throw new StarRocksException(
+                    ERROR_PREFIX + "a projected column has no source-table column mapping and is not a literal");
         }
         return projections;
-    }
-
-    /**
-     * Remaps target columns (the sort key or the partition columns) to their source-table column
-     * names via {@link InsertSelectSourceColumns#lookup}. Throws (-&gt; the sample fails -&gt; the
-     * load proceeds without pre-split) if any column is unmapped, so a boundary is never computed
-     * against the wrong source column. {@code prepare} gates this at admission time; the throw
-     * remains as the fail-safe for a metadata race between prepare and sampling.
-     */
-    private static List<String> mapToSource(
-            List<Column> targetColumns, Map<String, String> targetToSourceColumnNames) throws StarRocksException {
-        List<String> sourceNames = InsertSelectSourceColumns.lookup(targetColumns, targetToSourceColumnNames);
-        if (sourceNames == null) {
-            throw new StarRocksException(ERROR_PREFIX + "a projected column has no source-table column mapping");
-        }
-        return sourceNames;
     }
 }

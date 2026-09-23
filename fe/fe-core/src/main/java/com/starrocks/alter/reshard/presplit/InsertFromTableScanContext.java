@@ -27,8 +27,8 @@ import java.util.Objects;
  * the input, the pre-quoted FROM clause SQL, plus the target-&gt;source column-name map the sampler
  * uses to project the sort key and the partition columns by their source column names. The optional WHERE
  * predicate SQL is threaded through verbatim from the INSERT-SELECT statement so the sample
- * covers only the rows the load will actually write. A partition column the SELECT feeds with a literal
- * has no source column; it is carried as the literal's SQL, which the sampler projects instead.
+ * covers only the rows the load will actually write. A key column the SELECT feeds with a literal has no
+ * source column; it is carried as the literal's SQL, which the sampler projects instead.
  *
  * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
  * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
@@ -42,20 +42,20 @@ public record InsertFromTableScanContext(
         ComputeResource computeResource,
         long sourceTotalBytes,
         long sourceTotalRows,
-        Map<String, String> targetToConstantPartitionSql) implements ScanContext {   // lower-cased target name -> SQL
+        Map<String, String> targetToConstantSql) implements ScanContext {   // lower-cased target name -> SQL
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(sourceFromSql, "sourceFromSql");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(computeResource, "computeResource");
-        Objects.requireNonNull(targetToConstantPartitionSql, "targetToConstantPartitionSql");
+        Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
         if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
             throw new IllegalArgumentException("source estimates must be non-negative");
         }
     }
 
-    /** Every partition column is backed by a source column. */
+    /** Every key column is backed by a source column. */
     public InsertFromTableScanContext(
             Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
             String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows) {

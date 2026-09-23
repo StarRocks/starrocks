@@ -522,6 +522,33 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
+    void literalFedSortKeyColumnIsProjectedAsTheLiteral() throws Exception {
+        // ORDER BY (dt, sort_key) with dt fed by '20260917': the constant sits in the sort-key tuple
+        // exactly as the load writes it.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/dt=20260917/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/dt=20260917/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+        Column dt = new Column("dt", DateType.DATE);
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "file_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(dt, bigintColumn("sort_key")),
+                /*partitionSourceColumns=*/ List.of(dt),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date) FROM FILES("),
+                "the literal stands in for dt in the sort key and the partition column: " + capturedSql);
+    }
+
+    @Test
     void projectedColumnWithNoFilesMappingThrows() {
         // Fail-safe for a metadata race between the admitting gate and sampling: never compute a
         // boundary from a column the mapping cannot account for.

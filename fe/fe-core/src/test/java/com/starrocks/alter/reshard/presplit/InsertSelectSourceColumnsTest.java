@@ -1097,7 +1097,7 @@ public class InsertSelectSourceColumnsTest {
         Assertions.assertNotNull(resolved);
         Assertions.assertEquals(
                 Map.of("exp_id", "exp_id", "grp_id", "grp_id", "bucket_id", "bucket_id"), resolved.targetToSource());
-        Assertions.assertEquals(Map.of("dt", "'20260917'"), resolved.targetToConstantPartitionSql());
+        Assertions.assertEquals(Map.of("dt", "'20260917'"), resolved.targetToConstantSql());
     }
 
     @Test
@@ -1117,13 +1117,48 @@ public class InsertSelectSourceColumnsTest {
 
         Assertions.assertNotNull(resolved);
         Assertions.assertEquals(Map.of("k", "k", "v", "v"), resolved.targetToSource());
-        Assertions.assertEquals(Map.of("dt", "'2026-09-17'"), resolved.targetToConstantPartitionSql());
+        Assertions.assertEquals(Map.of("dt", "'2026-09-17'"), resolved.targetToConstantSql());
     }
 
     @Test
-    public void literalFedSortKeyColumnIsStillDeclined() {
-        // Every row carries the same key value, so no cut can separate them: only a partition
-        // column gets the constant path, even when the column is both.
+    public void literalLeadingACompoundSortKeyIsAdmitted() {
+        // ORDER BY (dt, exp_id, grp_id, bucket_id) with dt = '20260917', the natural layout of a daily
+        // table: every boundary is (2026-09-17, exp_id_k, ...), and the cuts come from the columns
+        // that vary.
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t BY NAME SELECT exp_id, grp_id, bucket_id, '20260917' AS dt "
+                        + "FROM FILES(\"path\" = \"s3://b/dt=20260917/*\", \"format\" = \"parquet\")",
+                SqlModeHelper.MODE_DEFAULT);
+        SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        List<Column> targetCols = Arrays.asList(dateCol("dt"), col("exp_id"), col("grp_id"), col("bucket_id"));
+
+        InsertSelectSourceColumns.Resolved resolved = resolvePerColumnFully(
+                stmt, rel, targetCols, filesTable(col("exp_id"), col("grp_id"), col("bucket_id")),
+                targetCols, Collections.singletonList(dateCol("dt")));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(Map.of("dt", "'20260917'"), resolved.targetToConstantSql());
+        Assertions.assertEquals(
+                List.of("CAST('20260917' AS date)", "`exp_id`", "`grp_id`", "`bucket_id`"),
+                InsertSelectSourceColumns.projections(
+                        targetCols, resolved.targetToSource(), resolved.targetToConstantSql()));
+    }
+
+    @Test
+    public void literalInTheMiddleOfASortKeyIsAdmitted() {
+        List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"), col("v"));
+        SelectRelation rel = bareRelation(
+                bareItem("k"), expressionItem("dt", new StringLiteral("20260917")), bareItem("v"));
+
+        Assertions.assertNotNull(resolvePerColumnFully(
+                insertStmt(true), rel, targetCols, filesTable(col("k"), col("v")),
+                targetCols, Collections.emptyList()));
+    }
+
+    @Test
+    public void sortKeyMadeOnlyOfLiteralsIsDeclined() {
+        // Every row carries the same key value, so no cut can separate them -- even when the column
+        // is also the partition column.
         List<Column> targetCols = Arrays.asList(dateCol("dt"), col("v"));
         SelectRelation rel = bareRelation(expressionItem("dt", new StringLiteral("20260917")), bareItem("v"));
 
@@ -1169,9 +1204,9 @@ public class InsertSelectSourceColumnsTest {
     }
 
     @Test
-    public void literalFedNonPartitionColumnIsNotRecorded() {
-        // A literal feeding an ordinary value column is admitted as before and plays no part in
-        // sampling, so it is not carried as a constant either.
+    public void literalFedValueColumnIsAdmittedAsBefore() {
+        // A literal feeding an ordinary value column is admitted as before. It is recorded with the
+        // other constants, but no projection ever asks for it.
         List<Column> targetCols = Arrays.asList(col("k"), col("v"));
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem("v", new StringLiteral("x")));
 
@@ -1180,19 +1215,34 @@ public class InsertSelectSourceColumnsTest {
                 Collections.singletonList(col("k")), Collections.emptyList());
 
         Assertions.assertNotNull(resolved);
-        Assertions.assertEquals(Map.of(), resolved.targetToConstantPartitionSql());
+        Assertions.assertEquals(Map.of("k", "k"), resolved.targetToSource());
     }
 
     @Test
-    public void partitionProjectionsCastALiteralToTheTargetColumnType() {
+    public void rollupSortKeyIsJudgedOnItsOwn() {
+        // The base key (k) passed inside resolve(); a rollup's key is checked separately by the
+        // source with the same rule. A rollup (dt, k) is sampleable, a rollup (dt) alone is not.
+        InsertSelectSourceColumns.Resolved resolved =
+                new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"));
+
+        Assertions.assertTrue(InsertSelectSourceColumns.sortKeySampleable(
+                Arrays.asList(dateCol("dt"), col("k")), resolved));
+        Assertions.assertFalse(InsertSelectSourceColumns.sortKeySampleable(
+                Collections.singletonList(dateCol("dt")), resolved));
+        Assertions.assertFalse(InsertSelectSourceColumns.sortKeySampleable(
+                Arrays.asList(col("k"), col("unmapped")), resolved));
+    }
+
+    @Test
+    public void projectionsCastALiteralToTheTargetColumnType() {
         // The load casts '20260917' to the DATE column before routing the row, so the grouper has to
         // see that DATE -- not the string -- or it pre-creates a partition the load never uses.
-        List<String> projections = InsertSelectSourceColumns.partitionProjections(
+        List<String> projections = InsertSelectSourceColumns.projections(
                 Arrays.asList(col("region"), dateCol("dt")),
                 Map.of("region", "src_region"), Map.of("dt", "'20260917'"));
 
         Assertions.assertEquals(List.of("`src_region`", "CAST('20260917' AS date)"), projections);
-        Assertions.assertNull(InsertSelectSourceColumns.partitionProjections(
+        Assertions.assertNull(InsertSelectSourceColumns.projections(
                 Collections.singletonList(dateCol("dt")), Map.of(), Map.of()));
     }
 
@@ -1204,7 +1254,7 @@ public class InsertSelectSourceColumnsTest {
                 IntegerType.SMALLINT, IntegerType.INT, IntegerType.BIGINT, IntegerType.LARGEINT,
                 TypeFactory.createVarcharType(64), TypeFactory.createCharType(8));
         for (Type type : partitionTypes) {
-            String projection = InsertSelectSourceColumns.partitionProjections(
+            String projection = InsertSelectSourceColumns.projections(
                     Collections.singletonList(new Column("p", type)), Map.of(), Map.of("p", "'1'")).get(0);
             Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(
                     "SELECT " + projection + " FROM t", SqlModeHelper.MODE_DEFAULT), projection);

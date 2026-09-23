@@ -43,8 +43,9 @@ import java.util.Set;
  * source is one OLAP / Iceberg table or one {@code FILES(...)} call. The sampler uses the map to
  * project any index's sort key (base or rollup) and the partition columns by their source column
  * names. Non-key target columns may be expressions over the source relation and are omitted from
- * the map. A partition column fed by a literal ({@code '20260917' AS dt}) is recorded separately,
- * as the literal's SQL: the sampler projects the literal itself in place of a source column.
+ * the map. A column fed by a literal ({@code '20260917' AS dt}) is recorded separately, as the
+ * literal's SQL: the sampler projects the literal itself in place of a source column, for a
+ * partition column and for a sort-key column alike.
  *
  * <p>Outputs are paired against the statement's {@link #effectiveTargetColumns effective} target
  * columns, so an explicit target column list -- partial or reordered -- maps onto the columns it
@@ -88,11 +89,11 @@ final class InsertSelectSourceColumns {
 
     /**
      * The resolved projection: {@code targetToSource} maps each directly projected target column
-     * (lower-cased name) to its source column name; {@code targetToConstantPartitionSql} maps each
-     * partition column the SELECT feeds with a literal to that literal's SQL. The two key sets are
-     * disjoint, and only partition columns ever appear in the second.
+     * (lower-cased name) to its source column name; {@code targetToConstantSql} maps each target
+     * column the SELECT feeds with a non-NULL literal to that literal's SQL. The two key sets are
+     * disjoint.
      */
-    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantPartitionSql) {
+    record Resolved(Map<String, String> targetToSource, Map<String, String> targetToConstantSql) {
     }
 
     /**
@@ -259,27 +260,48 @@ final class InsertSelectSourceColumns {
             }
         }
 
-        // A sort-key or partition column with no source mapping cannot be sampled -> skip pre-split.
-        // The executor derives both projections from the maps at sample time (see mapToSource), so
-        // only the presence gate matters here. A partition column may instead be fed by a literal:
-        // every row then lands in the one partition that literal names. A constant sort-key column is
-        // still declined -- every row carries the same key, so no cut can separate them.
-        if (lookup(sortKeyColumns, targetToSource) == null) {
+        // The executors derive every projection from the two maps at sample time (see projections),
+        // so only the presence gates matter here.
+        Resolved resolved = new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql));
+        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
             return null;
         }
-        Map<String, String> targetToConstantPartitionSql = new HashMap<>();
-        for (Column partitionColumn : partitionColumns) {
-            String targetName = partitionColumn.getName().toLowerCase();
-            if (targetToSource.containsKey(targetName)) {
-                continue;
+        return resolved;
+    }
+
+    /**
+     * Whether a sort key (the base index's or a rollup's) can be sampled: every column is backed by
+     * a source column or fed by a literal, and at least one is backed by a source column. A literal
+     * column is fine anywhere in the key -- every sampled tuple carries the same value there, and the
+     * cuts come from the columns that vary -- but a key made only of literals is degenerate: every
+     * row has the same key, so no cut can separate them.
+     */
+    static boolean sortKeySampleable(List<Column> sortKey, Resolved resolved) {
+        boolean anySourceBacked = sortKey.isEmpty();
+        for (Column column : sortKey) {
+            String targetName = column.getName().toLowerCase();
+            if (resolved.targetToSource().containsKey(targetName)) {
+                anySourceBacked = true;
+            } else if (!resolved.targetToConstantSql().containsKey(targetName)) {
+                return false;
             }
-            String constantSql = targetToConstantSql.get(targetName);
-            if (constantSql == null) {
-                return null;
-            }
-            targetToConstantPartitionSql.put(targetName, constantSql);
         }
-        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantPartitionSql));
+        return anySourceBacked;
+    }
+
+    /**
+     * Whether every partition column is backed by a source column or fed by a literal. A literal
+     * partition column sends every row to the one partition that literal names.
+     */
+    static boolean partitionColumnsSampleable(List<Column> partitionColumns, Resolved resolved) {
+        for (Column column : partitionColumns) {
+            String targetName = column.getName().toLowerCase();
+            if (!resolved.targetToSource().containsKey(targetName)
+                    && !resolved.targetToConstantSql().containsKey(targetName)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**
@@ -287,7 +309,7 @@ final class InsertSelectSourceColumns {
      * literal qualifies: its value is fixed at plan time, so the sampler reproduces it exactly, which
      * a non-deterministic call ({@code now()}) or an expression over source columns would not. NULL is
      * left out: which partition a NULL key routes to is the partition scheme's business, not a value
-     * the sampler can hand the grouper.
+     * the sampler can hand the grouper, and a NULL key column is not worth the special case.
      */
     private static String constantSqlOf(Expr expr) {
         if (!(expr instanceof LiteralExpr) || expr instanceof NullLiteral) {
@@ -297,21 +319,22 @@ final class InsertSelectSourceColumns {
     }
 
     /**
-     * The SQL each partition column is projected by in a sampling sub-query: the backing source
-     * column's quoted identifier, or -- for a column the SELECT feeds with a literal -- that literal
-     * cast to the TARGET column type. The cast makes the sampled value the one the load writes: the
-     * load casts the literal to the column type before routing the row (a STRING {@code '20260917'}
-     * becomes the DATE 2026-09-17), and the grouper must pre-create exactly that partition. Returns
-     * {@code null} when any column is backed by neither.
+     * The SQL each target column (sort key or partition) is projected by in a sampling sub-query: the
+     * backing source column's quoted identifier, or -- for a column the SELECT feeds with a literal --
+     * that literal cast to the TARGET column type. The cast makes the sampled value the one the load
+     * writes: the load casts the literal to the column type before routing the row (a STRING
+     * {@code '20260917'} becomes the DATE 2026-09-17), so the grouper pre-creates exactly that
+     * partition and a boundary carries the key value the rows really have. Returns {@code null} when
+     * any column is backed by neither.
      */
-    static List<String> partitionProjections(
-            List<Column> partitionColumns, Map<String, String> targetToSource,
-            Map<String, String> targetToConstantPartitionSql) {
-        List<String> projections = new ArrayList<>(partitionColumns.size());
-        for (Column column : partitionColumns) {
+    static List<String> projections(
+            List<Column> columns, Map<String, String> targetToSource,
+            Map<String, String> targetToConstantSql) {
+        List<String> projections = new ArrayList<>(columns.size());
+        for (Column column : columns) {
             String targetName = column.getName().toLowerCase();
             String sourceName = targetToSource.get(targetName);
-            String constantSql = targetToConstantPartitionSql.get(targetName);
+            String constantSql = targetToConstantSql.get(targetName);
             if (sourceName != null) {
                 projections.add(SqlUtils.getIdentSql(sourceName));
             } else if (constantSql != null) {

@@ -102,7 +102,7 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         InsertFromFilesScanContext scanContext =
                 new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
                         context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql,
-                        resolved.targetToConstantPartitionSql());
+                        resolved.targetToConstantSql());
         // Deliberately the WHOLE file byte total even when a predicate narrows the load: FILES()
         // exposes no row count, so the data tier has no denominator to turn its observed hit ratio
         // into a filtered size the way the table path does. Sizing from the full input can only
