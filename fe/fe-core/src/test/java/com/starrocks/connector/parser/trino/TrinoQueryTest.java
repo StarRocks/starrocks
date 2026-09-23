@@ -395,6 +395,9 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select any_match(array[1,2,null], x -> x is not null);";
         assertPlanContains(sql, "any_match(array_map(<slot 2> -> <slot 2> IS NOT NULL, [1,2,NULL]))");
+
+        sql = "select none_match(array[1,2,3], x-> x>0);";
+        assertPlanContains(sql, "none_match(array_map(<slot 2> -> <slot 2> > 0, [1,2,3]))");
     }
 
     @Test

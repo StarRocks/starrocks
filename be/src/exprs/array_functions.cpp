@@ -1174,6 +1174,10 @@ StatusOr<ColumnPtr> ArrayFunctions::any_match(FunctionContext* context, const Co
     return ArrayMatch<true>::process(context, columns);
 }
 
+StatusOr<ColumnPtr> ArrayFunctions::none_match(FunctionContext* context, const Columns& columns) {
+    return ArrayMatch<true, /*negate=*/true>::process(context, columns);
+}
+
 StatusOr<ColumnPtr> ArrayFunctions::concat(FunctionContext* ctx, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

@@ -5761,6 +5761,18 @@ TEST_F(ArrayFunctionsTest, array_match_nullable) {
     ASSERT_TRUE(dest_column->get(4).is_null());
     ASSERT_FALSE(dest_column->get(5).get_int8());
     ASSERT_TRUE(dest_column->get(6).get_int8());
+
+    // none_match
+    dest_column = ArrayFunctions::none_match(nullptr, {src_column}).value();
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_FALSE(dest_column->get(0).get_int8());
+    ASSERT_TRUE(dest_column->get(1).get_int8());
+    ASSERT_FALSE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_FALSE(dest_column->get(4).get_int8());
+    ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
 }
 
 TEST_F(ArrayFunctionsTest, array_match_not_null) {
@@ -5794,6 +5806,18 @@ TEST_F(ArrayFunctionsTest, array_match_not_null) {
     ASSERT_TRUE(dest_column->get(4).is_null());
     ASSERT_FALSE(dest_column->get(5).get_int8());
     ASSERT_TRUE(dest_column->get(6).get_int8());
+
+    // none_match
+    dest_column = ArrayFunctions::none_match(nullptr, {src_column}).value();
+    ASSERT_TRUE(dest_column->is_nullable());
+    ASSERT_EQ(dest_column->size(), 7);
+    ASSERT_FALSE(dest_column->get(0).get_int8());
+    ASSERT_TRUE(dest_column->get(1).get_int8());
+    ASSERT_FALSE(dest_column->get(2).get_int8());
+    ASSERT_TRUE(dest_column->get(3).is_null());
+    ASSERT_FALSE(dest_column->get(4).get_int8());
+    ASSERT_TRUE(dest_column->get(5).is_null());
+    ASSERT_TRUE(dest_column->get(6).get_int8());
 }
 
 TEST_F(ArrayFunctionsTest, array_match_only_null) {
@@ -5805,6 +5829,11 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
         ASSERT_TRUE(dest_column->only_null());
 
         dest_column = ArrayMatch<true>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->only_null());
+
+        // none_match
+        dest_column = ArrayFunctions::none_match(nullptr, {src_column}).value();
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->only_null());
     }
@@ -5820,6 +5849,11 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
         dest_column = ArrayMatch<true>::process(nullptr, {src_column});
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->get(0).get_int8());
+
+        // none_match
+        dest_column = ArrayFunctions::none_match(nullptr, {src_column}).value();
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_FALSE(dest_column->get(0).get_int8());
     }
     // test const
     {
@@ -5831,6 +5865,11 @@ TEST_F(ArrayFunctionsTest, array_match_only_null) {
         ASSERT_FALSE(dest_column->get(0).get_int8());
 
         dest_column = ArrayMatch<false>::process(nullptr, {src_column});
+        ASSERT_EQ(dest_column->size(), 3);
+        ASSERT_TRUE(dest_column->get(0).get_int8());
+
+        // none_match
+        dest_column = ArrayFunctions::none_match(nullptr, {src_column}).value();
         ASSERT_EQ(dest_column->size(), 3);
         ASSERT_TRUE(dest_column->get(0).get_int8());
     }

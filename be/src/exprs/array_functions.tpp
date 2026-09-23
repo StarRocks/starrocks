@@ -1022,11 +1022,12 @@ private:
     }
 };
 
-// all/any_match(lambda_func, array1, array2...)-> all/any_match(array_map(lambda_func, array1, array2...))
-// -> all/any_match(bool_array), result is bool type.
-// any_match: if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
-// all_match: if there are false matched, return false, else if there are null, return null, otherwise, return true;
-template <bool isAny>
+// all/any/none_match(lambda_func, array1, array2...)-> all/any/none_match(array_map(lambda_func, array1, array2...))
+// -> all/any/none_match(bool_array), result is bool type.
+// any_match:  if there are true  matched, return true,  else if there are null, return null, otherwise, return false;
+// all_match:  if there are false matched, return false, else if there are null, return null, otherwise, return true;
+// none_match: if there are true  matched, return false, else if there are null, return null, otherwise, return true;
+template <bool isAny, bool negate = false>
 class ArrayMatch {
 public:
     static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
@@ -1076,7 +1077,7 @@ private:
                     }
                 }
                 dest_null_column->get_data()[i] = res != isAny && has_null;
-                dest_data_column->get_data()[i] = res;
+                dest_data_column->get_data()[i] = negate ? !res : res;
             } else { // array_null_map[i] is null, result is null
                 dest_null_column->get_data()[i] = 1;
                 dest_data_column->get_data()[i] = 0;

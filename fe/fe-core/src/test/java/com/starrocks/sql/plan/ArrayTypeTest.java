@@ -780,6 +780,16 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
+    public void testNoneMatch() throws Exception {
+        // the lambda form takes the same array_map rewrite as its any_match/all_match siblings
+        assertContains(getFragmentPlan("select none_match([1,2,3], x -> x > 0)"),
+                "none_match(array_map(<slot 2> -> <slot 2> > 0, [1,2,3]))");
+
+        // the no-lambda form resolves against the registered none_match(ARRAY<BOOLEAN>) signature
+        assertContains(getFragmentPlan("select none_match([true,false])"), "none_match");
+    }
+
+    @Test
     public void testDecimal256ArrayFunctionsRestriction() {
         Throwable exception = assertThrows(SemanticException.class, () ->
                 getFragmentPlan("select array_sum(d_1) from adec256"));
