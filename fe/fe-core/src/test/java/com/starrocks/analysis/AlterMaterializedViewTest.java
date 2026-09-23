@@ -23,9 +23,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -46,6 +48,7 @@ import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
@@ -57,6 +60,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -787,4 +791,80 @@ public class AlterMaterializedViewTest extends MVTestBase  {
         Assertions.assertTrue(mv.isActive());
         Config.max_task_consecutive_fail_count = 10;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMvInactivatedOnIncrementalBreaking() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_brk_t1 (\n" +
+                "   k1 int,\n" +
+                "   k2 date,\n" +
+                "   k3 string\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1);");
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_brk_mv1\n" +
+                "REFRESH MANUAL\n" +
+                "AS select sum(k1), k2, k3 from base_brk_t1 group by k2, k3;");
+        executeInsertSql("insert into base_brk_t1 values(1, '2020-06-02','BJ'),(3,'2020-06-02','SZ');");
+        MaterializedView mv = getMv("test_brk_mv1");
+
+        // Breaking failure must inactivate the MV yet leave the running refresh (and its error) intact.
+        new MockUp<MVTaskRunProcessor>() {
+            @Mock
+            public void executePlan(ExecPlan execPlan, InsertStmt insertStmt) throws Exception {
+                throw new RuntimeException("INCREMENTAL materialized views "
+                        + MaterializedViewExceptions.FE_NON_APPEND_ONLY_MARKER);
+            }
+        };
+        Exception thrown = null;
+        try {
+            refreshMV("test", mv);
+        } catch (Exception e) {
+            thrown = e;
+        }
+
+        Assertions.assertNotNull(thrown, "the breaking error must propagate, not be swallowed");
+        Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+        Assertions.assertEquals(1, task.getConsecutiveFailCount());
+        Assertions.assertNotEquals(Constants.TaskState.PAUSE, task.getState());
+        Assertions.assertFalse(mv.isActive());
+        Assertions.assertTrue(mv.getInactiveReason().contains("incremental refresh broken"),
+                "inactive reason: " + mv.getInactiveReason());
+    }
+
+    /**
+     * ALTER MATERIALIZED VIEW must resolve before it locks.
+     *
+     * <p>Constraint analysis reaches MetadataMgr for every table the constraint names, which is a
+     * connector round trip when that table lives in an external catalog, and the dispatcher holds
+     * the MV's write lock for the whole statement -- so a slow metastore would hold up every reader
+     * of the MV and every transaction publishing into it. Pinned on the property itself (no FE
+     * metadata lock is held while the analysis runs) rather than on where the call sits in the
+     * source, so it keeps holding if the code moves.
+     */
+    @Test
+    public void testAlterMvAnalyzesConstraintsBeforeTakingTheLock() throws Exception {
+        AtomicBoolean analyzed = new AtomicBoolean(false);
+        AtomicBoolean analyzedUnderLock = new AtomicBoolean(false);
+        new MockUp<PropertyAnalyzer>() {
+            @Mock
+            public List<UniqueConstraint> analyzeUniqueConstraint(Invocation invocation,
+                                                                  Map<String, String> properties,
+                                                                  Database db, Table table) {
+                analyzed.set(true);
+                analyzedUnderLock.set(LockHoldDepth.isUnderLock());
+                return invocation.proceed(properties, db, table);
+            }
+        };
+
+        String alterMvSql = "alter materialized view mv1 set (\"unique_constraints\" = \"v1\")";
+        AlterMaterializedViewStmt stmt =
+                (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+        currentState.getLocalMetastore().alterMaterializedView(stmt);
+
+        Assertions.assertTrue(analyzed.get(), "the constraint analysis should have run");
+        Assertions.assertFalse(analyzedUnderLock.get(),
+                "constraint analysis resolves tables through MetadataMgr and must not run under the MV's lock");
+    }
+>>>>>>> 79226b7 ([BugFix] Keep MV cache maintenance and ALTER MATERIALIZED VIEW off connector I/O under the metadata lock (#79169))
 }
