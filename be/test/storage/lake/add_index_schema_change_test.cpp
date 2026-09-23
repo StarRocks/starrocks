@@ -21,6 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
+#include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -1980,53 +1981,78 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlaid_column_rewrites_cols_with_inlined_
 }
 
 // An all-overlaid build bypasses the base index builders and their memory
-// checks. Its SegmentWriter also accumulates the bitmap until finalize, so it
-// must enforce the alter's limit on the pool worker and clean up the new file.
+// checks. Charge the tracker after appending the first batch, so the failure
+// must come from the rewrite rather than an earlier page-read memory check.
 TEST_F(AddIndexSchemaChangeTest, dcg_overlay_pool_thread_trips_mem_limit_and_cleans_file) {
-    auto base_metadata = create_base_tablet_metadata();
-    auto tablet_id = base_metadata->id();
-    CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
-    auto base_schema = TabletSchema::create(base_metadata->schema());
-    int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, /*nrows=*/100);
+    size_t expected_cols_files = 0;
+    // 100 rows exercise the final pre-finalize check; 5000 exercise the next
+    // loop iteration's check before another batch can be appended.
+    for (int nrows : {100, 5000}) {
+        SCOPED_TRACE(nrows);
+        auto base_metadata = create_base_tablet_metadata();
+        auto tablet_id = base_metadata->id();
+        CHECK_OK(_tablet_manager->put_tablet_metadata(*base_metadata));
+        auto base_schema = TabletSchema::create(base_metadata->schema());
+        int64_t version = write_one_rowset(tablet_id, /*version=*/1, base_schema, nrows);
 
-    ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
-    auto md = std::make_shared<TabletMetadata>(*ro_md);
-    const uint32_t rssid = rssid_of(*md, 0, 0);
-    const auto original_cols = write_dcg_overlay(md, rssid, {_c1_uid}, /*nrows=*/100, /*value_base=*/1000);
-    version = put_metadata_at_next_version(md);
+        ASSIGN_OR_ABORT(auto ro_md, _tablet_manager->get_tablet_metadata(tablet_id, version, /*fill_cache=*/false));
+        auto md = std::make_shared<TabletMetadata>(*ro_md);
+        const uint32_t rssid = rssid_of(*md, 0, 0);
+        const auto original_cols = write_dcg_overlay(md, rssid, {_c1_uid}, nrows, /*value_base=*/1000);
+        ++expected_cols_files;
+        version = put_metadata_at_next_version(md);
 
-    std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("dcg_sc_test").set_min_threads(0).set_max_threads(1).build(&pool));
-    auto vt = versioned_at(tablet_id, version);
-    std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
-    AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema(), pool.get());
+        std::unique_ptr<ThreadPool> pool;
+        ASSERT_OK(ThreadPoolBuilder("dcg_sc_test").set_min_threads(0).set_max_threads(1).build(&pool));
+        auto vt = versioned_at(tablet_id, version);
+        std::vector<TabletIndexPB> indexes{make_index(IndexType::BITMAP, _c1_uid)};
+        AddIndexSchemaChange sc(_tablet_manager.get(), next_id(), vt, vt, indexes, version, vt.get_schema(),
+                                pool.get());
 
-    // BE_TEST does not account mallocs, so exceed the limit explicitly. The
-    // worker can observe this only if run() installs the caller's tracker.
-    MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "dcg_sc_test", nullptr);
-    sc_tracker.consume(sc_tracker.limit() + 1);
-    TxnLogPB_OpAddIndex op;
-    Status st;
-    {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
-        st = sc.run(&op);
-    }
-    sc_tracker.release(sc_tracker.consumption());
-    EXPECT_TRUE(st.is_mem_limit_exceeded()) << st;
-    EXPECT_EQ(0, op.segment_entries_size());
-    EXPECT_EQ(0, op.dcg_entries_size());
+        // BE_TEST does not account mallocs. Simulate the bitmap writer's growth
+        // only after a batch has been written and the output file exists.
+        MemTracker sc_tracker(MemTrackerType::SCHEMA_CHANGE_TASK, /*byte_limit=*/1024, "dcg_sc_test", nullptr);
+        int appended_batches = 0;
+        auto* sync = SyncPoint::GetInstance();
+        DeferOp clear_sync([&] {
+            sync->DisableProcessing();
+            sync->ClearAllCallBacks();
+        });
+        sync->SetCallBack("AddIndexSchemaChange::rewrite_dcg_for_segment:after_append", [&](void*) {
+            EXPECT_EQ(&sc_tracker, CurrentThread::mem_tracker());
+            if (++appended_batches == 1) {
+                sc_tracker.consume(sc_tracker.limit() + 1);
+            }
+        });
+        sync->EnableProcessing();
 
-    const auto dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
-    ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
-    std::vector<std::string> cols_files;
-    ASSERT_OK(fs->iterate_dir(dir, [&](std::string_view name) {
-        if (name.size() > 5 && name.substr(name.size() - 5) == ".cols") {
-            cols_files.emplace_back(name);
+        TxnLogPB_OpAddIndex op;
+        Status st;
+        {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&sc_tracker);
+            st = sc.run(&op);
         }
-        return true;
-    }));
-    ASSERT_EQ(1, cols_files.size());
-    EXPECT_EQ(original_cols, cols_files.front());
+        sc_tracker.release(sc_tracker.consumption());
+        EXPECT_EQ(1, appended_batches);
+        EXPECT_TRUE(st.is_mem_limit_exceeded()) << st;
+        EXPECT_NE(std::string::npos, st.to_string().find("AddIndexSchemaChange")) << st;
+        EXPECT_EQ(0, op.segment_entries_size());
+        EXPECT_EQ(0, op.dcg_entries_size());
+
+        const auto dir = lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName);
+        ASSIGN_OR_ABORT(auto fs, FileSystemFactory::CreateSharedFromString(dir));
+        size_t cols_files = 0;
+        bool original_exists = false;
+        ASSERT_OK(fs->iterate_dir(dir, [&](std::string_view name) {
+            if (name.size() > 5 && name.substr(name.size() - 5) == ".cols") {
+                ++cols_files;
+                original_exists |= (name == original_cols);
+            }
+            return true;
+        }));
+        EXPECT_EQ(expected_cols_files, cols_files);
+        EXPECT_TRUE(original_exists);
+    }
 }
 
 // A metadata-only DROP followed by a write can leave an old rowset pinned to a
@@ -2077,8 +2103,8 @@ TEST_F(AddIndexSchemaChangeTest, dcg_overlay_does_not_seed_metacache_with_curren
     // instead of receiving an already-cached Segment without its reader.
     size_t footer_hint = 16 * 1024;
     ASSIGN_OR_ABORT(auto reader_seg, _tablet_manager->load_segment(seg_fi, /*segment_id=*/0, &footer_hint,
-                                                                  LakeIOOptions{.fill_data_cache = false},
-                                                                  /*fill_meta_cache=*/true, base_schema));
+                                                                   LakeIOOptions{.fill_data_cache = false},
+                                                                   /*fill_meta_cache=*/true, base_schema));
     EXPECT_TRUE(reader_seg->column_with_uid(_c3_uid) != nullptr);
 }
 

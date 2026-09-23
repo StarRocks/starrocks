@@ -163,6 +163,9 @@ set enable_profile = true;
 set enable_async_profile = false;
 -- result:
 -- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
 select count(*) from t_pu_then_bloom where s1 = 'mm';
 -- result:
 0

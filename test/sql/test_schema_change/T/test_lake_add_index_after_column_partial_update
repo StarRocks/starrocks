@@ -110,6 +110,7 @@ select * from t_pu_then_bloom order by k1;
 -- the column has no bloom filter and therefore cannot prove index coverage.
 set enable_profile = true;
 set enable_async_profile = false;
+set cbo_enable_low_cardinality_optimize = false;
 select count(*) from t_pu_then_bloom where s1 = 'mm';
 create table profile_lines_bloom properties("replication_num"="1") as
     select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);

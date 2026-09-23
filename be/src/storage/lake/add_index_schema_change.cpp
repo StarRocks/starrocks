@@ -17,6 +17,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/testutil/sync_point.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
@@ -649,6 +650,7 @@ Status AddIndexSchemaChange::rewrite_dcg_for_segment(const RowsetMetadataPB& row
         ChunkHelper::padding_char_columns(char_field_indexes, chunk_schema, write_schema, chunk.get());
         RETURN_IF_ERROR(segment_writer->append_chunk(*chunk));
         written_rows += n;
+        TEST_SYNC_POINT_CALLBACK("AddIndexSchemaChange::rewrite_dcg_for_segment:after_append", &written_rows);
     }
 
     // The last batch can cross the limit before finalize serializes the index.
