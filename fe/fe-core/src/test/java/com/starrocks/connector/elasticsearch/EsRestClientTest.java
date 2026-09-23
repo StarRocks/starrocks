@@ -135,7 +135,7 @@ public class EsRestClientTest {
         List<Request> captured = Collections.synchronizedList(new ArrayList<>());
         mockMappingRequests(mappings, captured);
 
-        int roundsPerIndex = 10;
+        int roundsPerIndex = 20;
         int taskCount = MAPPING_INDICES.length * roundsPerIndex;
         CountDownLatch ready = new CountDownLatch(taskCount);
         CountDownLatch start = new CountDownLatch(1);
