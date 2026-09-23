@@ -32,6 +32,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @TestMethodOrder(MethodOrderer.MethodName.class)
 public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBase {
@@ -607,6 +608,54 @@ public class MaterializedViewTextBasedRewriteTest extends MaterializedViewTestBa
             Assertions.assertTrue(
                     CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty(),
                     "MV must leave the ast cache even when its ast keys cannot be re-derived");
+        });
+    }
+
+    /**
+     * loadMVAstCache derives the ast keys before it publishes them, and deriving them parses and analyzes the
+     * define query -- long enough for the mv to stop being cacheable in the meantime, by being dropped,
+     * replaced, or having rewrite turned off. Publishing anyway leaves an entry that nothing will ever remove,
+     * because the remover is evictMaterializedViewCache and whatever made the mv uncacheable has already run
+     * it.
+     *
+     * <p>Reproduced without threads, by making the second read of the condition disagree with the first --
+     * which is exactly what that interleaving does.
+     */
+    @Test
+    public void testAstCacheIsNotPublishedWhenTheMvStopsBeingCacheable() throws Exception {
+        String mvName = "test_mv_ast_publish_recheck";
+        String createMvSql = "create materialized view " + mvName + " distributed by random refresh manual " +
+                "as select user_id, time, sum(tag_id) from user_tags group by user_id, time";
+
+        starRocksAssert.withMaterializedView(createMvSql, name -> {
+            MaterializedView mv = getMv(MATERIALIZED_DB_NAME, mvName);
+
+            // Control: with nothing in the way this path does publish, so an empty cache at the end of the
+            // test means the re-check refused it and not that the load never ran.
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+            CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(mv);
+            Assertions.assertFalse(
+                    CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty(),
+                    "a cacheable MV should reach the ast cache");
+
+            CachingMvPlanContextBuilder.getInstance().evictMaterializedViewCache(mv);
+            Assertions.assertTrue(
+                    CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty());
+
+            // Cacheable on the way in, no longer cacheable by the time the ast keys are ready.
+            AtomicInteger reads = new AtomicInteger();
+            new MockUp<MaterializedView>() {
+                @Mock
+                public boolean isEnableRewrite() {
+                    return reads.getAndIncrement() == 0;
+                }
+            };
+
+            CachingMvPlanContextBuilder.getInstance().cacheMaterializedView(mv);
+
+            Assertions.assertTrue(
+                    CachingMvPlanContextBuilder.getInstance().getAstsOfRelatedMvs(Set.of(mv)).isEmpty(),
+                    "an MV that stopped being cacheable must not be published into the ast cache");
         });
     }
 }
