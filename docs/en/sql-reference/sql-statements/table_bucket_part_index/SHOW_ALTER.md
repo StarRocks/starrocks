@@ -21,7 +21,7 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
 - Show the execution of operations of adding or deleting the rollup index.
 
     ```sql
-    SHOW ALTER TABLE ROLLUP [FROM db_name]
+    SHOW ALTER TABLE ROLLUP [FROM db_name] [WHERE TableName|CreateTime|FinishedTime|State] [ORDER BY] [LIMIT]
     ```
 
 ## Parameters
@@ -33,6 +33,8 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
   - If `ROLLUP` is specified, this statement shows operations of adding or deleting the rollup index.
 
 - `db_name`: optional. If `db_name` is not specified, the current database is used by default.
+
+- `WHERE`, `ORDER BY` and `LIMIT`: optional, and supported for every alter type. The columns they accept are `TableName`, `CreateTime`, the finish time, and `State`. The finish time is returned as `FinishTime` by `COLUMN` and `OPTIMIZE`, and as `FinishedTime` by `ROLLUP`; `ROLLUP` accepts either spelling.
 
 ## Examples
 
@@ -52,11 +54,12 @@ SHOW ALTER TABLE shows the execution of the ongoing ALTER TABLE operations, incl
     SHOW ALTER TABLE ROLLUP FROM example_db;
     ```
 
-3. Show the execution of the most recent operation of modifying columns or optimizing table schema in a specified table.
+3. Show the execution of the most recent operation of modifying columns, optimizing table schema, or adding a rollup index in a specified table.
 
     ```sql
     SHOW ALTER TABLE COLUMN WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     SHOW ALTER TABLE OPTIMIZE WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1; 
+    SHOW ALTER TABLE ROLLUP WHERE TableName = "table1" ORDER BY CreateTime DESC LIMIT 1;
     ```
 
 ## References
