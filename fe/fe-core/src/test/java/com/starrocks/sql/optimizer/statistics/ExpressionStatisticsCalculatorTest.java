@@ -3672,4 +3672,50 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(expectedNonMcvRows, actualBuckets.get(0).getCount());
         Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
     }
+    @Test
+    public void testIfRoutesNullConditionToElse() {
+        // Given IF(col > 5, thenCol, elseCol) over 1000 rows where col is 40% null, so the condition is
+        // NULL for 400 rows and SQL evaluates the ELSE branch for those, and neither branch is nullable
+        // CASE WHEN the condition has NULL rows THEN they are counted in the ELSE branch, so the result
+        // covers every input row ELSE they are lost and the result undercounts END
+
+        final long rowCount = 1000;
+        final double conditionNullFraction = 0.4;
+        final long expectedTotalRows = 1000L;
+
+        final var col = new ColumnRefOperator(0, IntegerType.BIGINT, "col", true);
+        final var thenCol = new ColumnRefOperator(1, IntegerType.BIGINT, "thenCol", true);
+        final var elseCol = new ColumnRefOperator(2, IntegerType.BIGINT, "elseCol", true);
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(rowCount)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(10)
+                        .setNullsFraction(conditionNullFraction)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(10)
+                        .build())
+                .addColumnStatistic(thenCol, ColumnStatistic.builder()
+                        .setMinValue(0).setMaxValue(10)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(5)
+                        .setHistogram(new Histogram(Map.of("1", 200L)))
+                        .build())
+                .addColumnStatistic(elseCol, ColumnStatistic.builder()
+                        .setMinValue(5).setMaxValue(20)
+                        .setNullsFraction(0.0)
+                        .setAverageRowSize(8)
+                        .setDistinctValuesCount(5)
+                        .setHistogram(new Histogram(Map.of("2", 200L)))
+                        .build())
+                .build();
+        final var condition =
+                new BinaryPredicateOperator(BinaryType.GT, col, ConstantOperator.createBigint(5));
+        final var ifOp = new CallOperator(FunctionSet.IF, IntegerType.BIGINT,
+                Lists.newArrayList(condition, thenCol, elseCol));
+
+        final var actualStatistic = ExpressionStatisticCalculator.calculate(ifOp, statistics);
+
+        Assertions.assertEquals(expectedTotalRows, actualStatistic.getHistogram().getTotalRows());
+    }
 }

@@ -1381,14 +1381,20 @@ public class ExpressionStatisticCalculator {
                     // If condition MCVs are available, use branch row weights and collapse
                     // stats to the surviving branch when one side is unreachable.
                     final var conditionHistogram = condStat.getHistogram();
+                    long trueRows = 0;
+                    long totalFalseRows = 0;
                     if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
-                        final long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+                        trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
                         final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
-                        final long totalRows = trueRows + falseRows;
+                        final long nonNullRows = trueRows + falseRows;
+                        // IF(NULL, a, b) redirects to the ELSE branch, just like IF(false, a, b). Therefore:
+                        totalFalseRows = falseRows + Math.max(0L, Math.round(rowCount) - nonNullRows);
+
+                        final long totalRows = trueRows + totalFalseRows;
                         if (totalRows > 0) {
                             final double trueWeight = (double) trueRows / totalRows;
-                            final double falseWeight = (double) falseRows / totalRows;
+                            final double falseWeight = (double) totalFalseRows / totalRows;
                             nullsFraction = thenStat.getNullsFraction() * trueWeight
                                     + elseStat.getNullsFraction() * falseWeight;
 
@@ -1397,7 +1403,7 @@ public class ExpressionStatisticCalculator {
                                 distinctValues = elseStat.getDistinctValuesCount();
                                 minValue = elseStat.getMinValue();
                                 maxValue = elseStat.getMaxValue();
-                            } else if (falseRows == 0) {
+                            } else if (totalFalseRows == 0) {
                                 // Only THEN branch is reachable
                                 distinctValues = thenStat.getDistinctValuesCount();
                                 minValue = thenStat.getMinValue();
@@ -1406,7 +1412,8 @@ public class ExpressionStatisticCalculator {
                         }
                     }
 
-                    final var histogram = buildIfMcv(condStat, thenStat, elseStat, minValue, maxValue);
+                    final var histogram = buildIfMcv(condStat, thenStat, elseStat, minValue, maxValue,
+                            trueRows, totalFalseRows);
 
                     return ColumnStatistic.builder() //
                             .setMinValue(minValue) //
@@ -1450,15 +1457,12 @@ public class ExpressionStatisticCalculator {
                                      ColumnStatistic thenStat,
                                      ColumnStatistic elseStat,
                                      double minValue,
-                                     double maxValue) {
+                                     double maxValue,
+                                     long trueRows,
+                                     long totalFalseRows) {
             if (condStat.getHistogram() == null) {
                 return null;
             }
-
-            final var conditionMcv = condStat.getHistogram().getMCV();
-
-            long trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
-            long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
 
             final boolean thenHasHist = thenStat.getHistogram() != null;
             final boolean elseHasHist = elseStat.getHistogram() != null;
@@ -1471,7 +1475,7 @@ public class ExpressionStatisticCalculator {
             // If one branch is unreachable, return the other branch MCV.
             if (trueRows == 0 && elseHasHist) {
                 return elseStat.getHistogram();
-            } else if (falseRows == 0 && thenHasHist) {
+            } else if (totalFalseRows == 0 && thenHasHist) {
                 return thenStat.getHistogram();
             }
 
@@ -1482,14 +1486,14 @@ public class ExpressionStatisticCalculator {
 
             Map<String, Long> mcvs = new HashMap<>();
             scaleBranchMcvAndMerge(thenStat.getHistogram().getMCV(), trueRows, mcvs);
-            scaleBranchMcvAndMerge(elseStat.getHistogram().getMCV(), falseRows, mcvs);
+            scaleBranchMcvAndMerge(elseStat.getHistogram().getMCV(), totalFalseRows, mcvs);
 
             if (mcvs.isEmpty()) {
                 return null;
             }
 
             final double nonNullRows = trueRows * (1 - thenStat.getNullsFraction())
-                    + falseRows * (1 - elseStat.getNullsFraction());
+                    + totalFalseRows * (1 - elseStat.getNullsFraction());
             return Histogram.ofSingleBucket(minValue, maxValue, nonNullRows, mcvs);
         }
 
