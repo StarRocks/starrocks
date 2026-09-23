@@ -5,6 +5,8 @@ displayed_sidebar: docs
 
 # 从 Apache Flink® 持续导入
 
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
+
 StarRocks 提供 Apache Flink® 连接器 (以下简称 Flink connector)，可以通过 Flink 导入数据至 StarRocks表。
 
 基本原理是 Flink connector 在内存中积攒小批数据，再通过 [Stream Load](./StreamLoad.md) 一次性导入 StarRocks。
@@ -91,6 +93,10 @@ Flink connector JAR 文件的命名格式如下：
     > **注意**：
     >
     > 未正式发布的 Flink connector 的名称包含 `SNAPSHOT` 后缀。
+
+## 连接 StarRocks
+
+<FlinkStarRocksConnection />
 
 ## 参数说明
 

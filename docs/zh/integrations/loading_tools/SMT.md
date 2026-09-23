@@ -5,7 +5,7 @@ displayed_sidebar: docs
 
 # StarRocks migration tool（SMT）
 
-StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工具，用于将源数据库的数据通过 Flink 导入 StarRocks。其主要有两个功能：
+StarRocks migration tool（简称 SMT）是一个命令行工具，用于生成通过 Flink 将源数据库的数据导入 StarRocks 所需的 SQL。其主要有两个功能：
 
 - 根据源数据库和目标 StarRocks 集群的信息，生成 StarRocks 建表语句。
 - 生成 Flink 的 SQL 客户端 可执行的 SQL 语句，以提交同步数据的 Flink job，简化链路中全量或增量数据同步流程。
@@ -23,6 +23,22 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 | TiDB       | 支持       | 支持     | 支持     |
 
 下载链接：https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2
+
+## SMT 的作用与限制
+
+SMT 只负责生成 SQL 文件，生成后即退出。它读取源数据库中的表定义，并在 `result` 目录下生成两类文件：
+
+- `starrocks-create.*.sql`：CREATE TABLE 语句，需要您在 StarRocks 中执行。
+- `flink-create.*.sql`：定义 source table 和 sink table 并提交 `INSERT INTO ... SELECT` 作业的 Flink SQL，需要您在 Flink SQL 客户端中执行。
+
+SMT 不会启动、运行或连接 Flink，也不会迁移任何数据。您仍然需要安装并运行 Flink 集群，并为其配置源数据库对应的 Flink CDC connector 和 [StarRocks Flink connector](../../loading/Flink-connector-starrocks.md)，然后自行执行生成的文件。
+
+### 不使用 SMT 同步数据
+
+SMT 不是必需的。您也可以：
+
+- 使用 [Flink CDC pipeline](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/core-concept/data-pipeline/)。Pipeline 通过一个 YAML 文件定义，会自动创建 StarRocks 表并执行同步。参见 [从 PostgreSQL 实时同步](../../loading/Flink_cdc_postgres.md)；对于 MySQL，参见 Flink CDC 文档中的 [Streaming ELT from MySQL to StarRocks](https://nightlies.apache.org/flink/flink-cdc-docs-release-3.6/docs/get-started/quickstart-for-1.20/mysql-to-starrocks/)。
+- 自行创建 StarRocks 表，并使用 [StarRocks Flink connector](../../loading/Flink-connector-starrocks.md) 作为 sink 编写 Flink SQL。该方式适用于 Flink 能够读取的任何数据源。
 
 ## SMT 使用步骤
 
@@ -218,6 +234,12 @@ StarRocks migration tool（简称 SMT）是 StarRocks 提供的数据迁移工�
 
 ## 同步 PostgreSQL 到 StarRocks
 
+:::tip
+
+使用 Flink CDC 3.5 或更高版本时，Flink CDC pipeline 无需 SMT 即可将 PostgreSQL 同步到 StarRocks，并会自动创建 StarRocks 表。详细步骤请参见 [从 PostgreSQL 实时同步](../../loading/Flink_cdc_postgres.md)。
+
+:::
+
 ### 简介
 
 通过 Flink CDC connector 和 SMT 可以实现 PostgreSQL 数据的秒级同步。
@@ -322,9 +344,9 @@ SMT 可以根据 PostgreSQL 和 StarRocks 的集群信息和表结构自动生�
 2. 如何开启 PostgreSQL WAL？
 
     ```Bash
-    # 开启连接权限
-    echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
-    echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
+    # 允许 Flink 所在主机连接。将 10.0.0.0/24 替换为这些主机的地址段。
+    echo "host all all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
+    echo "host replication all 10.0.0.0/24 scram-sha-256" >> pg_hba.conf
     # 开启 wal logical 复制
     echo "wal_level = logical" >> postgresql.conf
     echo "max_wal_senders = 2" >> postgresql.conf
