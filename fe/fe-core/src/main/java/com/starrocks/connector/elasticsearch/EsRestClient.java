@@ -182,12 +182,7 @@ public class EsRestClient {
      * @param path the path must not leading with '/'
      * @return response
      */
-<<<<<<< HEAD
-    private String execute(String path) throws StarRocksConnectorException {
-        int retrySize = nodes.length;
-=======
     String execute(String path) throws StarRocksConnectorException {
->>>>>>> 7117e73 ([BugFix] fix elasticsearch request error because of url confusion on concurrent queries (#79391))
         StarRocksConnectorException scratchExceptionForThrow = null;
         OkHttpClient client;
         if (sslEnabled) {
