@@ -427,8 +427,6 @@ under the License.
                 <scope>test</scope>
             </dependency>
 
-<<<<<<< HEAD
-=======
             <!-- https://mvnrepository.com/artifact/com.unboundid/unboundid-ldapsdk -->
             <!-- In-process LDAP directory server for tests. Used under the Apache License 2.0,
                  which this SDK offers as of version 5.0.0. -->
@@ -438,27 +436,6 @@ under the License.
                 <version>${unboundid.ldapsdk.version}</version>
                 <scope>test</scope>
             </dependency>
-            <!-- https://mvnrepository.com/artifact/org.mockito/mockito-core -->
-            <dependency>
-                <groupId>org.mockito</groupId>
-                <artifactId>mockito-core</artifactId>
-                <version>${mockito.version}</version>
-                <scope>test</scope>
-            </dependency>
-            <!-- assertj-core also pulls byte-buddy; pin both artifacts so Maven's
-                 nearest-wins mediation cannot hand Mockito a pre-Java-21 Byte Buddy -->
-            <dependency>
-                <groupId>net.bytebuddy</groupId>
-                <artifactId>byte-buddy</artifactId>
-                <version>${bytebuddy.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>net.bytebuddy</groupId>
-                <artifactId>byte-buddy-agent</artifactId>
-                <version>${bytebuddy.version}</version>
-            </dependency>
-
->>>>>>> 67f917d ([Enhancement] Resolve LDAP groups from the user's memberOf attribute (#79254))
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>jprotobuf-starrocks</artifactId>

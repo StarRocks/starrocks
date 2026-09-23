@@ -36,9 +36,6 @@ alter security integration ldap_pattern set ("authentication_ldap_simple_bind_dn
 -- !result
 drop security integration ldap_pattern;
 -- result:
-<<<<<<< HEAD
--- !result
-=======
 -- !result
 -- name: test_ldap_security_integration_group_source
 create security integration ldap_group_source properties(
@@ -66,4 +63,3 @@ create security integration ldap_bad_group_source properties("type"="authenticat
 -- result:
 E: (1064, "Getting analyzing error. Detail message: invalid value 'memberof_only' for property 'authentication_ldap_simple_group_source', legal values are: group_provider, memberof, both.")
 -- !result
->>>>>>> 67f917d ([Enhancement] Resolve LDAP groups from the user's memberOf attribute (#79254))

@@ -10,9 +10,6 @@ create security integration ldap_pattern properties("type"="authentication_ldap_
 [UC]show create security integration ldap_pattern;
 alter security integration ldap_pattern set ("authentication_ldap_simple_bind_dn_pattern"="cn=${USER},ou=Staff,dc=example,dc=com");
 [UC]show create security integration ldap_pattern;
-<<<<<<< HEAD
-drop security integration ldap_pattern;
-=======
 drop security integration ldap_pattern;
 
 -- name: test_ldap_security_integration_group_source
@@ -25,4 +22,3 @@ alter security integration ldap_group_source set ("authentication_ldap_simple_gr
 drop security integration ldap_group_source;
 -- ... and on CREATE, which goes through checkProperty()
 create security integration ldap_bad_group_source properties("type"="authentication_ldap_simple", "authentication_ldap_simple_group_source"="memberof_only");
->>>>>>> 67f917d ([Enhancement] Resolve LDAP groups from the user's memberOf attribute (#79254))

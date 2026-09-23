@@ -42,11 +42,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
-<<<<<<< HEAD
-=======
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
->>>>>>> 67f917d ([Enhancement] Resolve LDAP groups from the user's memberOf attribute (#79254))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -78,14 +75,11 @@ public class ExecuteAsExecutorTest {
 
     @BeforeEach
     public void setUp() throws Exception {
-<<<<<<< HEAD
         // Mock EditLog
         EditLog editLog = spy(new EditLog(null));
         doNothing().when(editLog).logEdit(anyShort(), any());
         GlobalStateMgr.getCurrentState().setEditLog(editLog);
-=======
         savedGroupProvider = Config.group_provider;
->>>>>>> 67f917d ([Enhancement] Resolve LDAP groups from the user's memberOf attribute (#79254))
 
         authenticationMgr = new AuthenticationMgr();
         GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
