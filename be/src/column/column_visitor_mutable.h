@@ -59,6 +59,7 @@ public:
     virtual Status visit(PercentileColumn* column);
     virtual Status visit(JsonColumn* column);
     virtual Status visit(VariantColumn* column);
+    virtual Status visit(FileColumn* column);
     virtual Status visit(FixedLengthColumn<int96_t>* column);
     virtual Status visit(FixedLengthColumn<uint24_t>* column);
     virtual Status visit(FixedLengthColumn<decimal12_t>* column);

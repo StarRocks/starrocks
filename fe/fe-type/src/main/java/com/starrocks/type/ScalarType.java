@@ -189,6 +189,7 @@ public class ScalarType extends Type implements Cloneable {
             case PERCENTILE:
             case JSON:
             case VARIANT:
+            case FILE:
             case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
@@ -307,8 +308,8 @@ public class ScalarType extends Type implements Cloneable {
 
     @Override
     public boolean isSupported() {
-        // BINARY and UNKNOWN_TYPE is unsupported
-        return type != PrimitiveType.BINARY && type != PrimitiveType.UNKNOWN_TYPE && !isGeoType();
+        // BINARY and UNKNOWN_TYPE is unsupported; GEO and FILE are read-only external types with no DDL/storage.
+        return type != PrimitiveType.BINARY && type != PrimitiveType.UNKNOWN_TYPE && !isGeoType() && !isFileType();
     }
 
     @Override

@@ -73,7 +73,7 @@ subprojects {
         set("log4j.version", "2.19.0")
         set("nimbusds.version", "9.37.2")
         set("odps.version", "0.48.7-public")
-        set("paimon.version", "1.3.1")
+        set("paimon.version", "2.0.0")
         set("parquet.version", "1.16.0")
         set("ranger.version", "2.9.0")
         set("orc.version", "1.9.1")

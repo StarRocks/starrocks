@@ -712,6 +712,7 @@ const FieldConverter* get_field_converter(LogicalType from_type, LogicalType to_
         case TYPE_MAX_VALUE:
         case TYPE_GEOGRAPHY:
         case TYPE_GEOMETRY:
+        case TYPE_FILE:
             return nullptr;
         }
         DCHECK(false) << "unreachable path";
