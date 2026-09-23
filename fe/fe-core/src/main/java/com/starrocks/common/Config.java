@@ -5324,6 +5324,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+
     @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
     public static String ai_default_embedding_endpoint = "";
 
@@ -5332,4 +5333,38 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
     public static String ai_default_embedding_provider = "";
+
+    @ConfField(comment = "Use a bot/system JWT identity (client-credentials flow) for background tasks " +
+            "such as MV async refresh and Iceberg stats collection, instead of running unauthenticated")
+    public static boolean use_bot_for_background_tasks = false;
+
+    @ConfField(comment = "OAuth2 client id used to fetch the bot JWT for background tasks")
+    public static String background_task_client_id = "";
+
+    @ConfField(comment = "OAuth2 client secret used to fetch the bot JWT for background tasks")
+    public static String background_task_client_password = "";
+
+    @ConfField(comment = "OAuth2 token endpoint base URL used to fetch the bot JWT for background tasks")
+    public static String background_task_client_token_issuer_url = "";
+
+    @ConfField(comment = "OAuth2 scope requested when fetching the bot JWT for background tasks")
+    public static String background_task_client_scope = "";
+
+    @ConfField(comment = "OAuth2 audience requested when fetching the bot JWT for background tasks")
+    public static String background_task_client_audience = "";
+
+    @ConfField(comment = "OAuth2 issuer requested when fetching the bot JWT for background tasks")
+    public static String background_task_client_issuer = "";
+
+    @ConfField(comment = "JWKS URL used to validate the bot JWT for background tasks")
+    public static String background_task_client_token_jwks_url = "";
+
+    @ConfField(comment = "JWT claim field used as the principal when fetching the bot JWT for background tasks")
+    public static String background_task_client_principal_field = "";
+
+    @ConfField(comment = "Connection timeout, in seconds, for the HTTP client used to fetch the bot JWT")
+    public static int background_task_http_client_connection_timeout_s = 30;
+
+    @ConfField(comment = "Read timeout, in seconds, for the HTTP client used to fetch the bot JWT")
+    public static int background_task_http_client_read_timeout_s = 30;
 }
