@@ -50,18 +50,18 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
      * {@code targetToSourceColumnNames} re-points each projected target column at the FILES column
      * that backs it. An EMPTY map means the file's columns already carry the target's names, which
      * is what the three-argument constructor below asserts for its callers.
-     * {@code targetToConstantPartitionSql} carries the partition columns the load feeds with a
-     * literal rather than a FILES column.
+     * {@code targetToConstantSql} carries the key columns the load feeds with a literal rather
+     * than a FILES column.
      */
     protected record Source(
             Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource,
             String wherePredicateSqlOrNull, Map<String, String> targetToSourceColumnNames,
-            Map<String, String> targetToConstantPartitionSql) {
+            Map<String, String> targetToConstantSql) {
         public Source {
             Objects.requireNonNull(filesProperties, "filesProperties");
             Objects.requireNonNull(computeResource, "computeResource");
             Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
-            Objects.requireNonNull(targetToConstantPartitionSql, "targetToConstantPartitionSql");
+            Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
             if (totalFileBytes < 0) {
                 throw new IllegalArgumentException("totalFileBytes must be non-negative, was " + totalFileBytes);
             }
@@ -98,11 +98,11 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
         List<Column> sortKeyColumns = request.getSortKey();
         List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
         Map<String, String> targetToSource = source.targetToSourceColumnNames();
+        Map<String, String> targetToConstantSql = source.targetToConstantSql();
         return new SampleSpec(fromClauseSql, source.wherePredicateSqlOrNull(),
                 source.totalFileBytes(), source.computeResource(),
-                filesProjectionIdents(sortKeyColumns, targetToSource),
-                filesPartitionProjections(partitionSourceColumns, targetToSource,
-                        source.targetToConstantPartitionSql()),
+                filesProjections(sortKeyColumns, targetToSource, targetToConstantSql),
+                filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql),
                 sortKeyColumns, partitionSourceColumns);
     }
 
@@ -113,19 +113,19 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
     }
 
     /**
-     * Like {@link #filesProjectionIdents}, except that a partition column the load feeds with a
-     * literal is projected as that literal cast to the column type.
+     * Like {@link #filesProjectionIdents}, except that a column the load feeds with a literal is
+     * projected as that literal cast to the column type.
      */
-    private static List<String> filesPartitionProjections(
-            List<Column> partitionColumns, Map<String, String> targetToSourceColumnNames,
-            Map<String, String> targetToConstantPartitionSql) throws StarRocksException {
-        if (targetToConstantPartitionSql.isEmpty()) {
-            return filesProjectionIdents(partitionColumns, targetToSourceColumnNames);
+    static List<String> filesProjections(
+            List<Column> columns, Map<String, String> targetToSourceColumnNames,
+            Map<String, String> targetToConstantSql) throws StarRocksException {
+        if (targetToConstantSql.isEmpty()) {
+            return filesProjectionIdents(columns, targetToSourceColumnNames);
         }
-        List<String> projections = InsertSelectSourceColumns.partitionProjections(
-                partitionColumns, targetToSourceColumnNames, targetToConstantPartitionSql);
+        List<String> projections = InsertSelectSourceColumns.projections(
+                columns, targetToSourceColumnNames, targetToConstantSql);
         if (projections == null) {
-            throw new StarRocksException("a partition column has neither a FILES column nor a constant");
+            throw new StarRocksException("a projected column has neither a FILES column nor a constant");
         }
         return projections;
     }

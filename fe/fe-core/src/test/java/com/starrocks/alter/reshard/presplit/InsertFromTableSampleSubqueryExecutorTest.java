@@ -213,6 +213,31 @@ class InsertFromTableSampleSubqueryExecutorTest {
         Assertions.assertEquals("2026-09-17", rows.get(0).partitionSourceTuple().get(0).getStringValue());
     }
 
+    @Test
+    void literalFedSortKeyColumnIsProjectedAndDecodedIntoTheSortKeyTuple() throws Exception {
+        // ORDER BY (dt, k) with '20260917' AS dt: the boundary tuple must carry the DATE the rows have.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", \"10\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(new Column("dt", DateType.DATE), bigintColumn("k")), List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT CAST('20260917' AS date), `k` FROM"),
+                "the literal stands in for the sort-key column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals("2026-09-17", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(1).getStringValue());
+    }
+
     // ---------------------------------------------------------------------------
     // Error-path tests
     // ---------------------------------------------------------------------------

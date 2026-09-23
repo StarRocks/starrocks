@@ -57,7 +57,7 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
                 insertFromFilesContext.computeResource(),
                 insertFromFilesContext.wherePredicateSql(),
                 insertFromFilesContext.targetToSourceColumnNames(),
-                insertFromFilesContext.targetToConstantPartitionSql());
+                insertFromFilesContext.targetToConstantSql());
     }
 
     private static long sumFileBytes(List<TBrokerFileStatus> fileStatuses) {
