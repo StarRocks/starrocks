@@ -834,6 +834,11 @@ bool extract_json_selection(simdjson::ondemand::value value, const JsonMultiExtr
                             JsonGetThreadState* scratch, std::vector<uint8_t>* visited, vpack::Builder* selected) {
     const auto& node = state.nodes[node_id];
     if (!node.outputs.empty()) {
+        if (node.outputs.size() == 1 && node.fields.empty() && node.indexes.empty()) {
+            // Write a leaf directly to the result instead of building and copying a temporary value.
+            selected->add(vpack::Value(state.output_keys[node.outputs[0]]));
+            return convert_simdjson_to_vpack(value, selected).ok();
+        }
         scratch->leaf_builder.clear();
         if (!convert_simdjson_to_vpack(value, &scratch->leaf_builder).ok()) {
             return false;
