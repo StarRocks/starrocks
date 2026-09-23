@@ -27,6 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
@@ -192,6 +193,18 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         }
 
         newChildOpt.getOp().setProjection(new Projection(newProjectMap));
+
+        // The aggregation being removed is the operator that carried the query's limit. For an
+        // aggregate-keys table whose group by covers every key column the scan already yields one row
+        // per group, so the same limit applies to the scan unchanged. Leaving it behind still returns
+        // the right rows -- an exchange above truncates -- but the limit never reaches the storage
+        // layer, so the BE reads the whole table.
+        if (aggregationOperator.hasLimit()) {
+            Operator childOperator = newChildOpt.getOp();
+            childOperator.setLimit(childOperator.hasLimit()
+                    ? Math.min(childOperator.getLimit(), aggregationOperator.getLimit())
+                    : aggregationOperator.getLimit());
+        }
         return Lists.newArrayList(newChildOpt);
     }
 }
