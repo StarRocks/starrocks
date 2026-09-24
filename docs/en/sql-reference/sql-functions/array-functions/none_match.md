@@ -15,6 +15,8 @@ Returns whether no elements of an array match the given predicate.
 
 - Returns NULL if the predicate returns NULL for one or more elements and `false` for all other elements.
 
+This function is supported from v26.3 onwards.
+
 ## Syntax
 
 ```Haskell
