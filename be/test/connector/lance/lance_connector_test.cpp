@@ -354,6 +354,35 @@ TEST_F(LanceConnectorTest, ReadsNativeDatasetAcrossEveryFragment) {
     EXPECT_EQ(7, source->num_rows_read());
 }
 
+TEST_F(LanceConnectorTest, ReopenResetsProjectionAndBufferedBatch) {
+    TCloudConfiguration cloud;
+    cloud.__set_cloud_type(TCloudType::DEFAULT);
+    LanceNativeReader reader;
+    ASSERT_OK(reader.open(_state.get(), _tuple, LANCE_TEST_DATASET, cloud));
+    ChunkPtr chunk;
+    ASSERT_OK(reader.get_next(_state.get(), &chunk));
+    const auto* tuple = tuple_for_type(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 0), "u64");
+    ASSERT_NE(nullptr, tuple);
+    // Reopen before EOF: the old Arrow batch and projected field list must be replaced.
+    ASSERT_OK(reader.open(_state.get(), tuple, LANCE_TEST_DATASET, cloud));
+    size_t rows = 0;
+    while (true) {
+        auto status = reader.get_next(_state.get(), &chunk);
+        if (status.is_end_of_file()) break;
+        ASSERT_OK(status);
+        ASSERT_EQ(1, chunk->num_columns());
+        for (size_t i = 0; i < chunk->num_rows(); ++i) {
+            const auto value = chunk->get_column_by_index(0)->get(i).get_int128();
+            EXPECT_GE(value, static_cast<int128_t>(UINT64_MAX) - 6);
+            EXPECT_LE(value, static_cast<int128_t>(UINT64_MAX));
+        }
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(7, rows);
+    reader.close();
+    reader.close();
+}
+
 TEST_F(LanceConnectorTest, TracksAndReleasesNativeArrowMemory) {
     TCloudConfiguration cloud;
     cloud.__set_cloud_type(TCloudType::DEFAULT);
