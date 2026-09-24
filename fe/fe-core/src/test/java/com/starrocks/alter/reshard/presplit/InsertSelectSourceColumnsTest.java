@@ -16,6 +16,8 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -137,6 +139,29 @@ public class InsertSelectSourceColumnsTest {
 
     private static final TableName SRC_NAME = new TableName("cat", "db1", "src");
 
+    /**
+     * The table-source call: the effective target columns are the full non-generated base schema,
+     * and the source schema must be an exact image of the target's.
+     */
+    private static Map<String, String> resolveExact(
+            InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
+            TableName normalizedSourceName, String sourceAlias,
+            List<Column> sortKeyColumns, List<Column> partitionColumns) {
+        return InsertSelectSourceColumns.resolve(
+                stmt, rel, target, source,
+                normalizedSourceName, sourceAlias, sortKeyColumns, partitionColumns,
+                InsertSelectSourceColumns.SchemaPairing.EXACT);
+    }
+
+    /** The FILES call: whatever columns correspond are paired, extras on either side are fine. */
+    private static Map<String, String> resolvePerColumn(
+            InsertStmt stmt, SelectRelation rel, OlapTable target, Table source,
+            List<Column> sortKeyColumns, List<Column> partitionColumns) {
+        return InsertSelectSourceColumns.resolve(
+                stmt, rel, target, source, SRC_NAME, null, sortKeyColumns, partitionColumns,
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
+    }
+
     // --- tests ---
 
     @Test
@@ -146,7 +171,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -164,7 +189,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -182,7 +207,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -199,7 +224,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -216,7 +241,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -234,7 +259,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -251,7 +276,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -267,7 +292,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, true); // has generated column
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -286,7 +311,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("b"), bareItem("a"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("b")),
@@ -309,7 +334,7 @@ public class InsertSelectSourceColumnsTest {
                 bareItem("v", null, "k"),   // SELECT v AS k
                 bareItem("k", null, "v"));  // SELECT k AS v
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -329,7 +354,7 @@ public class InsertSelectSourceColumnsTest {
         TableName otherTbl = new TableName(null, null, "other");
         SelectRelation rel = bareRelation(bareItem("k", otherTbl, null), bareItem("v", null, null));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -348,7 +373,7 @@ public class InsertSelectSourceColumnsTest {
         TableName wrongDb = new TableName(null, "db2", "src");
         SelectRelation rel = bareRelation(bareItem("k", wrongDb, null), bareItem("v", null, null));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -367,7 +392,7 @@ public class InsertSelectSourceColumnsTest {
         TableName srcTbl = new TableName(null, null, "src");
         SelectRelation rel = bareRelation(bareItem("k", srcTbl, null), bareItem("v", null, null));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -387,7 +412,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("ghost"), bareItem("v"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -406,7 +431,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k")); // only 1 item, target has 2
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -425,7 +450,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k", null, null), bareItem("x", null, "k"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -445,7 +470,7 @@ public class InsertSelectSourceColumnsTest {
         // SELECT k, v, extra — output has "extra" not in target
         SelectRelation rel = bareRelation(bareItem("k"), bareItem("v"), bareItem("extra"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -465,7 +490,7 @@ public class InsertSelectSourceColumnsTest {
         // SELECT k, v by-name aligned but sortKey is col("z") which is absent
         SelectRelation rel = bareRelation(bareItem("k"), bareItem("v"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("z")),  // z not in target
@@ -481,7 +506,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -500,7 +525,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -518,7 +543,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -535,7 +560,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(expressionItem(null), bareItem("v"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -552,7 +577,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null), bareItem("v"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -569,7 +594,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem("v"));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -586,7 +611,7 @@ public class InsertSelectSourceColumnsTest {
 
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -606,7 +631,7 @@ public class InsertSelectSourceColumnsTest {
                 null, sourceExpr(new SlotRef(new TableName(null, null, "src"), "v")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -626,7 +651,7 @@ public class InsertSelectSourceColumnsTest {
                 null, sourceExpr(new SlotRef(new TableName(null, null, "other"), "v")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -645,7 +670,7 @@ public class InsertSelectSourceColumnsTest {
         SelectListItem expr = expressionItem(null, sourceExpr(new SlotRef((TableName) null, "nosuch")));
         SelectRelation rel = bareRelation(bareItem("k"), expr);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -664,7 +689,7 @@ public class InsertSelectSourceColumnsTest {
         Subquery subquery = new Subquery(mock(QueryStatement.class), NodePosition.ZERO);
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null, subquery));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -683,7 +708,7 @@ public class InsertSelectSourceColumnsTest {
         Subquery subquery = new Subquery(mock(QueryStatement.class), NodePosition.ZERO);
         SelectRelation rel = bareRelation(bareItem("k"), expressionItem(null, sourceExpr(subquery)));
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -703,7 +728,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("k", "v")), bareRelation(bareItem("k"), bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -720,7 +745,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("v", "k")), bareRelation(bareItem("k"), bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -737,7 +762,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("k", "v")), starRelation(),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -754,7 +779,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("k", "v")), bareRelation(bareItem("k")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -771,7 +796,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true, List.of("k", "v")), bareRelation(bareItem("k"), bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -794,7 +819,7 @@ public class InsertSelectSourceColumnsTest {
                 bareItem("v", null, "k"),   // SELECT v AS k
                 bareItem("k", null, "v"));  // SELECT k AS v
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true, List.of("v", "k")), rel,
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -811,7 +836,7 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(true, List.of("k", "v")), bareRelation(bareItem("k")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
@@ -829,11 +854,49 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(targetCols, targetCols, false);
         OlapTable source = olapTable(sourceCols, sourceCols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("v")), bareRelation(bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    // --- SchemaPairing.PER_COLUMN (a FILES(...) source) ---
+
+    /** A mock FILES table: the inferred file schema, no generated columns. */
+    private static Table filesTable(Column... columns) {
+        TableFunctionTable table = mock(TableFunctionTable.class);
+        when(table.getFullVisibleSchema()).thenReturn(Arrays.asList(columns));
+        return table;
+    }
+
+    @Test
+    public void filesStarByPositionMapsByOrdinalEvenWhenNamesDiffer() {
+        // INSERT INTO t(k, v) SELECT * FROM FILES(a, b): by position the load writes file column a
+        // into target k, so the sampler must read a -- not the file's own "k", which does not exist.
+        // EXACT rejects this shape outright (starByPositionMisalignedNameReturnsNull above).
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(false), starRelation(), olapTable(targetCols, targetCols, false),
+                filesTable(col("a"), col("b")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "a", "v", "b"), result);
+    }
+
+    @Test
+    public void filesStarByPositionStillRequiresEqualArity() {
+        // A file wider than the target makes the by-position pairing of the tail ambiguous
+        // (the load trims), so the whole projection is declined rather than half-mapped.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(false), starRelation(), olapTable(targetCols, targetCols, false),
+                filesTable(col("k"), col("v"), col("w")),
+                Collections.singletonList(col("k")), Collections.emptyList());
 
         Assertions.assertNull(result);
     }
@@ -845,11 +908,138 @@ public class InsertSelectSourceColumnsTest {
         OlapTable target = olapTable(cols, cols, false);
         OlapTable source = olapTable(cols, cols, false);
 
-        Map<String, String> result = InsertSelectSourceColumns.resolve(
+        Map<String, String> result = resolveExact(
                 insertStmt(false, List.of("k", "typo")), bareRelation(bareItem("k"), bareItem("v")),
                 target, source, SRC_NAME, null,
                 Collections.singletonList(col("k")),
                 Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void filesStarByNameDeclinesAFileWiderThanTheTarget() {
+        // INSERT INTO t BY NAME SELECT * FROM FILES(...) where the file also carries "extra".
+        // BY NAME makes the query's OUTPUT names the target column names, and `SELECT *` over FILES
+        // outputs every file column, so InsertAnalyzer fails this statement with
+        // "Unknown column 'extra' in 't'". Pre-split runs BEFORE analysis, so admitting it would
+        // reshard the target for a load that never runs.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), starRelation(), olapTable(targetCols, targetCols, false),
+                filesTable(col("v"), col("k"), col("extra")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void filesStarByNameAdmitsAFileNarrowerThanTheTarget() {
+        // The other direction stays admitted: every file column IS a target column, and the target
+        // columns the file omits are simply defaulted by the load.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("w"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), starRelation(), olapTable(targetCols, targetCols, false),
+                filesTable(col("v"), col("k")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void filesStarByNameLeavesASortKeyTheFileLacksUnmapped() {
+        // The file has no "k", so the load defaults that column for every row and no FILES column
+        // can be sampled for it -> the final presence gate declines.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), starRelation(), olapTable(targetCols, targetCols, false), filesTable(col("v")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void filesStarByNameMapsANonKeyColumnTheFileLacks() {
+        // Same shape, but the column the file lacks is not a key: the load defaults it and pre-split
+        // is unaffected, so the projection is admitted with that column simply absent from the map.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), starRelation(), olapTable(targetCols, targetCols, false), filesTable(col("k")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k"), result);
+    }
+
+    @Test
+    public void filesExplicitListByPositionMapsEachOutputToItsTargetOrdinal() {
+        // INSERT INTO t(k, v) SELECT b, a FROM FILES(a, b) -- the load writes b into k and a into v.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(false), bareRelation(bareItem("b"), bareItem("a")),
+                olapTable(targetCols, targetCols, false), filesTable(col("a"), col("b")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "b", "v", "a"), result);
+    }
+
+    @Test
+    public void filesExplicitListAdmitsAnExpressionOverANonKeyColumn() {
+        // INSERT INTO t(k, v) SELECT k, parse_json(v) FROM FILES(...): the sampler never evaluates a
+        // non-key projection, so only the sort key has to be a direct file-column reference.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(false), bareRelation(bareItem("k"), expressionItem(null)),
+                olapTable(targetCols, targetCols, false), filesTable(col("k"), col("v")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k"), result);
+    }
+
+    @Test
+    public void filesExplicitListByNameNeedNotCoverEveryTargetColumn() {
+        // INSERT INTO t BY NAME SELECT k, v FROM FILES(...) against a target that also has w: the
+        // load defaults w. EXACT requires the outputs to be exactly the target's columns.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"), col("w"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), bareRelation(bareItem("k"), bareItem("v")),
+                olapTable(targetCols, targetCols, false), filesTable(col("k"), col("v"), col("other")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertEquals(Map.of("k", "k", "v", "v"), result);
+    }
+
+    @Test
+    public void filesExplicitListByNameDeclinesAnOutputThatIsNoTargetColumn() {
+        // INSERT INTO t BY NAME SELECT k, v AS not_a_target_col FROM FILES(...): only k needs to map
+        // for the sort key, but BY NAME turns "not_a_target_col" into a target column name and
+        // InsertAnalyzer rejects it with "Unknown column". A partial output set is legitimate here;
+        // an output naming nothing on the target is not.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), bareRelation(bareItem("k"), bareItem("v", null, "not_a_target_col")),
+                olapTable(targetCols, targetCols, false), filesTable(col("k"), col("v")),
+                Collections.singletonList(col("k")), Collections.emptyList());
+
+        Assertions.assertNull(result);
+    }
+
+    @Test
+    public void filesExplicitListByNameStillRejectsDuplicateOutputNames() {
+        // Two outputs named v leave the target position of each ambiguous, whatever the pairing mode.
+        List<Column> targetCols = Arrays.asList(col("k"), col("v"));
+
+        Map<String, String> result = resolvePerColumn(
+                insertStmt(true), bareRelation(bareItem("k"), bareItem("v"), bareItem("v", null, "v")),
+                olapTable(targetCols, targetCols, false), filesTable(col("k"), col("v")),
+                Collections.singletonList(col("k")), Collections.emptyList());
 
         Assertions.assertNull(result);
     }
