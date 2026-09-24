@@ -452,6 +452,98 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Assertions.assertEquals("56.78", rows.get(1).sortKeyTuple().get(0).getStringValue());
     }
 
+    @Test
+    void wherePredicateIsCopiedIntoTheSampleSubquery() throws Exception {
+        // INSERT INTO t SELECT * FROM FILES(...) WHERE dt >= '2026-01-01': the sampler builds its
+        // own FROM clause, so the statement's predicate only reaches the BE if the scan context
+        // carries it -- otherwise the sample would span rows the load never writes.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), "`dt` >= '2026-01-01'"),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("WHERE (`dt` >= '2026-01-01') AND rand(0)"),
+                "the statement's predicate must gate the sample: " + capturedSql);
+    }
+
+    @Test
+    void renamedProjectionIsSampledFromTheFilesColumnThatBacksIt() throws Exception {
+        // INSERT INTO t(sort_key, ...) SELECT file_col, ... FROM FILES(...): the load writes
+        // file_col into sort_key, so the sample must read file_col. Projecting the TARGET name
+        // would either fail (no such file column) or read an unrelated one.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "file_col"), /*wherePredicateSql=*/ null),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `file_col` FROM FILES("),
+                "the projection must name the FILES column, not the target column: " + capturedSql);
+    }
+
+    @Test
+    void rollupSortKeyIsProjectedThroughTheSameMapping() throws Exception {
+        // A rollup's sort key lives under the FILES name too, so it goes through the map as well;
+        // the inherited default would have projected it by its target name.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "file_key", "rollup_key", "file_rollup"),
+                        /*wherePredicateSql=*/ null),
+                List.of(bigintColumn("sort_key")),
+                List.of(new SecondaryIndexSpec(7L, List.of(bigintColumn("rollup_key")))),
+                /*partitionSourceColumns=*/ List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(
+                capturedSql.toString().startsWith("SELECT `file_key`, `file_rollup` FROM FILES("),
+                "the rollup sort key must be projected by its FILES name: " + capturedSql);
+    }
+
+    @Test
+    void projectedColumnWithNoFilesMappingThrows() {
+        // Fail-safe for a metadata race between the admitting gate and sampling: never compute a
+        // boundary from a column the mapping cannot account for.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+    }
+
     private static TableFunctionTable mockSourceTable(
             Map<String, String> properties, List<TBrokerFileStatus> fileStatuses) {
         TableFunctionTable sourceTable = Mockito.mock(TableFunctionTable.class);
