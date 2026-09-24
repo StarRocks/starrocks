@@ -413,6 +413,13 @@ public class InsertAnalyzer {
                     tableFunctionProperties.put(property, properties.get(property));
                 }
             }
+            // The relation may already carry a FILES() table resolved outside the meta lock, before
+            // this push-down ran -- StatementPlanner's lock-free pre-analysis, or the tablet
+            // pre-split hook. QueryAnalyzer#resolveTableRef reuses that instance rather than
+            // rebuilding it from the map above, so the pushed-down keys would never reach it.
+            if (relation.getTable() instanceof TableFunctionTable preResolved) {
+                preResolved.applyPushedDownLoadProperties(tableFunctionProperties);
+            }
         }
     }
 

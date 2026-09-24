@@ -63,7 +63,6 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
@@ -207,19 +206,28 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testInsertWithLoadPropertiesShortCircuits() throws Exception {
-        // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
-        // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
-        // may fail property validation is wrong. Skip conservatively when any property is present.
-        // The gate reads the parse-time key set, not getProperties(), which the analyzer overwrites.
-        InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("strict_mode"));
+    public void testInsertWithLoadPropertiesDispatches() throws Exception {
+        // A PROPERTIES(...) clause no longer disqualifies the statement. No INSERT load property can
+        // move a row to a different tablet: the live ones (strict_mode, max_filter_ratio,
+        // merge_condition) only remove rows, and the rest are shared load vocabulary an INSERT
+        // ignores. So the sampled boundaries stay valid and the statement must reach the flow.
+        // Driven with the mix the requirement asks for plus two keys the removed gate rejected
+        // (partial_update, merge_condition) and a max_filter_ratio the analyzer will itself reject,
+        // so re-adding any arm of that gate makes this fail.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "2.0",
+                    "partial_update", "true", "merge_condition", "v"));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+            InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context);
+
+            flow.verify(() -> PreSplitFlow.dispatch(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context),
+                    any(PreSplitPartitionScope.class)), times(1));
+        }
     }
-
-    // ---------- extractSingleTableSource: query-shape filters ----------
 
     @Test
     public void testNullQueryStatementShortCircuits() throws Exception {
@@ -1045,7 +1053,6 @@ public class InsertPreSplitHookTableTest {
             when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
             when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
                     "strict_mode", "true", "max_filter_ratio", "0.0", "timeout", "14400"));
-            when(fixture.insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
 
             InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
 
@@ -1056,12 +1063,24 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void dynamicOverwriteHookSkipsUserSpecifiedProperties() throws Exception {
-        assertDynamicOverwriteHookSkips(42L, stmt -> {
-            when(stmt.isDynamicOverwrite()).thenReturn(true);
-            when(stmt.hasOverwriteJob()).thenReturn(true);
-            when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("max_filter_ratio"));
-        });
+    public void dynamicOverwriteHookDispatchesWithUserSpecifiedProperties() throws Exception {
+        // Parity with the normal entry point, which the properties gate used to break separately:
+        // this hook is the one that runs AFTER analysis, so it sees a getProperties() the analyzer
+        // has already filled. Neither the parse-time key set nor that map may disqualify it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "0.1", "timeout", "14400",
+                    "timezone", "Asia/Shanghai"));
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
     }
 
     @Test
