@@ -25,6 +25,7 @@ raw_record	json	YES
 source_info	json	YES
 backend_id	bigint	YES
 -- !result
+
 -- name: test_rejected_records_csv_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -72,6 +73,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_csv_null_violation @sequential
 create database db_${uuid0};
 -- result:
@@ -119,6 +121,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_csv_string_too_long @sequential
 create database db_${uuid0};
 -- result:
@@ -165,6 +168,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_csv_partition_miss @sequential
 create database db_${uuid0};
 -- result:
@@ -217,6 +221,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_csv_column_count @sequential
 create database db_${uuid0};
 -- result:
@@ -261,6 +266,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_json_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -308,6 +314,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_parquet_type_mismatch @sequential
 create database db_${uuid0};
 -- result:
@@ -369,6 +376,82 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 0
 -- !result
 shell: rm -f /tmp/rej_parquet_${uuid0}.parquet; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
+-- result:
+0
+0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result
+
+-- name: test_rejected_records_parquet_rehydrate @sequential
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (id int not null, val int not null, name varchar(8))
+    duplicate key(id) distributed by hash(id) buckets 1
+    properties("replication_num" = "1");
+-- result:
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=1" >/dev/null; curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=true" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: python3 -c 'import pyarrow as pa, pyarrow.parquet as pq; tbl = pa.table({"id": pa.array([1,2,3],pa.int32()), "val": pa.array([100,200,300],pa.int32()), "name": pa.array(["alice","bobby_too_long_name","carol"],pa.string())}); pq.write_table(tbl, "/tmp/rej_rehydrate_${uuid0}.parquet"); print(0)'
+-- result:
+0
+0
+-- !result
+shell: ossutil64 mkdir oss://${oss_bucket}/test_rejected_records/${uuid0} >/dev/null 2>&1 || true; ossutil64 cp --force /tmp/rej_rehydrate_${uuid0}.parquet oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet >/dev/null 2>&1; echo 0
+-- result:
+0
+0
+-- !result
+set log_rejected_record_num = -1;
+-- result:
+-- !result
+set insert_max_filter_ratio = 1.0;
+-- result:
+-- !result
+insert into t select id, val, name from files("path" = "oss://${oss_bucket}/test_rejected_records/${uuid0}/rej.parquet", "fs.oss.endpoint" = "${oss_endpoint}", "fs.oss.accessKeyId" = "${oss_ak}", "fs.oss.accessKeySecret" = "${oss_sk}", "format" = "parquet");
+-- result:
+-- !result
+select id, val, name from t order by id;
+-- result:
+1	100	alice
+3	300	carol
+-- !result
+shell: for i in $(seq 1 30); do n=$(${mysql_cmd} -Ne "select count(*) from _statistics_.rejected_records where target_database='db_${uuid0}' and target_table='t'" 2>/dev/null); [ -n "$n" ] && [ "$n" -ge 1 ] && break; sleep 1; done; sleep 3; echo 0
+-- result:
+0
+0
+-- !result
+insert into t
+select cast(json_query(p.raw_record, '$.id') as int),
+       cast(json_query(p.raw_record, '$.val') as int),
+       left(cast(json_query(p.raw_record, '$.name') as varchar), 8)
+from _statistics_.rejected_records r,
+     parquet_read_rows(r.source_info) p
+where r.target_database='db_${uuid0}' and r.target_table='t'
+  and cast(json_query(r.source_info, '$.format') as varchar)='parquet';
+-- result:
+-- !result
+select id, val, name from t order by id;
+-- result:
+1	100	alice
+2	200	bobby_to
+3	300	carol
+-- !result
+shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"; } | awk '{print $2":"$5}' | sort -u | while read h; do curl -s -X POST "http://$h/api/update_config?enable_rejected_record_sync=false" >/dev/null; curl -s -X POST "http://$h/api/update_config?rejected_record_sync_interval_sec=30" >/dev/null; done; echo "0"
+-- result:
+0
+0
+-- !result
+shell: rm -f /tmp/rej_rehydrate_${uuid0}.parquet; ossutil64 rm -rf oss://${oss_bucket}/test_rejected_records/${uuid0}/ >/dev/null 2>&1 || true; echo 0
 -- result:
 0
 0
@@ -444,6 +527,7 @@ shell: rm -f /tmp/rej_orc_${uuid0}.orc; ossutil64 rm -rf oss://${oss_bucket}/tes
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_fields @sequential
 create database db_${uuid0};
 -- result:
@@ -496,6 +580,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_idempotency @sequential
 create database db_${uuid0};
 -- result:
@@ -548,6 +633,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_row_access_policy @sequential
 create database db_a_${uuid0};
 -- result:
@@ -621,6 +707,7 @@ drop database db_a_${uuid0};
 drop database db_b_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_insert @sequential
 create database db_${uuid0};
 -- result:
@@ -683,6 +770,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_max_filter_ratio_fail @sequential
 create database db_${uuid0};
 -- result:
@@ -728,6 +816,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_max_filter_ratio_pass @sequential
 create database db_${uuid0};
 -- result:
@@ -769,6 +858,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_log_num_cap @sequential
 create database db_${uuid0};
 -- result:
@@ -810,6 +900,7 @@ shell: { ${mysql_cmd} -Ne "show backends"; ${mysql_cmd} -Ne "show compute nodes"
 drop database db_${uuid0};
 -- result:
 -- !result
+
 -- name: test_rejected_records_files_csv @sequential
 create database db_${uuid0};
 -- result:
