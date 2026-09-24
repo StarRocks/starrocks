@@ -199,13 +199,18 @@ public class InsertPreSplitHookFilesTest {
         when(partitionInfo.isPartitioned()).thenReturn(false);
         when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
         when(target.getPartitionInfo()).thenReturn(partitionInfo);
+        // BY NAME pairs FILES columns with the target's written columns, so the target must list its
+        // sort key too; an empty base schema leaves the sort key unpaired and the statement declined.
+        when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(bigintColumn("k")));
 
         FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
         TableFunctionTable filesTable = mock(TableFunctionTable.class);
         when(filesTable.loadFileList()).thenReturn(List.of());
         // The inferred FILES() schema must carry the sort key: the sampler projects it by name, so a
         // schema without it leaves nothing to sample and the statement is declined before the coordinator.
+        // Stub both views of it -- the column pairing reads the visible schema, the key guard the full one.
         when(filesTable.getFullSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k")));
         when(filesRelation.getTable()).thenReturn(filesTable);
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
         when(stmt.isColumnMatchByName()).thenReturn(true);
