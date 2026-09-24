@@ -369,6 +369,7 @@ TEST(HashUtilTest, CrcSoftwareFallbackMatchesHardwareAcrossLengths) {
 }
 #endif
 
+#if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
 TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
     const std::string_view s1 = "hello";                                      // 5 bytes (< 8)
     const std::string_view s2 = "12345678";                                   // 8 bytes (= 8)
@@ -379,6 +380,7 @@ TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
     EXPECT_EQ(crc_hash_64_unmixed(s2.data(), static_cast<int32_t>(s2.size()), seed), 0x6a03190bULL);
     EXPECT_EQ(crc_hash_64_unmixed(s3.data(), static_cast<int32_t>(s3.size()), seed), 0xf369fa27ULL);
 }
+#endif
 
 } // namespace
 } // namespace starrocks

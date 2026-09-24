@@ -320,7 +320,7 @@ void CpuInfo::init() {
             while (std::getline(file, line)) {
                 buffer << line << "\n";
             }
-            if (!file.eof()) {
+            if (file.bad() || (file.fail() && !file.eof())) {
                 LOG(ERROR) << "I/O error reading /proc/cpuinfo; CPU feature detection may be incomplete";
                 cpuinfo_content.clear();
             } else {
