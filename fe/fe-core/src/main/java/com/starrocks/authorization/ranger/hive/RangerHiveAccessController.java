@@ -79,6 +79,21 @@ public class RangerHiveAccessController extends RangerAccessController {
                 PrivilegeType.ANY);
     }
 
+    // In the Hive Ranger service model a view is just a table, so view privilege checks reuse the table
+    // resource. Without these overrides they would fall through to the AccessController default that always
+    // throws, denying access to Hive/Iceberg/Paimon views routed through the VIEW authorization branch.
+    @Override
+    public void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        checkTableAction(context, tableName, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnView(ConnectContext context, TableName tableName)
+            throws AccessDeniedException {
+        checkAnyActionOnTable(context, tableName);
+    }
+
     @Override
     public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {

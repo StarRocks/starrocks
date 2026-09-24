@@ -300,8 +300,13 @@ public class AuthorizationAnalyzer {
                     }
                     objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1)));
                 } else if (ObjectType.VIEW.equals(objectType)
-                        || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                        || ObjectType.PIPE.equals(objectType)) {
+                        || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+                    if (tokens.size() != 2) {
+                        throw new SemanticException(
+                                "Invalid grant statement with error privilege object " + tokens);
+                    }
+                    objectTokenList.add(Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1)));
+                } else if (ObjectType.PIPE.equals(objectType)) {
                     if (tokens.size() != 2) {
                         throw new SemanticException(
                                 "Invalid grant statement with error privilege object " + tokens);
@@ -352,8 +357,11 @@ public class AuthorizationAnalyzer {
 
                     for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
                         TableName tableName;
-                        if (tokens.size() == 2) {
+                        if (tokens.size() == 3) {
+                            tableName = new TableName(tokens.get(0), tokens.get(1), tokens.get(2));
+                        } else if (tokens.size() == 2) {
                             tableName = new TableName(tokens.get(0), tokens.get(1));
+                            tableName.normalization(session);
                         } else if (tokens.size() == 1) {
                             tableName = new TableName("", tokens.get(0));
                             tableName.normalization(session);
@@ -362,7 +370,8 @@ public class AuthorizationAnalyzer {
                                     "Invalid grant statement with error privilege object " + tokens);
                         }
 
-                        objectTokenList.add(Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
+                        objectTokenList.add(Lists.newArrayList(
+                                tableName.getCatalog(), tableName.getDb(), tableName.getTbl()));
                     }
                 } else if (ObjectType.PIPE.equals(objectType)) {
                     Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
