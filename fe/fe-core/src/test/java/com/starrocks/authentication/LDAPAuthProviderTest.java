@@ -649,4 +649,28 @@ class LDAPAuthProviderTest {
             gpMap.remove("gp_regex_correct");
         }
     }
+
+    @Test
+    public void testBindEnvCarriesConnectAndReadTimeouts() throws Exception {
+        // Without these two the bind falls back to the OS TCP timeout, which pins whichever thread is
+        // authenticating -- an HTTP worker or a thrift handler now that security integrations serve those
+        // channels too.
+        LDAPAuthProvider provider = new LDAPAuthProvider("localhost", 389, false, "", "",
+                "cn=admin,dc=example,dc=com", "root_pwd", "dc=example,dc=com", "uid", null, null);
+        int savedConn = Config.authentication_ldap_simple_conn_timeout_ms;
+        int savedRead = Config.authentication_ldap_simple_conn_read_timeout_ms;
+        Config.authentication_ldap_simple_conn_timeout_ms = 1234;
+        Config.authentication_ldap_simple_conn_read_timeout_ms = 5678;
+
+        try {
+            java.util.Hashtable<String, String> env =
+                    provider.buildEnv("uid=alice,dc=example,dc=com", "pwd");
+
+            Assertions.assertEquals("1234", env.get("com.sun.jndi.ldap.connect.timeout"));
+            Assertions.assertEquals("5678", env.get("com.sun.jndi.ldap.read.timeout"));
+        } finally {
+            Config.authentication_ldap_simple_conn_timeout_ms = savedConn;
+            Config.authentication_ldap_simple_conn_read_timeout_ms = savedRead;
+        }
+    }
 }

@@ -18,6 +18,13 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.StarRocksException;
 
 public class AuthenticationException extends StarRocksException {
+    /**
+     * True when the failure came from the directory / IdP being unusable (connection refused, timeout, JWKS
+     * fetch failed) rather than from the credential being wrong. Callers that remember failures must not
+     * remember these: the same credential will be valid again as soon as the service recovers.
+     */
+    private boolean transientFailure;
+
     public AuthenticationException(String msg) {
         super(msg);
     }
@@ -29,4 +36,17 @@ public class AuthenticationException extends StarRocksException {
     public AuthenticationException(ErrorCode errorCode, Object... objs) {
         super(errorCode, objs);
     }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/authentication/AuthenticationException.java
 }
+=======
+
+    public AuthenticationException asTransient() {
+        this.transientFailure = true;
+        return this;
+    }
+
+    public boolean isTransientFailure() {
+        return transientFailure;
+    }
+}
+>>>>>>> 7cb1013 ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#79165)):fe/fe-spi/src/main/java/com/starrocks/authentication/AuthenticationException.java

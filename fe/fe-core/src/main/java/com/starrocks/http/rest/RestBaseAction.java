@@ -163,9 +163,30 @@ public class RestBaseAction extends BaseAction {
         Set<Long> prevRoleIds = ctx.getCurrentRoleIds();
         String prevUserName = ctx.getQualifiedUser();
 
+<<<<<<< HEAD
         ctx.setCurrentUserIdentity(currentUser);
         ctx.setCurrentRoleIds(currentUser);
         ctx.setQualifiedUser(authInfo.fullUserName);
+=======
+            // Authenticate via a temporary ConnectContext so AuthenticationHandler can populate
+            // identity *and* group-derived roles on it. The legacy BaseAction.checkPassword(authInfo)
+            // overload drops the temp ctx and only returns UserIdentity, which means group roles
+            // (e.g. db_admin granted via LDAP group mapping) would be lost on the real ctx and
+            // requireXxxIfHttpAuthEnabled() helpers would wrongly deny access.
+            ConnectContext authCtx = new ConnectContext();
+            UserIdentity currentUser;
+            Set<Long> currentRoleIds;
+            Set<String> currentGroups;
+            try {
+                AuthenticationHandler.authenticateWithClearPassword(authCtx, authInfo.fullUserName,
+                        authInfo.remoteIp, authInfo.password);
+                currentUser = authCtx.getCurrentUserIdentity();
+                currentRoleIds = authCtx.getCurrentRoleIds();
+                currentGroups = authCtx.getGroups();
+            } catch (AuthenticationException e) {
+                throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
+            }
+>>>>>>> 7cb1013 ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#79165))
 
         if (ctx.isRegistered() && prevUserName != null && !prevUserName.equals(authInfo.fullUserName)) {
             ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();

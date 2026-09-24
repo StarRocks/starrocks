@@ -16,6 +16,11 @@ package com.starrocks.authentication;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
+>>>>>>> 7cb1013 ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#79165))
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
@@ -77,9 +82,10 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     @Override
     public void authenticate(ConnectContext context, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
-        //clear password terminate string
+        // clear password terminate string: the MySQL clear-password frame appends a trailing \0, while
+        // HTTP Basic sends the bare password and may even send an empty one.
         byte[] clearPassword = authResponse;
-        if (authResponse[authResponse.length - 1] == 0) {
+        if (authResponse.length > 0 && authResponse[authResponse.length - 1] == 0) {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
 
@@ -101,10 +107,27 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             Preconditions.checkNotNull(distinguishedName);
 
             // set distinguished name to auth context
+<<<<<<< HEAD
             context.setDistinguishedName(distinguishedName);
         } catch (Exception e) {
             LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
+=======
+            authContext.setDistinguishedName(distinguishedName);
+        } catch (AuthenticationException e) {
+            // Already classified (empty password, user not found, or a nested bind failure): pass it through.
+            LOG.warn("check password failed for user: {}", user, e);
+            throw e;
+        } catch (javax.naming.AuthenticationException e) {
+            // The directory answered and rejected the credential -- a definitive "wrong password".
+            LOG.warn("check password failed for user: {}", user, e);
+>>>>>>> 7cb1013 ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#79165))
             throw new AuthenticationException(e.getMessage());
+        } catch (Exception e) {
+            // Anything else means we could not get an answer: connection refused, timeout, TLS failure.
+            // Mark it transient so a caller that caches rejections does not hold a valid credential back
+            // until the directory recovers.
+            LOG.warn("cannot reach the directory while authenticating user: {}", user, e);
+            throw new AuthenticationException(e.getMessage()).asTransient();
         }
     }
 
@@ -156,7 +179,50 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 return dn;
             } catch (Exception e) {
                 lastException = e;
+<<<<<<< HEAD
                 LOG.debug("direct bind failed for pattern '{}' with user '{}': {}", pattern, user, e.getMessage());
+=======
+                LOG.debug("direct bind failed for dn '{}' with user '{}': {}", dn, user, e.getMessage());
+            }
+        }
+        // Null only when the pattern produced no candidate at all - `";"` splits to an empty array.
+        throw lastException != null ? lastException
+                : new AuthenticationException("bind dn pattern '" + ldapBindDNPattern + "' produced no candidate DN");
+    }
+
+    /**
+     * Build the JNDI environment for a simple bind as `principal`. Shared by the three places that
+     * open a connection - the user bind, the service account search and the memberOf probe - so that
+     * a change to URL handling, SSL or timeouts only has to be made once.
+     */
+    // Package-private so a test can assert the two timeouts below are actually set.
+    Hashtable<String, String> buildEnv(String principal, String credentials) throws Exception {
+        Hashtable<String, String> env = new Hashtable<>();
+        env.put(Context.SECURITY_AUTHENTICATION, "simple");
+        env.put(Context.SECURITY_CREDENTIALS, credentials);
+        env.put(Context.SECURITY_PRINCIPAL, principal);
+        env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
+        env.put(Context.PROVIDER_URL, getURL());
+        // Both timeouts matter: without them the bind falls back to the OS TCP timeout, so an unreachable
+        // directory can pin the calling thread -- an HTTP worker or a thrift handler now that a security
+        // integration serves those channels too. LDAPGroupProvider sets the same two properties.
+        env.put("com.sun.jndi.ldap.connect.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_timeout_ms));
+        env.put("com.sun.jndi.ldap.read.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_read_timeout_ms));
+        if (useSSL) {
+            setSSLContext(env);
+        }
+        return env;
+    }
+
+    private static void closeQuietly(DirContext ctx) {
+        if (ctx != null) {
+            try {
+                ctx.close();
+            } catch (Exception e) {
+                // ignore
+>>>>>>> 7cb1013 ([BugFix] Authenticate security integration (LDAP) users on the non-MySQL channels (#79165))
             }
         }
         throw lastException;
