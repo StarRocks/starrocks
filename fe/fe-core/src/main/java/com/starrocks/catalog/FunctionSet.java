@@ -1239,7 +1239,6 @@ public class FunctionSet {
     }
 
     private void addBuiltInFunction(Function fn) {
-        Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
         if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }

@@ -763,11 +763,11 @@ public class ExpressionAnalyzer {
         public Void visitBinaryPredicate(BinaryPredicate node, Scope scope) {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
+            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
 
             Type compatibleType =
                     TypeManager.getCompatibleTypeForBinary(!node.getOp().isNotRangeComparison(), type1, type2);
             // check child type can be cast
-            final String ERROR_MSG = "Column type %s does not support binary predicate operation with type %s";
             if (!TypeManager.canCastTo(type1, compatibleType)) {
                 throw new SemanticException(String.format(ERROR_MSG, type1.toSql(), type2.toSql()), node.getPos());
             }
@@ -907,7 +907,6 @@ public class ExpressionAnalyzer {
                         "subquery must return the same number of columns as provided by the IN predicate",
                         node.getPos());
             }
-
             for (int i = 0; i < rightTypes.size(); ++i) {
                 if (leftTypes.get(i).isJsonType() || rightTypes.get(i).isJsonType() || leftTypes.get(i).isMapType() ||
                         rightTypes.get(i).isMapType() || leftTypes.get(i).isStructType() ||
