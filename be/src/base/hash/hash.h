@@ -97,7 +97,7 @@ public:
 inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if (defined(__x86_64__) && !defined(__SSE4_2__))
     return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
-#else 
+#else
 #if (defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32))
     hash = ~starrocks::crc32c::Extend(~hash, (const char*)data, bytes);
 #else
