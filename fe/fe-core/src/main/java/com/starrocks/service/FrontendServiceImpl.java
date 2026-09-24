@@ -424,7 +424,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1163,8 +1162,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
             // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
             // and the OPERATE/NODE checks below would falsely reject privileged callers.
-            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
-                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+            AuthenticationHandler.authenticateWithClearPassword(ctx, request.getUser(), host,
+                    request.getPasswd());
 
             // getRequired_privilege() can return null when a newer BE sends an enum value
             // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
@@ -1269,13 +1268,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
             return UserIdentity.ROOT;
         }
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8));
+        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = AuthenticationHandler.authenticateWithClearPassword(
+                context, user, clientIp, passwd);
         // check INSERT action on table
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            // Reuse the context authentication just populated: it already carries the identity and the
+            // group-derived roles. Rebuilding it from currentUser alone would drop those groups.
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
