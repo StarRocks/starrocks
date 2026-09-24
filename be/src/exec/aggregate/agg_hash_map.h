@@ -73,8 +73,130 @@ template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
+
+// Key of the slice agg hash maps. It is exactly sizeof(Slice): `size` is narrowed to 32 bits and the freed 4 bytes
+// cache the key's crc, so a rehash never walks the key bytes again. The size of the map slot and of the agg state
+// prefix (which holds a copy of the key, see AllocateState) stay unchanged.
+//
+// A key of kEscape bytes or more stores kEscape in `size` and its real length in the kEscapeHeader bytes in front of
+// `data`. Such keys are always materialized by make_agg_slice_key() or persist_agg_slice_key().
 template <PhmapSeed seed>
-using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
+struct SliceWithHash32 {
+    static constexpr uint32_t kEscape = std::numeric_limits<uint32_t>::max();
+    static constexpr size_t kEscapeHeader = sizeof(uint64_t);
+
+    const char* data = nullptr;
+    uint32_t size = 0;
+    uint32_t hash = 0;
+
+    SliceWithHash32() = default;
+    // Only for keys shorter than kEscape.
+    explicit SliceWithHash32(const Slice& s) : data(s.data), size(static_cast<uint32_t>(s.size)), hash(hash_of(s)) {
+        DCHECK_LT(s.size, kEscape);
+    }
+
+    static uint32_t hash_of(const Slice& s) {
+        if (LIKELY(s.size <= kMaxHashPiece)) {
+            return static_cast<uint32_t>(SliceHashWithSeed<seed>()(s));
+        }
+        return hash_of_huge(s);
+    }
+
+    ALWAYS_INLINE size_t real_size() const {
+        if (LIKELY(size != kEscape)) {
+            return size;
+        }
+        uint64_t v;
+        memcpy(&v, data - kEscapeHeader, sizeof(v));
+        return v;
+    }
+    ALWAYS_INLINE Slice slice() const { return {data, real_size()}; }
+    // convert_hash_map_to_chunk copies the key into a Buffer<Slice>.
+    operator Slice() const { return slice(); }
+
+private:
+    // SliceHashWithSeed takes an int32 length.
+    static constexpr size_t kMaxHashPiece = std::numeric_limits<int32_t>::max();
+
+    // Hashes the key in int32-sized pieces, chaining each piece's hash into the next one's seed.
+    static ALWAYS_NOINLINE uint32_t hash_of_huge(const Slice& s) {
+        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, kMaxHashPiece));
+        for (size_t offset = kMaxHashPiece; offset < s.size; offset += kMaxHashPiece) {
+            const size_t piece = std::min(kMaxHashPiece, s.size - offset);
+            h = crc_hash_64(s.data + offset, static_cast<int32_t>(piece), h);
+        }
+        return static_cast<uint32_t>(h);
+    }
+};
+static_assert(sizeof(SliceWithHash32<PhmapSeed1>) == sizeof(Slice));
+static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
+
+template <PhmapSeed seed>
+struct SliceWithHash32Hash {
+    // The crc has 32 bits of entropy, the mix spreads them over 64 bits so H1 keeps its high bits.
+    size_t operator()(const SliceWithHash32<seed>& s) const { return phmap_mix_with_seed<8, seed>()(s.hash); }
+};
+
+template <PhmapSeed seed>
+struct SliceWithHash32Equal {
+    bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
+        return x.hash == y.hash && memequal_padded(x.data, x.real_size(), y.data, y.real_size());
+    }
+};
+
+// Builds the key of `data[0, size)`. A key of kEscape bytes or more is copied into `scratch` behind its length
+// header, because the bytes in front of `data` are not ours to write.
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const char* data, size_t size, uint32_t hash, MemPool* scratch) {
+    Key key;
+    if (LIKELY(size < Key::kEscape)) {
+        key.data = data;
+        key.size = static_cast<uint32_t>(size);
+    } else {
+        uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        uint64_t real_size = size;
+        memcpy(pos, &real_size, sizeof(real_size));
+        strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
+        key.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+        key.size = Key::kEscape;
+    }
+    key.hash = hash;
+    return key;
+}
+
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const Slice& s, MemPool* scratch) {
+    return make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
+}
+
+// Copies the key bytes into `pool` so the key can live in the hash map.
+template <typename Key>
+ALWAYS_INLINE Key persist_agg_slice_key(const Key& key, MemPool* pool) {
+    const size_t size = key.real_size();
+    Key pk = key;
+    if (LIKELY(key.size != Key::kEscape)) {
+        uint8_t* pos = pool->allocate_with_reserve(size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data, size);
+        pk.data = reinterpret_cast<const char*>(pos);
+    } else {
+        uint8_t* pos = pool->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data - Key::kEscapeHeader, Key::kEscapeHeader + size);
+        pk.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+    }
+    return pk;
+}
+
+// Frees the escaped probe keys once the chunk is probed: a single one holds 4 GiB or more, which must not outlive the
+// chunk that needed it.
+inline void reset_agg_escape_pool(MemPool* pool) {
+    if (UNLIKELY(pool->total_reserved_bytes() > 0)) {
+        pool->free_all();
+    }
+}
+
+template <PhmapSeed seed>
+using SliceAggHashMap =
+        phmap::flat_hash_map<SliceWithHash32<seed>, AggDataPtr, SliceWithHash32Hash<seed>, SliceWithHash32Equal<seed>>;
 
 // ==================
 // one level fixed size slice hash map
@@ -95,9 +217,9 @@ using Int32AggTwoLevelHashMap = phmap::parallel_flat_hash_map<int32_t, AggDataPt
 // The 16 is same as PartitionedAggregationNode::PARTITION_FANOUT
 static constexpr uint8_t PHMAPN = 4;
 template <PhmapSeed seed>
-using SliceAggTwoLevelHashMap =
-        phmap::parallel_flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual,
-                                      phmap::priv::Allocator<phmap::priv::Pair<const Slice, AggDataPtr>>, PHMAPN>;
+using SliceAggTwoLevelHashMap = phmap::parallel_flat_hash_map<
+        SliceWithHash32<seed>, AggDataPtr, SliceWithHash32Hash<seed>, SliceWithHash32Equal<seed>,
+        phmap::priv::Allocator<phmap::priv::Pair<const SliceWithHash32<seed>, AggDataPtr>>, PHMAPN>;
 
 template <typename T>
 auto get_immutable_data(T* obj) {
@@ -471,6 +593,7 @@ struct AggHashMapWithOneStringKeyWithNullable
     template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        DeferOp free_escaped_keys([this]() { reset_agg_escape_pool(&escape_pool); });
         const auto* key_column = key_columns[0].get();
         if constexpr (is_nullable) {
             return this->template compute_agg_states_nullable<Func, HTBuildOp>(
@@ -530,10 +653,20 @@ struct AggHashMapWithOneStringKeyWithNullable
                                               Func&& allocate_func, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
-        AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, agg_hash_map_default_prefetch_dist());
+        size_t const column_size = column->size();
+        caches.resize(column_size);
+        for (size_t i = 0; i < column_size; i++) {
+            caches[i] = make_agg_slice_key<KeyType>(column->get_slice(i), &escape_pool);
+        }
+        size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());
+        for (size_t i = 0; i < column_size; i++) {
+            hash_values[i] = this->hash_map.hash_function()(caches[i]);
+        }
+        const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+        size_t __prefetch_index = __prefetch_dist;
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
-            auto key = column->get_slice(i);
+            const auto& key = caches[i];
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key_with_hash<Func>(key, hash_values[i], pool,
@@ -560,7 +693,7 @@ struct AggHashMapWithOneStringKeyWithNullable
         size_t num_rows = column->size();
 
         for (size_t i = 0; i < num_rows; i++) {
-            auto key = column->get_slice(i);
+            const auto key = make_agg_slice_key<KeyType>(column->get_slice(i), &escape_pool);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func), (*agg_states)[i],
@@ -593,7 +726,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                 }
                 (*agg_states)[i] = null_key_data;
             } else {
-                const auto key = data_column->get_slice(i);
+                const auto key = make_agg_slice_key<KeyType>(data_column->get_slice(i), &escape_pool);
                 if constexpr (HTBuildOp::process_limit) {
                     if (hash_table_size < extra->limits) {
                         this->template _emplace_key<Func>(key, pool, std::forward<Func>(allocate_func),
@@ -617,9 +750,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                                 AggDataPtr& target_state, EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
             callback();
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
+            KeyType pk = persist_agg_slice_key(key, pool);
             AggDataPtr pv = allocate_func(pk);
             ctor(pk, pv);
         });
@@ -631,9 +762,7 @@ struct AggHashMapWithOneStringKeyWithNullable
                       EmplaceCallBack&& callback) {
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
-            uint8_t* pos = pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
+            KeyType pk = persist_agg_slice_key(key, pool);
             AggDataPtr pv = allocate_func(pk);
             ctor(pk, pv);
         });
@@ -669,6 +798,9 @@ struct AggHashMapWithOneStringKeyWithNullable
 
     AggDataPtr null_key_data = nullptr;
     ResultVector results;
+    std::vector<KeyType> caches;
+    // Holds the escaped (>= 4 GiB) probe keys of the current chunk.
+    MemPool escape_pool;
 };
 
 template <typename HashMap>
@@ -704,6 +836,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     template <AllocFunc<Self> Func, typename HTBuildOp>
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
+        DeferOp free_escaped_keys([this]() { reset_agg_escape_pool(&escape_pool); });
         slice_sizes.assign(_chunk_size, 0);
         size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
@@ -747,7 +880,9 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             }
             DCHECK(serialize_cursor <= buffer + max_serialize_each_row);
             size_t serialize_size = serialize_cursor - buffer;
-            Slice key = {buffer, serialize_size};
+            const Slice serialized(buffer, serialize_size);
+            const auto key = make_agg_slice_key<KeyType>(serialized.data, serialized.size, KeyType::hash_of(serialized),
+                                                         &escape_pool);
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
@@ -788,7 +923,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         for (size_t i = 0; i < chunk_size; ++i) {
-            Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
+            const KeyType key(Slice(buffer + i * max_one_row_size, slice_sizes[i]));
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
@@ -849,9 +984,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_val, [&](const auto& ctor) {
             callback();
             // we must persist the slice before insert
-            uint8_t* pos = pool->allocate(key.size);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
+            KeyType pk = persist_agg_slice_key(key, pool);
             AggDataPtr pv = allocate_func(pk);
             ctor(pk, pv);
         });
@@ -864,9 +997,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             callback();
             // we must persist the slice before insert
-            uint8_t* pos = pool->allocate(key.size);
-            strings::memcpy_inlined(pos, key.data, key.size);
-            Slice pk{pos, key.size};
+            KeyType pk = persist_agg_slice_key(key, pool);
             AggDataPtr pv = allocate_func(pk);
             ctor(pk, pv);
         });
@@ -919,6 +1050,8 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     std::unique_ptr<MemPool> mem_pool;
     uint8_t* buffer;
     ResultVector results;
+    // Holds the escaped (>= 4 GiB) probe keys of the current chunk.
+    MemPool escape_pool;
 
     int32_t _chunk_size;
 };
