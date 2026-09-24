@@ -760,7 +760,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP or external Iceberg table. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP table or a table in an external catalog, such as Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, or Elasticsearch. Views are not supported as a source. When an external source cannot be sized from its table statistics, the load skips pre-split. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
