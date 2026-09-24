@@ -394,7 +394,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("compact_threads", [&]() -> Status {
             auto tablet_manager = _exec_env->lake_tablet_manager();
             if (tablet_manager != nullptr) {
-                tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+                return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
             }
             return Status::OK();
         });

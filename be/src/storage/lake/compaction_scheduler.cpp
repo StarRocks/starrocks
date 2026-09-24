@@ -20,11 +20,7 @@
 #include <butil/time.h> // NOLINT
 
 #include <chrono>
-<<<<<<< HEAD
-=======
 #include <limits>
-#include <memory>
->>>>>>> 67b9ae7 ([BugFix] Reject non-positive compact_threads instead of crashing the CN (#79641))
 #include <thread>
 
 #include "agent/master_info.h"
