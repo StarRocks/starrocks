@@ -53,13 +53,6 @@
 #include <sstream>
 #include <utility>
 
-<<<<<<< HEAD:be/src/http/ev_http_server.cpp
-=======
-#include "base/brpc/brpc.h"
-#include "base/system/errno.h"
-#include "base/testutil/sync_point.h"
-#include "common/config_ingest_fwd.h"
->>>>>>> 6b6b960 ([BugFix] Fix EvHttpServer closing unrelated fds on shutdown (#79582)):be/src/platform/http/ev_http_server.cpp
 #include "common/logging.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
@@ -67,6 +60,7 @@
 #include "http/http_request.h"
 #include "service/backend_options.h"
 #include "service/brpc.h"
+#include "testutil/sync_point.h"
 #include "util/debug_util.h"
 #include "util/errno.h"
 #include "util/thread.h"
@@ -227,17 +221,7 @@ Status EvHttpServer::start() {
             _https.push_back(http);
             pthread_rwlock_unlock(&_rw_lock);
 
-<<<<<<< HEAD:be/src/http/ev_http_server.cpp
-            // Worker 0 reuses _server_fd from _bind(); workers 1..N-1 create
-=======
-#if defined(__APPLE__) && !defined(STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
-            // Old libevent can only initialize requests in the generic callback,
-            // so cap pre-read bodies before any handler-specific header checks.
-            evhttp_set_max_body_size(http, static_cast<ev_ssize_t>(config::streaming_load_max_mb) * 1024 * 1024);
-#endif
-
             // Worker 0 listens on _server_fd from _bind(); workers 1..N-1 create
->>>>>>> 6b6b960 ([BugFix] Fix EvHttpServer closing unrelated fds on shutdown (#79582)):be/src/platform/http/ev_http_server.cpp
             // their own SO_REUSEPORT listeners so the kernel load-balances
             // accepts in-kernel rather than waking all workers on every
             // connection (the cause of native_queued_spin_lock_slowpath

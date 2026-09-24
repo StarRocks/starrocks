@@ -25,23 +25,14 @@
 #include <thread>
 #include <vector>
 
-<<<<<<< HEAD:be/test/http/ev_http_server_test.cpp
 #include "http/http_channel.h"
 #include "http/http_client.h"
 #include "http/http_handler.h"
 #include "http/http_method.h"
 #include "http/http_request.h"
 #include "testutil/assert.h"
-=======
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/defer_op.h"
-#include "platform/http/http_channel.h"
-#include "platform/http/http_client.h"
-#include "platform/http/http_handler.h"
-#include "platform/http/http_method.h"
-#include "platform/http/http_request.h"
->>>>>>> 6b6b960 ([BugFix] Fix EvHttpServer closing unrelated fds on shutdown (#79582)):be/test/platform/ev_http_server_test.cpp
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
