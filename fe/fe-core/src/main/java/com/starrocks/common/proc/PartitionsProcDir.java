@@ -269,18 +269,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) {
-        // set result
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(this.titleNames);
-        for (List<Comparable> info : partitionInfos) {
-            List<String> row = new ArrayList<String>(info.size());
-            for (Comparable comparable : info) {
-                row.add(comparable.toString());
-            }
-            result.addRow(row);
-        }
-
-        return result;
+        return ProcUtils.toProcResult(this.titleNames, partitionInfos);
     }
 
     public List<List<Comparable>> getPartitionInfos() {
