@@ -14,6 +14,8 @@
 
 #include "service/service_be/config_update_hooks.h"
 
+#include <gflags/gflags_declare.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -36,12 +38,15 @@
 #include "common/config_llm_fwd.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_merge_commit_fwd.h"
+#include "common/config_network_fwd.h"
+#include "common/config_path_fwd.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_runtime_fwd.h"
 #include "common/config_staros_worker_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/config_update_registry.h"
 #include "common/config_vector_index_fwd.h"
+#include "common/glog_init.h"
 #include "common/logging.h"
 #include "common/status.h"
 #include "common/system/cpu_info.h"
@@ -79,6 +84,12 @@
 #include "compute_env/staros/staros_worker.h"
 #include "compute_env/staros/staros_worker_runtime.h"
 #endif // USE_STAROS
+
+namespace brpc {
+
+DECLARE_int32(max_connection_pool_size);
+
+} // namespace brpc
 
 namespace starrocks {
 namespace {
@@ -138,6 +149,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_rate_limit_qps_chat(config::ai_function_rate_limit_qps_chat);
     });
+    registry->register_callback("ai_function_rate_limit_qps_embedding", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_rate_limit_qps_embedding(config::ai_function_rate_limit_qps_embedding);
+    });
     registry->register_callback("ai_function_max_inflight", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_inflight(config::ai_function_max_inflight);
@@ -150,6 +165,17 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     const auto* runtime_env_ptr = &runtime_env;
 
     register_ai_config_update_hooks(exec_env);
+
+    // Without this, changing sys_log_level at runtime reports success and changes nothing.
+    registry->register_callback("sys_log_level", []() -> Status { return update_logging(); });
+
+    // brpc reads FLAGS_max_connection_pool_size on every pooled get/return, so lowering it only stops
+    // further connections from being cached; connections already in flight are left untouched.
+    registry->register_callback("brpc_max_connection_pool_size", []() -> Status {
+        LOG(INFO) << "set brpc max_connection_pool_size:" << config::brpc_max_connection_pool_size;
+        brpc::FLAGS_max_connection_pool_size = config::brpc_max_connection_pool_size;
+        return Status::OK();
+    });
 
     registry->register_callback("try_release_resource_before_core_dump", []() -> Status {
         refresh_core_dump_resource_releaser_config();
@@ -527,7 +553,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("compact_threads", [=]() -> Status {
         auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
-            tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
         }
         return Status::OK();
     });
@@ -592,6 +618,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
 #undef UPDATE_STARLET_CONFIG
+
+    // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
+    // The value reaching here already passed the config's enum check, so the update can only fail if
+    // starlet does not know the flag.
+    registry->register_callback("starlet_starmgr_client_compression_type", []() {
+        auto val = config::starlet_starmgr_client_compression_type.value();
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type", val).empty()) {
+            LOG(WARNING) << "Failed to update starmgr_client_compression_type";
+            return Status::InvalidArgument("Failed to update starlet_starmgr_client_compression_type.");
+        }
+        LOG(INFO) << "set starlet_starmgr_client_compression_type: " << val;
+        return Status::OK();
+    });
 
 #ifndef BUILD_FORMAT_LIB
     registry->register_callback("starlet_filesystem_instance_cache_capacity", [=]() -> Status {

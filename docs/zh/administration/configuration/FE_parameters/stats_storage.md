@@ -153,6 +153,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于响应外部表谓词列查询（例如自动 ANALYZE 选列时）的内存缓存的 TTL。值越小，新记录的使用信息越快可见，但会增加对底层存储表的查询压力；值越大则降低该压力，但会增加数据的陈旧程度。
 - 引入版本: v4.2.0
 
+### `enable_temporary_table_statistic_collect`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 采集作业是否为临时表收集统计信息。该项作用于根据采集作业定义构建的收集任务，即自动采集作业以及通过 CREATE ANALYZE 创建的作业。设置为 `false` 时，构建这些作业时会跳过临时表，仅对非临时表进行采集。单次执行的 `ANALYZE TABLE` 语句不受该项影响，仍会为临时表收集统计信息。当生命周期很短的临时表带来的采集开销超过其统计信息的价值时，可将该项设置为 `false`。
+- 引入版本: v3.4.0
+
 ## 存储
 
 ### `allow_implicit_key_column_in_agg_add_column`
@@ -751,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Boolean
 - 单位: -
 - 是否可变: Yes
-- 描述: 是否为源表是内部 OLAP 表或外部 Iceberg 表的 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
+- 描述: 是否为 `INSERT INTO ... SELECT FROM <table>` 导入启用基于采样的 Tablet 预分裂。源表可以是内部 OLAP 表，也可以是 External Catalog 中的表，如 Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch 表，但不支持视图。如果无法根据表统计信息估算外部源表的大小，该导入跳过预分裂。该功能支持自动 Range 分区目标，包括显式指定的正式分区或临时分区，以及 static 和 dynamic 两种 `INSERT OVERWRITE`。v4.1.0 起 GA 默认开启。如需在集群范围关闭，设置为 `false`。会话变量 `enable_tablet_pre_split` 也必须为 `true` 时预分裂才会运行。如需回滚，将其设为 `false`，新的 INSERT-from-table 导入将立即跳过预分裂。
 - 引入版本: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -805,7 +814,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 基于采样的 Tablet 预分裂 meta tier 从 `FILES()` 数据源并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
+- 描述: 基于采样的 Tablet 预分裂 meta tier 从文件类导入源（`FILES()` 或 Broker Load）并发读取的 Parquet/ORC footer 数量。每个文件的 footer 读取相互独立，且采样器会对汇总后的统计信息排序，因此并发只会缩短预分裂钩子的墙钟耗时（每个 footer 都是一次远程往返；文件众多的数据源否则会串行执行数百次往返）。设为 `1` 可关闭并发。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`
@@ -830,7 +839,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 降级或线上回滚前安全关闭该特性的步骤：
 
 1. 将四个预分裂开关同时设为 `false`：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table` 和 `enable_tablet_pre_split_for_mv_refresh`。新导入将立即跳过预分裂。
-2. 等待预分裂创建的在途 reshard 作业排空。用 `SHOW TABLET RESHARD JOB` 监控；当没有 `RUNNING` 或 `PENDING` 行后回滚完成。
+2. 等待预分裂创建的在途 reshard 作业排空。可用以下查询监控：
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   该查询不再返回任何行时，回滚即完成。只有 `FINISHED` 和 `ABORTED` 是终态，处于 `PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` 等非终态的作业都仍在执行中。
 3. 继续降级流程。底层基础设施（External-Boundaries Tablet Split）与预分裂特性开关解耦，无论开关如何都可用。
 
 #### 多分区基于采样的 Tablet 预分裂行为说明（P2-a）

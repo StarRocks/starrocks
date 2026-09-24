@@ -62,6 +62,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
@@ -169,16 +170,100 @@ public class InsertPreSplitHookFilesTest {
     }
 
     @Test
-    public void skipsFilesInsertWithProperties() throws Exception {
-        // INSERT PROPERTIES(strict_mode=true) ... SELECT * FROM FILES(...) — load
-        // properties are validated only after this hook, so skip conservatively.
-        // Source-agnostic pre-filter: passesCommonPreFilters runs before source
-        // selection, so this is parity coverage, not a FILES-isolating gate test.
-        InsertStmt stmt = simpleFilesInsertStmt();
-        when(stmt.getProperties()).thenReturn(java.util.Map.of("strict_mode", "true"));
+    public void filesInsertByNameWithLoadPropertiesReachesTheCoordinator() {
+        // The shape this path exists for:
+        //
+        //     INSERT INTO t BY NAME
+        //     PROPERTIES("strict_mode" = "true", "max_filter_ratio" = "0.1")
+        //     SELECT * FROM FILES("path" = "s3://...", "format" = "parquet", ...)
+        //
+        // BY NAME pairs each FILES column with the target column of the same name, which is also
+        // how the sampler reads the source, so the schema-alignment gate does not apply. The
+        // PROPERTIES clause used to stop the statement dead in passesCommonPreFilters; that gate is
+        // gone, because no INSERT load property can move a row to a different tablet. A third key
+        // the gate rejected outright (enable_push_down_schema) rides along to pin that down. Every
+        // other gate is wired eligible, so the properties gate is the SOLE barrier -- reinstating
+        // it makes this test fail.
+        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
+        when(context.isBypassAuthorizerCheck()).thenReturn(true);
+        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        OlapTable target = mock(OlapTable.class);
+        when(target.getName()).thenReturn("abt_test");
+        when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(target.isRangeDistribution()).thenReturn(true);
+        when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        when(target.getVisibleIndexMetas())
+                .thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
+        com.starrocks.catalog.PartitionInfo partitionInfo = mock(com.starrocks.catalog.PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
+        when(target.getPartitionInfo()).thenReturn(partitionInfo);
+        // BY NAME pairs FILES columns with the target's written columns, so the target must list its
+        // sort key too; an empty base schema leaves the sort key unpaired and the statement declined.
+        when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(bigintColumn("k")));
+
+        FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
+        TableFunctionTable filesTable = mock(TableFunctionTable.class);
+        when(filesTable.loadFileList()).thenReturn(List.of());
+        // The inferred FILES() schema must carry the sort key: the sampler projects it by name, so a
+        // schema without it leaves nothing to sample and the statement is declined before the coordinator.
+        // Stub both views of it -- the column pairing reads the visible schema, the key guard the full one.
+        when(filesTable.getFullSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesRelation.getTable()).thenReturn(filesTable);
+        InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
+        when(stmt.isColumnMatchByName()).thenReturn(true);
+        when(stmt.getTableRef()).thenReturn(mock(TableRef.class));
+        when(stmt.getProperties()).thenReturn(java.util.Map.of(
+                "strict_mode", "true", "max_filter_ratio", "0.1", "enable_push_down_schema", "true"));
+
+        Database database = mock(Database.class);
+        when(database.getFullName()).thenReturn("target_db");
+
+        try (MockedStatic<com.starrocks.alter.reshard.TabletReshardUtils> reshardUtils =
+                     PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr =
+                        Mockito.mockStatic(com.starrocks.server.GlobalStateMgr.class);
+                MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedStatic<com.starrocks.sql.common.MetaUtils> metaUtils =
+                        Mockito.mockStatic(com.starrocks.sql.common.MetaUtils.class);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                org.mockito.MockedConstruction<com.starrocks.sql.analyzer.QueryAnalyzer> ignoredAnalyzer =
+                        Mockito.mockConstruction(com.starrocks.sql.analyzer.QueryAnalyzer.class)) {
+            com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
+            com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
+            when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
+            globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
+            when(metadataMgr.getDb(any(), any(), eq("target_db"))).thenReturn(database);
+
+            TableRef normalizedRef = mock(TableRef.class);
+            when(normalizedRef.getCatalogName()).thenReturn("default_catalog");
+            when(normalizedRef.getDbName()).thenReturn("target_db");
+            analyzerUtils.when(() -> AnalyzerUtils.normalizedTableRef(any(), any())).thenReturn(normalizedRef);
+
+            metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getSessionAwareTable(any(), eq(database), any()))
+                    .thenReturn(target);
+            metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getRangeDistributionColumns(target))
+                    .thenReturn(List.of(bigintColumn("k")));
+
+            targets.when(() -> PreSplitTargets.findEligibleTarget(database, target))
+                    .thenReturn(new PreSplitTargets.EligibleTarget(database, target, /*partitionId*/ 11L,
+                            List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
+                                    List.of(bigintColumn("k"))))));
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                    any(), any(), any(), anyLong(), any(), any()))
+                    .thenReturn(mock(DefaultPreSplitPipeline.class));
+
+            InsertPreSplitHook.maybeRunPreSplit(stmt, context);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
+        }
     }
 
     @Test
@@ -266,7 +351,7 @@ public class InsertPreSplitHookFilesTest {
             InsertPreSplitHook.maybeRunPreSplit(stmt, context);
 
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
         }

@@ -1,0 +1,122 @@
+-- name: test_multi_node_tablet_write @cloud
+create database db_${uuid0};
+use db_${uuid0};
+
+-- One bucket on purpose: this is the shape the feature exists for -- without it the whole load
+-- lands on the single compute node that owns the tablet. `file_bundling` is required, not
+-- incidental: it is what puts the transaction on combined txn logs (each writing node emits a
+-- PARTIAL txn log and the sender folds them into one) and what makes every segment carry its own
+-- bundle filename plus offset, so segments written into different nodes' bundles can be folded
+-- into one rowset.
+create table t_local (k1 bigint, k2 int, v1 string, v2 bigint)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+
+set lake_multi_node_tablet_write_mode = 'force';
+-- Without these two the case would quietly run the single-node path it exists to check. The node
+-- count is the load's estimated size divided by the share, and a 20,000-row insert is nowhere near
+-- the 2 GB default share, so it would resolve to one node whatever the mode says. The bound is set
+-- here for the same reason: the case must not depend on what lake_multi_node_write_max_nodes
+-- happens to default to. Both stay set for the rest of the file.
+set lake_multi_node_write_bytes_per_node = 1;
+set lake_multi_node_write_max_nodes = 4;
+
+-- Enough rows for many chunks, so the load actually lands data on more than whichever node
+-- happened to receive the first chunk.
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
+select count(*), count(distinct k1), sum(k1), sum(v2) from t_local;
+
+-- A second transaction into the same tablet: the folded rowsets must accumulate, not replace.
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('w', generate_series), generate_series * 5 from table(generate_series(1, 20000));
+select count(*), sum(v2) from t_local;
+select k1, k2, v1, v2 from t_local where k1 = 12345 order by v1;
+
+-- Deletes must still erase rows written by earlier transactions.
+delete from t_local where k1 <= 10000;
+select count(*), sum(k1), sum(v2) from t_local;
+
+-- Back to the default: the same load must give exactly the same answer.
+set lake_multi_node_tablet_write_mode = 'off';
+truncate table t_local;
+insert into t_local select generate_series, cast(generate_series % 7 as int), concat('v', generate_series), generate_series * 3 from table(generate_series(1, 20000));
+select count(*), sum(k1), sum(v2) from t_local;
+
+-- A table without file bundling is refused: there is no combined txn log to fold the per-node logs
+-- into, and the folded rowset would mix segments that carry a bundle offset with segments that do
+-- not. It must load correctly on the single-node path rather than fail.
+set lake_multi_node_tablet_write_mode = 'force';
+create table t_no_bundle (k1 bigint, k2 int, v1 string)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'false');
+insert into t_no_bundle select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_no_bundle;
+
+-- A primary-key table is NOT refused. Rows sharing a key are routed by a hash of the key columns,
+-- so all of them reach one node and resolve against each other in arrival order; ordering BETWEEN
+-- transactions is unaffected either way, which is what the second load asserts here.
+create table t_pk (k1 bigint, k2 int, v1 string)
+    primary key(k1, k2)
+    distributed by hash(k1, k2) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+insert into t_pk select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_pk select generate_series, cast(generate_series % 7 as int), concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_pk;
+select k1, k2, v1 from t_pk where k1 = 12345;
+
+-- Bucket-level parallelism already fills the cluster here, so the gate keeps the feature out of it
+-- regardless of the session variable. Correctness is unchanged either way.
+create table t_many_buckets (k1 bigint, k2 int, v1 string)
+    duplicate key(k1, k2)
+    distributed by hash(k1) buckets 16
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_many_buckets select generate_series, cast(generate_series % 7 as int), concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_many_buckets;
+
+-- Every partition here is created by the LOAD, not by the DDL: the table starts empty and automatic
+-- partitioning adds one per day as rows arrive. Those partitions are not in the plan, so their
+-- tablets come back over the create-partition RPC instead of from the sink's location -- the path
+-- this case exists for. Each of them starts with one tablet, because the data boundaries that would
+-- have split it have not been seen yet, so without the spread a whole load funnels through one node.
+create table t_auto (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto;
+
+-- A second load into the partitions the first one created. They are in the plan this time, so this
+-- also checks that rowsets folded from several nodes accumulate across the two paths rather than
+-- replace each other.
+insert into t_auto select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), sum(k1) from t_auto;
+select dt, k1, v1 from t_auto where k1 = 12345 order by v1;
+
+-- A primary-key table partitioned the same way. Rows sharing a key are routed by a hash of the key
+-- columns, and every sink instance must resolve that hash against the SAME node list for a
+-- runtime-created partition -- they each ask FE for it separately, and a per-instance answer would
+-- send one key's rows to two writers.
+create table t_auto_pk (dt date, k1 bigint, v1 string)
+    primary key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true', 'enable_persistent_index' = 'true');
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_auto_pk select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto_pk;
+select dt, k1, v1 from t_auto_pk where k1 = 12345;
+
+-- The same loads with the feature off must give exactly the same answers.
+set lake_multi_node_tablet_write_mode = 'off';
+create table t_auto_off (dt date, k1 bigint, v1 string)
+    duplicate key(dt, k1)
+    partition by date_trunc('day', dt)
+    distributed by hash(k1) buckets 1
+    properties('replication_num' = '1', 'file_bundling' = 'true');
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('v', generate_series) from table(generate_series(1, 20000));
+insert into t_auto_off select date_add('2026-01-01', cast(generate_series % 5 as int)), generate_series, concat('w', generate_series) from table(generate_series(1, 20000));
+select count(*), count(distinct dt), sum(k1) from t_auto_off;
+
+drop database db_${uuid0} force;

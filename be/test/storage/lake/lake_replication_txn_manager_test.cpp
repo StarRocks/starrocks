@@ -485,25 +485,30 @@ private:
 
 TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_basic_gate) {
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
     config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 4;
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(2, nullptr));
 
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_par_gate")
-                      .set_min_threads(1)
-                      .set_max_threads(1)
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_gate")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
                       .set_max_queue_size(8)
                       .build(&pool));
+    EXPECT_EQ(0, pool->num_threads());
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(1, pool.get()));
     EXPECT_TRUE(LakeReplicationTxnManager::should_use_parallel_copy(2, pool.get()));
     pool->shutdown();
 }
 
-TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overloaded) {
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_ignores_queue_depth) {
     Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
     config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 4;
     std::unique_ptr<ThreadPool> pool;
-    ASSERT_OK(ThreadPoolBuilder("lake_par_overld")
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_parallel_overload")
                       .set_min_threads(1)
                       .set_max_threads(1)
                       .set_max_queue_size(32)
@@ -515,7 +520,7 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_queue_overload
         ASSERT_OK(pool->submit_func([&]() { block.wait(); }));
     }
 
-    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(20, pool.get()));
+    EXPECT_TRUE(LakeReplicationTxnManager::should_use_parallel_copy(20, pool.get()));
     block.count_down();
     pool->wait();
     pool->shutdown();
@@ -530,6 +535,121 @@ TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_disable_by
             ThreadPoolBuilder("lake_par_dis").set_min_threads(1).set_max_threads(1).set_max_queue_size(8).build(&pool));
 
     EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_should_use_parallel_copy_can_limit_tablet_to_one_worker) {
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    Int32ConfigGuard max_worker_guard(&config::lake_replication_max_parallel_files_per_tablet);
+    config::lake_replication_parallel_copy_min_file_count = 2;
+    config::lake_replication_max_parallel_files_per_tablet = 1;
+
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_one_worker")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    EXPECT_FALSE(LakeReplicationTxnManager::should_use_parallel_copy(100, pool.get()));
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_uses_pool_for_single_file) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_single_file")
+                      .set_min_threads(0)
+                      .set_max_threads(2)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    const auto caller_thread = std::this_thread::get_id();
+    std::thread::id copy_thread;
+    std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+    tasks.emplace_back([&]() {
+        copy_thread = std::this_thread::get_id();
+        return Status::OK();
+    });
+
+    ASSERT_OK(LakeReplicationTxnManager::execute_file_copy_tasks(std::move(tasks), pool.get(), 1));
+    EXPECT_NE(caller_thread, copy_thread);
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_limits_tablet_workers) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_tablet_dop")
+                      .set_min_threads(0)
+                      .set_max_threads(4)
+                      .set_max_queue_size(8)
+                      .build(&pool));
+
+    CountDownLatch workers_started(2);
+    std::atomic<int> active{0};
+    std::atomic<int> max_active{0};
+    std::atomic<int> completed{0};
+    std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+    for (int i = 0; i < 12; ++i) {
+        tasks.emplace_back([&]() {
+            int current = active.fetch_add(1, std::memory_order_relaxed) + 1;
+            int observed = max_active.load(std::memory_order_relaxed);
+            while (current > observed && !max_active.compare_exchange_weak(observed, current)) {
+            }
+            workers_started.count_down();
+            workers_started.wait();
+            completed.fetch_add(1, std::memory_order_relaxed);
+            active.fetch_sub(1, std::memory_order_relaxed);
+            return Status::OK();
+        });
+    }
+
+    ASSERT_OK(LakeReplicationTxnManager::execute_file_copy_tasks(std::move(tasks), pool.get(), 2));
+    EXPECT_EQ(12, completed.load());
+    EXPECT_EQ(2, max_active.load());
+    pool->shutdown();
+}
+
+TEST(LakeReplicationTaskRunnerTest, test_execute_file_copy_tasks_shares_global_pool_limit) {
+    std::unique_ptr<ThreadPool> pool;
+    ASSERT_OK(ThreadPoolBuilder("lake_repl_global_limit")
+                      .set_min_threads(0)
+                      .set_max_threads(3)
+                      .set_max_queue_size(16)
+                      .build(&pool));
+
+    CountDownLatch workers_started(3);
+    std::atomic<int> active{0};
+    std::atomic<int> max_active{0};
+    auto build_tasks = [&]() {
+        std::vector<LakeReplicationTxnManager::ReplicationTask> tasks;
+        for (int i = 0; i < 8; ++i) {
+            tasks.emplace_back([&]() {
+                int current = active.fetch_add(1, std::memory_order_relaxed) + 1;
+                int observed = max_active.load(std::memory_order_relaxed);
+                while (current > observed && !max_active.compare_exchange_weak(observed, current)) {
+                }
+                workers_started.count_down();
+                workers_started.wait();
+                active.fetch_sub(1, std::memory_order_relaxed);
+                return Status::OK();
+            });
+        }
+        return tasks;
+    };
+
+    Status first_status;
+    Status second_status;
+    std::thread first(
+            [&]() { first_status = LakeReplicationTxnManager::execute_file_copy_tasks(build_tasks(), pool.get(), 4); });
+    std::thread second([&]() {
+        second_status = LakeReplicationTxnManager::execute_file_copy_tasks(build_tasks(), pool.get(), 4);
+    });
+    first.join();
+    second.join();
+
+    ASSERT_OK(first_status);
+    ASSERT_OK(second_status);
+    EXPECT_EQ(3, max_active.load());
     pool->shutdown();
 }
 
@@ -1150,8 +1270,8 @@ protected:
     }
 
     StatusOr<std::shared_ptr<TabletMetadataPB>> convert(
-            const TabletMetadataPtr& source, const TabletMetadataPtr& target, int64_t data_version,
-            const std::string& source_data_dir, std::unordered_map<std::string, size_t>* segment_sizes = nullptr,
+            const TabletMetadataPtr& source, const TabletMetadataPtr& target, const std::string& source_data_dir,
+            std::unordered_map<std::string, size_t>* segment_sizes = nullptr,
             std::map<std::string, std::string>* file_locations_out = nullptr,
             std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>* filename_map_out = nullptr,
             LakeReplicationTxnManager::SourceEncryptionMetaMap* source_encryption_metas_out = nullptr) {
@@ -1160,7 +1280,7 @@ protected:
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> local_filename_map;
         LakeReplicationTxnManager::SourceEncryptionMetaMap local_source_encryption_metas;
         return _replication_txn_manager->convert_and_build_new_tablet_meta(
-                source, target, source->id(), target->id(), 70001, data_version, source_data_dir,
+                source, target, source->id(), target->id(), 70001, source_data_dir,
                 segment_sizes != nullptr ? *segment_sizes : local_segment_sizes,
                 file_locations_out != nullptr ? *file_locations_out : local_file_locations,
                 filename_map_out != nullptr ? *filename_map_out : local_filename_map,
@@ -1193,7 +1313,7 @@ protected:
     std::unique_ptr<lake::LakeReplicationTxnManager> _replication_txn_manager;
 };
 
-TEST_F(LakeReplicationMetadataConversionTest, target_split_child_without_data_version_metadata) {
+TEST_F(LakeReplicationMetadataConversionTest, target_split_child_reuses_visible_metadata) {
     auto source = make_metadata(51001, 3);
     auto target = make_metadata(51002, 2, true);
     const std::string source_filename = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000081.dat";
@@ -1206,12 +1326,11 @@ TEST_F(LakeReplicationMetadataConversionTest, target_split_child_without_data_ve
     auto* target_segment = target_rowset->add_segment_metas();
     target_segment->set_filename(target_filename);
     target_segment->set_shared(true);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
 
     std::map<std::string, std::string> file_locations;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, &file_locations,
-                          &filename_map);
+    auto result =
+            convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, &file_locations, &filename_map);
     ASSERT_OK(result.status());
     ASSERT_EQ(1, (*result)->rowsets_size());
     ASSERT_EQ(1, (*result)->rowsets(0).segment_metas_size());
@@ -1221,24 +1340,50 @@ TEST_F(LakeReplicationMetadataConversionTest, target_split_child_without_data_ve
     EXPECT_TRUE(filename_map.empty());
 }
 
-TEST_F(LakeReplicationMetadataConversionTest,
-       target_split_child_without_data_version_metadata_current_version_not_newer) {
-    auto source = make_metadata(51101, 3);
-    auto target = make_metadata(51102, 1, true);
-
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_not_found()) << result.status();
-}
-
-TEST_F(LakeReplicationMetadataConversionTest, target_hash_tablet_without_data_version_metadata) {
+TEST_F(LakeReplicationMetadataConversionTest, uses_visible_metadata_and_preserves_target_segment_size) {
     auto source = make_metadata(52001, 3);
-    auto target = make_metadata(52002, 2);
-    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+    auto target = make_metadata(52002, 3);
+    auto stale_data_version = make_metadata(52002, 1);
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
-    ASSERT_FALSE(result.ok());
-    EXPECT_TRUE(result.status().is_not_found()) << result.status();
+    const std::string source_reused = file_name(81, "dat");
+    const std::string target_reused = fmt::format("00000000000000ff_{}", source_reused.substr(17));
+    const std::string source_stale = file_name(82, "dat");
+    const std::string target_stale = fmt::format("00000000000000ee_{}", source_stale.substr(17));
+
+    auto* source_rowset = source->add_rowsets();
+    source_rowset->set_id(1);
+    auto* source_reused_segment = source_rowset->add_segment_metas();
+    source_reused_segment->set_filename(source_reused);
+    source_reused_segment->set_size(101);
+    auto* source_stale_segment = source_rowset->add_segment_metas();
+    source_stale_segment->set_filename(source_stale);
+    source_stale_segment->set_size(202);
+
+    auto* target_rowset = target->add_rowsets();
+    target_rowset->set_id(10);
+    auto* target_reused_segment = target_rowset->add_segment_metas();
+    target_reused_segment->set_filename(target_reused);
+    target_reused_segment->set_size(111);
+
+    auto* stale_rowset = stale_data_version->add_rowsets();
+    stale_rowset->set_id(20);
+    auto* stale_segment = stale_rowset->add_segment_metas();
+    stale_segment->set_filename(target_stale);
+    stale_segment->set_size(222);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*stale_data_version));
+
+    std::map<std::string, std::string> file_locations;
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, &file_locations);
+    ASSERT_OK(result.status());
+
+    ASSERT_EQ(1, (*result)->rowsets_size());
+    ASSERT_EQ(2, (*result)->rowsets(0).segment_metas_size());
+    EXPECT_EQ(target_reused, (*result)->rowsets(0).segment_metas(0).filename());
+    EXPECT_EQ(111, (*result)->rowsets(0).segment_metas(0).size());
+    EXPECT_NE(target_stale, (*result)->rowsets(0).segment_metas(1).filename());
+    EXPECT_EQ(202, (*result)->rowsets(0).segment_metas(1).size());
+    ASSERT_EQ(1, file_locations.size());
+    EXPECT_EQ(lake::join_path(lake::join_path(_test_dir, "source_data"), source_stale), file_locations.begin()->first);
 }
 
 TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix) {
@@ -1254,7 +1399,7 @@ TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix) {
     add_file_set(source.get(), 20, true);
     add_file_set(source.get(), 40, true);
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_OK(result.status());
     expect_file_set_shared(**result, 0, 0, true);
     expect_file_set_shared(**result, 1, 20, false);
@@ -1271,7 +1416,7 @@ TEST_F(LakeReplicationMetadataConversionTest, records_exact_private_source_encry
     add_file_set(source.get(), 20, false);
 
     LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, nullptr,
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, nullptr,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
     ASSERT_EQ(12, source_encryption_metas.size());
@@ -1301,7 +1446,7 @@ TEST_F(LakeReplicationMetadataConversionTest, rejects_empty_and_encrypted_metada
     delvec.set_name(filename);
     delvec.set_encryption_meta("encrypted");
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_corruption()) << result.status();
 }
@@ -1320,7 +1465,7 @@ TEST_F(LakeReplicationMetadataConversionTest, rejects_distinct_encrypted_metadat
     delvec.set_name(filename);
     delvec.set_encryption_meta("encrypted-b");
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_corruption()) << result.status();
 }
@@ -1352,7 +1497,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_shared_aggregate_conflicting
             add_segment(false, "private-encrypted-meta");
         }
 
-        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_corruption()) << result.status();
     }
@@ -1387,7 +1532,7 @@ TEST_F(LakeReplicationMetadataConversionTest, bundled_aggregate_conflicting_sour
             add_segment(false, "private-encrypted-meta");
         }
 
-        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_corruption()) << result.status();
     }
@@ -1403,7 +1548,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_shared_files_remain_shared_a
     // would make every split child read the complete physical segment.
     add_file_set(source.get(), 0, true);
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_OK(result.status());
     expect_file_set_shared(**result, 0, 0, true);
 }
@@ -1418,7 +1563,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_new_shared_files_with_tde_ar
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
     add_file_set(source.get(), 0, true);
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_supported()) << result.status();
 }
@@ -1436,7 +1581,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_new_source_encrypted_shared_
     segment->set_shared(true);
     segment->set_encryption_meta("deliberately-unresolvable-source-meta");
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_supported()) << result.status();
 }
@@ -1458,7 +1603,7 @@ TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_
         segment->set_bundle_file_offset(0);
         segment->set_shared(false);
 
-        auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+        auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
         ASSERT_FALSE(result.ok()) << "range_table=" << range_table;
         EXPECT_TRUE(result.status().is_not_supported()) << result.status();
     }
@@ -1478,7 +1623,7 @@ TEST_F(LakeReplicationMetadataConversionTest, new_source_encrypted_bundle_is_rej
     segment->set_bundle_file_offset(0);
     segment->set_encryption_meta("deliberately-unresolvable-source-meta");
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_not_supported()) << result.status();
 }
@@ -1498,7 +1643,7 @@ TEST_F(LakeReplicationMetadataConversionTest, range_existing_encrypted_shared_fi
 
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
     EXPECT_TRUE(filename_map.empty());
@@ -1536,7 +1681,7 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_t
 
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
     EXPECT_TRUE(filename_map.empty());
@@ -1597,14 +1742,14 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_p
     for (int i = 0; i < 2; ++i) {
         auto* segment = source_rowset->add_segment_metas();
         segment->set_filename(source_bundle_filename);
-        segment->set_size(plaintexts[i].size());
+        segment->set_size(plaintexts[i].size() + 10);
         segment->set_bundle_file_offset(i == 0 ? writer0.bundle_file_offset() : writer1.bundle_file_offset());
         segment->set_encryption_meta(fmt::format("deliberately-unresolvable-source-slice-{}", i));
     }
 
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
     EXPECT_TRUE(filename_map.empty());
@@ -1616,6 +1761,8 @@ TEST_F(LakeReplicationMetadataConversionTest, existing_encrypted_bundle_reuses_p
     EXPECT_EQ(target_bundle_filename, output_segments.Get(1).filename());
     EXPECT_EQ(target_pair0.encryption_meta, output_segments.Get(0).encryption_meta());
     EXPECT_EQ(target_pair1.encryption_meta, output_segments.Get(1).encryption_meta());
+    EXPECT_EQ(plaintexts[0].size(), output_segments.Get(0).size());
+    EXPECT_EQ(plaintexts[1].size(), output_segments.Get(1).size());
 
     ASSIGN_OR_ABORT(auto target_fs, FileSystemFactory::CreateSharedFromString(target_bundle_path));
     for (int i = 0; i < 2; ++i) {
@@ -1656,7 +1803,7 @@ TEST_F(LakeReplicationMetadataConversionTest, mixed_dcg_encryption_metadata_pres
 
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
     LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), nullptr, nullptr, &filename_map,
                           &source_encryption_metas);
     ASSERT_OK(result.status());
     const auto& result_dcg = (*result)->dcg_meta().dcgs().at(1);
@@ -1687,7 +1834,7 @@ TEST_F(LakeReplicationMetadataConversionTest, shared_file_ownership_matrix_tde_m
     add_file_set(source.get(), 40, true);
     set_file_set_encryption_meta(source.get(), 1, 40, "source-new");
 
-    auto result = convert(source, target, 1, lake::join_path(_test_dir, "source_data"));
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
     ASSERT_OK(result.status());
     const std::array<std::string, 6> expected_reused = {"target-reused-segment", "target-reused-del",
                                                         "target-reused-sst",     "target-reused-delvec",
@@ -1731,7 +1878,7 @@ TEST_F(LakeReplicationMetadataConversionTest, copies_complete_bundle_object) {
     std::unordered_map<std::string, size_t> segment_sizes;
     std::map<std::string, std::string> file_locations;
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
-    auto result = convert(source, target, 1, source_data_dir, &segment_sizes, &file_locations, &filename_map);
+    auto result = convert(source, target, source_data_dir, &segment_sizes, &file_locations, &filename_map);
     ASSERT_OK(result.status());
     ASSERT_EQ(1, filename_map.size());
     ASSERT_EQ(1, file_locations.size());

@@ -138,6 +138,27 @@ keywords: ['shen ji ri zhi']
 - `audit_log_json_format`: 是否以JSON格式记录。默认是false
 - `audit_log_enable_compress`: 是否启用压缩
 
+#### AI 执行字段
+
+有 AI 执行统计时，下列字段描述已观测到的、已完成的 AI 任务，不包含仍在执行的任务。这些统计沿用查询上报语义：失败、取消、异步上报以及混合版本执行可能导致观测不完整，不能作为保证精确计费且不重复的账本。
+
+| 字段 | 说明 |
+| --- | --- |
+| `AITaskCount` | 已完成的 AI 任务数，包括失败或取消的任务。不计入 SQL NULL 输入和创建任务前被拒绝的输入。 |
+| `AIRequestCount` | 已完成任务中被接受的 HTTP 提交次数，包括被接受的重试。不计入被拒绝的提交。 |
+| `AIRetryCount` | 已完成任务中被接受的重试提交次数。 |
+| `AITimeoutCount` | AI 响应处理路径中观测到的 HTTP 超时和任务截止时间到期次数，不等同于所有被取消的任务数。 |
+| `AIErrorCount` | 最终以行级失败结束的任务数。不包含生命周期取消；失败后重试成功的请求不算最终错误。 |
+| `AIHttpTimeNs` | 从被接受的 HTTP 提交到传输回调的累计耗时，单位为纳秒。不包含重试退避、响应解析和完成队列中的时间。 |
+| `AIPromptTokens` | 提供方报告的有效 prompt token 用量之和。 |
+| `AICompletionTokens` | 提供方报告的有效 completion token 用量之和。 |
+| `AITotalTokens` | 提供方报告的有效 total token 用量之和，不根据 prompt 和 completion token 计算。 |
+| `AIPromptUsageCount` | 包含有效 prompt token 用量的响应数，包括明确报告为零的情况。 |
+| `AICompletionUsageCount` | 包含有效 completion token 用量的响应数，包括明确报告为零的情况。 |
+| `AITotalUsageCount` | 包含有效 total token 用量的响应数，包括明确报告为零的情况。 |
+
+每个 token 字段都有独立的覆盖计数。缺失或无效的用量表示未知，而不是零。未观测到有效用量时省略对应 token 字段；明确报告为零时记录为 `0`。用量覆盖可能不完整，解读 token 总和时应同时查看对应的 usage count。没有 AI 统计时省略 AI 字段。这些字段只记录数值计数，不包含 prompt、响应内容、模型凭据或提供方错误字符串。
+
 ### `fe.big_query.log`
 
 这是StarRocks专用的大查询日志文件，用于监控和分析高资源消耗的查询。其结构类似于审计日志，但包括三个附加字段：

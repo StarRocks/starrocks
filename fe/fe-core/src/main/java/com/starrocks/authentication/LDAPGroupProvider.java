@@ -98,8 +98,6 @@ public class LDAPGroupProvider extends GroupProvider {
      */
     public static final String LDAP_CACHE_REFRESH_INTERVAL = "ldap_cache_refresh_interval";
 
-<<<<<<< HEAD
-=======
     /**
      * How long, in seconds, the last successfully built cache may keep being served while refreshes
      * keep failing. Once the cache has been stale for longer than this, it is dropped and every user
@@ -131,7 +129,6 @@ public class LDAPGroupProvider extends GroupProvider {
             LDAP_CACHE_REFRESH_INTERVAL,
             LDAP_CACHE_MAX_STALE_TIME);
 
->>>>>>> 4c650435d8d ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#61390))
     public static final Set<String> REQUIRED_PROPERTIES = new HashSet<>(Arrays.asList(
             LDAP_LDAP_CONN_URL,
             LDAP_PROP_ROOT_DN_KEY,
@@ -145,9 +142,16 @@ public class LDAPGroupProvider extends GroupProvider {
             Executors.newScheduledThreadPool(Config.group_provider_refresh_thread_num);
 
     /**
-     * Cache user-to-group mapping
+     * Cache user-to-group mapping. Written by the refresh task, read by every login, hence volatile.
      */
-    private Map<String, Set<String>> userToGroupCache = new ConcurrentHashMap<>();
+    private volatile Map<String, Set<String>> userToGroupCache = new ConcurrentHashMap<>();
+
+    /**
+     * Wall-clock time of the last refresh that actually reached the directory, or 0 if none ever did.
+     * Used together with {@link #LDAP_CACHE_MAX_STALE_TIME} to decide whether a failed refresh may
+     * keep serving the previous cache.
+     */
+    private volatile long lastSuccessfulRefreshTimeMs = 0;
 
     /**
      * True once {@link #prepareForActivation()} has filled {@link #userToGroupCache} synchronously.
@@ -236,7 +240,10 @@ public class LDAPGroupProvider extends GroupProvider {
             lookupKey = LDAPAuthProvider.normalizeUsername(userIdentity.getUser());
         } else {
             // When using distinguished name, normalize it for case-insensitive matching
-            lookupKey = LDAPAuthProvider.normalizeUsername(distinguishedName);
+            // Without a search attribute the cache is keyed by the member DN, so canonicalize it: two
+            // spellings of one DN differing only in separator whitespace or case must not land in two
+            // different cache entries.
+            lookupKey = LDAPAuthProvider.canonicalDn(distinguishedName);
         }
         return userToGroupCache.getOrDefault(lookupKey, Set.of());
     }
@@ -244,37 +251,6 @@ public class LDAPGroupProvider extends GroupProvider {
     public void refreshGroups() {
         LOG.info("refresh ldap group cache for group provider: {}", name);
         Map<String, Set<String>> groups = new ConcurrentHashMap<>();
-<<<<<<< HEAD
-        try {
-            DirContext ctx = createDirContextOnConnection(getLdapBindRootDn(), getLdapBindRootPwd());
-            UserNameExtractInterface userNameExtractInterface = getUserNameExtractInterface();
-
-            if (getLdapGroupFilter() != null) {
-                SearchControls searchControls = new SearchControls();
-                searchControls.setSearchScope(SearchControls.SUBTREE_SCOPE);
-                NamingEnumeration<SearchResult> results = ctx.search(getLdapBaseDn(), getLdapGroupFilter(), searchControls);
-                try {
-                    while (results.hasMore()) {
-                        SearchResult result = results.next();
-                        Attributes attributes = result.getAttributes();
-                        matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
-                    }
-                } catch (PartialResultException e) {
-                    LOG.warn("LDAP group search partial result exception", e);
-                }
-            } else if (getLdapGroupDn() != null) {
-                for (String ldapGroupDN : getLdapGroupDn()) {
-                    Attributes attributes =
-                            ctx.getAttributes(ldapGroupDN, new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
-                    matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface);
-                }
-            } else {
-                LOG.warn("Neither ldap_group_filter nor ldap_group_dn exists");
-            }
-        } catch (Exception e) {
-            //Do not affect the normal login process at this time. If an error occurs, an empty group will be returned.
-            LOG.error("LDAP group search failed", e);
-=======
         boolean refreshed = false;
         try {
             // A truncated answer is NOT a successful refresh: publishing the partial map and stamping the
@@ -285,14 +261,34 @@ public class LDAPGroupProvider extends GroupProvider {
             refreshed = fetchGroupsInto(groups);
         } catch (Exception e) {
             LOG.error("LDAP group search failed for group provider: {}", name, e);
->>>>>>> 4c650435d8d ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#61390))
         }
 
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("LDAP group refresh completed, userToGroupCache: {}", groups);
+        if (refreshed) {
+            this.userToGroupCache = groups;
+            this.lastSuccessfulRefreshTimeMs = System.currentTimeMillis();
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("LDAP group refresh completed, userToGroupCache: {}", groups);
+            }
+            return;
         }
 
-        this.userToGroupCache = groups;
+        // The refresh failed. Keep serving the previous cache until it has been stale for longer than
+        // `ldap_cache_max_stale_time`, so that a brief directory outage does not lock every user out
+        // (an empty group set can never intersect a configured `permitted_groups` list).
+        long maxStaleMs = getLdapCacheMaxStaleTime() * 1000L;
+        long staleForMs = System.currentTimeMillis() - lastSuccessfulRefreshTimeMs;
+        if (staleForMs > maxStaleMs) {
+            if (!userToGroupCache.isEmpty()) {
+                LOG.warn("LDAP group cache of group provider '{}' has been stale for {}ms which exceeds {}={}s, " +
+                                "dropping {} cached entries; users will resolve to an empty group set",
+                        name, staleForMs, LDAP_CACHE_MAX_STALE_TIME, getLdapCacheMaxStaleTime(), userToGroupCache.size());
+            }
+            this.userToGroupCache = new ConcurrentHashMap<>();
+        } else {
+            LOG.warn("LDAP group refresh failed for group provider '{}', keeping the last successful cache " +
+                            "({} entries, stale for {}ms, {}={}s)",
+                    name, userToGroupCache.size(), staleForMs, LDAP_CACHE_MAX_STALE_TIME, getLdapCacheMaxStaleTime());
+        }
     }
 
     /**
@@ -413,7 +409,11 @@ public class LDAPGroupProvider extends GroupProvider {
 
             // Normalize extracted username for case-insensitive matching
             // LDAP is case-insensitive by default, so we normalize to ensure consistent mapping
-            String normalizedUserName = LDAPAuthProvider.normalizeUsername(extractUserName);
+            // Same function the lookup side uses in getGroup(): a user name when a search attribute is
+            // configured, the whole member DN otherwise.
+            String normalizedUserName = getLdapUserSearchAttr() != null
+                    ? LDAPAuthProvider.normalizeUsername(extractUserName)
+                    : LDAPAuthProvider.canonicalDn(extractUserName);
 
             groups.putIfAbsent(normalizedUserName, new HashSet<>());
             groups.get(normalizedUserName).add(groupName);
@@ -490,15 +490,12 @@ public class LDAPGroupProvider extends GroupProvider {
                 10, Integer.MAX_VALUE);
         validateIntegerProp(properties, LDAP_PROP_CONN_READ_TIMEOUT_MS_KEY,
                 10, Integer.MAX_VALUE);
-<<<<<<< HEAD
-=======
         // Unvalidated, the refresh interval reaches scheduleAtFixedRate() as the period: 0 or a negative
         // value throws a message-less IllegalArgumentException out of init(), which is not a DdlException
         // and reaches the client as "Unknown error", and a non-numeric value throws a NumberFormatException
         // that names no property. Both after prepareForActivation() has already paid a full directory walk.
         validateIntegerProp(properties, LDAP_CACHE_REFRESH_INTERVAL, 1, Integer.MAX_VALUE);
         validateIntegerProp(properties, LDAP_CACHE_MAX_STALE_TIME, 0, Integer.MAX_VALUE);
->>>>>>> 4c650435d8d ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#61390))
 
         if ((properties.get(LDAP_GROUP_DN) == null && properties.get(LDAP_GROUP_FILTER) == null) ||
                 (properties.get(LDAP_GROUP_DN) != null && properties.get(LDAP_GROUP_FILTER) != null)) {
@@ -604,6 +601,10 @@ public class LDAPGroupProvider extends GroupProvider {
         return Long.parseLong(properties.getOrDefault(LDAP_CACHE_REFRESH_INTERVAL, "300"));
     }
 
+    public long getLdapCacheMaxStaleTime() {
+        return Long.parseLong(properties.getOrDefault(LDAP_CACHE_MAX_STALE_TIME, "3600"));
+    }
+
     private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
             throws SemanticException {
         if (propertyMap.containsKey(key)) {
@@ -625,5 +626,10 @@ public class LDAPGroupProvider extends GroupProvider {
     @VisibleForTesting
     public void setUserToGroupCache(Map<String, Set<String>> userToGroupCache) {
         this.userToGroupCache = userToGroupCache;
+    }
+
+    @VisibleForTesting
+    public void setLastSuccessfulRefreshTimeMs(long lastSuccessfulRefreshTimeMs) {
+        this.lastSuccessfulRefreshTimeMs = lastSuccessfulRefreshTimeMs;
     }
 }

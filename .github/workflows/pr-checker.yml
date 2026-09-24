@@ -55,7 +55,15 @@ jobs:
           ORI_PR=$(echo "${PR_TITLE}" | grep -oP '\(backport #\K\d+' | tail -n 1)
           author=$(gh pr view ${ORI_PR} -R ${REPO} --json author -q '.author.login')
           if [[ ! "${author}" =~ "mergify" ]]; then
-            gh pr edit ${PR_NUMBER} -R ${REPO} --add-assignee ${author} || true
+            # REST "Add assignees to an issue", not `gh pr edit`: the latter also
+            # queries Projects (classic), which GitHub has sunset -- on a runner with
+            # an older gh it fails with "GraphQL: Projects (classic) is being
+            # deprecated" and the `|| true` swallowed it, so nothing got assigned.
+            # The body is passed as JSON (--input -) so the array does not depend on
+            # gh's `key[]=` sugar, which not every gh version supports.
+            echo "{\"assignees\":[\"${author}\"]}" \
+              | gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/assignees" --input - --silent \
+              || echo "::warning::failed to assign ${author} to #${PR_NUMBER}"
             echo "ORI_PR=${ORI_PR}" >> $GITHUB_OUTPUT
           fi
 

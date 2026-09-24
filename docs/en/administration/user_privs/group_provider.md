@@ -68,7 +68,8 @@ ldap_search_user_arg ::=
     "ldap_user_search_attr" = ""
 
 ldap_cache_arg ::= 
-    "ldap_cache_refresh_interval" = ""
+    ["ldap_cache_refresh_interval" = "",]
+    ["ldap_cache_max_stale_time" = ""]
 ```
 
 <UnixFileSyntax />
@@ -177,7 +178,17 @@ The argument used to define the cache behavior for the LDAP group information.
 
 ##### `ldap_cache_refresh_interval`
 
-Optional. The interval at which StarRocks automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `900`.
+Optional. The interval at which StarRocks automatically refreshes the cached LDAP group information. Unit: Seconds. Default: `300`.
+
+##### `ldap_cache_max_stale_time`
+
+Optional. How long the last successfully built cache keeps being served while refreshes keep failing. Unit: Seconds. Default: `3600`.
+
+If a refresh cannot reach the LDAP server, StarRocks keeps serving the previous cache until it has been stale for longer than this value, after which the cache is dropped and every user resolves to an empty group set. Set this item to `0` to drop the cache as soon as a refresh fails.
+
+:::note
+Dropping the cache immediately turns a brief LDAP outage into a cluster-wide login failure when `permitted_groups` is configured, because an empty group set can never intersect the allowed list. Raising this value trades a longer window of stale group information for tolerance of directory downtime.
+:::
 
 ### Example
 
@@ -349,6 +360,8 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 #### `group_provider`
 
 The name of the group provider(s) to be combined with the security integration. Multiple group providers are separated by commas. Once set, StarRocks will record the user's group information under each specified provider upon login.
+
+When this property is not set, the security integration falls back to the FE configuration item `group_provider`, the cluster-wide default list. Note that versions earlier than v4.2 consulted no group provider at all in that case, so setting the FE configuration item takes effect for such an integration only from v4.2 onwards.
 
 #### `permitted_groups`
 

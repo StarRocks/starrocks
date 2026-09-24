@@ -121,6 +121,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         String mv1 = "create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")   as select date_trunc('day', k1) as dt, sum(v1) as sum_v1, max(v2) as max_v2 " +
@@ -147,6 +148,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         String mv1 = "create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")   as select date_trunc('day', k1) as dt, sum(v1) as sum_v1, max(v2) as max_v2 " +
@@ -207,6 +209,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") as select date_trunc('day', k1) as dt, sum(v1) as sum_v1, max(v2) as max_v2 " +
@@ -214,6 +217,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW test_mv2\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")   as select date_trunc('month', dt) as dt, sum(sum_v1) as sum_v1, max(max_v2) as max_v2 " +
@@ -282,6 +286,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView("create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") as select date_trunc('day', k1) as dt, array_agg_distinct(v1) as sum_v1 " +
@@ -399,6 +404,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         starRocksAssert.withRefreshedMaterializedView(String.format("create MATERIALIZED VIEW test_mv1\n" +
                 "PARTITION BY (dt)\n" +
                 "DISTRIBUTED BY RANDOM\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "as select date_trunc('day', k1) as dt, %s\n" +
                 "from t0 group by date_trunc('day', k1);", agg));
 

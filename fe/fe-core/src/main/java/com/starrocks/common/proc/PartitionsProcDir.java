@@ -229,16 +229,17 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<List<Comparable>> partitionInfos = getPartitionInfos();
         List<List<Comparable>> filterPartitionInfos;
 
+        // Before the filter, and for every statement rather than only the ones with a WHERE: the
+        // loop below pairs titleNames.get(i) with partitionInfo.get(i), and getBasicProcResult
+        // checks again on the way out.
+        ProcUtils.checkRowWidths(this.titleNames, partitionInfos);
+
         // where
         if (filterMap == null || filterMap.isEmpty()) {
             filterPartitionInfos = partitionInfos;
         } else {
             filterPartitionInfos = Lists.newArrayList();
             for (List<Comparable> partitionInfo : partitionInfos) {
-                if (partitionInfo.size() != this.titleNames.size()) {
-                    throw new AnalysisException("PartitionInfos.size() " + partitionInfos.size()
-                            + " not equal TITLE_NAMES.size() " + this.titleNames.size());
-                }
                 boolean isNeed = true;
                 for (int i = 0; i < partitionInfo.size(); i++) {
                     isNeed = filter(this.titleNames.get(i), partitionInfo.get(i), filterMap);
@@ -274,19 +275,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         return getBasicProcResult(filterPartitionInfos);
     }
 
-    public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) {
-        // set result
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(this.titleNames);
-        for (List<Comparable> info : partitionInfos) {
-            List<String> row = new ArrayList<String>(info.size());
-            for (Comparable comparable : info) {
-                row.add(comparable.toString());
-            }
-            result.addRow(row);
-        }
-
-        return result;
+    public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) throws AnalysisException {
+        return ProcUtils.toProcResult(this.titleNames, partitionInfos);
     }
 
     public List<List<Comparable>> getPartitionInfos() {
@@ -509,12 +499,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public int analyzeColumn(String columnName) {
-        for (int i = 0; i < this.titleNames.size(); ++i) {
-            if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
+        // This one reports through ErrorReport instead of throwing, and its title list is built per
+        // table rather than being a constant, so only the lookup is shared.
+        try {
+            return ProcUtils.analyzeColumn(this.titleNames, columnName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+            return -1;
         }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        return -1;
     }
 }

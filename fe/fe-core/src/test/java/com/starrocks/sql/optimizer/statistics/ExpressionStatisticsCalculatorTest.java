@@ -3477,4 +3477,54 @@ public class ExpressionStatisticsCalculatorTest {
         assertBooleanDistribution(stat, 175L, 825L, 0.0);
     }
 
+    /**
+     * A column statistic's min/max is a plain double and nothing keeps it inside the DATETIME domain:
+     * an implicit cast drags a BIGINT column into a date context, an expression statistic is derived
+     * from one, and the bound arrives far outside it. {@code (long) bound} then saturates to
+     * Long.MAX_VALUE and Instant.ofEpochSecond() throws DateTimeException, which escapes statistics
+     * derivation and fails the whole query with "Instant exceeds minimum or maximum instant".
+     * Every date function that converts a statistic bound must treat an out-of-domain bound as no
+     * bound at all.
+     */
+    @Test
+    public void testDateStatisticsWithBoundOutsideDatetimeDomain() {
+        final var col = new ColumnRefOperator(0, DateType.DATETIME, "dt", true);
+        // 9.3e18 is above Long.MAX_VALUE, so the (long) cast saturates and the epoch second is
+        // far past the end of the DATETIME domain.
+        final var statistics = Statistics.builder()
+                .setOutputRowCount(1024)
+                .addColumnStatistic(col, ColumnStatistic.builder()
+                        .setMinValue(0)
+                        .setMaxValue(9.3e18)
+                        .setNullsFraction(0)
+                        .setAverageRowSize(DateType.DATETIME.getTypeSize())
+                        .setDistinctValuesCount(100)
+                        .build())
+                .build();
+
+        final var dateTrunc = new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                Lists.newArrayList(ConstantOperator.createVarchar("day"), col));
+        final var truncStats = ExpressionStatisticCalculator.calculate(dateTrunc, statistics);
+        // No usable range, so date_trunc must fall back to the unknown-range estimate.
+        Assertions.assertEquals(Double.NEGATIVE_INFINITY, truncStats.getMinValue(), 0.001);
+        Assertions.assertEquals(Double.POSITIVE_INFINITY, truncStats.getMaxValue(), 0.001);
+
+        final var year = new CallOperator(FunctionSet.YEAR, IntegerType.INT, Lists.newArrayList(col));
+        final var yearStats = ExpressionStatisticCalculator.calculate(year, statistics);
+        // The default year range, not a year derived from a saturated bound.
+        Assertions.assertEquals(1700, yearStats.getMinValue(), 0.001);
+        Assertions.assertEquals(2100, yearStats.getMaxValue(), 0.001);
+
+        final var toDate = new CallOperator(FunctionSet.TO_DATE, DateType.DATE, Lists.newArrayList(col));
+        Assertions.assertDoesNotThrow(() -> ExpressionStatisticCalculator.calculate(toDate, statistics));
+
+        final var toDays = new CallOperator(FunctionSet.TO_DAYS, IntegerType.INT, Lists.newArrayList(col));
+        Assertions.assertDoesNotThrow(() -> ExpressionStatisticCalculator.calculate(toDays, statistics));
+
+        final var week = new CallOperator(FunctionSet.WEEK, IntegerType.INT,
+                Lists.newArrayList(col, ConstantOperator.createInt(0)));
+        final var weekStats = ExpressionStatisticCalculator.calculate(week, statistics);
+        Assertions.assertEquals(53, weekStats.getDistinctValuesCount(), 0.001);
+    }
+
 }

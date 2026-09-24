@@ -15,12 +15,16 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Test;
+
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -52,6 +56,57 @@ public class OperatorFunctionCheckerTest {
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATE, DateType.DATETIME)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATETIME, DateType.DATE)).first);
         assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(IntegerType.BIGINT, IntegerType.BIGINT)).first);
+    }
+
+    /**
+     * DATE and DATETIME render as fixed-width, zero-padded text, so the text sorts the way the
+     * instant does. str2date(dt, '%Y-%m-%d') over a DATE column is cast(dt as varchar) underneath.
+     */
+    @Test
+    public void testDateToTextCastIsMonotonic() {
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(DateType.DATE, VarcharType.VARCHAR)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(
+                cast(DateType.DATETIME, VarcharType.VARCHAR)).first);
+
+        CallOperator str2date = new CallOperator(FunctionSet.STR2DATE, DateType.DATE,
+                ImmutableList.of(cast(DateType.DATE, VarcharType.VARCHAR), ConstantOperator.createVarchar("%Y-%m-%d")));
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(str2date).first);
+
+        // a number rendered as text still does not keep its order
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctions(cast(IntegerType.INT, VarcharType.VARCHAR)).first);
+    }
+
+    /**
+     * A retention condition only needs the order where it compares a range. Under an (in)equality or
+     * an IN list any deterministic cast maps soundly, so the cast check applies to range comparisons
+     * alone -- while the calls are still checked everywhere.
+     */
+    @Test
+    public void testCastOrderMattersOnlyUnderRangeComparison() {
+        CastOperator textOfInt = cast(IntegerType.INT, VarcharType.VARCHAR);
+        ConstantOperator text = ConstantOperator.createVarchar("20200707");
+
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.EQ, textOfInt, text)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.NE, textOfInt, text)).first);
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new InPredicateOperator(false, textOfInt, text)).first);
+
+        BinaryPredicateOperator range = new BinaryPredicateOperator(BinaryType.GE, textOfInt, text);
+        Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(range);
+        assertFalse(result.first);
+        assertTrue(result.second.contains("cast"), result.second);
+        // a range next to an equality is still checked
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                        new BinaryPredicateOperator(BinaryType.EQ, textOfInt, text), range)).first);
+
+        // a non-monotonic call is refused even under an equality
+        CallOperator substr = new CallOperator(FunctionSet.SUBSTR, VarcharType.VARCHAR,
+                ImmutableList.of(textOfInt, ConstantOperator.createInt(1), ConstantOperator.createInt(4)));
+        assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(
+                new BinaryPredicateOperator(BinaryType.EQ, substr, ConstantOperator.createVarchar("2020"))).first);
     }
 
     /**
@@ -87,6 +142,65 @@ public class OperatorFunctionCheckerTest {
                 ImmutableList.of(ts, ConstantOperator.createVarchar("%m-%Y-%d")));
         assertFalse(OperatorFunctionChecker.onlyContainMonotonicFunctions(
                 new CastOperator(DateType.DATETIME, scrambled)).first);
+    }
+
+    /**
+     * onlyContainMonotonicFunctions() and onlyContainIncreasingFunctions() answer different
+     * questions, and the callers are split between them. A consumer that keeps the comparison
+     * operator when it rewrites `col OP c` needs the expression to INCREASE with the column; a
+     * consumer that maps both endpoints of a partition range and re-sorts them -- which is what
+     * PartitionColPredicateEvaluator does for a retention condition on a range-partitioned table --
+     * only needs the order preserved, in either direction. Collapsing the two would reject retention
+     * conditions such as `datediff('2024-02-28', dt) < 30` that work correctly today.
+     */
+    @Test
+    public void testIncreasingCheckIsStricterThanMonotonicCheck() {
+        ColumnRefOperator dt = new ColumnRefOperator(1, DateType.DATETIME, "dt", true);
+        CallOperator daysUntil = new CallOperator(FunctionSet.DATEDIFF, IntegerType.INT,
+                ImmutableList.of(ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 28, 0, 0)), dt));
+        assertTrue(OperatorFunctionChecker.onlyContainMonotonicFunctions(daysUntil).first);
+        assertFalse(OperatorFunctionChecker.onlyContainIncreasingFunctions(daysUntil).first);
+
+        // the same function with the column in its leading argument grows with it and stays usable
+        CallOperator daysSince = new CallOperator(FunctionSet.DATEDIFF, IntegerType.INT,
+                ImmutableList.of(dt, ConstantOperator.createDatetime(LocalDateTime.of(2024, 2, 28, 0, 0))));
+        assertTrue(OperatorFunctionChecker.onlyContainIncreasingFunctions(daysSince).first);
+    }
+
+    /**
+     * Direction is not the only thing a bare monotonicity flag hides: a function can be monotonic in
+     * one argument and arbitrary in another. next_day() is monotonic in its date, but its
+     * day-of-week argument orders results however the strings happen to sort -- 'Monday' sorts below
+     * 'Sunday' while next_day('2024-01-01', 'Monday') = 2024-01-08 lands ABOVE
+     * next_day('2024-01-01', 'Sunday') = 2024-01-07. A guard keyed on function names alone misses
+     * this whole class, so the check asks which ARGUMENT the column sits in.
+     */
+    @Test
+    public void testColumnInAnArgumentThatCarriesNoOrder() {
+        ColumnRefOperator dow = new ColumnRefOperator(1, VarcharType.VARCHAR, "dow", true);
+        CallOperator byDow = new CallOperator(FunctionSet.NEXT_DAY, DateType.DATE,
+                ImmutableList.of(ConstantOperator.createDatetime(LocalDateTime.of(2024, 1, 1, 0, 0)), dow));
+        assertFalse(OperatorFunctionChecker.onlyContainIncreasingFunctions(byDow).first);
+
+        // a format string is the same shape of argument
+        ColumnRefOperator fmt = new ColumnRefOperator(2, VarcharType.VARCHAR, "fmt", true);
+        ColumnRefOperator ts2 = new ColumnRefOperator(3, IntegerType.BIGINT, "ts", true);
+        assertFalse(OperatorFunctionChecker.onlyContainIncreasingFunctions(
+                new CallOperator(FunctionSet.FROM_UNIXTIME, VarcharType.VARCHAR,
+                        ImmutableList.of(ts2, fmt))).first);
+
+        // date_trunc() takes its unit FIRST, so for that one the ordered argument is the second and a
+        // column there must stay prunable -- a guard that assumed "leading argument is the safe one"
+        // would silently cost every date_trunc-partitioned table its pruning
+        ColumnRefOperator c1 = new ColumnRefOperator(4, DateType.DATETIME, "c1", true);
+        assertTrue(OperatorFunctionChecker.onlyContainIncreasingFunctions(
+                new CallOperator(FunctionSet.DATE_TRUNC, DateType.DATETIME,
+                        ImmutableList.of(ConstantOperator.createVarchar("day"), c1))).first);
+
+        // adding grows with both sides, so a column in either argument is fine
+        ColumnRefOperator n = new ColumnRefOperator(5, IntegerType.INT, "n", true);
+        assertTrue(OperatorFunctionChecker.onlyContainIncreasingFunctions(
+                new CallOperator(FunctionSet.DAYS_ADD, DateType.DATETIME, ImmutableList.of(c1, n))).first);
     }
 
     /**

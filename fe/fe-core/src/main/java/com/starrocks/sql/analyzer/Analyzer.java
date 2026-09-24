@@ -158,23 +158,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.context.AlterContextBaseRenameStmt;
-import com.starrocks.sql.ast.context.AlterContextBaseStmt;
-import com.starrocks.sql.ast.context.ContextDeleteStmt;
-import com.starrocks.sql.ast.context.ContextUpsertStmt;
-import com.starrocks.sql.ast.context.CreateContextBaseStmt;
-import com.starrocks.sql.ast.context.CreateContextCollectionStmt;
-import com.starrocks.sql.ast.context.CreateRetrievalProfileStmt;
-import com.starrocks.sql.ast.context.CreateWorkspaceStmt;
-import com.starrocks.sql.ast.context.DropContextBaseStmt;
-import com.starrocks.sql.ast.context.DropContextCollectionStmt;
-import com.starrocks.sql.ast.context.DropRetrievalProfileStmt;
-import com.starrocks.sql.ast.context.DropWorkspaceStmt;
-import com.starrocks.sql.ast.context.WorkspaceUpsertStmt;
 import com.starrocks.sql.ast.group.AlterGroupProviderStmt;
->>>>>>> 4c650435d8d ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#61390))
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;

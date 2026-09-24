@@ -14,6 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <iostream>
 #include <memory>
 
 #include "base/coding.h"
@@ -34,10 +36,12 @@
 #include "column/nullable_column.h"
 #include "column/schema.h"
 #include "column/serde/column_array_serde.h"
+#include "column/serde/encode_level.h"
 #include "column/variant_column.h"
 #include "common/config_local_io_fwd.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/serde/chunk_encode_context.h"
 #include "runtime/serde/protobuf_chunk_serde.h"
 #include "types/hll.h"
 #include "types/json_value.h"
@@ -743,6 +747,144 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
     }
 }
 
+PARALLEL_TEST(ColumnArraySerdeTest, nullable_column_all_null_encoding) {
+    constexpr size_t kRows = 100;
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    auto all_null = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    all_null->append_nulls(kRows);
+
+    // Without the bit the layout is untouched: no tag, both sub-columns serialized in full.
+    ASSERT_EQ(ColumnArraySerde::max_serialized_size(*all_null->null_column(), 7) +
+                      ColumnArraySerde::max_serialized_size(*all_null->data_column(), 7),
+              ColumnArraySerde::max_serialized_size(*all_null, 7));
+
+    // With the bit an all-NULL column costs a tag plus the row count, whatever its length.
+    const auto all_null_size = ColumnArraySerde::max_serialized_size(*all_null, kLevel);
+    ASSERT_EQ(static_cast<int64_t>(sizeof(uint8_t) + sizeof(uint32_t)), all_null_size);
+    ASSERT_LT(all_null_size, ColumnArraySerde::max_serialized_size(*all_null, 7));
+
+    std::vector<uint8_t> buffer(all_null_size);
+    ASSIGN_OR_ABORT(auto* write_end, ColumnArraySerde::serialize(*all_null, buffer.data(), false, kLevel));
+    ASSERT_EQ(buffer.data() + buffer.size(), write_end);
+
+    auto restored = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSIGN_OR_ABORT(auto* read_end,
+                    ColumnArraySerde::deserialize(buffer.data(), write_end, restored.get(), false, kLevel));
+    ASSERT_EQ(write_end, read_end);
+    ASSERT_EQ(kRows, restored->size());
+    ASSERT_EQ(kRows, restored->data_column()->size());
+    ASSERT_TRUE(restored->has_null());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored->is_null(i));
+    }
+}
+
+PARALLEL_TEST(ColumnArraySerdeTest, nullable_column_all_null_encoding_keeps_mixed_values) {
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    std::vector<Slice> strings{{"aaa"}, {"bbbb"}};
+    auto mixed = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_TRUE(mixed->append_strings(strings.data(), strings.size()));
+    mixed->append_nulls(1);
+
+    std::vector<uint8_t> buffer(ColumnArraySerde::max_serialized_size(*mixed, kLevel));
+    ASSIGN_OR_ABORT(auto* write_end, ColumnArraySerde::serialize(*mixed, buffer.data(), false, kLevel));
+
+    auto restored = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSIGN_OR_ABORT(auto* read_end,
+                    ColumnArraySerde::deserialize(buffer.data(), write_end, restored.get(), false, kLevel));
+    ASSERT_EQ(write_end, read_end);
+    ASSERT_EQ(mixed->size(), restored->size());
+    for (size_t i = 0; i < mixed->size(); i++) {
+        ASSERT_EQ(mixed->is_null(i), restored->is_null(i));
+        if (!mixed->is_null(i)) {
+            ASSERT_EQ(mixed->get(i).get_slice(), restored->get(i).get_slice());
+        }
+    }
+
+    // An unknown tag is rejected instead of being read as column data.
+    buffer[0] = 0x7f;
+    auto corrupted = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ASSERT_FALSE(ColumnArraySerde::deserialize(buffer.data(), write_end, corrupted.get(), false, kLevel).status().ok());
+}
+
+// _is_all_null() short-circuits on the first non-NULL row rather than counting every NULL, so the
+// cases that decide the branch are: no NULL at all (has_null() false), a NULL run broken at the
+// very end (worst case for the memchr), and a NULL run broken at the very start. All three must
+// take the legacy layout and round-trip byte-exactly.
+PARALLEL_TEST(ColumnArraySerdeTest, nullable_column_all_null_detection_edges) {
+    constexpr size_t kRows = 97; // deliberately not a multiple of any SIMD width
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    auto round_trip = [&](const NullableColumn::Ptr& column, bool expect_compact) {
+        const auto size_with_bit = ColumnArraySerde::max_serialized_size(*column, kLevel);
+        // A compact payload is tag + row count; anything else still carries both sub-columns.
+        ASSERT_EQ(expect_compact, size_with_bit == static_cast<int64_t>(sizeof(uint8_t) + sizeof(uint32_t)));
+
+        std::vector<uint8_t> buffer(size_with_bit);
+        ASSIGN_OR_ABORT(auto* write_end, ColumnArraySerde::serialize(*column, buffer.data(), false, kLevel));
+        auto restored = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ASSIGN_OR_ABORT(auto* read_end,
+                        ColumnArraySerde::deserialize(buffer.data(), write_end, restored.get(), false, kLevel));
+        ASSERT_EQ(write_end, read_end);
+        ASSERT_EQ(column->size(), restored->size());
+        for (size_t i = 0; i < column->size(); i++) {
+            ASSERT_EQ(column->is_null(i), restored->is_null(i)) << "row " << i;
+            if (!column->is_null(i)) {
+                ASSERT_EQ(column->get(i).get_int32(), restored->get(i).get_int32()) << "row " << i;
+            }
+        }
+    };
+
+    // No NULL anywhere: has_null() is false, so the predicate must reject it without scanning.
+    auto dense = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    for (size_t i = 0; i < kRows; i++) {
+        dense->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    ASSERT_FALSE(dense->has_null());
+    round_trip(dense, /*expect_compact=*/false);
+
+    // NULL everywhere except the LAST row -- the memchr has to walk the whole null column.
+    auto last_set = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    last_set->append_nulls(kRows - 1);
+    last_set->append_datum(Datum(static_cast<int32_t>(42)));
+    ASSERT_TRUE(last_set->has_null());
+    round_trip(last_set, /*expect_compact=*/false);
+
+    // NULL everywhere except the FIRST row -- the common bail-immediately shape.
+    auto first_set = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    first_set->append_datum(Datum(static_cast<int32_t>(7)));
+    first_set->append_nulls(kRows - 1);
+    ASSERT_TRUE(first_set->has_null());
+    round_trip(first_set, /*expect_compact=*/false);
+
+    // Genuinely all NULL: still detected, still compact.
+    auto all_null = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    all_null->append_nulls(kRows);
+    round_trip(all_null, /*expect_compact=*/true);
+}
+
+PARALLEL_TEST(EncodeContextTest, all_null_bit_survives_the_compression_ratio_check) {
+    constexpr int kLevel = 7 | ENCODE_ALL_NULL;
+
+    // A column whose payload does not shrink loses its compression bits, but must keep
+    // ENCODE_ALL_NULL: that bit selects a layout, and the writer and reader agree on it through
+    // the per-column level recorded in the payload header.
+    auto incompressible = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    for (int i = 0; i < 5; i++) {
+        incompressible->update(0, 1000, 1000);
+        incompressible->adjust_encode_levels();
+    }
+    ASSERT_EQ(ENCODE_ALL_NULL, incompressible->get_encode_level(0));
+
+    auto compressible = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    for (int i = 0; i < 5; i++) {
+        compressible->update(0, 1000, 100);
+        compressible->adjust_encode_levels();
+    }
+    ASSERT_EQ(kLevel, compressible->get_encode_level(0));
+}
 // NOLINTNEXTLINE
 PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     std::vector<Slice> strings{{"bbb"}, {"bbc"}, {"ccc"}};
@@ -939,6 +1081,59 @@ ColumnPtr make_column(size_t start) {
     return column;
 }
 
+// Chunk(Columns&&, SchemaPtr) leaves _slot_id_to_index empty, and ProtobufChunkSerde::serialize()
+// DCHECKs that it has one entry per column, so any chunk that goes through the full serialize()
+// has to be built slot-mapped.
+Chunk::SlotHashMap make_slot_map(size_t size) {
+    Chunk::SlotHashMap slot_map;
+    slot_map.reserve(std::max<size_t>(1, size * 2));
+    for (size_t i = 0; i < size; i++) {
+        slot_map[static_cast<SlotId>(i)] = i;
+    }
+    return slot_map;
+}
+
+// A nullable varchar whose every row is NULL: the shape that 985 of the reported table's 993
+// columns have, and the only shape whose layout ENCODE_ALL_NULL changes.
+ColumnPtr make_all_null_varchar(size_t rows) {
+    auto column = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    column->append_nulls(rows);
+    return column;
+}
+
+ColumnPtr make_populated_int(size_t rows) {
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    for (size_t i = 0; i < rows; i++) {
+        column->append_datum(Datum(static_cast<int32_t>(i)));
+    }
+    return column;
+}
+
+// The worst case for the all-NULL probe: NULL everywhere except the LAST row, so memchr must walk
+// the whole null column before answering "not all-NULL". The compaction can never fire on a column
+// shaped like this, so every byte that scan touches is pure cost.
+ColumnPtr make_almost_all_null_int(size_t rows) {
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    column->append_nulls(rows - 1);
+    column->append_datum(Datum(static_cast<int32_t>(7)));
+    return column;
+}
+
+// Meta for a chunk of |all_null_columns| nullable varchars followed by |int_columns| nullable ints.
+ProtobufChunkMeta make_wide_meta(size_t all_null_columns, size_t int_columns) {
+    const size_t total = all_null_columns + int_columns;
+    ProtobufChunkMeta meta;
+    meta.types.resize(total);
+    meta.is_nulls.assign(total, true);
+    meta.is_consts.assign(total, false);
+    for (size_t i = 0; i < total; i++) {
+        meta.slot_id_to_index[static_cast<SlotId>(i)] = i;
+        meta.types[i] = i < all_null_columns ? TypeDescriptor::create_varchar_type(65533)
+                                             : TypeDescriptor(LogicalType::TYPE_INT);
+    }
+    return meta;
+}
+
 Columns make_columns(size_t size) {
     Columns columns;
     for (size_t i = 0; i < size; i++) {
@@ -980,6 +1175,359 @@ PARALLEL_TEST(ProtobufChunkSerde, test_serde) {
 }
 
 // NOLINTNEXTLINE
+PARALLEL_TEST(ProtobufChunkSerde, exchange_ignores_the_spill_only_all_null_bit) {
+    constexpr size_t kRows = 64;
+    constexpr int kLegacyLevel = 7;
+    constexpr int kLevelWithBit = 7 | ENCODE_ALL_NULL;
+
+    // An all-NULL nullable column is where the two layouts differ, so it is the only shape that
+    // can detect the bit leaking onto the wire.
+    auto nullable = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    nullable->append_nulls(kRows);
+    Columns columns;
+    columns.emplace_back(std::move(nullable));
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(1));
+
+    // A sender whose transmission_encode_level carries the bit must still emit the legacy layout,
+    // or a BE of an older version could not parse it.
+    auto legacy_context = EncodeContext::get_encode_context_shared_ptr(1, kLegacyLevel);
+    auto with_bit_context = EncodeContext::get_encode_context_shared_ptr(1, kLevelWithBit);
+    ASSIGN_OR_ABORT(auto legacy_pb, ProtobufChunkSerde::serialize(*chunk, legacy_context));
+    ASSIGN_OR_ABORT(auto with_bit_pb, ProtobufChunkSerde::serialize(*chunk, with_bit_context));
+    // Compare only the content. serialize_without_meta() sizes the buffer with
+    // resize_uninitialized() and keeps STREAMVBYTE_PADDING bytes past serialized_size that no
+    // writer ever fills, so the tail of data() is whatever the allocator handed out.
+    ASSERT_EQ(legacy_pb.serialized_size(), with_bit_pb.serialized_size());
+    ASSERT_EQ(legacy_pb.data().substr(0, legacy_pb.serialized_size()),
+              with_bit_pb.data().substr(0, with_bit_pb.serialized_size()));
+
+    // The reverse direction: a sender predating the bit treats it as unused, so it advertises the
+    // level unchanged in ChunkPB while sending the legacy layout. A receiver applies the SENDER's
+    // level, so it has to ignore the bit rather than read the first payload byte as the tag.
+    with_bit_pb.clear_encode_level();
+    with_bit_pb.add_encode_level(kLevelWithBit);
+
+    ProtobufChunkMeta meta;
+    meta.slot_id_to_index[0] = 0;
+    meta.is_nulls.resize(1, true);
+    meta.is_consts.resize(1, false);
+    meta.types.resize(1);
+    meta.types[0] = TypeDescriptor(LogicalType::TYPE_INT);
+
+    ProtobufChunkDeserializer deserializer(meta, &with_bit_pb, kLevelWithBit);
+    ASSIGN_OR_ABORT(auto restored, deserializer.deserialize(with_bit_pb.data()));
+    ASSERT_EQ(kRows, restored.num_rows());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored.columns()[0]->is_null(i));
+    }
+}
+
+// The tablet sink negotiates ENCODE_ALL_NULL with the receiving BE, so unlike the exchange it is
+// allowed to keep the bit. Both settings of the flag are checked: with it the payload collapses to
+// a tag plus a row count, without it the very same context still emits the legacy layout.
+PARALLEL_TEST(ProtobufChunkSerde, tablet_sink_keeps_the_negotiated_all_null_bit) {
+    constexpr size_t kRows = 64;
+    constexpr int kLevel = ENCODE_ALL_NULL;
+
+    Columns columns;
+    columns.emplace_back(protobuf_serde_test::make_all_null_varchar(kRows));
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(1));
+
+    auto negotiated_ctx = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    auto stripped_ctx = EncodeContext::get_encode_context_shared_ptr(1, kLevel);
+    ASSIGN_OR_ABORT(auto negotiated_pb,
+                    ProtobufChunkSerde::serialize(*chunk, negotiated_ctx, /*all_null_negotiated=*/true));
+    ASSIGN_OR_ABORT(auto stripped_pb,
+                    ProtobufChunkSerde::serialize(*chunk, stripped_ctx, /*all_null_negotiated=*/false));
+
+    // 8 bytes of chunk header (version + row count), then the tag and the row count.
+    ASSERT_EQ(8 + 1 + 4, negotiated_pb.serialized_size());
+    ASSERT_LT(negotiated_pb.serialized_size(), stripped_pb.serialized_size());
+
+    negotiated_ctx->set_encode_levels_in_pb(&negotiated_pb);
+    ASSERT_EQ(1, negotiated_pb.encode_level_size());
+    ASSERT_EQ(kLevel, negotiated_pb.encode_level(0));
+
+    auto meta = protobuf_serde_test::make_wide_meta(1, 0);
+    ProtobufChunkDeserializer deserializer(meta, &negotiated_pb, kLevel, /*all_null_negotiated=*/true);
+    ASSIGN_OR_ABORT(auto restored, deserializer.deserialize(negotiated_pb.data()));
+    ASSERT_EQ(kRows, restored.num_rows());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored.columns()[0]->is_null(i));
+    }
+}
+
+// A receiver that never advertised the bit must not apply it even if a sender records it in
+// ChunkPB: it would read the first byte of the legacy payload as the tag. This is the tablet sink
+// equivalent of the exchange's one-way-masking hazard.
+PARALLEL_TEST(ProtobufChunkSerde, tablet_sink_ignores_the_bit_it_did_not_negotiate) {
+    constexpr size_t kRows = 32;
+
+    Columns columns;
+    columns.emplace_back(protobuf_serde_test::make_all_null_varchar(kRows));
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(1));
+
+    // Legacy layout on the wire, but ChunkPB claims the bit.
+    ASSIGN_OR_ABORT(auto legacy_pb, ProtobufChunkSerde::serialize(*chunk));
+    legacy_pb.clear_encode_level();
+    legacy_pb.add_encode_level(ENCODE_ALL_NULL);
+
+    auto meta = protobuf_serde_test::make_wide_meta(1, 0);
+    // A receiver with the feature off passes 0 as the gate, which drops the sender's levels
+    // wholesale and parses at level 0 -- exactly what such a BE advertised it would do.
+    ProtobufChunkDeserializer des(meta, &legacy_pb, /*encode_level=*/0, /*all_null_negotiated=*/false);
+    ASSIGN_OR_ABORT(auto restored, des.deserialize(legacy_pb.data()));
+    ASSERT_EQ(kRows, restored.num_rows());
+    for (size_t i = 0; i < kRows; i++) {
+        ASSERT_TRUE(restored.columns()[0]->is_null(i));
+    }
+}
+
+// The no-regression side of the negotiation: what does turning the bit on cost a table that has
+// no all-NULL columns at all? Two shapes, both fully populated: the 8-column narrow PK table from
+// the reported workload, and a 100-column medium table. Asserts the exact format delta and reports
+// the CPU delta, which is the number a wide cluster run cannot resolve.
+PARALLEL_TEST(ProtobufChunkSerde, negotiated_bit_costs_one_tag_byte_per_nullable_column) {
+    constexpr size_t kRows = 4096;
+    constexpr int kLevel = ENCODE_ALL_NULL;
+    constexpr int kReps = 20;
+
+    struct Shape {
+        const char* name;
+        size_t nullable_cols;
+        size_t non_nullable_cols;
+    };
+    for (const auto& shape : {Shape{"narrow(8)", 6, 2}, Shape{"medium(100)", 80, 20}}) {
+        const size_t total = shape.nullable_cols + shape.non_nullable_cols;
+        Columns columns;
+        for (size_t i = 0; i < shape.nullable_cols; i++) {
+            columns.emplace_back(protobuf_serde_test::make_populated_int(kRows)); // nullable, no NULLs
+        }
+        for (size_t i = 0; i < shape.non_nullable_cols; i++) {
+            auto c = Int32Column::create();
+            for (size_t r = 0; r < kRows; r++) {
+                c->append(static_cast<int32_t>(r));
+            }
+            columns.emplace_back(std::move(c));
+        }
+        auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(total));
+
+        ASSIGN_OR_ABORT(auto legacy_pb, ProtobufChunkSerde::serialize(*chunk));
+        auto ctx = EncodeContext::get_encode_context_shared_ptr(total, kLevel);
+        ASSIGN_OR_ABORT(auto negotiated_pb, ProtobufChunkSerde::serialize(*chunk, ctx, /*all_null_negotiated=*/true));
+
+        // The ONLY format change on data like this is a one-byte tag per NULLABLE column. Columns
+        // that are not nullable are untouched, and no column's payload is re-encoded.
+        ASSERT_EQ(legacy_pb.serialized_size() + static_cast<int64_t>(shape.nullable_cols),
+                  negotiated_pb.serialized_size())
+                << shape.name;
+
+        // One timed pass. Whichever arm runs first absorbs the cold-cache and first-touch
+        // allocation cost, which is worth more than the effect being measured -- a naive
+        // "legacy then negotiated" ordering reported the negotiated path as ~19% FASTER even
+        // though it strictly does more work. So: warm both arms first, then alternate which one
+        // leads on each rep so the first-position penalty cancels.
+        auto one_pass = [&](bool negotiated, const std::shared_ptr<EncodeContext>& c) {
+            const auto start = std::chrono::steady_clock::now();
+            auto res =
+                    negotiated ? ProtobufChunkSerde::serialize(*chunk, c, true) : ProtobufChunkSerde::serialize(*chunk);
+            const auto ns =
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start)
+                            .count();
+            CHECK(res.ok());
+            return static_cast<double>(ns) / 1000.0;
+        };
+        auto ctx_for = [&]() { return EncodeContext::get_encode_context_shared_ptr(total, kLevel); };
+
+        for (int i = 0; i < 5; i++) { // warmup, untimed
+            auto w = ctx_for();
+            one_pass(false, nullptr);
+            one_pass(true, w);
+        }
+        double legacy_us = 0, negotiated_us = 0;
+        for (int i = 0; i < kReps; i++) {
+            auto c = ctx_for();
+            if (i % 2 == 0) {
+                legacy_us += one_pass(false, nullptr);
+                negotiated_us += one_pass(true, c);
+            } else {
+                negotiated_us += one_pass(true, c);
+                legacy_us += one_pass(false, nullptr);
+            }
+        }
+        legacy_us /= kReps;
+        negotiated_us /= kReps;
+
+        std::cerr << "[negotiated bit overhead] " << shape.name << " rows=" << kRows
+                  << " nullable=" << shape.nullable_cols << "\n  bytes: " << legacy_pb.serialized_size() << " -> "
+                  << negotiated_pb.serialized_size() << " (+" << shape.nullable_cols << ")"
+                  << "\n  serialize: " << legacy_us << " us -> " << negotiated_us << " us ("
+                  << (100.0 * (negotiated_us - legacy_us) / legacy_us) << "%)" << std::endl;
+
+        // Values must survive the negotiated path untouched.
+        auto meta = protobuf_serde_test::make_wide_meta(0, 0);
+        meta.types.resize(total, TypeDescriptor(LogicalType::TYPE_INT));
+        meta.is_nulls.assign(total, false);
+        for (size_t i = 0; i < shape.nullable_cols; i++) {
+            meta.is_nulls[i] = true;
+        }
+        meta.is_consts.assign(total, false);
+        for (size_t i = 0; i < total; i++) {
+            meta.slot_id_to_index[static_cast<SlotId>(i)] = i;
+        }
+        negotiated_pb.clear_encode_level();
+        ctx->set_encode_levels_in_pb(&negotiated_pb);
+        ProtobufChunkDeserializer des(meta, &negotiated_pb, kLevel, /*all_null_negotiated=*/true);
+        ASSIGN_OR_ABORT(auto restored, des.deserialize(negotiated_pb.data()));
+        ASSERT_EQ(kRows, restored.num_rows()) << shape.name;
+        for (size_t i = 0; i < total; i++) {
+            ASSERT_FALSE(restored.columns()[i]->is_null(11)) << shape.name << " col " << i;
+            ASSERT_EQ(11, restored.columns()[i]->get(11).get_int32()) << shape.name << " col " << i;
+        }
+    }
+}
+
+// Risk 1 from the review: on a table that never benefits, the per-chunk per-column all-NULL probe
+// is pure added cost. The cluster A/B cannot answer this -- within-arm wall-clock spread there
+// reached 28%, far larger than the effect -- so measure the probe directly, against the work it
+// gates, on the shape that maximises it: every column NULL except its last row, which forces the
+// memchr to walk the entire null column and still answer "not all-NULL".
+PARALLEL_TEST(ProtobufChunkSerde, all_null_probe_cost_is_small_against_serialization) {
+    constexpr size_t kRows = 4096;
+    constexpr size_t kColumns = 80;
+    constexpr int kReps = 20;
+
+    Columns columns;
+    for (size_t i = 0; i < kColumns; i++) {
+        columns.emplace_back(protobuf_serde_test::make_almost_all_null_int(kRows));
+    }
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(kColumns));
+
+    auto probe = [&]() {
+        size_t hits = 0;
+        for (const auto& column : chunk->columns()) {
+            if (serde::is_all_null_column(*column)) hits++;
+        }
+        return hits;
+    };
+    // Not one column qualifies, so the sink keeps the legacy path and the payload is byte-identical
+    // to before this change. The probe buys nothing here, which is exactly why its cost matters.
+    ASSERT_EQ(0u, probe());
+
+    auto timed = [](auto&& fn) {
+        const auto start = std::chrono::steady_clock::now();
+        fn();
+        const auto ns =
+                std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - start).count();
+        return static_cast<double>(ns) / 1000.0;
+    };
+    auto probe_pass = [&]() { return timed([&]() { CHECK(probe() == 0); }); };
+    auto serialize_pass = [&]() {
+        return timed([&]() {
+            auto res = ProtobufChunkSerde::serialize(*chunk);
+            CHECK(res.ok());
+        });
+    };
+
+    for (int i = 0; i < 5; i++) { // warmup, untimed -- see the ordering-bias note above
+        probe_pass();
+        serialize_pass();
+    }
+    double probe_us = 0, serialize_us = 0;
+    for (int i = 0; i < kReps; i++) {
+        if (i % 2 == 0) {
+            probe_us += probe_pass();
+            serialize_us += serialize_pass();
+        } else {
+            serialize_us += serialize_pass();
+            probe_us += probe_pass();
+        }
+    }
+    probe_us /= kReps;
+    serialize_us /= kReps;
+
+    std::cerr << "[all-NULL probe cost] worst case rows=" << kRows << " columns=" << kColumns
+              << " (every column NULL except its last row)\n  probe: " << probe_us << " us, serialize: " << serialize_us
+              << " us (" << (100.0 * probe_us / serialize_us) << "% of serialization)" << std::endl;
+
+    // A structural bound, kept deliberately wide so ordinary CI-machine variance cannot flake it:
+    // the probe reads one byte per row per column, while serialization moves the values themselves,
+    // so the gate cannot approach the cost of the work it gates.
+    ASSERT_LT(probe_us, serialize_us) << "probe " << probe_us << " us vs serialize " << serialize_us << " us";
+}
+
+// Quantifies what the bit is worth on this RPC, on the schema that motivated it: 993 columns of
+// which 985 are entirely NULL. The load RPC defaults to NO_COMPRESSION, so these are wire bytes.
+PARALLEL_TEST(ProtobufChunkSerde, tablet_sink_all_null_payload_shrinks_a_wide_mostly_null_chunk) {
+    constexpr size_t kAllNullColumns = 985;
+    constexpr size_t kIntColumns = 8;
+    constexpr size_t kColumns = kAllNullColumns + kIntColumns;
+    constexpr size_t kRows = 4096; // the default chunk size
+    constexpr int kLevel = ENCODE_ALL_NULL;
+
+    Columns columns;
+    for (size_t i = 0; i < kAllNullColumns; i++) {
+        columns.emplace_back(protobuf_serde_test::make_all_null_varchar(kRows));
+    }
+    for (size_t i = 0; i < kIntColumns; i++) {
+        columns.emplace_back(protobuf_serde_test::make_populated_int(kRows));
+    }
+    auto chunk = std::make_unique<Chunk>(std::move(columns), protobuf_serde_test::make_slot_map(kColumns));
+
+    // Legacy: exactly what a sender that has not negotiated the bit emits today.
+    ASSIGN_OR_ABORT(auto legacy_pb, ProtobufChunkSerde::serialize(*chunk));
+    auto negotiated_ctx = EncodeContext::get_encode_context_shared_ptr(kColumns, kLevel);
+    ASSIGN_OR_ABORT(auto negotiated_pb,
+                    ProtobufChunkSerde::serialize(*chunk, negotiated_ctx, /*all_null_negotiated=*/true));
+    negotiated_ctx->set_encode_levels_in_pb(&negotiated_pb);
+
+    const int64_t legacy_bytes = legacy_pb.serialized_size();
+    const int64_t negotiated_bytes = negotiated_pb.serialized_size();
+
+    // At level 0 each all-NULL varchar costs a 1-byte null flag plus a 4-byte offset per row; with
+    // the bit it costs a 1-byte tag plus a 4-byte row count per chunk, so its payload stops
+    // scaling with the row count altogether. Asserting an order of magnitude rather than an exact
+    // byte count keeps this from breaking on unrelated layout changes, while still failing if the
+    // short circuit stops firing on this shape.
+    ASSERT_GT(legacy_bytes, negotiated_bytes * 50);
+
+    auto meta = protobuf_serde_test::make_wide_meta(kAllNullColumns, kIntColumns);
+    auto time_deserialize = [&](const ChunkPB& pb, int level, bool negotiated) {
+        ProtobufChunkDeserializer des(meta, &pb, level, negotiated);
+        const auto start = std::chrono::steady_clock::now();
+        auto res = des.deserialize(pb.data());
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        CHECK(res.ok()) << res.status();
+        CHECK_EQ(kRows, res->num_rows());
+        return std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count();
+    };
+    const int64_t legacy_us = time_deserialize(legacy_pb, 0, false);
+    const int64_t negotiated_us = time_deserialize(negotiated_pb, kLevel, true);
+
+    // Reported, not asserted: wall time on a shared CI runner is too noisy to gate on, but it is
+    // the other half of what this RPC pays for the empty columns.
+    std::cerr << "[all-null tablet sink payload] columns=" << kColumns << " (" << kAllNullColumns
+              << " all NULL) rows=" << kRows << "\n  bytes: " << legacy_bytes << " -> " << negotiated_bytes << " ("
+              << (legacy_bytes / static_cast<double>(negotiated_bytes)) << "x, "
+              << (legacy_bytes / static_cast<double>(kRows)) << " -> "
+              << (negotiated_bytes / static_cast<double>(kRows)) << " B/row)\n  deserialize: " << legacy_us << " us -> "
+              << negotiated_us << " us" << std::endl;
+
+    // The rows still round-trip: every varchar NULL, every int its value.
+    ProtobufChunkDeserializer des(meta, &negotiated_pb, kLevel, /*all_null_negotiated=*/true);
+    ASSIGN_OR_ABORT(auto restored, des.deserialize(negotiated_pb.data()));
+    ASSERT_EQ(kRows, restored.num_rows());
+    for (size_t i = 0; i < kAllNullColumns; i++) {
+        ASSERT_EQ(kRows, restored.columns()[i]->size());
+        ASSERT_TRUE(restored.columns()[i]->is_null(0));
+        ASSERT_TRUE(restored.columns()[i]->is_null(kRows - 1));
+    }
+    for (size_t i = kAllNullColumns; i < kColumns; i++) {
+        ASSERT_FALSE(restored.columns()[i]->is_null(7));
+        ASSERT_EQ(7, restored.columns()[i]->get(7).get_int32());
+    }
+}
+
 PARALLEL_TEST(ProtobufChunkSerde, deserialize_with_schema) {
     auto chunk = std::make_unique<Chunk>(protobuf_serde_test::make_columns(2), protobuf_serde_test::make_schema(2));
 

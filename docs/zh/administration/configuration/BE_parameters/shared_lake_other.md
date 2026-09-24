@@ -304,6 +304,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BE 范围内的客户端缓存为每个远程主机保留的最大缓存 client 实例数。提高此值可以减少重连和 stub 创建开销，但会增加内存和文件描述符使用；降低它则节省资源但可能增加连接 churn。该值在启动时读取，运行时无法更改。目前一个共享设置控制所有客户端缓存类型；将来可能会引入每种缓存的独立配置。
 - 引入版本：v3.2.0
 
+### paimon_native_parquet_cache_hole_size_limit
+
+- 默认值: 1048576
+- 类型: Long
+- 单位: Bytes
+- 是否动态配置: 是
+- 描述: Paimon native reader 将两个必需的 Parquet 读取范围合并为一次读取时允许的最大间隔。值越大，请求次数越少，但读放大越多。默认值与 StarRocks 原生 Parquet reader 使用的 `io_coalesce_read_max_distance_size` 一致；paimon-cpp 自身的默认值远小于此，会在对象存储上产生大量小请求。
+- 引入版本: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - 默认值：10000
@@ -384,6 +393,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：否
 - 描述：存算分离集群中，Data Cache 最多可使用的磁盘容量百分比。仅在 `datacache_unified_instance_enable` 为 `false` 时生效。
 - 引入版本：v3.1
+
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：存算分离集群中，对于由当前 CN 进程写入且此后未被淘汰的 Data Cache 磁盘 Block，后续请求首次访问时是否跳过整块 Checksum 校验读取。该校验会从磁盘重新读取整个 Block，以校验进程刚刚写入且仍在内存中跟踪的数据，因此每个新写入 Block 的首次访问都会多一次磁盘读取。将该项设置为 `false` 可在首次访问时校验每个 Block，仅当怀疑缓存磁盘存在静态数据损坏时才值得付出该开销。无论该项如何设置，从进程上一次运行继承下来的 Block 始终会被校验，因为当前进程并未见证其写入过程。该项仅在 Data Cache 初始化时读取一次。
+- 引入版本：v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- 默认值：none
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：存算分离集群中，当前 CN 发送给 StarMgr 的 Worker 心跳所使用的压缩方式。该心跳会为 CN 上的每个 Tablet 携带一个条目，是集群中最大的周期性请求。有效值：`none` 和 `zstd`。`zstd` 在心跳线程中压缩负载，并占用同一个 RPC 超时预算，由 FE 负责解压。`none` 表示不压缩发送心跳。在切换任何 CN 之前，FE 必须具备解压能力，因为不支持该机制的 FE 会丢弃压缩后的心跳，所以请先升级 FE，再在 CN 上设置该项。无法识别的取值会被记录并回退为 `none`，而不会导致 CN 启动失败。
+- 引入版本：v4.2.0
 
 ### starlet_use_star_cache
 
@@ -659,11 +686,29 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_replication_file_copy_threads
 
-- 默认值：0
+- 默认值：16
 - 类型：Int
 - 单位：-
 - 是否动态：否
-- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的独立线程池大小。`0` 表示 `cpu_cores * 4`（与 `replication_threads` 默认语义一致）；负值表示 `-value * cpu_cores`。该线程池与 agent 任务的 `replicate_snapshot` 线程池刻意区分，目的是让外层任务可以安全地通过 `ThreadPoolToken::wait()` 等待逐文件拷贝子任务，而不触发线程池自死锁保护。该线程池在启动时一次性创建，无运行时 resize 入口，调整大小需重启 CN。
+- 描述：存算分离跨集群复制（lake-to-lake replication）逐文件拷贝所使用的 CN 全局独立线程池大小。默认值用于限制并发拷贝任务及其读缓冲区，不随 CPU 核数增长。`0` 表示 `cpu_cores * 4`；负值表示 `-value * cpu_cores`。该线程池在启动时一次性创建，调整大小需重启 CN。
+- 引入版本：v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- 默认值：4
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中单个 tablet 同时拷贝文件的最大数量。所有 tablet 共用 CN 全局的 `lake_replication_file_copy_threads` 线程池，因此该配置可防止单个 tablet 独占线程池。配置值小于或等于 `1` 时，单个 tablet 内的文件串行拷贝。
+- 引入版本：v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：存算分离跨集群复制（lake-to-lake replication）中，启用单个 tablet 内文件并行拷贝所需的最小文件数。设置为 `0` 时关闭独立文件拷贝线程池，由调用复制任务直接执行文件拷贝。
 - 引入版本：v4.1.2
 
 ### lake_service_max_concurrency

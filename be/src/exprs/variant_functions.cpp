@@ -271,6 +271,14 @@ StatusOr<ColumnPtr> VariantFunctions::_do_variant_query(FunctionContext* context
 }
 
 StatusOr<ColumnPtr> VariantFunctions::variant_typeof(FunctionContext* context, const Columns& columns) {
+    // An only-null column carries no type to unwrap: ColumnHelper::get_data_column takes it down to
+    // the placeholder create_const_null_column builds, which is not a VariantColumn, and the
+    // down_cast below asserts and takes the BE down. _do_variant_query -- and so every
+    // variant_query / get_variant_* that delegates to it -- already guards this way, and it can
+    // produce exactly such a column: querying a path that the variant does not have.
+    //   SELECT variant_typeof(variant_query(s.v, '$.age'))
+    //   FROM (SELECT CAST('age' AS VARIANT) AS v) s;
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
     const auto& variant_column = columns[0];
     auto variant_viewer = ColumnViewer<TYPE_VARIANT>(variant_column);
     size_t num_rows = variant_column->size();

@@ -95,6 +95,8 @@ public class TypeSerializer {
                 return TPrimitiveType.JSON;
             case VARIANT:
                 return TPrimitiveType.VARIANT;
+            case FILE:
+                return TPrimitiveType.FILE;
             case FUNCTION:
                 return TPrimitiveType.FUNCTION;
             case BINARY:

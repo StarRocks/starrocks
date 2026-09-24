@@ -107,6 +107,20 @@ TEST(AIProviderOptionsBuilderTest, EmptyMapProducesAnEmptyPreparedObject) {
     EXPECT_EQ(expected_body(""), request_body(result.value()));
 }
 
+TEST(AIProviderOptionsBuilderTest, ReservedFieldsAreCapabilitySpecific) {
+    const auto type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT));
+    for (const std::string key : {"model", "input", "encoding_format", "dimensions", "messages", "stream"}) {
+        auto values = Int32Column::create();
+        values->append(128);
+        auto options = make_map(make_keys({key}), std::move(values), 1);
+        const auto embedding = build_ai_provider_options(*options, type, 0, AICapability::TEXT_EMBEDDING);
+        EXPECT_EQ(key != "model" && key != "input" && key != "encoding_format", embedding.ok()) << key;
+        const auto chat = build_ai_provider_options(*options, type, 0, AICapability::CHAT);
+        EXPECT_EQ(key != "model" && key != "messages" && key != "stream", chat.ok()) << key;
+        EXPECT_FALSE(build_ai_provider_options(*options, type, 0, static_cast<AICapability>(255)).ok());
+    }
+}
+
 TEST(AIProviderOptionsBuilderTest, UntypedEmptyMapProducesAnEmptyPreparedObject) {
     auto options = make_map(BinaryColumn::create(), BinaryColumn::create(), 0);
     auto result = build_ai_provider_options(

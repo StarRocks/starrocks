@@ -68,7 +68,8 @@ ldap_search_user_arg ::=
     "ldap_user_search_attr" = ""
 
 ldap_cache_arg ::= 
-    "ldap_cache_refresh_interval" = ""
+    ["ldap_cache_refresh_interval" = "",]
+    ["ldap_cache_max_stale_time" = ""]
 ```
 
 <UnixFileSyntax />
@@ -177,7 +178,17 @@ LDAP 服务器可以识别的自定义组过滤器。它将被直接发送到您
 
 ##### `ldap_cache_refresh_interval`
 
-可选。StarRocks 自动刷新缓存的 LDAP 组信息的间隔。单位：秒。默认值：`900`。
+可选。StarRocks 自动刷新缓存的 LDAP 组信息的间隔。单位：秒。默认值：`300`。
+
+##### `ldap_cache_max_stale_time`
+
+可选。刷新持续失败时，上一次成功构建的缓存最多可以继续使用多久。单位：秒。默认值：`3600`。
+
+当刷新无法连接 LDAP 服务器时，StarRocks 会继续使用上一次的缓存，直到该缓存陈旧超过此值，此后缓存被清空，所有用户解析到空的组集合。将该项设置为 `0` 表示刷新一旦失败就立即清空缓存。
+
+:::note
+配置了 `permitted_groups` 时，立即清空缓存会把 LDAP 的短暂不可用放大为集群级登录失败，因为空的组集合永远无法与允许列表求交。调大该值相当于用更长的组信息陈旧窗口，换取对目录服务停机的容忍。
+:::
 
 ### 示例
 
@@ -344,6 +355,8 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 #### `group_provider`
 
 要与安全集成结合的 Group Provider 名称。多个 Group Provider 用逗号分隔。一旦设置，StarRocks 将在用户登录时记录每个指定提供者下的用户组信息。
+
+未设置该属性时，该安全集成会回退到 FE 配置项 `group_provider`，即集群级默认列表。注意 v4.2 之前的版本在这种情况下不会查询任何 Group Provider，因此 FE 配置项对这类安全集成从 v4.2 起才生效。
 
 #### `permitted_groups`
 

@@ -711,6 +711,11 @@ struct TVectorSearchOptions {
   // FE predicate-shape flag, so no thrift field is needed. Do not reuse ordinal 13.
   // Whether vector_range is present. Kept separate because similarity metrics can have negative bounds.
   14: optional bool has_vector_range;
+  // The query vector from field 4 as densely packed little-endian IEEE-754 binary32, exactly 4 * dim
+  // bytes. Byte order is in the name because reading it back the other way yields wrong distances, not
+  // an error. A sender sets exactly one of field 4 and field 15; a receiver that sees field 15 must use
+  // it and must reject a malformed payload rather than fall back to field 4.
+  15: optional binary query_vector_f32_le;
 }
 
 enum SampleMethod {
@@ -1609,10 +1614,16 @@ struct TAIEndpointConfig {
   1: optional string endpoint
   2: optional string model
   3: optional string provider
+  4: optional string api_key
+  5: optional i64 timeout_ms
+  6: optional i32 dimensions
 }
 
 struct TAIModelConfiguration {
   1: optional TAIEndpointConfig chat
+  2: optional TAIEndpointConfig embedding
+  // Missing source is accepted only for legacy SYSTEM configurations.
+  3: optional Types.TAIModelSource source
 }
 
 struct TAIProjectNode {

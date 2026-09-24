@@ -298,6 +298,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BE/CN プロセスが終了する際に待機するループ回数。各ループは固定間隔の 10 秒です。ループ待機を無効にするには `0` に設定できます。v3.4 以降、この項目は変更可能になり、デフォルト値は `0` から `2` に変更されました。
 - 導入バージョン: v2.5
 
+### paimon_native_parquet_cache_hole_size_limit
+
+- デフォルト: 1048576
+- タイプ: Long
+- 単位: Bytes
+- 変更可能: Yes
+- 説明: Paimon native reader が 2 つの必要な Parquet 読み取り範囲を 1 回の読み取りに統合する際に許容する最大の間隔。値を大きくするとリクエスト数は減りますが読み取りの増幅が大きくなります。デフォルト値は StarRocks ネイティブ Parquet reader が使用する `io_coalesce_read_max_distance_size` と同じです。paimon-cpp 自体のデフォルト値はこれよりはるかに小さく、オブジェクトストレージ上で多数の小さなリクエストを発生させます。
+- 導入バージョン: -
+
 ### starlet_filesystem_instance_cache_capacity
 
 - デフォルト: 10000
@@ -378,6 +387,24 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 変更可能: いいえ
 - 説明: 共有データクラスタで Data Cache が使用できるディスク容量の割合。`datacache_unified_instance_enable` が `false` の場合のみ有効です。
 - 導入バージョン: v3.1
+
+### starlet_star_cache_skip_fresh_block_checksum_verification
+
+- デフォルト: true
+- タイプ: Boolean
+- 単位: -
+- 変更可能: いいえ
+- 説明: 共有データクラスタで、この CN プロセスが書き込み、その後追い出されていない Data Cache のディスクブロックについて、後続のリクエストが最初にアクセスする際にブロック全体のチェックサム読み取りをスキップするかどうか。この検証はブロック全体をディスクから読み直して、プロセスが書き込んだばかりでまだメモリ上で追跡しているデータを検査するため、新しくキャッシュされたすべてのブロックの初回アクセスでディスク読み取りが 1 回余分に発生します。この項目を `false` に設定すると初回アクセス時にすべてのブロックを検証します。これはキャッシュディスクが保存済みデータを破損させている疑いがある場合にのみ、そのコストに見合います。この項目の設定にかかわらず、プロセスの前回の実行から引き継いだブロックは常に検証されます。現在のプロセスはその書き込みを見ていないためです。この項目は Data Cache の初期化時に一度だけ読み取られます。
+- 導入バージョン: v4.2.0
+
+### starlet_starmgr_client_compression_type
+
+- デフォルト: none
+- タイプ: String
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データクラスタで、この CN が StarMgr に送信する worker ハートビートに適用する圧縮方式。このハートビートは CN 上の tablet ごとに 1 エントリを運ぶため、クラスタ内で最大の定期リクエストになります。有効な値: `none` と `zstd`。`zstd` は同じ RPC タイムアウトの予算内でハートビートスレッド上でペイロードを圧縮し、FE が展開します。`none` はハートビートを圧縮せずに送信します。この仕組みを持たない FE は圧縮されたハートビートを破棄するため、CN を切り替える前に FE が展開できる必要があります。先に FE をアップグレードし、その後で CN にこの項目を設定してください。認識できない値は記録された上で `none` にフォールバックし、CN の起動は妨げられません。
+- 導入バージョン: v4.2.0
 
 ### starlet_use_star_cache
 
@@ -653,11 +680,29 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ### lake_replication_file_copy_threads
 
-- デフォルト: 0
+- デフォルト: 16
 - タイプ: Int
 - 単位: -
 - 変更可能: いいえ
-- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する専用スレッドプールのサイズ。`0` は `cpu_cores * 4`（`replication_threads` と同じデフォルトセマンティクス）を意味し、負の値は `-value * cpu_cores` を意味します。このプールはエージェントタスクの `replicate_snapshot` プールと意図的に分離されており、外部タスクが `ThreadPoolToken::wait()` を通じてファイルごとのコピーサブタスクを安全に待機でき、スレッドプールのセルフデッドロックガードをトリガーしません。このプールは起動時に一度だけ作成され、ランタイムのリサイズフックはないため、サイズ変更には CN の再起動が必要です。
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）でファイルごとのコピーに使用する CN 全体の専用スレッドプールのサイズ。デフォルト値は、CPU コア数に関係なく、同時コピータスク数とその読み取りバッファを制限します。`0` は `cpu_cores * 4` を意味し、負の値は `-value * cpu_cores` を意味します。このプールは起動時に一度だけ作成されるため、サイズ変更には CN の再起動が必要です。
+- 導入バージョン: v4.1.2
+
+### lake_replication_max_parallel_files_per_tablet
+
+- デフォルト: 4
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）で、1 つの tablet に対して同時にコピーするファイルの最大数。すべての tablet が CN 全体の `lake_replication_file_copy_threads` プールを共有するため、この設定により 1 つの tablet がプールを占有することを防ぎます。値が `1` 以下の場合、各 tablet 内のファイルコピーは直列化されます。
+- 導入バージョン: v4.1.4
+
+### lake_replication_parallel_copy_min_file_count
+
+- デフォルト: 2
+- タイプ: Int
+- 単位: -
+- 変更可能: はい
+- 説明: 共有データのクロスクラスタレプリケーション（lake-to-lake replication）で、tablet 内のファイルを並列にコピーするために必要な最小ファイル数。このパラメータを `0` に設定すると専用ファイルコピープールが無効になり、呼び出し元のレプリケーションタスクでファイルコピーが実行されます。
 - 導入バージョン: v4.1.2
 
 ### lake_service_max_concurrency

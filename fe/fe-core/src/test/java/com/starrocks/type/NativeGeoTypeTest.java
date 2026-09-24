@@ -17,6 +17,9 @@ package com.starrocks.type;
 import com.baidu.bjf.remoting.protobuf.ProtobufProxy;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
+import com.starrocks.planner.SlotDescriptor;
+import com.starrocks.planner.SlotId;
+import com.starrocks.proto.GeoEdgeAlgorithmPB;
 import com.starrocks.proto.GeoTypeDescPB;
 import com.starrocks.proto.PTypeDesc;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -38,6 +41,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -51,6 +55,19 @@ public class NativeGeoTypeTest {
                 geography ? GeoTypeDescriptor.CoordinateSystem.SPHERICAL : GeoTypeDescriptor.CoordinateSystem.CARTESIAN,
                 geography ? GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL : GeoTypeDescriptor.EdgeAlgorithm.PLANAR,
                 "OGC:CRS84", 4326);
+    }
+
+    @Test
+    public void testScanSlotPreservesGeoDescriptor() {
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            SlotDescriptor slot = new SlotDescriptor(new SlotId(0), null);
+            slot.setColumn(new Column("shape", type));
+            assertEquals(type, slot.getType());
+            assertNotSame(type, slot.getType());
+            assertEquals(TypeSerializer.toThrift(type), TypeSerializer.toThrift(slot.getType()));
+            assertSame(type, slot.getOriginType());
+        }
     }
 
     @Test
@@ -91,15 +108,22 @@ public class NativeGeoTypeTest {
 
     @Test
     public void testRejectMissingMetadataAndWrongEdge() {
-        ScalarType type = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor(PrimitiveType.GEOGRAPHY));
-        TTypeDesc thrift = TypeSerializer.toThrift(type);
-        thrift.types.get(0).scalar_type.geo.setEdge_algorithm(TGeoEdgeAlgorithm.PLANAR);
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
-        thrift.types.get(0).scalar_type.unsetGeo();
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
-        PTypeDesc proto = TypeSerializer.toProtobuf(type);
-        proto.types.get(0).scalarType.geo = null;
-        assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+        for (PrimitiveType primitive : new PrimitiveType[] {PrimitiveType.GEOGRAPHY, PrimitiveType.GEOMETRY}) {
+            ScalarType type = ScalarType.createGeoType(primitive, descriptor(primitive));
+            TTypeDesc thrift = TypeSerializer.toThrift(type);
+            thrift.types.get(0).scalar_type.geo.setEdge_algorithm(
+                    primitive == PrimitiveType.GEOGRAPHY ? TGeoEdgeAlgorithm.PLANAR : TGeoEdgeAlgorithm.SPHERICAL);
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
+            thrift.types.get(0).scalar_type.unsetGeo();
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromThrift(thrift));
+            PTypeDesc proto = TypeSerializer.toProtobuf(type);
+            proto.types.get(0).scalarType.geo.edgeAlgorithm = primitive == PrimitiveType.GEOGRAPHY
+                    ? GeoEdgeAlgorithmPB.GEO_EDGE_ALGORITHM_PLANAR
+                    : GeoEdgeAlgorithmPB.GEO_EDGE_ALGORITHM_SPHERICAL;
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+            proto.types.get(0).scalarType.geo = null;
+            assertThrows(IllegalArgumentException.class, () -> TypeDeserializer.fromProtobuf(proto));
+        }
     }
 
     @Test
@@ -317,6 +341,10 @@ public class NativeGeoTypeTest {
                     TypeDeserializer.fromProtobuf(TypeSerializer.toProtobuf(geo)))) {
                 assertTrue(type.matchesType(AnyElementType.ANY_ELEMENT));
                 assertTrue(AnyElementType.ANY_ELEMENT.matchesType(type));
+                assertEquals(primitive == PrimitiveType.GEOGRAPHY,
+                        type.matchesType(AnyGeographyType.GEOGRAPHY));
+                assertEquals(primitive == PrimitiveType.GEOGRAPHY,
+                        AnyGeographyType.GEOGRAPHY.matchesType(type));
                 assertFalse(type.matchesType(AnyArrayType.ANY_ARRAY));
                 assertFalse(type.matchesType(AnyMapType.ANY_MAP));
                 assertFalse(type.matchesType(AnyStructType.ANY_STRUCT));

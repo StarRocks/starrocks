@@ -2453,12 +2453,37 @@ class StarrocksSQLApiLib(object):
                 plan.find(expect) > 0, "assert expect %s should not be found in plan: %s" % (expect, plan)
             )
 
-    def wait_alter_table_finish(self, alter_type="COLUMN", off=9):
+    def wait_alter_table_finish(self, alter_type="COLUMN", off=9, timeout=600):
         """
-        wait alter table job finish and return status
+        Block until the alter submitted just before this call has landed.
+
+        `SHOW ALTER TABLE` lists jobs newest first and this helper cannot name the one it is
+        waiting for, so a row in a terminal state is ambiguous. It is either the job this call
+        should wait for, finished quickly, or the *previous* job -- because the alter took the
+        fast-schema-evolution path and created no job at all (SchemaChangeHandler#process returns
+        early when analyzeAndCreateJob gives null). Both cases look identical, and the old code
+        paid a flat second to cover the difference.
+
+        JobId separates them. A job is registered inside the DDL's own execution path, atomically
+        with its edit log (SchemaChangeHandler.java:3004-3012), so by the time this runs a heavy
+        alter is already listed: an id above the last one waited on means the job is ours, and no
+        new id means the change was applied inline and there is nothing left to wait for. Ids only
+        increase, so the watermark stays valid across databases and alter types.
+
+        What it waits for is then a real signal rather than a guess -- FINISHED is set after the
+        index swap, under the table's write lock (SchemaChangeJobV2.java:1215-1227), so it means
+        the new schema is in effect.
+
+        The first call has no watermark, but it does not need one: registration being
+        synchronous rules out the only reading that would have to keep waiting -- our job
+        submitted but not yet listed -- so both remaining readings return straight away. The flat
+        second is gone from every path; the loop now only sleeps while a job is genuinely running,
+        and polls at 100ms so a fast job is not rounded up.
         """
+        seen = getattr(self, "_last_alter_job_id", None)
+        deadline = time.monotonic() + timeout
         status = ""
-        sleep_time = 0
+        job_id = None
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2467,13 +2492,29 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            status = res["result"][0][off]
+            job_id, status = res["result"][0][0], res["result"][0][off]
+            if seen is not None and int(job_id) <= int(seen):
+                # No job of our own: either the alter was applied inline, or it created a job of
+                # a different type than the one being listed (a caller that leaves alter_type at
+                # COLUMN after an ADD ROLLUP, say). Nothing to wait for either way.
+                #
+                # Return None, not "": the value a `function:` line produces is recorded into the
+                # R file, and the path this replaces fell through to the end of the method. ""
+                # is reserved for the pre-existing "no rows at all" return above, whose recorded
+                # value callers already depend on.
+                return None
+
             if status == "FINISHED" or status == "CANCELLED" or status == "":
-                if sleep_time <= 1:
-                    time.sleep(1)
                 break
-            time.sleep(0.5)
-            sleep_time += 0.5
+
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait alter table %s finish timeout after %ss, job %s is %s"
+                % (alter_type, timeout, job_id, status),
+            )
+            time.sleep(0.1)
+
+        self._last_alter_job_id = int(job_id)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
     @staticmethod
@@ -3182,6 +3223,32 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "wait compaction timeout")
 
+    def wait_compaction_committed(self, table_name: str, version_before, timeout: int = 60):
+        """Block until a compaction of `table_name` commits, i.e. until the tablet's visible
+        version moves past `version_before`.
+
+        `ALTER TABLE ... COMPACT` is fire-and-forget on shared-data tables: CompactionHandler only
+        raises the partition's priority to MANUAL_COMPACT and returns, CompactionScheduler
+        dispatches it on a 1s loop, and the CN runs it asynchronously. SQL exposes no synchronous
+        completion signal, which is why these cases used to sleep a fixed 30s -- pure wall clock
+        when compaction is quick, and still not enough when it is not.
+        """
+        sql = (
+            "SELECT MAX(t.MAX_VERSION) FROM information_schema.be_tablets t, "
+            "information_schema.tables_config c "
+            "WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_NAME = '%s' "
+            "AND c.TABLE_SCHEMA = DATABASE()" % table_name
+        )
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            res = self.execute_sql(sql, True)
+            tools.assert_true(res["status"], f'Fail to read MAX_VERSION, error=[{res["msg"]}]')
+            rows = list(res["result"])
+            if rows and rows[0][0] is not None and int(rows[0][0]) > int(version_before):
+                return
+            time.sleep(0.5)
+        tools.assert_true(False, "compaction of %s did not commit within %ss" % (table_name, timeout))
+
     def _get_backend_http_endpoints(self) -> List[Dict]:
         """Get the http host and port of all the backends.
 
@@ -3443,6 +3510,33 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
                 str(res["result"]).find(expect) < 0,
                 "assert expect {} is unexpectedly found in result {}".format(expect, res["result"]),
             )
+
+    def print_query_columns(self, query, *columns):
+        """
+        Run `query` and print only the named columns, one row per line, tab separated.
+
+        SHOW statements answer with job ids, timestamps and progress counters that differ on every
+        run, so their output cannot go into an R file as it stands. Projecting to the columns that
+        are stable makes the rest recordable -- which is worth more than asserting a substring is
+        or is not present, because the recorded rows say what actually came back.
+
+        Column names are matched against the result's own description, case-insensitively, and an
+        unknown name fails rather than silently projecting nothing.
+        """
+        res = self.execute_sql(query, True)
+        tools.assert_true(res["status"], "execute failed: %s, sql: %s" % (res["msg"], query))
+
+        names = [col[0] for col in res["desc"]]
+        indexes = []
+        for column in columns:
+            matched = [i for i, name in enumerate(names) if name.lower() == str(column).lower()]
+            tools.assert_true(
+                len(matched) == 1,
+                "column %s is not one of %s, sql: %s" % (column, names, query),
+            )
+            indexes.append(matched[0])
+
+        return "\n".join("\t".join(str(row[i]) for i in indexes) for row in res["result"])
 
     def assert_query_contains_times(self, query, expect, expected_times: int):
         """

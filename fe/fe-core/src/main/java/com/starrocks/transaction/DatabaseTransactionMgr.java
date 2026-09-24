@@ -1590,7 +1590,7 @@ public class DatabaseTransactionMgr {
                     // reset data version to visible version
                     partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
                     if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                        partitionCommitInfo.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
                     }
                 } else {
                     // double write logic partition
@@ -1615,7 +1615,7 @@ public class DatabaseTransactionMgr {
                     partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
                     if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
                             partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                        partitionCommitInfo.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
                     }
                     LOG.debug("set partition {} version to {} in transaction {}",
                             partitionId, partitionCommitInfo.getVersion(), transactionState);

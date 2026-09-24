@@ -177,6 +177,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Azure Data Lake Storage Gen2 の要求を承認するために使用されるマネージド ID のテナント ID。
 - 導入時期：v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- デフォルト：空文字列
+- タイプ：String
+- 単位：-
+- 変更可能：いいえ
+- 説明：組み込み ADLS2 ストレージボリュームの作成時に、ワークロード ID 認証に使用するフェデレーション トークン ファイルのパス。`azure_adls2_oauth2_tenant_id` と `azure_adls2_oauth2_client_id` も設定し、`azure_adls2_oauth2_use_managed_identity` は `false` のままにします。すべての FE と CN で同じ読み取り可能なパスにファイルをマウントしてください。空文字列の場合、トークン ファイル認証は使用しません。変更後は FE の再起動が必要です。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - デフォルト：false
@@ -375,6 +383,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：Compute Engine にバインドされているサービスアカウントを使用するかどうか。
 - 導入時期：v3.5.1
 
+### `group_provider`
+
+- デフォルト：Empty
+- タイプ：String[]
+- 単位：-
+- 変更可能：Yes
+- 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
+- 導入時期：v3.5
+
 ### `hdfs_file_system_expire_seconds`
 
 - デフォルト：300
@@ -535,6 +552,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：共有データクラスターでのバージョン公開タスクの最大スレッド数。
 - 導入時期：v3.2.0
 
+### `lake_publish_version_timeout_ms`
+
+- デフォルト：60000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：共有データクラスターにおけるトランザクションのバージョン公開（Publish Version）RPC のタイムアウトです。この値は、FE がコンピュートノードの応答を待つ時間と、コンピュートノードが公開タスクに適用する期限の両方を制限するため、両者は常に一致します。1 つのトランザクションが大量の tablet を公開するなど、公開に本当にデフォルトより長い時間が必要で、公開タイムアウトによってトランザクションが失敗する場合は、この値を上げてください。
+- 導入時期：v4.2.0
+
 ### `slow_publish_partition_log_threshold_ms`
 
 - デフォルト：3000
@@ -642,6 +668,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：colocate group サンプリングの密度ガードで、許容される空サンプルの最大割合をパーセントで表します。抽出された tablet が候補 Compute Node 上にレプリカを持たない場合 (まだ配置されていない、またはその Compute Node 上にない場合)、その抽出は空サンプルとみなされます。空サンプルの割合がこのパーセンテージを超える場合、その group は配置が疎すぎてサンプルが真の分布を表せない (group が空の状態から一括で埋められている最中に起こります) ため、スケジューラはサンプルを破棄して全走査にフォールバックします。言い換えると、抽出された tablet の少なくとも (100 - この値)% が候補 Compute Node 上に配置されている場合にのみサンプルが信頼されます。したがって値が小さいほど保守的になり、サンプリングを行うためにより密な group が必要になります。安定して完全に配置された group は空サンプルがほぼ 0% になり、この値にかかわらず常に高速なサンプリング経路を通るため、この項目は一括充填中の過渡期のみを制御します。フォールバックを完全に無効にするには `100` に設定します。この項目は `lake_scheduler_enable_colocate_group_sample` が `true` に設定されている場合にのみ有効です。
 - 導入時期：v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarMgr がレプリカのみに関わる tablet の変更を、tablet 全体のスナップショットではなくレプリカの差分としてジャーナルに記録するかどうか。そうしない場合、単一のレプリカの追加、削除、状態遷移のたびに、ファイルパス、ストレージ認証情報、プロパティ、すべてのレプリカを含む tablet メタデータ全体が再シリアライズされます。そのうち約 95% は、レプリカ操作では変化しない状態を表しています。tablet のスケジューリングが頻繁なクラスタでは、これらのスナップショットがメタデータジャーナルの大半を占めます。この項目を持つ FE はすべて、リプレイ時に差分エントリを解釈できます。ゲートされるのは書き込み側だけなので、まずこの項目を持つバージョンを `false` のままデプロイしてクラスタが差分エントリをリプレイできる状態にし、その後で `true` に設定してください。クラスタ内にそれ以前のバージョンの FE が残っている間は有効にしないでください。そのような FE は 1 件ではなくすべてのレプリカ更新をスキップし、その結果生じた差異をエラーを報告しないまま自身のチェックポイントに書き込みます。ロールバックする場合は、この項目を `false` に設定し、メタデータチェックポイントを強制実行して既に書き込まれたエントリをイメージに取り込ませてから、バージョンをダウングレードしてください。`false` に設定しても、既にジャーナルにあるエントリが取り消されるわけではありません。有効なのは Leader FE の値のみで、両方の種類のエントリを含むジャーナルは正しくリプレイされるため、実行時の変更は安全です。
+- 導入時期：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：No
+- 説明：StarMgr が Compute Node から tablet への逆引きインデックスを保持するかどうか。そうしない場合、再起動した Compute Node の tablet を再スケジュールする処理と、Compute Node がハートビートごとに報告するレプリカを検証する処理は、いずれも tablet マップ全体を走査し、各 tablet にその Compute Node 上のレプリカがあるかを判定するため、Compute Node ごとにクラスタ内の tablet 数に比例したコストがかかります。このインデックスがあれば、コストはその Compute Node 自身の tablet 数のみに比例します。このインデックスは派生状態です。メタデータイメージのロード時に tablet マップから再構築され、以降は同じロックの下で維持されます。この項目が `false` の場合は構築も保持もされないため、無効のままにしてもコストはかかりません。StarMgr はメタデータイメージのロード時にこの項目を一度だけ読み取るため、変更は FE の再起動後にのみ有効になります。
+- 導入時期：v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - デフォルト：600
@@ -720,6 +764,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：レイクテーブルの公開バッチを形成するために必要な連続するトランザクションバージョンの最小数を設定します。DatabaseTransactionMgr.getReadyToPublishTxnListBatch は、依存トランザクションを選択するためにこの値を `lake_batch_publish_max_version_num` とともに transactionGraph.getTxnsWithTxnDependencyBatch に渡します。値が `1` の場合、単一トランザクションの公開が許可されます (バッチ処理なし)。値が `>1` の場合、少なくともその数の連続したバージョンを持つ単一テーブル、非レプリケーショントランザクションが利用可能である必要があります。バージョンが連続していない場合、レプリケーショントランザクションが出現した場合、またはスキーマ変更がバージョンを消費した場合、バッチ処理は中止されます。この値を増やすと、コミットをグループ化することで公開スループットが向上する可能性がありますが、十分な連続トランザクションを待機している間に公開が遅延する可能性があります。
 - 導入時期：v3.2.0
+
+### `lake_publish_version_retry_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：共有データ (lake) モードにおいて、直前の公開が失敗したパーティションを PublishVersionDaemon が再試行するまでの最小間隔です。単一トランザクションの公開パスとバッチ公開パスの両方に適用されます。待機するのは実際に失敗したパーティションだけです。最初の試行で公開できたパーティションが遅延することはなく、先行バージョンが可視になるのを待っているだけのパーティションは失敗とはみなされません。この値を大きくすると、公開が失敗し続ける場合に leader とオブジェクトストレージにかかる負荷は減りますが、原因が解消してからの復旧は遅くなります。`0` を指定するとデーモンの実行ごとに再試行し、バックオフ導入前の動作に戻ります。負の値は `0` として扱われます。
+- 導入時期：v4.1
 
 ### `lake_enable_batch_publish_version`
 
@@ -860,6 +913,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が属する StarRocks クラスター内で ID 認証に使用されるトークン。このパラメーターが指定されていない場合、StarRocks はクラスターのリーダー FE が最初に起動されたときに、クラスターのランダムなトークンを生成します。
 - 導入時期：-
 
+### `authentication_failure_cache_capacity`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_failure_cache_ttl_second` が記憶する拒否済み認証情報の最大件数。1 つのクライアント（またはユーザー名を次々に変える攻撃者）が占有できるメモリを制限し、超過分は古いものから破棄されます。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarRocks 側での LDAP/AD ユーザー名の照合を大文字小文字の区別なしに緩めるかどうか。`true` に設定すると、`AUTHENTICATION_LDAP_SIMPLE` で作成されたユーザーと大文字小文字だけが異なるログイン名でもそのユーザーに解決されるため、ユーザーごとの DN と付与されたロールが有効になります。また LDAP security integration で認証されたログインは、クライアントが入力した表記ではなくディレクトリが保持する名前をセッション ID として使用します。この項目はログインが解決しうる保存済みユーザーの範囲を広げ、さらに `current_user()` と `SHOW PROCESSLIST` が返す値を変えるため、デフォルトでは無効です。ネイティブパスワード、JWT、OAuth2 で認証されたユーザーは影響を受けません。`AUTHENTICATION_LDAP_SIMPLE` で作成された 2 つのユーザーの名前が大文字小文字だけ異なる場合、その両方に一致するログインはどちらかに解決されるのではなく拒否されます。グループ名の照合はこの項目とは独立しています。
+- 導入時期：v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string
@@ -895,6 +975,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドのソケット読み取りタイムアウト。`authentication_ldap_simple_conn_timeout_ms` を参照してください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドの TCP 接続タイムアウト。設定しない場合は OS の TCP タイムアウトにフォールバックし、ディレクトリに到達できないときにリクエストを処理しているスレッド（security integration が HTTP・Arrow Flight・BE→FE のロード RPC も認証するようになったため、これらのチャネルのワーカースレッド）を数分間占有する可能性があります。認証を早く失敗させたい場合は小さくしてください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- デフォルト：group_provider
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：LDAP で認証されたユーザーのグループの取得元に関するクラスター全体のデフォルト値。有効な値：`group_provider`（設定された Group Provider のみ。以前のバージョンと同じ動作）、`memberof`（ユーザー自身の LDAP エントリーのグループメンバーシップ属性のみ）、`both`（両方の和集合）。同名の security integration プロパティがこの値を上書きします。不正な値は `group_provider` として扱われ、ERROR レベルで記録されます。これにより、入力ミスによってすべての LDAP ユーザーがログインできなくなることを防ぎます。
+- 導入時期：v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- デフォルト：memberOf
+- タイプ：String
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple_group_source` が `memberof` または `both` の場合に使用される、ユーザーエントリー上でグループメンバーシップを保持する属性名のクラスター全体のデフォルト値。`memberOf` は Active Directory および `memberof` overlay を導入した OpenLDAP に適合します。Oracle Directory Server と 389 Directory Server は `isMemberOf` を使用します。同名の security integration プロパティがこの値を上書きします。
+- 導入時期：v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - デフォルト：Empty string
@@ -919,7 +1035,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：String
 - 単位：-
 - 変更可能：Yes
-- 説明：LDAP オブジェクトでユーザーを識別する属性の名前。
+- 説明：ユーザーエントリー上でログイン名を保持する属性の名前で、検索バインドモードの検索フィルターの構築に使われます。`uid` は OpenLDAP に適しています。Active Directory では `sAMAccountName` を設定してください。AD のエントリーの RDN は表示名であり、`uid` は管理者が設定しない限り空だからです。この選択により `authentication_ldap_simple_bind_dn_pattern` は使えなくなります。詳細は [Security Integration](../../user_privs/authentication/security_integration.md) の同名プロパティを参照してください。
 - 導入時期：-
 
 ### `backup_clean_check_interval_seconds`
@@ -1577,7 +1693,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目
+- 説明：関連するマテリアライズドビューを持つテーブルに「非ロック」最適化を StarRocks がいつ適用するかを制御します。この項目を 0 未満に設定した場合、システムは常に非ロック最適化を適用し、クエリのために関連するマテリアライズドビューをコピーしません（FE のメモリ使用量とメタデータのコピー/ロック競合は減りますが、メタデータの並行性問題のリスクが高まる可能性があります）。0 に設定した場合、関連するマテリアライズドビューを持たないテーブルにのみ非ロック最適化を適用します。0 より大きい値に設定した場合、関連するマテリアライズドビューの数が設定した閾値以下のテーブルにのみ非ロック最適化を適用します。この閾値は、外部 Catalog のテーブルも読み取る文には適用されません。そのような文でプランニングフェーズ全体にわたってロックを保持すると、FE が制御できない外部システムへのパーティション、統計情報、ファイル一覧の要求にロックの保持時間が左右される一方、そのロックは外部側を何も保護しないためです。したがって、内部テーブルが関連するマテリアライズドビューをいくつ持っていても、そのような文は非ロックパスを使用します。さらに、値が 0 以上の場合、プランナーはマテリアライズドビュー関連の書き換えパスを有効にするために、クエリの OLAP テーブルをオプティマイザコンテキストに記録します。0 未満の場合、この手順はスキップされます。
+- 導入時期：v3.2.1
 
 ### `transform_type_prefer_string_for_varchar`
 

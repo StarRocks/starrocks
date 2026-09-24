@@ -1011,4 +1011,96 @@ TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
     EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
 }
 
+TEST_F(TabletReshardHelperTest, has_shared_files_all_private) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("seg0.dat");
+    segment->set_shared(false);
+    auto* del = rowset->add_del_files();
+    del->set_name("del0.del");
+    del->set_shared(false);
+    auto* sstable = metadata.mutable_sstable_meta()->add_sstables();
+    sstable->set_filename("index0.sst");
+    sstable->set_shared(false);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_segment) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_segment_metas()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_del_file) {
+    TabletMetadataPB metadata;
+    auto* rowset = metadata.add_rowsets();
+    rowset->add_segment_metas()->set_shared(false);
+    rowset->add_del_files()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_sstable) {
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.mutable_sstable_meta()->add_sstables()->set_shared(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_shared_delvec) {
+    // A merge rewrites delvec pages into a new file, so a shared source delvec never blocks it.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& version_to_file = *metadata.mutable_delvec_meta()->mutable_version_to_file();
+    version_to_file[3].set_name("v3.delvec");
+    version_to_file[3].set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_dcg) {
+    // A shared .cols is checked directly, independent of its segment's own shared flag.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& dcgs = *metadata.mutable_dcg_meta()->mutable_dcgs();
+    auto* dcg = &dcgs[0];
+    dcg->add_column_files("c0.cols");
+    dcg->add_shared_files(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_shared_idg) {
+    // A cross-published OpAddIndex can mark an IDG entry shared without touching its segment's own
+    // shared flag, so the segment here stays private while the IDG entry alone must block the merge.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    auto& idgs = *metadata.mutable_idg_meta()->mutable_idgs();
+    idgs[0].add_entries()->set_shared_file(true);
+
+    EXPECT_TRUE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_ignores_garbage_records) {
+    // compaction_inputs is itself a repeated RowsetMetadataPB, so an implementation that walked every
+    // RowsetMetadataPB in the message instead of the live rowsets would wrongly block here.
+    TabletMetadataPB metadata;
+    metadata.add_rowsets()->add_segment_metas()->set_shared(false);
+    metadata.add_compaction_inputs()->add_segment_metas()->set_shared(true);
+    metadata.add_orphan_files()->set_shared(true);
+
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
+TEST_F(TabletReshardHelperTest, has_shared_files_empty_metadata) {
+    TabletMetadataPB metadata;
+    EXPECT_FALSE(has_shared_files(metadata));
+}
+
 } // namespace starrocks::lake
