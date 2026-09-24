@@ -29,19 +29,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-=======
-import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
->>>>>>> a3da2f0 ([BugFix] Check a proc dir's row width where its rows become an answer (#79619))
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
