@@ -3999,6 +3999,9 @@ public class Config extends ConfigBase {
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
 
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
+
     // gcp gs
     @ConfField
     public static String gcp_gcs_endpoint = "";

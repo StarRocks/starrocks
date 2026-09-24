@@ -16,6 +16,7 @@ package com.starrocks.credential.azure;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.ADLS2CredentialInfo;
+import com.staros.proto.ADLS2CredentialType;
 import com.staros.proto.ADLS2FileStoreInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
@@ -284,6 +285,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     private final String oauth2ClientSecret;
     private final String oauth2ClientEndpoint;
     private final String oauth2TokenFile;
+    private ADLS2CredentialType credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_UNSPECIFIED;
 
     public AzureADLS2CloudCredential(String endpoint, boolean oauth2ManagedIdentity, String oauth2TenantId, String oauth2ClientId,
                                      String storageAccount, String sharedKey, String sasToken, String oauth2ClientSecret,
@@ -315,6 +317,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     @Override
     void tryGenerateConfigurationMap() {
         if (oauth2ManagedIdentity && !oauth2TenantId.isEmpty() && !oauth2ClientId.isEmpty()) {
+            credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_MANAGED_IDENTITY;
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
                     "OAuth");
             generatedConfigurationMap.put(
@@ -325,6 +328,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ID),
                     oauth2ClientId);
         } else if (!sharedKey.isEmpty()) {
+            credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_SHARED_KEY;
             // Shared Key is always used by specific storage account, so we don't need to invoke createConfigKey()
             if (!storageAccount.isEmpty()) {
                 generatedConfigurationMap.put(
@@ -343,6 +347,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                         sharedKey);
             }
         } else if (!sasToken.isEmpty()) {
+            credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_SAS_TOKEN;
             if (!storageAccount.isEmpty()) {
                 generatedConfigurationMap.put(
                         String.format("fs.azure.account.auth.type.%s.dfs.core.windows.net", storageAccount),
@@ -361,6 +366,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
             }
         } else if (!oauth2ClientId.isEmpty() && !oauth2ClientSecret.isEmpty() &&
                 !oauth2ClientEndpoint.isEmpty()) {
+            credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_CLIENT_SECRET;
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
                     "OAuth");
             generatedConfigurationMap.put(
@@ -373,6 +379,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_OAUTH_CLIENT_ENDPOINT),
                     oauth2ClientEndpoint);
         } else if (!oauth2TokenFile.isEmpty() && !oauth2TenantId.isEmpty() && !oauth2ClientId.isEmpty()) {
+            credentialType = ADLS2CredentialType.ADLS2_CREDENTIAL_WORKLOAD_IDENTITY;
             generatedConfigurationMap.put(createConfigKey(ConfigurationKeys.FS_AZURE_ACCOUNT_AUTH_TYPE_PROPERTY_NAME),
                     "OAuth");
             generatedConfigurationMap.put(
@@ -433,6 +440,8 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
         adls2CredentialInfo.setClientId(oauth2ClientId);
         adls2CredentialInfo.setClientSecret(oauth2ClientSecret);
         adls2CredentialInfo.setAuthorityHost(oauth2ClientEndpoint);
+        adls2CredentialInfo.setOauth2TokenFile(oauth2TokenFile);
+        adls2CredentialInfo.setCredentialType(credentialType);
         adls2FileStoreInfo.setCredential(adls2CredentialInfo.build());
         fileStore.setAdls2FsInfo(adls2FileStoreInfo.build());
         return fileStore.build();
