@@ -18,6 +18,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.LDAPAuthProvider;
+import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.SimpleLDAPSecurityIntegration;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
@@ -50,6 +53,7 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -155,9 +159,13 @@ import org.mockito.internal.util.collections.Sets;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -269,7 +277,8 @@ public class FrontendServiceImplTest {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(buildAuthParams(null));
@@ -283,7 +292,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
             // checkSystemAction is void; default mock = no-op (i.e. authorized)
 
@@ -300,7 +310,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
             mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.OPERATE)))
                     .thenThrow(new AccessDeniedException("internal denial reason — operator only"));
@@ -321,7 +332,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.NODE));
@@ -337,7 +349,8 @@ public class FrontendServiceImplTest {
 
         try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
                 MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
-            mockedAuth.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
             mockedAuthz.when(() -> Authorizer.checkSystemAction(any(ConnectContext.class), eq(PrivilegeType.NODE)))
                     .thenThrow(new AccessDeniedException("denied"));
@@ -352,7 +365,8 @@ public class FrontendServiceImplTest {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenThrow(new AuthenticationException("wrong password"));
 
             TFeResult result = impl.checkAuth(buildAuthParams(TPrivilegeRequirement.OPERATE));
@@ -374,7 +388,8 @@ public class FrontendServiceImplTest {
         Mockito.doReturn(null).when(spy).getRequired_privilege();
 
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
 
             TFeResult result = impl.checkAuth(spy);
@@ -391,7 +406,8 @@ public class FrontendServiceImplTest {
         org.apache.logging.log4j.core.config.Configurator.setLevel(
                 FrontendServiceImpl.class.getName(), org.apache.logging.log4j.Level.DEBUG);
         try (MockedStatic<AuthenticationHandler> mocked = mockStatic(AuthenticationHandler.class)) {
-            mocked.when(() -> AuthenticationHandler.authenticate(any(ConnectContext.class), any(), any(), any()))
+            mocked.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
                     .thenReturn(UserIdentity.ROOT);
             TAuthenticateParams params = new TAuthenticateParams();
             params.setUser("ut_user");
@@ -2456,5 +2472,173 @@ public class FrontendServiceImplTest {
         Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
         // partitions should be empty since the created partition was "dropped" by TTL
         Assertions.assertTrue(result.getPartitions() == null || result.getPartitions().isEmpty());
+    }
+
+    /**
+     * Register an LDAP security integration and put it on the authentication chain, then stub the LDAP bind
+     * so no directory server is needed. Returns a counter of bind attempts: asserting it is non-zero proves
+     * the chain actually reached the integration instead of skipping it.
+     */
+    private AtomicInteger withLdapSecurityIntegration(String name, String validPassword) {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                AuthPlugin.Server.AUTHENTICATION_LDAP_SIMPLE.name());
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_HOST, "localhost");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_SERVER_PORT, "389");
+        properties.put(SimpleLDAPSecurityIntegration.AUTHENTICATION_LDAP_SIMPLE_BIND_DN_PATTERN,
+                "uid=${USER},ou=People,dc=example,dc=com");
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateSecurityIntegration(name, properties);
+        Config.authentication_chain = new String[] {"native", name};
+
+        AtomicInteger bindCount = new AtomicInteger();
+        new MockUp<LDAPAuthProvider>() {
+            @Mock
+            public void checkPassword(String dn, String password) throws Exception {
+                bindCount.incrementAndGet();
+                if (!validPassword.equals(password)) {
+                    throw new AuthenticationException("invalid credentials");
+                }
+            }
+        };
+        return bindCount;
+    }
+
+    private void dropLdapSecurityIntegration(String name, String[] savedAuthChain) throws Exception {
+        Config.authentication_chain = savedAuthChain;
+        GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropSecurityIntegration(name);
+    }
+
+    @Test
+    public void testLoadTxnBeginAuthenticatesSecurityIntegrationLdapUser() throws Exception {
+        // The load RPCs build their own ConnectContext, so before the fix the chain compared the integration
+        // against an unset authPlugin and skipped it: an LDAP user defined by a security integration could
+        // never authenticate here. This runs the real chain (only the LDAP bind is stubbed) and isolates the
+        // authentication step; the privilege step has its own cases below.
+        String siName = "ldap_corp_txn_auth";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            // the BE always fills user_ip in; the ephemeral identity is keyed on it
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertEquals(1, bindCount.get(), "the chain must reach the LDAP integration");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginRejectsSecurityIntegrationUserWithoutPrivilege() throws Exception {
+        // Pairs with the case above: letting the chain match more integrations must not loosen authorization.
+        // The LDAP user authenticates but its groups map to no role holding INSERT, so the load is refused.
+        String siName = "ldap_corp_txn_priv";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("ldap_password");
+            // the BE always fills user_ip in; the ephemeral identity is keyed on it
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertTrue(String.join(";", result.getStatus().getError_msgs()).contains("INSERT"),
+                    "the refusal must name the missing privilege: " + result.getStatus().getError_msgs());
+            Assertions.assertEquals(1, bindCount.get(), "authentication itself must have succeeded");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginRejectsSecurityIntegrationUserWithWrongPassword() throws Exception {
+        String siName = "ldap_corp_txn_pwd";
+        String[] savedAuthChain = Config.authentication_chain;
+        AtomicInteger bindCount = withLdapSecurityIntegration(siName, "ldap_password");
+
+        try (MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+            TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+            request.setLabel(UUID.randomUUID().toString());
+            request.setDb("test");
+            request.setTbl("site_access_auto");
+            request.setUser("ldap_user");
+            request.setPasswd("wrong_password");
+            request.setUser_ip("10.1.2.3");
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+
+            Assertions.assertNotEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            Assertions.assertEquals(1, bindCount.get(), "the LDAP bind must have been attempted and failed");
+        } finally {
+            dropLdapSecurityIntegration(siName, savedAuthChain);
+        }
+    }
+
+    @Test
+    public void testLoadTxnBeginAuthorizesOnTheAuthenticatedContext() throws Exception {
+        // A user coming from a security integration is ephemeral and owns no roles of its own: every
+        // privilege it has comes from the roles its groups map to, and authentication puts those on the
+        // context it authenticated. Authorizing on a fresh context instead would come back with no roles
+        // and reject an LDAP user that does have INSERT through a group.
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label_group_derived_roles");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("ldap_user");
+        request.setPasswd("ldap_password");
+        // the BE always fills user_ip in; without it the ephemeral identity would carry a null host
+        request.setUser_ip("10.1.2.3");
+
+        UserIdentity ephemeralUser = UserIdentity.createEphemeralUserIdent("ldap_user", "10.1.2.3");
+        Set<Long> groupDerivedRoles = Set.of(1234L);
+        AtomicReference<ConnectContext> authenticatedContext = new AtomicReference<>();
+        AtomicReference<ConnectContext> authorizedContext = new AtomicReference<>();
+
+        try (MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class);
+                MockedStatic<Authorizer> mockedAuthz = mockStatic(Authorizer.class)) {
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithClearPassword(
+                            any(ConnectContext.class), any(), any(), any()))
+                    .thenAnswer(invocation -> {
+                        ConnectContext authContext = invocation.getArgument(0);
+                        // Stand in for the real handler, which resolves groups and the roles they map to.
+                        authContext.setCurrentUserIdentity(ephemeralUser);
+                        authContext.setCurrentRoleIds(groupDerivedRoles);
+                        authenticatedContext.set(authContext);
+                        return ephemeralUser;
+                    });
+            mockedAuthz.when(() -> Authorizer.checkTableAction(any(ConnectContext.class), any(String.class),
+                            any(String.class), eq(PrivilegeType.INSERT)))
+                    .thenAnswer(invocation -> {
+                        authorizedContext.set(invocation.getArgument(0));
+                        return null;
+                    });
+
+            TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+            Assertions.assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+        }
+
+        Assertions.assertNotNull(authorizedContext.get(), "the INSERT check must run");
+        Assertions.assertSame(authenticatedContext.get(), authorizedContext.get());
+        Assertions.assertEquals(groupDerivedRoles, authorizedContext.get().getCurrentRoleIds());
     }
 }
