@@ -233,6 +233,7 @@ public enum PrimitiveType {
 
     // Check whether 'type' can cast to 'target'
     public static boolean isImplicitCast(PrimitiveType type, PrimitiveType target) {
+        // Keep GEOMETRY casts strict until descriptor-aware cast semantics are defined.
         if (type == GEOMETRY && target == GEOMETRY) {
             return false;
         }
