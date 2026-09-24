@@ -1386,6 +1386,18 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    /**
+     * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
+     * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch
+     * publish path.
+     * Only a partition that actually failed waits. A partition that publishes on its first attempt is never
+     * delayed, and one that is merely waiting for an earlier version to become visible is not treated as a
+     * failure. Set it to 0 to retry on every daemon tick, which is the behaviour from before the backoff
+     * existed. A negative value is clamped to 0.
+     */
+    @ConfField(mutable = true)
+    public static long lake_publish_version_retry_interval_ms = 1000;
+
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 

@@ -742,6 +742,15 @@ This topic introduces the following types of FE configurations:
 - Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values `>1` require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval before PublishVersionDaemon retries a partition whose last publish attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch publish path. Only a partition that actually failed waits: a partition that publishes on its first attempt is never delayed, and a partition that is merely waiting for an earlier version to become visible is not treated as a failure. Raising this value reduces the load a persistently failing publish puts on the leader and on object storage, at the cost of a slower recovery once the underlying problem clears. Setting it to `0` retries on every daemon tick, which is the behavior from before the backoff existed. A negative value is treated as `0`.
+- Introduced in: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - Default: true
