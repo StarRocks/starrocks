@@ -1002,26 +1002,19 @@ public class PaimonMetadata implements ConnectorMetadata {
                     null, null));
             return result;
         }
-        Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
+        Map<String, Partition> partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
         // Refresh before collecting results so a later cache miss also updates earlier hits.
-        boolean hasRefreshed = false;
-        if (partitionInfo == null && !partitionNames.isEmpty()) {
-            this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
-            partitionInfo = this.partitionInfos.get(identifier);
-            hasRefreshed = true;
-        }
-        if (!hasRefreshed && partitionInfo != null) {
-            for (String partitionName : partitionNames) {
-                if (!partitionInfo.containsKey(partitionName)) {
-                    this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
-                    partitionInfo = this.partitionInfos.get(identifier);
-                    break;
-                }
+        for (String partitionName : partitionNames) {
+            if (!partitionInfo.containsKey(partitionName)) {
+                this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
+                break;
             }
         }
         for (String partitionName : partitionNames) {
-            if (partitionInfo != null && partitionInfo.get(partitionName) != null) {
-                result.add(partitionInfo.get(partitionName));
+            Partition partition = partitionInfo.get(partitionName);
+            if (partition != null) {
+                result.add(partition);
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }
