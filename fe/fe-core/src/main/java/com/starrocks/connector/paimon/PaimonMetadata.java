@@ -85,7 +85,6 @@ import org.apache.paimon.table.DataTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
-import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
@@ -132,10 +131,14 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
+    private final Map<PaimonScanKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
+
+    // A LIMIT-pruned result must not be reused by another scan of the same table with a larger limit.
+    private record PaimonScanKey(PredicateSearchKey predicate, long limit, List<String> fieldNames) {
+    }
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -634,31 +637,27 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        if (!paimonSplits.containsKey(filter)) {
-            ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
+        PaimonScanKey scanKey = new PaimonScanKey(filter, params.getLimit(), List.copyOf(params.getFieldNames()));
+        if (!paimonSplits.containsKey(scanKey)) {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
                     && onlyHasPartitionPredicate(table, params.getPredicate());
-            readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
-
-            if (pruneManifestsByLimit) {
-                readBuilder = readBuilder.withLimit((int) params.getLimit());
-            }
-            InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
+            InnerTableScan scan = PaimonScan.create(paimonNativeTable, predicates, projected,
+                    pruneManifestsByLimit ? (int) params.getLimit() : null);
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
             List<Split> splits = scan.withMetricRegistry(paimonMetricRegistry).plan().splits();
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
-            paimonSplits.put(filter, paimonSplitsInfo);
+            paimonSplits.put(scanKey, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                     PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(scanKey)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
