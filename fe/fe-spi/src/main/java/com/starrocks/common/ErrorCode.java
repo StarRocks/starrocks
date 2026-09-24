@@ -261,11 +261,15 @@ public enum ErrorCode {
     ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+            "Access denied; User %s's group[%s] does not overlap with permitted_groups[%s]"),
     ERR_OAUTH2_NOT_AUTHENTICATED(5207, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; Need to access the URL [%s] to complete the OAuth2 authentication operation"),
     ERR_AUTHENTICATION_FAIL_IN_AUTH_CHAIN(5208, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; No authentication was successful in the authentication chain : [%s]"),
+    ERR_AMBIGUOUS_LDAP_USER(5209, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; User %s matches more than one LDAP user when ignoring case. " +
+                    "The conflicting user names are in the FE log; an administrator must remove all " +
+                    "but one of them, or set authentication_ldap_case_insensitive = false"),
 
     /**
      * 5300 - 5399: Lock and Transaction
