@@ -795,15 +795,22 @@ public class PreSplitFlowTest {
         // must degrade to the data tier, never abort the flow.
         OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
         PreSplitFlow.Prepared prepared = preparedWithPartitionInSortKey(mock(ScanContext.class));
+        PreSplitProfile profile = new PreSplitProfile();
 
         try (MockedConstruction<BrokerLoadRowGroupStatisticsProvider> ignored =
                 Mockito.mockConstruction(BrokerLoadRowGroupStatisticsProvider.class,
                         (provider, ctx) -> when(provider.fetch(any(SampleRequest.class)))
                                 .thenThrow(new MetaTierUnavailableException("broker-backed source")))) {
-            Assertions.assertNull(
-                    PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD),
-                    "a meta-tier-unavailable Broker Load source must fall back to the data tier");
+            try (PreSplitProfile.Scope attempt =
+                         PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+                Assertions.assertNull(
+                        PreSplitFlow.runMetaTierMultiPartitionSampler(table, prepared, LoadKind.BROKER_LOAD),
+                        "a meta-tier-unavailable Broker Load source must fall back to the data tier");
+            }
         }
+        Assertions.assertEquals("MetaTierUnavailableException: broker-backed source",
+                profile.toRuntimeProfile().getInfoString(PreSplitProfile.META_TIER_FALLBACK_REASONS),
+                "multi-partition fallback must expose why the footer tier declined");
     }
 
     // ---------- helpers ----------
