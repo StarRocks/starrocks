@@ -451,9 +451,9 @@ endif()
 # --without-paimon-cpp, so no other test binary depends on libpaimon.so.
 # The paimon include path comes from the imported `paimon` target, so other
 # test sources cannot include paimon headers.
-# The production sources are compiled directly into this binary: they ship in
-# the dlopen()ed libstarrocks_paimon.so shim and are no longer part of
-# ConnectorHive, while tests link paimon the ordinary build-time way.
+# The production sources are compiled by paimon_cpp_test_objs under the src
+# build tree, then linked here. This mirrors the shim without making any other
+# test binary depend on libpaimon.so and keeps their gcov data discoverable.
 if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
     ADD_BE_TEST(connector/paimon/paimon_cpp_test)
     target_sources(paimon_cpp_test PRIVATE
@@ -463,12 +463,7 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_blob_converter_test.cpp
         connector/paimon/paimon_global_index_evaluator_test.cpp
         connector/paimon/paimon_global_index_scanner_test.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_global_index_evaluator.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_global_index_scanner.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
-        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
+        $<TARGET_OBJECTS:paimon_cpp_test_objs>
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()

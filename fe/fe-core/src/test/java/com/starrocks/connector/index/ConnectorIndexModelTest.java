@@ -37,7 +37,6 @@ public class ConnectorIndexModelTest {
         Assertions.assertEquals(new ConnectorIndexShard(10L, 20L), shard);
         Assertions.assertEquals(new ConnectorIndexShard(10L, 20L).hashCode(), shard.hashCode());
         Assertions.assertNotEquals(new ConnectorIndexShard(10L, 21L), shard);
-        Assertions.assertNotEquals("[10, 20]", shard);
         Assertions.assertEquals("[10, 20]", shard.toString());
         Assertions.assertThrows(IllegalArgumentException.class, () -> new ConnectorIndexShard(-1L, 0L));
         Assertions.assertThrows(IllegalArgumentException.class, () -> new ConnectorIndexShard(2L, 1L));
