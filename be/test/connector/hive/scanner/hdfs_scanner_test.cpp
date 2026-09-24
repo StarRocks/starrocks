@@ -395,6 +395,85 @@ TEST_F(HdfsScannerTest, TestCreateMinMaxValueColumnForDatetimeSupportsNegativeMi
     EXPECT_EQ("1970-01-01 00:00:00", col->debug_item(1));
 }
 
+// COUNT(c1) rewrite: the placeholder `___count___c1` (slot 1) carries the non-null count of c1 (slot 0).
+static SlotDesc parquet_count_column_descs[] = {
+        {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+        {"___count___c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {""}};
+
+TEST_F(HdfsScannerTest, TestParquetCountColumnFromNullCounts) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    range->__set_record_count(4);
+    range->__set_is_first_split(true);
+    range->__set_null_value_counts({{0, 1}});
+    auto* tuple_desc = _create_tuple_desc(parquet_count_column_descs);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
+    ctx->format_scan_context.options.use_count_opt = true;
+    ctx->format_scan_context.non_null_count_slots = {{1, 0}};
+
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(scanner->get_next(_runtime_state, &chunk));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(0));
+    EXPECT_EQ(3, chunk->get_column_by_slot_id(1)->get(0).get_int64());
+
+    ASSERT_TRUE(scanner->get_next(_runtime_state, &chunk).is_end_of_file());
+    scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestParquetCountColumnFromNullCountsOnLaterSplit) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    range->__set_record_count(4);
+    range->__set_is_first_split(false);
+    range->__set_null_value_counts({{0, 1}});
+    auto* tuple_desc = _create_tuple_desc(parquet_count_column_descs);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
+    ctx->format_scan_context.options.use_count_opt = true;
+    ctx->format_scan_context.non_null_count_slots = {{1, 0}};
+
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(scanner->get_next(_runtime_state, &chunk));
+    ASSERT_EQ(1, chunk->num_rows());
+    EXPECT_TRUE(chunk->get_column_by_slot_id(0)->is_null(0));
+    EXPECT_EQ(0, chunk->get_column_by_slot_id(1)->get(0).get_int64());
+    scanner->close();
+}
+
+TEST_F(HdfsScannerTest, TestParquetCountColumnReadsFileWithoutNullCounts) {
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+
+    auto* range = _create_scan_range(default_parquet_file, 4, 1024);
+    range->__set_record_count(4);
+    range->__set_is_first_split(true);
+    auto* tuple_desc = _create_tuple_desc(parquet_count_column_descs);
+    auto* ctx = _create_ctx(default_parquet_file, range, tuple_desc);
+    ctx->format_scan_context.options.use_count_opt = true;
+    ctx->format_scan_context.non_null_count_slots = {{1, 0}};
+
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+
+    ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+    ASSERT_OK(scanner->get_next(_runtime_state, &chunk));
+    ASSERT_EQ(4, chunk->num_rows());
+    const auto& placeholder = chunk->get_column_by_slot_id(1);
+    ASSERT_EQ(4, placeholder->size());
+    for (size_t i = 0; i < placeholder->size(); i++) {
+        EXPECT_EQ(0, placeholder->get(i).get_int64());
+    }
+    scanner->close();
+}
+
 // ========================= ORC SCANNER ============================
 
 static TTypeDesc create_primitive_type_desc(TPrimitiveType::type type) {
@@ -581,6 +660,42 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 100);
     EXPECT_EQ(scanner->raw_rows_read(), 100);
+    scanner->close();
+}
+
+static SlotDesc mtypes_orc_count_column_descs[] = {
+        {"id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {"___count___id", TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT)},
+        {""}};
+
+// A file read row by row leaves the COUNT(id) placeholder at 0, since COUNT(id) counts the rows read.
+TEST_F(HdfsScannerTest, TestOrcCountColumnPlaceholderIsZeroForRowsRead) {
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(mtypes_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(mtypes_orc_count_column_descs);
+    auto* ctx = _create_ctx(mtypes_orc_file, range, tuple_desc);
+    ctx->format_scan_context.non_null_count_slots = {{1, 0}};
+
+    ASSERT_OK(scanner->init(_runtime_state, ctx));
+    ASSERT_OK(scanner->open(_runtime_state));
+
+    uint64_t rows = 0;
+    while (true) {
+        ChunkPtr chunk = RuntimeChunkHelper::new_chunk(*tuple_desc, 0);
+        Status status = scanner->get_next(_runtime_state, &chunk);
+        if (status.is_end_of_file()) {
+            break;
+        }
+        ASSERT_OK(status);
+        const auto& placeholder = chunk->get_column_by_slot_id(1);
+        ASSERT_EQ(chunk->num_rows(), placeholder->size());
+        for (size_t i = 0; i < placeholder->size(); i++) {
+            EXPECT_EQ(0, placeholder->get(i).get_int64());
+        }
+        rows += chunk->num_rows();
+    }
+    EXPECT_EQ(100, rows);
     scanner->close();
 }
 

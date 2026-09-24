@@ -59,6 +59,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.is_first_split = false;
     ctx.format_scan_context.first_row_id.reset();
     ctx.format_scan_context.min_max_values.clear();
+    ctx.format_scan_context.null_value_counts.clear();
     ctx.format_scan_context.extended_column_exprs.clear();
     ctx.format_scan_context.predicate_tree = nullptr;
     ctx.format_scan_context.runtime_filter_scan_range_pruner = nullptr;
@@ -68,6 +69,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.format_scan_context.scan_range_offset = ctx.scan_range->offset;
     ctx.format_scan_context.scan_range_length = ctx.scan_range->length;
     ctx.format_scan_context.min_max_values = ctx.scan_range->min_max_values;
+    ctx.format_scan_context.null_value_counts = ctx.scan_range->null_value_counts;
     if (ctx.scan_range->__isset.extended_columns) {
         ctx.format_scan_context.extended_column_exprs = ctx.scan_range->extended_columns;
     }
@@ -214,10 +216,11 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             file_record_count = _scanner_ctx->format_scan_context.file_record_count;
         }
         // append_side_columns_to_chunk fills per-row count (value=1),
-        // partition, and extended columns first.  The next call overwrites the
-        // count column with the aggregated file record count.
+        // partition, and extended columns first.  The next calls overwrite the
+        // count columns with the aggregated file counts.
         RETURN_IF_ERROR(_scanner_ctx->format_scan_context.append_side_columns_to_chunk(chunk, 1));
         _scanner_ctx->format_scan_context.append_or_update_count_column_to_chunk(chunk, 1, file_record_count);
+        _scanner_ctx->format_scan_context.append_file_non_null_counts_to_chunk(chunk);
         _scanner_ctx->no_more_chunks = true;
         _app_stats.rows_read += 1;
         return Status::OK();
