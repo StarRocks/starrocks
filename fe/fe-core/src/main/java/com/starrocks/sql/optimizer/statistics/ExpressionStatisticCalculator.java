@@ -41,7 +41,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.math.BigInteger;
-import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -361,7 +360,6 @@ public class ExpressionStatisticCalculator {
             double minValue = columnStatistic.getMinValue();
             double maxValue = columnStatistic.getMaxValue();
             double distinctValue = Math.min(rowCount, columnStatistic.getDistinctValuesCount());
-            final boolean minMaxValueInfinite = Double.isInfinite(minValue) || Double.isInfinite(maxValue);
             switch (callOperator.getFnName().toLowerCase()) {
                 case FunctionSet.SIGN:
                     minValue = -1;
@@ -399,18 +397,19 @@ public class ExpressionStatisticCalculator {
                     maxValue = 127;
                     distinctValue = 128;
                     break;
-                case FunctionSet.YEAR:
+                case FunctionSet.YEAR: {
                     minValue = 1700;
                     maxValue = 2100;
-                    try {
-                        minValue = Utils.getDatetimeFromLong((long) columnStatistic.getMinValue()).getYear();
-                        maxValue = Utils.getDatetimeFromLong((long) columnStatistic.getMaxValue()).getYear();
-                    } catch (DateTimeException e) {
-                        LOG.debug("get date type column statistics min/max failed. " + e);
+                    Optional<LocalDateTime> yearMin = Utils.getDatetimeFromStatistic(columnStatistic.getMinValue());
+                    Optional<LocalDateTime> yearMax = Utils.getDatetimeFromStatistic(columnStatistic.getMaxValue());
+                    if (yearMin.isPresent() && yearMax.isPresent()) {
+                        minValue = yearMin.get().getYear();
+                        maxValue = yearMax.get().getYear();
                     }
                     distinctValue =
                             Math.min(columnStatistic.getDistinctValuesCount(), (maxValue - minValue + 1));
                     break;
+                }
                 case FunctionSet.QUARTER:
                     minValue = 1;
                     maxValue = 4;
@@ -453,24 +452,39 @@ public class ExpressionStatisticCalculator {
                     maxValue = 59;
                     distinctValue = 60;
                     break;
+<<<<<<< HEAD
                 case FunctionSet.TO_DATE:
                     if (minMaxValueInfinite) {
+=======
+                case FunctionSet.FROM_UNIXTIME:
+                    minValue = Double.NEGATIVE_INFINITY;
+                    maxValue = Double.POSITIVE_INFINITY;
+                    break;
+                case FunctionSet.TO_DATE, FunctionSet.DATE: {
+                    Optional<LocalDateTime> dateMin = Utils.getDatetimeFromStatistic(minValue);
+                    Optional<LocalDateTime> dateMax = Utils.getDatetimeFromStatistic(maxValue);
+                    if (dateMin.isEmpty() || dateMax.isEmpty()) {
+>>>>>>> 32e0fec ([BugFix] Reject a statistic bound that falls outside the DATETIME domain (#79388))
                         break;
                     }
-                    minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate()
+                    minValue = dateMin.get().toLocalDate()
                             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-                    maxValue = Utils.getDatetimeFromLong((long) maxValue).toLocalDate()
+                    maxValue = dateMax.get().toLocalDate()
                             .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     break;
-                case FunctionSet.TO_DAYS:
-                    if (minMaxValueInfinite) {
+                }
+                case FunctionSet.TO_DAYS: {
+                    Optional<LocalDateTime> daysMin = Utils.getDatetimeFromStatistic(minValue);
+                    Optional<LocalDateTime> daysMax = Utils.getDatetimeFromStatistic(maxValue);
+                    if (daysMin.isEmpty() || daysMax.isEmpty()) {
                         break;
                     }
-                    minValue = Utils.getDatetimeFromLong((long) minValue).toLocalDate().toEpochDay() +
+                    minValue = daysMin.get().toLocalDate().toEpochDay() +
                             (double) DAYS_FROM_0_TO_1970;
-                    maxValue = Utils.getDatetimeFromLong((long) maxValue).toLocalDate().toEpochDay() +
+                    maxValue = daysMax.get().toLocalDate().toEpochDay() +
                             (double) DAYS_FROM_0_TO_1970;
                     break;
+                }
                 case FunctionSet.FROM_DAYS:
                     if (minValue < DAYS_FROM_0_TO_1970) {
                         minValue = LocalDate.ofEpochDay(0).atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
@@ -772,12 +786,11 @@ public class ExpressionStatisticCalculator {
             if (fmtArg.isPresent()) {
                 final var fmtString = fmtArg.get().getVarchar().toLowerCase();
                 final Optional<Long> estimatedNdv;
-                if (!dateStatistic.hasNaNValue() && dateStatistic.getMinValue() != Double.NEGATIVE_INFINITY
-                        && dateStatistic.getMaxValue() != Double.POSITIVE_INFINITY) {
-                    final var minDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMinValue());
-                    final var maxDateTime = Utils.getDatetimeFromLong((long) dateStatistic.getMaxValue());
-                    final var truncatedMinDateTime = truncateDateValue(fmtString, minDateTime, type);
-                    final var truncatedMaxDateTime = truncateDateValue(fmtString, maxDateTime, type);
+                final var minDateTime = Utils.getDatetimeFromStatistic(dateStatistic.getMinValue());
+                final var maxDateTime = Utils.getDatetimeFromStatistic(dateStatistic.getMaxValue());
+                if (!dateStatistic.hasNaNValue() && minDateTime.isPresent() && maxDateTime.isPresent()) {
+                    final var truncatedMinDateTime = truncateDateValue(fmtString, minDateTime.get(), type);
+                    final var truncatedMaxDateTime = truncateDateValue(fmtString, maxDateTime.get(), type);
 
                     if (truncatedMinDateTime.isPresent() && truncatedMaxDateTime.isPresent()) {
                         minValue = Utils.getLongFromDateTime(truncatedMinDateTime.get());
@@ -1043,11 +1056,18 @@ public class ExpressionStatisticCalculator {
         }
 
         private double calcDistinctValForWeek(ColumnStatistic col) {
+<<<<<<< HEAD
             if (col.hasNaNValue() || col.isInfiniteRange()) {
                 return 54;
+=======
+            Optional<LocalDateTime> minOpt = Utils.getDatetimeFromStatistic(col.getMinValue());
+            Optional<LocalDateTime> maxOpt = Utils.getDatetimeFromStatistic(col.getMaxValue());
+            if (col.hasNaNValue() || minOpt.isEmpty() || maxOpt.isEmpty()) {
+                return 53;
+>>>>>>> 32e0fec ([BugFix] Reject a statistic bound that falls outside the DATETIME domain (#79388))
             }
-            LocalDateTime min = Utils.getDatetimeFromLong((long) col.getMinValue());
-            LocalDateTime max = Utils.getDatetimeFromLong((long) col.getMaxValue());
+            LocalDateTime min = minOpt.get();
+            LocalDateTime max = maxOpt.get();
 
             // the range is more than one year
             if (min.plusYears(1).compareTo(max) <= 0) {

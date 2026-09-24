@@ -100,6 +100,11 @@ import static java.util.function.Function.identity;
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
 
+    // The bounds of the DATETIME domain, in epoch seconds, used to reject a statistic bound that
+    // cannot be converted back into a datetime.
+    private static final double MIN_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MIN_DATETIME);
+    private static final double MAX_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATETIME);
+
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
         if (null == root) {
@@ -467,6 +472,26 @@ public class Utils {
 
     public static LocalDateTime getDatetimeFromLong(long dateTime) {
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(dateTime), ZoneId.systemDefault());
+    }
+
+    /**
+     * Converts a column statistic's min/max bound, which is a plain double of epoch seconds, into a
+     * datetime.
+     *
+     * <p>Nothing keeps such a bound inside the DATETIME domain. It can come from a derived expression
+     * statistic, or from a non-date column that an implicit cast dragged into a date context, and then
+     * {@code (long) bound} saturates to {@code Long.MAX_VALUE} and {@link Instant#ofEpochSecond} throws
+     * {@link java.time.DateTimeException}. That exception escapes statistics derivation and fails the
+     * whole query, so a caller converting a statistic bound must use this and treat an empty result as
+     * "no usable bound" rather than calling {@link #getDatetimeFromLong} directly.
+     */
+    public static Optional<LocalDateTime> getDatetimeFromStatistic(double epochSecond) {
+        if (!Double.isFinite(epochSecond)
+                || epochSecond < MIN_DATETIME_EPOCH_SECOND
+                || epochSecond > MAX_DATETIME_EPOCH_SECOND) {
+            return Optional.empty();
+        }
+        return Optional.of(getDatetimeFromLong((long) epochSecond));
     }
 
     public static long convertBitSetToLong(BitSet bitSet, int length) {
