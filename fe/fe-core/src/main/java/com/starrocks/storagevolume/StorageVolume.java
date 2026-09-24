@@ -291,6 +291,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_OAUTH2_CLIENT_SECRET, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_EMAIL, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
                 (key, value) -> CREDENTIAL_MASK);
@@ -450,6 +451,11 @@ public class StorageVolume implements Writable, GsonPostProcessable {
             case ADLS2: {
                 ADLS2FileStoreInfo adls2FileStoreInfo = fsInfo.getAdls2FsInfo();
                 params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, adls2FileStoreInfo.getEndpoint());
+                String storageAccount = fsInfo.getPropertiesOrDefault(
+                        CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, "");
+                if (!storageAccount.isEmpty()) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_STORAGE_ACCOUNT, storageAccount);
+                }
                 ADLS2CredentialInfo adls2credentialInfo = adls2FileStoreInfo.getCredential();
                 String sharedKey = adls2credentialInfo.getSharedKey();
                 if (!Strings.isNullOrEmpty(sharedKey)) {

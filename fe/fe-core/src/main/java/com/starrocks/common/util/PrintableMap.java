@@ -64,6 +64,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("azure.adls1.oauth2_credential");
         SENSITIVE_KEY.add("azure.adls1.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.shared_key");
+        SENSITIVE_KEY.add("azure.adls2.sas_token");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_secret");
         SENSITIVE_KEY.add("databricks.token");
