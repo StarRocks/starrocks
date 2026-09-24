@@ -244,7 +244,7 @@ public:
     int16_t concurrency() const { return _limiter.concurrency(); }
 
     // update at runtime
-    void update_compact_threads(int32_t new_val);
+    Status update_compact_threads(int32_t new_val);
 
     void stop();
 

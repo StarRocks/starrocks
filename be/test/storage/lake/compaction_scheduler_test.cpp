@@ -15,6 +15,7 @@
 #include "storage/lake/compaction_scheduler.h"
 
 #include <atomic>
+#include <limits>
 #include <new>
 #include <system_error>
 #include <thread>
@@ -123,9 +124,61 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     bthread_join(tid, nullptr);
 }
 
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_rejects_out_of_range) {
+    auto old_target = _compaction_scheduler._task_queues.target_size();
+    auto old_config = config::compact_threads;
+    SCOPED_CLEANUP({ config::compact_threads = old_config; });
+
+    for (int32_t v : {0, -1, static_cast<int32_t>(std::numeric_limits<int16_t>::max()) + 1}) {
+        config::compact_threads = v;
+        auto st = _compaction_scheduler.update_compact_threads(v);
+        EXPECT_TRUE(st.is_invalid_argument()) << st;
+        EXPECT_EQ(old_target, _compaction_scheduler._task_queues.target_size());
+    }
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_while_resizing) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    // A target above the current size leaves the queues "modifying" without any worker acting on it.
+    queues.set_target_size(size + 2);
+    SCOPED_CLEANUP({ queues.set_target_size(size); });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+    EXPECT_EQ(size + 2, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_concurrent_update) {
+    auto& queues = _compaction_scheduler._task_queues;
+    auto size = queues.task_queue_size();
+    auto* sync_point = SyncPoint::GetInstance();
+    // Another update puts the target back before this one checks it.
+    sync_point->SetCallBack("CompactionScheduler::update_compact_threads:after_set_target_size",
+                            [&](void* /*arg*/) { queues.set_target_size(size); });
+    sync_point->EnableProcessing();
+    SCOPED_CLEANUP({
+        sync_point->ClearCallBack("CompactionScheduler::update_compact_threads:after_set_target_size");
+        sync_point->DisableProcessing();
+    });
+
+    auto st = _compaction_scheduler.update_compact_threads(size + 1);
+    EXPECT_TRUE(st.is_internal_error()) << st;
+    EXPECT_EQ(size, queues.target_size());
+    EXPECT_EQ(size, queues.task_queue_size());
+}
+
+TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_after_stop) {
+    _compaction_scheduler.stop();
+    auto target = _compaction_scheduler._task_queues.target_size();
+    auto st = _compaction_scheduler.update_compact_threads(target + 1);
+    EXPECT_TRUE(st.is_service_unavailable()) << st;
+}
+
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     // set to single thread mode, so all the tasks will be in the same thread
-    _compaction_scheduler.update_compact_threads(1);
+    ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
     std::vector<CompactionTaskInfo> tasks;
     _compaction_scheduler.list_tasks(&tasks);
     EXPECT_EQ(0, tasks.size());
@@ -756,7 +809,7 @@ TEST_F(LakeCompactionSchedulerTest, test_parallel_compaction_exception_after_reg
 // rescheduled for a worker that holds one instead -- and still complete its RPC exactly once.
 TEST_F(LakeCompactionSchedulerTest, test_parallel_planning_token_loss_reschedules) {
     // Single worker, single token: the token freed for planning cannot go anywhere but to the drain below.
-    _compaction_scheduler.update_compact_threads(1);
+    ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
 
     std::atomic<bool> drained_once{false};
     std::atomic<int> tokens_held{0};
