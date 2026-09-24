@@ -271,6 +271,33 @@ This topic introduces the following types of BE configurations:
 - Description: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
 - Introduced in: -
 
+### zstd_compression_dict_min_gain
+
+- Default: 0.10
+- Type: Double
+- Unit: -
+- Is mutable: Yes
+- Description: How much smaller the trial pages must get, as a fraction, before the per-column compression dictionary is kept. The writer compresses the first pages after the sample both with and without the dictionary and compares; below this threshold the dictionary is dropped for the whole column and the column is written as plain ZSTD. A dictionary is not free -- it costs a page of its own per column per segment, a load per segment on every read, and the choice cannot be revisited once data pages reference it -- so the default asks for a clear win rather than a measurable one. Measured across 13 datasets and 3 page sizes, `0.10` keeps the dictionary only where it earns 10% or more, and the cost is turning down gains of 5-9% that cluster at 256 KB pages, where a plain page already captures most of the repetition; lower the value to about `0.05` to take those as well. Values below `0` are treated as `0`; even at `0` the trial pages still have to come out strictly smaller with the dictionary than without it, so a dictionary that makes them larger is never kept. This parameter takes effect only when `enable_zstd_compression_dict` is `true`, and only for data written after the change.
+- Introduced in: v4.2
+
+### zstd_compression_dict_min_sample_bytes
+
+- Default: 1024
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The minimum size of the encoded values that a data page must reach before it can be used as the dictionary sample. This guards against building a garbage dictionary from a tiny or nearly empty first page and permanently marking the column as dictionary-ready. The value is compared against the encoded values of each data page until one reaches it, so a column whose first page is too small is sampled from a later one rather than giving up. Set it to `0` or a greater value. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Introduced in: v4.2
+
+### zstd_compression_dict_sample_bytes
+
+- Default: 65536
+- Type: Int
+- Unit: Bytes
+- Is mutable: Yes
+- Description: The number of bytes sampled from the first eligible data page to build the compression dictionary. The default corresponds to roughly one 64 KB data page. The actual sample is `min(size of the encoded values of the page, zstd_compression_dict_sample_bytes)`, so this parameter also bounds the dictionary size. The value is read when a column writer is created, so a change takes effect for the segments written afterwards. This parameter takes effect only when `enable_zstd_compression_dict` is `true`.
+- Introduced in: v4.2
+
 ### create_tablet_worker_count
 
 - Default: 3
@@ -414,6 +441,21 @@ This topic introduces the following types of BE configurations:
 - Is mutable: No
 - Description: Whether to check the data length during loading to solve compaction failures caused by out-of-bound VARCHAR data.
 - Introduced in: -
+
+### enable_zstd_compression_dict
+
+- Default: true
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: The cluster-wide master switch of the column-level compression dictionary, which is a ZSTD dictionary stored per column in each segment file. The switch is checked at the segment write gate. When it is `false`, the columns designated by the table property `zstd_compression_columns` are still compressed with ZSTD -- that part is the user's request and does not depend on this switch -- but no shared dictionary is built for them. The switch therefore only trades some compression ratio, never the codec, and can be flipped at runtime as an operational safety valve.
+
+  The default is `true`: every build that carries this switch also carries the reader (the `ColumnMetaPB.zstd_compression_dict_page` field, field 35, shipped ahead of the write side), and a dictionary page is only ever written for columns nominated through the table property `zstd_compression_columns` -- a cluster that never sets the property writes no dictionary pages regardless of this default.
+
+  The one window that still needs care is a rolling upgrade FROM a release that predates the reader. A compression dictionary data page is a ZSTD frame compressed against a raw-content dictionary (`dictID=0`), so its frame header carries no signal that a dictionary is required; a BE that does not know field 35 would decompress such a page WITHOUT the dictionary and hit ZSTD corruption. During such an upgrade, do not add `zstd_compression_columns` to any table (or set this parameter to `false`) until every BE has been upgraded. The same reasoning covers cross-replica clone and replication during a mixed-version window.
+
+  Warning: once a cluster has written compression dictionary segments, it can no longer be downgraded to a version earlier than the one that introduced this feature, because the older BEs can neither read nor compact those segments.
+- Introduced in: v4.2
 
 ### enable_event_based_compaction_framework
 

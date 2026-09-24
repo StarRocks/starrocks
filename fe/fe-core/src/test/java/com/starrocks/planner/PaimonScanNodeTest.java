@@ -33,8 +33,11 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.thrift.THdfsFileFormat;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.StringType;
+import com.starrocks.type.Type;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.data.BinaryRow;
@@ -55,6 +58,7 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.OptionalLong;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
@@ -410,6 +414,47 @@ public class PaimonScanNodeTest {
     }
 
     @Test
+    public void testAutoReaderModeSwitchesToNativeForFileColumns() {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(0), tuple);
+        idSlot.setType(IntegerType.INT);
+        idSlot.setColumn(new Column("id", IntegerType.INT));
+        tuple.addSlot(idSlot);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(1), tuple);
+        fileSlot.setType(FileType.FILE);
+        fileSlot.setColumn(new Column("image", FileType.FILE));
+        tuple.addSlot(fileSlot);
+
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.AUTO));
+        // An explicit choice is left alone; the BE reports whatever the chosen reader cannot do.
+        Assertions.assertEquals(PaimonReaderMode.JNI,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.JNI));
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(tuple, PaimonReaderMode.NATIVE));
+
+        // Paimon allows ARRAY<BLOB> and MAP<K, BLOB>; the FILE inside them must route the same way.
+        TupleDescriptor nested = new TupleDescriptor(new TupleId(1));
+        SlotDescriptor arraySlot = new SlotDescriptor(new SlotId(0), nested);
+        Type arrayOfFile = new ArrayType(FileType.FILE);
+        arraySlot.setType(arrayOfFile);
+        arraySlot.setColumn(new Column("images", arrayOfFile));
+        nested.addSlot(arraySlot);
+        Assertions.assertEquals(PaimonReaderMode.NATIVE,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(nested, PaimonReaderMode.AUTO));
+
+        // No FILE anywhere, even inside a complex type: AUTO stays AUTO.
+        TupleDescriptor plain = new TupleDescriptor(new TupleId(2));
+        SlotDescriptor intArraySlot = new SlotDescriptor(new SlotId(0), plain);
+        Type arrayOfInt = new ArrayType(IntegerType.INT);
+        intArraySlot.setType(arrayOfInt);
+        intArraySlot.setColumn(new Column("ids", arrayOfInt));
+        plain.addSlot(intArraySlot);
+        Assertions.assertEquals(PaimonReaderMode.AUTO,
+                PaimonScanNode.resolveAutoReaderModeForFileColumns(plain, PaimonReaderMode.AUTO));
+    }
+
+    @Test
     public void testJniReaderAllowsNonVariantSlots() {
         TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
         SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
@@ -461,6 +506,11 @@ public class PaimonScanNodeTest {
         @Override
         public long rowCount() {
             return 1;
+        }
+
+        @Override
+        public OptionalLong mergedRowCount() {
+            return OptionalLong.empty();
         }
     }
 

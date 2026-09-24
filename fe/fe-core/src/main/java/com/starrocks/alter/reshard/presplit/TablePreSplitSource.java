@@ -20,13 +20,17 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.common.util.SqlUtils;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -37,22 +41,28 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * INSERT-from-table pre-split source. Matches a single plain internal OLAP or
- * external Iceberg {@link TableRelation} — rejecting FILES() sources and any source-slice
- * modifier (partition / tablet / replica / hint / sample / time-travel / GTID).
- * {@link #prepare} resolves the OLAP source, re-checks the user's SELECT
- * privilege and rejects row-access / column-masking policies, gates the WHERE
- * predicate, maps the projection onto the target, and builds an
- * {@link InsertFromTableScanContext}. The flow uses a data-tier sample for both source kinds;
- * Iceberg snapshot totals seed the sampling rate and the observed predicate hit ratio sizes the
- * target tablet count.
+ * INSERT-from-table pre-split source. Matches a single plain {@link TableRelation} — rejecting
+ * FILES() sources and any source-slice modifier (partition / tablet / replica / hint / sample /
+ * time-travel / GTID). The source may be an internal OLAP table or any base table an external
+ * catalog serves (Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, Elasticsearch, ...); views are
+ * excluded. {@link #prepare} resolves the source, re-checks the user's SELECT privilege and rejects
+ * row-access / column-masking policies, gates the WHERE predicate, maps the projection onto the
+ * target, and builds an {@link InsertFromTableScanContext}. The flow uses a data-tier sample for
+ * every source kind; the source size estimate seeds the sampling rate and the observed predicate hit
+ * ratio sizes the target tablet count.
  */
 final class TablePreSplitSource implements InsertPreSplitSource {
 
@@ -81,13 +91,10 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     public PreSplitFlow.Prepared prepare(InsertStmt insertStmt, SelectRelation selectRelation,
                                          OlapTable target, Database database, ConnectContext context)
             throws AccessDeniedException {
-        // The INSERT-from-table column mapping (InsertSelectSourceColumns) assumes
-        // the load writes the full base schema in order, so a partial / reordered
-        // target column list is not yet supported on this path (the common gate
-        // only guarantees all sort keys are present, which is weaker).
-        if (!InsertPreSplitHook.targetColumnListIsFullIdentity(insertStmt, target)) {
-            return null;
-        }
+        // No column-list gate of its own: InsertPreSplitHook#targetColumnListIsPreSplitSafe has
+        // already vetted the list for every path, and InsertSelectSourceColumns#resolve pairs the
+        // SELECT outputs against the columns the list names, so a partial or reordered list maps
+        // as written.
         TableRelation sourceRelation = (TableRelation) selectRelation.getRelation();
         ResolvedSource resolvedSource = resolveSourceTable(sourceRelation, context);
         if (resolvedSource == null) {
@@ -96,7 +103,12 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (!sourceAuthorizedAndPolicyFree(resolvedSource, context)) {
             return null;
         }
-        Expr where = selectRelation.getWhereClause();
+        // Fold plan-time constants in the user's context before the gate, so the ROOT sampler
+        // never evaluates a function that reads session state (time zone, query start time).
+        Expr where = SamplingPredicateGate.foldPlanTimeConstants(selectRelation.getWhereClause(), context);
+        if (where == null && selectRelation.getWhereClause() != null) {
+            return null;
+        }
         if (!SamplingPredicateGate.isDeterministicAndSafe(
                 where, resolvedSource.normalizedName(), resolvedSource.sourceAlias())) {
             return null;
@@ -113,12 +125,6 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         if (targetToSource == null) {
             return null;
         }
-        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
-                resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
-                targetToSource,
-                wherePredicateSql, context.getCurrentComputeResource(),
-                resolvedSource.totalBytes(), resolvedSource.totalRows());
-        long estimatedBytes = resolvedSource.totalBytes();
         List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
             // A rollup sort-key column with no source mapping (e.g. a range DUP rollup whose ORDER BY
@@ -129,6 +135,28 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 return null;
             }
         }
+        // Sized last: for an external source this reads connector metadata, so only a load that
+        // passed every other gate -- the SELECT re-check included -- pays for it.
+        Estimates estimates = sourceEstimates(resolvedSource.sourceTable(), context);
+        if (!(resolvedSource.sourceTable() instanceof OlapTable)
+                && (estimates.totalBytes() == 0L || estimates.totalRows() == 0L)) {
+            // An unsized external source would be sampled at rate 1.0 -- a second full scan of the
+            // source, sorted by rand() -- only for selectPreSplitTabletCount to size zero bytes down to
+            // the minimum two tablets. That costs about as much as the load and buys almost nothing, so
+            // decline and say why. An internal OLAP source keeps sampling unrated: its size comes from
+            // the FE's own tablet statistics, and zero there means an empty or just-loaded table.
+            LOG.info("Pre-split: source {} has no usable size estimate (bytes={}, rows={}); skipping",
+                    resolvedSource.normalizedName(), estimates.totalBytes(), estimates.totalRows());
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.ESTIMATE_UNAVAILABLE);
+            PreSplitProfile.recordOutcome("SKIPPED: " + SkipReason.ESTIMATE_UNAVAILABLE);
+            return null;
+        }
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
+                targetToSource,
+                wherePredicateSql, context.getCurrentComputeResource(),
+                estimates.totalBytes(), estimates.totalRows());
+        long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);
     }
@@ -197,7 +225,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
      * AST's own {@code TableName} is never mutated in place.
      *
      * @return the resolved source bundle, or {@code null} when the source db /
-     *         table cannot be resolved or the source is not an internal OLAP or Iceberg table.
+     *         table cannot be resolved or the source is not a supported kind.
      */
     private static ResolvedSource resolveSourceTable(TableRelation sourceRelation, ConnectContext context) {
         TableName sourceName = sourceRelation.getName();
@@ -225,41 +253,108 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 ? "" : SqlUtils.getIdentSql(normalized.getCatalog()) + ".")
                 + SqlUtils.getIdentSql(normalized.getDb()) + "." + SqlUtils.getIdentSql(normalized.getTbl())
                 + (sourceAlias != null ? " " + SqlUtils.getIdentSql(sourceAlias) : "");
-        Estimates estimates = sourceEstimates(table);
-        return new ResolvedSource(table, normalized, sourceAlias, sourceFromSql,
-                estimates.totalBytes(), estimates.totalRows());
+        return new ResolvedSource(table, normalized, sourceAlias, sourceFromSql);
     }
 
+    /**
+     * An internal OLAP table (or materialized view), or a base table served by an external catalog.
+     * The sampler reads the source with a plain catalog-qualified SELECT, so any table the optimizer
+     * can scan is samplable. Views are excluded: their projection would have to be mapped through the
+     * view definition. Iceberg metadata tables and information_schema tables are not load sources.
+     */
     static boolean isSupportedSourceTable(Table sourceTable) {
-        return sourceTable instanceof OlapTable || sourceTable instanceof IcebergTable;
+        if (sourceTable instanceof OlapTable) {
+            return true;
+        }
+        return sourceTable != null
+                && CatalogMgr.isExternalCatalog(sourceTable.getCatalogName())
+                && !sourceTable.isView()
+                && !sourceTable.isMetadataTable()
+                && sourceTable.getType() != Table.TableType.SCHEMA;
     }
 
-    static Estimates sourceEstimates(Table sourceTable) {
+    static Estimates sourceEstimates(Table sourceTable, ConnectContext context) {
         if (sourceTable instanceof OlapTable olapTable) {
             return new Estimates(Math.max(0L, olapTable.getDataSize()), Math.max(0L, olapTable.getRowCount()));
         }
-        if (!(sourceTable instanceof IcebergTable icebergTable)) {
+        if (sourceTable instanceof IcebergTable icebergTable) {
+            // The snapshot summary is exact and costs nothing, and it is the only source here that
+            // reports stored file bytes -- the unit tablet_pre_split_target_size is measured in.
+            Estimates snapshotTotals = icebergSnapshotEstimates(icebergTable);
+            if (snapshotTotals.totalBytes() > 0L && snapshotTotals.totalRows() > 0L) {
+                return snapshotTotals;
+            }
+        }
+        return connectorStatisticsEstimates(sourceTable, context);
+    }
+
+    /**
+     * Sizes an external source from the statistics the optimizer would use to cost a scan of it:
+     * {@link MetadataMgr#getTableStatistics}, which prefers ANALYZE-collected statistics and falls
+     * back to the connector's own metadata (HMS numRows, Paimon / Iceberg manifests, the JDBC
+     * source's catalog, ...). A {@link Statistics.StatsSource#NONE} result is the optimizer's
+     * placeholder, not a measurement, so it counts as no estimate.
+     *
+     * <p>The byte figure is the row count times the statistics' average row width. That describes
+     * decoded rows, not stored files, and the width is itself an estimate where the connector has no
+     * column statistics (a type-size guess for strings), so it can land on either side of the
+     * source's on-disk size. tablet_reshard_max_split_count and tablet_reshard_min_split_size bound
+     * the split either way, and the reshard daemon converges the tablets afterwards.
+     */
+    static Estimates connectorStatisticsEstimates(Table sourceTable, ConnectContext context) {
+        try {
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            Map<ColumnRefOperator, Column> columns = new HashMap<>();
+            for (Column column : sourceTable.getBaseSchema()) {
+                columns.put(columnRefFactory.create(column.getName(), column.getType(), column.isAllowNull()),
+                        column);
+            }
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            // The version and the partition keys are what the optimizer hands a scan's statistics
+            // call once it has resolved the relation: Iceberg sizes nothing without a snapshot, and
+            // Hive / Hudi size a partitioned table only over the partitions they are given.
+            TvrVersionRange version = metadataMgr.getTableVersionRange(
+                    sourceTable.getCatalogDBName(), sourceTable, Optional.empty(), Optional.empty());
+            List<PartitionKey> partitionKeys = PartitionUtil.getPartitionKeys(sourceTable);
+            Statistics statistics = metadataMgr.getTableStatistics(
+                    OptimizerFactory.initContext(context, columnRefFactory), sourceTable.getCatalogName(),
+                    sourceTable, columns, partitionKeys, null, -1, version);
+            if (statistics == null || statistics.getStatsSource() == Statistics.StatsSource.NONE) {
+                return Estimates.ZERO;
+            }
+            double rows = statistics.getOutputRowCount();
+            if (!(rows >= 1.0) || Double.isInfinite(rows)) {
+                return Estimates.ZERO;
+            }
+            double bytes = statistics.getComputeSize();
+            return new Estimates(bytes >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) bytes,
+                    rows >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) rows);
+        } catch (Exception e) {
+            LOG.info("Pre-split: could not read statistics for source {}.{}.{}, so the load's input size "
+                            + "is unknown: {}", sourceTable.getCatalogName(), sourceTable.getCatalogDBName(),
+                    sourceTable.getName(), e.getMessage());
             return Estimates.ZERO;
         }
+    }
+
+    static Estimates icebergSnapshotEstimates(IcebergTable icebergTable) {
         org.apache.iceberg.Snapshot snapshot = icebergTable.getNativeTable().currentSnapshot();
         if (snapshot == null || snapshot.summary() == null) {
-            LOG.info("Pre-split: Iceberg source {} exposes no current snapshot summary, so the load's "
-                    + "input size is unknown", sourceTable.getName());
+            LOG.info("Pre-split: Iceberg source {} exposes no current snapshot summary; "
+                    + "falling back to the table statistics", icebergTable.getName());
             return Estimates.ZERO;
         }
         Estimates estimates = new Estimates(parseNonNegativeLong(snapshot.summary().get("total-files-size")),
                 parseNonNegativeLong(snapshot.summary().get("total-records")));
         if (estimates.totalBytes() == 0L || estimates.totalRows() == 0L) {
             // These summary keys are written by whichever engine produced the snapshot, so a writer
-            // that omits them leaves the sampler with no size at all. That degrades silently and in
-            // two directions at once: pickSamplingRate falls back to 1.0, so every predicate-matching
-            // row reaches the ORDER BY rand() LIMIT instead of a small Bernoulli sample, and
-            // selectPreSplitTabletCount sizes zero bytes down to the minimum two tablets. Log it so
-            // an unsplit load is attributable rather than looking like a successful pre-split.
+            // may omit them. The caller then falls back to the connector statistics, and declines
+            // the pre-split if those cannot size the source either. Log it so the fallback -- and a
+            // declined load -- is attributable to the writer rather than to pre-split.
             LOG.warn("Pre-split: Iceberg source {} snapshot {} reports total-files-size={} and "
                             + "total-records={}, so the load cannot be sized from the snapshot; "
-                            + "sampling will not be rate-limited and the split count falls to the minimum",
-                    sourceTable.getName(), snapshot.snapshotId(),
+                            + "falling back to the table statistics",
+                    icebergTable.getName(), snapshot.snapshotId(),
                     snapshot.summary().get("total-files-size"), snapshot.summary().get("total-records"));
         }
         return estimates;
@@ -276,10 +371,9 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         }
     }
 
-    /** Resolved source + the qualifier / SQL bits and snapshot estimates the sampler needs. */
+    /** Resolved source + the qualifier / SQL bits the sampler needs. */
     private record ResolvedSource(Table sourceTable, TableName normalizedName,
-                                  String sourceAlias, String sourceFromSql,
-                                  long totalBytes, long totalRows) { }
+                                  String sourceAlias, String sourceFromSql) { }
 
     /**
      * Re-checks the user's SELECT privilege on the source and rejects sources

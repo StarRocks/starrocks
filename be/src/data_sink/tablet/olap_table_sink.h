@@ -34,6 +34,9 @@
 
 #pragma once
 
+#include <string_view>
+
+#include "common/statusor.h"
 #include "data_sink/tablet/tablet_sink_sender.h"
 #include "exec_primitive/async_data_sink.h"
 
@@ -44,6 +47,11 @@ class NodeChannel;
 class IndexChannel;
 class TabletSinkSender;
 class TableMetrics;
+
+// Undo the `__starrocks_shadow_` rename a schema change gives the columns it rewrites, so the two
+// halves of an index -- the slot names, which carry it, and TabletColumn::name(), which does not --
+// can be matched. A no-op for every other name. Defined in olap_table_sink.cpp, where the caller is.
+std::string_view strip_shadow_column_prefix(std::string_view name);
 
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
@@ -82,7 +90,9 @@ public:
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
     // otherwise close_wait() will block
-    Status try_close(RuntimeState* state) override { return _tablet_sink_sender->try_close(state); }
+    Status try_close(RuntimeState* state) override {
+        return _is_initialized && _tablet_sink_sender != nullptr ? _tablet_sink_sender->try_close(state) : Status::OK();
+    }
 
     Status close_wait(RuntimeState* state, Status close_status) override;
 
@@ -170,6 +180,7 @@ private:
     int64_t _sink_id = 0;
     std::string _txn_trace_parent;
     Span _span;
+    bool _is_initialized = false;
     bool _close_wait_done = false;
     Status _close_wait_status;
     int _num_repicas = -1;
@@ -190,11 +201,23 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
     bool _write_txn_log = false;
+    // Shared-data only: a tablet's location carries several compute nodes that each write PART of
+    // its rows (see TOlapTableSink.enable_multi_node_write), instead of one node per tablet.
+    bool _enable_multi_node_write = false;
+    // Widest tablet under multi-node write: how many CNs the most-spread tablet is written by. Reported in
+    // the sink profile so a load can be told apart from one where the feature silently did not apply.
+    size_t _multi_node_write_node_num = 1;
     bool _enable_data_file_bundling = false;
     bool _is_multi_statements_txn = false;
     bool _enable_lake_per_partition_coordinator_txn_log = false;
 
     TKeysType::type _keys_type;
+    // Per index, the slots of the key columns for multi-node write key-hash routing. Empty for DUPLICATE
+    // KEY, which keeps local-first routing.
+    // An empty map means there is no key to group by (DUPLICATE KEY) and rows may stay local. An
+    // error means the sink does not carry some index's key columns in full, which FE's own gate
+    // makes impossible -- so it is reported rather than worked around.
+    StatusOr<std::unordered_map<int64_t, std::vector<SlotId>>> _resolve_multi_node_write_key_slots() const;
 
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;

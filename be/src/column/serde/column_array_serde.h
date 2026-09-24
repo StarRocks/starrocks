@@ -28,6 +28,13 @@ class Column;
 
 namespace starrocks::serde {
 
+// True if |column| is a NullableColumn whose every row is NULL, i.e. the only shape whose layout
+// ENCODE_ALL_NULL actually changes. Exposed so a caller can decide whether to enable the bit for a
+// whole chunk: if no column qualifies, enabling it is pure cost (a tag byte per nullable column
+// plus a per-column encode_level in ChunkPB) for no benefit. Shares its definition with the serde,
+// so the two can never disagree about what "all NULL" means.
+bool is_all_null_column(const Column& column);
+
 // ColumnArraySerde used to serialize/deserialize a column to/from an in-memory array.
 class ColumnArraySerde {
 public:

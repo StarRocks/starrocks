@@ -14,7 +14,9 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "column/chunk.h"
 #include "column/column_builder.h"
@@ -23,6 +25,7 @@
 #include "column/runtime_type_traits.h"
 #include "column/simd_mulselector.h"
 #include "column/vectorized_fwd.h"
+#include "common/config_expr_fwd.h"
 #include "common/object_pool.h"
 #include "exprs/case_expr.h"
 #include "gutil/casts.h"
@@ -66,6 +69,11 @@ class VectorizedCaseExpr final : public Expr
 public:
     explicit VectorizedCaseExpr(const TExprNode& node)
             : Expr(node), _has_case_expr(node.case_expr.has_case_expr), _has_else_expr(node.case_expr.has_else_expr) {}
+
+    // Result types built row by row through the generic Column::append() instead of
+    // ColumnBuilder/ColumnViewer + the SIMD multi-selector. VARIANT is not a collection but shares that
+    // path because it has no ColumnBuilder specialization.
+    static constexpr bool kRowWiseAppendResult = lt_is_collection<ResultType> || ResultType == TYPE_VARIANT;
 
     ~VectorizedCaseExpr() override = default;
 
@@ -466,11 +474,26 @@ private:
     //  If all `WHEN` is null/false, return NULL
     //  If `WHEN` is not null and true, return `THEN`
     StatusOr<ColumnPtr> evaluate_no_case(ExprContext* context, Chunk* chunk) {
+        const size_t num_rows = chunk != nullptr ? chunk->num_rows() : 1;
+
+        // Selective evaluation, see handbook/plans .../case-when-selective-evaluation.md: evaluate each
+        // THEN only on the rows it owns under first-match-wins. Restricted to the result types that go
+        // down the generic row-wise Column::append() path at the bottom of this function - those are the
+        // ones where materializing a row is expensive enough to pay for compacting the input. The other
+        // branch builds through ColumnBuilder/SIMD and must not compile any of this in.
+        // Read the knob once: it is runtime-mutable, and the loop below must not see it change between
+        // deciding to compact a branch and walking that branch with a cursor.
+        int32_t selective_ratio = 0;
+        bool selective = false;
+        if constexpr (kRowWiseAppendResult) {
+            selective_ratio = config::case_when_selective_eval_ratio;
+            selective = selective_ratio > 0 && chunk != nullptr && num_rows > 0;
+        }
+
         ColumnPtr else_column = nullptr;
-        if (!_has_else_expr) {
-            else_column = ColumnHelper::create_const_null_column(chunk != nullptr ? chunk->num_rows() : 1);
-        } else {
-            ASSIGN_OR_RETURN(else_column, _children[_children.size() - 1]->evaluate_checked(context, chunk));
+        if (!selective) {
+            // Eager ELSE: keep the non-selective path byte-for-byte as it was.
+            ASSIGN_OR_RETURN(else_column, _evaluate_else(context, chunk, num_rows));
         }
 
         int loop_end = _children.size() - 1;
@@ -484,6 +507,21 @@ private:
         std::vector<ColumnViewer<TYPE_BOOLEAN>> when_viewers;
         when_viewers.reserve(loop_end);
 
+        // Rows not yet claimed by any earlier branch. A branch owns `when_i AND remaining`, which is
+        // what it must be evaluated on - `when_i` alone would include rows an earlier branch already won.
+        Filter remaining;
+        Buffer<uint32_t> owned_rows;
+        if (selective) {
+            remaining.assign(num_rows, 1);
+            owned_rows.reserve(num_rows);
+        }
+        // Parallel to then_columns. A compacted branch holds only its owned rows, in ascending row
+        // order, so the row loop at the bottom walks it with a cursor instead of a row index.
+        std::vector<uint8_t> then_compacted;
+        std::vector<size_t> then_sizes;
+        then_compacted.reserve(loop_end);
+        then_sizes.reserve(loop_end);
+
         for (int i = 0; i < loop_end; i += 2) {
             ASSIGN_OR_RETURN(ColumnPtr when_column, _children[i]->evaluate_checked(context, chunk));
 
@@ -494,7 +532,26 @@ private:
                 continue;
             }
 
-            ASSIGN_OR_RETURN(ColumnPtr then_column, _children[i + 1]->evaluate_checked(context, chunk));
+            ColumnPtr then_column = nullptr;
+            bool compacted = false;
+            if (selective) {
+                // Every recorded branch must update `remaining`, including a const when column: the
+                // cursor walk below relies on owned_rows being exactly the rows this branch wins.
+                _collect_owned_rows(when_column, num_rows, &remaining, &owned_rows);
+                // Stronger than the trues_count == 0 skip above: a branch whose rows were all claimed
+                // by earlier branches is dropped without evaluating its THEN at all.
+                if (owned_rows.empty()) {
+                    continue;
+                }
+                if (owned_rows.size() * static_cast<size_t>(selective_ratio) < num_rows) {
+                    ASSIGN_OR_RETURN(then_column,
+                                     _evaluate_on_owned_rows(context, chunk, _children[i + 1], owned_rows));
+                    compacted = then_column != nullptr;
+                }
+            }
+            if (then_column == nullptr) {
+                ASSIGN_OR_RETURN(then_column, _children[i + 1]->evaluate_checked(context, chunk));
+            }
 
             // direct return if first when is all true
             if (when_viewers.empty() && trues_count == when_column->size()) {
@@ -503,13 +560,28 @@ private:
 
             when_columns.emplace_back(when_column);
             then_columns.emplace_back(then_column);
+            then_compacted.emplace_back(compacted ? 1 : 0);
+            // 0 means "full length", resolved to `size` below. A compacted branch always owns >= 1 row.
+            then_sizes.emplace_back(compacted ? owned_rows.size() : 0);
             when_viewers.emplace_back(when_column);
+        }
+
+        if (selective) {
+            // Lazy ELSE: the natural degenerate case of the `remaining` mask. Skipping it is the same
+            // class of behavior change as the trues_count == 0 skip above.
+            if (memchr(remaining.data(), 1, remaining.size()) == nullptr) {
+                else_column = ColumnHelper::create_const_null_column(num_rows);
+            } else {
+                ASSIGN_OR_RETURN(else_column, _evaluate_else(context, chunk, num_rows));
+            }
         }
 
         if (when_viewers.empty()) {
             return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
+        then_compacted.emplace_back(0);
+        then_sizes.emplace_back(0);
 
         size_t size = when_columns[0]->size();
 
@@ -518,7 +590,7 @@ private:
             when_columns_has_null |= column->has_null();
         }
 
-        if constexpr (lt_is_collection<ResultType> || ResultType == TYPE_VARIANT) {
+        if constexpr (kRowWiseAppendResult) {
             // construct nullable result column
             bool res_nullable = false;
             for (const auto& col : then_columns) {
@@ -528,8 +600,19 @@ private:
             }
             MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
-            for (auto& then_column : then_columns) {
-                then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
+            DCHECK_EQ(then_columns.size(), then_sizes.size());
+            for (size_t c = 0; c < then_columns.size(); ++c) {
+                then_columns[c] = ColumnHelper::unpack_and_duplicate_const_column(
+                        then_sizes[c] != 0 ? then_sizes[c] : size, then_columns[c]);
+            }
+            // A compacted branch holds only the rows it owns, in ascending row order, and this loop
+            // visits rows in ascending order too - so the k-th time it lands on branch i is exactly row
+            // k of that branch's column. One cursor per branch is all the mapping we need.
+            std::vector<size_t> cursors;
+            const bool has_compacted =
+                    std::find(then_compacted.begin(), then_compacted.end(), 1) != then_compacted.end();
+            if (has_compacted) {
+                cursors.assign(then_columns.size(), 0);
             }
             // when_columns[i] is true or not
             auto when_num = when_columns.size();
@@ -539,10 +622,11 @@ private:
                     while (i < when_num && !(when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(row)) {
+                    const size_t pos = (has_compacted && then_compacted[i]) ? cursors[i]++ : row;
+                    if (then_columns[i]->is_null(pos)) {
                         res->append_nulls(1);
                     } else {
-                        res->append(*then_columns[i], row, 1);
+                        res->append(*then_columns[i], pos, 1);
                     }
                 }
             } else {
@@ -551,10 +635,11 @@ private:
                     while ((i < when_num) && (when_viewers[i].is_null(row) || !when_viewers[i].value(row))) {
                         ++i;
                     }
-                    if (then_columns[i]->is_null(row)) {
+                    const size_t pos = (has_compacted && then_compacted[i]) ? cursors[i]++ : row;
+                    if (then_columns[i]->is_null(pos)) {
                         res->append_nulls(1);
                     } else {
-                        res->append(*then_columns[i], row, 1);
+                        res->append(*then_columns[i], pos, 1);
                     }
                 }
             }
@@ -657,6 +742,83 @@ private:
 
             return builder.build(ColumnHelper::is_all_const(when_columns) && ColumnHelper::is_all_const(then_columns));
         }
+    }
+
+    StatusOr<ColumnPtr> _evaluate_else(ExprContext* context, Chunk* chunk, size_t num_rows) {
+        if (!_has_else_expr) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+        return _children[_children.size() - 1]->evaluate_checked(context, chunk);
+    }
+
+    // owned = when AND remaining, with null treated as false (same semantics as count_true_with_notnull).
+    // The owned rows are cleared from |remaining| so later branches cannot claim them again.
+    static void _collect_owned_rows(const ColumnPtr& when_column, size_t num_rows, Filter* remaining,
+                                    Buffer<uint32_t>* owned_rows) {
+        owned_rows->clear();
+        uint8_t* __restrict rem_data = remaining->data();
+        if (when_column->is_constant()) {
+            // The caller already skipped all-false and all-null branches, so this constant is true and
+            // the branch owns every row still unclaimed.
+            for (size_t row = 0; row < num_rows; ++row) {
+                if (rem_data[row] != 0) {
+                    owned_rows->emplace_back(static_cast<uint32_t>(row));
+                    rem_data[row] = 0;
+                }
+            }
+            return;
+        }
+        const auto* values = down_cast<const BooleanColumn*>(ColumnHelper::get_data_column(when_column.get()))
+                                     ->immutable_data()
+                                     .data();
+        const uint8_t* nulls = nullptr;
+        if (when_column->is_nullable()) {
+            const auto* nullable = down_cast<const NullableColumn*>(when_column.get());
+            if (nullable->has_null()) {
+                nulls = nullable->immutable_null_column_data().data();
+            }
+        }
+        for (size_t row = 0; row < num_rows; ++row) {
+            const bool hit = rem_data[row] != 0 && values[row] != 0 && (nulls == nullptr || nulls[row] == 0);
+            if (hit) {
+                owned_rows->emplace_back(static_cast<uint32_t>(row));
+                rem_data[row] = 0;
+            }
+        }
+    }
+
+    // Gather the rows |owned_rows| into a sub-chunk holding only the slots |then_expr| reads and evaluate
+    // |then_expr| there. The result stays compacted - one row per entry of |owned_rows|, in the same
+    // ascending order - and the row loop in evaluate_no_case walks it with a cursor. Returns nullptr when
+    // the branch cannot take this path, in which case the caller evaluates on the whole chunk instead.
+    StatusOr<ColumnPtr> _evaluate_on_owned_rows(ExprContext* context, Chunk* chunk, Expr* then_expr,
+                                                const Buffer<uint32_t>& owned_rows) {
+        std::vector<SlotId> slot_ids;
+        then_expr->get_slot_ids(&slot_ids);
+        std::sort(slot_ids.begin(), slot_ids.end());
+        slot_ids.erase(std::unique(slot_ids.begin(), slot_ids.end()), slot_ids.end());
+
+        const auto owned_count = static_cast<uint32_t>(owned_rows.size());
+        auto sub_chunk = std::make_unique<Chunk>();
+        for (SlotId slot_id : slot_ids) {
+            // A reported slot that the chunk does not carry is supplied by the expression itself (a
+            // lambda argument, a hoisted common sub expression); gathering it is neither possible nor needed.
+            if (!chunk->is_slot_exist(slot_id)) {
+                continue;
+            }
+            const ColumnPtr& src = chunk->get_column_by_slot_id(slot_id);
+            MutableColumnPtr dst = src->clone_empty();
+            dst->reserve(owned_count);
+            dst->append_selective(*src, owned_rows.data(), 0, owned_count);
+            sub_chunk->append_column(std::move(dst), slot_id);
+        }
+        // A THEN that reads no column is constant-ish and cheap, and an empty sub-chunk has no row
+        // count to drive it. Let the caller evaluate it on the whole chunk.
+        if (sub_chunk->num_columns() == 0) {
+            return ColumnPtr(nullptr);
+        }
+
+        return then_expr->evaluate_checked(context, sub_chunk.get());
     }
 
 private:

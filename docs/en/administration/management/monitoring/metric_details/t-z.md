@@ -86,6 +86,11 @@ description: "Alphabetical t - z"
 - Unit: Bytes
 - Description: Memory used by tablet metadata.
 
+## `tablet_reshard_merge_candidate_blocked`
+
+- Unit: Count
+- Description: Cumulative count of tablet-exclusion events during merge planning, not a live count of currently blocked tablets: it increases every planning pass that skips an otherwise-eligible tablet, and never decreases except across an FE restart. Watch its rate of increase, not its raw value. A tablet is skipped either because it still holds merge-blocking shared data files left over from a tablet split, or because it has not yet been proven free of them -- which usually means compaction has not caught up yet, but can also mean the tablet is on a BE that predates this check, or has simply not been observed yet. Clearing the shared files a split leaves behind takes a compaction that rewrites them: on a non-primary-key table `ALTER TABLE ... COMPACT` forces that on demand. On a primary-key table the same statement forces base compaction only for a tablet that carries outstanding deletes; a delete-free tablet, which is the usual shape right after a split, is unaffected by it and waits for ordinary compaction to reach those rowsets. Only the Leader FE increments this counter.
+
 ## `tablet_schema_mem_bytes`
 
 - Unit: Bytes

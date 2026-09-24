@@ -63,6 +63,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(st_as_wkt);
 
+    DEFINE_VECTORIZED_FN(st_geog_from_text);
+    DEFINE_VECTORIZED_FN(st_geog_from_wkb);
+    DEFINE_VECTORIZED_FN(st_geography_as_text);
+    DEFINE_VECTORIZED_FN(st_geography_as_wkb);
+    DEFINE_VECTORIZED_FN(st_geography_x);
+    DEFINE_VECTORIZED_FN(st_geography_y);
+    DEFINE_VECTORIZED_FN(st_geography_type);
+    DEFINE_VECTORIZED_FN(st_geography_distance);
+
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,
                                              GeoShapeType shape_type);

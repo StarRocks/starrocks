@@ -17,34 +17,32 @@ package com.starrocks.authentication;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.util.NetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Hashtable;
-<<<<<<< HEAD
-=======
 import java.util.List;
 import java.util.Locale;
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
 import java.util.Optional;
+import java.util.Set;
 import javax.naming.Context;
 import javax.naming.InvalidNameException;
 import javax.naming.NamingEnumeration;
 import javax.naming.NamingException;
 import javax.naming.PartialResultException;
-<<<<<<< HEAD
-=======
 import javax.naming.directory.Attribute;
 import javax.naming.directory.Attributes;
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
 import javax.naming.directory.DirContext;
 import javax.naming.directory.InitialDirContext;
 import javax.naming.directory.SearchControls;
 import javax.naming.directory.SearchResult;
+import javax.naming.ldap.LdapName;
 import javax.net.ssl.SSLContext;
 
 public class LDAPAuthProvider implements AuthenticationProvider {
@@ -60,7 +58,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     private final String ldapSearchFilter;
     private final String ldapUserDN;
     private final String ldapBindDNPattern;
+    private final LdapGroupSource ldapGroupSource;
+    private final String ldapMemberOfAttr;
 
+    /**
+     * Kept so that callers that do not care about group resolution - and the existing tests - do not
+     * have to be touched. Behaves exactly as before: groups come from the group providers only.
+     */
     public LDAPAuthProvider(String ldapServerHost,
                             int ldapServerPort,
                             boolean useSSL,
@@ -72,6 +76,26 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                             String ldapSearchFilter,
                             String ldapUserDN,
                             String ldapBindDNPattern) {
+        this(ldapServerHost, ldapServerPort, useSSL, trustStorePath, trustStorePwd, ldapBindRootDN, ldapBindRootPwd,
+                ldapBindBaseDN, ldapSearchFilter, ldapUserDN, ldapBindDNPattern,
+                LdapGroupSource.GROUP_PROVIDER, "memberOf");
+    }
+
+    public LDAPAuthProvider(String ldapServerHost,
+                            int ldapServerPort,
+                            boolean useSSL,
+                            String trustStorePath,
+                            String trustStorePwd,
+                            String ldapBindRootDN,
+                            String ldapBindRootPwd,
+                            String ldapBindBaseDN,
+                            String ldapSearchFilter,
+                            String ldapUserDN,
+                            String ldapBindDNPattern,
+                            LdapGroupSource ldapGroupSource,
+                            String ldapMemberOfAttr) {
+        this.ldapGroupSource = ldapGroupSource == null ? LdapGroupSource.GROUP_PROVIDER : ldapGroupSource;
+        this.ldapMemberOfAttr = Strings.isNullOrEmpty(ldapMemberOfAttr) ? "memberOf" : ldapMemberOfAttr;
         this.ldapServerHost = ldapServerHost;
         this.ldapServerPort = ldapServerPort;
         this.useSSL = useSSL;
@@ -88,14 +112,13 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     @Override
     public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
-        //clear password terminate string
+        // clear password terminate string: the MySQL clear-password frame appends a trailing \0, while
+        // HTTP Basic sends the bare password and may even send an empty one.
         byte[] clearPassword = authResponse;
-        if (authResponse[authResponse.length - 1] == 0) {
+        if (authResponse.length > 0 && authResponse[authResponse.length - 1] == 0) {
             clearPassword = Arrays.copyOf(authResponse, authResponse.length - 1);
         }
 
-<<<<<<< HEAD
-=======
         String user = userIdentity.getUser();
         boolean legacyPerUserDN = !Strings.isNullOrEmpty(ldapUserDN);
         // The legacy `AS \'<dn>\'` form intentionally does not read memberOf, see below.
@@ -117,22 +140,21 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         String distinguishedName;
         LdapUserEntry userEntry = null;
         boolean directBind = false;
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
         try {
             String password = new String(clearPassword, StandardCharsets.UTF_8);
-            String distinguishedName;
-            if (!Strings.isNullOrEmpty(ldapUserDN)) {
-                // Priority 1: per-user DN (from CREATE USER ... AS 'dn')
+            if (legacyPerUserDN) {
+                // Priority 1: per-user DN (from CREATE USER ... AS \'dn\')
+                // NOTE: `CREATE USER ... IDENTIFIED WITH authentication_ldap_simple AS \'<dn>\'` is the
+                // legacy per-user-DN form and is scheduled for deprecation. It intentionally does NOT
+                // support the memberOf group source added later - use a security integration instead.
                 distinguishedName = ldapUserDN;
                 checkPassword(distinguishedName, password);
             } else if (!Strings.isNullOrEmpty(ldapBindDNPattern)) {
                 // Priority 2: direct bind via DN pattern
-                distinguishedName = authenticateByPattern(userIdentity.getUser(), password);
+                directBind = true;
+                userEntry = checkPasswordByDnPattern(user, password, requestedAttributes);
+                distinguishedName = userEntry.dn();
             } else {
-<<<<<<< HEAD
-                // Priority 3: search-and-bind
-                distinguishedName = findUserDNByRoot(userIdentity.getUser());
-=======
                 // Priority 3: search-and-bind. The search that resolves the DN also carries the
                 // requested attributes back, so reading memberOf costs no extra request here.
                 if (requestedAttributes.length > 0) {
@@ -143,19 +165,27 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                     // the one the existing tests intercept.
                     distinguishedName = findUserDNByRoot(user);
                 }
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
                 checkPassword(distinguishedName, password);
             }
             Preconditions.checkNotNull(distinguishedName);
 
             // set distinguished name to auth context
             authContext.setDistinguishedName(distinguishedName);
-        } catch (Exception e) {
-            LOG.warn("check password failed for user: {}", userIdentity.getUser(), e);
+        } catch (AuthenticationException e) {
+            // Already classified (empty password, user not found, or a nested bind failure): pass it through.
+            LOG.warn("check password failed for user: {}", user, e);
+            throw e;
+        } catch (javax.naming.AuthenticationException e) {
+            // The directory answered and rejected the credential -- a definitive "wrong password".
+            LOG.warn("check password failed for user: {}", user, e);
             throw new AuthenticationException(e.getMessage());
+        } catch (Exception e) {
+            // Anything else means we could not get an answer: connection refused, timeout, TLS failure.
+            // Mark it transient so a caller that caches rejections does not hold a valid credential back
+            // until the directory recovers.
+            LOG.warn("cannot reach the directory while authenticating user: {}", user, e);
+            throw new AuthenticationException(e.getMessage()).asTransient();
         }
-<<<<<<< HEAD
-=======
 
         if (readCanonicalName) {
             authContext.setAuthenticatedUserName(
@@ -377,7 +407,6 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
     private boolean canProbeWithServiceAccount() {
         return !Strings.isNullOrEmpty(ldapBindRootDN) && !Strings.isNullOrEmpty(ldapBindRootPwd);
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
     }
 
     private String getURL() {
@@ -399,69 +428,160 @@ public class LDAPAuthProvider implements AuthenticationProvider {
         env.put("java.naming.ldap.factory.socket", LdapSslSocketFactory.class.getName());
     }
 
-    // Try each DN pattern in order, return the first successfully bound DN.
-    // Patterns are separated by semicolon ';'.
-    protected String authenticateByPattern(String user, String password) throws Exception {
+    /**
+     * Validate every configured DN pattern and substitute the user into each of them.
+     * <p>
+     * The patterns are validated up front, before any of them is used, so a typo in the second
+     * pattern is reported even when the first one would have worked.
+     *
+     * @return the candidate DNs, in the configured order
+     */
+    private String[] candidateDNsFromPattern(String user) throws AuthenticationException {
         String safeUser = escapeDnValue(normalizeUsername(user));
         String[] rawPatterns = ldapBindDNPattern.split(";");
-        // Pre-validate all patterns before attempting any bind
-        String[] patterns = new String[rawPatterns.length];
+        String[] dns = new String[rawPatterns.length];
         for (int i = 0; i < rawPatterns.length; i++) {
-            patterns[i] = trim(trim(rawPatterns[i].trim(), "\""), "'");
-            if (!patterns[i].contains("${USER}")) {
+            String pattern = trim(trim(rawPatterns[i].trim(), "\""), "'");
+            if (!pattern.contains("${USER}")) {
                 throw new AuthenticationException(
-                        "Invalid bind DN pattern: '" + patterns[i] + "' does not contain ${USER} placeholder. " +
+                        "Invalid bind DN pattern: '" + pattern + "' does not contain ${USER} placeholder. " +
                         "Each pattern segment must include ${USER} to prevent shared-DN authentication bypass.");
             }
-            if (!patterns[i].contains("=")) {
+            if (!pattern.contains("=")) {
                 throw new AuthenticationException(
-                        "Invalid bind DN pattern: '" + patterns[i] + "' is not a valid DN format. " +
+                        "Invalid bind DN pattern: '" + pattern + "' is not a valid DN format. " +
                         "Pattern must produce a Distinguished Name (e.g., 'uid=${USER},ou=People,dc=example,dc=com'). " +
                         "UPN-style patterns like '${USER}@domain' are not supported.");
             }
+            dns[i] = pattern.replace("${USER}", safeUser);
         }
+        return dns;
+    }
+
+    /**
+     * Expand the semicolon-separated bind DN pattern and check the password against each candidate DN
+     * in order, returning the first entry that accepts it - the pattern loop over
+     * {@link #checkPassword} and {@link #checkPasswordAndReadAttributes}. An empty
+     * `requestedAttributes` means only check the password, which is what the default path does.
+     */
+    protected LdapUserEntry checkPasswordByDnPattern(String user, String password, String[] requestedAttributes)
+            throws Exception {
         Exception lastException = null;
-        for (String pattern : patterns) {
-            String dn = pattern.replace("${USER}", safeUser);
+        for (String dn : candidateDNsFromPattern(user)) {
             try {
-                checkPassword(dn, password);
-                return dn;
+                if (requestedAttributes.length == 0) {
+                    checkPassword(dn, password);
+                    return new LdapUserEntry(dn, null);
+                }
+                return checkPasswordAndReadAttributes(dn, password, requestedAttributes);
             } catch (Exception e) {
                 lastException = e;
-                LOG.debug("direct bind failed for pattern '{}' with user '{}': {}", pattern, user, e.getMessage());
+                LOG.debug("direct bind failed for dn '{}' with user '{}': {}", dn, user, e.getMessage());
             }
         }
-        throw lastException;
+        // Null only when the pattern produced no candidate at all - `";"` splits to an empty array.
+        throw lastException != null ? lastException
+                : new AuthenticationException("bind dn pattern '" + ldapBindDNPattern + "' produced no candidate DN");
+    }
+
+    /**
+     * Build the JNDI environment for a simple bind as `principal`. Shared by the three places that
+     * open a connection - the user bind, the service account search and the memberOf probe - so that
+     * a change to URL handling, SSL or timeouts only has to be made once.
+     */
+    // Package-private so a test can assert the two timeouts below are actually set.
+    Hashtable<String, String> buildEnv(String principal, String credentials) throws Exception {
+        Hashtable<String, String> env = new Hashtable<>();
+        env.put(Context.SECURITY_AUTHENTICATION, "simple");
+        env.put(Context.SECURITY_CREDENTIALS, credentials);
+        env.put(Context.SECURITY_PRINCIPAL, principal);
+        env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
+        env.put(Context.PROVIDER_URL, getURL());
+        // Both timeouts matter: without them the bind falls back to the OS TCP timeout, so an unreachable
+        // directory can pin the calling thread -- an HTTP worker or a thrift handler now that a security
+        // integration serves those channels too. LDAPGroupProvider sets the same two properties.
+        env.put("com.sun.jndi.ldap.connect.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_timeout_ms));
+        env.put("com.sun.jndi.ldap.read.timeout",
+                String.valueOf(Config.authentication_ldap_simple_conn_read_timeout_ms));
+        if (useSSL) {
+            setSSLContext(env);
+        }
+        return env;
+    }
+
+    private static void closeQuietly(DirContext ctx) {
+        if (ctx != null) {
+            try {
+                ctx.close();
+            } catch (Exception e) {
+                // ignore
+            }
+        }
     }
 
     //bind to ldap server to check password
     protected void checkPassword(String dn, String password) throws Exception {
+        checkPasswordAndReadAttributes(dn, password, new String[0]);
+    }
+
+    /**
+     * Bind as the user and, on the same connection, read the requested attributes.
+     * <p>
+     * A bind response cannot carry attributes, so on this path reading memberOf costs one extra read
+     * request - but no extra connection and no extra bind. The read has to happen between the bind
+     * and closing the context, which is why it lives in this method rather than in a caller.
+     * <p>
+     * A failure of the attribute read is swallowed: the bind - the actual authentication - already
+     * succeeded, and the caller falls back to the service account probe.
+     *
+     * @param requestedAttributes attributes to read, empty for none (then this is a plain bind)
+     */
+    protected LdapUserEntry checkPasswordAndReadAttributes(String dn, String password, String[] requestedAttributes)
+            throws Exception {
         if (Strings.isNullOrEmpty(password)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        String url = getURL();
-        Hashtable<String, String> env = new Hashtable<>();
-        env.put(Context.SECURITY_AUTHENTICATION, "simple");
-        env.put(Context.SECURITY_CREDENTIALS, password);
-        env.put(Context.SECURITY_PRINCIPAL, dn);
-        env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-        env.put(Context.PROVIDER_URL, url);
-        if (useSSL) {
-            setSSLContext(env);
-        }
+        Hashtable<String, String> env = buildEnv(dn, password);
 
         DirContext ctx = null;
         try {
             //this will send a bind call to ldap server, throw exception if failed
             ctx = new InitialDirContext(env);
-        } finally {
-            if (ctx != null) {
-                try {
-                    ctx.close();
-                } catch (Exception e) {
-                }
+            if (requestedAttributes.length == 0) {
+                return new LdapUserEntry(dn, null);
             }
+            try {
+                // LdapName, not the String overload: getAttributes(String, ...) parses its argument
+                // as a JNDI *composite* name, where '/' separates components. A DN may legally
+                // contain '/' (AD's `CN=Smith/Jones,...` is common), and escapeDnValue() does not
+                // escape it, so the String form would split the DN and fail with NameNotFoundException.
+                return new LdapUserEntry(dn, ctx.getAttributes(new LdapName(dn), requestedAttributes));
+            } catch (Exception e) {
+                LOG.warn("bound as {} but failed to read attributes {}: {}",
+                        dn, Arrays.toString(requestedAttributes), e.getMessage());
+                return new LdapUserEntry(dn, null);
+            }
+        } finally {
+            closeQuietly(ctx);
+        }
+    }
+
+    /**
+     * Read attributes of `dn` with the configured service account. Only used as the fallback probe of
+     * the direct-bind path, so it is the single place that pays for an extra connection and bind.
+     */
+    protected Attributes readAttributesAsServiceAccount(String dn, String[] requestedAttributes) throws Exception {
+        String rootDN = trim(trim(ldapBindRootDN, "\""), "'");
+        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd);
+        DirContext ctx = null;
+        try {
+            ctx = new InitialDirContext(env);
+            // LdapName for the same reason as in checkPasswordAndReadAttributes().
+            return ctx.getAttributes(new LdapName(dn), requestedAttributes);
+        } finally {
+            closeQuietly(ctx);
         }
     }
 
@@ -469,24 +589,29 @@ public class LDAPAuthProvider implements AuthenticationProvider {
     //2. search user
     //3. if match exactly one, return the user's actual DN
     protected String findUserDNByRoot(String user) throws Exception {
+        return findUserEntryByRoot(user, new String[0]).dn();
+    }
+
+    /**
+     * Same as {@link #findUserDNByRoot(String)}, but the search also brings back the requested
+     * attributes. On this path reading memberOf is free: the search of the user entry has to happen
+     * anyway, so the attribute name is simply added to the ones it returns.
+     *
+     * @param requestedAttributes attributes to return. An empty array means "no attribute at all",
+     *                            which is what the default path wants - leaving it unset would make
+     *                            the directory return every attribute of the entry, only for all of
+     *                            them to be discarded.
+     */
+    protected LdapUserEntry findUserEntryByRoot(String user, String[] requestedAttributes) throws Exception {
         if (Strings.isNullOrEmpty(ldapBindRootPwd)) {
             throw new AuthenticationException("empty password is not allowed for simple authentication");
         }
 
-        String url = getURL();
-        Hashtable<String, String> env = new Hashtable<>();
         //dn contains '=', so we should use ' or " to wrap the value in config file
         String rootDN = ldapBindRootDN;
         rootDN = trim(rootDN, "\"");
         rootDN = trim(rootDN, "'");
-        env.put(Context.SECURITY_AUTHENTICATION, "simple");
-        env.put(Context.SECURITY_CREDENTIALS, ldapBindRootPwd);
-        env.put(Context.SECURITY_PRINCIPAL, rootDN);
-        env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
-        env.put(Context.PROVIDER_URL, url);
-        if (useSSL) {
-            setSSLContext(env);
-        }
+        Hashtable<String, String> env = buildEnv(rootDN, ldapBindRootPwd);
 
         DirContext ctx = null;
         try {
@@ -495,6 +620,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             baseDN = trim(baseDN, "'");
             SearchControls sc = new SearchControls();
             sc.setSearchScope(SearchControls.SUBTREE_SCOPE);
+            sc.setReturningAttributes(requestedAttributes);
             // Normalize username for case-insensitive LDAP search
             // LDAP treats usernames as case-insensitive by default, aligning with Microsoft Active Directory
             String normalizedUser = normalizeUsername(user);
@@ -505,6 +631,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
             NamingEnumeration<SearchResult> results = ctx.search(baseDN, searchFilter, sc);
 
             String userDN = null;
+            Attributes userAttributes = null;
             int matched = 0;
 
             try {
@@ -516,6 +643,7 @@ public class LDAPAuthProvider implements AuthenticationProvider {
 
                     SearchResult result = results.next();
                     userDN = result.getNameInNamespace();
+                    userAttributes = result.getAttributes();
                 }
             } catch (PartialResultException e) {
                 LOG.warn("ldap search partial result exception", e);
@@ -525,14 +653,9 @@ public class LDAPAuthProvider implements AuthenticationProvider {
                 throw new AuthenticationException("ldap search matched user count " + matched);
             }
 
-            return userDN;
+            return new LdapUserEntry(userDN, userAttributes);
         } finally {
-            if (ctx != null) {
-                try {
-                    ctx.close();
-                } catch (Exception e) {
-                }
-            }
+            closeQuietly(ctx);
         }
     }
 

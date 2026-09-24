@@ -149,6 +149,10 @@ void register_ai_config_update_hooks(ExecEnv* exec_env) {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_rate_limit_qps_chat(config::ai_function_rate_limit_qps_chat);
     });
+    registry->register_callback("ai_function_rate_limit_qps_embedding", [exec_env]() -> Status {
+        ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
+        return executor->update_rate_limit_qps_embedding(config::ai_function_rate_limit_qps_embedding);
+    });
     registry->register_callback("ai_function_max_inflight", [exec_env]() -> Status {
         ASSIGN_OR_RETURN(auto* executor, resolve_ai_executor(exec_env));
         return executor->update_max_inflight(config::ai_function_max_inflight);
@@ -549,7 +553,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("compact_threads", [=]() -> Status {
         auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
-            tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
         }
         return Status::OK();
     });
@@ -614,6 +618,19 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_max_single_part_size, fslib_azure_storage_max_single_part_size);
     UPDATE_STARLET_CONFIG(starlet_fslib_azure_storage_min_upload_part_size, fslib_azure_storage_min_upload_part_size);
 #undef UPDATE_STARLET_CONFIG
+
+    // Registered by hand rather than through UPDATE_STARLET_CONFIG, which stringifies a numeric config.
+    // The value reaching here already passed the config's enum check, so the update can only fail if
+    // starlet does not know the flag.
+    registry->register_callback("starlet_starmgr_client_compression_type", []() {
+        auto val = config::starlet_starmgr_client_compression_type.value();
+        if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("starmgr_client_compression_type", val).empty()) {
+            LOG(WARNING) << "Failed to update starmgr_client_compression_type";
+            return Status::InvalidArgument("Failed to update starlet_starmgr_client_compression_type.");
+        }
+        LOG(INFO) << "set starlet_starmgr_client_compression_type: " << val;
+        return Status::OK();
+    });
 
 #ifndef BUILD_FORMAT_LIB
     registry->register_callback("starlet_filesystem_instance_cache_capacity", [=]() -> Status {

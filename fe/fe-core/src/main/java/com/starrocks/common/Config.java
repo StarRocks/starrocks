@@ -1386,6 +1386,18 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    /**
+     * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
+     * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch
+     * publish path.
+     * Only a partition that actually failed waits. A partition that publishes on its first attempt is never
+     * delayed, and one that is merely waiting for an earlier version to become visible is not treated as a
+     * failure. Set it to 0 to retry on every daemon tick, which is the behaviour from before the backoff
+     * existed. A negative value is clamped to 0.
+     */
+    @ConfField(mutable = true)
+    public static long lake_publish_version_retry_interval_ms = 1000;
+
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
@@ -1905,8 +1917,14 @@ public class Config extends ConfigBase {
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
      * may cause metadata concurrency problem but can reduce many lock conflict time and metadata memory-copy consume.
-     * N = 0    : always not use non lock optimization
+     * N = 0    : use non lock optimization only for a table that carries no related materialized view
      * N > 0    : use non lock optimization when related mvs's num <= N, otherwise don't use non lock optimization
+     * <p>
+     * This limit weighs the cost of snapshotting a table against the time the meta lock is held instead, and
+     * both sides are CPU only as long as planning stays local. It is therefore not applied to a statement that
+     * also reads a table in an external catalog: there the lock would be held across partition, statistics and
+     * file-list round trips to a system the FE does not control, while protecting nothing on that side. See
+     * AnalyzerUtils.CopyUnsafeTablesCollector#isCopySafe.
      */
     @ConfField(mutable = true)
     public static int skip_whole_phase_lock_mv_limit = 5;
@@ -2495,6 +2513,26 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int authentication_ldap_simple_server_port = 389;
 
+    @ConfField(mutable = true, comment = "TCP connect timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple. Without it the bind falls back to the OS TCP timeout, which can pin " +
+            "the request thread for minutes when the directory is unreachable. Matches the default of the other " +
+            "LDAP paths (group provider, enterprise ldap integration).")
+    public static int authentication_ldap_simple_conn_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "Socket read timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple.")
+    public static int authentication_ldap_simple_conn_read_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "How long (seconds) a rejected credential is remembered so that a " +
+            "client retrying the same wrong password does not produce one LDAP bind per attempt. The cache key " +
+            "includes a hash of the credential, so fixing the password takes effect immediately. 0 disables it.")
+    public static int authentication_failure_cache_ttl_second = 10;
+
+    @ConfField(mutable = true, comment = "Maximum number of rejected credentials remembered by " +
+            "authentication_failure_cache_ttl_second. Bounds the memory a client (or an attacker) cycling " +
+            "usernames can occupy.")
+    public static int authentication_failure_cache_capacity = 1024;
+
     @ConfField(mutable = true, comment = "false to enable ssl connection")
     public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
 
@@ -2541,8 +2579,6 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_dn_pattern = "";
 
     /**
-<<<<<<< HEAD
-=======
      * Cluster-wide default for where the groups of an LDAP-authenticated user come from.
      * Legal values: "group_provider" (default, behavior unchanged), "memberof", "both".
      * A security integration property of the same name overrides this value.
@@ -2581,7 +2617,6 @@ public class Config extends ConfigBase {
     public static boolean authentication_ldap_case_insensitive = false;
 
     /**
->>>>>>> 0e135bc2c76 ([Enhancement] Treat LDAP/AD user and group names as case-insensitive (#61403))
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
@@ -2600,6 +2635,29 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean authorization_enable_admin_user_protection = false;
+
+    /**
+     * When set to true, a cached query profile can be read only by the user who ran the query or by a holder of
+     * SYSTEM OPERATE. This gates SHOW PROFILELIST, ANALYZE PROFILE, get_query_profile(), the /api/profile,
+     * /api/query/progress and /api/query_detail endpoints (the last keeps listing every query but drops the
+     * profile text and the plan rendered from it), and the /query and /query_profile web pages; the OPERATE
+     * requirement that enable_http_auth already places on the endpoints is unchanged.
+     * Off by default so an upgrade keeps the earlier behavior, in which every authenticated user can read every
+     * profile; turn it on to restrict profile visibility.
+     *
+     * Turning it on has two visible consequences beyond the rule itself, both deliberate. /api/query/progress
+     * stops accepting anonymous requests, because the rule needs a caller identity -- an existing anonymous
+     * poller of it starts getting 401. And get_query_profile() requires SYSTEM OPERATE for an id whose profile
+     * is not cached on the connected frontend, since the RPC that fetches it from the other frontends carries
+     * no caller identity to authorize there; that narrows the cross-frontend lookup to OPERATE holders while
+     * the check is on.
+     *
+     * Mutable so the check can be toggled without a restart. Changing it needs SYSTEM OPERATE, which already grants
+     * full profile visibility, so the knob opens no path its holder lacks. Callers that apply it across several
+     * rows snapshot it once so a flip mid-operation cannot produce a half-filtered result.
+     */
+    @ConfField(mutable = true)
+    public static boolean authorization_enable_query_profile_access_check = false;
 
     /**
      * When set to true, guava cache is used to cache the privilege collection
@@ -3092,6 +3150,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Per statistics-scan estimated-row budget for external-table analyze; " +
             "<= 0 means unlimited. Auxiliary soft budget only (row counts are estimated).")
     public static long connector_table_analyze_scan_rows_cap = 10000000; // 10M
+
+    // A collection query reads one partition under the scan caps above into constant-size sketches and in
+    // practice returns in well under a second. Without a ceiling of its own each one inherits whatever is
+    // left of statistic_collect_query_timeout - the budget for the entire job - so a single stuck query can
+    // spend it all and leave every partition after it uncollected. The default is a tenth of the default job
+    // budget: far above anything the scan caps can produce, while still bounding one query's share of the
+    // job. Mutable so a cold or distant object store can be given more room without a restart.
+    @ConfField(mutable = true, comment = "Per-query timeout for external-table analyze collection queries; " +
+            "<= 0 means no separate ceiling and a query may use the job's whole remaining budget. Always " +
+            "additionally bounded by statistic_collect_query_timeout.")
+    public static long connector_table_analyze_query_timeout = 360; // unit: second, default 6min
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -3733,6 +3802,9 @@ public class Config extends ConfigBase {
     @ConfField(aliases = {"azure_adls2_oauth2_oauth2_client_endpoint"})
     public static String azure_adls2_oauth2_client_endpoint = "";
 
+    @ConfField
+    public static String azure_adls2_oauth2_token_file = "";
+
     // gcp gs
     @ConfField
     public static String gcp_gcs_endpoint = "";
@@ -3942,6 +4014,12 @@ public class Config extends ConfigBase {
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;
 
+    @ConfField(mutable = true, comment = "Timeout (ms) of the publish version RPC of a shared-data transaction. " +
+            "It bounds both how long FE waits for the compute node to answer and the deadline the compute node " +
+            "applies to the publish task itself. Raise it when publishing a large batch of tablets legitimately " +
+            "takes longer than the default.")
+    public static int lake_publish_version_timeout_ms = 60000;
+
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
@@ -3994,6 +4072,18 @@ public class Config extends ConfigBase {
                     "placed for the sample to be representative, so the scheduler discards it and " +
                     "falls back to a full scan. Lower is more conservative. Default: 40")
     public static int lake_scheduler_colocate_group_sample_empty_fallback_percent = 40;
+
+    @ConfField(mutable = true, comment =
+            "Whether StarMgr journals a replica-only shard change as a replica delta instead of a full " +
+                    "shard snapshot. Enable only once every FE in the cluster runs a build that carries " +
+                    "this item, otherwise an older FE silently skips all replica updates. Default: false")
+    public static boolean lake_enable_incremental_shard_replica_journal = false;
+
+    @ConfField(mutable = false, comment =
+            "Whether StarMgr maintains a compute node -> shards reverse index, so that per-node shard " +
+                    "lookups cost the node's own fan-out instead of a full shard-map scan. Read once at " +
+                    "FE startup. Default: false")
+    public static boolean lake_enable_worker_shard_reverse_index = false;
 
     @ConfField(mutable = true, comment =
             "How long a shared-data online rewrite keeps retrying one partition's rewrite INSERT after " +
@@ -5136,10 +5226,11 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
-            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
-            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
-            + "enable_tablet_pre_split must also be true for pre-split to run.")
+            + "INSERT INTO ... SELECT FROM <table> loads whose source is an internal OLAP table or a "
+            + "table in an external catalog (views excluded), including explicit real/temp partitions "
+            + "and static/dynamic overwrite. Default on as of v4.1.0 after the GA gate. Set to false "
+            + "to disable cluster-wide. The session variable enable_tablet_pre_split must also be "
+            + "true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "
@@ -5189,11 +5280,11 @@ public class Config extends ConfigBase {
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
     @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
-            + "Pre-Split meta tier reads concurrently from a FILES() source. Footer reads are "
-            + "independent per file and the sampler sorts the aggregated stats, so concurrency only "
-            + "cuts the wall time of the pre-split hook (each footer is a remote round-trip; a "
-            + "many-file source otherwise serializes hundreds of round-trips). 1 disables "
-            + "concurrency.")
+            + "Pre-Split meta tier reads concurrently from a file-backed load source (FILES() or "
+            + "Broker Load). Footer reads are independent per file and the sampler sorts the "
+            + "aggregated stats, so concurrency only cuts the wall time of the pre-split hook "
+            + "(each footer is a remote round-trip; a many-file source otherwise serializes "
+            + "hundreds of round-trips). 1 disables concurrency.")
     public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
 
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
@@ -5315,4 +5406,60 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Provider for SYSTEM ai_complete calls; must be openai_compatible")
     public static String ai_default_chat_provider = "";
+    @ConfField(mutable = true, comment = "Complete HTTPS POST URL for SYSTEM ai_embed calls")
+    public static String ai_default_embedding_endpoint = "";
+
+    @ConfField(mutable = true, comment = "Default model for text-only SYSTEM ai_embed calls")
+    public static String ai_default_embedding_model = "";
+
+    @ConfField(mutable = true, comment = "Provider for SYSTEM ai_embed calls; must be openai_compatible")
+    public static String ai_default_embedding_provider = "";
+
+    /**
+     * How the FE reacts when a metadata lock is requested on an object the internal catalog does
+     * not own -- a database from an external catalog, or a placeholder table id such as the
+     * {@code -1} BaseTableInfo default. Such an id names nothing the lock manager can protect: it
+     * either never collides (a lock nobody else can take) or collides with everything (every
+     * external base table on one lock).
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with a stack and lets the
+     * operation proceed, {@code error} refuses it. Mutable, so a deployment can start at
+     * {@code warn}, confirm its logs are clean and tighten to {@code error} without a restart.
+     * Unrecognized values behave as {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_target_validation_mode = "warn";
+
+    /**
+     * How the FE reacts when it contacts an external system -- a Hive metastore, a JDBC source, an
+     * Iceberg REST catalog, a thrift peer -- while holding an FE metadata lock. The lock's hold
+     * time then becomes that system's round-trip time, and every waiter pays it: transaction
+     * publish takes the table lock with a 1000ms {@code tryLock}, so one slow call inside a
+     * critical section fails a load rather than merely delaying a query.
+     *
+     * The check sits at the last layer the FE owns before a socket is used, so a cache hit never
+     * reaches it: every violation reported is a request that really went out.
+     *
+     * {@code off} skips the check, {@code warn} logs the violation with the offending caller's
+     * stack and lets the call proceed, {@code error} refuses it. Unlike
+     * {@link #lock_target_validation_mode} this rule ships knowing its violation set is not yet
+     * empty, so {@code warn} is the only sane default: it turns those sites from a reviewer's
+     * memory into a log you can aggregate by transport. Mutable, so a deployment can tighten to
+     * {@code error} without a restart once its logs are clean. Unrecognized values behave as
+     * {@code warn}.
+     */
+    @ConfField(mutable = true)
+    public static String lock_blocking_call_validation_mode = "warn";
+
+    /**
+     * Minimum interval in milliseconds between lock-invariant violation log lines <b>from the same
+     * call site</b>. Throttling per site rather than globally keeps a busy violating site from
+     * crowding out every other one, and a site that has not been seen before always logs its first
+     * occurrence. Violation counts stay exact regardless of what the throttle drops.
+     *
+     * Set to 0 to log every violation while investigating.
+     */
+    @ConfField(mutable = true)
+    public static long lock_invariant_violation_log_interval_ms = 10000;
+
 }

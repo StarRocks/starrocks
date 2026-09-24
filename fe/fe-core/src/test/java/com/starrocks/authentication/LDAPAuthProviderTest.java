@@ -555,12 +555,12 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             Assertions.assertEquals("uid=alice,ou=People,dc=test,dc=com", authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_simple"));
             Assertions.assertEquals(Set.of("engineers"), groups);
 
             // Unknown DN → empty
-            Assertions.assertTrue(AuthenticationHandler.getGroups(user,
+            Assertions.assertTrue(AuthenticationHandler.resolveGroupsFromProviders(user,
                     "uid=unknown,ou=People,dc=test,dc=com", List.of("gp_dn_simple")).isEmpty());
         } finally {
             gpMap.remove("gp_dn_simple");
@@ -591,7 +591,7 @@ class LDAPAuthProviderTest {
 
             Assertions.assertEquals("uid=alice@abc.com,ou=People,dc=test,dc=com",
                     authCtx.getDistinguishedName());
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_dn_at"));
             Assertions.assertEquals(Set.of("staff"), groups);
         } finally {
@@ -622,7 +622,7 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_simple"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {
@@ -658,7 +658,7 @@ class LDAPAuthProviderTest {
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
             // Lookup key "alice" vs cache key "alice@abc.com" → mismatch → empty
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_attr_wrong"));
             Assertions.assertTrue(groups.isEmpty(),
                     "ldap_user_search_attr=uid extracts 'alice@abc.com' as cache key, " +
@@ -691,11 +691,35 @@ class LDAPAuthProviderTest {
             UserIdentity user = UserIdentity.createEphemeralUserIdent("alice", "%");
             provider.authenticate(authCtx, user, "password\0".getBytes(StandardCharsets.UTF_8));
 
-            Set<String> groups = AuthenticationHandler.getGroups(user, authCtx.getDistinguishedName(),
+            Set<String> groups = AuthenticationHandler.resolveGroupsFromProviders(user, authCtx.getDistinguishedName(),
                     List.of("gp_regex_correct"));
             Assertions.assertEquals(Set.of("developers"), groups);
         } finally {
             gpMap.remove("gp_regex_correct");
+        }
+    }
+
+    @Test
+    public void testBindEnvCarriesConnectAndReadTimeouts() throws Exception {
+        // Without these two the bind falls back to the OS TCP timeout, which pins whichever thread is
+        // authenticating -- an HTTP worker or a thrift handler now that security integrations serve those
+        // channels too.
+        LDAPAuthProvider provider = new LDAPAuthProvider("localhost", 389, false, "", "",
+                "cn=admin,dc=example,dc=com", "root_pwd", "dc=example,dc=com", "uid", null, null);
+        int savedConn = Config.authentication_ldap_simple_conn_timeout_ms;
+        int savedRead = Config.authentication_ldap_simple_conn_read_timeout_ms;
+        Config.authentication_ldap_simple_conn_timeout_ms = 1234;
+        Config.authentication_ldap_simple_conn_read_timeout_ms = 5678;
+
+        try {
+            java.util.Hashtable<String, String> env =
+                    provider.buildEnv("uid=alice,dc=example,dc=com", "pwd");
+
+            Assertions.assertEquals("1234", env.get("com.sun.jndi.ldap.connect.timeout"));
+            Assertions.assertEquals("5678", env.get("com.sun.jndi.ldap.read.timeout"));
+        } finally {
+            Config.authentication_ldap_simple_conn_timeout_ms = savedConn;
+            Config.authentication_ldap_simple_conn_read_timeout_ms = savedRead;
         }
     }
 }

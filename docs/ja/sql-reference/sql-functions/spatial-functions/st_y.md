@@ -1,27 +1,33 @@
 ---
 displayed_sidebar: docs
-description: "有効なPoint型の場合、対応するY座標の値を返します。"
+description: "点の Y 座標を返します。GEOGRAPHY の場合、Y は度単位の緯度です。"
 ---
 
 # ST_Y
 
-ポイントが有効な Point 型の場合、対応する Y 座標の値を返します。
+点の Y 座標を返します。
+
+`GEOGRAPHY` 値の場合、OGC:CRS84 の球面セマンティクスにおいて Y は度単位の緯度です。値は空でない `POINT` である必要があります。
 
 ## 構文
 
-```Haskell
-DOUBLE ST_Y(POINT point)
+```SQL
+DOUBLE ST_Y(VARCHAR point)
+DOUBLE ST_Y(GEOGRAPHY point)
 ```
+
+## 戻り値
+
+入力が `NULL` の場合は `NULL` を返します。`GEOGRAPHY` が空、または `POINT` 以外の場合はエラーになります。サポートされていない次元またはディスクリプターもエラーになります。
 
 ## 例
 
-```Plain Text
-MySQL > SELECT ST_Y(ST_Point(24.7, 56.7));
-+----------------------------+
-| st_y(st_point(24.7, 56.7)) |
-+----------------------------+
-|                       56.7 |
-+----------------------------+
+```SQL
+SELECT ST_Y(ST_Point(24.7, 56.7));
+-- 56.7
+
+SELECT ST_Y(ST_GeogFromText('POINT (24.7 56.7)'));
+-- 56.7
 ```
 
 ## キーワード

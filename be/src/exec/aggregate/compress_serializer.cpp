@@ -18,6 +18,7 @@
 #include "base/hash/unaligned_access.h"
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/nullable_column.h"
 #include "common/status.h"
@@ -152,6 +153,35 @@ public:
     template <typename T>
     Status do_visit(const DecimalV3Column<T>& column) {
         bit_compress<DecimalV3Column<T>, T>(column);
+        return Status::OK();
+    }
+
+    // A group-by key can reach the hash table as a constant. Aggregator::_evaluate_group_by_exprs
+    // unpacks constants into real columns with one deliberate exception -- an only-null constant is
+    // left packed, on the stated grounds that "all hash table could handle only null". Every other
+    // hash table does. This one did not: the column fell through to the generic do_visit below and
+    // took the BE down on CHECK(false). `GROUP BY CUBE(c)` is enough to produce one, because the
+    // grouping set that drops c substitutes a constant NULL for it.
+    //
+    // Such a column is always nullable -- ConstColumn::only_null() is defined as its inner column
+    // being nullable -- and _evaluate_group_by_exprs rejects a nullable column for a group-by key
+    // the plan typed as non-nullable. So could_apply_bitcompress_opt has reserved the null bit at
+    // _offset for this key, and writing it cannot run into the neighbouring key's bits.
+    Status do_visit(const ConstColumn& column) {
+        if (!column.only_null()) {
+            // Non-null constants are unpacked before they reach a hash table. If that ever changes,
+            // the key would have to carry the constant's value, which this visitor cannot read
+            // without knowing its type -- so fail loudly rather than group every row together.
+            CHECK(false) << "unreachable: non-null constant group-by key";
+            return Status::NotSupported("non-null constant key");
+        }
+        // The encoding bitcompress_serialize uses for a null row: flag set at _offset, value bits
+        // left zero. Every row therefore produces the same key and lands in one group, which is
+        // what a key that is NULL for the whole chunk means.
+        const size_t n = column.size();
+        for (size_t i = 0; i < n; ++i) {
+            _dst[i] |= Dst(1) << _offset;
+        }
         return Status::OK();
     }
 

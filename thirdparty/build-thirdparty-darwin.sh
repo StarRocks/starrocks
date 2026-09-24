@@ -2049,8 +2049,11 @@ build_arrow() {
     local arrow_simd_level="DEFAULT"
     local arrow_runtime_simd_level="SSE4_2"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+        # ARROW_RUNTIME_SIMD_LEVEL only accepts MAX|NONE|SSE4_2|AVX2|AVX512, and arrow
+        # consumes it exclusively in its x86 branch, so NEON is rejected by the option
+        # validator. Disable runtime dispatch here; NEON is selected at compile time.
         arrow_simd_level="NEON"
-        arrow_runtime_simd_level="NEON"
+        arrow_runtime_simd_level="NONE"
     elif [[ "${THIRD_PARTY_BUILD_WITH_AVX2}" != "OFF" ]]; then
         arrow_simd_level="AVX2"
         arrow_runtime_simd_level="AVX2"

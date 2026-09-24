@@ -14,11 +14,8 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
-import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -130,7 +127,6 @@ public class LDAPCaseInsensitiveIdentityTest {
                 new UserAuthOption("AUTHENTICATION_LDAP_SIMPLE",
                         "uid=" + name + ",ou=people,dc=example,dc=com",
                         false, NodePosition.ZERO),
-                null, null,
                 List.of(), Map.of(), NodePosition.ZERO);
     }
 
@@ -141,7 +137,7 @@ public class LDAPCaseInsensitiveIdentityTest {
     private void createNativeUser(String name) throws Exception {
         authenticationMgr.createUser(new CreateUserStmt(
                 new UserRef(name, "%", false, NodePosition.ZERO),
-                true, null, null, null,
+                true, null,
                 List.of(), Map.of(), NodePosition.ZERO));
     }
 
@@ -420,42 +416,6 @@ public class LDAPCaseInsensitiveIdentityTest {
     }
 
     // ---------------------------------------------------------------- group side
-
-    /**
-     * Test case: the enterprise type='ldap' integration, whose provider is not a subclass of
-     * {@link LDAPAuthProvider}.
-     * Test point: it searches a directory just like the community one, so its session identity comes
-     *             from the entry the search found rather than from the casing the client typed. The
-     *             provider check cannot be a single instanceof, which is easy to get wrong.
-     */
-    @Test
-    public void testEnterpriseLdapIntegrationTakesNameFromDirectory() throws Exception {
-        Config.authentication_ldap_case_insensitive = true;
-
-        new MockUp<LDAPAuthProviderForExternal>() {
-            @Mock
-            public void authenticate(AccessControlContext context, UserIdentity userIdentity, byte[] authResponse) {
-                // the directory accepted the bind and the search read back the entry's own spelling
-                context.setAuthenticatedUserName(DIRECTORY_SPELLING);
-            }
-        };
-
-        Map<String, String> properties = new HashMap<>();
-        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
-                LDAPSecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP);
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_HOST, "localhost");
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_LDAP_SERVER_PORT, "389");
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY, "cn=admin,dc=example,dc=com");
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY, "secret");
-        properties.put(LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY, "dc=example,dc=com");
-        authenticationMgr.replayCreateSecurityIntegration("ldap_ee", properties);
-        Config.authentication_chain = new String[] {"native", "ldap_ee"};
-
-        ConnectContext context = newLdapClientContext();
-        AuthenticationHandler.authenticate(context, "aLLEN", "%", AUTH_RESPONSE);
-        Assertions.assertEquals(DIRECTORY_SPELLING, context.getQualifiedUser(),
-                "this path searches the directory, so its spelling must be used rather than lowercase");
-    }
 
     /**
      * Test case: permitted_groups written with stray whitespace around the items.

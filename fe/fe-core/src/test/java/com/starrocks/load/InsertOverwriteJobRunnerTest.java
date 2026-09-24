@@ -24,25 +24,42 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.thrift.TAIModelConfiguration;
+import com.starrocks.thrift.TAIModelSource;
+import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class InsertOverwriteJobRunnerTest {
 
@@ -135,6 +152,116 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         cluster.runSql("insert_overwrite_test", sql);
         Assertions.assertFalse(GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getForceDeleteTablets().isEmpty());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"alter", "drop", "recreate"})
+    public void testInsertOverwriteReplanUsesCurrentProviderConfiguration(String change) throws Exception {
+        AIProviderMgr providerMgr = GlobalStateMgr.getCurrentState().getAIProviderMgr();
+        String providerName = "overwrite_provider_" + change;
+        String tableName = "overwrite_ai_" + change;
+        providerMgr.createProvider(providerName, AIProviderType.CHAT, providerProperties("original"), "");
+        try {
+            starRocksAssert.withTable("create table " + tableName + "(k1 int, response varchar(65533)) "
+                    + "distributed by hash(k1) buckets 1 properties('replication_num'='1')", () -> {
+                        ConnectContext context = UtFrameUtils.createDefaultCtx();
+                        context.setDatabase("insert_overwrite_test");
+                        context.setQueryId(UUIDUtil.genUUID());
+                        context.setExecutionId(UUIDUtil.toTUniqueId(context.getQueryId()));
+                        context.getSessionVariable().setOptimizerExecuteTimeout(300000000);
+                        String sql = "insert overwrite " + tableName + " select k1, ai_custom_query('"
+                                + providerName + "', cast(k2 as varchar)) from t2";
+                        InsertStmt statement = (InsertStmt) SqlParser.parseSingleStatement(
+                                sql, context.getSessionVariable().getSqlMode());
+                        AtomicReference<ExecPlan> originalPlan = new AtomicReference<>();
+                        AtomicReference<ExecPlan> loadPlan = new AtomicReference<>();
+                        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                .getTable(context.getDatabase(), tableName);
+                        long originalPartitionId = table.getPartition(tableName).getId();
+                        StmtExecutor executor = new StmtExecutor(context, statement) {
+                            @Override
+                            public void handleInsertOverwrite(ExecPlan plan, InsertStmt insertStmt) throws Exception {
+                                originalPlan.set(plan);
+                                // Simulate concurrent DDL after the first plan, before the real manager/runner replan.
+                                if (change.equals("alter")) {
+                                    providerMgr.alterProvider(providerName, providerProperties("changed"), false);
+                                } else {
+                                    providerMgr.dropProvider(providerName, false);
+                                    if (change.equals("recreate")) {
+                                        providerMgr.createProvider(providerName, AIProviderType.CHAT,
+                                                providerProperties("changed"), "");
+                                    }
+                                }
+                                super.handleInsertOverwrite(plan, insertStmt);
+                            }
+
+                            @Override
+                            public void handleDMLStmt(ExecPlan plan, DmlStmt stmt) throws Exception {
+                                if (((InsertStmt) stmt).isFromOverwrite()) {
+                                    loadPlan.set(plan);
+                                }
+                                // The pseudo backends finish the real load transaction; no external AI service is called.
+                                super.handleDMLStmt(plan, stmt);
+                            }
+                        };
+                        context.setExecutor(executor);
+                        executor.execute();
+
+                        Assertions.assertNotNull(originalPlan.get());
+                        assertProviderConfiguration(originalPlan.get(), "original");
+                        Assertions.assertTrue(table.getTempPartitions().isEmpty());
+                        Assertions.assertEquals(0, GlobalStateMgr.getCurrentState().getInsertOverwriteJobMgr().getJobNum());
+
+                        String nextSql = "select ai_custom_query('" + providerName + "', cast(k2 as varchar)) from t2";
+                        if (change.equals("drop")) {
+                            Assertions.assertEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType());
+                            Assertions.assertTrue(context.getState().getErrorMessage()
+                                    .contains("AI provider '" + providerName + "' does not exist"),
+                                    context.getState().getErrorMessage());
+                            Assertions.assertNull(loadPlan.get(), "A missing provider must prevent the overwrite load");
+                            Assertions.assertEquals(originalPartitionId, table.getPartition(tableName).getId());
+                            Assertions.assertThrows(SemanticException.class, () -> StatementPlanner.plan(
+                                    SqlParser.parseSingleStatement(nextSql, context.getSessionVariable().getSqlMode()), context));
+                        } else {
+                            Assertions.assertNotEquals(QueryState.MysqlStateType.ERR, context.getState().getStateType(),
+                                    context.getState().getErrorMessage());
+                            Assertions.assertNotNull(loadPlan.get(), "The overwrite runner must execute its second plan");
+                            Assertions.assertNotSame(originalPlan.get(), loadPlan.get());
+                            assertProviderConfiguration(loadPlan.get(), "changed");
+                            Assertions.assertNotEquals(originalPartitionId, table.getPartition(tableName).getId());
+                            ExecPlan nextPlan = StatementPlanner.plan(SqlParser.parseSingleStatement(
+                                    nextSql, context.getSessionVariable().getSqlMode()), context);
+                            assertProviderConfiguration(nextPlan, "changed");
+                        }
+                    });
+        } finally {
+            providerMgr.dropProvider(providerName, true);
+        }
+    }
+
+    private static Map<String, String> providerProperties(String version) {
+        return Map.of("endpoint", "https://" + version + ".example.test/v1/chat/completions",
+                "model", version + "-model", "api_key", version + "-test-key", "timeout_ms", "1200");
+    }
+
+    private static void assertProviderConfiguration(ExecPlan plan, String version) {
+        List<Map<String, TAIModelConfiguration>> configurations = plan.getFragments().stream()
+                .flatMap(fragment -> fragment.getPlanRoot().treeToThrift().getNodes().stream())
+                .filter(node -> node.getNode_type() == TPlanNodeType.AI_PROJECT_NODE)
+                .map(node -> node.getAi_project_node().getAi_model_configs())
+                .toList();
+        Assertions.assertFalse(configurations.isEmpty());
+        configurations.forEach(configs -> {
+            Assertions.assertEquals(Set.of("provider:0"), configs.keySet());
+            TAIModelConfiguration configuration = configs.get("provider:0");
+            Assertions.assertEquals(TAIModelSource.PROVIDER, configuration.getSource());
+            Assertions.assertEquals(version + "-model", configuration.getChat().getModel());
+            Assertions.assertEquals(version + "-test-key", configuration.getChat().getApi_key());
+            Assertions.assertEquals("https://" + version + ".example.test/v1/chat/completions",
+                    configuration.getChat().getEndpoint());
+            Assertions.assertEquals("openai_compatible", configuration.getChat().getProvider());
+            Assertions.assertEquals(1200, configuration.getChat().getTimeout_ms());
+        });
     }
 
     @Test
