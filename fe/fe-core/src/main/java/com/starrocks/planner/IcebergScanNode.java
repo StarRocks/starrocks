@@ -54,7 +54,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -166,7 +168,7 @@ public class IcebergScanNode extends ScanNode {
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, true,
-                scanOptimizeOption.getCanUseMinMaxOpt());
+                scanOptimizeOption.getCanUseMinMaxOpt(), false, List.copyOf(getNonNullCountSlots().values()));
     }
 
     public void setupScanRangeLocations(boolean enableIncrementalScanRanges) throws StarRocksException {
@@ -211,7 +213,7 @@ public class IcebergScanNode extends ScanNode {
                         .setParams(morParams)
                         .setTableVersionRange(tvrVersionRange)
                         .setPredicate(icebergJobPlanningPredicate)
-                        .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt())
+                        .setEnableColumnStats(scanOptimizeOption.getCanUseMinMaxOpt() || !getNonNullCountSlots().isEmpty())
                         .setUsedForDelete(usedForDelete)
                         .setFieldNames(requiredColumnNames)
                         .setScanBytesCap(scanBytesCap)
@@ -241,7 +243,22 @@ public class IcebergScanNode extends ScanNode {
 
         scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
                 remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, false,
-                scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete);
+                scanOptimizeOption.getCanUseMinMaxOpt(), usedForDelete, List.copyOf(getNonNullCountSlots().values()));
+    }
+
+    /**
+     * Each COUNT(col) placeholder slot id, paired with the slot of the column it counts. The counted slot is
+     * found by name because a low-cardinality rewrite may have replaced its column ref after the count rewrite.
+     */
+    private Map<Integer, SlotDescriptor> getNonNullCountSlots() {
+        Map<Integer, SlotDescriptor> slots = new HashMap<>();
+        scanOptimizeOption.getNonNullCountColumns().forEach((placeholderId, countedName) -> {
+            SlotDescriptor counted = desc.getColumnSlot(countedName);
+            if (desc.getSlot(placeholderId) != null && counted != null) {
+                slots.put(placeholderId, counted);
+            }
+        });
+        return slots;
     }
 
     private void setupCloudCredential() {
@@ -446,6 +463,11 @@ public class IcebergScanNode extends ScanNode {
         }
         msg.hdfs_scan_node.setTable_name(icebergTable.getName());
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
+        Map<Integer, SlotDescriptor> nonNullCountSlots = getNonNullCountSlots();
+        if (!nonNullCountSlots.isEmpty()) {
+            tHdfsScanNode.setNon_null_count_slots(nonNullCountSlots.entrySet().stream()
+                    .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().getId().asInt())));
+        }
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);
         HdfsScanNode.setMinMaxConjunctsToThrift(tHdfsScanNode, this, this.getScanNodePredicates());
         HdfsScanNode.setDataCacheOptionsToThrift(tHdfsScanNode, dataCacheOptions);
