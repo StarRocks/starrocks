@@ -1089,7 +1089,7 @@ Starting from version 3.3.0, the system defaults to refreshing one partition at 
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: [Experimental] Whether to accept Stream Load jobs with `partial_update_mode` set to `flexible` or `flexible_row` (flexible partial updates of shared-data Primary Key tables, in which each row of a JSON-formatted load updates only the columns present in that row). The BE configuration item of the same name must also be set to `true`. When set to `false` (default), such loads fail. Enable this only after all BEs and CNs have been upgraded to a version that supports flexible partial update: a node of an earlier version would apply such a load as a plain partial update and set the columns that a row omits to `NULL`. For the same reason, before downgrading, disable it and wait until all flexible partial update loads have been published.
+- Description: [Experimental] Whether to accept Stream Load jobs with `partial_update_mode` set to `flexible_row` (flexible partial updates of shared-data Primary Key tables, in which each row of a JSON-formatted load updates only the columns present in that row). The BE configuration item of the same name must also be set to `true`. When set to `false` (default), such loads fail. Enable this only after all BEs and CNs have been upgraded to a version that supports flexible partial update: a node of an earlier version would apply such a load as a plain partial update and set the columns that a row omits to `NULL`. For the same reason, before downgrading, disable it and wait until all flexible partial update loads have been published.
 - Introduced in: -
 
 ### `enable_pipeline_routine_load`

@@ -1040,9 +1040,10 @@ TEST_F(StreamLoadActionTest, numeric_headers_accepted) {
 }
 
 // partial_update_mode keeps matching the tokens exactly (case-sensitive), and an unknown value is still
-// ignored. The flexible / flexible_row tokens are refused while enable_flexible_partial_update is off rather
-// than ignored: ignored, a load whose rows each declare other columns would run as a plain partial update of
-// the union of the columns and overwrite the columns a row omits with NULL.
+// ignored. The flexible_row token is refused while enable_flexible_partial_update is off rather than ignored:
+// ignored, a load whose rows each declare other columns would run as a plain partial update of the union of
+// the columns and overwrite the columns a row omits with NULL. The flexible token (column mode) is refused
+// as not supported yet, whatever the config.
 TEST_F(StreamLoadActionTest, partial_update_mode_flexible_disabled) {
     const bool saved = config::enable_flexible_partial_update;
     config::enable_flexible_partial_update = false;
@@ -1055,7 +1056,7 @@ TEST_F(StreamLoadActionTest, partial_update_mode_flexible_disabled) {
             {"unknown_mode", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
             {"Flexible", "true", "json", true, false, TPartialUpdateMode::UNKNOWN_MODE, false, nullptr},
             {"flexible", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
-             "partial_update_mode=flexible requires enable_flexible_partial_update"},
+             "partial_update_mode=flexible (flexible partial update in column mode) is not supported yet"},
             {"flexible_row", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
              "partial_update_mode=flexible_row requires enable_flexible_partial_update"},
     };
@@ -1064,16 +1065,17 @@ TEST_F(StreamLoadActionTest, partial_update_mode_flexible_disabled) {
     }
 }
 
-// With enable_flexible_partial_update on: flexible is column mode plus the flexible bit, flexible_row is row
-// mode plus the flexible bit, and every other token behaves as before.
+// With enable_flexible_partial_update on: flexible_row is row mode plus the flexible bit, flexible (column
+// mode) is still refused as not supported yet, and every other token behaves as before.
 TEST_F(StreamLoadActionTest, partial_update_mode_flexible_enabled) {
     const bool saved = config::enable_flexible_partial_update;
     config::enable_flexible_partial_update = true;
     DeferOp restore([saved]() { config::enable_flexible_partial_update = saved; });
 
     PartialUpdateModeCase test_cases[] = {
-            {"flexible", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPDATE_MODE, true, nullptr},
             {"flexible_row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, true, nullptr},
+            {"flexible", "true", "json", false, false, TPartialUpdateMode::UNKNOWN_MODE, false,
+             "partial_update_mode=flexible (flexible partial update in column mode) is not supported yet"},
             {"row", "true", "json", true, true, TPartialUpdateMode::ROW_MODE, false, nullptr},
             {"column", "true", "json", true, true, TPartialUpdateMode::COLUMN_UPSERT_MODE, false, nullptr},
             // auto never gets the flexible bit.
@@ -1108,7 +1110,7 @@ TEST_F(StreamLoadActionTest, flexible_partial_update_requires_a_flexible_plan) {
         request._params.emplace(HTTP_TABLE_KEY, "tbl");
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, "0");
-        request._headers.emplace(HTTP_PARTIAL_UPDATE_MODE, "flexible");
+        request._headers.emplace(HTTP_PARTIAL_UPDATE_MODE, "flexible_row");
         request._headers.emplace(HTTP_PARTIAL_UPDATE, "true");
         request._headers.emplace(HTTP_FORMAT_KEY, "json");
         request.set_handler(&action);

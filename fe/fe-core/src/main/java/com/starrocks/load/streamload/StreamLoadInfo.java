@@ -442,6 +442,11 @@ public class StreamLoadInfo {
             if (!partialUpdate) {
                 throw new StarRocksException("flexible partial update requires partial_update=true");
             }
+            // Only the row-mode apply understands the per-row column sets (partial_update_mode=flexible_row).
+            if (partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new StarRocksException(
+                        "flexible partial update is only supported in row mode (partial_update_mode=flexible_row)");
+            }
             flexiblePartialUpdate = true;
         }
 

@@ -145,7 +145,8 @@ public class StreamLoadInfoTest {
     @Test
     public void testFlexiblePartialUpdateAccepted() throws Exception {
         TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
-        // buildTStreamLoadPutRequest already sets FORMAT_JSON + partial_update=true.
+        // buildTStreamLoadPutRequest already sets FORMAT_JSON + partial_update=true; flexible needs row mode.
+        request.setPartial_update_mode(TPartialUpdateMode.ROW_MODE);
         request.setFlexible_partial_update(true);
         StreamLoadInfo info = StreamLoadInfo.fromTStreamLoadPutRequest(request, null);
         org.junit.jupiter.api.Assertions.assertTrue(info.isFlexiblePartialUpdate());
@@ -170,6 +171,17 @@ public class StreamLoadInfoTest {
         StarRocksException exception = assertThrows(StarRocksException.class,
                 () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
         assertEquals("flexible partial update requires partial_update=true", exception.getMessage());
+    }
+
+    @Test
+    public void testFlexiblePartialUpdateRequiresRowMode() {
+        TStreamLoadPutRequest request = buildTStreamLoadPutRequest();
+        request.setPartial_update_mode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        request.setFlexible_partial_update(true);
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> StreamLoadInfo.fromTStreamLoadPutRequest(request, null));
+        assertEquals("flexible partial update is only supported in row mode (partial_update_mode=flexible_row)",
+                exception.getMessage());
     }
 
     @Test

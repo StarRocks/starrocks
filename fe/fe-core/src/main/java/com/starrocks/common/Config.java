@@ -3795,8 +3795,8 @@ public class Config extends ConfigBase {
     public static boolean enable_experimental_gin = false;
 
     /**
-     * Experimental. Plan JSON stream loads with partial_update_mode=flexible or flexible_row as flexible partial
-     * updates: each row updates only the columns present in it and the omitted columns keep their current value.
+     * Experimental. Plan JSON stream loads with partial_update_mode=flexible_row as flexible partial updates:
+     * each row updates only the columns present in it and the omitted columns keep their current value.
      * Shared-data primary key tables only; the BE config of the same name must be enabled too. Enable it only
      * after every BE/CN of the cluster runs a version that supports it: a node that does not understand the
      * per-row column sets would apply such a load as a plain partial update and overwrite the omitted columns

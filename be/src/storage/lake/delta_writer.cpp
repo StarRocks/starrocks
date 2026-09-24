@@ -728,12 +728,6 @@ Status DeltaWriterImpl::check_partial_update_with_sort_key(const Chunk& chunk) {
             string msg;
             if (_partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE) {
                 msg = "partial update on table with sort key must provide all sort key columns";
-            } else if (_flexible_partial_update) {
-                // A flexible partial update is COLUMN_UPDATE_MODE but inserts, so it reaches this check
-                // for the OPPOSITE reason to a plain column update: not because it touches the sort key,
-                // but because it does NOT provide it and still needs to place a new row.
-                msg = "flexible partial update that inserts rows on a table with a sort key must "
-                      "provide all sort key columns";
             } else {
                 msg = "column mode partial update on table with sort key cannot update sort key column";
             }
@@ -818,21 +812,27 @@ Status DeltaWriterImpl::init_write_schema() {
 
     // Flexible partial update: _flexible_partial_update is the explicit PTabletWriterOpenRequest flag, and
     // when it is set FE has injected the hidden "__cset__" SMALLINT slot directly before "__op". FE plans
-    // it only for primary key tables and without merge_condition; reject anything else here, before any
-    // data is written, because the apply has no flexible-aware path for it.
+    // it only for primary key tables, in row mode and without merge_condition; reject anything else here,
+    // before any data is written, because the apply has no flexible-aware path for it.
     if (_flexible_partial_update) {
         if (_tablet_schema->keys_type() != KeysType::PRIMARY_KEYS) {
             return Status::NotSupported("flexible partial update is only supported on primary key tables");
+        }
+        // Only the row-mode apply (partial_update_mode=flexible_row) understands the per-row column sets. The
+        // column-mode apply would overlay the update files' NULL placeholders onto every column a row did
+        // not declare; that mode is not supported yet.
+        if (_partial_update_mode != PartialUpdateMode::ROW_MODE) {
+            return Status::NotSupported(
+                    "flexible partial update is only supported in row mode (partial_update_mode=flexible_row)");
         }
         if (!_merge_condition.empty()) {
             return Status::NotSupported("flexible partial update combined with merge_condition is not supported");
         }
         // A row that omits a sort key column carries a NULL placeholder in it, and the memtable orders the
         // rows of a segment by their sort key values before the publish supplies the current value: the
-        // row would be placed by the placeholder, and the rewritten (row mode) or inserted (column mode)
-        // rows would leave a segment that is not sorted by its sort key, whose short key index then prunes
-        // wrongly. A sort key made only of primary key columns is fine: every row carries the whole key.
-        // FE rejects these tables too.
+        // row would be placed by the placeholder, and the rewritten rows would leave a segment that is not
+        // sorted by its sort key, whose short key index then prunes wrongly. A sort key made only of primary
+        // key columns is fine: every row carries the whole key. FE rejects these tables too.
         for (auto sort_key_idx : _tablet_schema->sort_key_idxes()) {
             if (!_tablet_schema->column(sort_key_idx).is_key()) {
                 return Status::NotSupported(
@@ -866,8 +866,7 @@ Status DeltaWriterImpl::init_write_schema() {
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         _partial_schema_with_sort_key_conflict = starrocks::DeltaWriter::is_partial_update_with_sort_key_conflict(
-                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns(),
-                /*column_mode_inserts_rows=*/_flexible_partial_update);
+                _partial_update_mode, _write_column_ids, sort_key_idxes, _tablet_schema->num_key_columns());
         auto write_schema = TabletSchema::create(_tablet_schema, _write_column_ids);
         if (_flexible_partial_update) {
             // The per-row set-id travels into the written segment as a real column under a reserved

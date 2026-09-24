@@ -17,8 +17,8 @@
 // carries each row's set-id in the hidden "__cset__" column and the dictionary of sets in the txn meta; the
 // update file holds a placeholder in every cell a row did not declare, which must never reach the table.
 //
-// Both apply paths are covered with the same data: column mode (partial_update_mode=flexible), which writes
-// ordinary row-complete `.cols` delta column groups, and row mode (flexible_row), which rewrites whole rows.
+// The load is applied in row mode (partial_update_mode=flexible_row), which rewrites whole rows. The
+// column-mode apply is not supported yet: the writer refuses a flexible load in column mode.
 
 #include "common/flexible_partial_update.h"
 
@@ -41,8 +41,6 @@
 #include "common/config_ingest_fwd.h"
 #include "gen_cpp/Types_types.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/compaction_task.h"
-#include "storage/lake/compaction_task_context.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
@@ -436,20 +434,6 @@ protected:
     Chunk::SlotHashMap _slot_cid_map;
 };
 
-// Column mode: each column is overlaid only at the rows that declare it, new keys get the defaults of what
-// they omit, and the result is stored as ordinary `.cols` files.
-TEST_F(LakeFlexiblePartialUpdateTest, column_mode_applies_each_row_to_its_own_columns) {
-    int64_t version = 1;
-    Table model;
-    write_base(kBaseRows, &version, &model);
-
-    const auto rows = mixed_rows();
-    ASSERT_OK(flexible_load({rows}, PartialUpdateMode::COLUMN_UPDATE_MODE, &version));
-    apply_to_model(rows, &model);
-    expect_table_eq(model, read_table(version));
-    EXPECT_GE(count_cols_files(version), 1);
-}
-
 // Row mode: the same load, applied by rewriting the full rows.
 TEST_F(LakeFlexiblePartialUpdateTest, row_mode_applies_each_row_to_its_own_columns) {
     int64_t version = 1;
@@ -463,12 +447,13 @@ TEST_F(LakeFlexiblePartialUpdateTest, row_mode_applies_each_row_to_its_own_colum
     EXPECT_EQ(0, count_cols_files(version));
 }
 
-// The same cases in both apply modes.
+// Parameterized by the apply mode. Row mode is the only one supported today; the column-mode apply joins the
+// list once it is supported.
 class LakeFlexiblePartialUpdateModeTest : public LakeFlexiblePartialUpdateTest,
                                           public ::testing::WithParamInterface<PartialUpdateMode> {};
 
 INSTANTIATE_TEST_SUITE_P(FlexibleModes, LakeFlexiblePartialUpdateModeTest,
-                         ::testing::Values(PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::ROW_MODE));
+                         ::testing::Values(PartialUpdateMode::ROW_MODE));
 
 // Every row declaring the same single column behaves like a plain partial update of that column.
 TEST_P(LakeFlexiblePartialUpdateModeTest, homogeneous_column_set) {
@@ -643,44 +628,21 @@ TEST_F(LakeFlexiblePartialUpdateTest, merge_condition_is_rejected) {
     write_base(kBaseRows, &version, &model);
     LoadOptions options;
     options.merge_condition = "c1";
-    auto st = flexible_load({mixed_rows()}, PartialUpdateMode::COLUMN_UPDATE_MODE, &version, options);
+    auto st = flexible_load({mixed_rows()}, PartialUpdateMode::ROW_MODE, &version, options);
     ASSERT_TRUE(st.is_not_supported()) << st;
     expect_table_eq(model, read_table(version));
 }
 
-// Every flexible load writes a `.cols` file covering all the columns it loads, which supersedes the one
-// of the previous load, so the cells a load does not declare must carry the values of the earlier loads.
-// A compaction then folds the `.cols` file into the base without changing a value.
-TEST_F(LakeFlexiblePartialUpdateTest, column_mode_layers_survive_compaction) {
+// The column-mode apply is not supported yet: the writer refuses a flexible load in column mode before anything
+// is written, so the update files' NULL placeholders can never be merged onto the columns a row did not declare.
+TEST_F(LakeFlexiblePartialUpdateTest, column_mode_is_rejected) {
     int64_t version = 1;
     Table model;
     write_base(kBaseRows, &version, &model);
-    // Each load declares a single other column for the same keys.
-    for (int round = 0; round < 3; ++round) {
-        const std::string col = "c" + std::to_string(round + 1);
-        std::array<int, kNumValueColumns> vals{};
-        vals[round] = 15000 + round;
-        std::vector<Row> rows = {{15, {col}, vals}, {16, {}, {}}, {4000 + round, {col}, vals}};
-        vals[round] = 17000 + round;
-        rows.push_back({17 + round, {col}, vals});
-        ASSERT_OK(flexible_load({rows}, PartialUpdateMode::COLUMN_UPDATE_MODE, &version));
-        apply_to_model(rows, &model);
-        expect_table_eq(model, read_table(version));
-    }
-    EXPECT_GE(count_cols_files(version), 1);
-
-    auto txn_id = next_id();
-    auto task_context =
-            std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), version, false, false, nullptr);
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id(), version));
-    ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get(), tablet.get_rowsets()));
-    ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
-    ASSERT_OK(publish_single_version(_tablet_metadata->id(), version + 1, txn_id).status());
-    ++version;
-
-    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
-    EXPECT_EQ(1, metadata->rowsets_size());
-    EXPECT_EQ(0, count_cols_files(version));
+    auto st = flexible_load({mixed_rows()}, PartialUpdateMode::COLUMN_UPDATE_MODE, &version);
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    EXPECT_TRUE(st.message().find("row mode") != std::string::npos) << st;
+    EXPECT_EQ(2, version);
     expect_table_eq(model, read_table(version));
 }
 
@@ -692,16 +654,14 @@ public:
 
 // A sort key that holds a value column: a row that omits the column carries a NULL placeholder in it, and the
 // memtable would order the rows of the segment by that placeholder rather than by the current value the
-// publish keeps for the row. The writer refuses the load in both modes before anything is written.
+// publish keeps for the row. The writer refuses the load before anything is written.
 TEST_F(LakeFlexiblePartialUpdateSortKeyTest, value_column_in_sort_key_is_rejected) {
     int64_t version = 1;
     Table model;
     write_base(kBaseRows, &version, &model);
-    for (auto mode : {PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::ROW_MODE}) {
-        auto st = flexible_load({mixed_rows()}, mode, &version);
-        ASSERT_TRUE(st.is_not_supported()) << st;
-        EXPECT_TRUE(st.message().find("sort key") != std::string::npos) << st;
-    }
+    auto st = flexible_load({mixed_rows()}, PartialUpdateMode::ROW_MODE, &version);
+    ASSERT_TRUE(st.is_not_supported()) << st;
+    EXPECT_TRUE(st.message().find("sort key") != std::string::npos) << st;
     EXPECT_EQ(2, version);
     expect_table_eq(model, read_table(version));
 }

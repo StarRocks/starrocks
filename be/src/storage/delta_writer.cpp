@@ -130,18 +130,11 @@ static bool contains_any_of(const std::vector<int32_t>& referenced_column_ids,
 bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                            const std::vector<int32_t>& referenced_column_ids,
                                                            const std::vector<ColumnId>& sort_key_idxes,
-                                                           size_t num_key_columns, bool column_mode_inserts_rows) {
-    // A flexible partial update stays in COLUMN_UPDATE_MODE but inserts rows whose key is not in the
-    // tablet yet, so it belongs on the inserting side of this gate. COLUMN_UPDATE_MODE is otherwise
-    // excluded here precisely because update-only never inserts and therefore never has to decide a
-    // new row's position. Without this, those rows land in a segment whose order the sort key cannot
-    // address.
-    const bool inserts_new_rows =
-            partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE ||
-            (partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE && column_mode_inserts_rows);
+                                                           size_t num_key_columns) {
     // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
     if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
-        partial_update_mode == PartialUpdateMode::UNKNOWN_MODE || inserts_new_rows) {
+        partial_update_mode == PartialUpdateMode::UNKNOWN_MODE ||
+        partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE) {
         // Using Row Mode partial update, then the column to be updated must contain the sort key column,
         // because they need sort key to decide their order when segment is generated.
         // Column mode with upsert will insert new rows, which also need sort key to decide their order.

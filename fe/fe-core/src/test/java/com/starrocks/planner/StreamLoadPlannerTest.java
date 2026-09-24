@@ -197,7 +197,7 @@ public class StreamLoadPlannerTest {
         request.setFileType(TFileType.FILE_STREAM);
         request.setFormatType(TFileFormatType.FORMAT_JSON);
         request.setPartial_update(true);
-        request.setPartial_update_mode(TPartialUpdateMode.COLUMN_UPDATE_MODE);
+        request.setPartial_update_mode(TPartialUpdateMode.ROW_MODE);
         request.setFlexible_partial_update(true);
         request.setColumns("c1,c2");
         return request;

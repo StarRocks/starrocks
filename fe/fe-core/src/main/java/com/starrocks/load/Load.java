@@ -794,9 +794,8 @@ public class Load {
             throw new DdlException("Flexible partial update is not supported on range-distributed tables");
         }
         // A row that omits a sort key column carries a NULL placeholder in it, and the BE orders the rows of a
-        // segment by their sort key values before the publish supplies the current value: the rewritten
-        // (flexible_row) or inserted (flexible) rows would leave a segment that is not sorted by its sort key,
-        // whose short key index then prunes wrongly. A sort key made only of primary key columns is fine: every
+        // segment by their sort key values before the publish supplies the current value: the rewritten rows
+        // would leave a segment that is not sorted by its sort key, whose short key index then prunes wrongly. A sort key made only of primary key columns is fine: every
         // row carries the whole primary key.
         MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
         if (baseIndexMeta != null && baseIndexMeta.getSortKeyIdxes() != null) {
@@ -840,8 +839,8 @@ public class Load {
     }
 
     /**
-     * Decide whether a load that asks for a flexible partial update (partial_update_mode=flexible or
-     * flexible_row) is planned as one. It either is, or the load fails: the flexible bit is never dropped
+     * Decide whether a load that asks for a flexible partial update (partial_update_mode=flexible_row) is
+     * planned as one. It either is, or the load fails: the flexible bit is never dropped
      * silently, because the same load planned as a plain partial update would overwrite the columns a row omits
      * with NULL. Requires {@code Config.enable_flexible_partial_update}.
      *
@@ -853,7 +852,7 @@ public class Load {
             return false;
         }
         if (!Config.enable_flexible_partial_update) {
-            throw new DdlException("Flexible partial update (partial_update_mode=flexible or flexible_row) requires "
+            throw new DdlException("Flexible partial update (partial_update_mode=flexible_row) requires "
                     + "enable_flexible_partial_update to be enabled on the FE and the BE");
         }
         checkFlexiblePartialUpdate(tbl, mergeCondition, columnExprDescs);

@@ -634,25 +634,25 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
-        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible" ||
-                   http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible_row") {
-            // Flexible partial update: each JSON row updates only the columns present in it. The storage
-            // mode is column (flexible) or row (flexible_row); the separate flexible bit makes FE plan
-            // the per-row column sets. Without it the load would run as a plain partial update of the
-            // union of the columns and overwrite the columns a row omits with NULL, so the tokens are
-            // refused, not ignored, while the feature is off.
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible_row") {
+            // Flexible partial update: each JSON row updates only the columns present in it, applied in row
+            // mode. The separate flexible bit makes FE plan the per-row column sets. Without it the load
+            // would run as a plain partial update of the union of the columns and overwrite the columns a
+            // row omits with NULL, so the token is refused, not ignored, while the feature is off.
             if (!config::enable_flexible_partial_update) {
                 return Status::NotSupported(
-                        fmt::format("partial_update_mode={} requires enable_flexible_partial_update to be enabled on "
-                                    "the BE and the FE",
-                                    http_req->header(HTTP_PARTIAL_UPDATE_MODE)));
+                        "partial_update_mode=flexible_row requires enable_flexible_partial_update to be enabled on "
+                        "the BE and the FE");
             }
-            if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible") {
-                request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPDATE_MODE);
-            } else {
-                request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
-            }
+            request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
             request.__set_flexible_partial_update(true);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible") {
+            // The column-mode apply of a flexible partial update is not supported yet. Refuse the token rather
+            // than ignore it: run as a plain partial update, the load would overwrite the columns a row omits
+            // with NULL.
+            return Status::NotSupported(
+                    "partial_update_mode=flexible (flexible partial update in column mode) is not supported yet; "
+                    "use partial_update_mode=flexible_row");
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
