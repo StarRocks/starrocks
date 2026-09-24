@@ -522,6 +522,10 @@ struct THdfsScanRange {
 
     // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
     45: optional binary paimon_split_info_binary
+
+    // null counts of the columns counted by a rewritten COUNT(col), keyed by the counted column's slot id.
+    // a column without an entry has no null count for this file, which is then read to count it.
+    46: optional map<Types.TSlotId, i64> null_value_counts
 }
 
 struct TBinlogScanRange {
@@ -1466,6 +1470,10 @@ struct THdfsScanNode {
 
     // database name it scans, used to disambiguate same-named tables across databases
     29: optional string database_name
+
+    // COUNT(col) placeholder slot id -> slot id of the column it counts. A file whose scan range carries a null
+    // count for every counted column fills each placeholder with its non-null count instead of being read.
+    30: optional map<Types.TSlotId, Types.TSlotId> non_null_count_slots
 }
 
 struct TProjectNode {

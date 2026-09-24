@@ -35,6 +35,7 @@ import com.starrocks.type.DateType;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionKey;
 import org.apache.iceberg.PartitionSpec;
 import org.junit.jupiter.api.Assertions;
@@ -43,6 +44,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.type.IntegerType.BIGINT;
@@ -226,6 +228,69 @@ public class IcebergConnectorScanRangeSourceTest extends TableTestBase {
         // It should NOT be in the extendedColumnSlotIds list
         Assertions.assertFalse(scanRangeSource.getExtendedColumnSlotIds().contains(
                 lastUpdatedSequenceNumberSlot.getId().asInt()));
+    }
+
+    @Test
+    public void testBuildScanRangeCarriesNullCountsOfCountedColumns() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(5));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(7), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+        SlotDescriptor dataSlot = new SlotDescriptor(new SlotId(8), localTupleDescriptor);
+        dataSlot.setType(VARCHAR);
+        dataSlot.setColumn(new Column("data", VARCHAR));
+        localTupleDescriptor.addSlot(dataSlot);
+
+        // field 1 (id) has 1 null in 3 rows; field 2 (data) claims more nulls than rows, which is not trusted
+        DataFile file = DataFiles.builder(SPEC_A)
+                .withPath("/path/to/data-a-metrics.parquet")
+                .withFileSizeInBytes(10)
+                .withPartitionPath("data_bucket=0")
+                .withMetrics(new Metrics(3L, null, null, Map.of(1, 1L, 2, 5L), null))
+                .build();
+        mockedNativeTableA.newFastAppend().appendFile(file).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        FileScanTask fileScanTask =
+                Lists.newArrayList(mockedNativeTableA.newScan().includeColumnStats().planFiles()).get(0);
+
+        IcebergConnectorScanRangeSource countingSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false, List.of(idSlot, dataSlot));
+        long partitionId = countingSource.addPartition(fileScanTask);
+        THdfsScanRange countingRange = countingSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
+        Assertions.assertEquals(Map.of(7, 1L), countingRange.getNull_value_counts());
+
+        IcebergConnectorScanRangeSource plainSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false);
+        partitionId = plainSource.addPartition(fileScanTask);
+        THdfsScanRange plainRange = plainSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
+        Assertions.assertFalse(plainRange.isSetNull_value_counts());
+    }
+
+    @Test
+    public void testBuildScanRangeWithoutColumnStatsCarriesNoNullCounts() throws Exception {
+        TupleDescriptor localTupleDescriptor = new TupleDescriptor(new TupleId(6));
+        SlotDescriptor idSlot = new SlotDescriptor(new SlotId(7), localTupleDescriptor);
+        idSlot.setType(INT);
+        idSlot.setColumn(new Column("id", INT));
+        localTupleDescriptor.addSlot(idSlot);
+
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        List<Column> schema = Lists.newArrayList(new Column("id", INT), new Column("data", VARCHAR));
+        IcebergTable icebergTable = new IcebergTable(1, "iceberg_table", "iceberg_catalog",
+                "resource", "db", "table", "", schema, mockedNativeTableA, Maps.newHashMap());
+        FileScanTask fileScanTask = Lists.newArrayList(mockedNativeTableA.newScan().planFiles()).get(0);
+
+        IcebergConnectorScanRangeSource scanRangeSource = new IcebergConnectorScanRangeSource(icebergTable,
+                RemoteFileInfoDefaultSource.EMPTY, IcebergMORParams.EMPTY, localTupleDescriptor, Optional.empty(),
+                PartitionIdGenerator.of(), false, false, false, List.of(idSlot));
+        long partitionId = scanRangeSource.addPartition(fileScanTask);
+        THdfsScanRange hdfsScanRange = scanRangeSource.buildScanRange(fileScanTask, fileScanTask.file(), partitionId);
+        Assertions.assertTrue(hdfsScanRange.getNull_value_counts().isEmpty());
     }
 
     @Test
