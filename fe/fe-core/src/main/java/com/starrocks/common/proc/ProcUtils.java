@@ -14,14 +14,32 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.ListComparator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class ProcUtils {
 
-<<<<<<< HEAD
-=======
     private static final Logger LOG = LogManager.getLogger(ProcUtils.class);
 
     /**
@@ -171,7 +189,6 @@ public class ProcUtils {
         throw new AnalysisException("Title name[" + columnName + "] does not exist");
     }
 
->>>>>>> 2afdae9 ([Refactor] Build a proc dir's result in one place (#79622))
     static long getDbId(String dbIdOrName) throws AnalysisException {
         try {
             return Long.parseLong(dbIdOrName);
