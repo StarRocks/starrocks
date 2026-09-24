@@ -29,8 +29,19 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+=======
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.expression.BinaryPredicate;
+import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.DateLiteral;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+import com.starrocks.sql.ast.expression.StringLiteral;
+import com.starrocks.type.DateType;
+>>>>>>> a3da2f0 ([BugFix] Check a proc dir's row width where its rows become an answer (#79619))
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -40,8 +51,6 @@ import java.util.Map;
 
 public class ProcUtils {
 
-    private static final Logger LOG = LogManager.getLogger(ProcUtils.class);
-
     /**
      * Apply a SHOW statement's WHERE, ORDER BY and LIMIT to rows a proc dir has already fetched.
      *
@@ -50,22 +59,25 @@ public class ProcUtils {
      * the call that produced `rows`, down to OptimizeProcDir still naming its local variable
      * schemaChangeJobInfos. What is left in each proc dir is the part that is actually its own.
      *
-     * Rows whose width does not match the title list are dropped rather than filtered, because
-     * neither the filter nor the order-by index would mean anything against them.
+     * A row whose width does not match the title list fails the statement with an AnalysisException,
+     * checked up front rather than as the filter walks the two lists by index. See checkRowWidths.
+     *
+     * @throws AnalysisException if any row's width does not match titleNames
      */
     public static ProcResult applyFilterOrderLimit(List<String> titleNames, List<List<Comparable>> rows,
                                                    Map<String, Expr> filter, List<OrderByPair> orderByPairs,
                                                    LimitElement limitElement) throws AnalysisException {
+        // Before the filter, not only inside it: the loop below pairs titleNames.get(i) with
+        // row.get(i), so a mismatched width would compare against the wrong column or run off the
+        // end of one of the two lists.
+        checkRowWidths(titleNames, rows);
+
         List<List<Comparable>> selected;
         if (filter == null || filter.isEmpty()) {
             selected = rows;
         } else {
             selected = Lists.newArrayList();
             for (List<Comparable> row : rows) {
-                if (row.size() != titleNames.size()) {
-                    LOG.warn("row width {} not equal titleNames.size() {}", row.size(), titleNames.size());
-                    continue;
-                }
                 boolean isNeed = true;
                 for (int i = 0; i < row.size(); i++) {
                     isNeed = filterResult(titleNames.get(i), row.get(i), filter);
@@ -97,6 +109,25 @@ public class ProcUtils {
     }
 
     /**
+     * Refuse rows that do not match the title list.
+     *
+     * toProcResult calls this, which covers every answer. A caller that walks the two lists together
+     * - a WHERE filter does - needs it before that walk as well, since by then a mismatched row has
+     * already been compared against the wrong columns or run off the end of one of them.
+     *
+     * @throws AnalysisException if any row's width does not match titleNames
+     */
+    public static void checkRowWidths(List<String> titleNames, List<List<Comparable>> rows)
+            throws AnalysisException {
+        for (List<Comparable> row : rows) {
+            if (row.size() != titleNames.size()) {
+                throw new AnalysisException("row has " + row.size() + " columns but "
+                        + titleNames.size() + " were expected: " + titleNames);
+            }
+        }
+    }
+
+    /**
      * Build a ProcResult from rows, under the given column titles.
      *
      * Used by the proc dirs behind SHOW ALTER TABLE and SHOW PARTITIONS - SchemaChangeProcDir,
@@ -107,8 +138,19 @@ public class ProcUtils {
      * Most other proc dirs still build their own. Some are the same loop and could move here; some,
      * like LoadProcDir, interleave it with merging and reversing their rows. Nothing about this
      * helper requires them to, and it does not claim to cover them.
+     *
+     * Because those eight roads end here, this is where their rows are checked against the titles
+     * they are about to be sent under. sendShowResult does not check: it declares the title list as
+     * the column set and then writes however many cells each row happens to have, so a row missing
+     * a column in the middle goes out with every value after it shifted one column left, under
+     * headers that no longer describe them. Such a row fails the statement instead.
+     *
+     * @throws AnalysisException if any row's width does not match titleNames
      */
-    public static BaseProcResult toProcResult(List<String> titleNames, List<List<Comparable>> rows) {
+    public static BaseProcResult toProcResult(List<String> titleNames, List<List<Comparable>> rows)
+            throws AnalysisException {
+        checkRowWidths(titleNames, rows);
+
         BaseProcResult result = new BaseProcResult();
         result.setNames(titleNames);
         for (List<Comparable> row : rows) {
