@@ -23,6 +23,10 @@
 #include <memory>
 #include <string>
 
+#ifdef BE_TEST
+#include <functional>
+#endif
+
 #include "connector/hive/scanner/hdfs_scanner.h"
 
 namespace starrocks {
@@ -61,6 +65,9 @@ private:
     std::shared_ptr<paimon::MemoryPool> _memory_pool;
     std::shared_ptr<PaimonFileSystem> _paimon_file_system;
     std::unique_ptr<paimon::GlobalIndexScan> _global_index_scan;
+#ifdef BE_TEST
+    std::function<paimon::Result<std::unique_ptr<paimon::GlobalIndexScan>>()> _scan_factory_for_test;
+#endif
 };
 
 } // namespace starrocks

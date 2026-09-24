@@ -97,10 +97,19 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
 
     const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
+#ifdef BE_TEST
+    auto scan = _scan_factory_for_test ? _scan_factory_for_test()
+                                       : paimon::GlobalIndexScan::Create(
+                                                 scan_range.table_path, std::optional<int64_t>(scan_range.snapshot_id),
+                                                 std::optional<std::vector<std::map<std::string, std::string>>>{},
+                                                 std::map<std::string, std::string>(), _paimon_file_system,
+                                                 paimon::GetGlobalDefaultExecutor(), _memory_pool);
+#else
     auto scan = paimon::GlobalIndexScan::Create(scan_range.table_path, std::optional<int64_t>(scan_range.snapshot_id),
                                                 std::optional<std::vector<std::map<std::string, std::string>>>{},
                                                 std::map<std::string, std::string>(), _paimon_file_system,
                                                 paimon::GetGlobalDefaultExecutor(), _memory_pool);
+#endif
     if (!scan.ok()) {
         return paimon_error("scan creation", scan.status());
     }

@@ -14,6 +14,7 @@
 
 #include "connector/hive/paimon/paimon_global_index_evaluator.h"
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <paimon/global_index/bitmap_global_index_result.h>
 
@@ -83,15 +84,25 @@ public:
     std::string GetIndexType() const override { return "fake"; }
 
     const std::string& last_operation() const { return _last_operation; }
+    void fail_with(paimon::Status status) { _status = std::move(status); }
+    void set_return_null(bool return_null) { _return_null = return_null; }
 
 private:
     paimon::Result<std::shared_ptr<paimon::GlobalIndexResult>> record(std::string operation) {
         _last_operation = std::move(operation);
+        if (!_status.ok()) {
+            return _status;
+        }
+        if (_return_null) {
+            return std::shared_ptr<paimon::GlobalIndexResult>();
+        }
         return _result;
     }
 
     std::shared_ptr<paimon::GlobalIndexResult> _result;
     std::string _last_operation;
+    paimon::Status _status;
+    bool _return_null = false;
 };
 
 std::shared_ptr<paimon::GlobalIndexResult> result_from_ranges(std::vector<paimon::Range> ranges) {
@@ -128,6 +139,47 @@ TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesTypedBinaryPredicate) {
     EXPECT_EQ(9, ranges.value()[0].to);
 }
 
+TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesAllBinaryOperations) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    const std::vector<std::pair<std::string, std::string>> operations = {
+            {"EQ", "equal"},         {"NE", "not_equal"},    {"LT", "less_than"},
+            {"LE", "less_or_equal"}, {"GT", "greater_than"}, {"GE", "greater_or_equal"}};
+
+    for (const auto& [binary_type, expected_operation] : operations) {
+        rapidjson::Document predicate = parse_json(
+                fmt::format(R"({{"o":"b","b":"{}","c":[{{"o":"cr","t":"int","n":"k"}},{{"o":"co","t":"int","v":7}}]}})",
+                            binary_type)
+                        .c_str());
+        ASSERT_TRUE(evaluator.evaluate(predicate).ok()) << binary_type;
+        EXPECT_EQ(expected_operation, reader->last_operation());
+    }
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, ConvertsSupportedLiteralTypes) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    const std::vector<std::string> constants = {R"({"o":"co","t":"boolean","v":true})",
+                                                R"({"o":"co","t":"tinyint","v":1})",
+                                                R"({"o":"co","t":"smallint","v":2})",
+                                                R"({"o":"co","t":"int","v":3})",
+                                                R"({"o":"co","t":"bigint","v":4})",
+                                                R"({"o":"co","t":"float","v":1.5})",
+                                                R"({"o":"co","t":"double","v":2.5})",
+                                                R"({"o":"co","t":"string","v":"s"})",
+                                                R"json({"o":"co","t":"varchar(12)","v":"v"})json",
+                                                R"json({"o":"co","t":"char(3)","v":"c"})json"};
+
+    for (const std::string& constant : constants) {
+        rapidjson::Document predicate = parse_json(
+                fmt::format(R"({{"o":"b","b":"EQ","c":[{{"o":"cr","t":"int","n":"k"}},{}]}})", constant).c_str());
+        ASSERT_TRUE(evaluator.evaluate(predicate).ok()) << constant;
+        EXPECT_EQ("equal", reader->last_operation());
+    }
+}
+
 TEST(PaimonGlobalIndexEvaluatorTest, IntersectsCompoundPredicateResults) {
     auto left = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 3)}));
     auto right = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(3, 5)}));
@@ -148,6 +200,26 @@ TEST(PaimonGlobalIndexEvaluatorTest, IntersectsCompoundPredicateResults) {
     EXPECT_EQ(3, ranges.value()[0].to);
 }
 
+TEST(PaimonGlobalIndexEvaluatorTest, UnionsCompoundPredicateResults) {
+    auto left = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    auto right = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(4, 5)}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [left, right](std::string_view column) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                return column == "left" ? left : right;
+            });
+    rapidjson::Document predicate = parse_json(
+            R"({"o":"cp","ct":"OR","c":[{"o":"b","b":"EQ","c":[{"o":"cr","t":"int","n":"left"},{"o":"co","t":"int","v":1}]},{"o":"b","b":"EQ","c":[{"o":"cr","t":"int","n":"right"},{"o":"co","t":"int","v":1}]}]})");
+
+    auto result = evaluator.evaluate(predicate);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    auto ranges = result.value()->ToRanges();
+    ASSERT_TRUE(ranges.ok()) << ranges.status().ToString();
+    ASSERT_EQ(2, ranges.value().size());
+    EXPECT_EQ(1, ranges.value()[0].from);
+    EXPECT_EQ(5, ranges.value()[1].to);
+}
+
 TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesScalarPredicateFamilies) {
     auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
     PaimonGlobalIndexEvaluator evaluator(
@@ -161,12 +233,22 @@ TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesScalarPredicateFamilies) {
     ASSERT_TRUE(evaluator.evaluate(in).ok());
     EXPECT_EQ("not_in", reader->last_operation());
 
+    rapidjson::Document positive_in =
+            parse_json(R"({"o":"ip","ng":false,"c":[{"o":"cr","t":"int","n":"k"},{"o":"co","t":"int","v":1}]})");
+    ASSERT_TRUE(evaluator.evaluate(positive_in).ok());
+    EXPECT_EQ("in", reader->last_operation());
+
     rapidjson::Document is_null = parse_json(R"({"o":"isn","ng":true,"c":[{"o":"cr","t":"varchar","n":"k"}]})");
     ASSERT_TRUE(evaluator.evaluate(is_null).ok());
     EXPECT_EQ("is_not_null", reader->last_operation());
 
+    rapidjson::Document is_null_positive =
+            parse_json(R"({"o":"isn","ng":false,"c":[{"o":"cr","t":"varchar","n":"k"}]})");
+    ASSERT_TRUE(evaluator.evaluate(is_null_positive).ok());
+    EXPECT_EQ("is_null", reader->last_operation());
+
     rapidjson::Document starts_with = parse_json(
-            R"({"o":"ca","f":"starts_with","a":[{"o":"cr","t":"varchar","n":"k"},{"o":"co","t":"varchar","v":"prefix"}]})");
+            R"({"o":"ca","f":"STARTS_WITH","a":[{"o":"cr","t":"varchar","n":"k"},{"o":"co","t":"varchar","v":"prefix"}]})");
     ASSERT_TRUE(evaluator.evaluate(starts_with).ok());
     EXPECT_EQ("starts_with", reader->last_operation());
 }
@@ -181,6 +263,73 @@ TEST(PaimonGlobalIndexEvaluatorTest, RejectsMalformedPredicate) {
 
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, RejectsMalformedPredicateFamilies) {
+    PaimonGlobalIndexEvaluator evaluator([](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+        return Status::InternalError("reader should not be requested");
+    });
+    const std::vector<std::string> malformed = {R"({})",
+                                                R"({"o":1})",
+                                                R"({"o":"b","b":"EQ","c":[]})",
+                                                R"({"o":"cp","ct":"AND","c":[]})",
+                                                R"({"o":"ip","ng":false,"c":[]})",
+                                                R"({"o":"isn","ng":false,"c":[]})",
+                                                R"({"o":"ca","f":"starts_with","a":[]})"};
+
+    for (const std::string& json : malformed) {
+        rapidjson::Document predicate = parse_json(json.c_str());
+        auto result = evaluator.evaluate(predicate);
+        ASSERT_FALSE(result.ok()) << json;
+        EXPECT_TRUE(result.status().is_invalid_argument()) << result.status();
+    }
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, RejectsInvalidColumnsLiteralsAndOperations) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    const std::vector<std::string> invalid = {
+            R"({"o":"b","b":"EQ","c":[{"o":"co","t":"int","v":1},{"o":"co","t":"int","v":2}]})",
+            R"({"o":"b","b":"EQ","c":[{"o":"cr","n":"k"},{"o":"co","t":"date","v":"2026-01-01"}]})",
+            R"({"o":"b","b":"EQ","c":[{"o":"cr","n":"k"},{"o":"co","t":"boolean","v":1}]})",
+            R"({"o":"b","b":"BETWEEN","c":[{"o":"cr","n":"k"},{"o":"co","t":"int","v":1}]})",
+            R"({"o":"cp","ct":"XOR","c":[{"o":"isn","ng":false,"c":[{"o":"cr","n":"k"}]},{"o":"isn","ng":false,"c":[{"o":"cr","n":"k"}]}]})",
+            R"({"o":"ca","f":"ends_with","a":[{"o":"cr","n":"k"},{"o":"co","t":"string","v":"x"}]})"};
+
+    for (const std::string& json : invalid) {
+        rapidjson::Document predicate = parse_json(json.c_str());
+        auto result = evaluator.evaluate(predicate);
+        ASSERT_FALSE(result.ok()) << json;
+        EXPECT_TRUE(result.status().is_invalid_argument()) << result.status();
+    }
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, PropagatesReaderLookupAndEvaluationFailures) {
+    rapidjson::Document predicate =
+            parse_json(R"({"o":"b","b":"EQ","c":[{"o":"cr","n":"k"},{"o":"co","t":"int","v":1}]})");
+    PaimonGlobalIndexEvaluator missing_reader(
+            [](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                return Status::NotFound("missing reader");
+            });
+    auto missing = missing_reader.evaluate(predicate);
+    ASSERT_FALSE(missing.ok());
+    EXPECT_TRUE(missing.status().is_not_found());
+
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    reader->fail_with(paimon::Status::IOError("broken index"));
+    auto failed = evaluator.evaluate(predicate);
+    ASSERT_FALSE(failed.ok());
+    EXPECT_TRUE(failed.status().is_internal_error());
+    EXPECT_NE(std::string::npos, failed.status().message().find("broken index"));
+
+    reader->fail_with(paimon::Status::OK());
+    reader->set_return_null(true);
+    auto unsupported = evaluator.evaluate(predicate);
+    ASSERT_FALSE(unsupported.ok());
+    EXPECT_TRUE(unsupported.status().is_not_supported());
 }
 
 } // namespace starrocks
