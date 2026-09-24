@@ -63,7 +63,7 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testToProcResultBuildsUnderTheGivenTitles() {
+    public void testToProcResultBuildsUnderTheGivenTitles() throws AnalysisException {
         List<String> titleNames = List.of("JobId", "TableName", "State");
         List<List<Comparable>> rows = List.of(List.of(1L, "t1", "FINISHED"), List.of(2L, "t2", "RUNNING"));
 
@@ -75,10 +75,47 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testToProcResultOnNoRows() {
+    public void testToProcResultOnNoRows() throws AnalysisException {
         BaseProcResult result = ProcUtils.toProcResult(List.of("JobId"), List.of());
         Assertions.assertEquals(List.of("JobId"), result.getColumnNames());
         Assertions.assertTrue(result.getRows().isEmpty());
+    }
+
+    @Test
+    public void testToProcResultRejectsAMisalignedRow() {
+        // fetchResult does not go through applyFilterOrderLimit, and SHOW PROC and the proc HTTP
+        // endpoints take that road. Both end here, so the check does.
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        AnalysisException e = Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.toProcResult(titleNames, List.of(List.of("1", "t1"))));
+        Assertions.assertTrue(e.getMessage().contains("row has 2 columns but 3 were expected"),
+                e.getMessage());
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.toProcResult(titleNames, List.of(List.of("1", "t1", "FINISHED", "extra"))));
+    }
+
+    @Test
+    public void testApplyFilterOrderLimitRejectsAMisalignedRow() {
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        List<List<Comparable>> narrow = List.of(List.of("1", "t1"));
+
+        // The point of the change: a statement without a WHERE clause is checked too.
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.applyFilterOrderLimit(titleNames, narrow, null, null, null));
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.applyFilterOrderLimit(titleNames, narrow, Map.of("tablename", eq("t1")),
+                        null, null));
+    }
+
+    @Test
+    public void testCheckRowWidthsIsReachableOnItsOwn() {
+        // A caller that walks titleNames and the row together by index has to check before that
+        // walk, not when the result is built - PartitionsProcDir still filters with its own loop.
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        Assertions.assertThrows(AnalysisException.class,
+                () -> ProcUtils.checkRowWidths(titleNames, List.of(List.of("1", "t1"))));
+        Assertions.assertDoesNotThrow(
+                () -> ProcUtils.checkRowWidths(titleNames, List.of(List.of("1", "t1", "FINISHED"))));
     }
 
     @Test
