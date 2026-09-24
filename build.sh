@@ -118,6 +118,7 @@ else
     done
 
     export THIRD_PARTY_BUILD_WITH_ARM_CRC="${RESOLVED_ARM_CRC32}"
+    export USE_ARM_CRC32="${RESOLVED_ARM_CRC32}"
 
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
@@ -352,15 +353,6 @@ if [ -e /proc/cpuinfo ] ; then
     fi
     if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
         USE_BMI_2=OFF
-    fi
-    if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
-        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
-        features_count=${features_count:-0}
-        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
-        crc_count=${crc_count:-0}
-        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
-            USE_ARM_CRC32=OFF
-        fi
     fi
 fi
 
