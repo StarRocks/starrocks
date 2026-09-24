@@ -289,7 +289,7 @@ public class SiLdapClearPasswordTest {
         authInfo.remoteIp = "10.1.2.3";
         authInfo.password = "ldap_password";
 
-        UserIdentity user = BaseAction.checkPassword(new ConnectContext(), authInfo);
+        UserIdentity user = BaseAction.checkPassword(authInfo);
 
         Assertions.assertNotNull(user);
         Assertions.assertEquals("alice", user.getUser());
@@ -309,7 +309,7 @@ public class SiLdapClearPasswordTest {
 
         // AccessDeniedException is what the HTTP layer turns into a 401
         Assertions.assertThrows(AccessDeniedException.class, () ->
-                BaseAction.checkPassword(new ConnectContext(), authInfo));
+                BaseAction.checkPassword(authInfo));
         Assertions.assertEquals(1, ldapBindCount.get());
     }
 
