@@ -848,7 +848,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
 1. 4 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`、`enable_tablet_pre_split_for_mv_refresh`。新規取り込みは即座に事前分割をスキップします。
-2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
+2. 事前分割が作成した進行中の reshard ジョブがすべて終わるのを待ちます。次のクエリで状況を確認します。
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   このクエリが 1 行も返さなくなればロールバックは完了です。終了状態は `FINISHED` と `ABORTED` だけで、`PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` のいずれかにあるジョブはまだ実行中です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 
 #### マルチパーティション版サンプリングベースのタブレット事前分割の動作上の注意（P2-a）
