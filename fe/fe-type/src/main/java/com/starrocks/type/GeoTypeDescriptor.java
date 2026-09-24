@@ -38,6 +38,11 @@ public record GeoTypeDescriptor(LogicalType logicalType, CoordinateSystem coordi
         Objects.requireNonNull(crs);
     }
 
+    public static GeoTypeDescriptor geometry(String crs) {
+        return new GeoTypeDescriptor(LogicalType.GEOMETRY, CoordinateSystem.CARTESIAN,
+                EdgeAlgorithm.PLANAR, crs, deriveSrid(crs));
+    }
+
     public void validate(PrimitiveType primitive) {
         if (crs.isEmpty()) {
             throw new IllegalArgumentException("Native geo types require a non-empty CRS");

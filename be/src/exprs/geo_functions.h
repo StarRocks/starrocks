@@ -67,6 +67,10 @@ public:
     DEFINE_VECTORIZED_FN(st_geog_from_wkb);
     DEFINE_VECTORIZED_FN(st_geography_as_text);
     DEFINE_VECTORIZED_FN(st_geography_as_wkb);
+    DEFINE_VECTORIZED_FN(st_geom_from_text);
+    DEFINE_VECTORIZED_FN(st_geom_from_wkb);
+    DEFINE_VECTORIZED_FN(st_geometry_as_text);
+    DEFINE_VECTORIZED_FN(st_geometry_as_wkb);
     DEFINE_VECTORIZED_FN(st_geography_x);
     DEFINE_VECTORIZED_FN(st_geography_y);
     DEFINE_VECTORIZED_FN(st_geography_type);

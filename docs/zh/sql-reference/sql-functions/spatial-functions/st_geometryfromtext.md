@@ -1,35 +1,39 @@
 ---
 displayed_sidebar: docs
-description: "将 WKT（Well Known Text）转换为对应的内存几何形式。"
+description: "使用显式 CRS 从 WKT 构造原生 GEOMETRY，或使用旧版单参数格式。"
 ---
 
-# ST_GeometryFromText, ST_GeomFromText
+# ST_GeomFromText, ST_GeometryFromText
 
 
 
-将一个 WKT（Well Known Text）转化为对应的内存的几何形式。
+`ST_GeomFromText(wkt, crs)` 从二维 OGC Well-Known Text（WKT）构造原生平面 `GEOMETRY` 值。必须显式指定 CRS，该 CRS 会成为原生类型描述符的一部分。
+
+现有的单参数 `ST_GeomFromText` 和 `ST_GeometryFromText` 签名保持不变，继续返回旧版 `VARCHAR` 表示。
 
 ## 语法
 
 ```Haskell
-ST_GeometryFromText(wkt)
+GEOMETRY ST_GeomFromText(VARCHAR wkt, VARCHAR crs)
+VARCHAR ST_GeomFromText(VARCHAR wkt)
+VARCHAR ST_GeometryFromText(VARCHAR wkt)
 ```
 
 ## 参数说明
 
-`wkt`: 待转化的 WKT，支持的数据类型为 VARCHAR。
+对于原生签名，`crs` 必须是非空字符串字面量。没有默认 CRS，也不会执行隐式坐标转换或重投影。支持全部七种二维 OGC 几何类型、`EMPTY` 和空子元素。无效 WKT 返回 `NULL`；WKT 为 `NULL` 时返回 `NULL`。
 
 ## 返回值说明
 
-返回值的数据类型为 GEOMETRY。
+双参数签名返回原生 `GEOMETRY`。单参数签名返回旧版 `VARCHAR` 表示。
 
 ## 示例
 
 ```Plain Text
-MySQL > SELECT ST_AsText(ST_GeometryFromText("LINESTRING (1 1, 2 2)"));
-+---------------------------------------------------------+
-| st_astext(st_geometryfromtext('LINESTRING (1 1, 2 2)')) |
-+---------------------------------------------------------+
-| LINESTRING (1 1, 2 2)                                   |
-+---------------------------------------------------------+
+MySQL > SELECT ST_AsText(ST_GeomFromText('LINESTRING (1 1, 2 2)', 'EPSG:3857'));
++----------------------------------------------------------------------------+
+| st_astext(st_geomfromtext('LINESTRING (1 1, 2 2)', 'EPSG:3857'))           |
++----------------------------------------------------------------------------+
+| LINESTRING (1 1, 2 2)                                                      |
++----------------------------------------------------------------------------+
 ```
