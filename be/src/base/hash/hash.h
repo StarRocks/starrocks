@@ -141,14 +141,16 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
 #if defined(__x86_64__) && !defined(__SSE4_2__)
     return crc32(hash, (const unsigned char*)data, length);
 #else
-#if defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
-    // New ARM fallback using CRC-32C
-    return ~starrocks::crc32c::Extend(~hash, (const char*)data, length);
-#else
+    // Route short strings for both ARM fallback AND hardware paths
     if (UNLIKELY(length < 8)) {
         return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
 
+#if defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+    // ARM software fallback for lengths >= 8
+    return ~starrocks::crc32c::Extend(~hash, (const char*)data, length);
+#else
+    // Hardware accelerated paths for lengths >= 8
     uint64_t words = length / sizeof(uint64_t);
     uint64_t remainder = length % sizeof(uint64_t);
     auto* p = reinterpret_cast<const uint8_t*>(data);
@@ -159,7 +161,7 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
 #else
-        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
+#error "Not supported architecture"
 #endif
         p += sizeof(uint64_t);
     }
@@ -170,7 +172,7 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
 #else
-        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
+#error "Not supported architecture"
 #endif
     }
 
