@@ -100,6 +100,13 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
         analyzeFail(sql, "No matching function with signature: json_value(varchar, varchar)");
     }
 
+    // refer to https://trino.io/docs/current/functions/datetime.html#interval-day-to-second
+    @Test
+    public void testIntervalWithUnsupportedOperator() {
+        String sql = "select DATE '2026-06-26' + INTERVAL '1' DAY % 2";
+        analyzeFail(sql, "Interval arithmetic only supports + and -, but got '%'");
+    }
+
     // refer to https://trino.io/docs/current/functions/json.html#json-object
     @Test
     public void testJsonObject() {

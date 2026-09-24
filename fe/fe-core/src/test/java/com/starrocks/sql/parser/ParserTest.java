@@ -1028,4 +1028,13 @@ class ParserTest {
             SqlParser.parse(sql, new SessionVariable());
         }
     }
+
+    @Test
+    void testIntervalArithmeticRejectsUnsupportedOperator() {
+        String sql = "select date '2026-06-26' + interval 1 day % 2";
+        ParsingException exception = Assertions.assertThrows(ParsingException.class,
+                () -> SqlParser.parse(sql, new SessionVariable()), sql);
+        Assertions.assertTrue(exception.getMessage().contains("Interval arithmetic only supports + and -"),
+                exception.getMessage());
+    }
 }
