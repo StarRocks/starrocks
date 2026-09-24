@@ -839,7 +839,15 @@ This topic introduces the following types of FE configurations:
 To disable the feature safely before a downgrade or during a production rollback:
 
 1. Set all four pre-split flags to `false`: `enable_tablet_pre_split_for_insert_from_files`, `enable_tablet_pre_split_for_broker_load`, `enable_tablet_pre_split_for_insert_from_table`, and `enable_tablet_pre_split_for_mv_refresh`. New loads will skip pre-split immediately.
-2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor with `SHOW TABLET RESHARD JOB`; the rollback is complete once no `RUNNING` or `PENDING` rows remain.
+2. Wait for in-flight reshard jobs created by pre-split to drain. Monitor them with the following query:
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   The rollback is complete once this query returns no rows. A job in any non-final state, including `PENDING`, `PREPARING`, `RUNNING`, `CLEANING`, and `ABORTING`, is still in flight; only `FINISHED` and `ABORTED` are final.
 3. Proceed with the downgrade. The substrate (External-Boundaries Tablet Split) remains available regardless of the pre-split feature flag.
 
 #### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
