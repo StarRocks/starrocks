@@ -34,10 +34,30 @@ Run the collector and capture its JSON:
 ```bash
 bash .claude/skills/release-notes/scripts/collect-prs.sh <prev_tag> <new_tag>
 # e.g. collect-prs.sh 3.5.18 3.5.19
+
+# Version not tagged yet: diffs to the head of branch-<minor> automatically, or pin the
+# release commit on branch-<minor> (must be pushed)
+bash .claude/skills/release-notes/scripts/collect-prs.sh <prev_tag> <new_tag> --commit <sha>
+# e.g. collect-prs.sh 3.5.18 3.5.19 --commit 1a2b3c4d
 ```
 
+`<new_tag>` does not need to be released. The collector picks where the diff ends and
+reports it as `new_ref_source`:
+
+- `tag`: `<new_tag>` exists on GitHub. `unreleased` is `true` unless a GitHub release is
+  published for it.
+- `branch`: `<new_tag>` is not tagged yet, so the diff runs to the current head of
+  `branch-<minor>` (override with `--branch <name>`). The result includes every commit merged
+  to the branch so far, which can be more than will ship. Tell the user, and suggest pinning
+  the release point with `--commit`.
+- `commit`: the user supplied a release commit ID, passed with `--commit`. `<new_tag>` is then
+  only the version label.
+
+`new_ref` is the tag or the resolved full SHA. For an untagged ref, `release_date_raw` is that
+commit's date.
+
 It returns
-`{ release_date_raw, pr_count, prs: [{number,title,url,base,resolved_to_main,labels,body_excerpt}],
+`{ new_ref, new_ref_source, unreleased, release_date_raw, pr_count, prs: [{number,title,url,base,resolved_to_main,labels,body_excerpt}],
 unresolved_count, unresolved: [...] }` for every PR backported between the two tags. If
 `pr_count` is 0, stop and report — the tags likely don't exist yet or the order is wrong
 (`gh api repos/StarRocks/starrocks/tags`).
