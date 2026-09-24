@@ -36,8 +36,13 @@ public class PaimonIndexMetadataTest {
 
         Assertions.assertFalse(PaimonMetadata.isPaimonCppReadable(ConnectorIndexType.BITMAP));
         Assertions.assertTrue(PaimonMetadata.isPaimonCppReadable(ConnectorIndexType.RANGE));
-        Assertions.assertFalse(PaimonMetadata.isPaimonCppReadable(ConnectorIndexType.VECTOR));
+        Assertions.assertTrue(PaimonMetadata.isPaimonCppReadable(ConnectorIndexType.VECTOR));
         Assertions.assertFalse(PaimonMetadata.isPaimonCppReadable(ConnectorIndexType.FULL_TEXT));
+
+        Assertions.assertTrue(PaimonMetadata.isPaimonCppReadable("btree", ConnectorIndexType.RANGE));
+        Assertions.assertTrue(PaimonMetadata.isPaimonCppReadable("lumina", ConnectorIndexType.VECTOR));
+        Assertions.assertFalse(PaimonMetadata.isPaimonCppReadable(
+                "lumina-vector-ann", ConnectorIndexType.VECTOR));
     }
 
     @Test

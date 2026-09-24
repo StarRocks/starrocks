@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -49,7 +50,7 @@ public class ApplyConnectorIndexRuleTest {
     private final ColumnRefOperator idColumn =
             new ColumnRefOperator(1, IntegerType.INT, "id", true);
     private final ColumnRefOperator vectorColumn =
-            new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", true);
+            new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", false);
 
     @Test
     public void testPredicateRuleAnnotatesScanWithoutRemovingPredicate() {
@@ -75,8 +76,6 @@ public class ApplyConnectorIndexRuleTest {
 
     @Test
     public void testTopNRulePreservesTopNScoreAndScanSemantics() {
-        BinaryPredicateOperator predicate =
-                new BinaryPredicateOperator(BinaryType.EQ, idColumn, ConstantOperator.createInt(7));
         ColumnRefOperator scoreColumn = new ColumnRefOperator(3, FloatType.FLOAT, "score", true);
         ArrayOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
                 List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
@@ -86,7 +85,7 @@ public class ApplyConnectorIndexRuleTest {
                 idColumn, idColumn,
                 vectorColumn, vectorColumn,
                 scoreColumn, scoreExpression));
-        LogicalPaimonScanOperator scan = createScan(predicate, projection);
+        LogicalPaimonScanOperator scan = createScan(null, projection);
         LogicalTopNOperator topN = new LogicalTopNOperator(
                 List.of(new Ordering(scoreColumn, true, false)), 10, 2);
         ConnectorIndexMetadata metadata = ConnectorIndexMetadata.of(Map.of(
@@ -102,31 +101,104 @@ public class ApplyConnectorIndexRuleTest {
         Assertions.assertEquals(1, outputs.size());
         Assertions.assertSame(topN, outputs.get(0).getOp());
         LogicalScanOperator annotated = (LogicalScanOperator) outputs.get(0).inputAt(0).getOp();
-        Assertions.assertSame(predicate, annotated.getPredicate());
+        Assertions.assertNull(annotated.getPredicate());
         Assertions.assertSame(projection, annotated.getProjection());
         TopNIndexCondition condition = (TopNIndexCondition) annotated.getIndexCondition();
-        Assertions.assertEquals(predicate, condition.getPredicate());
+        Assertions.assertNull(condition.getPredicate());
         Assertions.assertSame(scoreExpression, condition.getScoreExpression());
         Assertions.assertEquals(10, condition.getLimit());
         Assertions.assertEquals(2, condition.getOffset());
+        Assertions.assertEquals(12, condition.getCandidateLimit());
         Assertions.assertTrue(condition.isAscending());
-        Assertions.assertTrue(condition.getUsedColumns().contains(idColumn));
         Assertions.assertTrue(condition.getUsedColumns().contains(vectorColumn));
+        Assertions.assertEquals(Map.of("embedding", ConnectorIndexType.VECTOR), condition.getRequiredIndexes());
 
-        TopNIndexCondition equivalent = new TopNIndexCondition(predicate, scoreExpression, 10, 2, true);
+        TopNIndexCondition equivalent = new TopNIndexCondition(null, scoreExpression,
+                Map.of(vectorColumn.getName(), ConnectorIndexType.VECTOR), 10, 2, true);
         Assertions.assertEquals(condition, equivalent);
         Assertions.assertEquals(condition.hashCode(), equivalent.hashCode());
-        Assertions.assertNotEquals(condition, new IndexCondition(predicate));
-        Assertions.assertNotEquals(condition, new TopNIndexCondition(null, scoreExpression, 10, 2, true));
+        Assertions.assertNotEquals(condition, new IndexCondition(null));
+        Assertions.assertNotEquals(condition,
+                new TopNIndexCondition(null, scoreExpression,
+                        Map.of(vectorColumn.getName(), ConnectorIndexType.VECTOR), 10, 3, true));
         Assertions.assertTrue(condition.toString().contains("score="));
+
+        TopNIndexCondition fullTextCondition = new TopNIndexCondition(null, scoreExpression,
+                Map.of("body", ConnectorIndexType.FULL_TEXT), 10, 2, false);
+        Assertions.assertEquals(Map.of("body", ConnectorIndexType.FULL_TEXT),
+                fullTextCondition.getRequiredIndexes());
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TopNIndexCondition(null, scoreExpression, Map.of(), 10, 2, false));
+
+        ColumnRefOperator doubleScoreColumn = new ColumnRefOperator(5, FloatType.DOUBLE, "double_score", true);
+        CastOperator castedScore = new CastOperator(FloatType.DOUBLE, scoreExpression);
+        Projection castedProjection = new Projection(Map.of(doubleScoreColumn, castedScore));
+        LogicalPaimonScanOperator castedScan = createScan(null, castedProjection);
+        LogicalTopNOperator castedTopN = new LogicalTopNOperator(
+                List.of(new Ordering(doubleScoreColumn, true, false)), 10, 2);
+        List<OptExpression> castedOutputs = rule.transform(
+                OptExpression.create(castedTopN, OptExpression.create(castedScan)), null);
+        Assertions.assertEquals(1, castedOutputs.size());
+        Assertions.assertSame(castedTopN, castedOutputs.get(0).getOp());
+        LogicalScanOperator castedAnnotated = (LogicalScanOperator) castedOutputs.get(0).inputAt(0).getOp();
+        Assertions.assertSame(castedProjection, castedAnnotated.getProjection());
+        Assertions.assertSame(scoreExpression,
+                ((TopNIndexCondition) castedAnnotated.getIndexCondition()).getScoreExpression());
+    }
+
+    @Test
+    public void testTopNRuleDefersFilteredAndNullableVectorQueries() {
+        BinaryPredicateOperator predicate =
+                new BinaryPredicateOperator(BinaryType.EQ, idColumn, ConstantOperator.createInt(7));
+        ColumnRefOperator nullableVector =
+                new ColumnRefOperator(4, ArrayType.ARRAY_FLOAT, "nullable_embedding", true);
+        ColumnRefOperator scoreColumn = new ColumnRefOperator(3, FloatType.FLOAT, "score", true);
+        ArrayOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+        CallOperator scoreExpression = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                List.of(vectorColumn, queryVector));
+        Projection projection = new Projection(Map.of(scoreColumn, scoreExpression));
+        ConnectorIndexMetadata metadata = ConnectorIndexMetadata.of(
+                Map.of(vectorColumn.getName(), Set.of(ConnectorIndexType.VECTOR)));
+        ApplyTopNIndexRule rule = new ApplyTopNIndexRule(
+                OperatorType.LOGICAL_PAIMON_SCAN, ignored -> metadata);
+
+        LogicalTopNOperator nullsLast = new LogicalTopNOperator(
+                List.of(new Ordering(scoreColumn, true, false)), 10, 0);
+        Assertions.assertFalse(rule.check(
+                OptExpression.create(nullsLast, OptExpression.create(createScan(predicate, projection))), null));
+
+        CallOperator nullableScore = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                List.of(nullableVector, queryVector));
+        Projection nullableProjection = new Projection(Map.of(scoreColumn, nullableScore));
+        ConnectorIndexMetadata nullableMetadata = ConnectorIndexMetadata.of(
+                Map.of(nullableVector.getName(), Set.of(ConnectorIndexType.VECTOR)));
+        ApplyTopNIndexRule nullableRule = new ApplyTopNIndexRule(
+                OperatorType.LOGICAL_PAIMON_SCAN, ignored -> nullableMetadata);
+        LogicalTopNOperator nullsFirst = new LogicalTopNOperator(
+                List.of(new Ordering(scoreColumn, true, true)), 10, 0);
+        OptExpression nullableNullsFirst = OptExpression.create(
+                nullsFirst, OptExpression.create(createScan(null, nullableProjection, nullableVector)));
+        Assertions.assertTrue(nullableRule.check(nullableNullsFirst, null));
+        Assertions.assertTrue(nullableRule.transform(nullableNullsFirst, null).isEmpty());
+
+        OptExpression nullableNullsLast = OptExpression.create(
+                nullsLast, OptExpression.create(createScan(null, nullableProjection, nullableVector)));
+        Assertions.assertTrue(nullableRule.check(nullableNullsLast, null));
+        Assertions.assertTrue(nullableRule.transform(nullableNullsLast, null).isEmpty());
     }
 
     private LogicalPaimonScanOperator createScan(ScalarOperator predicate, Projection projection) {
+        return createScan(predicate, projection, vectorColumn);
+    }
+
+    private LogicalPaimonScanOperator createScan(
+            ScalarOperator predicate, Projection projection, ColumnRefOperator scanVectorColumn) {
         Column id = new Column(idColumn.getName(), IntegerType.INT);
-        Column vector = new Column(vectorColumn.getName(), ArrayType.ARRAY_FLOAT);
+        Column vector = new Column(scanVectorColumn.getName(), ArrayType.ARRAY_FLOAT);
         LogicalPaimonScanOperator scan = new LogicalPaimonScanOperator(new PaimonTable(),
-                Map.of(idColumn, id, vectorColumn, vector),
-                Map.of(id, idColumn, vector, vectorColumn), -1, predicate);
+                Map.of(idColumn, id, scanVectorColumn, vector),
+                Map.of(id, idColumn, vector, scanVectorColumn), -1, predicate);
         if (projection == null) {
             return scan;
         }

@@ -32,6 +32,7 @@ import com.starrocks.type.Type;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,9 +84,14 @@ public final class IndexAnalyzer {
      * L2 distance is ordered ascending; cosine similarity and inner product are ordered descending.
      */
     public boolean supportsVectorTopN(ScalarOperator scoreExpression, boolean ascending) {
+        return getVectorTopNColumn(scoreExpression, ascending).isPresent();
+    }
+
+    /** Returns the indexed vector column when the score expression and ordering form a supported ANN TopN. */
+    public Optional<ColumnRefOperator> getVectorTopNColumn(ScalarOperator scoreExpression, boolean ascending) {
         ScalarOperator unwrapped = unwrapFloatingPointCast(scoreExpression);
         if (!(unwrapped instanceof CallOperator)) {
-            return false;
+            return Optional.empty();
         }
 
         CallOperator call = (CallOperator) unwrapped;
@@ -97,19 +103,25 @@ public final class IndexAnalyzer {
                 || FunctionSet.APPROX_INNER_PRODUCT.equalsIgnoreCase(function)) {
             supportedDirection = !ascending;
         } else {
-            return false;
+            return Optional.empty();
         }
         if (!supportedDirection || call.getChildren().size() != 2) {
-            return false;
+            return Optional.empty();
         }
 
         ScalarOperator first = call.getChild(0);
         ScalarOperator second = call.getChild(1);
         if (first instanceof ColumnRefOperator && isFloatArrayLiteral(second)) {
-            return metadata.supports(((ColumnRefOperator) first).getName(), ConnectorIndexType.VECTOR);
+            ColumnRefOperator column = (ColumnRefOperator) first;
+            return isVectorColumn(column) && metadata.supports(column.getName(), ConnectorIndexType.VECTOR)
+                    ? Optional.of(column) : Optional.empty();
         }
-        return second instanceof ColumnRefOperator && isFloatArrayLiteral(first)
-                && metadata.supports(((ColumnRefOperator) second).getName(), ConnectorIndexType.VECTOR);
+        if (second instanceof ColumnRefOperator && isFloatArrayLiteral(first)) {
+            ColumnRefOperator column = (ColumnRefOperator) second;
+            return isVectorColumn(column) && metadata.supports(column.getName(), ConnectorIndexType.VECTOR)
+                    ? Optional.of(column) : Optional.empty();
+        }
+        return Optional.empty();
     }
 
     private boolean supportsScalarPredicate(ScalarOperator predicate) {
@@ -198,7 +210,7 @@ public final class IndexAnalyzer {
 
     private static boolean isLiteral(ScalarOperator expression) {
         if (expression instanceof ConstantOperator) {
-            return true;
+            return !((ConstantOperator) expression).isNull();
         }
         if (expression instanceof CastOperator) {
             return isLiteral(expression.getChild(0));
@@ -211,9 +223,15 @@ public final class IndexAnalyzer {
         while (unwrapped instanceof CastOperator) {
             unwrapped = unwrapped.getChild(0);
         }
-        return unwrapped instanceof ArrayOperator && unwrapped.getType() instanceof ArrayType
+        return unwrapped instanceof ArrayOperator && !unwrapped.getChildren().isEmpty()
+                && unwrapped.getType() instanceof ArrayType
                 && ((ArrayType) unwrapped.getType()).getItemType().isFloatingPointType()
                 && isLiteral(unwrapped);
+    }
+
+    private static boolean isVectorColumn(ColumnRefOperator column) {
+        return column.getType() instanceof ArrayType
+                && ((ArrayType) column.getType()).getItemType().isFloat();
     }
 
     private static boolean isNonNullScalarLiteral(ScalarOperator expression) {

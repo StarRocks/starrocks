@@ -16,6 +16,8 @@ package com.starrocks.connector.index;
 
 import com.starrocks.catalog.Table;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
@@ -81,18 +83,22 @@ public class ConnectorIndexModelTest {
         Assertions.assertTrue(table.isSupported());
         Assertions.assertEquals("orders$global_index", table.getName());
         Assertions.assertEquals("paimon_catalog", table.getCatalogName());
-        Assertions.assertEquals(2, table.getBaseSchema().size());
+        Assertions.assertEquals(4, table.getBaseSchema().size());
         Assertions.assertSame(table.getBaseSchema(), table.getFullSchema());
         Assertions.assertEquals(VarbinaryType.VARBINARY,
                 table.getBaseSchema().get(0).getType());
         Assertions.assertEquals(IndexTable.INDEX_RESULT_COLUMN_NAME, table.getBaseSchema().get(0).getName());
         Assertions.assertEquals(VarcharType.VARCHAR, table.getBaseSchema().get(1).getType());
         Assertions.assertEquals(IndexTable.ARGS_COLUMN_NAME, table.getBaseSchema().get(1).getName());
-        Assertions.assertEquals(2, table.getIdToColumn().size());
+        Assertions.assertEquals(IntegerType.BIGINT, table.getBaseSchema().get(2).getType());
+        Assertions.assertEquals(IndexTable.ROW_ID_COLUMN_NAME, table.getBaseSchema().get(2).getName());
+        Assertions.assertEquals(FloatType.FLOAT, table.getBaseSchema().get(3).getType());
+        Assertions.assertEquals(IndexTable.SCORE_COLUMN_NAME, table.getBaseSchema().get(3).getName());
+        Assertions.assertEquals(4, table.getIdToColumn().size());
 
         Assertions.assertSame(descriptor, table.toThrift(Collections.emptyList()));
         Assertions.assertEquals(101L, descriptor.getId());
-        Assertions.assertEquals(2, descriptor.getNumCols());
+        Assertions.assertEquals(4, descriptor.getNumCols());
         Assertions.assertEquals("orders$global_index", descriptor.getTableName());
         Assertions.assertThrows(NullPointerException.class, () -> new IndexTable(null));
     }

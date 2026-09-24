@@ -80,7 +80,8 @@ public final class PaimonIndexScanNode extends ScanNode {
 
         for (int shardId = 0; shardId < shards.size(); shardId++) {
             ConnectorIndexShard shard = shards.get(shardId);
-            scanRanges.add(createScanRange(shardId, shard, queryJson, tablePath, snapshotId));
+            scanRanges.add(createScanRange(
+                    shardId, shard, queryJson, tablePath, snapshotId, request.getVersion()));
         }
     }
 
@@ -112,9 +113,10 @@ public final class PaimonIndexScanNode extends ScanNode {
     }
 
     private static TScanRangeLocations createScanRange(
-            int shardId, ConnectorIndexShard shard, String queryJson, String tablePath, long snapshotId) {
+            int shardId, ConnectorIndexShard shard, String queryJson, String tablePath, long snapshotId,
+            int protocolVersion) {
         TPaimonGlobalIndexScanRange request = new TPaimonGlobalIndexScanRange();
-        request.setProtocol_version(PaimonGlobalIndexRequest.CURRENT_VERSION);
+        request.setProtocol_version(protocolVersion);
         request.setShard_id(shardId);
         request.setRange_from(shard.getFrom());
         request.setRange_to(shard.getTo());

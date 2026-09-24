@@ -136,7 +136,8 @@ elseif ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT BUILD_FORMAT_LIB)
     # directory; CMAKE_SKIP_RPATH is ON, so set the rpath by hand.
     target_link_options(starrocks_paimon PRIVATE "LINKER:-rpath,$ORIGIN")
     # build.sh copies this directory into the package as be/lib/paimon-cpp-lib,
-    # together with the libpaimon*.so files from thirdparty.
+    # together with the libpaimon*.so plugins and, on supported x86-64 builds,
+    # the liblumina runtime from thirdparty.
     install(TARGETS starrocks_paimon LIBRARY DESTINATION ${OUTPUT_DIR}/lib/paimon-cpp-lib)
 endif ()
 

@@ -741,8 +741,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             for (IndexManifestEntry entry : fileStoreTable.store().newIndexFileHandler().scanEntries()) {
                 GlobalIndexMeta globalIndex = entry.indexFile().globalIndexMeta();
-                ConnectorIndexType indexType = toConnectorIndexType(entry.indexFile().indexType());
-                if (globalIndex == null || indexType == null || !isPaimonCppReadable(indexType)) {
+                String provider = entry.indexFile().indexType();
+                ConnectorIndexType indexType = toConnectorIndexType(provider);
+                if (globalIndex == null || indexType == null || !isPaimonCppReadable(provider, indexType)) {
                     continue;
                 }
                 String columnName = fileStoreTable.rowType().getField(globalIndex.indexFieldId()).name();
@@ -807,8 +808,9 @@ public class PaimonMetadata implements ConnectorMetadata {
             for (IndexManifestEntry entry : fileStoreTable.store().newIndexFileHandler()
                     .scan(snapshot, ignored -> true)) {
                 GlobalIndexMeta globalIndex = entry.indexFile().globalIndexMeta();
-                ConnectorIndexType type = toConnectorIndexType(entry.indexFile().indexType());
-                if (globalIndex == null || type == null) {
+                String provider = entry.indexFile().indexType();
+                ConnectorIndexType type = toConnectorIndexType(provider);
+                if (globalIndex == null || type == null || !isPaimonCppReadable(provider, type)) {
                     continue;
                 }
                 String columnName = fileStoreTable.rowType().getField(globalIndex.indexFieldId()).name();
@@ -951,12 +953,20 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     static boolean isPaimonCppReadable(ConnectorIndexType indexType) {
-        // The community paimon-cpp build currently enables the B-tree scalar reader only. Its
-        // legacy bitmap-global reader is incompatible with the dedicated bitmap format written by
-        // Paimon Java 2.0, while Lumina and full-text providers are intentionally introduced by
-        // later PRs together with their third-party build dependencies. Never advertise a provider
-        // before the BE shim can execute it.
-        return indexType == ConnectorIndexType.RANGE;
+        // The legacy bitmap-global reader is incompatible with the dedicated bitmap format written
+        // by Paimon Java 2.0. Full-text providers are introduced separately. Never advertise a
+        // provider before the BE shim and the community paimon-cpp build can execute it.
+        return indexType == ConnectorIndexType.RANGE || indexType == ConnectorIndexType.VECTOR;
+    }
+
+    static boolean isPaimonCppReadable(String provider, ConnectorIndexType indexType) {
+        if (!isPaimonCppReadable(indexType)) {
+            return false;
+        }
+        // Paimon 2.0 writes the canonical "lumina" provider. The old
+        // "lumina-vector-ann" alias is still recognized as metadata, but selecting it safely
+        // requires carrying an exact provider id through the connector-neutral protocol.
+        return indexType != ConnectorIndexType.VECTOR || "lumina".equalsIgnoreCase(provider);
     }
 
     private void traceScanMetrics(PaimonMetricRegistry metricRegistry,

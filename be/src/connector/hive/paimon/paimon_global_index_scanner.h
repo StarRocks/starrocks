@@ -35,8 +35,8 @@ class PaimonFileSystem;
 class PaimonGlobalIndexScannerTestAccessor;
 class TPaimonGlobalIndexScanRange;
 
-// Executes one snapshot-bound Paimon global-index row-id range and emits one
-// serialized GlobalIndexResult row for FE aggregation.
+// Executes one snapshot-bound Paimon global-index row-id range. Predicate scans emit one
+// serialized GlobalIndexResult; scored TopN scans emit (row_id, score) candidate rows.
 class PaimonGlobalIndexScanner final : public HdfsScanner {
 public:
     PaimonGlobalIndexScanner() = default;
@@ -54,6 +54,7 @@ private:
 
     Status _parse_request();
     static Status _parse_request(const TPaimonGlobalIndexScanRange& scan_range, rapidjson::Document* request);
+    static float _normalize_score(const rapidjson::Value& score_expression, float score);
     StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> _evaluate(RuntimeState* runtime_state);
 
     bool _emitted = false;
@@ -61,6 +62,7 @@ private:
     int64_t _evaluate_ns = 0;
     int64_t _serialize_ns = 0;
     int64_t _serialized_bytes = 0;
+    int64_t _scored_rows = 0;
     rapidjson::Document _request;
     std::shared_ptr<paimon::MemoryPool> _memory_pool;
     std::shared_ptr<PaimonFileSystem> _paimon_file_system;

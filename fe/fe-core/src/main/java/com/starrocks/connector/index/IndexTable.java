@@ -19,6 +19,8 @@ import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Table;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.type.FloatType;
+import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarbinaryType;
 import com.starrocks.type.VarcharType;
 
@@ -31,11 +33,16 @@ public final class IndexTable extends Table {
     public static final String INDEX_TABLE_SUFFIX = "$global_index";
     public static final String INDEX_RESULT_COLUMN_NAME = "index_result";
     public static final String ARGS_COLUMN_NAME = "args";
+    public static final String ROW_ID_COLUMN_NAME = "row_id";
+    public static final String SCORE_COLUMN_NAME = "score";
 
     private static final Column INDEX_RESULT_COLUMN =
             new Column(INDEX_RESULT_COLUMN_NAME, VarbinaryType.VARBINARY, true);
     private static final Column ARGS_COLUMN = new Column(ARGS_COLUMN_NAME, VarcharType.VARCHAR, true);
-    private static final List<Column> SCHEMA = List.of(INDEX_RESULT_COLUMN, ARGS_COLUMN);
+    private static final Column ROW_ID_COLUMN = new Column(ROW_ID_COLUMN_NAME, IntegerType.BIGINT, true);
+    private static final Column SCORE_COLUMN = new Column(SCORE_COLUMN_NAME, FloatType.FLOAT, true);
+    private static final List<Column> SCHEMA =
+            List.of(INDEX_RESULT_COLUMN, ARGS_COLUMN, ROW_ID_COLUMN, SCORE_COLUMN);
 
     private final Table innerTable;
 
@@ -67,7 +74,9 @@ public final class IndexTable extends Table {
     @Override
     public Map<ColumnId, Column> getIdToColumn() {
         return Map.of(INDEX_RESULT_COLUMN.getColumnId(), INDEX_RESULT_COLUMN,
-                ARGS_COLUMN.getColumnId(), ARGS_COLUMN);
+                ARGS_COLUMN.getColumnId(), ARGS_COLUMN,
+                ROW_ID_COLUMN.getColumnId(), ROW_ID_COLUMN,
+                SCORE_COLUMN.getColumnId(), SCORE_COLUMN);
     }
 
     @Override
