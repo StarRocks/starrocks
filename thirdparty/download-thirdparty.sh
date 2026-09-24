@@ -552,6 +552,7 @@ if [[ -d $TP_SOURCE_DIR/$BRPC_SOURCE ]] ; then
     fi
     if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.9.0" ]; then
         apply_patch $TP_PATCH_DIR/brpc-1.9.0.patch
+        apply_patch -p1 $TP_PATCH_DIR/brpc-1.9.0-socket-write-timing.patch
         touch $PATCHED_MARK
     fi
     cd -
