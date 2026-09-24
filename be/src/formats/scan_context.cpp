@@ -79,7 +79,13 @@ bool FormatScanContext::is_lazy_materialization_slot(SlotId slot_id) const {
 }
 
 bool FormatScanContext::can_use_count_optimization() const {
-    return options.use_count_opt && has_file_record_count;
+    return options.use_count_opt && has_file_record_count && _has_all_null_value_counts();
+}
+
+bool FormatScanContext::_has_all_null_value_counts() const {
+    return std::all_of(_non_null_count_slots.begin(), _non_null_count_slots.end(), [this](const SlotDescriptor* slot) {
+        return null_value_counts.contains(non_null_count_slots.at(slot->id()));
+    });
 }
 
 bool FormatScanContext::can_use_min_max_optimization() const {
@@ -100,10 +106,13 @@ void FormatScanContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 
 void FormatScanContext::update_return_count_columns() {
     _count_slot.reset();
+    _non_null_count_slots.clear();
     std::vector<FormatColumnInfo> updated_columns;
     for (auto& column : materialized_columns) {
         if (column.name() == kCountOptColumnName) {
             _count_slot = column.slot_desc;
+        } else if (non_null_count_slots.contains(column.slot_id())) {
+            _non_null_count_slots.emplace_back(column.slot_desc);
         } else {
             updated_columns.emplace_back(column);
         }
@@ -207,6 +216,32 @@ void FormatScanContext::append_or_update_count_column_to_chunk(ChunkPtr* chunk, 
     }
     ck->append_or_update_column(std::move(col), slot_desc->id());
     ck->set_num_rows(output_rows);
+}
+
+void FormatScanContext::append_or_update_non_null_count_columns_to_chunk(ChunkPtr* chunk, size_t output_rows) {
+    for (auto* slot_desc : _non_null_count_slots) {
+        auto col = Int64Column::create();
+        if (output_rows > 0) {
+            col->append(0);
+            col->assign(output_rows, 0);
+        }
+        (*chunk)->append_or_update_column(std::move(col), slot_desc->id());
+    }
+}
+
+void FormatScanContext::append_file_non_null_counts_to_chunk(ChunkPtr* chunk) {
+    ChunkPtr& ck = (*chunk);
+    for (auto* slot_desc : _non_null_count_slots) {
+        int64_t null_count = null_value_counts.at(non_null_count_slots.at(slot_desc->id()));
+        auto col = Int64Column::create();
+        col->append(is_first_split ? file_record_count - null_count : 0);
+        ck->append_or_update_column(std::move(col), slot_desc->id());
+    }
+    for (const auto& column : materialized_columns) {
+        auto col = ColumnHelper::create_column(column.slot_type(), true);
+        col->append_nulls(1);
+        ck->append_or_update_column(std::move(col), column.slot_id());
+    }
 }
 
 MutableColumnPtr FormatScanContext::create_min_max_value_column(SlotDescriptor* slot_desc,
@@ -371,6 +406,7 @@ Status FormatScanContext::append_side_columns_to_chunk(ChunkPtr* chunk, size_t r
     if (has_count_column()) {
         append_or_update_count_column_to_chunk(chunk, row_count, 1);
     }
+    append_or_update_non_null_count_columns_to_chunk(chunk, row_count);
     return Status::OK();
 }
 

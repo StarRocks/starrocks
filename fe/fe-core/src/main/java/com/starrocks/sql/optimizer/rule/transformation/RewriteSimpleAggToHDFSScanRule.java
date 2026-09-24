@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.AggregateFunction;
@@ -26,7 +25,6 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFileScanOperator;
@@ -42,7 +40,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.IntegerType;
-import com.starrocks.type.NullType;
 import com.starrocks.type.Type;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -85,15 +82,6 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
                                                LogicalScanOperator scanOperator,
                                                OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-
-        // only need to handle count(*)
-        Map<ColumnRefOperator, CallOperator> aggs = aggregationOperator.getAggregations();
-        Preconditions.checkArgument(aggs.entrySet().size() == 1);
-        ColumnRefOperator aggColumnRef = aggs.entrySet().iterator().next().getKey();
-        CallOperator aggCall = aggs.entrySet().iterator().next().getValue();
-        Preconditions.checkArgument(aggCall.getFnName().equals(FunctionSet.COUNT) && !aggCall.isDistinct());
-
-        Map<ColumnRefOperator, CallOperator> newAggCalls = Maps.newHashMap();
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         // select out partition columns.
@@ -117,25 +105,10 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return null;
         }
 
-        ColumnRefOperator sumOutputColumnRef =
-                columnRefFactory.create("sum_" + aggCall.getFnName(), aggCall.getType(), aggCall.isNullable());
-        {
-            // generate a placeholder column for scan node.
-            // ___count___ must be the column name for backend code.
-            String metaColumnName = "___" + aggCall.getFnName() + "___";
-            Column c = new Column(metaColumnName, NullType.NULL);
-            c.setIsAllowNull(true);
-            ColumnRefOperator placeholderColumn =
-                    columnRefFactory.create(metaColumnName, aggCall.getType(), aggCall.isNullable());
-            columnRefFactory.updateColumnToRelationIds(placeholderColumn.getId(), tableRelationId);
-            columnRefFactory.updateColumnRefToColumns(placeholderColumn, c, scanOperator.getTable());
-            newScanColumnRefs.put(placeholderColumn, c);
-
-            CallOperator sumCall = new CallOperator(FunctionSet.SUM, IntegerType.BIGINT,
-                    Collections.singletonList(placeholderColumn),
-                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
-                            Function.CompareMode.IS_IDENTICAL));
-            newAggCalls.put(sumOutputColumnRef, sumCall);
+        CountRewrite countRewrite = new CountRewrite(scanOperator, columnRefFactory, tableRelationId, newScanColumnRefs);
+        Map<ColumnRefOperator, ScalarOperator> counts = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> agg : aggregationOperator.getAggregations().entrySet()) {
+            counts.put(agg.getKey(), countRewrite.rewrite(agg.getValue()));
         }
 
         Map<Column, ColumnRefOperator> newScanColumnMeta = Maps.newHashMap();
@@ -159,8 +132,9 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             LOG.warn("Unexpected scan operator: " + scanOperator);
             return null;
         }
-        newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption());
+        newMetaScan.setScanOptimizeOption(scanOperator.getScanOptimizeOption().copy());
         newMetaScan.getScanOptimizeOption().setCanUseCountOpt(true);
+        newMetaScan.getScanOptimizeOption().setNonNullCountColumns(countRewrite.nonNullCountColumns);
         try {
             newMetaScan.setScanOperatorPredicates(scanOperator.getScanOperatorPredicates());
         } catch (AnalysisException e) {
@@ -169,18 +143,13 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
         }
 
         LogicalAggregationOperator newAggOperator = new LogicalAggregationOperator(aggregationOperator.getType(),
-                aggregationOperator.getGroupingKeys(), newAggCalls);
+                aggregationOperator.getGroupingKeys(), countRewrite.aggCalls);
         newAggOperator.setProjection(aggregationOperator.getProjection());
 
-        // ifnull(sum(__count__)), 0) to avoid null result
-        CallOperator ifNullCall = new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
-                Lists.newArrayList(sumOutputColumnRef, ConstantOperator.createBigint(0)),
-                ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
-                        Function.CompareMode.IS_IDENTICAL));
         Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
         newProjectMap.putAll(newAggOperator.getColumnRefMap());
-        newProjectMap.remove(sumOutputColumnRef);
-        newProjectMap.put(aggColumnRef, ifNullCall);
+        countRewrite.aggCalls.keySet().forEach(newProjectMap::remove);
+        newProjectMap.putAll(counts);
         LogicalProjectOperator newProjectOperator = new LogicalProjectOperator(newProjectMap);
 
         // project(ifnull) -> agg(sum(__count__)) -> scan
@@ -242,27 +211,38 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return false;
         }
 
-        boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
-                aggregator -> {
-                    AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
-                    String functionName = aggregateFunction.functionName();
-                    ColumnRefSet usedColumns = aggregator.getUsedColumns();
+        return aggregationOperator.getAggregations().values().stream().allMatch(
+                aggregator -> isCountOfRows(aggregator) || isCountOfDataColumn(aggregator, scanOperator));
+    }
 
-                    if (functionName.equals(FunctionSet.COUNT) && !aggregator.isDistinct() && usedColumns.isEmpty()) {
-                        List<ScalarOperator> arguments = aggregator.getArguments();
-                        if (arguments.isEmpty()) {
-                            // count()/count(*)
-                            return true;
-                        } else if (arguments.size() == 1 && !arguments.get(0).isConstantNull()) {
-                            // count(non-null constant)
-                            return true;
-                        }
-                        return false;
-                    }
-                    return false;
-                }
-        );
-        return allValid;
+    /**
+     * COUNT(), COUNT(*) or COUNT of a non-null constant, answered from each data file's record count.
+     */
+    private static boolean isCountOfRows(CallOperator aggregator) {
+        if (!isPlainCount(aggregator) || !aggregator.getUsedColumns().isEmpty()) {
+            return false;
+        }
+        List<ScalarOperator> arguments = aggregator.getArguments();
+        return arguments.isEmpty() || (arguments.size() == 1 && !arguments.get(0).isConstantNull());
+    }
+
+    /**
+     * COUNT(col) is answered from Iceberg manifest null counts, so it qualifies only on an Iceberg scan, for a
+     * scalar column that is read from the data files rather than being a partition column.
+     */
+    private static boolean isCountOfDataColumn(CallOperator aggregator, LogicalScanOperator scanOperator) {
+        if (!(scanOperator instanceof LogicalIcebergScanOperator) || !isPlainCount(aggregator)
+                || aggregator.getArguments().size() != 1 || !aggregator.getArguments().get(0).isColumnRef()) {
+            return false;
+        }
+        Column column = scanOperator.getColRefToColumnMetaMap().get((ColumnRefOperator) aggregator.getArguments().get(0));
+        return column != null && column.getType().isScalarType()
+                && !scanOperator.getPartitionColumns().contains(column.getName());
+    }
+
+    private static boolean isPlainCount(CallOperator aggregator) {
+        AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
+        return aggregateFunction.functionName().equals(FunctionSet.COUNT) && !aggregator.isDistinct();
     }
 
     private static boolean hasMaterializedColumnInPredicate(LogicalScanOperator scanOperator, ScalarOperator predicate) {
@@ -289,5 +269,88 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             return Lists.newArrayList(input);
         }
         return Lists.newArrayList(result);
+    }
+
+    /**
+     * Rewrites each count into a sum of per-file counts that the backend writes into a placeholder scan column,
+     * collecting the aggregate calls and scan columns that needs. Counts sharing a placeholder share one sum.
+     */
+    private static final class CountRewrite {
+        /**
+         * The COUNT(*) placeholder, which the backend recognizes by this name. A COUNT(col) placeholder appends the
+         * counted column's name for readability and is recognized by slot id instead.
+         */
+        private static final String COUNT_PLACEHOLDER = "___count___";
+
+        private final LogicalScanOperator scanOperator;
+        private final ColumnRefFactory columnRefFactory;
+        private final int tableRelationId;
+        private final Map<ColumnRefOperator, Column> scanColumns;
+        private final Map<ColumnRefOperator, CallOperator> aggCalls = Maps.newHashMap();
+        private final Map<Integer, String> nonNullCountColumns = Maps.newHashMap();
+        private final Map<String, ScalarOperator> countByPlaceholder = Maps.newHashMap();
+
+        private CountRewrite(LogicalScanOperator scanOperator, ColumnRefFactory columnRefFactory, int tableRelationId,
+                             Map<ColumnRefOperator, Column> scanColumns) {
+            this.scanOperator = scanOperator;
+            this.columnRefFactory = columnRefFactory;
+            this.tableRelationId = tableRelationId;
+            this.scanColumns = scanColumns;
+        }
+
+        private ScalarOperator rewrite(CallOperator count) {
+            if (count.getUsedColumns().isEmpty()) {
+                return countByPlaceholder.computeIfAbsent(COUNT_PLACEHOLDER,
+                        name -> sumOfFileCounts(addPlaceholder(name, count), count));
+            }
+            ColumnRefOperator counted = (ColumnRefOperator) count.getArguments().get(0);
+            Column countedColumn = scanOperator.getColRefToColumnMetaMap().get(counted);
+            return countByPlaceholder.computeIfAbsent(COUNT_PLACEHOLDER + countedColumn.getName(),
+                    name -> countOfColumn(name, count, counted, countedColumn));
+        }
+
+        /**
+         * ifnull(sum(placeholder), 0) + count(col). A file answered from its statistics adds its non-null count
+         * through the placeholder and leaves the counted column NULL, while any other file is read with the
+         * placeholder at zero and counted by count(col).
+         */
+        private ScalarOperator countOfColumn(String placeholderName, CallOperator count, ColumnRefOperator counted,
+                                             Column countedColumn) {
+            ColumnRefOperator placeholder = addPlaceholder(placeholderName, count);
+            nonNullCountColumns.put(placeholder.getId(), countedColumn.getName());
+            scanColumns.put(counted, countedColumn);
+            ColumnRefOperator countOfRowsRead = columnRefFactory.create(count, count.getType(), count.isNullable());
+            aggCalls.put(countOfRowsRead, count);
+            return new CallOperator(FunctionSet.ADD, IntegerType.BIGINT,
+                    Lists.newArrayList(sumOfFileCounts(placeholder, count), countOfRowsRead),
+                    ExprUtils.getBuiltinFunction(FunctionSet.ADD, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
+                            Function.CompareMode.IS_IDENTICAL));
+        }
+
+        private ColumnRefOperator addPlaceholder(String name, CallOperator count) {
+            Column column = new Column(name, IntegerType.BIGINT);
+            column.setIsAllowNull(true);
+            ColumnRefOperator placeholder = columnRefFactory.create(name, count.getType(), count.isNullable());
+            columnRefFactory.updateColumnToRelationIds(placeholder.getId(), tableRelationId);
+            columnRefFactory.updateColumnRefToColumns(placeholder, column, scanOperator.getTable());
+            scanColumns.put(placeholder, column);
+            return placeholder;
+        }
+
+        /**
+         * ifnull(sum(placeholder), 0), so that a scan over no files still counts zero.
+         */
+        private ScalarOperator sumOfFileCounts(ColumnRefOperator placeholder, CallOperator count) {
+            ColumnRefOperator sum = columnRefFactory.create("sum_" + count.getFnName(), count.getType(),
+                    count.isNullable());
+            aggCalls.put(sum, new CallOperator(FunctionSet.SUM, IntegerType.BIGINT,
+                    Collections.singletonList(placeholder),
+                    ExprUtils.getBuiltinFunction(FunctionSet.SUM, new Type[] {IntegerType.BIGINT},
+                            Function.CompareMode.IS_IDENTICAL)));
+            return new CallOperator(FunctionSet.IFNULL, IntegerType.BIGINT,
+                    Lists.newArrayList(sum, ConstantOperator.createBigint(0)),
+                    ExprUtils.getBuiltinFunction(FunctionSet.IFNULL, new Type[] {IntegerType.BIGINT, IntegerType.BIGINT},
+                            Function.CompareMode.IS_IDENTICAL));
+        }
     }
 }
