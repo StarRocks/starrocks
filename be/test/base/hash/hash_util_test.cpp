@@ -369,7 +369,7 @@ TEST(HashUtilTest, CrcSoftwareFallbackMatchesHardwareAcrossLengths) {
 }
 #endif
 
-#if (defined(__x86_64__) && defined(__SSE4_2__)) || (defined(__aarch64__) && defined(__ARM_FEATURE_CRC32))
+#if !(defined(__x86_64__) && !defined(__SSE4_2__))
 TEST(HashUtilTest, CrcHash64UnmixedGoldenVectors) {
     const std::string_view s1 = "hello";                                      // 5 bytes (< 8)
     const std::string_view s2 = "12345678";                                   // 8 bytes (= 8)
