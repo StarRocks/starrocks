@@ -285,7 +285,12 @@ Status EvHttpServer::start() {
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
                              << ", error:" << errno_to_string(errno);
-                // libevent did not take ownership of worker_fd.
+                // TODO: evhttp_accept_socket() returns -1 in two cases that leave worker_fd with
+                // different owners: evconnlistener_new() failed (worker_fd untouched, we must close it),
+                // or evhttp_bind_listener() failed (libevent already closed worker_fd when freeing the
+                // listener, LEV_OPT_CLOSE_ON_FREE). Both only happen when a tiny allocation fails, so
+                // assume the first case here; calling evconnlistener_new() and evhttp_bind_listener()
+                // separately would make the ownership explicit.
                 ::close(worker_fd);
                 return;
             }
