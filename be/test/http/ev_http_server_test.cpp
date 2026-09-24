@@ -19,12 +19,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <chrono>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include "http/http_channel.h"
-#include "http/http_client.h"
 #include "http/http_handler.h"
 #include "http/http_request.h"
 #include "testutil/assert.h"
@@ -44,21 +46,10 @@ public:
 // next socket()/open() in the process (e.g. a brpc health check) reuses it. The sync
 // point grabs the freed fd numbers right before evhttp_free() and checks they survive.
 static void verify_join_does_not_close_foreign_fds(int num_workers) {
-    EvHttpServerTestHandler handler;
-    auto server = std::make_unique<EvHttpServer>(0, num_workers);
-    ASSERT_TRUE(server->register_handler(GET, "/echo", &handler));
-    ASSERT_OK(server->start());
-
-    // Make sure a worker has entered dispatch before stop(), otherwise its loopbreak may be lost.
-    {
-        HttpClient client;
-        ASSERT_OK(client.init("http://127.0.0.1:" + std::to_string(server->get_real_port()) + "/echo"));
-        client.set_method(GET);
-        std::string resp;
-        ASSERT_OK(client.execute(&resp));
-    }
-
+    std::atomic<int> workers_in_dispatch{0};
     std::vector<int> foreign_fds;
+    SyncPoint::GetInstance()->SetCallBack("EvHttpServer::worker:in_dispatch",
+                                          [&](void*) { workers_in_dispatch.fetch_add(1); });
     SyncPoint::GetInstance()->SetCallBack("EvHttpServer::join:before_evhttp_free", [&](void*) {
         for (int i = 0; i < num_workers + 1; ++i) {
             int fd = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -68,8 +59,22 @@ static void verify_join_does_not_close_foreign_fds(int num_workers) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
         SyncPoint::GetInstance()->DisableProcessing();
+        SyncPoint::GetInstance()->ClearCallBack("EvHttpServer::worker:in_dispatch");
         SyncPoint::GetInstance()->ClearCallBack("EvHttpServer::join:before_evhttp_free");
     });
+
+    EvHttpServerTestHandler handler;
+    auto server = std::make_unique<EvHttpServer>(0, num_workers);
+    ASSERT_TRUE(server->register_handler(GET, "/echo", &handler));
+    ASSERT_OK(server->start());
+
+    // Every worker must be running its event loop before stop(): a loopbreak issued before a worker enters
+    // event_base_loop() is lost, and that worker would then spin forever on the shut down listen socket.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(30);
+    while (workers_in_dispatch.load() < num_workers && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    ASSERT_EQ(num_workers, workers_in_dispatch.load());
 
     server->stop();
     server->join();

@@ -165,6 +165,19 @@ Status EvHttpServer::start() {
             evhttp_set_newreqcb(http, on_connection, this);
             evhttp_set_gencb(http, on_request, this);
 
+#ifdef BE_TEST
+            // Tell tests when this worker is actually running its event loop. event_base_loop() resets the
+            // break flag on entry, so an event_base_loopbreak() from stop() issued before that is lost and
+            // join() hangs. The callback runs inside the loop, after that reset.
+            struct timeval zero_tv = {0, 0};
+            event_base_once(
+                    base, -1, EV_TIMEOUT,
+                    [](evutil_socket_t, short, void*) {
+                        TEST_SYNC_POINT_CALLBACK("EvHttpServer::worker:in_dispatch", nullptr);
+                    },
+                    nullptr, &zero_tv);
+#endif
+
             event_base_dispatch(base);
         };
         _workers.emplace_back(worker);
