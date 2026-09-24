@@ -33,13 +33,13 @@
 
 namespace starrocks {
 namespace {
-LanceString view(std::string_view value) {
+SrLanceString to_lance_string(std::string_view value) {
     return {value.data(), value.size()};
 }
 bool is_cancelled(void* context) {
     return static_cast<RuntimeState*>(context)->is_cancelled();
 }
-Status reader_error(char* error) {
+Status lance_error_status(char* error) {
     std::string message = error == nullptr ? "Unknown Lance reader error" : error;
     sr_lance_free_error(error);
     return Status::IOError(message);
@@ -190,105 +190,138 @@ Status LanceNativeReader::open(RuntimeState* state, const TupleDescriptor* tuple
     RETURN_IF_CANCELLED(state);
     _tuple = tuple;
     _mem_tracker = state->instance_mem_tracker_ptr();
-    std::vector<LanceString> columns;
-    for (const auto* slot : tuple->slots()) columns.push_back(view(slot->col_name()));
-    if (columns.empty()) return Status::NotSupported("Lance scan requires a materialized slot");
-    std::vector<LanceProperty> properties;
-    for (const auto& [key, value] : cloud.cloud_properties) properties.push_back({view(key), view(value)});
+    _state = state;
+    _max_chunk_size = state->chunk_size();
+    _init_read_fields();
+    if (_field_names.empty()) return Status::NotSupported("Lance scan requires a materialized slot");
+    return _open_reader(uri, cloud);
+}
+
+void LanceNativeReader::_init_read_fields() {
+    _field_names.clear();
+    _field_names.reserve(_tuple->slots().size());
+    for (const auto* slot : _tuple->slots()) _field_names.emplace_back(slot->col_name());
+}
+
+Status LanceNativeReader::_open_reader(const std::string& dataset_uri, const TCloudConfiguration& cloud) {
+    std::vector<SrLanceString> fields;
+    fields.reserve(_field_names.size());
+    for (const auto& name : _field_names) fields.emplace_back(to_lance_string(name));
+    // StarRocks cloud properties are normalized into SDK storage options in Rust.
+    std::vector<SrLanceStringPair> properties;
+    for (const auto& [key, value] : cloud.cloud_properties)
+        properties.push_back({to_lance_string(key), to_lance_string(value)});
     char* error = nullptr;
-    int result = sr_lance_open(view(uri), 0, columns.data(), columns.size(), state->chunk_size(), cloud.cloud_type,
-                               properties.data(), properties.size(), {is_cancelled, state}, &_reader, &error);
-    if (state->is_cancelled()) {
+    int result = sr_lance_reader_open(to_lance_string(dataset_uri), 0, fields.data(), fields.size(), _max_chunk_size,
+                                      cloud.cloud_type, properties.data(), properties.size(), {is_cancelled, _state},
+                                      &_reader, &error);
+    if (_state->is_cancelled()) {
         sr_lance_free_error(error);
         return Status::Cancelled("Lance scan cancelled");
     }
-    if (result != 1) return reader_error(error);
+    if (result != SR_LANCE_NEXT_BATCH) return lance_error_status(error);
     return Status::OK();
 }
 
 Status LanceNativeReader::get_next(RuntimeState* state, ChunkPtr* chunk) {
     if (_reader == nullptr) return Status::InternalError("Lance reader is not open");
-    while (_batch == nullptr || _batch_offset == _batch->num_rows()) {
-        RETURN_IF_CANCELLED(state);
-        release_batch();
-        _batch_offset = 0;
+    RETURN_IF_CANCELLED(state);
+    while (_batch_is_exhausted()) {
+        RETURN_IF_ERROR(_next_batch());
+    }
+    RETURN_IF_CANCELLED(state);
+    return _append_batch_to_read_chunk(chunk);
+}
+
+bool LanceNativeReader::_batch_is_exhausted() const {
+    return _arrow_batch == nullptr || _batch_start_idx >= _arrow_batch->num_rows();
+}
+
+Status LanceNativeReader::_next_batch() {
+    _release_batch();
+    _batch_start_idx = 0;
+    while (true) {
+        RETURN_IF_CANCELLED(_state);
         ArrowOutput output;
         char* error = nullptr;
         int result;
         {
             SCOPED_RAW_TIMER(&_io_time_ns);
-            result = sr_lance_next(_reader, &output.array, &output.schema, &error);
+            result = sr_lance_reader_next(_reader, &output.array, &output.schema, &error);
         }
-        if (result == 0) return Status::EndOfFile("Lance scan completed");
-        if (result == 2) continue;
-        if (result != 1) return reader_error(error);
-        auto imported = arrow::ImportRecordBatch(&output.array, &output.schema);
-        if (!imported.ok()) return Status::InternalError("Cannot import Lance Arrow batch");
-        _batch = std::move(imported).ValueOrDie();
-        const int64_t bytes = arrow::util::TotalBufferSize(*_batch);
+        if (result == SR_LANCE_NEXT_EOF) return Status::EndOfFile("Lance scan completed");
+        if (result == SR_LANCE_NEXT_PENDING) continue;
+        if (result != SR_LANCE_NEXT_BATCH) return lance_error_status(error);
+        auto arrow_batch_result = arrow::ImportRecordBatch(&output.array, &output.schema);
+        if (!arrow_batch_result.ok()) return Status::InternalError("Cannot import Lance Arrow batch");
+        _arrow_batch = std::move(arrow_batch_result).ValueOrDie();
+        const int64_t bytes = arrow::util::TotalBufferSize(*_arrow_batch);
         if (_mem_tracker != nullptr) {
             if (_mem_tracker->try_consume(bytes) != nullptr) {
-                _batch.reset();
+                _arrow_batch.reset();
                 return Status::MemoryLimitExceeded("Lance Arrow batch exceeds query memory limit");
             }
             _batch_bytes = bytes;
         }
+        return Status::OK();
     }
-    RETURN_IF_CANCELLED(state);
-    auto count = std::min<int64_t>(_batch->num_rows() - _batch_offset, state->chunk_size());
-    {
-        SCOPED_RAW_TIMER(&_convert_time_ns);
-        RETURN_IF_ERROR(convert_batch(state, _tuple, _batch->Slice(_batch_offset, count), chunk));
-    }
-    _batch_offset += count;
+}
+
+Status LanceNativeReader::_append_batch_to_read_chunk(ChunkPtr* chunk) {
+    const auto remaining_batch = _arrow_batch->num_rows() - _batch_start_idx;
+    const auto num_elements = std::min<int64_t>(remaining_batch, _max_chunk_size);
+    SCOPED_RAW_TIMER(&_convert_time_ns);
+    RETURN_IF_ERROR(convert_batch(_state, _tuple, _arrow_batch->Slice(_batch_start_idx, num_elements), chunk));
+    _batch_start_idx += num_elements;
     return Status::OK();
 }
 
 Status LanceNativeReader::convert_batch(RuntimeState* state, const TupleDescriptor* tuple,
                                         const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk) {
-    auto raw = std::make_shared<Chunk>();
-    auto result = std::make_shared<Chunk>();
+    auto read_chunk = std::make_shared<Chunk>();
+    auto dst = std::make_shared<Chunk>();
     ObjectPool pool;
-    Filter filter(batch->num_rows(), 1);
-    ArrowConvertContext context;
-    context.timezone = state->timezone();
+    Filter chunk_filter(batch->num_rows(), 1);
+    ArrowConvertContext conv_ctx;
+    conv_ctx.timezone = state->timezone();
     bool conversion_error = false;
-    context.report_error_message = [&](const std::string&, const std::string&, int64_t) { conversion_error = true; };
-    std::vector<Expr*> casts;
-    for (const auto* slot : tuple->slots()) {
-        auto array = batch->GetColumnByName(std::string(slot->col_name()));
+    conv_ctx.report_error_message = [&](const std::string&, const std::string&, int64_t) { conversion_error = true; };
+    std::vector<Expr*> cast_exprs;
+    for (const auto* slot_desc : tuple->slots()) {
+        auto array = batch->GetColumnByName(std::string(slot_desc->col_name()));
         if (array == nullptr)
-            return Status::InternalError("Missing projected Lance column: " + std::string(slot->col_name()));
-        if (!slot->is_nullable() && array->null_count() != 0) {
-            return Status::DataQualityError("Null in non-nullable Lance column: " + std::string(slot->col_name()));
+            return Status::InternalError("Missing projected Lance column: " + std::string(slot_desc->col_name()));
+        if (!slot_desc->is_nullable() && array->null_count() != 0) {
+            return Status::DataQualityError("Null in non-nullable Lance column: " + std::string(slot_desc->col_name()));
         }
-        RETURN_IF_ERROR(validate_integer_width(array->type().get(), slot->type()));
-        ConvertFuncTree plan;
-        Expr* cast = nullptr;
+        RETURN_IF_ERROR(validate_integer_width(array->type().get(), slot_desc->type()));
+        ConvertFuncTree conv_func;
+        Expr* cast_expr = nullptr;
         MutableColumnPtr column;
-        RETURN_IF_ERROR(create_arrow_column(array->type().get(), slot, &column, &plan, &cast, pool, true));
-        configure_lance_temporal(array->type().get(), slot->type(), &plan);
-        context.set_current_column(slot->col_name(), slot->type());
-        RETURN_IF_ERROR(convert_arrow_array_to_column(&plan, batch->num_rows(), array.get(), column.get(), 0, 0,
-                                                      &filter, &context));
-        if (conversion_error || std::find(filter.begin(), filter.end(), 0) != filter.end()) {
-            return Status::DataQualityError("Invalid value in Lance column: " + std::string(slot->col_name()));
+        RETURN_IF_ERROR(
+                create_arrow_column(array->type().get(), slot_desc, &column, &conv_func, &cast_expr, pool, true));
+        configure_lance_temporal(array->type().get(), slot_desc->type(), &conv_func);
+        conv_ctx.set_current_column(slot_desc->col_name(), slot_desc->type());
+        RETURN_IF_ERROR(convert_arrow_array_to_column(&conv_func, batch->num_rows(), array.get(), column.get(), 0, 0,
+                                                      &chunk_filter, &conv_ctx));
+        if (conversion_error || std::find(chunk_filter.begin(), chunk_filter.end(), 0) != chunk_filter.end()) {
+            return Status::DataQualityError("Invalid value in Lance column: " + std::string(slot_desc->col_name()));
         }
-        raw->append_column(std::move(column), slot->id());
-        casts.push_back(cast);
+        read_chunk->append_column(std::move(column), slot_desc->id());
+        cast_exprs.push_back(cast_expr);
     }
-    for (size_t i = 0; i < casts.size(); ++i) {
-        const auto* slot = tuple->slots()[i];
-        ASSIGN_OR_RETURN(auto column, casts[i]->evaluate_checked(nullptr, raw.get()));
-        column = ColumnHelper::unfold_const_column(slot->type(), batch->num_rows(), column);
-        result->append_column(std::move(column), slot->id());
+    for (size_t i = 0; i < cast_exprs.size(); ++i) {
+        const auto* slot_desc = tuple->slots()[i];
+        ASSIGN_OR_RETURN(auto column, cast_exprs[i]->evaluate_checked(nullptr, read_chunk.get()));
+        column = ColumnHelper::unfold_const_column(slot_desc->type(), batch->num_rows(), column);
+        dst->append_column(std::move(column), slot_desc->id());
     }
-    *chunk = std::move(result);
+    *chunk = std::move(dst);
     return Status::OK();
 }
 
-void LanceNativeReader::release_batch() {
-    _batch.reset();
+void LanceNativeReader::_release_batch() {
+    _arrow_batch.reset();
     if (_batch_bytes != 0) {
         _mem_tracker->release(_batch_bytes);
         _batch_bytes = 0;
@@ -296,10 +329,10 @@ void LanceNativeReader::release_batch() {
 }
 
 void LanceNativeReader::close() {
-    release_batch();
-    _batch_offset = 0;
+    _release_batch();
+    _batch_start_idx = 0;
     if (_reader != nullptr) {
-        sr_lance_close(_reader);
+        sr_lance_reader_close(_reader);
         _reader = nullptr;
     }
 }
