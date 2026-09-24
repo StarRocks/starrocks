@@ -24,8 +24,8 @@ use lance::{
 use std::ffi::CStr;
 use std::sync::Arc;
 
-fn view(s: &str) -> LanceString {
-    LanceString {
+fn view(s: &str) -> SrLanceString {
+    SrLanceString {
         data: s.as_ptr().cast(),
         len: s.len(),
     }
@@ -71,11 +71,11 @@ fn write(uri: &str, values: Vec<i32>, mode: WriteMode) {
         ))
         .unwrap();
 }
-unsafe fn reader(uri: &str, version: u64, fields: &[&str]) -> *mut LanceReader {
+unsafe fn reader(uri: &str, version: u64, fields: &[&str]) -> *mut SrLanceReader {
     let cols: Vec<_> = fields.iter().map(|s| view(s)).collect();
     let mut out = ptr::null_mut();
     let mut err = ptr::null_mut();
-    let status = sr_lance_open(
+    let status = sr_lance_reader_open(
         view(uri),
         version,
         cols.as_ptr(),
@@ -84,7 +84,7 @@ unsafe fn reader(uri: &str, version: u64, fields: &[&str]) -> *mut LanceReader {
         0,
         ptr::null(),
         0,
-        LanceCancellation {
+        SrLanceCancellation {
             check: None,
             context: ptr::null_mut(),
         },
@@ -93,7 +93,7 @@ unsafe fn reader(uri: &str, version: u64, fields: &[&str]) -> *mut LanceReader {
     );
     assert_eq!(
         status,
-        BATCH,
+        SR_LANCE_NEXT_BATCH,
         "{}",
         if err.is_null() {
             ""
@@ -103,16 +103,16 @@ unsafe fn reader(uri: &str, version: u64, fields: &[&str]) -> *mut LanceReader {
     );
     out
 }
-unsafe fn batches(reader: *mut LanceReader) -> Vec<RecordBatch> {
+unsafe fn batches(reader: *mut SrLanceReader) -> Vec<RecordBatch> {
     let mut out = Vec::new();
     loop {
         let mut array = FFI_ArrowArray::empty();
         let mut schema = FFI_ArrowSchema::empty();
         let mut err = ptr::null_mut();
-        match sr_lance_next(reader, &mut array, &mut schema, &mut err) {
-            EOF => break,
-            PENDING => continue,
-            BATCH => {
+        match sr_lance_reader_next(reader, &mut array, &mut schema, &mut err) {
+            SR_LANCE_NEXT_EOF => break,
+            SR_LANCE_NEXT_PENDING => continue,
+            SR_LANCE_NEXT_BATCH => {
                 let data = arrow_array::ffi::from_ffi(array, &schema).unwrap();
                 out.push(RecordBatch::from(StructArray::from(data)));
             }
@@ -130,10 +130,10 @@ fn full_dataset_projection_snapshot_and_buffer_lifetime() {
     write(uri, (0..7).collect(), WriteMode::Create);
     unsafe {
         let r = reader(uri, 0, &["id"]);
-        assert_eq!(sr_lance_version(r), 1);
+        assert_eq!(sr_lance_reader_version(r), 1);
         write(uri, vec![99], WriteMode::Append);
         let result = batches(r);
-        sr_lance_close(r);
+        sr_lance_reader_close(r);
         // Arrays remain readable after their scanner and dataset have been destroyed.
         let mut ids = result
             .iter()
@@ -152,7 +152,7 @@ fn full_dataset_projection_snapshot_and_buffer_lifetime() {
             .iter()
             .all(|b| b.num_columns() == 1 && b.num_rows() <= 2));
         let latest = reader(uri, 0, &["id", "label"]);
-        assert_eq!(sr_lance_version(latest), 2);
+        assert_eq!(sr_lance_reader_version(latest), 2);
         assert_eq!(
             batches(latest)
                 .iter()
@@ -160,7 +160,7 @@ fn full_dataset_projection_snapshot_and_buffer_lifetime() {
                 .sum::<usize>(),
             8
         );
-        sr_lance_close(latest);
+        sr_lance_reader_close(latest);
         let old = reader(uri, 1, &["label"]);
         let rows = batches(old);
         assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), 7);
@@ -168,7 +168,7 @@ fn full_dataset_projection_snapshot_and_buffer_lifetime() {
             rows.iter().map(|b| b.column(0).null_count()).sum::<usize>(),
             3
         );
-        sr_lance_close(old);
+        sr_lance_reader_close(old);
     }
 }
 
@@ -181,7 +181,7 @@ fn empty_projection_preserves_row_count() {
     unsafe {
         let r = reader(uri, 0, &[]);
         let rows = batches(r);
-        sr_lance_close(r);
+        sr_lance_reader_close(r);
         assert_eq!(rows.iter().map(RecordBatch::num_rows).sum::<usize>(), 3);
         assert!(rows.iter().all(|b| b.num_columns() == 0));
     }
@@ -193,7 +193,7 @@ fn invalid_arguments_and_errors_do_not_escape_ffi() {
         let mut out = ptr::null_mut();
         let mut error = ptr::null_mut();
         assert_eq!(
-            sr_lance_open(
+            sr_lance_reader_open(
                 view("unused"),
                 0,
                 ptr::null(),
@@ -202,20 +202,20 @@ fn invalid_arguments_and_errors_do_not_escape_ffi() {
                 0,
                 ptr::null(),
                 0,
-                LanceCancellation {
+                SrLanceCancellation {
                     check: None,
                     context: ptr::null_mut()
                 },
                 &mut out,
                 &mut error
             ),
-            ERROR
+            SR_LANCE_ERROR
         );
         assert!(out.is_null());
         assert!(!error.is_null());
         sr_lance_free_error(error);
         assert_eq!(
-            sr_lance_open(
+            sr_lance_reader_open(
                 view("unused"),
                 0,
                 ptr::null(),
@@ -224,24 +224,27 @@ fn invalid_arguments_and_errors_do_not_escape_ffi() {
                 0,
                 ptr::null(),
                 0,
-                LanceCancellation {
+                SrLanceCancellation {
                     check: None,
                     context: ptr::null_mut()
                 },
                 &mut out,
                 &mut error
             ),
-            ERROR
+            SR_LANCE_ERROR
         );
         sr_lance_free_error(error);
-        assert_eq!(boundary(&mut error, || panic!("test panic")), ERROR);
+        assert_eq!(
+            boundary(&mut error, || panic!("test panic")),
+            SR_LANCE_ERROR
+        );
         assert_eq!(
             CStr::from_ptr(error).to_str().unwrap(),
             "Lance reader panicked"
         );
         sr_lance_free_error(error);
         assert_eq!(
-            sr_lance_open(
+            sr_lance_reader_open(
                 view("/missing/private?sig=secret"),
                 0,
                 ptr::null(),
@@ -250,20 +253,20 @@ fn invalid_arguments_and_errors_do_not_escape_ffi() {
                 0,
                 ptr::null(),
                 0,
-                LanceCancellation {
+                SrLanceCancellation {
                     check: None,
                     context: ptr::null_mut()
                 },
                 &mut out,
                 &mut error
             ),
-            ERROR
+            SR_LANCE_ERROR
         );
         let msg = CStr::from_ptr(error).to_str().unwrap();
         assert!(!msg.contains("secret"));
         assert!(!msg.contains("private"));
         sr_lance_free_error(error);
-        sr_lance_close(ptr::null_mut());
+        sr_lance_reader_close(ptr::null_mut());
         sr_lance_free_error(ptr::null_mut());
     }
 }
@@ -332,7 +335,7 @@ fn cancelled_open_returns_before_storage_access() {
         let mut out = ptr::null_mut();
         let mut error = ptr::null_mut();
         assert_eq!(
-            sr_lance_open(
+            sr_lance_reader_open(
                 view("/must-not-be-opened"),
                 0,
                 ptr::null(),
@@ -341,14 +344,14 @@ fn cancelled_open_returns_before_storage_access() {
                 0,
                 ptr::null(),
                 0,
-                LanceCancellation {
+                SrLanceCancellation {
                     check: Some(cancelled),
                     context: ptr::null_mut()
                 },
                 &mut out,
                 &mut error
             ),
-            ERROR
+            SR_LANCE_ERROR
         );
         assert!(out.is_null());
         assert_eq!(
@@ -387,7 +390,7 @@ fn unsigned_64_export_preserves_full_range_and_nested_nulls() {
     unsafe {
         let r = reader(uri, 0, &["u64"]);
         let result = batches(r);
-        sr_lance_close(r);
+        sr_lance_reader_close(r);
         let values = result[0]
             .column(0)
             .as_any()

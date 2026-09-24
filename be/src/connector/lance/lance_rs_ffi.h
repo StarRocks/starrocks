@@ -22,35 +22,39 @@
 extern "C" {
 #endif
 
+enum { SR_LANCE_ERROR = -1, SR_LANCE_NEXT_EOF = 0, SR_LANCE_NEXT_BATCH = 1, SR_LANCE_NEXT_PENDING = 2 };
+
 struct ArrowArray;
 struct ArrowSchema;
-typedef struct LanceReader LanceReader;
-typedef struct LanceString {
+typedef struct SrLanceReader SrLanceReader;
+typedef struct SrLanceString {
     const char* data;
     size_t len;
-} LanceString;
-typedef struct LanceProperty {
-    LanceString key;
-    LanceString value;
-} LanceProperty;
+} SrLanceString;
+typedef struct SrLanceStringPair {
+    SrLanceString key;
+    SrLanceString value;
+} SrLanceStringPair;
 
-typedef struct LanceCancellation {
+typedef struct SrLanceCancellation {
     bool (*check)(void* context);
     void* context;
-} LanceCancellation;
+} SrLanceCancellation;
 
 // Input buffers are borrowed during open only. A handle must not be used concurrently.
 // version=0 resolves latest once. All batches of this reader use that immutable version.
 // Returns 1 on success, -1 on error. Error strings must be freed with sr_lance_free_error.
-int sr_lance_open(LanceString uri, uint64_t version, const LanceString* columns, size_t column_count,
-                  int32_t batch_size, int32_t cloud_type, const LanceProperty* properties, size_t property_count,
-                  LanceCancellation cancellation, LanceReader** reader, char** error);
+int sr_lance_reader_open(SrLanceString dataset_uri, uint64_t version, const SrLanceString* columns, size_t column_count,
+                         int32_t batch_size, int32_t cloud_type, const SrLanceStringPair* properties,
+                         size_t property_count, SrLanceCancellation cancellation, SrLanceReader** out_reader,
+                         char** error);
 // Returns 1=batch, 0=EOF, 2=pending (check cancellation and poll again), -1=error.
 // Outputs must be zero-initialized. On success, caller owns both Arrow release callbacks.
-int sr_lance_next(LanceReader* reader, struct ArrowArray* array, struct ArrowSchema* schema, char** error);
-uint64_t sr_lance_version(const LanceReader* reader);
+int sr_lance_reader_next(SrLanceReader* reader, struct ArrowArray* out_array, struct ArrowSchema* out_schema,
+                         char** error);
+uint64_t sr_lance_reader_version(const SrLanceReader* reader);
 // Closing a reader does not invalidate exported Arrow arrays. Null is accepted.
-void sr_lance_close(LanceReader* reader);
+void sr_lance_reader_close(SrLanceReader* reader);
 void sr_lance_free_error(char* error);
 
 #ifdef __cplusplus
