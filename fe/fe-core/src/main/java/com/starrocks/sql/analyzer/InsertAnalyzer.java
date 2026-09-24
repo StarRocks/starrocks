@@ -332,7 +332,9 @@ public class InsertAnalyzer {
             }
         }
 
-        int mentionedColumnSize = mentionedColumns.size();
+        // FILES() takes its schema from the select list, whose names may repeat
+        int mentionedColumnSize = table instanceof TableFunctionTable && insertStmt.getTargetColumnNames() == null
+                ? targetColumns.size() : mentionedColumns.size();
         if ((table.isIcebergTable() || table.isHiveTable()) && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
