@@ -67,6 +67,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
@@ -850,6 +851,12 @@ public class ShowExecutorSimpleTest {
             }
 
             @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                  TableLoadPurpose purpose) {
+                return getTable(context, catalogName, dbName, tblName);
+            }
+
+            @Mock
             public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 List<Column> fullSchema = new ArrayList<>();
                 Column columnId = new Column("id", IntegerType.INT, true);
@@ -902,6 +909,12 @@ public class ShowExecutorSimpleTest {
             @Mock
             public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database();
+            }
+
+            @Mock
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                                  TableLoadPurpose purpose) {
+                return getTable(context, catalogName, dbName, tblName);
             }
 
             @Mock

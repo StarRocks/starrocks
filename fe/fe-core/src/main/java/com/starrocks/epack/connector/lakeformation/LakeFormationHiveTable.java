@@ -19,12 +19,15 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.TableOperation;
+import com.starrocks.connector.QueryScopedCredentials;
+import com.starrocks.connector.QueryScopedCredentialsSource;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -58,10 +61,17 @@ import static java.util.Objects.requireNonNull;
  * catalog, db and table identifier, so the two are the same key in any Map&lt;Table, ...&gt;. One query must
  * never put both into the same DescriptorTable.
  */
-public class LakeFormationHiveTable extends HiveTable {
+public class LakeFormationHiveTable extends HiveTable
+        implements QueryScopedCredentialsSource, LakeFormationGovernedTable {
 
     private final Set<String> authorizedColumnNames;
     private final LakeFormationTableIdentity lakeFormationIdentity;
+
+    /**
+     * How this table finds what authorized it. Never the credentials: a Table outlives its query in several caches,
+     * and a handle from a finished attempt simply stops resolving. Transient against gson reflection.
+     */
+    private final transient LakeFormationTableHandle handle;
 
     /**
      * Own snapshot, because HiveTable.getProperties() is not a plain getter: on a resource backed table it
@@ -71,12 +81,14 @@ public class LakeFormationHiveTable extends HiveTable {
     private final Map<String, String> propertiesSnapshot;
 
     public static LakeFormationHiveTable of(HiveTable physical, List<Column> authorizedSchema,
-                                            LakeFormationTableIdentity identity) {
-        return new LakeFormationHiveTable(physical, authorizedSchema, identity);
+                                            LakeFormationTableIdentity identity,
+                                            LakeFormationTableHandle handle) {
+        return new LakeFormationHiveTable(physical, authorizedSchema, identity, handle);
     }
 
     private LakeFormationHiveTable(HiveTable physical, List<Column> authorizedSchema,
-                                   LakeFormationTableIdentity identity) {
+                                   LakeFormationTableIdentity identity,
+                                   LakeFormationTableHandle handle) {
         // Every collection is copied: HiveTable's constructor stores these by reference and
         // modifyTableSchemaInternal clears them in place, so sharing them would let one table mutate the
         // other. createTime is passed through because getUUID is built from it and the masking and
@@ -98,6 +110,21 @@ public class LakeFormationHiveTable extends HiveTable {
         authorizedSchema.forEach(column -> names.add(column.getName()));
         this.authorizedColumnNames = Collections.unmodifiableSet(names);
         this.lakeFormationIdentity = requireNonNull(identity, "identity is null");
+        this.handle = requireNonNull(handle, "handle is null");
+    }
+
+    public LakeFormationTableHandle getLakeFormationHandle() {
+        return handle;
+    }
+
+    /** The credentials of the attempt planning now, via the handle; empty anywhere outside that attempt. */
+    @Override
+    public Optional<QueryScopedCredentials> currentQueryScopedCredentials() {
+        return LakeFormationQueryScope.current()
+                .filter(handle::isReusableIn)
+                .map(scope -> scope.find(lakeFormationIdentity, handle.purpose()))
+                .filter(resolution -> resolution != null && resolution.isAccessReady())
+                .map(resolution -> (QueryScopedCredentials) resolution.lease());
     }
 
     /*
@@ -117,8 +144,28 @@ public class LakeFormationHiveTable extends HiveTable {
         return propertiesSnapshot;
     }
 
+    @Override
     public boolean isColumnAuthorized(String columnName) {
         return authorizedColumnNames.contains(columnName);
+    }
+
+    /** From the physical lists, so an unauthorized real column is refused rather than taken for a placeholder. */
+    @Override
+    public boolean isPhysicalColumn(String columnName) {
+        return containsIgnoreCase(getDataColumnNames(), columnName)
+                || containsIgnoreCase(getPartitionColumnNames(), columnName);
+    }
+
+    private static boolean containsIgnoreCase(List<String> names, String column) {
+        if (names == null) {
+            return false;
+        }
+        for (String name : names) {
+            if (name != null && name.equalsIgnoreCase(column)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Immutable, and case insensitive to match the comparison semantics of Table's own schema index. */
@@ -126,6 +173,7 @@ public class LakeFormationHiveTable extends HiveTable {
         return authorizedColumnNames;
     }
 
+    @Override
     public LakeFormationTableIdentity getLakeFormationIdentity() {
         return lakeFormationIdentity;
     }

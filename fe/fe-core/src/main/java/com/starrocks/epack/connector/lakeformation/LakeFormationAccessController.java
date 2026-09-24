@@ -41,18 +41,16 @@ import java.util.Map;
 /**
  * Lake Formation for the tables it governs, native RBAC for everything else.
  *
- * Both supertypes are load bearing: ExternalAccessController is what makes a column refusal report 5204
- * rather than the generic code, and five places cast the active controller to AccessControllerEPack with no
- * guard, so omitting it would turn `USE db` into a ClassCastException.
+ * Extending ExternalAccessController is what makes a column level refusal report error 5204 instead of the
+ * generic one: AccessDeniedException.reportAccessDenied only picks that code for an external controller.
+ * Implementing AccessControllerEPack is not optional either - five places cast the active controller to it
+ * without any guard, so a plain ExternalAccessController would turn `USE db` into a ClassCastException.
  *
- * The split is by object, not by layer. A governed table's data is decided by Lake Formation alone - no
- * native grant required, no native policy read - because one catalog identity would only restate the same
- * answer for every user, and a second policy owner over the same rows is the ambiguity the row and cell
- * filter refusal exists to avoid. Everything Lake Formation has no object for is delegated verbatim to
- * NativeAccessControllerEPack.
+ * The split is by object. A governed table's columns, row and masking policies are Lake Formation's alone;
+ * everything it has no object for - unregistered tables, views, databases, platform actions - is delegated
+ * verbatim to NativeAccessControllerEPack.
  *
- * Name level entry points still delegate: they run on paths like SHOW TABLES that hold only a name, and
- * resolving each one through Lake Formation would cost a call per table with no budget.
+ * Name level entry points still delegate: resolving every SHOW TABLES name through Lake Formation has no budget.
  */
 public class LakeFormationAccessController extends ExternalAccessController implements AccessControllerEPack {
 
@@ -107,7 +105,7 @@ public class LakeFormationAccessController extends ExternalAccessController impl
             throw new AccessDeniedException("Cannot verify Lake Formation authorization for " + tableName
                     + ": its metadata is unavailable.");
         }
-        if (!(table instanceof LakeFormationHiveTable lfTable)) {
+        if (!(table instanceof LakeFormationGovernedTable governed)) {
             // Not governed by Lake Formation - an unregistered table in the same catalog, or a view. The
             // native decision is the whole answer.
             nativeController.checkTableAction(context, tableName, privilegeType);
@@ -115,10 +113,10 @@ public class LakeFormationAccessController extends ExternalAccessController impl
         }
         // Governed: Lake Formation resolved this table for this statement and named the columns it may
         // read. A native table grant would add nothing it can distinguish between users, so none is asked for.
-        if (lfTable.isColumnAuthorized(column)) {
+        if (governed.isColumnAuthorized(column)) {
             return;
         }
-        if (!isPhysicalColumn(lfTable, column) && COUNT_STAR_PLACEHOLDER.equals(column)) {
+        if (!governed.isPhysicalColumn(column) && COUNT_STAR_PLACEHOLDER.equals(column)) {
             // The one name that is not a column of any table and still has to be waved through.
             //
             // ColumnPrivilege collects the columns it checks from the *optimized* plan, and
@@ -138,39 +136,14 @@ public class LakeFormationAccessController extends ExternalAccessController impl
     }
 
     /**
-     * Whether the name is one of the table's physical columns.
-     *
-     * Compared case insensitively and against the physical lists on purpose. Only fullSchema is narrowed
-     * to the authorized subset on a LakeFormationHiveTable; partition and data column names stay physical,
-     * which is exactly what is needed here - an unauthorized real column must be recognised as physical so
-     * that it is refused, and a difference in case must not turn it into a synthetic one.
-     */
-    private static boolean isPhysicalColumn(LakeFormationHiveTable table, String column) {
-        return containsIgnoreCase(table.getDataColumnNames(), column)
-                || containsIgnoreCase(table.getPartitionColumnNames(), column);
-    }
-
-    private static boolean containsIgnoreCase(List<String> names, String column) {
-        if (names == null) {
-            return false;
-        }
-        for (String name : names) {
-            if (name != null && name.equalsIgnoreCase(column)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /**
      * Whether Lake Formation governs the named table. Null when it does not, or when that cannot be told:
      * the callers below treat both as "not governed" and fall through to the native policy, which is the
      * conservative side for a policy (a policy can only restrict) and matches what happened before.
      */
-    private LakeFormationHiveTable governedTable(ConnectContext context, TableName tableName) {
+    private LakeFormationGovernedTable governedTable(ConnectContext context, TableName tableName) {
         Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getTable(context, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
-        return table instanceof LakeFormationHiveTable governed ? governed : null;
+        return table instanceof LakeFormationGovernedTable governed ? governed : null;
     }
 
     /**

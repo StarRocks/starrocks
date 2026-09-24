@@ -30,11 +30,11 @@ import static java.util.Objects.requireNonNull;
  * Everything about a table's credentials that a renewal does not change: who they are for, which table,
  * and what is needed to ask for them again.
  *
- * Split out from the lease so that renewing is "same context, new response".
+ * Split out from the lease itself so that renewing is "same context, new response". Keeping these on the
+ * lease meant either a twelve-argument constructor or fields assigned after construction, and the second
+ * one had already cost this design its immutability once.
  *
- * <p>It also carries what this attempt learned about the table's partitions. That is state on a credential
- * object, deliberately: the file listing runs on a worker thread after planning ended, and the credentials
- * the scan node handed it are the only thing that reaches there.
+ * <p>Also carries the partitions checked while planning: the listing runs afterwards and only has the lease.
  *
  * @param holder the cell every scan node on this table reads through, so one renewal serves all of them
  * @param partitions what the partition listing decided for this table, success or failure, once
@@ -53,6 +53,7 @@ record LakeFormationLeaseContext(LakeFormationTableIdentity identity,
                                  Map<String, String> catalogProperties,
                                  long cacheScopeSeed,
                                  AtomicReference<LakeFormationLease> holder,
+                                 AtomicReference<PartitionListing> partitions,
                                  AtomicReference<Partition> tablePartition,
                                  AtomicReference<AdmissionRefresh> admissionRefresh) {
 
@@ -84,6 +85,25 @@ record LakeFormationLeaseContext(LakeFormationTableIdentity identity,
         }
     }
 
+    /** The partition listing's outcome, failure included, so a second call gets the same answer. */
+    record PartitionListing(LakeFormationPartitionSnapshot snapshot,
+                            LakeFormationTableAccessException failure) {
+
+        static PartitionListing of(LakeFormationPartitionSnapshot snapshot) {
+            return new PartitionListing(snapshot, null);
+        }
+
+        static PartitionListing failed(LakeFormationTableAccessException failure) {
+            return new PartitionListing(null, failure);
+        }
+
+        LakeFormationPartitionSnapshot getOrRethrow() {
+            if (failure != null) {
+                throw new LakeFormationTableAccessException(failure.getMessage(), failure);
+            }
+            return snapshot;
+        }
+    }
 
     /**
      * Convenience for the common case: fresh holders for a table nothing has decided anything about yet.
@@ -102,7 +122,8 @@ record LakeFormationLeaseContext(LakeFormationTableIdentity identity,
                                             long cacheScopeSeed) {
         return new LakeFormationLeaseContext(identity, principal, attemptId, queryId, executionId, gateway,
                 session, tableArn, tableRoot, lakeFormationProperties, catalogProperties, cacheScopeSeed,
-                new AtomicReference<>(), new AtomicReference<>(), new AtomicReference<>());
+                new AtomicReference<>(), new AtomicReference<>(), new AtomicReference<>(),
+                new AtomicReference<>());
     }
 
     LakeFormationLeaseContext {

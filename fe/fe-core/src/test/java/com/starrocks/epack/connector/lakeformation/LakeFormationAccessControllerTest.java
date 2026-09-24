@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.epack.authorization.AccessControllerEPack;
 import com.starrocks.epack.sql.ast.PolicyType;
@@ -575,6 +576,7 @@ public class LakeFormationAccessControllerTest {
         if (authorized) {
             authorizedSchema.add(new Column(column, IntegerType.INT));
         }
-        return LakeFormationHiveTable.of(physicalTable, authorizedSchema, IDENTITY);
+        return LakeFormationHiveTable.of(physicalTable, authorizedSchema, IDENTITY,
+                new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1"));
     }
 }

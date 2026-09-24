@@ -17,46 +17,72 @@ package com.starrocks.epack.connector.lakeformation;
 import com.starrocks.catalog.Table;
 
 /**
- * One table's outcome inside a single query's Lake Formation memo.
+ * What one attempt decided about one table, including the decision to refuse it.
  *
- * A failure is sticky on purpose: within one planning attempt a table that failed authorization must keep
- * failing. Retrying it would let a transient Lake Formation error turn into a silently different
- * authorization, and a second call succeeding after a first that failed is exactly the "fallback after
- * refusal" the design forbids.
+ * A failure is a result, not an exception, so it is remembered: one statement never gets two answers.
+ *
+ * No METADATA_AUTHORIZED to ACCESS_READY transition: data access resolves again as a separate scope entry.
  */
 public final class LakeFormationTableResolution {
 
+    private enum State {
+        /** Lake Formation answered IsRegisteredWithLakeFormation = false; the ordinary path applies. */
+        UNREGISTERED,
+        /** Authorized for metadata. Carries no credentials and cannot be scanned. */
+        METADATA_AUTHORIZED,
+        /** Authorized and vended. Carries the lease a scan node will capture. */
+        ACCESS_READY,
+        /** Refused. Sticky for the rest of the attempt. */
+        FAILED
+    }
+
+    private final State state;
     private final Table authorizedTable;
-    private final boolean unregistered;
+    private final AuthorizedTableMetadata metadata;
+    private final LakeFormationLease lease;
     private final LakeFormationTableAccessException failure;
 
-    private LakeFormationTableResolution(Table authorizedTable, boolean unregistered,
+    private LakeFormationTableResolution(State state, Table authorizedTable, AuthorizedTableMetadata metadata,
+                                         LakeFormationLease lease,
                                          LakeFormationTableAccessException failure) {
+        this.state = state;
         this.authorizedTable = authorizedTable;
-        this.unregistered = unregistered;
+        this.metadata = metadata;
+        this.lease = lease;
         this.failure = failure;
     }
 
-    public static LakeFormationTableResolution authorized(Table table) {
-        return new LakeFormationTableResolution(table, false, null);
+    public static LakeFormationTableResolution unregistered() {
+        return new LakeFormationTableResolution(State.UNREGISTERED, null, null, null, null);
     }
 
-    /** The table exists but Lake Formation explicitly answered IsRegisteredWithLakeFormation = false. */
-    public static LakeFormationTableResolution unregistered() {
-        return new LakeFormationTableResolution(null, true, null);
+    static LakeFormationTableResolution metadataAuthorized(Table table, AuthorizedTableMetadata metadata) {
+        return new LakeFormationTableResolution(State.METADATA_AUTHORIZED, table, metadata, null, null);
+    }
+
+    static LakeFormationTableResolution accessReady(Table table, AuthorizedTableMetadata metadata,
+                                                    LakeFormationLease lease) {
+        return new LakeFormationTableResolution(State.ACCESS_READY, table, metadata, lease, null);
     }
 
     public static LakeFormationTableResolution failed(LakeFormationTableAccessException failure) {
-        return new LakeFormationTableResolution(null, false, failure);
+        return new LakeFormationTableResolution(State.FAILED, null, null, null, failure);
     }
 
     public boolean isUnregistered() {
-        return unregistered;
+        return state == State.UNREGISTERED;
+    }
+
+    public boolean isAccessReady() {
+        return state == State.ACCESS_READY;
+    }
+
+    public boolean isFailed() {
+        return state == State.FAILED;
     }
 
     /**
-     * Rethrows the memoized failure wrapped in a new exception, so that each caller gets its own stack
-     * trace. Rethrowing the original would leave the trace pointing at whichever path failed first.
+     * Rethrows wrapped, so each caller gets its own stack trace.
      */
     public void rethrowIfFailed() {
         if (failure != null) {
@@ -67,4 +93,14 @@ public final class LakeFormationTableResolution {
     public Table authorizedTable() {
         return authorizedTable;
     }
+
+    AuthorizedTableMetadata metadata() {
+        return metadata;
+    }
+
+    LakeFormationLease lease() {
+        return lease;
+    }
+
+    // No partition state: partitions are read after the attempt ends, so they travel with the lease.
 }

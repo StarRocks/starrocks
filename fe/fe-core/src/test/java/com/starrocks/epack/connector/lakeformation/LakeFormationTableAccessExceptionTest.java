@@ -16,7 +16,11 @@ package com.starrocks.epack.connector.lakeformation;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.junit.jupiter.api.Test;
+import software.amazon.awssdk.services.glue.model.AccessDeniedException;
+import software.amazon.awssdk.services.glue.model.EntityNotFoundException;
+import software.amazon.awssdk.services.glue.model.PermissionTypeMismatchException;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,5 +47,37 @@ public class LakeFormationTableAccessExceptionTest {
         IllegalStateException cause = new IllegalStateException("underlying");
         LakeFormationTableAccessException e = new LakeFormationTableAccessException("wrapped", cause);
         assertSame(cause, e.getCause());
+    }
+
+    /** What a metadata enumeration may leave out, and what it may not. */
+    @Test
+    public void testOnlyThePerTableFailuresAreSomethingAnEnumerationMaySkip() {
+        LakeFormationTableIdentity identity =
+                new LakeFormationTableIdentity("lf", null, "us-east-2", "db", "t");
+
+        assertTrue(LakeFormationErrors.metadataFailure(identity,
+                AccessDeniedException.builder().message("no grant").build()).isNothingToDescribe());
+        assertTrue(LakeFormationErrors.metadataFailure(identity,
+                EntityNotFoundException.builder().message("gone").build()).isNothingToDescribe());
+
+        assertFalse(LakeFormationErrors.metadataFailure(identity,
+                        PermissionTypeMismatchException.builder().message("filters").build())
+                .isNothingToDescribe(), "a contract drift has to fail the statement");
+        assertFalse(LakeFormationErrors.metadataFailure(identity, new RuntimeException("AWS is down"))
+                .isNothingToDescribe(), "an unclassified failure could be all of AWS, not one table");
+    }
+
+    /** And the classification survives the rewrap every resolution does on its way out. */
+    @Test
+    public void testTheClassificationSurvivesARewrap() {
+        LakeFormationTableAccessException skippable =
+                LakeFormationTableAccessException.nothingToDescribe("nothing here");
+        assertTrue(new LakeFormationTableAccessException(skippable.getMessage(), skippable)
+                .isNothingToDescribe());
+
+        LakeFormationTableAccessException attemptLevel =
+                new LakeFormationTableAccessException("the budget ran out");
+        assertFalse(new LakeFormationTableAccessException(attemptLevel.getMessage(), attemptLevel)
+                .isNothingToDescribe());
     }
 }

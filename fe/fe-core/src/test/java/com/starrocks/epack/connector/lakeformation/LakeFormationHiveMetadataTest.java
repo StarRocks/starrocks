@@ -15,6 +15,7 @@
 package com.starrocks.epack.connector.lakeformation;
 
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.hive.HiveClassNames;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.qe.ConnectContext;
@@ -57,16 +58,39 @@ public class LakeFormationHiveMetadataTest {
 
     private ConnectContext context;
 
+    private LakeFormationQueryScope.Scope scope;
+
     @BeforeEach
     public void setUp() {
         context = new ConnectContext();
         context.setQueryId(UUID.randomUUID());
         context.setThreadLocalInfo();
+        // Authorization belongs to a planning attempt, so these tests have to run inside one - resolving a
+        // table outside any attempt is refused, and that refusal is asserted separately.
+        scope = LakeFormationQueryScope.open(context);
     }
 
     @AfterEach
     public void tearDown() {
+        if (scope != null) {
+            scope.close();
+        }
         ConnectContext.remove();
+    }
+
+    /**
+     * The attempt boundary itself: a table cannot be authorized when no statement is being planned, which
+     * is what background work and stale plan reuse look like from here.
+     */
+    @Test
+    public void testResolvingOutsideAPlanningAttemptIsRefused() {
+        scope.close();
+        scope = null;
+        LakeFormationHiveMetadata metadata =
+                metadataAnswering(new AtomicInteger(), registeredParquetTable(), null);
+        LakeFormationTableAccessException e = assertThrows(LakeFormationTableAccessException.class,
+                () -> metadata.getTable(context, "db", "t"));
+        assertTrue(e.getMessage().contains("outside a planning attempt"), e.getMessage());
     }
 
     /**
@@ -135,7 +159,8 @@ public class LakeFormationHiveMetadataTest {
             }
         };
         return new LakeFormationHiveMetadata(CATALOG, null, null, null, null,
-                java.util.Optional.empty(), null, null, gateway, properties());
+                java.util.Optional.empty(), null, null, gateway, properties(), null,
+                java.util.Map.of(), null, null, false);
     }
 
     @Test
@@ -144,10 +169,10 @@ public class LakeFormationHiveMetadataTest {
         AtomicInteger calls = new AtomicInteger();
         LakeFormationHiveMetadata metadata = metadataAnswering(calls, registeredParquetTable(), null);
 
-        Table first = metadata.getTable(context, "db", "t");
-        Table second = metadata.getTable(context, "db", "t");
+        Table first = metadata.getTable(context, "db", "t", TableLoadPurpose.METADATA_ONLY);
+        Table second = metadata.getTable(context, "db", "t", TableLoadPurpose.METADATA_ONLY);
 
-        assertEquals(1, calls.get(), "the second getTable must come from the memo");
+        assertEquals(1, calls.get(), "the second getTable must reuse what the attempt already decided");
         assertSame(first, second);
         assertInstanceOf(LakeFormationHiveTable.class, first);
     }
@@ -159,8 +184,8 @@ public class LakeFormationHiveMetadataTest {
         AtomicInteger calls = new AtomicInteger();
         LakeFormationHiveMetadata metadata = metadataAnswering(calls, registeredParquetTable(), null);
 
-        metadata.getTable(context, "db", "t");
-        metadata.getTable(context, "DB", "T");
+        metadata.getTable(context, "db", "t", TableLoadPurpose.METADATA_ONLY);
+        metadata.getTable(context, "DB", "T", TableLoadPurpose.METADATA_ONLY);
 
         assertEquals(1, calls.get());
     }
@@ -186,12 +211,43 @@ public class LakeFormationHiveMetadataTest {
         stubResourceLookup();
         LakeFormationHiveMetadata metadata =
                 metadataAnswering(new AtomicInteger(), registeredParquetTable(), null);
-        LakeFormationHiveTable table = (LakeFormationHiveTable) metadata.getTable(context, "db", "t");
+        LakeFormationHiveTable table = (LakeFormationHiveTable)
+                metadata.getTable(context, "db", "t", TableLoadPurpose.METADATA_ONLY);
 
         assertEquals(1, table.getFullSchema().size());
         assertEquals("id", table.getFullSchema().get(0).getName());
         assertTrue(table.isColumnAuthorized("id"));
         assertTrue(table.getDataColumnNames().contains("ssn"), "name lists stay physical");
+    }
+
+    /**
+     * And it takes the ordinary path with no planning attempt open either, which is the state a statistics collector resolves its
+     * table in.
+     */
+    @Test
+    public void testAnUnregisteredTableTakesTheOrdinaryPathWithNoPlanningAttempt() {
+        scope.close();
+        scope = null;
+        AtomicInteger superCalls = new AtomicInteger();
+        new MockUp<HiveMetadata>() {
+            @Mock
+            public Table getTable(ConnectContext ctx, String dbName, String tblName) {
+                superCalls.incrementAndGet();
+                return null;
+            }
+        };
+        AtomicInteger lakeFormationCalls = new AtomicInteger();
+        LakeFormationHiveMetadata metadata = metadataAnswering(lakeFormationCalls,
+                GetUnfilteredTableMetadataResponse.builder()
+                        .isRegisteredWithLakeFormation(false)
+                        .authorizedColumns("id")
+                        .build(), null);
+
+        metadata.getTable(context, "db", "t");
+
+        assertEquals(1, superCalls.get(), "an unregistered table must fall through to HiveMetadata");
+        assertEquals(1, lakeFormationCalls.get(),
+                "and it costs exactly one metadata call to establish that, asked fresh every time");
     }
 
     @Test
@@ -228,12 +284,23 @@ public class LakeFormationHiveMetadataTest {
         assertTrue(e.getMessage().contains("IsRegisteredWithLakeFormation"), e.getMessage());
     }
 
-    /** Data credentials are never handed out in this version, and this one is reached before any guard. */
+    /**
+     * The catalog's own credentials serve the tables Lake Formation does not govern, so this no longer
+     * refuses. A governed table is kept off that path by the scan asking it for its own credentials first,
+     * not by this method - see LakeFormationDataPlaneGuardTest.
+     */
     @Test
-    public void testCloudConfigurationIsRefused() {
+    public void testCloudConfigurationIsNotRefused() {
         LakeFormationHiveMetadata metadata =
                 metadataAnswering(new AtomicInteger(), registeredParquetTable(), null);
-        assertThrows(LakeFormationTableAccessException.class, metadata::getCloudConfiguration);
+        // super is not wired in this fixture, so only the Lake Formation refusal is what this rules out.
+        try {
+            metadata.getCloudConfiguration();
+        } catch (LakeFormationTableAccessException e) {
+            throw new AssertionError("must not be refused by Lake Formation: " + e.getMessage(), e);
+        } catch (RuntimeException expected) {
+            // The fixture has no HdfsEnvironment behind super.
+        }
     }
 
     /** Deny by default: an empty memo means nobody resolved this table here, not that it is unregistered. */

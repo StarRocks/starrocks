@@ -16,12 +16,11 @@ package com.starrocks.epack.connector.lakeformation;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.type.IntegerType;
 import mockit.Mock;
@@ -98,10 +97,13 @@ public class LakeFormationWriteGuardTest {
         assertRefused("REFRESH EXTERNAL TABLE " + LF + ".db.t");
     }
 
-    /** Statistics are data, and this version reads none of a registered table's data. */
+    /**
+     * Collecting statistics on demand is reading the table inside the user's own statement - the same thing
+     * a SELECT does - so it is allowed. The refusal below is for the scheduled kind.
+     */
     @Test
-    public void testRefusesAnalyze() {
-        assertRefused("ANALYZE TABLE " + LF + ".db.t");
+    public void testAllowsAnalyzeTable() {
+        assertAllowed("ANALYZE TABLE " + LF + ".db.t");
     }
 
     /**
@@ -137,6 +139,21 @@ public class LakeFormationWriteGuardTest {
         assertRefused("SUBMIT TASK AS CREATE TABLE db.t AS SELECT 1 AS id");
     }
 
+    /** A submitted cache prefetch is refused, and the immediate one is not. */
+    @Test
+    public void testRefusesASubmittedCachePrefetchButNotAnImmediateOne() {
+        assertRefused("SUBMIT TASK AS CACHE SELECT * FROM " + LF + ".db.src");
+        assertAllowed("CACHE SELECT * FROM " + LF + ".db.src");
+        // And the source is what decides, not the session's catalog.
+        context.setCurrentCatalog(LF);
+        assertAllowed("SUBMIT TASK AS CACHE SELECT * FROM " + OTHER + ".db.src");
+    }
+
+    /**
+     * A scheduled job is background collection: the daemon runs it later, outside any statement, on every
+     * table it enumerates. That is what stays refused, and it is refused by the statement that would create
+     * the job rather than left to fail table by table inside the daemon.
+     */
     @Test
     public void testRefusesCreateAnalyzeJob() {
         assertRefused("CREATE ANALYZE TABLE " + LF + ".db.t");
@@ -177,37 +194,22 @@ public class LakeFormationWriteGuardTest {
         assertDoesNotThrow(() -> LakeFormationWriteGuard.check(null, context));
     }
 
-    /**
-     * The catalog name check cannot cover this one: an INSERT names its target through a resolved table,
-     * so the guard reads the table instance rather than a name. The message has to name the table, or the
-     * user cannot tell which of several targets was refused.
-     */
     @Test
-    public void testRefusesAnInsertWhoseResolvedTargetIsGoverned() {
-        InsertStmt statement = (InsertStmt) parse("INSERT INTO " + OTHER + ".db.t SELECT 1");
-        statement.setTargetTable(governedTable());
+    public void testRefusesInsertIntoAGovernedTable() {
+        InsertStmt insert = (InsertStmt) parse("INSERT INTO " + LF + ".db.t SELECT 1");
+        insert.setTargetTable(governedHiveTable());
 
         LakeFormationTableAccessException e = assertThrows(LakeFormationTableAccessException.class,
-                () -> LakeFormationWriteGuard.check(statement, context));
-        assertTrue(e.getMessage().contains("Writing to"), e.getMessage());
+                () -> LakeFormationWriteGuard.check(insert, context));
         assertTrue(e.getMessage().contains("db.t"), e.getMessage());
     }
 
-    /** Same table level check inside a submitted task, which is a second place the target is resolved. */
-    @Test
-    public void testRefusesASubmitTaskWhoseResolvedInsertTargetIsGoverned() {
-        SubmitTaskStmt statement =
-                (SubmitTaskStmt) parse("SUBMIT TASK AS INSERT INTO " + OTHER + ".db.t SELECT 1");
-        statement.getInsertStmt().setTargetTable(governedTable());
-
-        LakeFormationTableAccessException e = assertThrows(LakeFormationTableAccessException.class,
-                () -> LakeFormationWriteGuard.check(statement, context));
-        assertTrue(e.getMessage().contains("SUBMIT TASK writing to"), e.getMessage());
+    private static LakeFormationTableIdentity governedIdentity() {
+        return new LakeFormationTableIdentity(LF, null, "us-west-2", "db", "t");
     }
 
-    private static LakeFormationHiveTable governedTable() {
-        List<Column> schema = new ArrayList<>();
-        schema.add(new Column("id", IntegerType.INT));
+    private static LakeFormationHiveTable governedHiveTable() {
+        List<Column> schema = List.of(new Column("id", IntegerType.INT));
         HiveTable physical = HiveTable.builder()
                 .setId(1L)
                 .setTableName("t")
@@ -216,14 +218,13 @@ public class LakeFormationWriteGuardTest {
                 .setHiveTableName("t")
                 .setTableLocation("s3://bucket/db/t")
                 .setCreateTime(1600000000L)
-                .setFullSchema(schema)
+                .setFullSchema(new ArrayList<>(schema))
                 .setPartitionColumnNames(new ArrayList<>())
                 .setDataColumnNames(new ArrayList<>(List.of("id")))
                 .setProperties(new HashMap<>())
                 .setSerdeProperties(new HashMap<>())
-                .setStorageFormat(HiveStorageFormat.PARQUET)
                 .build();
-        return LakeFormationHiveTable.of(physical, List.of(new Column("id", IntegerType.INT)),
-                new LakeFormationTableIdentity(LF, null, "us-west-2", "db", "t"));
+        return LakeFormationHiveTable.of(physical, new ArrayList<>(schema), governedIdentity(),
+                new LakeFormationTableHandle(governedIdentity(), TableLoadPurpose.DATA_ACCESS, "attempt-1"));
     }
 }

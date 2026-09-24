@@ -113,7 +113,13 @@ public final class LakeFormationTableGuard {
             throw unsupported(identity, "Kudu tables are not supported on a Lake Formation catalog in this version");
         }
 
-        HiveMetastoreApiConverter.validateHiveTableType(apiTable.getTableType());
+        // Wrapped so metadata enumeration can leave a table with an unsupported type out instead of failing.
+        try {
+            HiveMetastoreApiConverter.validateHiveTableType(apiTable.getTableType());
+        } catch (RuntimeException e) {
+            throw LakeFormationTableAccessException.nothingToDescribe(
+                    "Cannot query " + identity + ": " + e.getMessage(), e);
+        }
 
         // Checked explicitly even though the Parquet allowlist below already excludes ACID tables, which are
         // ORC: without this a user on a transactional table would only be told "not Parquet", which is true
@@ -127,12 +133,22 @@ public final class LakeFormationTableGuard {
                     + " catalog in this version");
         }
 
-        String serde = sd.getSerdeInfo() == null ? null : sd.getSerdeInfo().getSerializationLib();
-        HiveStorageFormat format = HiveStorageFormat.get(String.valueOf(inputFormat), String.valueOf(serde));
-        if (format != HiveStorageFormat.PARQUET) {
+        if (!isSupportedStorageFormat(sd)) {
+            String serde = sd.getSerdeInfo() == null ? null : sd.getSerdeInfo().getSerializationLib();
             throw unsupported(identity, "only Parquet is supported on a Lake Formation catalog in this version"
                     + " (inputFormat=" + inputFormat + ", serde=" + serde + ")");
         }
+    }
+
+    /** Input format and serde both Parquet; reused by the partition level check so the two cannot differ. */
+    static boolean isSupportedStorageFormat(StorageDescriptor sd) {
+        if (sd == null) {
+            return false;
+        }
+        String inputFormat = sd.getInputFormat();
+        String serde = sd.getSerdeInfo() == null ? null : sd.getSerdeInfo().getSerializationLib();
+        return HiveStorageFormat.get(String.valueOf(inputFormat), String.valueOf(serde))
+                == HiveStorageFormat.PARQUET;
     }
 
     /**
@@ -175,7 +191,9 @@ public final class LakeFormationTableGuard {
         }
     }
 
+    /** A shape this catalog cannot represent; enumeration leaves such a table out instead of failing. */
     private static LakeFormationTableAccessException unsupported(LakeFormationTableIdentity identity, String why) {
-        return new LakeFormationTableAccessException("Cannot query " + identity + ": " + why + ".");
+        return LakeFormationTableAccessException.nothingToDescribe(
+                "Cannot query " + identity + ": " + why + ".");
     }
 }

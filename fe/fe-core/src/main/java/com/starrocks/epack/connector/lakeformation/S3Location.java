@@ -110,6 +110,9 @@ public final class S3Location {
 
     private static List<String> normalizeSegments(String raw, String path) {
         List<String> normalized = new ArrayList<>();
+        if (path == null) {
+            return ImmutableList.of();
+        }
         for (String rawSegment : path.split("/")) {
             // Decoded before the dot segments are recognized, not after: "%2E%2E" has to traverse up
             // exactly like ".." does. Deciding on the raw text first would leave it in the list as an

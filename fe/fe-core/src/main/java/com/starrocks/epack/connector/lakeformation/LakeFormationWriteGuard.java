@@ -15,8 +15,8 @@
 package com.starrocks.epack.connector.lakeformation;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitorExtendInterface;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -29,18 +29,22 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
 
 /**
  * Refuses statements whose mutation target lives in a Lake Formation catalog.
  *
- * The rule is about the target, not the statement kind: reading a governed table into an internal one, CTAS
- * included, is fine. Nothing recurses into the query block, or every governed table used as a source would
- * be refused too.
+ * The rule is about the target, not about the statement kind: reading a Lake Formation table and writing the
+ * result into an internal table is fine, and so is CTAS whose source is a Lake Formation table. Only the
+ * thing being modified matters.
  *
- * It runs ahead of the privilege check: "this version does not support it" is a capability statement, and
- * reporting it as a permission problem sends an administrator looking for a grant that would not have
- * helped. Analysis has run by then, so an INSERT's target is resolved.
+ * It runs ahead of the privilege check, because "this version does not support it" is a capability
+ * statement and reporting it as a permission problem would send an administrator looking for a grant that
+ * would not have helped. Analysis has already run by this point, so an INSERT's target table is resolved.
+ *
+ * Nothing here recurses into a statement's query block. That is deliberate: recursing would turn every
+ * Lake Formation table used as a source into a refusal.
  */
 public final class LakeFormationWriteGuard {
 
@@ -80,7 +84,7 @@ public final class LakeFormationWriteGuard {
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
-            if (statement.getTargetTable() instanceof LakeFormationHiveTable lfTable) {
+            if (statement.getTargetTable() instanceof LakeFormationGovernedTable lfTable) {
                 throw new LakeFormationTableAccessException("Writing to "
                         + lfTable.getLakeFormationIdentity() + " is not supported in this version."
                         + " Reading a Lake Formation table and inserting the result elsewhere is allowed.");
@@ -172,9 +176,21 @@ public final class LakeFormationWriteGuard {
                         context, "SUBMIT TASK ... CREATE TABLE AS SELECT");
             }
             if (statement.getInsertStmt() != null
-                    && statement.getInsertStmt().getTargetTable() instanceof LakeFormationHiveTable lfTable) {
+                    && statement.getInsertStmt().getTargetTable() instanceof LakeFormationGovernedTable lfTable) {
                 throw new LakeFormationTableAccessException("SUBMIT TASK writing to "
                         + lfTable.getLakeFormationIdentity() + " is not supported in this version.");
+            }
+            // A submitted CACHE SELECT is judged by what it reads: it runs unattended on a schedule and leaves governed
+            // data in a cache whose later reads cannot be refused. One the user runs now is an ordinary authorized
+            // read.
+            if (statement.getDataCacheSelectStmt() != null) {
+                String what = "SUBMIT TASK ... CACHE SELECT";
+                // The analyzer may not have reached a nested statement, so the named tables are checked too.
+                refuseIfLakeFormation(statement.getDataCacheSelectStmt().getCatalog(), context, what);
+                for (TableRelation relation : AnalyzerUtils.collectAllTableRelation(
+                        statement.getDataCacheSelectStmt().getInsertStmt().getQueryStatement()).values()) {
+                    refuseIfLakeFormation(relation.getName().getCatalog(), context, what);
+                }
             }
             // Deliberately not checked: SubmitTaskStmt.getCatalogName(). The analyzer fills it from the
             // session's current catalog when the task is unqualified (TaskAnalyzer:33-37), so it names the
@@ -184,20 +200,12 @@ public final class LakeFormationWriteGuard {
             return null;
         }
 
-        /** Creates a persisted external analyze job that could only ever fail in the data plane. */
+        /**
+         * A scheduled job runs later in a daemon over every table it enumerates; refused where it is created.
+         */
         @Override
         public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
             refuseIfLakeFormation(statement.getCatalogName(), context, "CREATE ANALYZE JOB");
-            return null;
-        }
-
-        /**
-         * Statistics are data. This version cannot read a registered table's data, so an ANALYZE would fail
-         * at run time in the data plane anyway; refusing here says why.
-         */
-        @Override
-        public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext context) {
-            refuseIfLakeFormation(statement.getCatalogName(), context, "ANALYZE TABLE");
             return null;
         }
     }

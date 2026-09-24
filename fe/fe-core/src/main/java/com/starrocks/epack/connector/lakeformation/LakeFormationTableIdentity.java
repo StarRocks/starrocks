@@ -38,7 +38,12 @@ public record LakeFormationTableIdentity(
 
     @Override
     public String toString() {
-        String catalogId = awsCatalogId == null ? "the caller's own AWS account" : awsCatalogId;
-        return catalogName + "." + dbName + "." + tableName + " (catalogId=" + catalogId + ", region=" + region + ")";
+        return catalogName + "." + dbName + "." + tableName + " (catalogId=" + describeCatalogId(awsCatalogId)
+                + ", region=" + region + ")";
+    }
+
+    /** How messages name a catalog id; absent means the caller's own account. */
+    static String describeCatalogId(String awsCatalogId) {
+        return awsCatalogId == null ? "the caller's own AWS account" : awsCatalogId;
     }
 }

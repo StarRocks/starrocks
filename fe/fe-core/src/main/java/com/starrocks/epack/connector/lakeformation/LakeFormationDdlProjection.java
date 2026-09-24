@@ -22,17 +22,19 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Builds the table that SHOW CREATE TABLE is allowed to print for a governed table.
+ * Builds the table that SHOW CREATE TABLE is allowed to print for a Lake Formation governed table.
  *
- * Display only, which is why this is the one place allowed to narrow partColumnNames and dataColumnNames:
- * narrowing them on an executable table would break partition paths and the BE's positional column mapping.
+ * This is a display-only object. It is the one place allowed to narrow partColumnNames and dataColumnNames,
+ * because it never reaches the planner, the scan or a descriptor - narrowing those on an executable table
+ * would break partition paths and the BE's positional column mapping.
  *
- * Properties are an allowlist by key AND a rebuild by value. Keys alone are not enough - toHiveProperties
- * copies every Glue parameter over the computed ones, so a parameter named like an allowlisted key can
- * carry any string, an unauthorized column name included.
+ * Properties are an allowlist by key AND a rebuild by value. Filtering keys alone is not enough:
+ * toHiveProperties ends by copying every Glue table parameter over the computed ones, so a parameter named
+ * exactly like an allowlisted key can carry any string at all - an unauthorized column name included.
  */
 public final class LakeFormationDdlProjection {
 
@@ -55,12 +57,26 @@ public final class LakeFormationDdlProjection {
             "numFiles",
             "numRows",
             "EXTERNAL",
-            "table_type");
+            "table_type",
+            // Format labels on virtually every crawler or Spark table. Matched exactly, which keeps the
+            // dangerous sibling spark.sql.sources.schema.part.N out.
+            "classification",
+            "spark.sql.sources.provider");
 
     private static final Set<String> NUMERIC_PROPERTIES = ImmutableSet.of(
             "transient_lastDdlTime", "totalSize", "numFiles", "numRows");
 
     private static final Set<String> BOOLEAN_LIKE_PROPERTIES = ImmutableSet.of("EXTERNAL");
+
+    /**
+     * Free-form labels with no typed source to rebuild from, so they are validated by shape: one token that
+     * is not a physical column name. A schema dump cannot take that shape, and a value naming a column is
+     * refused even if it does.
+     */
+    private static final Set<String> TOKEN_PROPERTIES =
+            ImmutableSet.of("classification", "spark.sql.sources.provider");
+
+    private static final Pattern SINGLE_TOKEN = Pattern.compile("[A-Za-z0-9_.+-]{1,64}");
 
     private static final Set<String> TABLE_TYPE_VALUES = ImmutableSet.of(
             "MANAGED_TABLE", "EXTERNAL_TABLE", "VIRTUAL_VIEW");
@@ -154,6 +170,13 @@ public final class LakeFormationDdlProjection {
             String normalized = raw.trim().toUpperCase(Locale.ROOT);
             if (TABLE_TYPE_VALUES.contains(normalized)) {
                 putIfPresent(target, key, normalized);
+            }
+            return;
+        }
+        if (TOKEN_PROPERTIES.contains(key)) {
+            String trimmed = raw.trim();
+            if (SINGLE_TOKEN.matcher(trimmed).matches() && !table.isPhysicalColumn(trimmed)) {
+                putIfPresent(target, key, trimmed);
             }
         }
     }

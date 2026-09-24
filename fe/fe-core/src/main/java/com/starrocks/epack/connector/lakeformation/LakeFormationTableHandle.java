@@ -22,11 +22,8 @@ import static java.util.Objects.requireNonNull;
  * What a LakeFormationHiveTable carries instead of its credentials: enough to find them, nothing that is
  * worth stealing.
  *
- * A Table outlives its query on five paths - the MV rewrite plan cache, a prepared statement's AST, a
- * statistics job, MV pinned refresh, retry reusing the physical plan - so a credential parked on it would
- * sit there in plaintext. A stale handle simply stops resolving and the query fails closed.
- *
- * Staleness comes from attemptId: every planning attempt opens a scope with a new one.
+ * A Table outlives its query in several caches (MV plan cache, prepared statements, retry), so it carries
+ * this handle rather than a credential; a stale handle stops resolving and the query fails closed.
  */
 public record LakeFormationTableHandle(LakeFormationTableIdentity identity,
                                        TableLoadPurpose purpose,
@@ -39,8 +36,9 @@ public record LakeFormationTableHandle(LakeFormationTableIdentity identity,
     }
 
     /**
-     * False for anything from another planning attempt: a retry must re-resolve to get fresh credentials,
-     * and a prepared statement's second EXECUTE must re-resolve to notice a revoked grant.
+     * Whether a table carrying this handle may be reused as already resolved.
+     *
+     * False across attempts, so a retry gets fresh credentials and a re-EXECUTE notices a revoked grant.
      */
     public boolean isReusableIn(LakeFormationQueryScope scope) {
         return scope != null && attemptId.equals(scope.attemptId());

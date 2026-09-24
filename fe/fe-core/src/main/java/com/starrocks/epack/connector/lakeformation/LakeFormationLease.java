@@ -89,13 +89,14 @@ public final class LakeFormationLease implements QueryScopedCredentials {
             throw new LakeFormationTableAccessException("Lake Formation returned no location for "
                     + access.identity() + ", so there is nothing its credentials could be checked against.");
         }
+        // Parsed before anything else: a vended credential only governs S3, so a root on any other scheme
+        // would be listed with whatever identity the catalog configures for it.
+        S3Location root = S3Location.parse(tableRoot);
         List<String> vendedPaths = access.vendedS3Paths();
         if (vendedPaths == null || vendedPaths.isEmpty()) {
-            // Optional in the response and not always filled in. The per-partition containment check is
-            // the one that has to hold; this is the cheap table level sibling of it.
+            // Optional in the response; the per-partition containment check is the one that has to hold.
             return;
         }
-        S3Location root = S3Location.parse(tableRoot);
         for (String vendedPath : vendedPaths) {
             if (root.isSameOrDescendantOf(S3Location.parse(vendedPath))) {
                 return;
@@ -117,6 +118,16 @@ public final class LakeFormationLease implements QueryScopedCredentials {
         return context.holder();
     }
 
+
+    /**
+     * The partitions this table was authorized for, or null if they were never listed.
+     *
+     * Rethrows a failed listing, so it stays a failure.
+     */
+    LakeFormationPartitionSnapshot partitions() {
+        LakeFormationLeaseContext.PartitionListing listing = context.partitions().get();
+        return listing == null ? null : listing.getOrRethrow();
+    }
 
     /** The single partition an unpartitioned table is listed through, built when it was authorized. */
     com.starrocks.connector.hive.Partition tablePartition() {

@@ -154,7 +154,7 @@ public class LakeFormationListingTest {
         };
 
         LakeFormationHiveMetadata metadata = new LakeFormationHiveMetadata(CATALOG, null, hmsOps, null, null,
-                Optional.empty(), null, null, gateway(), properties());
+                Optional.empty(), null, null, gateway(), properties(), null, Map.of(), null, null, false);
 
         assertEquals(List.of("governed"), metadata.listTableNames(null, DB));
     }

@@ -16,6 +16,7 @@ package com.starrocks.epack.connector.lakeformation;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -36,6 +37,14 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class LakeFormationDdlProjectionTest {
+
+    /**
+     * A handle for a table built directly in a test, standing in for what a real planning attempt would
+     * have stamped on it. Tests that care about the attempt boundary open a real scope instead.
+     */
+    private static LakeFormationTableHandle testHandle(LakeFormationTableIdentity identity) {
+        return new LakeFormationTableHandle(identity, TableLoadPurpose.DATA_ACCESS, "test-attempt");
+    }
 
     private static final LakeFormationTableIdentity IDENTITY =
             new LakeFormationTableIdentity("lf", null, "us-west-2", "db", "t");
@@ -75,7 +84,8 @@ public class LakeFormationDdlProjectionTest {
                 .setStorageFormat(HiveStorageFormat.PARQUET)
                 .build();
         return LakeFormationHiveTable.of(physical,
-                List.of(new Column("id", IntegerType.INT), new Column("region", IntegerType.INT)), IDENTITY);
+                List.of(new Column("id", IntegerType.INT), new Column("region", IntegerType.INT)),
+                IDENTITY, testHandle(IDENTITY));
     }
 
     private static Map<String, String> physicalProperties() {
@@ -143,6 +153,33 @@ public class LakeFormationDdlProjectionTest {
         assertEquals("TRUE", display.getProperties().get("EXTERNAL"));
         assertEquals("EXTERNAL_TABLE", display.getProperties().get("table_type"));
         assertEquals("s3://bucket/db/t", display.getProperties().get("location"));
+    }
+
+    /** Format labels say nothing about columns, so a governed table shows them like any other table. */
+    @Test
+    public void testFormatLabelsAreShown() {
+        Map<String, String> properties = physicalProperties();
+        properties.put("classification", "parquet");
+        properties.put("spark.sql.sources.provider", "hive");
+        HiveTable display = LakeFormationDdlProjection.projectForDisplay(table(properties));
+
+        assertEquals("parquet", display.getProperties().get("classification"));
+        assertEquals("hive", display.getProperties().get("spark.sql.sources.provider"));
+    }
+
+    /**
+     * The labels are free text, so the shape is what is checked: one token, and not the name of any physical
+     * column - including one this principal cannot see, in any case.
+     */
+    @Test
+    public void testFormatLabelsThatCouldCarryAColumnAreDropped() {
+        Map<String, String> properties = physicalProperties();
+        properties.put("classification", "SSN");
+        properties.put("spark.sql.sources.provider", "{\"fields\":[{\"name\":\"x\"}]}");
+        HiveTable display = LakeFormationDdlProjection.projectForDisplay(table(properties));
+
+        assertNull(display.getProperties().get("classification"));
+        assertNull(display.getProperties().get("spark.sql.sources.provider"));
     }
 
     /**

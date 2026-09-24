@@ -35,21 +35,27 @@ public final class LakeFormationErrors {
         // class, a Lake Formation class AND com.starrocks.authorization.AccessDeniedException, so a
         // name comparison would dress an internal StarRocks failure up as a missing LF grant.
         String detail;
+        // No grant and no table mean "nothing to describe"; a permission type mismatch or an unclassified failure must fail.
+        boolean nothingToDescribe = false;
         if (cause instanceof software.amazon.awssdk.services.glue.model.PermissionTypeMismatchException) {
             detail = "Lake Formation refused the permission types StarRocks declared. Phase 1 supports "
                     + "column-level permissions only; row filters and cell filters are not supported yet";
         } else if (cause instanceof software.amazon.awssdk.services.glue.model.AccessDeniedException) {
             detail = "the query's principal has no Lake Formation grant on this table, or the "
                     + "StarRocks role is not registered as an authorized caller";
+            nothingToDescribe = true;
         } else if (cause instanceof software.amazon.awssdk.services.glue.model.EntityNotFoundException) {
             detail = "the table does not exist in this Glue catalog, or it is not registered with "
                     + "Lake Formation in this account and region";
+            nothingToDescribe = true;
         } else {
             detail = "the Lake Formation metadata request failed";
         }
-        return new LakeFormationTableAccessException(
-                "Cannot read Lake Formation metadata for " + identity + ": " + detail + "." + diagnostics(cause),
-                cause);
+        String message =
+                "Cannot read Lake Formation metadata for " + identity + ": " + detail + "." + diagnostics(cause);
+        return nothingToDescribe
+                ? LakeFormationTableAccessException.nothingToDescribe(message, cause)
+                : new LakeFormationTableAccessException(message, cause);
     }
 
     public static LakeFormationTableAccessException vendingFailure(LakeFormationTableIdentity identity,

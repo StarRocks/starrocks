@@ -31,11 +31,40 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
  */
 public class LakeFormationTableAccessException extends StarRocksConnectorException {
 
+    /**
+     * "Nothing here to describe" - an unrepresentable shape, or no grant / no table - rather than "this attempt
+     * failed". Enumeration leaves such a table out; everything else, AWS failures included, fails the statement.
+     */
+    private final boolean nothingToDescribe;
+
     public LakeFormationTableAccessException(String message) {
-        super(message);
+        this(message, null, false);
     }
 
     public LakeFormationTableAccessException(String message, Throwable cause) {
+        this(message, cause, causeReportsNothingToDescribe(cause));
+    }
+
+    private LakeFormationTableAccessException(String message, Throwable cause, boolean nothingToDescribe) {
         super(message, cause);
+        this.nothingToDescribe = nothingToDescribe;
+    }
+
+    public static LakeFormationTableAccessException nothingToDescribe(String message) {
+        return new LakeFormationTableAccessException(message, null, true);
+    }
+
+    public static LakeFormationTableAccessException nothingToDescribe(String message, Throwable cause) {
+        return new LakeFormationTableAccessException(message, cause, true);
+    }
+
+    public boolean isNothingToDescribe() {
+        return nothingToDescribe;
+    }
+
+    /** Survives the rewrap each rethrow does. */
+    private static boolean causeReportsNothingToDescribe(Throwable cause) {
+        return cause instanceof LakeFormationTableAccessException lakeFormationCause
+                && lakeFormationCause.isNothingToDescribe();
     }
 }

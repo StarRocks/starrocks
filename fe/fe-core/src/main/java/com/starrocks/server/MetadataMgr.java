@@ -64,6 +64,7 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.Partition;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -528,8 +529,16 @@ public class MetadataMgr {
     }
 
     public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
+        return getTable(context, catalogName, dbName, tblName, TableLoadPurpose.DATA_ACCESS);
+    }
+
+    /** @param purpose METADATA_ONLY lets a per query credential connector skip vending; the default is DATA_ACCESS */
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                          TableLoadPurpose purpose) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(context, dbName, tblName)).orElse(null);
+        Table connectorTable =
+                connectorMetadata.map(metadata -> metadata.getTable(context, dbName, tblName, purpose))
+                        .orElse(null);
         if (connectorTable != null && !connectorTable.isMetadataTable()) {
             // Load meta information from ConnectorTblMetaInfoMgr for each external table.
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);

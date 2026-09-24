@@ -33,6 +33,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
 import com.starrocks.epack.authorization.AuthorizerEPack;
@@ -42,7 +43,6 @@ import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.RoleMapping;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
-import com.starrocks.epack.connector.lakeformation.LakeFormationCatalogs;
 import com.starrocks.epack.connector.lakeformation.LakeFormationDdlProjection;
 import com.starrocks.epack.connector.lakeformation.LakeFormationHiveTable;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
@@ -108,13 +108,13 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
 
     /**
      * SHOW CREATE TABLE prints the schema and then the property map verbatim, and that map carries the full
-     * physical column names and types - so a narrowed schema would leak them straight back. A governed table
-     * is rendered from a display-only projection instead.
+     * physical column names and types - which is how a table whose schema was already narrowed would leak
+     * them straight back. A Lake Formation governed table is therefore rendered from a display-only
+     * projection instead.
      *
-     * Two conditions, deliberately different. Catalogs Lake Formation does not govern go straight to super,
-     * because resolving here would charge them a second resolution they never needed. Among the rest the
-     * decision is made on the resolved table, since only an authorized view is evidence that skipping the
-     * projection is safe.
+     * Decided on the resolved table, not the catalog: only an authorized view proves the projection can be skipped.
+     *
+     * External tables are resolved once here and rendered locally, not handed back to super to resolve again.
      */
     @Override
     public ShowResultSet visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
@@ -126,11 +126,6 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return super.visitShowCreateTableStatement(statement, context);
         }
-        // Only a Lake Formation catalog can resolve to a governed table, so every other external catalog
-        // keeps the behaviour it had - including not being resolved twice.
-        if (!LakeFormationCatalogs.isLakeFormationCatalog(catalogName)) {
-            return super.visitShowCreateTableStatement(statement, context);
-        }
 
         // Same order as upstream: a missing database is reported as such before anything asks Lake
         // Formation about a table inside it, so the error stays ERR_BAD_DB_ERROR rather than an
@@ -139,7 +134,9 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         if (metadataMgr.getDb(context, catalogName, tableRef.getDbName()) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, tableRef.getDbName());
         }
-        Table table = metadataMgr.getTable(context, catalogName, tableRef.getDbName(), tableRef.getTableName());
+        // METADATA_ONLY: SHOW CREATE is not planned, so a data-access request would be refused.
+        Table table = metadataMgr.getTable(context, catalogName, tableRef.getDbName(), tableRef.getTableName(),
+                TableLoadPurpose.METADATA_ONLY);
         if (table == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableRef.getTableName());
         }

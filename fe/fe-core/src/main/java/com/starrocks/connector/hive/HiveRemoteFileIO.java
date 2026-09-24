@@ -63,6 +63,14 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         this.configuration = configuration;
     }
 
+    /** Overridable so a connector with per query credentials can list on its own instance. */
+    protected FileSystem fileSystemFor(URI uri) throws IOException {
+        if (FeConstants.runningUnitTest) {
+            return this.fileSystem;
+        }
+        return FileSystem.get(uri, configuration);
+    }
+
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
         return getRemoteFiles(pathKey, false);
     }
@@ -77,12 +85,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
             URI uri = new Path(path).toUri();
-            FileSystem fileSystem;
-            if (!FeConstants.runningUnitTest) {
-                fileSystem = FileSystem.get(uri, configuration);
-            } else {
-                fileSystem = this.fileSystem;
-            }
+            FileSystem fileSystem = fileSystemFor(uri);
             List<Path> expandedPaths = Lists.newArrayList();
             if (!expandWildCards) {
                 expandedPaths.add(new Path(uri.getPath()));
@@ -248,12 +251,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         if (files == null || files.length <= 0) {
             return null;
         }
-        FileSystem fileSystem;
-        if (!FeConstants.runningUnitTest) {
-            fileSystem = FileSystem.get(files[0].toUri(), configuration);
-        } else {
-            fileSystem = this.fileSystem;
-        }
+        FileSystem fileSystem = fileSystemFor(files[0].toUri());
         List<FileStatus> fileStatuses = Lists.newArrayList();
         for (Path file : files) {
             FileStatus fileStatus = fileSystem.getFileStatus(file);

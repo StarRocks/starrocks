@@ -29,14 +29,18 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionInfo;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.QueryScopedCredentials;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.RemoteFileOperations;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreOperations;
 import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.glue.converters.CatalogToHiveConverter;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -51,36 +55,42 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.hadoop.conf.Configuration;
+import software.amazon.awssdk.services.glue.model.UnfilteredPartition;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * HiveMetadata for a catalog governed by Lake Formation.
  *
- * The instance is already query scoped when a query id exists: MetadataMgr keeps one ConnectorMetadata per
- * (queryId, catalog), so the memo below is per query without any extra plumbing. Note that MetadataMgr picks
- * that instance from the thread local ConnectContext, never from the context passed along the call chain.
- *
- * This version authorizes metadata only. Every data plane entry point is refused for a registered table,
- * because serving it would mean reading with the catalog's own credentials - exactly what deploying Lake
- * Formation is meant to prevent.
+ * MetadataMgr keeps one instance per (queryId, catalog), picked from the thread local ConnectContext. A
+ * registered table is authorized, vended and listed through Lake Formation; everything else is delegated.
  */
 public class LakeFormationHiveMetadata extends HiveMetadata {
 
     private final LakeFormationMetadataGateway gateway;
     private final LakeFormationCatalogProperties lakeFormationProperties;
     private final String lakeFormationCatalogName;
-    // No awsCatalogId field: it comes from lakeFormationProperties.awsCatalogId(), the same value the
-    // gateway puts on the wire. A second copy could drift from the one the request actually used.
 
-    // Concurrency is not expected during analysis, but PrepareCollectMetaTask does fan out over the same
-    // metadata instance, so the map is concurrent and resolution is deduplicated by computeIfAbsent.
-    private final Map<LakeFormationTableIdentity, LakeFormationTableResolution> memo = new ConcurrentHashMap<>();
+    private final LakeFormationPartitionReader partitionReader;
+    // Read only for the S3 addressing options a vended configuration keeps.
+    private final Map<String, String> catalogProperties;
+    private final Configuration baseConfiguration;
+    private final ExecutorService pullRemoteFileExecutor;
+    private final boolean recursiveListing;
+
+    // Listings no source has claimed yet; the backstop for paths that drop a coordinator without clearing it.
+    private final Set<LakeFormationFileListing> unclaimedListings = ConcurrentHashMap.newKeySet();
 
     public LakeFormationHiveMetadata(String catalogName,
                                      HdfsEnvironment hdfsEnvironment,
@@ -91,117 +101,233 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
                                      Executor updateExecutor,
                                      ConnectorProperties properties,
                                      LakeFormationMetadataGateway gateway,
-                                     LakeFormationCatalogProperties lakeFormationProperties) {
+                                     LakeFormationCatalogProperties lakeFormationProperties,
+                                     LakeFormationPartitionReader partitionReader,
+                                     Map<String, String> catalogProperties,
+                                     Configuration baseConfiguration,
+                                     ExecutorService pullRemoteFileExecutor,
+                                     boolean recursiveListing) {
         super(catalogName, hdfsEnvironment, hmsOps, fileOperations, statisticsProvider, cacheUpdateProcessor,
                 updateExecutor, properties);
         this.lakeFormationCatalogName = catalogName;
         this.gateway = gateway;
         this.lakeFormationProperties = lakeFormationProperties;
+        this.partitionReader = partitionReader;
+        this.catalogProperties = catalogProperties == null ? Map.of() : catalogProperties;
+        this.baseConfiguration = baseConfiguration;
+        this.pullRemoteFileExecutor = pullRemoteFileExecutor;
+        this.recursiveListing = recursiveListing;
     }
 
     /**
-     * Names the catalog's Lake Formation identity may see, not the ones its hmsOps identity can list.
-     *
-     * <p>Every enumeration entry point reads this - SHOW TABLES, information_schema.tables, the JDBC
-     * metadata calls - and the machine identity in aws.glue.* is not the identity Lake Formation authorizes,
-     * so a registered table granted to nobody used to be listed by name. Only the names change; what the
-     * user may then do with one is still the access controller's decision.
+     * Names the Lake Formation identity may see, not what the aws.glue.* identity can list, so a table granted to
+     * nobody is not enumerated. Access to a listed table is still the access controller's decision.
      */
     @Override
     public List<String> listTableNames(ConnectContext context, String dbName) {
         return gateway.listTableNames(dbName);
     }
 
+    /** An unannotated caller wants to read; defaulting to metadata-only would fail far from here. */
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+        return getTable(context, dbName, tblName, TableLoadPurpose.DATA_ACCESS);
+    }
+
+    @Override
+    public Table getTable(ConnectContext context, String dbName, String tblName, TableLoadPurpose purpose) {
         LakeFormationTableIdentity identity = identityOf(dbName, tblName);
-        // Outside the memo on purpose: "this call path has no query context" is a property of the path, not
-        // of the table, and memoizing it would keep the table dead for the rest of the query even on paths
-        // that do have one.
+        // Outside the scope: "no query context" belongs to the path, not the table, so it must not be memoized.
         LakeFormationQuerySession session = LakeFormationQuerySessions.of(context);
+        LakeFormationQueryScope scope = LakeFormationQueryScope.current().orElse(null);
+
+        if (scope == null) {
+            // No attempt is open. Metadata-only readers such as DESC run at execution time and get a one-shot answer;
+            // data access needs an attempt to account the credentials to.
+            if (purpose != TableLoadPurpose.METADATA_ONLY) {
+                // Except the table this statement already authorized while planning: ANALYZE resolves it again after
+                // the attempt closed. It carries no credential and matches no open attempt, so it can never be scanned.
+                Table planned = LakeFormationPlannedTables.find(session.queryId(), identity);
+                if (planned != null && purpose == TableLoadPurpose.DATA_ACCESS) {
+                    return planned;
+                }
+                // An ungoverned table needs no attempt, so it is served the ordinary way.
+                if (governsNothingHere(identity, session)) {
+                    return super.getTable(context, dbName, tblName);
+                }
+                throw new LakeFormationTableAccessException("Cannot read " + identity + " outside a planning"
+                        + " attempt: credentials are issued per query, and there is no query here to issue"
+                        + " them for.");
+            }
+            LakeFormationTableResolution oneShot =
+                    resolveOnce(identity, session, TableLoadPurpose.METADATA_ONLY, null, context);
+            oneShot.rethrowIfFailed();
+            return oneShot.isUnregistered()
+                    ? super.getTable(context, dbName, tblName) : oneShot.authorizedTable();
+        }
+
         LakeFormationTableResolution resolution =
-                memo.computeIfAbsent(memoKey(dbName, tblName), key -> resolveOnce(identity, session));
+                scope.resolve(identity, purpose, key -> resolveOnce(identity, session, purpose, scope, context));
         resolution.rethrowIfFailed();
         if (resolution.isUnregistered()) {
             return super.getTable(context, dbName, tblName);
         }
+        if (purpose == TableLoadPurpose.DATA_ACCESS) {
+            LakeFormationPlannedTables.remember(session.queryId(), identity, resolution.authorizedTable());
+        }
         return resolution.authorizedTable();
     }
 
-    /**
-     * Never throws: computeIfAbsent does not memoize when the mapping function throws, and a table that
-     * failed authorization must keep failing for the rest of this query rather than getting a second chance
-     * on the next call.
-     */
+    /** Never throws: computeIfAbsent drops a mapping whose function threw, and a failure must stay a failure. */
     private LakeFormationTableResolution resolveOnce(LakeFormationTableIdentity identity,
-                                                     LakeFormationQuerySession session) {
+                                                     LakeFormationQuerySession session,
+                                                     TableLoadPurpose purpose,
+                                                     LakeFormationQueryScope scope,
+                                                     ConnectContext context) {
         try {
             AuthorizedTableMetadata metadata = gateway.getTableMetadata(identity, session);
-            // isRegistered throws when the response carried no flag at all, which is what keeps "absent"
-            // from being read as "not registered". Only an explicit false takes the ordinary path.
+            // isRegistered throws on an absent flag; only an explicit false takes the ordinary path.
             if (!metadata.isRegistered(identity)) {
                 return LakeFormationTableResolution.unregistered();
             }
 
-            // Lake Formation answers with the AWS SDK v2 Glue model; everything below reads the Hive model.
-            // One conversion, shared by the guard and the builder, so what was validated is what gets built.
-            org.apache.hadoop.hive.metastore.api.Table apiTable =
-                    CatalogToHiveConverter.convertTable(metadata.table(), identity.dbName());
+            // One conversion shared by the guard and the builder. It can refuse a table with no storage descriptor, so
+            // it reports that table rather than ending an enumeration of the whole catalog.
+            org.apache.hadoop.hive.metastore.api.Table apiTable;
+            try {
+                apiTable = CatalogToHiveConverter.convertTable(metadata.table(), identity.dbName());
+            } catch (RuntimeException e) {
+                throw LakeFormationTableAccessException.nothingToDescribe(
+                        "Cannot query " + identity + ": " + e.getMessage(), e);
+            }
 
             LakeFormationTableGuard.check(metadata, apiTable, identity);
 
-            // Built from the Lake Formation response, never through hmsOps: HiveMetastore.getTable is a bare
-            // Glue call with the catalog's own credentials, and its result lands in the cross-query
-            // tableCache where the next principal would hit an untrimmed physical schema.
+            // Never through hmsOps: that is a bare Glue call whose result lands in the cross-query tableCache.
             HiveTable physical = HiveMetastoreApiConverter.toHiveTable(apiTable, lakeFormationCatalogName);
             List<Column> authorized =
                     LakeFormationSchemaProjection.project(physical.getFullSchema(), metadata, identity);
-            // After the projection, so the names compared here were already resolved against the physical
-            // schema exactly once.
             LakeFormationTableGuard.checkPartitionColumnsAuthorized(authorized, apiTable, identity);
-            return LakeFormationTableResolution.authorized(
-                    LakeFormationHiveTable.of(physical, authorized, identity));
+
+            // A one-shot read gets an id nothing can match, so its table is never reusable or scannable.
+            String attemptId = scope != null ? scope.attemptId() : "no-attempt-" + UUID.randomUUID();
+            LakeFormationHiveTable table = LakeFormationHiveTable.of(physical, authorized, identity,
+                    new LakeFormationTableHandle(identity, purpose, attemptId));
+            if (purpose != TableLoadPurpose.DATA_ACCESS) {
+                return LakeFormationTableResolution.metadataAuthorized(table, metadata);
+            }
+
+            // Vended while resolving, so no caller ever holds a table that looks readable and is not.
+            String tableArn = LakeFormationTableArns.of(identity, metadata.table(), lakeFormationProperties);
+            String queryAuthorizationId = metadata.queryAuthorizationId();
+            if (queryAuthorizationId == null || queryAuthorizationId.isEmpty()) {
+                throw new LakeFormationTableAccessException("Lake Formation reported " + identity
+                        + " as registered but returned no QueryAuthorizationId for it, so no credentials"
+                        + " can be requested.");
+            }
+            LakeFormationLeaseContext leaseContext = LakeFormationLeaseContext.create(identity,
+                    scope.principal(), attemptId, session.queryId(),
+                    context == null ? null : context.getExecutionId(), gateway, session, tableArn,
+                    physical.getTableLocation(), lakeFormationProperties, catalogProperties,
+                    gateway.cacheScopeSeed());
+            LakeFormationTableAccess access =
+                    gateway.vendTableCredentials(identity, tableArn, queryAuthorizationId, session);
+            LakeFormationLease lease = LakeFormationLease.validated(leaseContext, access);
+            leaseContext.holder().set(lease);
+            LakeFormationTableResolution resolution =
+                    LakeFormationTableResolution.accessReady(table, metadata, lease);
+            // An unpartitioned table is listed through one Partition from its own storage descriptor, built while it is in hand.
+            if (table.isUnPartitioned()) {
+                leaseContext.tablePartition().set(HiveMetastoreApiConverter.toPartition(
+                        apiTable.getSd(), apiTable.getParameters()));
+            }
+            return resolution;
         } catch (LakeFormationTableAccessException e) {
             return LakeFormationTableResolution.failed(e);
         } catch (Exception e) {
             return LakeFormationTableResolution.failed(new LakeFormationTableAccessException(
-                    // toString rather than getMessage: an NPE carries no message at all, and "…: null" is
-                    // a dead end for whoever has to work out which table stopped working.
+                    // toString: an NPE has no message.
                     "Failed to authorize " + identity + " with Lake Formation: " + e, e));
         }
     }
 
-    // ---------------------------------------------------------------------------------------------------
-    // Data plane. Everything here is refused for a registered table.
-    // ---------------------------------------------------------------------------------------------------
+    // Data plane.
 
     /**
-     * The catalog's own credentials, refused outright rather than per table.
-     *
-     * HdfsScanNode calls this from its constructor, before the remote-file refusal further down can fire -
-     * that one only runs when the scan range source is lazily set up. Leaving this open would make the
-     * boundary depend on the order two unrelated call sites happen to run in, and the whole point of a Lake
-     * Formation deployment is that the catalog's own credentials are never what reads the data.
-     *
-     * It is catalog scoped, not table scoped, so this also refuses unregistered tables in the same catalog.
-     * That is the intended trade for this version, which serves no data at all.
+     * The catalog's own credentials, for tables Lake Formation does not govern. A governed table never gets here:
+     * every scan asks the table for query scoped credentials first (HdfsScanNode), and refuseDataAccess backstops.
      */
     @Override
     public CloudConfiguration getCloudConfiguration() {
-        throw new LakeFormationTableAccessException("Lake Formation catalog " + lakeFormationCatalogName
-                + " does not hand out data credentials in this version, so its tables cannot be scanned.");
+        return super.getCloudConfiguration();
     }
 
+    /**
+     * Lists with the credentials the scan node captured, carried in the request: nothing is left to look them up in.
+     */
     @Override
     public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
-        refuseDataAccess(table, "enumerate its data files");
-        return super.getRemoteFiles(table, params);
+        LakeFormationLease lease = leaseForListing(table, params);
+        if (lease == null) {
+            return super.getRemoteFiles(table, params);
+        }
+        LakeFormationHiveTable lfTable = (LakeFormationHiveTable) table;
+        LakeFormationFileListing listing = openListing(lease);
+        try {
+            return listing.operations()
+                    .getRemoteFiles(table, partitionsFor(lfTable, lease, params), params);
+        } finally {
+            releaseListing(listing);
+        }
     }
 
     @Override
     public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
-        refuseDataAccess(table, "enumerate its data files");
-        return super.getRemoteFilesAsync(table, params);
+        LakeFormationLease lease = leaseForListing(table, params);
+        if (lease == null) {
+            return super.getRemoteFilesAsync(table, params);
+        }
+        LakeFormationHiveTable lfTable = (LakeFormationHiveTable) table;
+        // Consumed over time, so the source owns the listing and closes it.
+        LakeFormationFileListing listing = openListing(lease);
+        try {
+            RemoteFileInfoSource delegate = listing.operations()
+                    .getRemoteFilesAsync(table, params, p -> partitionsFor(lfTable, lease, p));
+            unclaimedListings.remove(listing);
+            return new LakeFormationRemoteFileInfoSource(delegate, listing);
+        } catch (RuntimeException e) {
+            releaseListing(listing);
+            throw e;
+        }
+    }
+
+    /**
+     * @return the credentials to list with, or null for an ungoverned table. Refusals throw: null would read as
+     *         "no credentials needed".
+     */
+    private LakeFormationLease leaseForListing(Table table, GetRemoteFilesParams params) {
+        if (!(table instanceof LakeFormationHiveTable lfTable)) {
+            refuseDataAccess(table, "enumerate its data files");
+            return null;
+        }
+        QueryScopedCredentials credentials = params.getQueryScopedCredentials();
+        if (credentials == null) {
+            throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                    + lfTable.getLakeFormationIdentity() + ": no Lake Formation credentials were captured"
+                    + " for this scan. The plan has to be rebuilt.");
+        }
+        if (!(credentials instanceof LakeFormationLease lease)) {
+            throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                    + lfTable.getLakeFormationIdentity() + ": the credentials carried by this scan were not"
+                    + " issued by Lake Formation.");
+        }
+        if (!lease.identity().equals(lfTable.getLakeFormationIdentity())) {
+            throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                    + lfTable.getLakeFormationIdentity() + ": the credentials carried by this scan were"
+                    + " issued for a different table.");
+        }
+        lease.cloudConfiguration(ConnectContext.get());
+        return lease;
     }
 
     @Override
@@ -211,12 +337,49 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
         return super.getHivePartitionDataInfos(table, partitionNames, partitionLimit);
     }
 
+    /**
+     * Split by table type, not by the attempt's memo: the descriptor table is serialized after planning, when no
+     * attempt is open, and must still read an ungoverned table's partitions. A governed table is answered from
+     * the snapshot this attempt authorized, never from the bare metastore.
+     */
     @Override
     public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-        refuseDataAccess(table, "read its partitions");
-        return super.getPartitions(table, partitionNames);
+        if (!(table instanceof LakeFormationHiveTable)) {
+            refuseDataAccess(table, "read its partitions");
+            return super.getPartitions(table, partitionNames);
+        }
+        if (((LakeFormationHiveTable) table).isUnPartitioned()) {
+            // Lake Formation authorizes no partitions for an unpartitioned table; answer its single one.
+            Partition single = tablePartitionFor(table.getCatalogDBName(), table.getCatalogTableName());
+            if (single == null) {
+                throw new LakeFormationTableAccessException("Cannot read the partitions of "
+                        + identityOf(table.getCatalogDBName(), table.getCatalogTableName())
+                        + ": it was not authorized while this statement was planned.");
+            }
+            return new ArrayList<>(Collections.nCopies(partitionNames.size(), single));
+        }
+        LakeFormationPartitionSnapshot snapshot =
+                partitionSnapshotFor(table.getCatalogDBName(), table.getCatalogTableName());
+        if (snapshot == null) {
+            throw new LakeFormationTableAccessException("Cannot read the partitions of "
+                    + identityOf(table.getCatalogDBName(), table.getCatalogTableName())
+                    + ": Lake Formation authorized no partitions for this attempt.");
+        }
+        List<PartitionInfo> partitions = new ArrayList<>(partitionNames.size());
+        for (String partitionName : partitionNames) {
+            Partition partition = snapshot.partitionFor(partitionName);
+            // Gone since planning: left out, as the ordinary path does, and the caller's size check decides.
+            if (partition != null) {
+                partitions.add(partition);
+            }
+        }
+        return partitions;
     }
 
+    /**
+     * Delegates. Accepted: Glue statistics are read with the catalog identity and filtered to the requested
+     * columns, and a missing numRows falls back to a listing that fails into unknown statistics.
+     */
     @Override
     public Statistics getTableStatistics(OptimizerContext session,
                                          Table table,
@@ -225,20 +388,24 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TvrVersionRange version) {
-        // Ahead of super on purpose: HiveMetadata.getTableStatistics swallows every Exception and returns
-        // unknown statistics, which would turn a refusal into a silently degraded plan.
+        if (table instanceof LakeFormationHiveTable) {
+            return super.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
+        }
+        // Before super, which swallows every exception into unknown statistics.
         refuseDataAccess(table, "collect statistics for it");
         return super.getTableStatistics(session, table, columns, partitionKeys, predicate, limit, version);
     }
 
     /**
-     * Refreshing ends in an unconditional bare-Glue loadTable whose result is put into the cross-query
-     * tableCache, so it has to be refused rather than allowed to repopulate the cache with an untrimmed
-     * schema.
+     * A no-op for a governed table: none of its state is in a shared cache, and refusing would break INSERT ...
+     * SELECT, which refreshes its sources by default.
      */
     @Override
     public void refreshTable(String srDbName, Table table, List<String> partitionNames,
                              boolean onlyCachedPartitions) {
+        if (table instanceof LakeFormationHiveTable) {
+            return;
+        }
         refuseDataAccess(table, "refresh it");
         super.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions);
     }
@@ -246,21 +413,167 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
     @Override
     public List<String> listPartitionNames(String dbName, String tblName,
                                            ConnectorMetadataRequestContext requestContext) {
-        refuseIfRegistered(dbName, tblName, "list its partitions");
-        return super.listPartitionNames(dbName, tblName, requestContext);
+        LakeFormationPartitionSnapshot snapshot = partitionSnapshotFor(dbName, tblName);
+        if (snapshot == null) {
+            return super.listPartitionNames(dbName, tblName, requestContext);
+        }
+        return snapshot.partitionNames();
     }
 
     @Override
     public List<String> listPartitionNamesByValue(String dbName, String tblName,
                                                   List<Optional<String>> partitionValues) {
-        refuseIfRegistered(dbName, tblName, "list its partitions");
-        return super.listPartitionNamesByValue(dbName, tblName, partitionValues);
+        LakeFormationPartitionSnapshot snapshot = partitionSnapshotFor(dbName, tblName);
+        if (snapshot == null) {
+            return super.listPartitionNamesByValue(dbName, tblName, partitionValues);
+        }
+        // Filtered here: every partition is read anyway, since one outside the table root refuses the table.
+        return LakeFormationPartitionSnapshot.filterByValues(snapshot.partitionNames(), partitionValues);
     }
 
-    // ---------------------------------------------------------------------------------------------------
-    // Mutators. Refused wholesale: this version has not implemented or verified writing through
-    // Lake Formation, and several of these reach the remote Glue catalog directly.
-    // ---------------------------------------------------------------------------------------------------
+    /** @return null when the table is not governed */
+    private LakeFormationPartitionSnapshot partitionSnapshotFor(String dbName, String tblName) {
+        LakeFormationTableIdentity identity = identityOf(dbName, tblName);
+        if (noAttemptButMayAuthorize()) {
+            return partitionsWithoutAnAttempt(identity);
+        }
+        LakeFormationTableResolution resolution = dataAccessResolutionFor(dbName, tblName);
+        return resolution == null ? null : loadPartitions(resolution, identity);
+    }
+
+    private boolean noAttemptButMayAuthorize() {
+        return LakeFormationQueryScope.current().isEmpty()
+                && LakeFormationQuerySessions.mayAuthorizeWithoutAnAttempt();
+    }
+
+    /**
+     * The single partition an unpartitioned table is listed through, or null. getPartitionNames and getPartitions
+     * must agree on the count, or callers fail with "corrupted partition meta".
+     */
+    private Partition tablePartitionFor(String dbName, String tblName) {
+        LakeFormationTableResolution resolution = dataAccessResolutionFor(dbName, tblName);
+        if (resolution == null || resolution.lease() == null) {
+            return null;
+        }
+        return resolution.lease().tablePartition();
+    }
+
+    private LakeFormationTableResolution dataAccessResolutionFor(String dbName, String tblName) {
+        LakeFormationQueryScope scope = LakeFormationQueryScope.current().orElse(null);
+        LakeFormationTableIdentity identity = identityOf(dbName, tblName);
+        LakeFormationTableResolution resolution = scope == null
+                ? null : scope.find(identity, TableLoadPurpose.DATA_ACCESS);
+        if (resolution == null) {
+            // Nothing recorded is not "unregistered"; deny by default.
+            refuseIfRegistered(dbName, tblName, "list its partitions");
+            return null;
+        }
+        resolution.rethrowIfFailed();
+        if (resolution.isUnregistered()) {
+            return null;
+        }
+        return resolution;
+    }
+
+    /**
+     * For internal steps with no attempt - the ANALYZE worker listing partitions, an MV refresh recording versions
+     * - open one for the length of the listing, with the same authorization the statement would get.
+     */
+    private LakeFormationPartitionSnapshot partitionsWithoutAnAttempt(LakeFormationTableIdentity identity) {
+        ConnectContext context = ConnectContext.get();
+        LakeFormationQuerySession session = LakeFormationQuerySessions.of(context);
+        try (LakeFormationQueryScope.Scope ignored = LakeFormationQueryScope.open(context)) {
+            LakeFormationQueryScope own = LakeFormationQueryScope.current().orElseThrow();
+            LakeFormationTableResolution resolution = own.resolve(identity, TableLoadPurpose.DATA_ACCESS,
+                    key -> resolveOnce(identity, session, TableLoadPurpose.DATA_ACCESS, own, context));
+            resolution.rethrowIfFailed();
+            return resolution.isUnregistered() ? null : loadPartitions(resolution, identity);
+        }
+    }
+
+    // Package-private for tests.
+    LakeFormationPartitionSnapshot loadPartitions(LakeFormationTableResolution resolution,
+                                                  LakeFormationTableIdentity identity) {
+        LakeFormationLease lease = resolution.lease();
+        AtomicReference<LakeFormationLeaseContext.PartitionListing> cell = lease.context().partitions();
+        LakeFormationLeaseContext.PartitionListing existing = cell.get();
+        if (existing != null) {
+            return existing.getOrRethrow();
+        }
+        // One request per table per attempt; a failure is published too, so it stays a failure.
+        synchronized (cell) {
+            LakeFormationLeaseContext.PartitionListing current = cell.get();
+            if (current != null) {
+                return current.getOrRethrow();
+            }
+            LakeFormationHiveTable table = (LakeFormationHiveTable) resolution.authorizedTable();
+            try {
+                LakeFormationQuerySession session = LakeFormationQuerySessions.of(ConnectContext.get());
+                List<UnfilteredPartition> raw = partitionReader.readAll(identity, session, null);
+                LakeFormationPartitionSnapshot snapshot = LakeFormationPartitionSnapshot.build(
+                        table, raw, table.getAuthorizedColumnNames(), identity);
+                cell.set(LakeFormationLeaseContext.PartitionListing.of(snapshot));
+                return snapshot;
+            } catch (LakeFormationTableAccessException e) {
+                cell.set(LakeFormationLeaseContext.PartitionListing.failed(e));
+                throw e;
+            } catch (RuntimeException e) {
+                LakeFormationTableAccessException failure = new LakeFormationTableAccessException(
+                        "Failed to list the Lake Formation authorized partitions of " + identity + ": " + e, e);
+                cell.set(LakeFormationLeaseContext.PartitionListing.failed(failure));
+                throw failure;
+            }
+        }
+    }
+
+    /** From what this attempt authorized: a partition that appeared after planning was never checked. */
+    private List<Partition> partitionsFor(LakeFormationHiveTable table, LakeFormationLease lease,
+                                          GetRemoteFilesParams params) {
+        if (table.isUnPartitioned()) {
+            Partition tablePartition = lease.tablePartition();
+            if (tablePartition == null) {
+                throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                        + table.getLakeFormationIdentity() + ": it was not authorized while this query was"
+                        + " planned.");
+            }
+            return List.of(tablePartition);
+        }
+        LakeFormationPartitionSnapshot snapshot = lease.partitions();
+        if (snapshot == null) {
+            throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                    + table.getLakeFormationIdentity() + ": its partitions were not resolved while this"
+                    + " query was planned, and this version does not read partition metadata during"
+                    + " execution.");
+        }
+        List<Partition> partitions = new ArrayList<>();
+        for (PartitionKey partitionKey : params.getPartitionKeys()) {
+            String name = PartitionUtil.toHivePartitionName(table.getPartitionColumnNames(), partitionKey);
+            Partition partition = snapshot.partitionFor(name);
+            if (partition == null) {
+                throw new LakeFormationTableAccessException("Cannot enumerate the data files of "
+                        + table.getLakeFormationIdentity() + ": partition " + name + " was not among the"
+                        + " partitions Lake Formation authorized for this query.");
+            }
+            partitions.add(partition);
+        }
+        return partitions;
+    }
+
+    /** One per listing, so each can release its own file systems; re-validates the lease first. */
+    private LakeFormationFileListing openListing(LakeFormationLease lease) {
+        LakeFormationFileListing listing = LakeFormationFileListing.open(
+                lease.cloudConfiguration(ConnectContext.get()), baseConfiguration, pullRemoteFileExecutor,
+                recursiveListing);
+        unclaimedListings.add(listing);
+        return listing;
+    }
+
+    private void releaseListing(LakeFormationFileListing listing) {
+        unclaimedListings.remove(listing);
+        listing.close();
+    }
+
+    // Mutators: writing through Lake Formation is not supported in this version.
 
     @Override
     public void createDb(ConnectContext context, String dbName, Map<String, String> properties)
@@ -293,10 +606,7 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
         throw refuseMutation("DROP TABLE");
     }
 
-    /**
-     * Overridden even though the base class appears to delegate: HiveMetadata does implement it, and it runs
-     * HiveAlterTableExecutor against the remote Glue catalog.
-     */
+    /** HiveMetadata runs HiveAlterTableExecutor against the remote Glue catalog. */
     @Override
     public ShowResultSet alterTable(ConnectContext context, AlterTableStmt stmt) throws StarRocksException {
         throw refuseMutation("ALTER TABLE");
@@ -314,15 +624,22 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
 
     @Override
     public void clear() {
-        memo.clear();
+        // Only unclaimed listings: this also runs on cache eviction, which says nothing about a running listing.
+        unclaimedListings.forEach(LakeFormationFileListing::close);
+        unclaimedListings.clear();
         super.clear();
     }
 
     /**
-     * awsCatalogId is read straight off the catalog properties, which is also where the gateway reads it, so
-     * the id named in an error message is always the one the request used. It is nullable, and absent means
-     * the caller's own AWS account.
+     * Registration is a deployment property, so it can be asked without an attempt. Never cached, and an absent
+     * flag throws, so only an explicit "not registered" is served ordinarily.
      */
+    private boolean governsNothingHere(LakeFormationTableIdentity identity,
+                                       LakeFormationQuerySession session) {
+        return !gateway.getTableMetadata(identity, session).isRegistered(identity);
+    }
+
+    /** awsCatalogId is nullable; absent means the caller's own account. */
     private LakeFormationTableIdentity identityOf(String dbName, String tblName) {
         return new LakeFormationTableIdentity(lakeFormationCatalogName,
                 lakeFormationProperties.awsCatalogId(),
@@ -330,63 +647,49 @@ public class LakeFormationHiveMetadata extends HiveMetadata {
     }
 
     /**
-     * The memo key, lower-cased. Hive and Glue treat database and table names case insensitively, so two
-     * spellings of the same table in one statement must not resolve twice - that would be a second Lake
-     * Formation call and a second Table instance for the same table.
-     *
-     * The request itself still uses the caller's spelling: only the key is normalized.
-     */
-    private LakeFormationTableIdentity memoKey(String dbName, String tblName) {
-        return identityOf(dbName == null ? null : dbName.toLowerCase(Locale.ROOT),
-                tblName == null ? null : tblName.toLowerCase(Locale.ROOT));
-    }
-
-    /**
-     * This version authorizes metadata only. Reading a registered table's data would mean falling back to
-     * the catalog's own credentials, which is precisely what a Lake Formation deployment forbids.
+     * Refuses a path that would read a governed table with the catalog's own credentials. The plain HiveTable
+     * half is a backstop: a registered table never produces one.
      */
     private void refuseDataAccess(Table table, String what) {
         if (table instanceof LakeFormationHiveTable lfTable) {
             throw new LakeFormationTableAccessException(
                     "Cannot " + what + " for " + lfTable.getLakeFormationIdentity()
-                            + ": this version authorizes Lake Formation metadata but does not vend data"
-                            + " credentials, and falling back to the catalog's own credentials is not allowed.");
+                            + ": this path cannot carry the credentials Lake Formation issued for this"
+                            + " query, and falling back to the catalog's own is not allowed.");
         }
-        // A caller can hand back a plain HiveTable it obtained earlier - the statistics collector keeps the
-        // Table it was created with, and refreshTable is reached that way. The type check alone would let
-        // that through, and refreshTable is the one entry point that ends in a bare Glue load whose result
-        // is put into the cross-query table cache, so it gets the same deny-by-default treatment the
-        // name-based entry points get.
         if (table instanceof HiveTable hiveTable) {
-            LakeFormationTableResolution resolution =
-                    memo.get(memoKey(hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName()));
+            LakeFormationTableResolution resolution = resolutionFor(
+                    hiveTable.getCatalogDBName(), hiveTable.getCatalogTableName());
             if (resolution != null && !resolution.isUnregistered()) {
                 throw new LakeFormationTableAccessException("Cannot " + what + " for "
                         + hiveTable.getCatalogDBName() + "." + hiveTable.getCatalogTableName()
                         + " on Lake Formation catalog " + lakeFormationCatalogName
-                        + ": this version does not read a registered table's data.");
+                        + ": this table is governed by Lake Formation and this path cannot read it.");
             }
         }
     }
 
     /**
-     * Deny by default. An empty memo does not mean "not registered", it means nobody has resolved this table
-     * on this metadata instance yet - which is the normal state on any freshly created instance. Only an
-     * explicitly memoized "unregistered" may take the ordinary path.
-     *
-     * The consequence, which is deliberate: a table that really is unregistered is also refused here if
-     * nothing resolved it on this instance first. Deciding otherwise would need either a live registration
-     * check on this path - turning partition enumeration into a Lake Formation caller - or a registration
-     * cache that is trustworthy across principals. Neither belongs in this version.
+     * Deny by default: nothing recorded is not "unregistered". An unregistered table nothing authorized first is
+     * refused too; avoiding that would need a live registration check or a cross-principal cache.
      */
     private void refuseIfRegistered(String dbName, String tblName, String what) {
-        LakeFormationTableResolution resolution = memo.get(memoKey(dbName, tblName));
+        LakeFormationTableResolution resolution = resolutionFor(dbName, tblName);
         if (resolution != null && resolution.isUnregistered()) {
             return;
         }
         throw new LakeFormationTableAccessException("Cannot " + what + " for "
                 + identityOf(dbName, tblName) + " without first authorizing the table with Lake Formation."
                 + " This version does not authorize partition level access.");
+    }
+
+    /** Data access only: a metadata-only authorization permits reading nothing. */
+    private LakeFormationTableResolution resolutionFor(String dbName, String tblName) {
+        LakeFormationQueryScope scope = LakeFormationQueryScope.current().orElse(null);
+        if (scope == null) {
+            return null;
+        }
+        return scope.find(identityOf(dbName, tblName), TableLoadPurpose.DATA_ACCESS);
     }
 
     private LakeFormationTableAccessException refuseMutation(String what) {

@@ -17,6 +17,7 @@ package com.starrocks.epack.connector.lakeformation;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.TableOperation;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
@@ -42,6 +43,8 @@ public class LakeFormationHiveTableTest {
 
     private static final LakeFormationTableIdentity IDENTITY =
             new LakeFormationTableIdentity("lf", "123456789012", "us-west-2", "db", "t");
+    private static final LakeFormationTableHandle HANDLE =
+            new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1");
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -101,7 +104,7 @@ public class LakeFormationHiveTableTest {
         // which is why this class never has to cope with a hidden partition column.
         HiveTable physical = physicalTable(List.of("id", "region", "ssn"), List.of("region"));
         LakeFormationHiveTable lf =
-                LakeFormationHiveTable.of(physical, List.of(col("id"), col("region")), IDENTITY);
+                LakeFormationHiveTable.of(physical, List.of(col("id"), col("region")), IDENTITY, HANDLE);
 
         assertEquals(List.of("id", "region"), names(lf.getFullSchema()));
         assertEquals(List.of("id", "region"), names(lf.getBaseSchema()));
@@ -121,7 +124,7 @@ public class LakeFormationHiveTableTest {
     public void testDoesNotAliasThePhysicalTablesMutableState() {
         HiveTable physical = physicalTable(List.of("id", "region"), List.of("region"));
         LakeFormationHiveTable lf =
-                LakeFormationHiveTable.of(physical, List.of(col("id"), col("region")), IDENTITY);
+                LakeFormationHiveTable.of(physical, List.of(col("id"), col("region")), IDENTITY, HANDLE);
 
         assertNotSame(physical.getDataColumnNames(), lf.getDataColumnNames());
         assertNotSame(physical.getPartitionColumnNames(), lf.getPartitionColumnNames());
@@ -137,7 +140,8 @@ public class LakeFormationHiveTableTest {
     @Test
     public void testPreservesTheIdentityPoliciesAreKeyedBy() {
         HiveTable physical = physicalTable(List.of("id"), List.of());
-        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY);
+        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY,
+                new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1"));
 
         assertEquals(physical.getCreateTime(), lf.getCreateTime());
         assertEquals(physical.getUUID(), lf.getUUID());
@@ -148,7 +152,8 @@ public class LakeFormationHiveTableTest {
     @Test
     public void testPropertiesAreASnapshotAndKeepThePhysicalContent() {
         HiveTable physical = physicalTable(List.of("id", "ssn"), List.of());
-        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY);
+        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY,
+                new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1"));
 
         assertEquals("id,ssn", lf.getProperties().get("hive.table.column.names"));
         assertThrows(UnsupportedOperationException.class, () -> lf.getProperties().put("x", "y"));
@@ -163,7 +168,8 @@ public class LakeFormationHiveTableTest {
     @Test
     public void testAuthorizedColumnNamesAreCaseInsensitiveAndImmutable() {
         HiveTable physical = physicalTable(List.of("Id", "ssn"), List.of());
-        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("Id")), IDENTITY);
+        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("Id")), IDENTITY,
+                new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1"));
 
         assertTrue(lf.isColumnAuthorized("id"));
         assertTrue(lf.isColumnAuthorized("ID"));
@@ -174,7 +180,7 @@ public class LakeFormationHiveTableTest {
     @Test
     public void testOnlySupportsRead() {
         LakeFormationHiveTable lf = LakeFormationHiveTable.of(
-                physicalTable(List.of("id"), List.of()), List.of(col("id")), IDENTITY);
+                physicalTable(List.of("id"), List.of()), List.of(col("id")), IDENTITY, HANDLE);
         assertEquals(java.util.Set.of(TableOperation.READ), lf.getSupportedOperations());
     }
 
@@ -182,14 +188,15 @@ public class LakeFormationHiveTableTest {
     @Test
     public void testInsertIsRefusedByTheTableItself() {
         LakeFormationHiveTable lf = LakeFormationHiveTable.of(
-                physicalTable(List.of("id"), List.of()), List.of(col("id")), IDENTITY);
+                physicalTable(List.of("id"), List.of()), List.of(col("id")), IDENTITY, HANDLE);
         assertFalse(lf.supportInsert());
     }
 
     @Test
     public void testSchemaMutatorsAreSealed() {
         HiveTable physical = physicalTable(List.of("id", "ssn"), List.of());
-        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY);
+        LakeFormationHiveTable lf = LakeFormationHiveTable.of(physical, List.of(col("id")), IDENTITY,
+                new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "attempt-1"));
 
         assertThrows(LakeFormationTableAccessException.class,
                 () -> lf.modifyTableSchema("db", "t", physical));

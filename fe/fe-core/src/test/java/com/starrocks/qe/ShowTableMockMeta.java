@@ -23,6 +23,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -100,6 +101,13 @@ public class ShowTableMockMeta extends MetadataMgr {
             return externalTbSet.get(tblName);
         }
         return localMetastore.getTable(dbName, tblName);
+    }
+
+    /** Routed to the four argument version, or a caller that states its purpose bypasses this mock. */
+    @Override
+    public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName,
+                          TableLoadPurpose purpose) {
+        return getTable(context, catalogName, dbName, tblName);
     }
 
     @Override

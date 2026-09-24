@@ -17,6 +17,7 @@ package com.starrocks.epack.connector.lakeformation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.io.Closeable;
 import java.util.UUID;
 
 /**
@@ -47,23 +48,15 @@ public final class LakeFormationQuerySessions {
         UUID queryId = source == null ? null : source.getQueryId();
 
         if (queryId == null) {
-            // No ambient query: the caller's own context is the best identity available, and the metadata
-            // instance is a throwaway one anyway.
+            // The schema readers take this branch: Thrift handlers set the calling statement's identity on the context
+            // they pass down and never publish it thread local. Publishing one would attribute Lake Formation calls to
+            // another statement, and the worker thread reuses its thread local across requests.
             source = context;
             queryId = source == null ? null : source.getQueryId();
         }
 
         if (queryId == null) {
-            // Deliberately not a NullPointerException: LakeFormationQuerySession requires a non null query
-            // id, and an NPE here would be caught by the resolution memo and remembered as an authorization
-            // failure for the table rather than reported as an unsupported entry point.
-            //
-            // Some metadata-only entry points legitimately have no query id - FrontendServiceImpl's Thrift
-            // handlers build a bare ConnectContext and never publish it as thread local, which is how
-            // SHOW COLUMNS and information_schema reach the connector. Serving those needs a session that
-            // is explicitly marked as a metadata read rather than one that impersonates a query, and the
-            // encoding of such a marker has to be validated against Glue before it ships. Until then this
-            // path stays closed.
+            // What is left cannot be attributed to any statement, and stays refused: the query id is what makes a call auditable.
             throw new LakeFormationTableAccessException(
                     "This code path reached Lake Formation without a query context, so no auditable query id"
                             + " is available. Metadata-only entry points are not supported on a Lake Formation"
@@ -74,5 +67,35 @@ public final class LakeFormationQuerySessions {
                 queryId.toString(),
                 source.getStartTimeInstant(),
                 String.valueOf(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId()));
+    }
+
+    /** The thread a manual ANALYZE hands its collection to; it lists partitions before its statement is planned. */
+    static boolean isStatisticsWorker() {
+        ConnectContext context = ConnectContext.get();
+        return context != null && context.isStatisticsJob();
+    }
+
+    /** Set while a materialized view refresh this catalog is part of runs, on that refresh's own thread. */
+    private static final ThreadLocal<Boolean> MATERIALIZED_VIEW_REFRESH = new ThreadLocal<>();
+
+    /**
+     * Marks this thread as a materialized view refresh while the handle is open: after its DML it reads the base
+     * partitions again, outside any attempt.
+     */
+    static Closeable enterMaterializedViewRefresh() {
+        MATERIALIZED_VIEW_REFRESH.set(Boolean.TRUE);
+        return MATERIALIZED_VIEW_REFRESH::remove;
+    }
+
+    static boolean isMaterializedViewRefresh() {
+        return Boolean.TRUE.equals(MATERIALIZED_VIEW_REFRESH.get());
+    }
+
+    /**
+     * Internal steps a user's statement set in motion - the ANALYZE worker, an MV refresh - may authorize for
+     * themselves.
+     */
+    static boolean mayAuthorizeWithoutAnAttempt() {
+        return isStatisticsWorker() || isMaterializedViewRefresh();
     }
 }

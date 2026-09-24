@@ -43,6 +43,12 @@ public class GetRemoteFilesParams {
     private long scanFilesCap = -1;
     private long scanRowsCap = -1;
 
+    /**
+     * Per query credentials the scan node captured while planning, for connectors that issue them per query: the
+     * listing runs after planning, with no way to look them up.
+     */
+    private QueryScopedCredentials queryScopedCredentials;
+
     protected GetRemoteFilesParams(Builder builder) {
         this.partitionKeys = builder.partitionKeys;
         this.partitionNames = builder.partitionNames;
@@ -59,6 +65,7 @@ public class GetRemoteFilesParams {
         this.scanBytesCap = builder.scanBytesCap;
         this.scanFilesCap = builder.scanFilesCap;
         this.scanRowsCap = builder.scanRowsCap;
+        this.queryScopedCredentials = builder.queryScopedCredentials;
     }
 
     public int getPartitionSize() {
@@ -86,7 +93,8 @@ public class GetRemoteFilesParams {
                 .setUsedForDelete(usedForDelete)
                 .setScanBytesCap(scanBytesCap)
                 .setScanFilesCap(scanFilesCap)
-                .setScanRowsCap(scanRowsCap);
+                .setScanRowsCap(scanRowsCap)
+                .setQueryScopedCredentials(queryScopedCredentials);
         if (isRecursive.isPresent()) {
             paramsBuilder.setIsRecursive(isRecursive.get());
         }
@@ -185,6 +193,11 @@ public class GetRemoteFilesParams {
         return scanRowsCap;
     }
 
+    /** Null for the ordinary case, where a catalog has one identity and the connector already knows it. */
+    public QueryScopedCredentials getQueryScopedCredentials() {
+        return queryScopedCredentials;
+    }
+
     // True when at least one bounded-cost statistics-scan budget is active. Used by connectors to
     // decide whether to bypass the split cache and enforce early stop; false leaves reads untouched.
     public boolean hasScanBudget() {
@@ -207,6 +220,7 @@ public class GetRemoteFilesParams {
         private long scanBytesCap = -1;
         private long scanFilesCap = -1;
         private long scanRowsCap = -1;
+        private QueryScopedCredentials queryScopedCredentials;
 
         public Builder setPartitionKeys(List<PartitionKey> partitionKeys) {
             this.partitionKeys = partitionKeys;
@@ -280,6 +294,11 @@ public class GetRemoteFilesParams {
 
         public Builder setScanRowsCap(long scanRowsCap) {
             this.scanRowsCap = scanRowsCap;
+            return this;
+        }
+
+        public Builder setQueryScopedCredentials(QueryScopedCredentials queryScopedCredentials) {
+            this.queryScopedCredentials = queryScopedCredentials;
             return this;
         }
 

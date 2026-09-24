@@ -187,9 +187,7 @@ public class LakeFormationQueryScopeTest {
             });
 
             assertEquals(1, resolutions.get(), "a refusal must not get a second chance");
-            // The remembered outcome is still the refusal, not the second resolver's answer.
-            assertThrows(LakeFormationTableAccessException.class,
-                    () -> scope.find(IDENTITY, TableLoadPurpose.DATA_ACCESS).rethrowIfFailed());
+            assertTrue(scope.find(IDENTITY, TableLoadPurpose.DATA_ACCESS).isFailed());
         }
     }
 

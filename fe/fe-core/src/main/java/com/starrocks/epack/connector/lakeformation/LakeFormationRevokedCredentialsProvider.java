@@ -25,13 +25,9 @@ import java.net.URI;
  * The credential provider a released Delta reader leaves in its configuration: constructing it fails, so
  * no file system can be built from that configuration again.
  *
- * <p>Closing a reader removes its file system from the cache, but the handlers keep the configuration and
- * build file systems from it lazily, so a later lookup would build a fresh one from credentials that are
- * still valid. Naming this provider makes that lookup fail instead.
+ * <p>A released reader's configuration can still build file systems lazily; this provider makes that lookup fail.
  *
- * <p>Replacing the provider rather than unsetting the credential keys: the configuration is a copy of the
- * catalog's, so unsetting would fall back to the catalog's identity or the SDK's ambient chain, both of
- * which can reach S3.
+ * <p>Replaced rather than unset: unsetting would fall back to the catalog's or the SDK's ambient identity.
  */
 public final class LakeFormationRevokedCredentialsProvider implements AwsCredentialsProvider {
 

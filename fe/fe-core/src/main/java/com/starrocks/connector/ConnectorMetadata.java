@@ -136,6 +136,17 @@ public interface ConnectorMetadata {
     }
 
     /**
+     * Get a Table, telling the connector what the caller will do with it; only connectors that pay per query to
+     * make a table readable act on it. Override this one without delegating from the three argument version:
+     * tests mock that one.
+     *
+     * @param purpose what the caller will do with the table; never null
+     */
+    default Table getTable(ConnectContext context, String dbName, String tblName, TableLoadPurpose purpose) {
+        return getTable(context, dbName, tblName);
+    }
+
+    /**
      * Lazily fetch the table comment when a caller really needs it
      * (e.g. information_schema.tables). Default implementation returns
      * the comment already on the cached Table object — i.e. for Iceberg

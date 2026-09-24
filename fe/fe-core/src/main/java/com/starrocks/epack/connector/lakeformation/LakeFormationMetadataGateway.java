@@ -39,9 +39,7 @@ import static java.util.Objects.requireNonNull;
 /**
  * The two Lake Formation calls, exposed separately.
  *
- * Deliberately not one atomic "authorize and vend" method: callers that only need metadata - DESC,
- * information_schema, statistics discovery - must be able to skip vending entirely, and bundling the
- * two would spend a credential request on every one of them.
+ * Authorizing and vending are separate calls: whether a metadata read needs a credential is the format's decision.
  */
 public class LakeFormationMetadataGateway {
     private static final Logger LOG = LogManager.getLogger(LakeFormationMetadataGateway.class);
@@ -61,13 +59,27 @@ public class LakeFormationMetadataGateway {
     private final GlueClient glueClient;
     private final LakeFormationClient lakeFormationClient;
     private final LakeFormationCatalogProperties properties;
+    private final long cacheScopeSeed;
 
     public LakeFormationMetadataGateway(GlueClient glueClient,
                                         LakeFormationClient lakeFormationClient,
                                         LakeFormationCatalogProperties properties) {
+        this(glueClient, lakeFormationClient, properties, 0);
+    }
+
+    /** @param cacheScopeSeed mixed into every backend cache key a scan builds; zero keeps the ordinary keys */
+    public LakeFormationMetadataGateway(GlueClient glueClient,
+                                        LakeFormationClient lakeFormationClient,
+                                        LakeFormationCatalogProperties properties,
+                                        long cacheScopeSeed) {
         this.glueClient = requireNonNull(glueClient, "glueClient is null");
         this.lakeFormationClient = requireNonNull(lakeFormationClient, "lakeFormationClient is null");
         this.properties = requireNonNull(properties, "properties is null");
+        this.cacheScopeSeed = cacheScopeSeed;
+    }
+
+    public long cacheScopeSeed() {
+        return cacheScopeSeed;
     }
 
     public AuthorizedTableMetadata getTableMetadata(LakeFormationTableIdentity identity,
@@ -95,13 +107,10 @@ public class LakeFormationMetadataGateway {
     /**
      * The tables this catalog's Lake Formation identity may see in a database.
      *
-     * <p>Plain GetTables, not the unfiltered variant: Lake Formation filters the response for the caller, so
-     * one call answers for the whole database with no per-table fan out. ⚠️ That filtering comes from the
-     * account's Lake Formation settings, not from this code - a database left on IAM-only access control is
-     * not filtered at all.
+     * <p>Plain GetTables: Lake Formation filters it for the caller, so one call returns the visible set. A
+     * database still on IAM-only access control is not filtered.
      *
-     * <p>A failed page fails the whole enumeration: a truncated list reads exactly like a database that
-     * really holds only those tables.
+     * <p>A failed page fails the whole enumeration rather than returning a truncated list.
      */
     public List<String> listTableNames(String dbName) {
         requireNonNull(dbName, "dbName is null");
@@ -130,6 +139,12 @@ public class LakeFormationMetadataGateway {
             nextToken = response.nextToken();
         } while (nextToken != null && !nextToken.isEmpty());
         return ImmutableList.copyOf(names);
+    }
+
+    private String describe(String dbName) {
+        String catalogId = properties.awsCatalogId();
+        return dbName + " (catalogId=" + LakeFormationTableIdentity.describeCatalogId(catalogId)
+                + ", region=" + properties.region() + ")";
     }
 
     /**
@@ -191,30 +206,22 @@ public class LakeFormationMetadataGateway {
 
         LakeFormationTableAccess access =
                 LakeFormationTableAccess.from(identity, queryAuthorizationId, response);
+        // The one place a credential is requested, so these lines count vends. Never log the response: it holds keys.
+        LOG.info("Lake Formation vended table credentials: table={} queryId={} expiresAt={}",
+                identity, session.queryId(), access.expiresAt());
         checkLease(identity, requestedDuration, access.expiresAt());
         return access;
     }
 
-    /** Names the database the way a refusal has to name it: with the account and region actually used. */
-    private String describe(String dbName) {
-        String catalogId = properties.awsCatalogId();
-        return dbName + " (catalogId=" + (catalogId == null ? "the caller's own AWS account" : catalogId)
-                + ", region=" + properties.region() + ")";
-    }
-
     /**
-     * The request is built from this gateway's catalog id and region while errors name the identity, so a
-     * disagreement would report an account or region that was never consulted.
-     *
-     * Neither branch can fire today - the only producer of an identity builds it from these same properties
-     * - so both are a structural assertion for the day a second producer appears.
+     * The request uses this gateway's catalog id and region but errors name the identity, so the two must agree.
      */
     private void checkIdentityMatchesThisCatalog(LakeFormationTableIdentity identity) {
         String catalogId = properties.awsCatalogId();
         if (!Objects.equals(catalogId, identity.awsCatalogId())) {
             throw new LakeFormationTableAccessException("Refusing to query " + identity
                     + " through a Lake Formation gateway bound to AWS catalog id "
-                    + (catalogId == null ? "the caller's own AWS account" : catalogId));
+                    + LakeFormationTableIdentity.describeCatalogId(catalogId));
         }
         if (!properties.region().equalsIgnoreCase(identity.region())) {
             throw new LakeFormationTableAccessException("Refusing to query " + identity
@@ -238,9 +245,8 @@ public class LakeFormationMetadataGateway {
                     + " that expired at " + expiresAt + ", before they could be used. Check for clock skew "
                     + "between this FE and AWS.");
         }
-        // A minute of slack absorbs clock skew and the round trip; anything beyond that is the
-        // account really capping us, which operators need to know before a long query fails.
-        if (granted < requestedDurationSeconds - 60) {
+        // Measured on this FE's clock after the round trip, so a full lease reads short; same slack admission holds back.
+        if (granted < requestedDurationSeconds - LakeFormationLease.CLOCK_SKEW_GUARD.toSeconds()) {
             LOG.warn("Lake Formation granted a {}s lease for {} although {}={}s was requested; "
                             + "long-running queries may be refused at admission",
                     granted, identity, LakeFormationCatalogProperties.CREDENTIAL_DURATION_SECONDS,

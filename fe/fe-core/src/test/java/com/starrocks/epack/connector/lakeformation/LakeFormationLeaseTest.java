@@ -256,6 +256,17 @@ public class LakeFormationLeaseTest {
                 "do not cover the table's own location");
     }
 
+    /** A root on another scheme is refused even when the response names no vended paths to compare with. */
+    @Test
+    public void testANonS3TableRootIsRefusedWithoutVendedPaths() {
+        LakeFormationLeaseContext leaseContext = LakeFormationLeaseContext.create(IDENTITY, ALICE,
+                "attempt-1", UUID.randomUUID().toString(), new TUniqueId(1, 1), null, null, null,
+                "hdfs://namenode/db/t", properties(), Map.of(), CACHE_SCOPE_SEED);
+
+        assertThrows(LakeFormationTableAccessException.class, () -> LakeFormationLease.validated(leaseContext,
+                access(IDENTITY, Instant.now().plus(1, ChronoUnit.HOURS))));
+    }
+
     @Test
     public void testCredentialsForAnotherTableAreRefusedAtConstruction() {
         LakeFormationLeaseContext leaseContext = LakeFormationLeaseContext.create(IDENTITY, ALICE,

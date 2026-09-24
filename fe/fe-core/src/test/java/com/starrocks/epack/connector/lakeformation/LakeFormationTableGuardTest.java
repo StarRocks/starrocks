@@ -168,6 +168,7 @@ public class LakeFormationTableGuardTest {
         assertTrue(check(parquetTable().tableType("VIRTUAL_VIEW").build()).getMessage().contains("views"));
     }
 
+    /** ⛔ And it must not be marked as a shape refusal, unlike the dozen refusals it sits among in the same method. */
     @Test
     public void testRejectsRowOrCellFilterAsAnInternalError() {
         AuthorizedTableMetadata withFilter = AuthorizedTableMetadata.from(
@@ -178,6 +179,22 @@ public class LakeFormationTableGuardTest {
         LakeFormationTableAccessException e = assertThrows(LakeFormationTableAccessException.class,
                 () -> LakeFormationTableGuard.check(withFilter, convert(parquetTable().build()), IDENTITY));
         assertTrue(e.getMessage().contains("row or cell filter"), e.getMessage());
+        assertFalse(e.isNothingToDescribe(),
+                "a filter we cannot enforce has to fail the statement, not hide the table it applies to");
+    }
+
+    /**
+     * A shape refusal says so, so metadata enumeration can leave the table out. Asserted on the Delta
+     * case because that is the one a Hive catalog over a shared Glue database actually meets.
+     */
+    @Test
+    public void testAShapeRefusalIsMarkedAsOne() {
+        Table table = parquetTable()
+                .parameters(Map.of("spark.sql.sources.provider", "delta"))
+                .build();
+        LakeFormationTableAccessException e = check(table);
+        assertTrue(e.getMessage().contains("Delta Lake tables are not supported"), e.getMessage());
+        assertTrue(e.isNothingToDescribe(), "a Delta table in a Hive catalog is a shape refusal");
     }
 
     @Test
@@ -229,11 +246,14 @@ public class LakeFormationTableGuardTest {
                 convert(partitionedBy("region")), IDENTITY));
     }
 
+    /** ⛔ Attempt-level as well, and for a different reason than the filter. */
     @Test
     public void testRejectsWhenAnyPhysicalPartitionColumnIsNotAuthorized() {
-        assertThrows(LakeFormationTableAccessException.class,
+        LakeFormationTableAccessException e = assertThrows(LakeFormationTableAccessException.class,
                 () -> LakeFormationTableGuard.checkPartitionColumnsAuthorized(
                         List.of(new Column("id", IntegerType.INT)), convert(partitionedBy("region")), IDENTITY));
+        assertFalse(e.isNothingToDescribe(),
+                "an incomplete grant has to fail the statement, not make the table disappear");
     }
 
     @Test

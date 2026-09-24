@@ -17,6 +17,7 @@ package com.starrocks.epack.connector.lakeformation;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.TableLoadPurpose;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
@@ -93,7 +94,7 @@ public class LakeFormationDumpTableProjectionTest {
     private static LakeFormationHiveTable governedTable() {
         return LakeFormationHiveTable.of(physicalTable(),
                 List.of(new Column("id", IntegerType.INT), new Column("region", IntegerType.INT)),
-                IDENTITY);
+                IDENTITY, new LakeFormationTableHandle(IDENTITY, TableLoadPurpose.DATA_ACCESS, "test-attempt"));
     }
 
     /** The same call the dump serializer makes, so the assertion tracks the text that really gets written. */
