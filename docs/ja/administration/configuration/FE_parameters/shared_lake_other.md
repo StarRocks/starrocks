@@ -913,6 +913,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が属する StarRocks クラスター内で ID 認証に使用されるトークン。このパラメーターが指定されていない場合、StarRocks はクラスターのリーダー FE が最初に起動されたときに、クラスターのランダムなトークンを生成します。
 - 導入時期：-
 
+### `authentication_failure_cache_capacity`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_failure_cache_ttl_second` が記憶する拒否済み認証情報の最大件数。1 つのクライアント（またはユーザー名を次々に変える攻撃者）が占有できるメモリを制限し、超過分は古いものから破棄されます。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
+- 導入時期：v4.2, v4.1.6
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string
@@ -947,6 +965,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドのソケット読み取りタイムアウト。`authentication_ldap_simple_conn_timeout_ms` を参照してください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドの TCP 接続タイムアウト。設定しない場合は OS の TCP タイムアウトにフォールバックし、ディレクトリに到達できないときにリクエストを処理しているスレッド（security integration が HTTP・Arrow Flight・BE→FE のロード RPC も認証するようになったため、これらのチャネルのワーカースレッド）を数分間占有する可能性があります。認証を早く失敗させたい場合は小さくしてください。
+- 導入時期：v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 
