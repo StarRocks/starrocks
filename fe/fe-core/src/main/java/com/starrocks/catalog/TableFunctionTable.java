@@ -392,6 +392,25 @@ public class TableFunctionTable extends Table {
         return properties;
     }
 
+    /**
+     * Re-derives the fields that come from the load properties {@code InsertAnalyzer} pushes down
+     * from the enclosing INSERT into the {@code FILES()} property map.
+     *
+     * <p>Needed because the push-down does not always run before this table is built. Two callers
+     * resolve a {@code FILES()} schema outside the planner meta lock and before
+     * {@code InsertAnalyzer#analyzeProperties}: {@code StatementPlanner}'s lock-free pre-analysis
+     * for an INSERT that mixes {@code FILES()} with locked tables, and the Sample-Based Tablet
+     * Pre-Split hook. {@code QueryAnalyzer#resolveTableRef} then reuses the instance they built
+     * instead of rebuilding it, so the constructor parsed the property map while the pushed-down
+     * keys were still absent and every derived field kept its default -- silently dropping, for
+     * example, the {@code strict_mode} the statement (or the session default) asked for.
+     */
+    public void applyPushedDownLoadProperties(Map<String, String> pushedDownProperties) {
+        if (pushedDownProperties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(pushedDownProperties.get(PROPERTY_STRICT_MODE));
+        }
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.TABLE_FUNCTION_TABLE, fullSchema.size(),
