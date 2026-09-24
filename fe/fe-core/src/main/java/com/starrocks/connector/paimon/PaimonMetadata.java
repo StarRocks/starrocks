@@ -135,7 +135,49 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
     private void updatePartitionInfo(String databaseName, String tableName) {
+=======
+    @Override
+    public void createView(ConnectContext context, CreateViewStmt stmt) {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+        String viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt).getInlineViewDef();
+        RowType rowType = ColumnTypeConverter.toPaimonRowType(stmt.getColumns());
+        Identifier identifier = new org.apache.paimon.catalog.Identifier(dbName, viewName);
+        Map<String, String> dialects = new HashMap<>(1);
+        dialects.put(VIEW_DIALECTS_KEY, viewDefinition);
+        View view = new ViewImpl(identifier, rowType.getFields(), viewDefinition, dialects, stmt.getComment(), new HashMap<>());
+        try {
+            paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
+        } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
+            throw new StarRocksConnectorException(
+                    String.format("Paimon createView error for %s.%s", dbName, viewName), e);
+        }
+    }
+
+    @Override
+    public void dropTable(ConnectContext context, DropTableStmt stmt) {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        Table paimonTable = getTable(context, stmt.getDbName(), stmt.getTableName());
+        if (paimonTable == null) {
+            return;
+        }
+        try {
+            if (paimonTable.isPaimonView()) {
+                paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
+                return;
+            }
+            paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
+        }
+    }
+
+    private void updateAllPartitionInfos(String databaseName, String tableName) {
+>>>>>>> 0a80e3c ([Enhancement] Reload Paimon partition cache at most once per getPartitions call (#79445))
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         RowType dataTableRowType;
@@ -215,9 +257,20 @@ public class PaimonMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public List<String> listPartitionNames(String databaseName, String tableName, ConnectorMetadatRequestContext requestContext) {
         updatePartitionInfo(databaseName, tableName);
         return new ArrayList<>(this.partitionInfos.keySet());
+=======
+    public List<String> listPartitionNames(String databaseName, String tableName,
+                                           ConnectorMetadataRequestContext requestContext) {
+        Identifier identifier = new Identifier(databaseName, tableName);
+        updateAllPartitionInfos(databaseName, tableName);
+        if (this.partitionInfos.get(identifier) == null) {
+            return Lists.newArrayList();
+        }
+        return new ArrayList<>(this.partitionInfos.get(identifier).keySet());
+>>>>>>> 0a80e3c ([Enhancement] Reload Paimon partition cache at most once per getPartitions call (#79445))
     }
 
     @Override
@@ -568,12 +621,28 @@ public class PaimonMetadata implements ConnectorMetadata {
                     null, null));
             return result;
         }
+<<<<<<< HEAD
         for (String partitionName : partitionNames) {
             if (this.partitionInfos.get(partitionName) == null) {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
             }
             if (this.partitionInfos.get(partitionName) != null) {
                 result.add(this.partitionInfos.get(partitionName));
+=======
+        Map<String, Partition> partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
+        // Refresh before collecting results so a later cache miss also updates earlier hits.
+        for (String partitionName : partitionNames) {
+            if (!partitionInfo.containsKey(partitionName)) {
+                this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
+                break;
+            }
+        }
+        for (String partitionName : partitionNames) {
+            Partition partition = partitionInfo.get(partitionName);
+            if (partition != null) {
+                result.add(partition);
+>>>>>>> 0a80e3c ([Enhancement] Reload Paimon partition cache at most once per getPartitions call (#79445))
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }
