@@ -89,14 +89,16 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     };
 
     Status ret_status;
-    auto defer = DeferOp([&]() {
-        SpillProcessTasksBuilder task_builder(state);
-        task_builder.finally(set_call_back_function);
-        Status st = _chunks_sorter->spill_channel()->execute(task_builder);
-        ret_status = ret_status.ok() ? st : ret_status;
-    });
+    {
+        auto defer = DeferOp([&]() {
+            SpillProcessTasksBuilder task_builder(state);
+            task_builder.finally(set_call_back_function);
+            Status st = _chunks_sorter->spill_channel()->execute(task_builder);
+            ret_status = ret_status.ok() ? st : ret_status;
+        });
 
-    ret_status = _chunks_sorter->done(state);
+        ret_status = _chunks_sorter->done(state);
+    } // Complete the final task before constructing the returned Status.
     return ret_status;
 }
 
