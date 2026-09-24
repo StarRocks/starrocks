@@ -2303,6 +2303,28 @@ TEST_F(VectorResidualPrefilterTest, delete_predicate_preapplied_before_ann_topk)
     EXPECT_EQ(res.del_filtered, 2) << "delete pre-apply must count the rows it removed";
 }
 
+// A scan range that covers the whole segment runs the ANN search without a row-id filter; the result must
+// be the exact top-k / range result.
+TEST_F(VectorResidualPrefilterTest, full_range_search_without_id_filter) {
+    // vecs[i] = {i,0,0,0}, query [0,0,0,0] -> dist = i^2: the exact top-3 is {0,1,2} at {0,1,4}.
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+    EXPECT_EQ(res.distances, (std::vector<float>{0.f, 1.f, 4.f}));
+}
+
+TEST_F(VectorResidualPrefilterTest, full_range_range_search_without_id_filter) {
+    ResidualCaseConfig cfg;
+    cfg.min_filter_col = 0;
+    cfg.vector_range = 4.0; // keep dist = i^2 <= 4 -> rows 0, 1, 2
+    ResidualCaseResult res;
+    run_residual_case(PredicateTree{}, /*above_predicate=*/false, &res, /*pred_col_late_mat=*/false, &cfg);
+    EXPECT_EQ(res.ids, (std::vector<int64_t>{0, 1, 2}));
+    EXPECT_EQ(res.distances, (std::vector<float>{0.f, 1.f, 4.f}));
+}
+
 TEST_F(VectorResidualPrefilterTest, delete_preapplied_short_circuit_bounds_topk) {
     // Pure ANN (no residual) + a delete predicate removing ids < 4 -> live set {4,5,6,7}, cardinality 4.
     // _apply_del_predicate folds the survivors into _scan_range and the vector stage treats them as

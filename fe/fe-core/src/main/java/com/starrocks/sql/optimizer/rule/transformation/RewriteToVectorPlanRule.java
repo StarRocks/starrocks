@@ -47,6 +47,7 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -171,6 +172,25 @@ public class RewriteToVectorPlanRule extends TransformationRule {
         return false;
     }
 
+    private static boolean isColumnStillReferenced(ColumnRefOperator ref, Collection<ScalarOperator> projections,
+                                                   ScalarOperator predicate) {
+        if (ref == null) {
+            return true;
+        }
+        for (ScalarOperator projection : projections) {
+            if (projection != null && projection.getUsedColumns().contains(ref.getId())) {
+                return true;
+            }
+        }
+        return predicate != null && predicate.getUsedColumns().contains(ref.getId());
+    }
+
+    // A scan left with only the synthetic distance column would have an empty storage schema.
+    private static boolean hasOtherRealColumn(Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                              ColumnRefOperator embedding, ColumnRefOperator distance) {
+        return colRefToColumnMetaMap.keySet().stream().anyMatch(ref -> !ref.equals(embedding) && !ref.equals(distance));
+    }
+
     private OptExpression rewriteOptByDistanceColumn(LogicalTopNOperator topNOp,
                                                      LogicalOlapScanOperator scanOp,
                                                      OptimizerContext context,
@@ -202,6 +222,16 @@ public class RewriteToVectorPlanRule extends TransformationRule {
                         Map.Entry::getKey,
                         entry -> rewriteScalarOperatorByDistanceColumn(entry.getValue(), info, distanceColRef)
                 ));
+
+        // The distance now comes from the index. If nothing else reads the embedding, take it out of the
+        // scan's column set; the BE re-adds it per segment when a segment has to fall back to brute force.
+        if (!isColumnStillReferenced(info.inColumnRef, newScanProjectMap.values(), newPredicate)
+                && hasOtherRealColumn(newColRefToColumnMetaMap, info.inColumnRef, distanceColRef)) {
+            Column embeddingColumn = newColRefToColumnMetaMap.remove(info.inColumnRef);
+            if (embeddingColumn != null) {
+                newColumnMetaToColRefMap.remove(embeddingColumn);
+            }
+        }
 
         LogicalOlapScanOperator newScanOp = LogicalOlapScanOperator.builder()
                 .withOperator(scanOp)

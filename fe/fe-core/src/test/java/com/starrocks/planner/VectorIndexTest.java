@@ -36,13 +36,20 @@ package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.stream.Collectors;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class VectorIndexTest extends PlanTestBase {
 
@@ -865,11 +872,9 @@ public class VectorIndexTest extends PlanTestBase {
     //     approx_*_distance(v, [...]) row by row, so v must remain eager at the scan output.
     @Test
     public void testLazyMaterializationForHnswSelectDistanceOnly() throws Exception {
-        // Quadrant 1: HNSW + SELECT does not reference embedding c1.
-        // Expected: c1 is pruned entirely from the BE scan output — neither the scan-side
-        // projection nor the FETCH operator references it. The BE only fills the virtual
-        // distance slot via id2distance_map and ships row_id columns up; the FETCH at the
-        // coordinator fetches only the small c0 column for the K survivors.
+        // Quadrant 1: HNSW + SELECT does not reference embedding c1. The ANN rewrite prunes c1 from the
+        // scan, which leaves c0 (INT) as the only deferrable column, so GLM's cost gate declines and the
+        // scan reads c0 directly: no FETCH, and c1 is referenced nowhere.
         boolean originalLazyMat = connectContext.getSessionVariable().isEnableGlobalLateMaterialization();
         connectContext.getSessionVariable().setEnableGlobalLateMaterialization(true);
         try {
@@ -878,9 +883,7 @@ public class VectorIndexTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "VECTORINDEX: ON");
             assertContains(plan, "Refine: OFF");
-            // The FETCH operator's lookup descriptor for table test_cosine should reference
-            // c0 but not c1.
-            assertContains(plan, "<slot 1> => c0");
+            assertNotContains(plan, "FETCH");
             assertNotContains(plan, "=> c1");
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
@@ -926,6 +929,58 @@ public class VectorIndexTest extends PlanTestBase {
         } finally {
             connectContext.getSessionVariable().setEnableGlobalLateMaterialization(originalLazyMat);
             connectContext.getSessionVariable().setEnableVectorIndexRefine(false);
+        }
+    }
+
+    private List<String> scanColumns(String sql) throws Exception {
+        ExecPlan execPlan = getExecPlan(sql);
+        OlapScanNode scan = (OlapScanNode) execPlan.getScanNodes().get(0);
+        return scan.getDesc().getSlots().stream()
+                .filter(slot -> slot.getColumn() != null)
+                .map(slot -> slot.getColumn().getName())
+                .collect(Collectors.toList());
+    }
+
+    // The embedding stays in the scan only when something other than the rewritten distance call reads it.
+    // GLM is off so the assertions see the scan's own column set, not what GLM defers to a FETCH.
+    @Test
+    public void testPruneAnnVectorColumn() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean originalLazyMat = sv.isEnableGlobalLateMaterialization();
+        sv.setEnableGlobalLateMaterialization(false);
+        String score = "approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1)";
+        String tail = " from test.test_cosine order by score desc limit 10";
+        try {
+            // only the distance reads c1: pruned
+            List<String> cols = scanColumns("select c0, " + score + " as score" + tail);
+            assertTrue(cols.contains("c0"), cols.toString());
+            assertFalse(cols.contains("c1"), cols.toString());
+
+            // c1 selected, or read by another expression: kept
+            assertTrue(scanColumns("select c1, " + score + " as score" + tail).contains("c1"));
+            assertTrue(scanColumns("select c0, array_length(c1) as n, " + score + " as score" + tail).contains("c1"));
+
+            // no other real column left: kept, so the scan never ends up with an empty storage schema
+            assertTrue(scanColumns("select " + score + " as score" + tail).contains("c1"));
+        } finally {
+            sv.setEnableGlobalLateMaterialization(originalLazyMat);
+        }
+    }
+
+    // Refine recomputes the exact distance from c1 above the scan, so the rule must not prune it.
+    @Test
+    public void testPruneAnnVectorColumnKeepsEmbeddingOnRefine() throws Exception {
+        SessionVariable sv = connectContext.getSessionVariable();
+        boolean originalLazyMat = sv.isEnableGlobalLateMaterialization();
+        sv.setEnableGlobalLateMaterialization(false);
+        sv.setEnableVectorIndexRefine(true);
+        try {
+            List<String> cols = scanColumns("select c0, approx_l2_distance([1.1,2.2,3.3,4.4], c1) as score "
+                    + "from test.test_ivfpq order by score limit 10");
+            assertTrue(cols.contains("c1"), cols.toString());
+        } finally {
+            sv.setEnableVectorIndexRefine(false);
+            sv.setEnableGlobalLateMaterialization(originalLazyMat);
         }
     }
 

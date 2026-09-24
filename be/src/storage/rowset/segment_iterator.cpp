@@ -1512,20 +1512,25 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
     std::vector<int64_t> result_ids;
     std::vector<float> result_distances;
     std::vector<int64_t> filtered_result_ids;
-    DelIdFilter del_id_filter(_scan_range);
+    // A scan range covering the whole segment makes the filter admit every row; faiss only probes it for
+    // membership, so passing none returns the same result without a probe per visited node.
+    std::optional<DelIdFilter> del_id_filter;
+    if (_scan_range.span_size() != _segment->num_rows()) {
+        del_id_filter.emplace(_scan_range);
+    }
+    tenann::IdFilter* id_filter = del_id_filter ? &*del_id_filter : nullptr;
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
         if (_vector_index_ctx->has_vector_range) {
             st = _vector_index_ctx->ann_reader->range_search(
-                    _vector_index_ctx->query_view, search_k, &result_ids, &result_distances, &del_id_filter,
+                    _vector_index_ctx->query_view, search_k, &result_ids, &result_distances, id_filter,
                     static_cast<float>(_vector_index_ctx->vector_range), _vector_index_ctx->result_order);
         } else {
             result_ids.resize(search_k);
             result_distances.resize(search_k);
             st = _vector_index_ctx->ann_reader->search(_vector_index_ctx->query_view, search_k, (result_ids.data()),
-                                                       reinterpret_cast<uint8_t*>(result_distances.data()),
-                                                       &del_id_filter);
+                                                       reinterpret_cast<uint8_t*>(result_distances.data()), id_filter);
         }
     }
 
