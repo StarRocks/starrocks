@@ -21,6 +21,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <memory>
 #include <thread>
 
@@ -499,28 +500,25 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
 }
 
 // Pay special attentions to the following statements order with different new and old val
-void CompactionScheduler::update_compact_threads(int32_t new_val) {
-    if (_task_queues.modifying()) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, reset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+Status CompactionScheduler::update_compact_threads(int32_t new_val) {
+    // _target_size is an int16_t, so anything above its max would wrap around when stored.
+    if (new_val <= 0 || new_val > std::numeric_limits<int16_t>::max()) {
+        return Status::InvalidArgument(fmt::format("compact_threads must be in [1, {}], got {}",
+                                                   std::numeric_limits<int16_t>::max(), new_val));
     }
-
+    if (_task_queues.modifying()) {
+        return Status::ServiceUnavailable(
+                fmt::format("compact_threads is still being resized to {}, retry later", _task_queues.target_size()));
+    }
     if (new_val == _task_queues.task_queue_size()) {
-        return;
-    } else if (new_val <= 0) {
-        LOG(ERROR) << "compact_threads can't be set to " << new_val << ", reset it back to "
-                   << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
+        return Status::OK();
     }
 
     _task_queues.set_target_size(new_val);
+    TEST_SYNC_POINT("CompactionScheduler::update_compact_threads:after_set_target_size");
     if (_task_queues.target_size() != new_val) {
-        LOG(ERROR) << "Failed to update compact_threads to " << new_val
-                   << " due to concurrency update, bereset it back to " << _task_queues.target_size();
-        config::compact_threads = _task_queues.target_size();
-        return;
+        return Status::InternalError(fmt::format("Failed to update compact_threads to {}, current target is {}",
+                                                 new_val, _task_queues.target_size()));
     }
 
     auto old_val = _task_queues.task_queue_size();
@@ -528,12 +526,13 @@ void CompactionScheduler::update_compact_threads(int32_t new_val) {
         // increase queue count
         _task_queues.resize_if_needed(_limiter);
         for (int i = old_val; i < new_val; i++) {
-            CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
+            RETURN_IF_ERROR(_threads->submit_func([this, id = i]() { this->thread_task(id); }));
         }
     } else {
         // In order to prevent exceptions due to concurrent modifications of the task queues,
         // reducing the queue length will be completed asynchronously.
     }
+    return Status::OK();
 }
 
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
