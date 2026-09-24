@@ -194,6 +194,7 @@ public class InsertPreSplitHookFilesTest {
         when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
         when(target.getVisibleIndexMetas())
                 .thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
+        when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(bigintColumn("k")));
         com.starrocks.catalog.PartitionInfo partitionInfo = mock(com.starrocks.catalog.PartitionInfo.class);
         when(partitionInfo.isPartitioned()).thenReturn(false);
         when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
@@ -204,7 +205,7 @@ public class InsertPreSplitHookFilesTest {
         when(filesTable.loadFileList()).thenReturn(List.of());
         // The inferred FILES() schema must carry the sort key: the sampler projects it by name, so a
         // schema without it leaves nothing to sample and the statement is declined before the coordinator.
-        when(filesTable.getFullSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k")));
         when(filesRelation.getTable()).thenReturn(filesTable);
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
         when(stmt.isColumnMatchByName()).thenReturn(true);
