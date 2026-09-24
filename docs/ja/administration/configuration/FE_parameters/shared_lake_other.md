@@ -931,6 +931,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
 - 導入時期：v4.2, v4.1.6
 
+### `authentication_ldap_case_insensitive`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarRocks 側での LDAP/AD ユーザー名の照合を大文字小文字の区別なしに緩めるかどうか。`true` に設定すると、`AUTHENTICATION_LDAP_SIMPLE` で作成されたユーザーと大文字小文字だけが異なるログイン名でもそのユーザーに解決されるため、ユーザーごとの DN と付与されたロールが有効になります。また LDAP security integration で認証されたログインは、クライアントが入力した表記ではなくディレクトリが保持する名前をセッション ID として使用します。この項目はログインが解決しうる保存済みユーザーの範囲を広げ、さらに `current_user()` と `SHOW PROCESSLIST` が返す値を変えるため、デフォルトでは無効です。ネイティブパスワード、JWT、OAuth2 で認証されたユーザーは影響を受けません。`AUTHENTICATION_LDAP_SIMPLE` で作成された 2 つのユーザーの名前が大文字小文字だけ異なる場合、その両方に一致するログインはどちらかに解決されるのではなく拒否されます。グループ名の照合はこの項目とは独立しています。
+- 導入時期：v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string

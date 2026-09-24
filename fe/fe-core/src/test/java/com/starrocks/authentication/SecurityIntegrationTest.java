@@ -843,4 +843,28 @@ public class SecurityIntegrationTest {
         // Clean up
         authenticationMgr.replayDropSecurityIntegration("ldap_pattern");
     }
+
+    /**
+     * Test case: group_provider / permitted_groups written with stray whitespace or empty items.
+     * Test point: every item is trimmed and empty items are dropped, so a value such as "a , b" no
+     *             longer yields "a " which would compare unequal to everything.
+     */
+    @Test
+    public void testCommaSeparatedPropertiesAreTrimmed() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, " a , b ,c ");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, "g1 , g2 ,g3");
+        SecurityIntegration si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b", "c"), si.getGroupProviderName());
+        Assertions.assertEquals(List.of("g1", "g2", "g3"), si.getGroupAllowedLoginList());
+
+        // Empty items are dropped; a value made only of separators means "not configured".
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER, "a,,b,");
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN, ", ,,");
+        si = new JWTSecurityIntegration("si", properties);
+
+        Assertions.assertEquals(List.of("a", "b"), si.getGroupProviderName());
+        Assertions.assertTrue(si.getGroupAllowedLoginList().isEmpty());
+    }
 }

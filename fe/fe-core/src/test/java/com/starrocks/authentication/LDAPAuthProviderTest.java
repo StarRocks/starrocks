@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -164,6 +165,55 @@ class LDAPAuthProviderTest {
             String normalized = LDAPAuthProvider.normalizeUsername(testUser);
             Assertions.assertEquals("allen", normalized,
                     "Username '" + testUser + "' should normalize to 'allen'");
+        }
+    }
+
+    @Test
+    void testCanonicalDn() {
+        Assertions.assertNull(LDAPAuthProvider.canonicalDn(null));
+
+        // Attribute types and attribute values are both folded to lowercase.
+        Assertions.assertEquals("uid=allen,ou=people,dc=example,dc=com",
+                LDAPAuthProvider.canonicalDn("uid=Allen,OU=People,DC=example,DC=Com"));
+
+        // Whitespace around the RDN separators is not part of the name.
+        Assertions.assertEquals(
+                LDAPAuthProvider.canonicalDn("uid=Allen,OU=People,DC=example,DC=Com"),
+                LDAPAuthProvider.canonicalDn("uid=Allen, OU=People , DC=example,DC=Com"));
+
+        // An escaped comma stays inside the attribute value instead of splitting the RDN.
+        Assertions.assertEquals("uid=al\\,en,ou=people",
+                LDAPAuthProvider.canonicalDn("uid=al\\,en,OU=People"));
+
+        // A multi-valued RDN keeps both of its parts.
+        Assertions.assertEquals("cn=a+sn=b,dc=x", LDAPAuthProvider.canonicalDn("CN=a+SN=b,DC=x"));
+
+        // Not a DN at all: fall back to a plain lowercase instead of failing the login. This is the
+        // normal case when the distinguished name defaults to the bare user name.
+        Assertions.assertEquals("not_a_dn", LDAPAuthProvider.canonicalDn("Not_A_DN"));
+        Assertions.assertEquals("", LDAPAuthProvider.canonicalDn(""));
+    }
+
+    /**
+     * Test case: normalize a user name while the JVM default locale is Turkish.
+     * Test point: the result does not depend on the locale the FE happens to run under. Turkish maps
+     *             uppercase ASCII 'I' to a dotless 'i', so a cluster whose FEs disagree on locale
+     *             would otherwise normalize the same name to different strings, and neither the
+     *             authentication nor the group lookup would agree between nodes.
+     */
+    @Test
+    void testNormalizeUsernameIsLocaleIndependent() {
+        Locale savedDefault = Locale.getDefault();
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            // Inputs must contain an uppercase ASCII 'I'; names such as 'Allen' or 'Li' come out the
+            // same under any locale and would not test anything.
+            Assertions.assertEquals("li", LDAPAuthProvider.normalizeUsername("LI"));
+            Assertions.assertEquals("ian", LDAPAuthProvider.normalizeUsername("Ian"));
+            Assertions.assertEquals("itadmin", LDAPAuthProvider.normalizeUsername("ITAdmin"));
+            Assertions.assertEquals("uid=itadmin,ou=people", LDAPAuthProvider.canonicalDn("uid=ITAdmin,OU=People"));
+        } finally {
+            Locale.setDefault(savedDefault);
         }
     }
 
