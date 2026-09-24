@@ -32,6 +32,8 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatementBase.ExplainLevel;
@@ -422,6 +424,52 @@ public final class InsertPreSplitHook {
             union.addAll(MetaUtils.getRangeDistributionColumns(target, meta.getIndexMetaId()));
         }
         return union;
+    }
+
+    /**
+     * Whether the SELECT's projection shape is one every source can reproduce in its own sampling
+     * sub-query: a bare {@code SELECT *} (single star, no qualifier / EXCLUDE / alias) or an
+     * explicit list without stars, with no DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT.
+     *
+     * <p>A WHERE clause is allowed here and gated separately by each source
+     * ({@link SamplingPredicateGate}), because a predicate the sampler can copy verbatim keeps the
+     * sampled row set equal to the loaded one. The rejected clauses are the ones that genuinely
+     * change that row set: DISTINCT collapses duplicates, GROUP BY / HAVING aggregate, and
+     * ORDER BY pairs with LIMIT to keep a deterministic prefix.
+     *
+     * <p>Expressions in an explicit list are checked later by {@link InsertSelectSourceColumns}:
+     * only the target columns needed for partitioning and range distribution must be direct
+     * source-column refs, and an expression may reference nothing beyond the resolved source
+     * relation.
+     *
+     * <p>Shared by both {@link InsertPreSplitSource} implementations, and package-private so the
+     * unit tests can drive it directly.
+     */
+    static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
+        SelectList selectList = selectRelation.getSelectList();
+        if (selectList == null || selectList.isDistinct()) {
+            return false;
+        }
+        List<SelectListItem> items = selectList.getItems();
+        if (items.isEmpty()) {
+            return false;
+        }
+        SelectListItem first = items.get(0);
+        if (items.size() == 1 && first.isStar()) {
+            if (first.getTblName() != null || !first.getExcludedColumns().isEmpty() || first.getAlias() != null) {
+                return false;
+            }
+        } else {
+            for (SelectListItem item : items) {
+                if (item.isStar()) {
+                    return false;
+                }
+            }
+        }
+        return !selectRelation.hasGroupByClause()
+                && !selectRelation.hasHavingClause()
+                && !selectRelation.hasOrderByClause()
+                && !selectRelation.hasLimit();
     }
 
     private static SelectRelation extractSelectRelation(InsertStmt insertStmt) {

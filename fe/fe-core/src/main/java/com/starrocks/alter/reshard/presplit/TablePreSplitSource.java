@@ -35,8 +35,6 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectList;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.expression.Expr;
@@ -81,7 +79,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
     @Override
     public boolean matches(InsertStmt insertStmt, SelectRelation selectRelation) {
         Relation from = selectRelation.getRelation();
-        return hasSupportedProjectionShape(selectRelation)
+        return InsertPreSplitHook.hasSupportedProjectionShape(selectRelation)
                 && from instanceof TableRelation
                 && !(from instanceof FileTableFunctionRelation)
                 && isPlainTableReference((TableRelation) from);
@@ -121,7 +119,7 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target, resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
-                sortKeyColumns, partitionColumns);
+                sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
         if (targetToSource == null) {
             return null;
         }
@@ -159,42 +157,6 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);
-    }
-
-    /**
-     * Verifies the projection is a bare {@code SELECT *} (single star, no
-     * qualifier / EXCLUDE / alias) or an explicit list without stars, with no
-     * DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT. A WHERE clause is
-     * allowed (gated separately). Expressions in the explicit list are checked
-     * later by {@link InsertSelectSourceColumns}: only target columns needed for
-     * partitioning and range distribution must be direct source-column refs, and
-     * an expression may reference nothing beyond the resolved source relation.
-     */
-    private static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
-        SelectList selectList = selectRelation.getSelectList();
-        if (selectList == null || selectList.isDistinct()) {
-            return false;
-        }
-        List<SelectListItem> items = selectList.getItems();
-        if (items.isEmpty()) {
-            return false;
-        }
-        SelectListItem first = items.get(0);
-        if (items.size() == 1 && first.isStar()) {
-            if (first.getTblName() != null || !first.getExcludedColumns().isEmpty() || first.getAlias() != null) {
-                return false;
-            }
-        } else {
-            for (SelectListItem item : items) {
-                if (item.isStar()) {
-                    return false;
-                }
-            }
-        }
-        return !selectRelation.hasGroupByClause()
-                && !selectRelation.hasHavingClause()
-                && !selectRelation.hasOrderByClause()
-                && !selectRelation.hasLimit();
     }
 
     /**
