@@ -89,6 +89,15 @@ if starrocks_is_darwin ; then
     PARALLEL=$(starrocks_detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
+    # Pre-parse ARM CRC flags to propagate to thirdparty build
+    for arg in "$@"; do
+        if [[ "$arg" == "--without-arm-crc32" ]]; then
+            export THIRD_PARTY_BUILD_WITH_ARM_CRC=OFF
+        elif [[ "$arg" == "--with-arm-crc32" ]]; then
+            export THIRD_PARTY_BUILD_WITH_ARM_CRC=ON
+        fi
+    done
+
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
