@@ -296,9 +296,6 @@ int64_t CpuInfo::_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64
 
 void CpuInfo::init() {
     if (initialized_) return;
-    string line;
-    string name;
-    string value;
 
     float max_mhz = 0;
     int num_cores = 0;
@@ -330,6 +327,9 @@ void CpuInfo::init() {
             LOG(ERROR) << "Unable to open /proc/cpuinfo; CPU feature detection may be incomplete";
         }
     }
+    std::string line;
+    std::string name;
+    std::string value;
 
     std::istringstream cpuinfo(cpuinfo_content);
     while (cpuinfo) {

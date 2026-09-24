@@ -139,45 +139,46 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 // NOTE: don't use it, only for test purpose. please use the crc_hash_64 instead
 inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__) && !defined(__SSE4_2__)
+    // 1. Legacy x86 fallback (must remain unbroken single-stream CRC32)
     return crc32(hash, (const unsigned char*)data, length);
 #else
-    // Route short strings for both ARM fallback AND hardware paths
+    // 2. Everything else (ARM fallback + all hardware paths)
     if (UNLIKELY(length < 8)) {
         return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
 
-#if defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
-    // ARM software fallback for lengths >= 8
-    return ~starrocks::crc32c::Extend(~hash, (const char*)data, length);
-#else
-    // Hardware accelerated paths for lengths >= 8
     uint64_t words = length / sizeof(uint64_t);
     uint64_t remainder = length % sizeof(uint64_t);
     auto* p = reinterpret_cast<const uint8_t*>(data);
     auto* end = reinterpret_cast<const uint8_t*>(data) + length;
+
     while (words--) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
         p += sizeof(uint64_t);
     }
+
     if (remainder != 0) {
         p = end - 8;
 #if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
         hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
+#elif defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+        hash = ~starrocks::crc32c::Extend(~hash, reinterpret_cast<const char*>(p), sizeof(uint64_t));
 #else
 #error "Not supported architecture"
 #endif
     }
 
     return hash;
-#endif
 #endif
 }
 
