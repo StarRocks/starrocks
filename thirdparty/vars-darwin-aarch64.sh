@@ -29,10 +29,11 @@ CURL_NAME="curl-8.16.0.tar.gz"
 CURL_SOURCE="curl-8.16.0"
 CURL_MD5SUM="3db9de72cc8f04166fa02d3173ac78bb"
 
-HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz"
-HYPERSCAN_NAME="vectorscan-5.4.12.tar.gz"
-HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.12"
-HYPERSCAN_MD5SUM="384eab5b23831993df96e5fa55f9951e"
+# HYPERSCAN provided by vectorscan
+HYPERSCAN_DOWNLOAD="https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.13.tar.gz"
+HYPERSCAN_NAME="vectorscan-5.4.13.tar.gz"
+HYPERSCAN_SOURCE="vectorscan-vectorscan-5.4.13"
+HYPERSCAN_MD5SUM="29bb5ad2756504d5299f106a156c6ac3"
 
 DARWIN_UNSUPPORTED_PACKAGES="starcache tenann pprof paimon_cpp"
 
