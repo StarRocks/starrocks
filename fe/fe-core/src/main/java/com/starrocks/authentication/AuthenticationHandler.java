@@ -300,7 +300,8 @@ public class AuthenticationHandler {
 
             // Match the integration against the client plugin the caller declared: mysql_clear_password for a
             // cleartext password (MySQL clear-password frame or HTTP Basic), a token plugin for JWT / OAuth2.
-            // An integration type without a client-side plugin cannot match, so skip it instead of throwing.
+            // Every type SecurityIntegrationFactory can build maps to a client plugin here, so no type is
+            // exempt from the match; the null branch below only guards the two tables drifting apart.
             String expectedClientPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
             if (expectedClientPlugin == null) {
                 // The type -> client plugin table is maintained by hand, so a type supported by
@@ -310,8 +311,7 @@ public class AuthenticationHandler {
                         authMechanism, securityIntegration.getType());
                 continue;
             }
-            if (expectedClientPlugin != null
-                    && !expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())) {
+            if (!expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())) {
                 continue;
             }
 
