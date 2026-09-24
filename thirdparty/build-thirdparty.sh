@@ -1871,6 +1871,12 @@ build_paimon_cpp() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
+    # Lumina 0.3.1 contains a prebuilt Linux x86-64 library only.
+    local paimon_enable_lumina=OFF
+    if [[ "${MACHINE_TYPE}" == "x86_64" ]]; then
+        paimon_enable_lumina=ON
+    fi
+
     # protobuf required for rocky9
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1879,7 +1885,7 @@ build_paimon_cpp() {
         -DPAIMON_BUILD_STATIC=OFF \
         -DPAIMON_ENABLE_ORC=ON \
         -DPAIMON_ENABLE_AVRO=ON \
-        -DPAIMON_ENABLE_LUMINA=OFF \
+        -DPAIMON_ENABLE_LUMINA=${paimon_enable_lumina} \
         -DPAIMON_ENABLE_LUCENE=OFF \
         -DPAIMON_ENABLE_TANTIVY=OFF \
         -DPAIMON_ENABLE_JINDO=OFF \
@@ -1891,10 +1897,22 @@ build_paimon_cpp() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     # be/ resolves paimon strictly from <prefix>/lib (CMAKE_INSTALL_LIBDIR pinned above).
-    if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so" ]]; then
-        echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/libpaimon.so not found after install; CMAKE_INSTALL_LIBDIR=lib was not honored" >&2
-        exit 1
+    local required_paimon_libraries=(libpaimon.so)
+    if [[ "${paimon_enable_lumina}" == "ON" ]]; then
+        required_paimon_libraries+=(libpaimon_lumina_index.so liblumina.so)
+    else
+        # A reused prefix may have been populated by an earlier x86-64 build. Do not
+        # leave unsupported foreign-arch Lumina artifacts visible to ARM packaging.
+        rm -f "${TP_INSTALL_DIR}/paimon-cpp/lib"/libpaimon_lumina_index.so* \
+              "${TP_INSTALL_DIR}/paimon-cpp/lib"/liblumina.so*
     fi
+    local required_paimon_library
+    for required_paimon_library in "${required_paimon_libraries[@]}"; do
+        if [[ ! -f "${TP_INSTALL_DIR}/paimon-cpp/lib/${required_paimon_library}" ]]; then
+            echo "Error: ${TP_INSTALL_DIR}/paimon-cpp/lib/${required_paimon_library} not found after install" >&2
+            exit 1
+        fi
+    done
     restore_compile_flags
 }
 

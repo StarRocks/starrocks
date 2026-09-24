@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 #include <paimon/global_index/bitmap_global_index_result.h>
+#include <paimon/global_index/bitmap_scored_global_index_result.h>
 
 #include <memory>
 #include <string>
@@ -73,8 +74,13 @@ public:
         return record("like");
     }
     paimon::Result<std::shared_ptr<paimon::ScoredGlobalIndexResult>> VisitVectorSearch(
-            const std::shared_ptr<paimon::VectorSearch>&) override {
-        return paimon::Status::Invalid("unused vector search");
+            const std::shared_ptr<paimon::VectorSearch>& search) override {
+        _last_operation = "vector_search";
+        _last_vector_search = search;
+        if (_vector_result == nullptr) {
+            return paimon::Status::Invalid("unused vector search");
+        }
+        return _vector_result;
     }
     paimon::Result<std::shared_ptr<paimon::GlobalIndexResult>> VisitFullTextSearch(
             const std::shared_ptr<paimon::FullTextSearch>&) override {
@@ -84,6 +90,10 @@ public:
     std::string GetIndexType() const override { return "fake"; }
 
     const std::string& last_operation() const { return _last_operation; }
+    const std::shared_ptr<paimon::VectorSearch>& last_vector_search() const { return _last_vector_search; }
+    void set_vector_result(std::shared_ptr<paimon::ScoredGlobalIndexResult> result) {
+        _vector_result = std::move(result);
+    }
     void fail_with(paimon::Status status) { _status = std::move(status); }
     void set_return_null(bool return_null) { _return_null = return_null; }
 
@@ -100,6 +110,8 @@ private:
     }
 
     std::shared_ptr<paimon::GlobalIndexResult> _result;
+    std::shared_ptr<paimon::ScoredGlobalIndexResult> _vector_result;
+    std::shared_ptr<paimon::VectorSearch> _last_vector_search;
     std::string _last_operation;
     paimon::Status _status;
     bool _return_null = false;
@@ -107,6 +119,12 @@ private:
 
 std::shared_ptr<paimon::GlobalIndexResult> result_from_ranges(std::vector<paimon::Range> ranges) {
     return paimon::BitmapGlobalIndexResult::FromRanges(ranges);
+}
+
+std::shared_ptr<paimon::ScoredGlobalIndexResult> scored_result(std::vector<int64_t> row_ids,
+                                                               std::vector<float> scores) {
+    return std::make_shared<paimon::BitmapScoredGlobalIndexResult>(paimon::RoaringBitmap64::From(row_ids),
+                                                                   std::move(scores));
 }
 
 rapidjson::Document parse_json(const char* json) {
@@ -251,6 +269,92 @@ TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesScalarPredicateFamilies) {
             R"({"o":"ca","f":"STARTS_WITH","a":[{"o":"cr","t":"varchar","n":"k"},{"o":"co","t":"varchar","v":"prefix"}]})");
     ASSERT_TRUE(evaluator.evaluate(starts_with).ok());
     EXPECT_EQ("starts_with", reader->last_operation());
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesVectorTopNScoreFunctions) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    reader->set_vector_result(scored_result({3, 7}, {0.8f, 0.9f}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view column) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                EXPECT_EQ("embedding", column);
+                return reader;
+            });
+
+    struct TestCase {
+        const char* function;
+        paimon::VectorSearch::DistanceType distance_type;
+    };
+    const std::vector<TestCase> test_cases = {
+            {"approx_l2_distance", paimon::VectorSearch::DistanceType::EUCLIDEAN},
+            {"approx_inner_product", paimon::VectorSearch::DistanceType::INNER_PRODUCT},
+            {"approx_cosine_similarity", paimon::VectorSearch::DistanceType::COSINE},
+    };
+    for (const TestCase& test_case : test_cases) {
+        std::string json =
+                std::string(R"({"o":"ca","f":")") + test_case.function +
+                R"(","a":[{"o":"cr","t":"array<float>","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1.25},{"o":"co","t":"float","v":2.5}]}]})";
+        rapidjson::Document expression = parse_json(json.c_str());
+
+        auto result = evaluator.evaluate_top_n(expression, 12);
+
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_EQ("vector_search", reader->last_operation());
+        ASSERT_NE(nullptr, reader->last_vector_search());
+        EXPECT_EQ("embedding", reader->last_vector_search()->field_name);
+        EXPECT_EQ(12, reader->last_vector_search()->limit);
+        EXPECT_EQ((std::vector<float>{1.25f, 2.5f}), reader->last_vector_search()->query);
+        EXPECT_FALSE(static_cast<bool>(reader->last_vector_search()->pre_filter));
+        EXPECT_EQ(nullptr, reader->last_vector_search()->predicate);
+        ASSERT_TRUE(reader->last_vector_search()->distance_type.has_value());
+        EXPECT_EQ(test_case.distance_type, reader->last_vector_search()->distance_type.value());
+        EXPECT_TRUE(reader->last_vector_search()->options.empty());
+        EXPECT_NE(nullptr, std::dynamic_pointer_cast<paimon::ScoredGlobalIndexResult>(result.value()));
+    }
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesVectorTopNWithLiteralFirst) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    reader->set_vector_result(scored_result({3}, {0.8f}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view column) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+                EXPECT_EQ("embedding", column);
+                return reader;
+            });
+    rapidjson::Document expression = parse_json(
+            R"({"o":"ca","f":"approx_inner_product","a":[{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1.25}]},{"o":"cr","t":"array<float>","n":"embedding"}]})");
+
+    auto result = evaluator.evaluate_top_n(expression, 3);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(nullptr, reader->last_vector_search());
+    EXPECT_EQ("embedding", reader->last_vector_search()->field_name);
+    EXPECT_EQ((std::vector<float>{1.25f}), reader->last_vector_search()->query);
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, RejectsMalformedVectorTopN) {
+    PaimonGlobalIndexEvaluator evaluator([](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> {
+        return Status::InternalError("reader should not be requested");
+    });
+    rapidjson::Document empty_vector = parse_json(
+            R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","t":"array<float>","n":"embedding"},{"o":"a","i":"float","c":[]}]})");
+    rapidjson::Document unsupported = parse_json(
+            R"({"o":"ca","f":"unsupported","a":[{"o":"cr","t":"array<float>","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1}]}]})");
+    rapidjson::Document integral_vector = parse_json(
+            R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","t":"array<float>","n":"embedding"},{"o":"a","i":"int","c":[{"o":"co","t":"int","v":1}]}]})");
+
+    auto empty_result = evaluator.evaluate_top_n(empty_vector, 10);
+    auto unsupported_result = evaluator.evaluate_top_n(unsupported, 10);
+    auto integral_result = evaluator.evaluate_top_n(integral_vector, 10);
+    auto invalid_limit_result = evaluator.evaluate_top_n(unsupported, 0);
+
+    ASSERT_FALSE(empty_result.ok());
+    EXPECT_TRUE(empty_result.status().is_invalid_argument());
+    ASSERT_FALSE(unsupported_result.ok());
+    EXPECT_TRUE(unsupported_result.status().is_invalid_argument());
+    ASSERT_FALSE(integral_result.ok());
+    EXPECT_TRUE(integral_result.status().is_invalid_argument());
+    ASSERT_FALSE(invalid_limit_result.ok());
+    EXPECT_TRUE(invalid_limit_result.status().is_invalid_argument());
 }
 
 TEST(PaimonGlobalIndexEvaluatorTest, RejectsMalformedPredicate) {

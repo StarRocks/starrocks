@@ -14,19 +14,26 @@
 
 package com.starrocks.connector.paimon;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.GlobalIndexResultSerializer;
+import org.apache.paimon.globalindex.ScoredGlobalIndexResult;
 import org.apache.paimon.io.DataInputDeserializer;
 import org.apache.paimon.utils.RoaringNavigableMap64;
 import org.junit.jupiter.api.Assertions;
@@ -106,6 +113,75 @@ public class PaimonGlobalIndexServiceTest {
         Assertions.assertEquals(9L, PaimonGlobalIndexRequest.parseTransport(transport).getSnapshotId());
     }
 
+    @Test
+    public void testAggregatesGloballyRankedVectorTopN(@Mocked PaimonTable table) {
+        new Expectations() {{
+                table.getCatalogName();
+                result = "paimon";
+                table.getCatalogDBName();
+                result = "db";
+                table.getCatalogTableName();
+                result = "tbl";
+            }};
+
+        ColumnRefOperator vector = new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", false);
+        ArrayOperator query = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+        CallOperator score = new CallOperator(FunctionSet.APPROX_COSINE_SIMILARITY, FloatType.FLOAT,
+                List.of(vector, query));
+        TopNIndexCondition condition = new TopNIndexCondition(null, score,
+                Map.of(vector.getName(), ConnectorIndexType.VECTOR), 2, 1, false);
+
+        AtomicReference<String> executedSql = new AtomicReference<>();
+        PaimonGlobalIndexService service = new PaimonGlobalIndexService(
+                table, condition, 10L, (sql, timeout) -> {
+                    executedSql.set(sql);
+                    return List.of(
+                            scoredBatch("[7,0.9]", "[3,0.8]"),
+                            scoredBatch("[11,0.7]"));
+                });
+
+        PaimonGlobalIndexResult result = service.evaluate();
+
+        Assertions.assertEquals(10L, result.getSnapshotId());
+        Assertions.assertInstanceOf(ScoredGlobalIndexResult.class, result.getResult());
+        ScoredGlobalIndexResult scored = (ScoredGlobalIndexResult) result.getResult();
+        Assertions.assertEquals(3L, scored.results().getLongCardinality());
+        Assertions.assertEquals(0.9f, scored.scoreGetter().score(7L), 0.0001f);
+        Assertions.assertEquals(0.8f, scored.scoreGetter().score(3L), 0.0001f);
+        Assertions.assertEquals(0.7f, scored.scoreGetter().score(11L), 0.0001f);
+
+        String sql = executedSql.get();
+        Assertions.assertTrue(sql.startsWith("select `row_id`, `score`"));
+        Assertions.assertTrue(sql.contains("order by `score` desc limit 3"));
+        Assertions.assertFalse(sql.contains("to_base64"));
+    }
+
+    @Test
+    public void testRejectsInvalidVectorTopNRows(@Mocked PaimonTable table) {
+        new Expectations() {{
+                table.getCatalogName();
+                result = "paimon";
+                table.getCatalogDBName();
+                result = "db";
+                table.getCatalogTableName();
+                result = "tbl";
+            }};
+
+        ColumnRefOperator vector = new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", false);
+        ArrayOperator query = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+        CallOperator score = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                List.of(vector, query));
+        TopNIndexCondition condition = new TopNIndexCondition(null, score,
+                Map.of(vector.getName(), ConnectorIndexType.VECTOR), 1, 0, true);
+        PaimonGlobalIndexService service = new PaimonGlobalIndexService(
+                table, condition, 10L, (sql, timeout) -> List.of(scoredBatch("[-1,0.5]")));
+
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, service::evaluate);
+        Assertions.assertTrue(exception.getMessage().contains("row id or score"));
+    }
+
     private static GlobalIndexResult result(long... rowIds) {
         RoaringNavigableMap64 rows = new RoaringNavigableMap64();
         for (long rowId : rowIds) {
@@ -121,6 +197,16 @@ public class PaimonGlobalIndexServiceTest {
             String value = result == null ? "null"
                     : "\"" + Base64.getEncoder().encodeToString(serializer.serialize(result)) + "\"";
             rows.add(ByteBuffer.wrap(("{\"data\":[" + value + "]}").getBytes(StandardCharsets.UTF_8)));
+        }
+        TResultBatch batch = new TResultBatch();
+        batch.setRows(rows);
+        return batch;
+    }
+
+    private static TResultBatch scoredBatch(String... dataRows) {
+        List<ByteBuffer> rows = new ArrayList<>();
+        for (String data : dataRows) {
+            rows.add(ByteBuffer.wrap(("{\"data\":" + data + "}").getBytes(StandardCharsets.UTF_8)));
         }
         TResultBatch batch = new TResultBatch();
         batch.setRows(rows);

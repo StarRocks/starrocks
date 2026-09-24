@@ -33,6 +33,7 @@
 #include "connector/hive/paimon/paimon_blob_converter.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_predicate_converter.h"
+#include "connector/hive/paimon/paimon_query_allocator.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr_context.h"
@@ -129,7 +130,10 @@ Status PaimonScanner::do_open(RuntimeState* runtime_state) {
         return Status::InternalError("Paimon native scanner has no StarRocks file system");
     }
 
-    _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
+    const auto query_tracker = runtime_state->query_mem_tracker_ptr();
+    _paimon_file_system =
+            std::allocate_shared<PaimonFileSystem>(PaimonQueryAllocator<PaimonFileSystem>(query_tracker),
+                                                   _scanner_ctx->fs, _scanner_ctx->datacache_options, query_tracker);
 
     const auto& materialized_columns = _scanner_ctx->format_scan_context.materialized_columns;
     std::vector<std::string> selected_field_names;

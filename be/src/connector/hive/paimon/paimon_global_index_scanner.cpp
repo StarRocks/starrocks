@@ -19,7 +19,9 @@
 #include <paimon/utils/range.h>
 #include <paimon/utils/row_range_index.h>
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <map>
 #include <optional>
 #include <string_view>
@@ -30,6 +32,7 @@
 #include "column/column_helper.h"
 #include "connector/hive/paimon/paimon_file_system.h"
 #include "connector/hive/paimon/paimon_global_index_evaluator.h"
+#include "connector/hive/paimon/paimon_query_allocator.h"
 #include "connector/hive/paimon/tracked_paimon_memory_pool.h"
 #include "runtime/runtime_state.h"
 #include "types/datum.h"
@@ -37,9 +40,13 @@
 namespace starrocks {
 namespace {
 
-constexpr int32_t kProtocolVersion = 1;
+constexpr int32_t kPredicateProtocolVersion = 1;
+constexpr int32_t kTopNProtocolVersion = 2;
 constexpr std::string_view kIndexResultColumn = "index_result";
 constexpr std::string_view kArgsColumn = "args";
+constexpr std::string_view kRowIdColumn = "row_id";
+constexpr std::string_view kScoreColumn = "score";
+constexpr std::string_view kTopNKind = "top_n";
 
 Status paimon_error(std::string_view operation, const paimon::Status& status) {
     return Status::InternalError(fmt::format("Paimon Global Index {} failed: {}", operation, status.ToString()));
@@ -60,7 +67,24 @@ std::string paimon_index_type(std::string_view semantic_type) {
     if (semantic_type == "range") {
         return "btree";
     }
+    if (semantic_type == "vector") {
+        return "lumina";
+    }
     return {};
+}
+
+bool is_supported_vector_direction(const rapidjson::Value& score_expression, bool ascending) {
+    if (!score_expression.IsObject() || !score_expression.HasMember("o") || !score_expression["o"].IsString() ||
+        std::string_view(score_expression["o"].GetString(), score_expression["o"].GetStringLength()) != "ca" ||
+        !score_expression.HasMember("f") || !score_expression["f"].IsString() || !score_expression.HasMember("a") ||
+        !score_expression["a"].IsArray() || score_expression["a"].Size() != 2) {
+        return false;
+    }
+    std::string_view function(score_expression["f"].GetString(), score_expression["f"].GetStringLength());
+    if (function == "approx_l2_distance") {
+        return ascending;
+    }
+    return !ascending && (function == "approx_cosine_similarity" || function == "approx_inner_product");
 }
 
 void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemStats::Snapshot& stats) {
@@ -82,6 +106,11 @@ void update_paimon_io_profile(RuntimeProfile* profile, const PaimonFileSystemSta
 
 Status PaimonGlobalIndexScanner::do_init(RuntimeState*, const HdfsScannerContext&) {
     _emitted = false;
+    _open_ns = 0;
+    _evaluate_ns = 0;
+    _serialize_ns = 0;
+    _serialized_bytes = 0;
+    _scored_rows = 0;
     return Status::OK();
 }
 
@@ -94,7 +123,10 @@ Status PaimonGlobalIndexScanner::do_open(RuntimeState* runtime_state) {
     }
 
     _memory_pool = std::make_shared<TrackedPaimonMemoryPool>(runtime_state->query_mem_tracker_ptr().get());
-    _paimon_file_system = std::make_shared<PaimonFileSystem>(_scanner_ctx->fs, _scanner_ctx->datacache_options);
+    const auto query_tracker = runtime_state->query_mem_tracker_ptr();
+    _paimon_file_system =
+            std::allocate_shared<PaimonFileSystem>(PaimonQueryAllocator<PaimonFileSystem>(query_tracker),
+                                                   _scanner_ctx->fs, _scanner_ctx->datacache_options, query_tracker);
 
     const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
 #ifdef BE_TEST
@@ -127,6 +159,75 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, _evaluate(runtime_state));
     _evaluate_ns = monotonic_nanos() - evaluate_start_ns;
 
+    const auto& scan_range = _scanner_ctx->scan_range->paimon_global_index_scan_range;
+    const bool top_n = scan_range.protocol_version == kTopNProtocolVersion;
+    const std::string& query_json = _scanner_ctx->scan_range->paimon_global_index_scan_range.query_json;
+    if (top_n) {
+        auto scored = std::dynamic_pointer_cast<paimon::ScoredGlobalIndexResult>(result);
+        if (scored == nullptr) {
+            return Status::InternalError("Paimon Vector TopN returned a non-scored result");
+        }
+        auto iterator_result = scored->CreateScoredIterator();
+        if (!iterator_result.ok()) {
+            return paimon_error("scored result iteration", iterator_result.status());
+        }
+        auto iterator = std::move(iterator_result).value();
+        if (iterator == nullptr) {
+            return Status::InternalError("Paimon Vector TopN returned a null scored iterator");
+        }
+        std::vector<int64_t> row_ids;
+        std::vector<float> scores;
+        const int32_t limit = _request["localLimit"].GetInt();
+        row_ids.reserve(std::min<int32_t>(limit, 4096));
+        scores.reserve(std::min<int32_t>(limit, 4096));
+        while (iterator->HasNext() && row_ids.size() < static_cast<size_t>(limit)) {
+            if ((row_ids.size() & 1023) == 0) {
+                RETURN_IF_ERROR(check_query_state(runtime_state));
+            }
+            auto [row_id, score] = iterator->NextWithScore();
+            if (row_id < scan_range.range_from || row_id > scan_range.range_to) {
+                return Status::InternalError(fmt::format("Paimon Vector TopN returned row id {} outside shard [{}, {}]",
+                                                         row_id, scan_range.range_from, scan_range.range_to));
+            }
+            score = _normalize_score(_request["scoreExpression"], score);
+            if (!std::isfinite(score)) {
+                return Status::InternalError(
+                        fmt::format("Paimon Vector TopN returned a non-finite score for row id {}", row_id));
+            }
+            row_ids.push_back(row_id);
+            scores.push_back(score);
+        }
+        if (iterator->HasNext()) {
+            return Status::InternalError(
+                    fmt::format("Paimon Vector TopN returned more than the requested {} candidates", limit));
+        }
+
+        const size_t num_rows = row_ids.size();
+        for (const SlotDescriptor* slot : _scanner_ctx->materialize_slots) {
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
+            if (slot->col_name() == kRowIdColumn) {
+                for (int64_t row_id : row_ids) {
+                    column->append_datum(Datum(row_id));
+                }
+            } else if (slot->col_name() == kScoreColumn) {
+                for (float score : scores) {
+                    column->append_datum(Datum(score));
+                }
+            } else if (slot->col_name() == kArgsColumn) {
+                for (size_t i = 0; i < num_rows; ++i) {
+                    column->append_datum(Datum(Slice(query_json)));
+                }
+            } else {
+                column->append_default(num_rows);
+            }
+            (*chunk)->append_or_update_column(std::move(column), slot->id());
+        }
+        (*chunk)->set_num_rows(num_rows);
+        _scored_rows = static_cast<int64_t>(num_rows);
+        _emitted = true;
+        return Status::OK();
+    }
+
     const int64_t serialize_start_ns = monotonic_nanos();
     auto serialized = paimon::GlobalIndexResult::Serialize(result, _memory_pool);
     if (!serialized.ok()) {
@@ -136,7 +237,6 @@ Status PaimonGlobalIndexScanner::do_get_next(RuntimeState* runtime_state, ChunkP
     _serialized_bytes = static_cast<int64_t>(bytes->size());
     _serialize_ns = monotonic_nanos() - serialize_start_ns;
 
-    const std::string& query_json = _scanner_ctx->scan_range->paimon_global_index_scan_range.query_json;
     for (const SlotDescriptor* slot : _scanner_ctx->materialize_slots) {
         MutableColumnPtr column = ColumnHelper::create_column(slot->type(), true);
         if (slot->col_name() == kIndexResultColumn) {
@@ -173,6 +273,7 @@ void PaimonGlobalIndexScanner::do_update_counter(HdfsScannerProfile* profile) {
     update("EvaluateTime", TUnit::TIME_NS, _evaluate_ns);
     update("SerializeTime", TUnit::TIME_NS, _serialize_ns);
     update("SerializedBytes", TUnit::BYTES, _serialized_bytes);
+    update("ScoredRows", TUnit::UNIT, _scored_rows);
 
     if (_paimon_file_system != nullptr) {
         update_paimon_io_profile(profile->runtime_profile, _paimon_file_system->get_stats());
@@ -195,7 +296,8 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
         !scan_range.__isset.snapshot_id) {
         return Status::InvalidArgument("Incomplete Paimon Global Index scan range");
     }
-    if (scan_range.protocol_version != kProtocolVersion) {
+    if (scan_range.protocol_version != kPredicateProtocolVersion &&
+        scan_range.protocol_version != kTopNProtocolVersion) {
         return Status::InvalidArgument(
                 fmt::format("Unsupported Paimon Global Index protocol version {}", scan_range.protocol_version));
     }
@@ -210,11 +312,40 @@ Status PaimonGlobalIndexScanner::_parse_request(const TPaimonGlobalIndexScanRang
     if (!request->HasMember("version") || !(*request)["version"].IsInt() ||
         (*request)["version"].GetInt() != scan_range.protocol_version || !request->HasMember("snapshotId") ||
         !(*request)["snapshotId"].IsInt64() || (*request)["snapshotId"].GetInt64() != scan_range.snapshot_id ||
-        !request->HasMember("predicate") || !(*request)["predicate"].IsObject() || !request->HasMember("indexes") ||
-        !(*request)["indexes"].IsObject()) {
+        !request->HasMember("indexes") || !(*request)["indexes"].IsObject() ||
+        (*request)["indexes"].MemberCount() == 0) {
         return Status::InvalidArgument("Inconsistent Paimon Global Index request envelope");
     }
+    if (scan_range.protocol_version == kPredicateProtocolVersion) {
+        if (!request->HasMember("predicate") || !(*request)["predicate"].IsObject() || request->HasMember("kind") ||
+            request->HasMember("scoreExpression") || request->HasMember("localLimit") ||
+            request->HasMember("ascending")) {
+            return Status::InvalidArgument("Invalid Paimon predicate request envelope");
+        }
+        return Status::OK();
+    }
+
+    const rapidjson::Value& indexes = (*request)["indexes"];
+    if (indexes.MemberCount() != 1 || !indexes.MemberBegin()->value.IsString() ||
+        std::string_view(indexes.MemberBegin()->value.GetString(), indexes.MemberBegin()->value.GetStringLength()) !=
+                "vector" ||
+        request->HasMember("predicate") || !request->HasMember("kind") || !(*request)["kind"].IsString() ||
+        std::string_view((*request)["kind"].GetString(), (*request)["kind"].GetStringLength()) != kTopNKind ||
+        !request->HasMember("scoreExpression") || !(*request)["scoreExpression"].IsObject() ||
+        !request->HasMember("localLimit") || !(*request)["localLimit"].IsInt() ||
+        (*request)["localLimit"].GetInt() <= 0 || !request->HasMember("ascending") ||
+        !(*request)["ascending"].IsBool() ||
+        !is_supported_vector_direction((*request)["scoreExpression"], (*request)["ascending"].GetBool())) {
+        return Status::InvalidArgument("Invalid Paimon Vector TopN request envelope");
+    }
     return Status::OK();
+}
+
+float PaimonGlobalIndexScanner::_normalize_score(const rapidjson::Value& score_expression, float score) {
+    std::string_view function(score_expression["f"].GetString(), score_expression["f"].GetStringLength());
+    // Lumina exposes cosine distance (1 - cosine similarity), while StarRocks orders
+    // approx_cosine_similarity itself. Normalize before the cross-shard global merge.
+    return function == "approx_cosine_similarity" ? 1.0f - score : score;
 }
 
 StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_evaluate(RuntimeState* runtime_state) {
@@ -253,7 +384,13 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexScanner::_
     };
 
     PaimonGlobalIndexEvaluator evaluator(std::move(reader_getter));
-    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexResult> result, evaluator.evaluate(_request["predicate"]));
+    std::shared_ptr<paimon::GlobalIndexResult> result;
+    if (scan_range.protocol_version == kTopNProtocolVersion) {
+        ASSIGN_OR_RETURN(result,
+                         evaluator.evaluate_top_n(_request["scoreExpression"], _request["localLimit"].GetInt()));
+    } else {
+        ASSIGN_OR_RETURN(result, evaluator.evaluate(_request["predicate"]));
+    }
     RETURN_IF_ERROR(check_query_state(runtime_state));
     if (result == nullptr) {
         return Status::InternalError("Paimon Global Index evaluator returned a null result");

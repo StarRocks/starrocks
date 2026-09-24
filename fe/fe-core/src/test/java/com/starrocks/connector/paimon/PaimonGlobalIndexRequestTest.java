@@ -14,16 +14,23 @@
 
 package com.starrocks.connector.paimon;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.connector.index.IndexCondition;
+import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
 import java.util.Map;
 
 public class PaimonGlobalIndexRequestTest {
@@ -40,6 +47,8 @@ public class PaimonGlobalIndexRequestTest {
                 PaimonGlobalIndexRequest.parseTransport(request.toTransportString());
 
         Assertions.assertEquals(42L, fromJson.getSnapshotId());
+        Assertions.assertEquals(PaimonGlobalIndexRequest.PREDICATE_VERSION, fromJson.getVersion());
+        Assertions.assertFalse(fromJson.isTopN());
         Assertions.assertEquals(Map.of("k", ConnectorIndexType.RANGE), fromJson.getRequiredIndexes());
         Assertions.assertEquals(42L, fromTransport.getSnapshotId());
         Assertions.assertEquals(Map.of("k", ConnectorIndexType.RANGE), fromTransport.getRequiredIndexes());
@@ -51,14 +60,58 @@ public class PaimonGlobalIndexRequestTest {
     }
 
     @Test
+    public void testVectorTopNRoundTrip() {
+        ColumnRefOperator vector = new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", true);
+        ArrayOperator query = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+        CallOperator score = new CallOperator(FunctionSet.APPROX_INNER_PRODUCT, FloatType.FLOAT,
+                List.of(query, vector));
+        TopNIndexCondition condition = new TopNIndexCondition(null, score,
+                Map.of(vector.getName(), ConnectorIndexType.VECTOR), 10, 2, false);
+
+        PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.parse(
+                PaimonGlobalIndexRequest.create(43L, condition).toJson());
+
+        Assertions.assertTrue(request.isTopN());
+        Assertions.assertEquals(PaimonGlobalIndexRequest.TOP_N_VERSION, request.getVersion());
+        Assertions.assertEquals(12, request.getLocalLimit());
+        Assertions.assertFalse(request.isAscending());
+        Assertions.assertEquals(Map.of("embedding", ConnectorIndexType.VECTOR), request.getRequiredIndexes());
+        Assertions.assertEquals("ca", request.getScoreExpression().get("o").getAsString());
+        Assertions.assertEquals("embedding", request.getScoreExpression().getAsJsonArray("a")
+                .get(0).getAsJsonObject().get("n").getAsString());
+        Assertions.assertNull(request.getPredicate());
+    }
+
+    @Test
     public void testRejectsInvalidEnvelope() {
         Assertions.assertThrows(IllegalArgumentException.class,
-                () -> PaimonGlobalIndexRequest.parse("{\"version\":2,\"snapshotId\":1}"));
+                () -> PaimonGlobalIndexRequest.parse("{\"version\":3,\"snapshotId\":1}"));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> PaimonGlobalIndexRequest.parseTransport("not-base64"));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> PaimonGlobalIndexRequest.parse(
                         "{\"version\":1,\"snapshotId\":1,\"predicate\":{},"
                                 + "\"indexes\":{\"k\":\"unknown\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":2,\"snapshotId\":1,\"kind\":\"top_n\",\"predicate\":{},"
+                                + "\"indexes\":{\"embedding\":\"vector\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":1,\"snapshotId\":1,\"kind\":\"top_n\",\"predicate\":{},"
+                                + "\"indexes\":{\"k\":\"range\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":2,\"snapshotId\":1,\"kind\":\"top_n\","
+                                + "\"scoreExpression\":{\"o\":\"ca\",\"f\":\"approx_l2_distance\","
+                                + "\"a\":[{},{}]},\"localLimit\":1,\"ascending\":false,"
+                                + "\"indexes\":{\"embedding\":\"vector\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":2,\"snapshotId\":1,\"kind\":\"top_n\","
+                                + "\"scoreExpression\":{\"o\":\"ca\",\"f\":\"unsupported\","
+                                + "\"a\":[{},{}]},\"localLimit\":1,\"ascending\":true,"
+                                + "\"indexes\":{\"embedding\":\"vector\"}}"));
     }
 }

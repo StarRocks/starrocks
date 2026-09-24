@@ -183,6 +183,7 @@ public class IndexAnalyzerTest {
         IndexAnalyzer analyzer = new IndexAnalyzer(metadata);
         Assertions.assertFalse(analyzer.supportsVectorTopN(ConstantOperator.createFloat(1), true));
         Assertions.assertTrue(analyzer.supportsVectorTopN(l2, true));
+        Assertions.assertEquals(vectorColumn, analyzer.getVectorTopNColumn(l2, true).orElseThrow());
         Assertions.assertFalse(analyzer.supportsVectorTopN(l2, false));
         Assertions.assertTrue(analyzer.supportsVectorTopN(cosine, false));
         Assertions.assertFalse(analyzer.supportsVectorTopN(cosine, true));
@@ -200,6 +201,23 @@ public class IndexAnalyzerTest {
         CallOperator unindexedL2 = new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
                 List.of(unindexed, queryVector));
         Assertions.assertFalse(analyzer.supportsVectorTopN(unindexedL2, true));
+
+        ColumnRefOperator doubleVector =
+                new ColumnRefOperator(7, new ArrayType(FloatType.DOUBLE), "double_embedding", false);
+        ConnectorIndexMetadata doubleMetadata = ConnectorIndexMetadata.of(
+                Map.of(doubleVector.getName(), Set.of(ConnectorIndexType.VECTOR)));
+        Assertions.assertFalse(new IndexAnalyzer(doubleMetadata).supportsVectorTopN(
+                new CallOperator(FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT,
+                        List.of(doubleVector, queryVector)), true));
+
+        ArrayOperator vectorWithNull = new ArrayOperator(ArrayType.ARRAY_FLOAT, true,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createNull(FloatType.FLOAT)));
+        Assertions.assertFalse(analyzer.supportsVectorTopN(new CallOperator(
+                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, vectorWithNull)), true));
+
+        ArrayOperator emptyVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false, List.of());
+        Assertions.assertFalse(analyzer.supportsVectorTopN(new CallOperator(
+                FunctionSet.APPROX_L2_DISTANCE, FloatType.FLOAT, List.of(vectorColumn, emptyVector)), true));
     }
 
     @Test

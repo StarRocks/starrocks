@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "cache/cache_options.h"
@@ -30,6 +31,7 @@ namespace starrocks {
 
 class SharedBufferedInputStream;
 class FileSystem;
+class MemTracker;
 class RandomAccessFile;
 
 class PaimonFileSystemStats {
@@ -102,11 +104,13 @@ class PaimonFileSystem final : public paimon::FileSystem {
 public:
     // `FileSystem` must be qualified inside this class: the injected-class-name of the
     // base paimon::FileSystem shadows the starrocks::FileSystem forward declaration.
-    PaimonFileSystem(starrocks::FileSystem* file_system, const DataCacheOptions& datacache_options)
-            : _file_system(file_system),
+    PaimonFileSystem(starrocks::FileSystem* file_system, const DataCacheOptions& datacache_options,
+                     std::shared_ptr<MemTracker> query_mem_tracker = nullptr)
+            : _query_mem_tracker(std::move(query_mem_tracker)),
+              _file_system(file_system),
               _datacache_options(datacache_options),
               _stats(std::make_shared<PaimonFileSystemStats>()) {}
-    ~PaimonFileSystem() override = default;
+    ~PaimonFileSystem() override;
 
     paimon::Result<std::unique_ptr<paimon::InputStream>> Open(const std::string& path) const override;
     paimon::Result<std::unique_ptr<paimon::OutputStream>> Create(const std::string& path,
@@ -125,6 +129,9 @@ public:
     PaimonFileSystemStats::Snapshot get_stats() const { return _stats->snapshot(); }
 
 private:
+    // Lumina can open and release streams on worker threads. Keep the owning query
+    // tracker alive until every stream and the shared I/O statistics are released.
+    std::shared_ptr<MemTracker> _query_mem_tracker;
     starrocks::FileSystem* _file_system;
     DataCacheOptions _datacache_options;
     std::shared_ptr<PaimonFileSystemStats> _stats;

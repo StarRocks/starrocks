@@ -14,26 +14,31 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.index.ConnectorIndexShard;
 import com.starrocks.connector.index.ConnectorIndexType;
-import com.starrocks.connector.index.IndexCondition;
 import com.starrocks.connector.index.IndexTable;
+import com.starrocks.connector.index.TopNIndexCondition;
 import com.starrocks.connector.paimon.PaimonGlobalIndexRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
-import com.starrocks.type.IntegerType;
+import com.starrocks.type.ArrayType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.VarcharType;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -73,7 +78,7 @@ public class PaimonIndexScanNodeTest {
             @Mocked FileStoreTable nativeTable) {
         String catalogName = "paimon_catalog";
         long snapshotId = 42L;
-        Map<String, ConnectorIndexType> requiredIndexes = Map.of("id", ConnectorIndexType.RANGE);
+        Map<String, ConnectorIndexType> requiredIndexes = Map.of("embedding", ConnectorIndexType.VECTOR);
         new Expectations() {
             {
                 table.getId();
@@ -108,10 +113,14 @@ public class PaimonIndexScanNodeTest {
         descriptor.setTable(indexTable);
         PaimonIndexScanNode scanNode = new PaimonIndexScanNode(new PlanNodeId(5), descriptor, indexTable);
 
-        ColumnRefOperator indexedColumn = new ColumnRefOperator(1, IntegerType.INT, "id", true);
-        IndexCondition condition = new IndexCondition(
-                new BinaryPredicateOperator(BinaryType.GE, indexedColumn, ConstantOperator.createInt(10)),
-                requiredIndexes);
+        ColumnRefOperator indexedColumn = new ColumnRefOperator(
+                1, ArrayType.ARRAY_FLOAT, "embedding", false);
+        ScalarOperator queryVector = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1), ConstantOperator.createFloat(2)));
+        ScalarOperator score = new CallOperator(FunctionSet.APPROX_COSINE_SIMILARITY, FloatType.FLOAT,
+                List.of(indexedColumn, queryVector));
+        TopNIndexCondition condition = new TopNIndexCondition(
+                null, score, requiredIndexes, 10, 2, false);
         String transport = PaimonGlobalIndexRequest.create(snapshotId, condition).toTransportString();
         ColumnRefOperator argsColumn = new ColumnRefOperator(
                 2, VarcharType.VARCHAR, IndexTable.ARGS_COLUMN_NAME, true);
@@ -126,8 +135,12 @@ public class PaimonIndexScanNodeTest {
         Assertions.assertEquals(99L, first.getPaimon_global_index_scan_range().getRange_to());
         Assertions.assertEquals(100L, first.getLength());
         Assertions.assertEquals(snapshotId, first.getPaimon_global_index_scan_range().getSnapshot_id());
-        Assertions.assertEquals(PaimonGlobalIndexRequest.CURRENT_VERSION,
+        Assertions.assertEquals(PaimonGlobalIndexRequest.TOP_N_VERSION,
                 first.getPaimon_global_index_scan_range().getProtocol_version());
+        PaimonGlobalIndexRequest forwarded = PaimonGlobalIndexRequest.parse(
+                first.getPaimon_global_index_scan_range().getQuery_json());
+        Assertions.assertTrue(forwarded.isTopN());
+        Assertions.assertEquals(12, forwarded.getLocalLimit());
         THdfsScanRange second = locations.get(1).getScan_range().getHdfs_scan_range();
         Assertions.assertEquals(Long.MAX_VALUE, second.getLength());
         Assertions.assertEquals(1, second.getPaimon_global_index_scan_range().getShard_id());

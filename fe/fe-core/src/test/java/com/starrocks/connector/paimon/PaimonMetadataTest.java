@@ -105,6 +105,7 @@ import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.globalindex.GlobalIndexResult;
 import org.apache.paimon.globalindex.IndexedSplit;
+import org.apache.paimon.globalindex.ScoredGlobalIndexResult;
 import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.options.Options;
@@ -1121,7 +1122,7 @@ public class PaimonMetadataTest {
             RoaringNavigableMap64 selectedRows = new RoaringNavigableMap64();
             selectedRows.add(0L);
             PaimonGlobalIndexResult indexResult = new PaimonGlobalIndexResult(
-                    snapshotId, GlobalIndexResult.create(selectedRows));
+                    snapshotId, ScoredGlobalIndexResult.create(selectedRows, rowId -> 0.75f));
             GetRemoteFilesParams indexedParams = GetRemoteFilesParams.newBuilder()
                     .setFieldNames(fields)
                     .setTableVersionRange(TvrTableSnapshot.of(snapshotId))
@@ -1137,6 +1138,13 @@ public class PaimonMetadataTest {
             assertTrue(indexedSplits.stream()
                     .map(IndexedSplit.class::cast)
                     .allMatch(split -> split.dataSplit().snapshotId() == snapshotId));
+            List<Float> indexedScores = new ArrayList<>();
+            indexedSplits.stream().map(IndexedSplit.class::cast).forEach(split -> {
+                for (float score : split.scores()) {
+                    indexedScores.add(score);
+                }
+            });
+            assertEquals(List.of(0.75f), indexedScores);
 
             GetRemoteFilesParams staleResultParams = GetRemoteFilesParams.newBuilder()
                     .setFieldNames(fields)

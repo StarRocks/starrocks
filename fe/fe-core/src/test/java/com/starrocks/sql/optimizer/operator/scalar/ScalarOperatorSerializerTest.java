@@ -17,12 +17,15 @@ package com.starrocks.sql.optimizer.operator.scalar;
 import com.google.gson.Gson;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class ScalarOperatorSerializerTest {
     private static final Gson GSON = new Gson();
@@ -57,5 +60,26 @@ public class ScalarOperatorSerializerTest {
         Assertions.assertTrue(json.contains("\"ng\":true"));
         Assertions.assertTrue(json.contains("\"o\":\"isn\""));
         Assertions.assertTrue(json.contains("\"f\":\"starts_with\""));
+    }
+
+    @Test
+    public void testVectorCallNormalizesColumnFirstAndSerializesArray() {
+        ColumnRefOperator vector = new ColumnRefOperator(2, ArrayType.ARRAY_FLOAT, "embedding", true);
+        ArrayOperator query = new ArrayOperator(ArrayType.ARRAY_FLOAT, false,
+                List.of(ConstantOperator.createFloat(1.25), ConstantOperator.createFloat(2.5)));
+        CallOperator cosine = new CallOperator(FunctionSet.APPROX_COSINE_SIMILARITY, FloatType.FLOAT,
+                List.of(query, vector));
+
+        Map<String, Object> serialized = ScalarOperatorSerializer.toJson(cosine);
+        List<?> arguments = (List<?>) serialized.get(ScalarOperatorSerializer.ARGUMENTS);
+        Map<?, ?> column = (Map<?, ?>) arguments.get(0);
+        Map<?, ?> array = (Map<?, ?>) arguments.get(1);
+
+        Assertions.assertEquals(FunctionSet.APPROX_COSINE_SIMILARITY,
+                serialized.get(ScalarOperatorSerializer.FN_NAME));
+        Assertions.assertEquals("embedding", column.get(ScalarOperatorSerializer.NAME));
+        Assertions.assertEquals("array<float>", column.get(ScalarOperatorSerializer.TYPE));
+        Assertions.assertEquals("float", array.get(ScalarOperatorSerializer.ITEM_TYPE));
+        Assertions.assertEquals(2, ((List<?>) array.get(ScalarOperatorSerializer.CHILDREN)).size());
     }
 }

@@ -17,6 +17,7 @@ package com.starrocks.connector.index;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.Map;
 import java.util.Objects;
 
 /** A scored connector-index request whose candidates are globally ordered by the original TopN. */
@@ -27,12 +28,25 @@ public final class TopNIndexCondition extends IndexCondition {
     private final boolean ascending;
 
     public TopNIndexCondition(ScalarOperator predicate, ScalarOperator scoreExpression,
+                              Map<String, ConnectorIndexType> requiredIndexes,
                               long limit, long offset, boolean ascending) {
-        super(predicate);
+        super(predicate, requireIndexes(requiredIndexes));
         this.scoreExpression = Objects.requireNonNull(scoreExpression, "scoreExpression is null");
+        if (limit <= 0 || offset < 0 || limit > Integer.MAX_VALUE - offset) {
+            throw new IllegalArgumentException("TopN candidate count must be between 1 and Integer.MAX_VALUE");
+        }
         this.limit = limit;
         this.offset = offset;
         this.ascending = ascending;
+    }
+
+    private static Map<String, ConnectorIndexType> requireIndexes(
+            Map<String, ConnectorIndexType> requiredIndexes) {
+        Objects.requireNonNull(requiredIndexes, "requiredIndexes is null");
+        if (requiredIndexes.isEmpty()) {
+            throw new IllegalArgumentException("TopN must require at least one connector index");
+        }
+        return requiredIndexes;
     }
 
     public ScalarOperator getScoreExpression() {
@@ -45,6 +59,10 @@ public final class TopNIndexCondition extends IndexCondition {
 
     public long getOffset() {
         return offset;
+    }
+
+    public int getCandidateLimit() {
+        return Math.toIntExact(limit + offset);
     }
 
     public boolean isAscending() {

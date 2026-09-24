@@ -19,7 +19,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
+#include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -37,6 +40,7 @@ constexpr std::string_view kName = "n";
 constexpr std::string_view kNegated = "ng";
 constexpr std::string_view kType = "t";
 constexpr std::string_view kValue = "v";
+constexpr std::string_view kItemType = "i";
 
 constexpr std::string_view kBinary = "b";
 constexpr std::string_view kCompound = "cp";
@@ -45,6 +49,7 @@ constexpr std::string_view kIsNull = "isn";
 constexpr std::string_view kCall = "ca";
 constexpr std::string_view kColumn = "cr";
 constexpr std::string_view kConstant = "co";
+constexpr std::string_view kArray = "a";
 
 bool equals_ignore_case(std::string_view left, std::string_view right) {
     return left.size() == right.size() && std::equal(left.begin(), left.end(), right.begin(), [](char lhs, char rhs) {
@@ -109,6 +114,52 @@ StatusOr<std::string_view> column_name(const rapidjson::Value& node) {
     return std::string_view(node[kName.data()].GetString(), node[kName.data()].GetStringLength());
 }
 
+StatusOr<std::vector<float>> query_vector(const rapidjson::Value& node) {
+    if (!node.IsObject() || !node.HasMember(kOperatorType.data()) || !node[kOperatorType.data()].IsString() ||
+        std::string_view(node[kOperatorType.data()].GetString(), node[kOperatorType.data()].GetStringLength()) !=
+                kArray ||
+        !node.HasMember(kItemType.data()) || !node[kItemType.data()].IsString() ||
+        (!equals_ignore_case(node[kItemType.data()].GetString(), "float") &&
+         !equals_ignore_case(node[kItemType.data()].GetString(), "double")) ||
+        !node.HasMember(kChildren.data()) || !node[kChildren.data()].IsArray() || node[kChildren.data()].Empty()) {
+        return invalid_node("expected a non-empty query vector literal");
+    }
+
+    std::vector<float> result;
+    result.reserve(node[kChildren.data()].Size());
+    for (const rapidjson::Value& element : node[kChildren.data()].GetArray()) {
+        if (!element.IsObject() || !element.HasMember(kOperatorType.data()) ||
+            !element[kOperatorType.data()].IsString() ||
+            std::string_view(element[kOperatorType.data()].GetString(),
+                             element[kOperatorType.data()].GetStringLength()) != kConstant ||
+            !element.HasMember(kType.data()) || !element[kType.data()].IsString() ||
+            (!equals_ignore_case(element[kType.data()].GetString(), "float") &&
+             !equals_ignore_case(element[kType.data()].GetString(), "double")) ||
+            !element.HasMember(kValue.data()) || !element[kValue.data()].IsNumber()) {
+            return invalid_node("query vector elements must be numeric constants");
+        }
+        float value = element[kValue.data()].GetFloat();
+        if (!std::isfinite(value)) {
+            return invalid_node("query vector elements must be finite");
+        }
+        result.push_back(value);
+    }
+    return result;
+}
+
+StatusOr<paimon::VectorSearch::DistanceType> vector_distance_type(std::string_view function) {
+    if (equals_ignore_case(function, "approx_l2_distance")) {
+        return paimon::VectorSearch::DistanceType::EUCLIDEAN;
+    }
+    if (equals_ignore_case(function, "approx_inner_product")) {
+        return paimon::VectorSearch::DistanceType::INNER_PRODUCT;
+    }
+    if (equals_ignore_case(function, "approx_cosine_similarity")) {
+        return paimon::VectorSearch::DistanceType::COSINE;
+    }
+    return invalid_node(fmt::format("unsupported vector score function '{}'", function));
+}
+
 StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> checked_result(
         std::string_view operation, paimon::Result<std::shared_ptr<paimon::GlobalIndexResult>>&& result) {
     if (!result.ok()) {
@@ -144,6 +195,51 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
         return _evaluate_call(node);
     }
     return invalid_node(fmt::format("unsupported operator type '{}'", type));
+}
+
+StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator::evaluate_top_n(
+        const rapidjson::Value& score_expression, int32_t limit) const {
+    if (limit <= 0) {
+        return invalid_node("Vector TopN limit must be positive");
+    }
+    if (!score_expression.IsObject() || !score_expression.HasMember(kOperatorType.data()) ||
+        !score_expression[kOperatorType.data()].IsString() ||
+        std::string_view(score_expression[kOperatorType.data()].GetString(),
+                         score_expression[kOperatorType.data()].GetStringLength()) != kCall ||
+        !score_expression.HasMember(kFunctionName.data()) || !score_expression[kFunctionName.data()].IsString() ||
+        !score_expression.HasMember(kArguments.data()) || !score_expression[kArguments.data()].IsArray() ||
+        score_expression[kArguments.data()].Size() != 2) {
+        return invalid_node("malformed Vector TopN score expression");
+    }
+
+    const rapidjson::Value& arguments = score_expression[kArguments.data()];
+    const rapidjson::Value* column_argument = &arguments[0];
+    const rapidjson::Value* query_argument = &arguments[1];
+    if (arguments[0].IsObject() && arguments[0].HasMember(kOperatorType.data()) &&
+        arguments[0][kOperatorType.data()].IsString() &&
+        std::string_view(arguments[0][kOperatorType.data()].GetString(),
+                         arguments[0][kOperatorType.data()].GetStringLength()) == kArray) {
+        column_argument = &arguments[1];
+        query_argument = &arguments[0];
+    }
+    ASSIGN_OR_RETURN(std::string_view column, column_name(*column_argument));
+    ASSIGN_OR_RETURN(std::vector<float> query, query_vector(*query_argument));
+    const std::string_view function(score_expression[kFunctionName.data()].GetString(),
+                                    score_expression[kFunctionName.data()].GetStringLength());
+    ASSIGN_OR_RETURN(paimon::VectorSearch::DistanceType distance_type, vector_distance_type(function));
+    ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
+
+    auto search = std::make_shared<paimon::VectorSearch>(
+            std::string(column), limit, query, nullptr, nullptr,
+            std::optional<paimon::VectorSearch::DistanceType>(distance_type), std::map<std::string, std::string>());
+    auto result = reader->VisitVectorSearch(search);
+    if (!result.ok()) {
+        return paimon_error("vector TopN evaluation", result.status());
+    }
+    if (result.value() == nullptr) {
+        return Status::NotSupported("Paimon Global Index reader does not support vector TopN evaluation");
+    }
+    return std::static_pointer_cast<paimon::GlobalIndexResult>(std::move(result).value());
 }
 
 StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator::_evaluate_binary(
