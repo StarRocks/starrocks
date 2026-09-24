@@ -63,6 +63,25 @@ public class ProcUtilsTest {
     }
 
     @Test
+    public void testToProcResultBuildsUnderTheGivenTitles() {
+        List<String> titleNames = List.of("JobId", "TableName", "State");
+        List<List<Comparable>> rows = List.of(List.of(1L, "t1", "FINISHED"), List.of(2L, "t2", "RUNNING"));
+
+        BaseProcResult result = ProcUtils.toProcResult(titleNames, rows);
+        Assertions.assertEquals(titleNames, result.getColumnNames());
+        // Cells are stringified on the way in, which is what both roads did before.
+        Assertions.assertEquals(List.of("1", "t1", "FINISHED"), result.getRows().get(0));
+        Assertions.assertEquals(List.of("2", "t2", "RUNNING"), result.getRows().get(1));
+    }
+
+    @Test
+    public void testToProcResultOnNoRows() {
+        BaseProcResult result = ProcUtils.toProcResult(List.of("JobId"), List.of());
+        Assertions.assertEquals(List.of("JobId"), result.getColumnNames());
+        Assertions.assertTrue(result.getRows().isEmpty());
+    }
+
+    @Test
     public void testFilterResultPassesWhatItDoesNotFilter() throws AnalysisException {
         // Filtering is opt-in per column: no filter at all, or a filter that does not mention this
         // column, keeps the row. Every column of every row goes through here, so this is the path

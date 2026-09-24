@@ -93,9 +93,25 @@ public class ProcUtils {
             selected = selected.subList(beginIndex, endIndex);
         }
 
+        return toProcResult(titleNames, selected);
+    }
+
+    /**
+     * Build a ProcResult from rows, under the given column titles.
+     *
+     * Used by the proc dirs behind SHOW ALTER TABLE and SHOW PARTITIONS - SchemaChangeProcDir,
+     * OptimizeProcDir, RollupProcDir and PartitionsProcDir. Each reaches an answer by two roads:
+     * fetchResult builds one directly, and fetchResultByFilter builds one after applying the
+     * statement's WHERE, ORDER BY and LIMIT. Those eight entry points delegate here.
+     *
+     * Most other proc dirs still build their own. Some are the same loop and could move here; some,
+     * like LoadProcDir, interleave it with merging and reversing their rows. Nothing about this
+     * helper requires them to, and it does not claim to cover them.
+     */
+    public static BaseProcResult toProcResult(List<String> titleNames, List<List<Comparable>> rows) {
         BaseProcResult result = new BaseProcResult();
         result.setNames(titleNames);
-        for (List<Comparable> row : selected) {
+        for (List<Comparable> row : rows) {
             List<String> oneResult = new ArrayList<>(row.size());
             for (Comparable column : row) {
                 oneResult.add(column.toString());

@@ -29,7 +29,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.OrderByPair;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
@@ -66,18 +65,7 @@ public class RollupProcDir implements ProcDirInterface {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(materializedViewHandler);
 
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(TITLE_NAMES);
-
-        List<List<Comparable>> rollupJobInfos = materializedViewHandler.getAlterJobInfosByDb(db);
-        for (List<Comparable> infoStr : rollupJobInfos) {
-            List<String> oneInfo = new ArrayList<String>(TITLE_NAMES.size());
-            for (Comparable element : infoStr) {
-                oneInfo.add(element.toString());
-            }
-            result.addRow(oneInfo);
-        }
-        return result;
+        return ProcUtils.toProcResult(TITLE_NAMES, materializedViewHandler.getAlterJobInfosByDb(db));
     }
 
     @Override
