@@ -95,7 +95,10 @@ public:
 };
 
 inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
-#if (defined(__x86_64__) && !defined(__SSE4_2__)) || (defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32))
+#if (defined(__x86_64__) && !defined(__SSE4_2__))
+    return static_cast<uint32_t>(crc32(hash, (const unsigned char*)data, bytes));
+#else 
+#if (defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32))
     hash = ~starrocks::crc32c::Extend(~hash, (const char*)data, bytes);
 #else
     uint32_t words = bytes / sizeof(uint32_t);
@@ -130,10 +133,18 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
     // for anyone who only uses the first several bits of the hash.
     hash = phmap_mix<4>()(hash);
     return hash;
+#endif
 }
 
 // NOTE: don't use it, only for test purpose. please use the crc_hash_64 instead
 inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t hash) {
+#if defined(__x86_64__) && !defined(__SSE4_2__)
+    return crc32(hash, (const unsigned char*)data, length);
+#else
+#if defined(__aarch64__) && !defined(__ARM_FEATURE_CRC32)
+    // New ARM fallback using CRC-32C
+    return ~starrocks::crc32c::Extend(~hash, (const char*)data, length);
+#else
     if (UNLIKELY(length < 8)) {
         return crc_hash_32(data, length, static_cast<uint32_t>(hash));
     }
@@ -164,6 +175,8 @@ inline uint64_t crc_hash_64_unmixed(const void* data, int32_t length, uint64_t h
     }
 
     return hash;
+#endif
+#endif
 }
 
 inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
