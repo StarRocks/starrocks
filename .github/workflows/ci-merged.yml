@@ -449,3 +449,42 @@ jobs:
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/merge-testcase.py --pr ${PR_NUMBER} --repo ${REPOSITORY} --branch ${BRANCH}
+
+  # Record the release this change ships in on its Jira issue, using what the merged PR
+  # already carries: the key in the title and the `version:<release>-ee` label that the
+  # version-label jobs above derive from the base branch.
+  #
+  # Runs for every merged PR on purpose, including backports: mergify inherits the original
+  # title, so each backport arrives with its own branch's version label and appends that
+  # release. Fix Versions accumulate as the change actually ships. A sync PR has no RB key
+  # and no-ops.
+  #
+  # Never fails: the PR is already merged, so a red check here is noise its author cannot
+  # act on. Everything surfaces as a ::warning:: in the log.
+  jira-fix-version:
+    runs-on: [self-hosted, quick]
+    # The version label is produced by the two jobs above, in this same run, AFTER the
+    # merge event fired -- on #63379 the merge landed at 02:31:34 and the label at 02:32:22.
+    # So the label cannot be read from github.event.pull_request.labels (a snapshot of the
+    # closing event); it has to come from those jobs' outputs, which means waiting for them.
+    #
+    # always(), because the two are mutually exclusive by base branch and PR type: whichever
+    # does not apply is skipped, and a skipped `needs` would otherwise skip this job too.
+    needs: [update_backport_merged_msg, update_version_label_for_main_feature]
+    if: always() && github.event.pull_request.merged == true
+    env:
+      JIRA_FIX_VERSION_ENABLED: ${{ vars.JIRA_FIX_VERSION_ENABLED }}
+      JIRA_DRY_RUN: ${{ vars.JIRA_DRY_RUN }}
+      JIRA_SERVER: ${{ vars.JIRA_SERVER }}
+      JIRA_USERNAME: ${{ vars.JIRA_USERNAME }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      PR_TITLE: ${{ github.event.pull_request.title }}
+      # Exactly one of the two is non-empty (a skipped job's outputs are empty strings), so
+      # concatenation yields that one. If both ever ran, the joined string parses as neither
+      # and the script skips rather than filing the change against a guessed release.
+      VERSION_LABEL: ${{ needs.update_backport_merged_msg.outputs.VERSION_LABEL }}${{ needs.update_version_label_for_main_feature.outputs.VERSION_LABEL }}
+    steps:
+      - name: Set Jira Fix Version
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && (git pull || true)
+          python3 scripts/set-jira-fix-version.py
