@@ -173,7 +173,12 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
 
     private final AtomicLong minRetainVersion = new AtomicLong(0);
 
-    private final AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
+    // The version this partition's incremental vacuum has advanced to -- everything below it is reclaimed.
+    // Equals the visible version once vacuum has caught up, and trails it while a reclaim backlog remains.
+    // Persisted so SHOW PARTITIONS / partitions_meta's VacuumVersion (and the vacuum scheduler) survive an
+    // FE restart / failover instead of resetting to 0.
+    @SerializedName(value = "lastSuccVacuumVersion")
+    private AtomicLong lastSuccVacuumVersion = new AtomicLong(0);
 
     // Purpose: the previous autovacuum round's computeMinActiveTxnId(), used to debounce a
     //   transiently-too-high value (begin-vs-vacuum race) before allowing txn-log deletion.
@@ -993,11 +998,11 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
             versionTxnType = TransactionType.TXN_NORMAL;
         }
 
-        // lastSuccVacuumVersion is not serialized into the image (no @SerializedName). Once a checkpoint has
-        // absorbed the vacuum-state edit-log records, restarting from that image replays no record to restore
-        // it, so it would reset to 0 and every already-drained partition would be needlessly vacuumed again.
-        // The completed-pass floor is durable in vacuumState.minRetainedVersion (which IS serialized), so
-        // re-derive the watermark from it here -- mirroring the edit-log replay path.
+        // lastSuccVacuumVersion is now serialized (@SerializedName), but an image written by an older FE that
+        // predates that field restores it as 0, so every already-drained partition would be needlessly
+        // vacuumed again after such an upgrade. The completed-pass floor is durable in
+        // vacuumState.minRetainedVersion (also serialized), so re-derive the watermark from it here --
+        // mirroring the edit-log replay path. For an image that already carries the field this is a no-op.
         if (vacuumState != null) {
             long vacuumFloor = vacuumState.getMinRetainedVersion();
             if (vacuumFloor > lastSuccVacuumVersion.get()) {

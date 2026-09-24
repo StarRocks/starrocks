@@ -464,6 +464,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 如果分区在此时间范围内没有更新（加载、DELETE 或 Compactions），系统将不会对此分区执行 AutoVacuum。
 - 引入版本: v3.1.0
 
+### `lake_vacuum_reset_partition_ids`
+
+- 默认值: （空）
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 存算分离集群中增量 AutoVacuum 卡死时的恢复手段：以分号分隔的物理分区 ID 列表（格式 `id1;id2`），列出的分区其增量 vacuum 状态将被强制重置。AutoVacuum 守护线程下次处理到列表中的分区时，会丢弃其进行中的 proposal、续跑游标和 tablet 代次（但保留已回收的 retain floor，使新一轮不会重新读取已删除的版本），跳过当前轮，并在下一轮开始一次干净的 pass。每个 ID 只消费一次——守护线程在重置后立即将其从列表中移除——因此卡死的 pass 只被推动一次，而非每轮都重置。该项仅在当前服务的 Leader FE 上生效：`ADMIN SET FRONTEND CONFIG` 会将取值广播到所有 FE，而每个 FE 在成为 Leader 的那一刻会丢弃继承到的取值，因此在 failover 前不久下发的请求会丢失，需要对新 Leader 重新下发。正常运行时请保持为空。
+- 引入版本: v26.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - 默认值: true

@@ -463,6 +463,15 @@ This topic introduces the following types of FE configurations:
 - Description: If a partition has no updates (loading, DELETE, or Compactions) within this time range, the system will not perform AutoVacuum on this partition.
 - Introduced in: v3.1.0
 
+### `lake_vacuum_reset_partition_ids`
+
+- Default: (empty)
+- Type: String
+- Unit: -
+- Is mutable: Yes
+- Description: A recovery escape hatch for a wedged incremental AutoVacuum in a shared-data cluster: a semicolon-separated list of physical partition IDs (format `id1;id2`) whose incremental vacuum state should be force-reset. When the AutoVacuum daemon next processes a listed partition it discards the in-flight proposal, resume cursor, and tablet generation (while preserving the already-vacuumed retain floor, so the fresh pass does not re-read already-deleted versions), skips that round, and starts a clean pass on the next round. Each ID is consumed exactly once — the daemon removes it from the list immediately after resetting — so a stuck pass is nudged once rather than reset every round. Only the serving leader acts on this item: `ADMIN SET FRONTEND CONFIG` broadcasts the value to every FE, and each FE discards whatever it inherited at the moment it becomes leader, so a request issued shortly before a failover is lost and must be re-issued against the new leader. Leave it empty in normal operation.
+- Introduced in: v26.2.0
+
 ### `lake_compaction_allow_partial_success`
 
 - Default: true

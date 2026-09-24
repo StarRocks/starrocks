@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.VacuumState;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -218,6 +219,41 @@ public class VacuumTest {
         }
         Assertions.assertEquals(7L, partition.getLastSuccVacuumVersion());
         Assertions.assertEquals(0L, partition.getMetadataSwitchVersion());
+    }
+
+    // The lake_vacuum_reset_partition_ids escape hatch: when a listed partition is processed,
+    // vacuumPartitionImpl must force-reset its VacuumState -- discarding the in-flight proposal / resume cursor
+    // / pass generation while preserving minRetainedVersion (the already-vacuumed walk floor) -- consume the id
+    // exactly once, and skip the round (returning before any BE RPC, so none is mocked here).
+    @Test
+    public void testForceResetPartitionVacuumState() throws Exception {
+        PhysicalPartition part = olapTable7.getPhysicalPartitions().stream().findFirst().orElse(null);
+
+        // Seed an in-flight pass whose retain floor must survive the reset.
+        VacuumState state = part.getVacuumState();
+        state.setMinRetainedVersion(8L);
+        state.advance(10L, 15L, 12L, true, 8L, new HashSet<>(Arrays.asList(100L)));
+        Assertions.assertTrue(state.isInFlight());
+
+        String saved = Config.lake_vacuum_reset_partition_ids;
+        try {
+            Config.lake_vacuum_reset_partition_ids = String.valueOf(part.getId());
+            AutovacuumDaemon daemon = new AutovacuumDaemon();
+            daemon.testVacuumPartitionImpl(db, olapTable7, part);
+
+            // The id is consumed exactly once.
+            Assertions.assertEquals("", Config.lake_vacuum_reset_partition_ids);
+            // The in-flight pass is discarded...
+            VacuumState after = part.getVacuumState();
+            Assertions.assertFalse(after.isInFlight());
+            Assertions.assertEquals(0L, after.getNextProposeStartVersion());
+            Assertions.assertEquals(0L, after.getPassStartVersion());
+            Assertions.assertTrue(after.getPassStartIndexIds().isEmpty());
+            // ...but the already-vacuumed floor is preserved.
+            Assertions.assertEquals(8L, after.getMinRetainedVersion());
+        } finally {
+            Config.lake_vacuum_reset_partition_ids = saved;
+        }
     }
 
     @Test

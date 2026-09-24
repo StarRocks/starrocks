@@ -14,6 +14,9 @@
 
 package com.starrocks.lake.vacuum;
 
+import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.LeaderDaemon;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -54,5 +57,73 @@ public class AutovacuumDaemonTest {
         Assertions.assertTrue(pool.isTerminated(), "pool must be drained to termination");
         Assertions.assertNull(daemon.executorService, "executor must be dereferenced for lazy rebuild");
         Assertions.assertTrue(daemon.vacuumingPartitions.isEmpty(), "reservations must be cleared");
+    }
+
+    // checkAndClearResetPartition is the consume-once gate for the lake_vacuum_reset_partition_ids recovery
+    // hatch: it must return true exactly once per listed id -- matching AND removing it in the same step,
+    // trimming whitespace, and leaving the other ids intact -- so a wedged pass is nudged once instead of
+    // reset every round.
+    @Test
+    public void testCheckAndClearResetPartitionConsumesEachIdOnce() {
+        String saved = Config.lake_vacuum_reset_partition_ids;
+        try {
+            // Empty config: fast path, nothing matches.
+            Config.lake_vacuum_reset_partition_ids = "";
+            Assertions.assertFalse(AutovacuumDaemon.checkAndClearResetPartition(1L));
+
+            // Multiple ids (with surrounding whitespace): matching one consumes only it, leaves the rest.
+            Config.lake_vacuum_reset_partition_ids = "10; 20 ;30";
+            Assertions.assertTrue(AutovacuumDaemon.checkAndClearResetPartition(20L));
+            Assertions.assertEquals("10;30", Config.lake_vacuum_reset_partition_ids);
+
+            // Consume-once: the same id no longer matches on a second round, and the list is unchanged.
+            Assertions.assertFalse(AutovacuumDaemon.checkAndClearResetPartition(20L));
+            Assertions.assertEquals("10;30", Config.lake_vacuum_reset_partition_ids);
+
+            // A partition not listed never matches and never mutates the list.
+            Assertions.assertFalse(AutovacuumDaemon.checkAndClearResetPartition(99L));
+            Assertions.assertEquals("10;30", Config.lake_vacuum_reset_partition_ids);
+
+            // Consuming the remaining ids drains the list to empty.
+            Assertions.assertTrue(AutovacuumDaemon.checkAndClearResetPartition(10L));
+            Assertions.assertTrue(AutovacuumDaemon.checkAndClearResetPartition(30L));
+            Assertions.assertEquals("", Config.lake_vacuum_reset_partition_ids);
+        } finally {
+            Config.lake_vacuum_reset_partition_ids = saved;
+        }
+    }
+
+    // The reset hatch is leader-only, but ADMIN SET FRONTEND CONFIG broadcasts the value to every live FE and
+    // only the leader consumes it, so a follower would hold the id until it is elected and then fire a stale,
+    // long-forgotten reset. start() must drop whatever was inherited at the beginning of a leader session --
+    // and must NOT wipe an id an admin set against a daemon that is already serving.
+    @Test
+    public void testStartDiscardsInheritedResetRequests() {
+        String saved = Config.lake_vacuum_reset_partition_ids;
+        // No GlobalStateMgr in this unit test: skip the ready/lease handshake so start() only exercises the
+        // discard and the worker lifecycle.
+        AutovacuumDaemon daemon = new AutovacuumDaemon() {
+            @Override
+            protected void runOneCycle() {
+            }
+        };
+        try {
+            Config.lake_vacuum_reset_partition_ids = "10;20";
+            daemon.start();
+            Assertions.assertEquals("", Config.lake_vacuum_reset_partition_ids,
+                    "an inherited request must not survive into this leader session");
+
+            // Already running: a redundant start() is a no-op and must leave this session's request alone.
+            Config.lake_vacuum_reset_partition_ids = "30";
+            daemon.start();
+            Assertions.assertEquals("30", Config.lake_vacuum_reset_partition_ids,
+                    "a request set on the serving leader must survive a redundant start()");
+        } finally {
+            daemon.setStop();
+            // Leave nothing in LeaderDaemon.RUNNING_INSTANCES: the re-activation gate reads it process-wide
+            // and exits the JVM on a straggler, which would take down unrelated tests in the same run.
+            LeaderDaemon.awaitQuiesced(Lists.<LeaderDaemon>newArrayList(daemon), 30000);
+            Config.lake_vacuum_reset_partition_ids = saved;
+        }
     }
 }

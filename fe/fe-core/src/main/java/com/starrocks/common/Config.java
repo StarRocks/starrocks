@@ -4221,6 +4221,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "partitions which can be vacuumed immediately, test only, format:'id1;id2'")
     public static String lake_vacuum_immediately_partition_ids = "";
 
+    @ConfField(mutable = true, comment = "partitions whose incremental vacuum state should be force-reset, a "
+            + "recovery escape hatch for a wedged propose/commit that never advances, format:'id1;id2'. Only "
+            + "the serving leader honors it: ADMIN SET FRONTEND CONFIG broadcasts the value to every FE, and "
+            + "a node discards whatever it inherited when it becomes leader, so a request must be re-issued "
+            + "after a failover")
+    public static String lake_vacuum_reset_partition_ids = "";
+
     @ConfField(mutable = true, comment = "the max number of threads for publishing version",
             aliases = {"lake_publish_version_max_threads"})
     public static int publish_version_max_threads = 512;

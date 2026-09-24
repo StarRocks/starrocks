@@ -134,4 +134,32 @@ TEST_F(SchemaPartitionsMetaScannerTest, fill_last_update_and_access_time_columns
     EXPECT_TRUE(chunk->get_column_by_slot_id(35)->is_null(1));
 }
 
+// VACUUM_VERSION (slot 36) is the incremental-vacuum success watermark, surfaced as a non-null BIGINT.
+TEST_F(SchemaPartitionsMetaScannerTest, fill_vacuum_version_column) {
+    SchemaPartitionsMetaScanner scanner;
+    SchemaScannerParam params;
+    std::string ip = "127.0.0.1";
+    params.ip = &ip;
+    params.port = 9020;
+    ObjectPool pool;
+    ASSERT_OK(scanner.init(&params, &pool));
+
+    TPartitionMetaInfo info;
+    info.__set_vacuum_version(42);
+    set_rows(scanner, {info});
+
+    // Only request the VACUUM_VERSION column so fill_chunk exercises just that case.
+    ChunkPtr chunk = std::make_shared<Chunk>();
+    for (auto* slot : scanner.get_slot_descs()) {
+        if (slot->id() == 36) {
+            chunk->append_column(ColumnHelper::create_column(slot->type(), slot->is_nullable()), slot->id());
+        }
+    }
+    ASSERT_EQ(1, chunk->num_columns());
+
+    ASSERT_OK(fill_chunk(scanner, &chunk));
+
+    EXPECT_EQ(42, chunk->get_column_by_slot_id(36)->get(0).get_int64());
+}
+
 } // namespace starrocks

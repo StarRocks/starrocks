@@ -1744,6 +1744,9 @@ struct TPartitionMetaInfo {
     // Last time this partition was modified by a user write (load/DML, excluding compaction),
     // in unix seconds. 0/absent = unknown.
     36: optional i64 last_update_time
+    // The version the partition's incremental vacuum has advanced to; everything below it is reclaimed.
+    // Equals visible_version once vacuum catches up, and is smaller while a reclaim backlog remains.
+    37: optional i64 vacuum_version
 }
 
 // Ask one FE for its local in-memory partition query-access times of a table, so the querying FE

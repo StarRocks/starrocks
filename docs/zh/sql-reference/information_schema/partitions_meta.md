@@ -44,3 +44,4 @@ description: "partitions_meta 提供表分区的信息。"
 | TABLET_BALANCED               | 分区的 Tablet 分布是否均衡。                                                                                       |
 | LAST_UPDATE_TIME              | 分区最近一次被**用户写入**（导入 / INSERT / DELETE / UPDATE）修改的时间。                                                     |
 | LAST_ACCESS_TIME              | 分区最近一次被用户语句读取的时间，包括查询、`INSERT ... SELECT`、`INSERT OVERWRITE`、CTAS、主键表的 `UPDATE`/`DELETE`、物化视图刷新以及 `EXPORT`；内部统计信息采集发起的读取不计入。当前仅保存在 FE 内存中（不持久化），查询时跨 FE 聚合结果。 |
+| VACUUM_VERSION                | 分区增量 vacuum 已推进到的版本：低于该版本的历史数据已被回收。vacuum 追上时该值等于 VISIBLE_VERSION，落后时小于 VISIBLE_VERSION，差值即尚未回收的版本积压。 |

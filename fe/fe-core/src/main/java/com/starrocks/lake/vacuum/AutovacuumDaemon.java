@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.vacuum;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -144,6 +145,26 @@ public class AutovacuumDaemon extends LeaderDaemon {
             return;
         }
         ThreadPoolManager.setFixedThreadPoolSize(executorService, newNumThreads);
+    }
+
+    @Override
+    public synchronized void start() {
+        // A leader session begins here. Drop any force-reset request inherited from the time this node was a
+        // follower: ADMIN SET FRONTEND CONFIG fans the value out to every live FE (ConfigBase.setConfig), but
+        // only the leader's daemon consumes it, so a follower holds the id indefinitely and would fire a
+        // second, long-forgotten reset the moment it is elected -- exactly the repeat the consume-once gate in
+        // checkAndClearResetPartition() exists to prevent. Discarding it here narrows the hatch to "reset
+        // requested of the leader that is serving right now": a request issued to a leader that fails over
+        // before its next round is lost and must be re-issued against the new leader, which is the right
+        // trade for a manual recovery lever. It also covers the fe.conf route: a value that reached the file
+        // is read back into memory on restart, and is dropped here rather than re-firing on every boot.
+        // Both this method and LeaderDaemon.start() synchronize on the instance, so the isRunning() probe
+        // cannot race the CAS inside super.start(): the discard runs exactly once per leader session, and an
+        // idempotent re-start on an already-running daemon never wipes a request an admin just set.
+        if (!isRunning()) {
+            discardInheritedResetRequests();
+        }
+        super.start();
     }
 
     @Override
@@ -370,6 +391,34 @@ public class AutovacuumDaemon extends LeaderDaemon {
     }
 
     private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+        // Recovery escape hatch (lake_vacuum_reset_partition_ids): force-reset this partition's incremental
+        // vacuum state and skip the round. A wedged pass -- an in-flight proposal that never commits, or a
+        // resume cursor that never advances -- otherwise re-attempts the same doomed band every round forever.
+        // checkAndClearResetPartition() consumes the id (matches AND removes it atomically) so this fires
+        // exactly ONCE per set: the very next round re-derives a clean fresh pass and vacuum resumes normally.
+        // It must be one-shot -- an id that stayed matched would reset + skip every round and the partition
+        // would never vacuum at all, worse than the wedge it recovers from. reset() discards the in-flight
+        // proposal/cursor/generation but intentionally preserves minRetainedVersion (the already-vacuumed walk
+        // floor), so the fresh walk does not re-descend into and re-read already-deleted versions. Journaled
+        // under the table WRITE lock like every other vacuum-state mutation (see updateVacuumState), so the
+        // reset survives an FE failover.
+        if (checkAndClearResetPartition(partition.getId())) {
+            VacuumState state = partition.getVacuumState();
+            Locker locker = new Locker();
+            locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            try {
+                state.reset();
+                GlobalStateMgr.getCurrentState().getEditLog().logModifyPartitionVacuumState(
+                        new PartitionVacuumStateInfo(db.getId(), table.getId(), partition.getId(), state));
+            } finally {
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
+            }
+            partition.setLastVacuumTime(System.currentTimeMillis());
+            LOG.warn("force-reset incremental vacuum state for {}.{}.{} via lake_vacuum_reset_partition_ids; "
+                            + "id cleared from the config, the next round starts a fresh pass",
+                    db.getFullName(), table.getName(), partition.getId());
+            return;
+        }
         List<Tablet> tablets = new ArrayList<>();
         // Visible MaterializedIndex ids (getId()) this round -- the tablet generation. Stored with each
         // proposal so the next round can detect a wholesale tablet-set replacement (split / sort-key change).
@@ -922,6 +971,65 @@ public class AutovacuumDaemon extends LeaderDaemon {
             }
         }
         return false;
+    }
+
+    // Returns true iff this partition is listed in lake_vacuum_reset_partition_ids, AND removes it in the same
+    // step so the force-reset is consumed exactly once per set (a matched id left in place would reset + skip
+    // every round).
+    @VisibleForTesting
+    static boolean checkAndClearResetPartition(long partitionId) {
+        // Fast path -- no reset requested, the overwhelmingly common case. Called every round for every
+        // partition, so the hot path must stay lock-free; only actually taking the lock when an id is present
+        // keeps the escape hatch off the critical path. A stale read races by at most one round: the hatch
+        // tolerates a naptime (2s) delay and the next round re-reads.
+        if (Config.lake_vacuum_reset_partition_ids.isEmpty()) {
+            return false;
+        }
+        // An id is set (rare, admin-triggered): consume it under a lock. synchronized because the auto_vacuum
+        // pool processes partitions in parallel; without it a read-modify-write of the shared config string
+        // could resurrect an id another thread just dropped. Writes the in-memory Config field directly
+        // (leader-only daemon).
+        synchronized (AutovacuumDaemon.class) {
+            String current = Config.lake_vacuum_reset_partition_ids;
+            if (current.isEmpty()) {
+                return false;
+            }
+            String target = String.valueOf(partitionId);
+            boolean matched = false;
+            List<String> remain = new ArrayList<>();
+            for (String id : current.split(";")) {
+                String trimmed = id.trim();
+                if (trimmed.isEmpty()) {
+                    continue;
+                }
+                if (trimmed.equals(target)) {
+                    matched = true;
+                } else {
+                    remain.add(trimmed);
+                }
+            }
+            if (matched) {
+                Config.lake_vacuum_reset_partition_ids = String.join(";", remain);
+            }
+            return matched;
+        }
+    }
+
+    // Clears lake_vacuum_reset_partition_ids at the start of a leader session, see start(). Takes the same
+    // lock as checkAndClearResetPartition() so it cannot interleave with a consuming round of a previous
+    // session's straggler task.
+    @VisibleForTesting
+    static void discardInheritedResetRequests() {
+        synchronized (AutovacuumDaemon.class) {
+            String inherited = Config.lake_vacuum_reset_partition_ids;
+            if (inherited.isEmpty()) {
+                return;
+            }
+            Config.lake_vacuum_reset_partition_ids = "";
+            LOG.warn("discarded inherited lake_vacuum_reset_partition_ids '{}' on becoming leader; the hatch "
+                    + "only honors ids set on the serving leader -- re-issue ADMIN SET FRONTEND CONFIG if "
+                    + "those partitions still need a force-reset", inherited);
+        }
     }
 
     public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
