@@ -40,6 +40,8 @@ public class PreSplitProfileTest {
                 nowNs.set(25L);
             }
             PreSplitProfile.recordSourceTier(DefaultPreSplitPipeline.TIER_LABEL_DATA_TIER);
+            PreSplitProfile.recordMetaTierFallbackReason(
+                    new MetaTierUnavailableException("failed to open oss footer"));
             PreSplitProfile.recordSample(new SampleSet(
                     List.of(new Tuple(List.of())), new Estimates(1_024L, 1L)));
             PreSplitProfile.recordSampleQueryId(null, new UUID(1L, 2L));
@@ -80,6 +82,8 @@ public class PreSplitProfileTest {
         Assertions.assertEquals("INSERT-from-table", profile.getInfoString("LoadKinds"));
         Assertions.assertEquals("demandbase_target", profile.getInfoString("Tables"));
         Assertions.assertEquals("data_tier", profile.getInfoString("SourceTiers"));
+        Assertions.assertEquals("MetaTierUnavailableException: failed to open oss footer",
+                profile.getInfoString(PreSplitProfile.META_TIER_FALLBACK_REASONS));
         Assertions.assertEquals("FINISHED", profile.getInfoString("Outcomes"));
         Assertions.assertNotNull(profile.getInfoString("SampleQueryIds"));
         Assertions.assertEquals("99", profile.getInfoString("ReshardJobIds"));
