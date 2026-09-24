@@ -59,8 +59,11 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.LiteralExpr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -642,8 +645,8 @@ public class PaimonMetadata implements ConnectorMetadata {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
-            boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
-                    && onlyHasPartitionPredicate(table, params.getPredicate());
+            boolean pruneManifestsByLimit = params.getLimit() > 0 && params.getLimit() < Integer.MAX_VALUE
+                    && canPushDownLimit(paimonTable, params.getPredicate(), predicates);
             InnerTableScan scan = PaimonScan.create(paimonNativeTable, predicates, projected,
                     pruneManifestsByLimit ? (int) params.getLimit() : null);
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
@@ -1061,34 +1064,40 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    public static boolean onlyHasPartitionPredicate(Table table, ScalarOperator predicate) {
+    private static boolean canPushDownLimit(PaimonTable table, ScalarOperator predicate, List<Predicate> pushedPredicates) {
         if (predicate == null) {
             return true;
         }
 
-        List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
-
-        List<String> predicateColumns = new ArrayList<>();
-        for (ScalarOperator operator : scalarOperators) {
-            String columnName = null;
-            if (operator.getChild(0) instanceof ColumnRefOperator) {
-                columnName = ((ColumnRefOperator) operator.getChild(0)).getName();
-            }
-
-            if (columnName == null || columnName.isEmpty()) {
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        // A residual WHERE clause can reject every row in the first files. File row counts are
+        // sufficient for LIMIT only if the entire predicate is evaluated exactly on partitions.
+        if (conjuncts.size() != pushedPredicates.size()) {
+            return false;
+        }
+        for (ScalarOperator conjunct : conjuncts) {
+            // Be conservative: compound/LIKE/function predicates can be only partially pushed or
+            // approximated by the converter. Column-to-column comparisons must also stay unbounded.
+            if (!(conjunct instanceof BinaryPredicateOperator || conjunct instanceof InPredicateOperator
+                    || conjunct instanceof IsNullPredicateOperator)) {
                 return false;
             }
-
-            predicateColumns.add(columnName);
-        }
-
-        List<String> partitionColNames = table.getPartitionColumnNames();
-        for (String columnName : predicateColumns) {
-            if (!partitionColNames.contains(columnName)) {
+            if (!(conjunct.getChild(0) instanceof ColumnRefOperator column)
+                    || !table.getPartitionColumnNames().contains(column.getName())) {
                 return false;
             }
+            for (int i = 1; i < conjunct.getChildren().size(); i++) {
+                ScalarOperator value = conjunct.getChild(i);
+                if (!(value instanceof ConstantOperator)) {
+                    return false;
+                }
+                // VARCHAR length differences do not change the literal's comparison semantics.
+                boolean varcharComparison = value.getType().isVarchar() && column.getType().isVarchar();
+                if (!varcharComparison && !value.getType().equals(column.getType())) {
+                    return false;
+                }
+            }
         }
-
         return true;
     }
 }
