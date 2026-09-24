@@ -45,9 +45,10 @@ import java.util.function.BooleanSupplier;
  * kinds:
  * <ul>
  *   <li>{@link #dispatch} — partitioned-vs-unpartitioned routing, including the
- *       automatic-partition gate that conservatively skips manually
- *       list/range-partitioned targets (those cannot pre-create partitions from
- *       sampled values).</li>
+ *       partitioning gate: automatic targets and manually range-partitioned ones
+ *       (whose existing partitions the grouper maps samples onto) take the
+ *       multi-partition flow; manual list and expression-range targets are
+ *       skipped.</li>
  *   <li>{@link #runSinglePartitionFlow} — resolve the unique partition + base
  *       tablet, build a {@link DefaultPreSplitPipeline}, submit via
  *       {@link TabletPreSplitCoordinator#submitAsynchronously}, then sync-await
@@ -119,11 +120,21 @@ final class PreSplitFlow {
                          LoadKind loadKind, BooleanSupplier shouldAbort, ConnectContext context,
                          PreSplitPartitionScope partitionScope) {
         if (target.getPartitionInfo().isPartitioned()) {
-            // Manually list/range-partitioned targets do not support pre-creating partitions
-            // from sampled values; skip conservatively, let the load proceed.
             if (!Boolean.TRUE.equals(target.supportedAutomaticPartition())) {
-                PreSplitProfile.recordOutcome("SKIPPED: MANUAL_PARTITIONING");
-                return;
+                // A manual RANGE target already declares every partition the load can write, so the
+                // grouper maps samples onto those and never creates one. Manual LIST and
+                // expression-range targets have no such mapping yet; skip them, let the load proceed.
+                if (!PartitionSampleGrouper.isManualRangePartitioned(target)) {
+                    PreSplitProfile.recordOutcome("SKIPPED: MANUAL_PARTITIONING");
+                    return;
+                }
+                // Only an empty single-tablet partition can be split; skip before sampling when the
+                // load cannot reach one, which is the common case for a repeatedly loaded table.
+                if (!PartitionSampleGrouper.hasEmptySingleTabletPartition(database.getId(), target, partitionScope)) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.PARTITION_NOT_EMPTY);
+                    PreSplitProfile.recordOutcome("SKIPPED: NO_EMPTY_PARTITION");
+                    return;
+                }
             }
             runMultiPartitionFlow(database, target, prepared, loadKind, shouldAbort, context, partitionScope);
         } else {

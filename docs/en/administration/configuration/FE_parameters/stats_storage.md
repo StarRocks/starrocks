@@ -760,7 +760,7 @@ This topic introduces the following types of FE configurations:
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP table or a table in an external catalog, such as Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, or Elasticsearch. Views are not supported as a source. When an external source cannot be sized from its table statistics, the load skips pre-split. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
+- Description: Whether to enable Sample-Based Tablet Pre-Split for `INSERT INTO ... SELECT FROM <table>` loads whose source is an internal OLAP table or a table in an external catalog, such as Hive, Iceberg, Paimon, Delta Lake, Hudi, JDBC, or Elasticsearch. Views are not supported as a source. When an external source cannot be sized from its table statistics, the load skips pre-split. The feature supports automatic range-partition targets, including explicitly named real or temporary partitions and both static and dynamic `INSERT OVERWRITE`. For `INSERT INTO`, it also supports manually range-partitioned targets, whose existing empty partitions are split without creating any partition. On by default as of v4.1.0. Set to `false` to disable cluster-wide. The session variable `enable_tablet_pre_split` must also be `true` for pre-split to run. To roll back, set to `false`; new INSERT-from-table loads will skip pre-split immediately.
 - Introduced in: v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -852,10 +852,11 @@ To disable the feature safely before a downgrade or during a production rollback
 
 #### Behavioral notes for multi-partition Sample-Based Tablet Pre-Split (P2-a)
 
-The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Two operational caveats apply:
+The multi-partition path extends Sample-Based Tablet Pre-Split to loads that target many partitions in one statement. Three operational caveats apply:
 
 - **Broker Load triggering-load asymmetry.** The multi-partition pre-split hook fires from `BrokerLoadJob.createLoadingTask` **after** `task.prepare()` has built the load's sink plan against the catalog as it existed at that moment. For Broker Load, pre-created partitions and the post-reshard tablet layout are therefore only visible to **subsequent** loads on the same table — the triggering Broker Load itself runs against the original layout and uses BE runtime auto-create for any partitions it touches. INSERT-from-FILES (where the hook fires before `StatementPlanner.plan()`) is unaffected and benefits in the same load.
 - **Pre-created partition leak on subsequent INSERT failure.** When pre-create succeeds and the triggering INSERT later fails for unrelated reasons (FILES schema mismatch, BE crash, load timeout, etc.), the empty pre-created partitions remain in the catalog. This matches the semantics of `ALTER TABLE ADD PARTITION`, which also leaves a partition behind on subsequent failure. Operators who care can drop the empty partitions manually with `ALTER TABLE ... DROP PARTITION`; in practice empty partitions are cheap and the next retry of the load will reuse them.
+- **Manually range-partitioned targets.** For a table with user-declared RANGE partitions, pre-split never creates a partition. Each sampled row is mapped onto the existing partition whose range contains it, and a value outside every declared range is dropped from the plan. Only partitions that are still empty and hold a single tablet are split, typically a partition just added with `ALTER TABLE ... ADD PARTITION`; a load whose target partitions all hold data already skips pre-split without sampling the source. `INSERT OVERWRITE`, LIST partitioning, and expression partitioning are not covered for manually partitioned tables.
 
 #### Production deployment guidance
 
