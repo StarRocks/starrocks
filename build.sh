@@ -89,14 +89,35 @@ if starrocks_is_darwin ; then
     PARALLEL=$(starrocks_detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
-    # Pre-parse ARM CRC flags to propagate to thirdparty build
+    # Resolve ARM CRC32 configuration before third-party build
+    # 1. Start with environment variable if provided, otherwise default ON
+    if [[ -z "${USE_ARM_CRC32}" ]]; then
+        RESOLVED_ARM_CRC32=ON
+    else
+        RESOLVED_ARM_CRC32="${USE_ARM_CRC32}"
+    fi
+
+    # 2. Hardware auto-detection overrides default (must have CRC on all cores)
+    if [[ -z "${USE_ARM_CRC32}" && -e /proc/cpuinfo && ("${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64") ]]; then
+        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
+        features_count=${features_count:-0}
+        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
+        crc_count=${crc_count:-0}
+        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
+            RESOLVED_ARM_CRC32=OFF
+        fi
+    fi
+
+    # 3. CLI arguments override everything
     for arg in "$@"; do
         if [[ "$arg" == "--without-arm-crc32" ]]; then
-            export THIRD_PARTY_BUILD_WITH_ARM_CRC=OFF
+            RESOLVED_ARM_CRC32=OFF
         elif [[ "$arg" == "--with-arm-crc32" ]]; then
-            export THIRD_PARTY_BUILD_WITH_ARM_CRC=ON
+            RESOLVED_ARM_CRC32=ON
         fi
     done
+
+    export THIRD_PARTY_BUILD_WITH_ARM_CRC="${RESOLVED_ARM_CRC32}"
 
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
