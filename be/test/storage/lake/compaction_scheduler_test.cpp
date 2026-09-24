@@ -20,20 +20,6 @@
 #include <system_error>
 #include <thread>
 
-<<<<<<< HEAD
-=======
-#include "base/bthreads/util.h"
-#include "base/concurrency/countdown_latch.h"
-#include "base/testutil/assert.h"
-#include "base/testutil/sync_point.h"
-#include "base/utility/scoped_cleanup.h"
-#include "common/config_compaction_fwd.h"
-#include "common/config_storage_fwd.h"
-#include "common/config_update_registry.h"
-#include "common/thread/threadpool.h"
-#include "gen_cpp/lake_service.pb.h"
-#include "runtime/descriptors.h"
->>>>>>> 67b9ae7 ([BugFix] Reject non-positive compact_threads instead of crashing the CN (#79641))
 #include "storage/lake/compaction_task_context.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/test_util.h"
@@ -138,20 +124,6 @@ TEST_F(LakeCompactionSchedulerTest, test_list_tasks) {
     bthread_join(tid, nullptr);
 }
 
-<<<<<<< HEAD
-=======
-TEST_F(LakeCompactionSchedulerTest, test_list_tasks_hides_parallel_merged_context) {
-    auto context = std::make_unique<CompactionTaskContext>(100, 101, 1, false, false, nullptr);
-    context->is_parallel_merged = true;
-    _compaction_scheduler._contexts.Append(context.get());
-
-    std::vector<CompactionTaskInfo> tasks;
-    _compaction_scheduler.list_tasks(&tasks);
-    EXPECT_TRUE(tasks.empty());
-
-    context->RemoveFromList();
-}
-
 TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_rejects_out_of_range) {
     auto old_target = _compaction_scheduler._task_queues.target_size();
     auto old_config = config::compact_threads;
@@ -204,29 +176,6 @@ TEST_F(LakeCompactionSchedulerTest, test_update_compact_threads_after_stop) {
     EXPECT_TRUE(st.is_service_unavailable()) << st;
 }
 
-TEST_F(LakeCompactionSchedulerTest, test_config_registry_rolls_back_rejected_compact_threads) {
-    auto* registry = ConfigUpdateRegistry::instance();
-    auto old_config = config::compact_threads;
-    registry->TEST_reset();
-    SCOPED_CLEANUP({
-        registry->TEST_reset();
-        config::compact_threads = old_config;
-    });
-    registry->register_callback("compact_threads", [this]() {
-        return _compaction_scheduler.update_compact_threads(config::compact_threads);
-    });
-    registry->set_ready();
-
-    auto target = _compaction_scheduler._task_queues.target_size();
-    ASSERT_OK(registry->update_config("compact_threads", std::to_string(target)));
-
-    auto st = registry->update_config("compact_threads", "0");
-    EXPECT_TRUE(st.is_invalid_argument()) << st;
-    EXPECT_EQ(target, config::compact_threads);
-    EXPECT_EQ(target, _compaction_scheduler._task_queues.target_size());
-}
-
->>>>>>> 67b9ae7 ([BugFix] Reject non-positive compact_threads instead of crashing the CN (#79641))
 TEST_F(LakeCompactionSchedulerTest, test_abort_all) {
     // set to single thread mode, so all the tasks will be in the same thread
     ASSERT_OK(_compaction_scheduler.update_compact_threads(1));
