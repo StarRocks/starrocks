@@ -45,6 +45,7 @@
 #include "starrocks_macos_libevent_shims.h"
 #endif
 
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -52,6 +53,13 @@
 #include <sstream>
 #include <utility>
 
+<<<<<<< HEAD:be/src/http/ev_http_server.cpp
+=======
+#include "base/brpc/brpc.h"
+#include "base/system/errno.h"
+#include "base/testutil/sync_point.h"
+#include "common/config_ingest_fwd.h"
+>>>>>>> 6b6b960 ([BugFix] Fix EvHttpServer closing unrelated fds on shutdown (#79582)):be/src/platform/http/ev_http_server.cpp
 #include "common/logging.h"
 #include "http/http_channel.h"
 #include "http/http_handler.h"
@@ -219,12 +227,31 @@ Status EvHttpServer::start() {
             _https.push_back(http);
             pthread_rwlock_unlock(&_rw_lock);
 
+<<<<<<< HEAD:be/src/http/ev_http_server.cpp
             // Worker 0 reuses _server_fd from _bind(); workers 1..N-1 create
+=======
+#if defined(__APPLE__) && !defined(STARROCKS_HAVE_EVHTTP_SET_NEWREQCB)
+            // Old libevent can only initialize requests in the generic callback,
+            // so cap pre-read bodies before any handler-specific header checks.
+            evhttp_set_max_body_size(http, static_cast<ev_ssize_t>(config::streaming_load_max_mb) * 1024 * 1024);
+#endif
+
+            // Worker 0 listens on _server_fd from _bind(); workers 1..N-1 create
+>>>>>>> 6b6b960 ([BugFix] Fix EvHttpServer closing unrelated fds on shutdown (#79582)):be/src/platform/http/ev_http_server.cpp
             // their own SO_REUSEPORT listeners so the kernel load-balances
             // accepts in-kernel rather than waking all workers on every
             // connection (the cause of native_queued_spin_lock_slowpath
             // contention seen in perf when be_http_num_workers is large).
-            int worker_fd = _server_fd;
+            //
+            // evhttp_accept_socket() creates its listener with LEV_OPT_CLOSE_ON_FREE,
+            // so libevent owns the fd it is given and closes it in evhttp_free().
+            // Every worker must therefore hand libevent an fd of its own: either
+            // its SO_REUSEPORT socket or a dup of _server_fd. Handing the same fd
+            // to several workers, or closing a handed-over fd again in join(),
+            // closes whatever unrelated fd (e.g. a brpc socket) has reused that
+            // number in the meantime.
+            int worker_fd = -1;
+            bool own_listener = false;
             if (reuseport_enabled && i > 0) {
                 int new_fd = open_listen_socket(listen_point, /*reuse_port=*/true);
                 if (new_fd < 0) {
@@ -235,10 +262,15 @@ Status EvHttpServer::start() {
                                  << "falling back to shared fd: " << errno_to_string(errno);
                     ::close(new_fd);
                 } else {
-                    pthread_rwlock_wrlock(&_rw_lock);
-                    _worker_fds.push_back(new_fd);
-                    pthread_rwlock_unlock(&_rw_lock);
                     worker_fd = new_fd;
+                    own_listener = true;
+                }
+            }
+            if (worker_fd < 0) {
+                worker_fd = ::fcntl(_server_fd, F_DUPFD_CLOEXEC, 0);
+                if (worker_fd < 0) {
+                    LOG(WARNING) << "Worker " << i << ": failed to dup listen fd: " << errno_to_string(errno);
+                    return;
                 }
             }
 
@@ -246,7 +278,20 @@ Status EvHttpServer::start() {
             if (res < 0) {
                 LOG(WARNING) << "evhttp accept socket failed"
                              << ", error:" << errno_to_string(errno);
+                // TODO: evhttp_accept_socket() returns -1 in two cases that leave worker_fd with
+                // different owners: evconnlistener_new() failed (worker_fd untouched, we must close it),
+                // or evhttp_bind_listener() failed (libevent already closed worker_fd when freeing the
+                // listener, LEV_OPT_CLOSE_ON_FREE). Both only happen when a tiny allocation fails, so
+                // assume the first case here; calling evconnlistener_new() and evhttp_bind_listener()
+                // separately would make the ownership explicit.
+                ::close(worker_fd);
                 return;
+            }
+            if (own_listener) {
+                // Tracked only so that stop() can shutdown() it; libevent closes it.
+                pthread_rwlock_wrlock(&_rw_lock);
+                _worker_fds.push_back(worker_fd);
+                pthread_rwlock_unlock(&_rw_lock);
             }
 
             evhttp_set_newreqcb(http, on_connection, this);
@@ -293,12 +338,13 @@ void EvHttpServer::join() {
         }
     }
 
-    // close the socket at last
+    // close the socket at last. Only _server_fd itself is owned here: the fds
+    // passed to evhttp_accept_socket() (dups of _server_fd and the per-worker
+    // SO_REUSEPORT fds in _worker_fds) are closed by evhttp_free() below.
     close(_server_fd);
-    for (int fd : _worker_fds) {
-        ::close(fd);
-    }
+    _server_fd = -1;
     _worker_fds.clear();
+    TEST_SYNC_POINT("EvHttpServer::join:before_evhttp_free");
 
     // free the evhttp and event_base
     for (auto http : _https) {
