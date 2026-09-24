@@ -14,15 +14,15 @@
 
 package com.starrocks.common.proc;
 
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -125,8 +125,8 @@ public class ProcUtilsTest {
         return new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "col"), new StringLiteral(value));
     }
 
-    private static Map<String, Expr> dateFilter(BinaryType op, String value) {
-        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), DateType.DATETIME);
+    private static Map<String, Expr> dateFilter(BinaryType op, String value) throws AnalysisException {
+        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), Type.DATETIME);
         return Map.of("createtime", new BinaryPredicate(op, new SlotRef(null, "CreateTime"), right));
     }
 }

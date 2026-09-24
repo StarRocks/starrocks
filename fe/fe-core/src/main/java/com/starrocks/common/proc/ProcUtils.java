@@ -14,14 +14,32 @@
 
 package com.starrocks.common.proc;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LimitElement;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.OrderByPair;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 public class ProcUtils {
 
-<<<<<<< HEAD
-=======
     private static final Logger LOG = LogManager.getLogger(ProcUtils.class);
 
     /**
@@ -127,7 +145,7 @@ public class ProcUtils {
         }
         if (subExpr.getChild(1) instanceof DateLiteral) {
             LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
-            Long leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
+            Long leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
             Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
             switch (binaryPredicate.getOp()) {
                 case EQ:
@@ -171,7 +189,6 @@ public class ProcUtils {
         throw new AnalysisException("Title name[" + columnName + "] does not exist");
     }
 
->>>>>>> 2afdae9 ([Refactor] Build a proc dir's result in one place (#79622))
     static long getDbId(String dbIdOrName) throws AnalysisException {
         try {
             return Long.parseLong(dbIdOrName);

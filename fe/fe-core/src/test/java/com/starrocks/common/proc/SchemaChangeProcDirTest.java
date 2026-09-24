@@ -18,7 +18,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
-import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -63,11 +64,12 @@ public class SchemaChangeProcDirTest {
         infos.add(job(1, "tb1", "FINISHED"));
         infos.add(job(2, "tb2", "RUNNING"));
 
-        new Expectations(handler) {
-            {
-                handler.getAlterJobInfosByDb(db);
-                minTimes = 0;
-                result = infos;
+        // SchemaChangeHandler extends Thread (via FrontendDaemon), which JMockit refuses to
+        // partially mock, so stub the method with a MockUp instead of Expectations.
+        new MockUp<SchemaChangeHandler>() {
+            @Mock
+            public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
+                return infos;
             }
         };
     }
