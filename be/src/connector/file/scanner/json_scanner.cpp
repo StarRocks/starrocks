@@ -630,8 +630,13 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
                 column_index = chunk->get_index_by_slot_id(slot_desc->id());
                 // A hidden metadata slot is filled from the message meta in the null-fill pass, never
                 // from the payload; if a payload field uses the same name as the metadata alias, skip it
-                // (cache as column_index = -1) so the metadata value still wins.
-                if (_meta_col_by_index.count(column_index) > 0) {
+                // (cache as column_index = -1) so the metadata value still wins. The hidden "__cset__"
+                // set-id slot of a flexible partial update is filled by this reader from the columns
+                // present in the row (below), never from the payload, so a payload field of that name is
+                // skipped the same way: parsed into the slot, it would give the column two values for this
+                // row, and every later row of the chunk would carry the set-id of the row before it.
+                if (_meta_col_by_index.count(column_index) > 0 ||
+                    (_flexible_partial_update && column_index == _cset_col_index)) {
                     if (_prev_parsed_position.size() <= key_index) {
                         _prev_parsed_position.emplace_back(key);
                     } else {
@@ -706,8 +711,9 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     // append null (or synthetic metadata) to the columns without data.
     for (int i = 0; i < chunk->num_columns(); i++) {
         if (UNLIKELY(i == _cset_col_index)) {
-            // The __cset__ set-id column is always materialized (it is never "present" in
-            // the JSON object), regardless of _parsed_columns[i].
+            // The __cset__ set-id column is always materialized here, regardless of
+            // _parsed_columns[i]: a payload field of that name is skipped above, so the row has not
+            // put a value into it.
             auto* column = chunk->get_column_raw_ptr_by_index(i);
             column->append_datum(Datum(static_cast<int16_t>(set_id)));
             continue;

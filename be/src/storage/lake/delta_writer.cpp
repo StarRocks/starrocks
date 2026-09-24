@@ -827,6 +827,19 @@ Status DeltaWriterImpl::init_write_schema() {
         if (!_merge_condition.empty()) {
             return Status::NotSupported("flexible partial update combined with merge_condition is not supported");
         }
+        // A row that omits a sort key column carries a NULL placeholder in it, and the memtable orders the
+        // rows of a segment by their sort key values before the publish supplies the current value: the
+        // row would be placed by the placeholder, and the rewritten (row mode) or inserted (column mode)
+        // rows would leave a segment that is not sorted by its sort key, whose short key index then prunes
+        // wrongly. A sort key made only of primary key columns is fine: every row carries the whole key.
+        // FE rejects these tables too.
+        for (auto sort_key_idx : _tablet_schema->sort_key_idxes()) {
+            if (!_tablet_schema->column(sort_key_idx).is_key()) {
+                return Status::NotSupported(
+                        "flexible partial update is not supported on a table whose sort key contains a "
+                        "non-primary-key column");
+            }
+        }
     }
 
     // maybe partial update, change to partial tablet schema.

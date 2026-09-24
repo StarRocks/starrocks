@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -53,6 +54,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
 import com.starrocks.thrift.TRoutineLoadMetaColumn;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TStreamSourceMetaKind;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BitmapType;
@@ -887,7 +889,8 @@ public class LoadTest {
     public void testCheckFlexiblePartialUpdate(@Mocked OlapTable localTbl, @Mocked OlapTable cnValid,
                                                @Mocked OlapTable cnDup, @Mocked OlapTable cnRange,
                                                @Mocked OlapTable cnAi, @Mocked OlapTable cnCset,
-                                               @Mocked OlapTable cnGenerated) {
+                                               @Mocked OlapTable cnGenerated, @Mocked OlapTable cnSortKey,
+                                               @Mocked OlapTable cnPkSortKey) {
         Column pk = new Column("pk", IntegerType.BIGINT, true, null, false, null, "");
         Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
         Column ai = new Column("id", IntegerType.BIGINT, false, null, false, null, "");
@@ -956,6 +959,36 @@ public class LoadTest {
                 cnGenerated.getBaseSchema();
                 result = Lists.newArrayList(pk, v);
                 minTimes = 0;
+
+                // ORDER BY (v): the sort key holds a value column.
+                cnSortKey.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnSortKey.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnSortKey.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+                cnSortKey.getIndexMetaByMetaId(anyLong);
+                result = new MaterializedIndexMeta(1L, Lists.newArrayList(pk, v), 0, 0, (short) 1,
+                        TStorageType.COLUMN, KeysType.PRIMARY_KEYS, null, Lists.newArrayList(1));
+                minTimes = 0;
+
+                // ORDER BY (pk): a sort key made only of primary key columns.
+                cnPkSortKey.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnPkSortKey.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnPkSortKey.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+                cnPkSortKey.getIndexMetaByMetaId(anyLong);
+                result = new MaterializedIndexMeta(1L, Lists.newArrayList(pk, v), 0, 0, (short) 1,
+                        TStorageType.COLUMN, KeysType.PRIMARY_KEYS, null, Lists.newArrayList(0));
+                minTimes = 0;
             }
         };
 
@@ -987,6 +1020,10 @@ public class LoadTest {
                 () -> Load.checkFlexiblePartialUpdate(cnAi, null, plain));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class, Load.LOAD_CSET_COLUMN,
                 () -> Load.checkFlexiblePartialUpdate(cnCset, null, plain));
+        // A row that omits a value column of the sort key would be placed by its NULL placeholder.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "sort key",
+                () -> Load.checkFlexiblePartialUpdate(cnSortKey, null, plain));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnPkSortKey, null, plain));
     }
 
     // resolveFlexiblePartialUpdate either plans the flexible bit or fails the load; it never drops the bit.

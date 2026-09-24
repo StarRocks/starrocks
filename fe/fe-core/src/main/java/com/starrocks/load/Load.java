@@ -44,6 +44,7 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
@@ -791,6 +792,23 @@ public class Load {
         OlapTable olapTable = (OlapTable) tbl;
         if (olapTable.isRangeDistribution()) {
             throw new DdlException("Flexible partial update is not supported on range-distributed tables");
+        }
+        // A row that omits a sort key column carries a NULL placeholder in it, and the BE orders the rows of a
+        // segment by their sort key values before the publish supplies the current value: the rewritten
+        // (flexible_row) or inserted (flexible) rows would leave a segment that is not sorted by its sort key,
+        // whose short key index then prunes wrongly. A sort key made only of primary key columns is fine: every
+        // row carries the whole primary key.
+        MaterializedIndexMeta baseIndexMeta = olapTable.getIndexMetaByMetaId(olapTable.getBaseIndexMetaId());
+        if (baseIndexMeta != null && baseIndexMeta.getSortKeyIdxes() != null) {
+            List<Column> indexSchema = baseIndexMeta.getSchema();
+            for (Integer sortKeyIdx : baseIndexMeta.getSortKeyIdxes()) {
+                if (sortKeyIdx != null && sortKeyIdx >= 0 && sortKeyIdx < indexSchema.size()
+                        && !indexSchema.get(sortKeyIdx).isKey()) {
+                    throw new DdlException("Flexible partial update is not supported on a table whose sort key"
+                            + " (ORDER BY) contains a non-primary-key column (column '"
+                            + indexSchema.get(sortKeyIdx).getName() + "')");
+                }
+            }
         }
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             throw new DdlException("Flexible partial update combined with merge_condition is not supported");

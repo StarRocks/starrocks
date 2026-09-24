@@ -675,9 +675,15 @@ Status ColumnModePartialUpdateHandler::execute(const RowsetUpdateStateParams& pa
             _flexible_column_sets.emplace_back(set_pb.column_unique_ids().begin(), set_pb.column_unique_ids().end());
         }
         _flexible_set_ids.resize(_rowset_ptr->num_segments());
+        int64_t set_ids_bytes = 0;
         for (uint32_t i = 0; i < _rowset_ptr->num_segments(); i++) {
             ASSIGN_OR_RETURN(_flexible_set_ids[i], _rowset_ptr->read_column_set_ids(static_cast<int>(i)));
+            set_ids_bytes += static_cast<int64_t>(_flexible_set_ids[i].size() * sizeof(int16_t));
         }
+        // One set id per update row, held until the handler is destroyed: charge it to the update tracker
+        // like the chunks the merge streams, so a large load's publish stays within the memory limit.
+        _tracker->consume(set_ids_bytes);
+        _memory_usage += set_ids_bytes;
         if (flexible_insert_mask != nullptr) {
             flexible_insert_mask->distinct_column_sets = _flexible_column_sets;
             flexible_insert_mask->set_ids_by_segment = _flexible_set_ids;

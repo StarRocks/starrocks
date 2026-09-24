@@ -157,7 +157,11 @@ std::vector<std::vector<Row>> repeated_rows_by_occurrence() {
 // Table: c0 INT key; c1, c2 INT nullable default 0; c3 INT nullable default 7.
 class LakeFlexiblePartialUpdateTest : public TestBase {
 public:
-    LakeFlexiblePartialUpdateTest() : TestBase(kTestDirectory) {
+    LakeFlexiblePartialUpdateTest() : LakeFlexiblePartialUpdateTest(/*value_column_in_sort_key=*/false) {}
+
+    // |value_column_in_sort_key|: the table is created with ORDER BY (c3), a sort key that holds a value
+    // column, which flexible partial update must refuse (see value_column_in_sort_key_is_rejected).
+    explicit LakeFlexiblePartialUpdateTest(bool value_column_in_sort_key) : TestBase(kTestDirectory) {
         _tablet_metadata = std::make_shared<TabletMetadata>();
         _tablet_metadata->set_id(next_id());
         _tablet_metadata->set_version(1);
@@ -182,6 +186,9 @@ public:
             col->set_is_nullable(true);
             col->set_aggregation("REPLACE");
             col->set_default_value(std::to_string(kDefaults[c]));
+        }
+        if (value_column_in_sort_key) {
+            schema->add_sort_key_idxes(kNumValueColumns);
         }
         _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
@@ -674,6 +681,28 @@ TEST_F(LakeFlexiblePartialUpdateTest, column_mode_layers_survive_compaction) {
     ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version));
     EXPECT_EQ(1, metadata->rowsets_size());
     EXPECT_EQ(0, count_cols_files(version));
+    expect_table_eq(model, read_table(version));
+}
+
+// Table: c0 INT key; c1, c2, c3 as above; ORDER BY (c3).
+class LakeFlexiblePartialUpdateSortKeyTest : public LakeFlexiblePartialUpdateTest {
+public:
+    LakeFlexiblePartialUpdateSortKeyTest() : LakeFlexiblePartialUpdateTest(/*value_column_in_sort_key=*/true) {}
+};
+
+// A sort key that holds a value column: a row that omits the column carries a NULL placeholder in it, and the
+// memtable would order the rows of the segment by that placeholder rather than by the current value the
+// publish keeps for the row. The writer refuses the load in both modes before anything is written.
+TEST_F(LakeFlexiblePartialUpdateSortKeyTest, value_column_in_sort_key_is_rejected) {
+    int64_t version = 1;
+    Table model;
+    write_base(kBaseRows, &version, &model);
+    for (auto mode : {PartialUpdateMode::COLUMN_UPDATE_MODE, PartialUpdateMode::ROW_MODE}) {
+        auto st = flexible_load({mixed_rows()}, mode, &version);
+        ASSERT_TRUE(st.is_not_supported()) << st;
+        EXPECT_TRUE(st.message().find("sort key") != std::string::npos) << st;
+    }
+    EXPECT_EQ(2, version);
     expect_table_eq(model, read_table(version));
 }
 
