@@ -1142,6 +1142,32 @@ void BinaryColumnBase<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_
 }
 
 template <typename T>
+void BinaryColumnBase<T>::serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const {
+    uint64_t* __restrict s = sizes.data();
+    _offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const auto len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            s[i] += compact_len_size(len) + len;
+        }
+    });
+}
+
+template <typename T>
+void BinaryColumnBase<T>::serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                                       const uint8_t* null_masks) const {
+    uint64_t* __restrict s = sizes.data();
+    const uint8_t* __restrict nulls = null_masks;
+    _offsets.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < chunk_size; ++i) {
+            const auto len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            s[i] += sizeof(bool) + (nulls[i] ? 0 : compact_len_size(len) + len);
+        }
+    });
+}
+
+template <typename T>
 const uint8_t* BinaryColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t string_size{};

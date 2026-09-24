@@ -377,6 +377,11 @@ public:
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override;
+
+    void serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                      const uint8_t* null_masks) const override;
+
     void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                          uint32_t max_one_row_size, const uint8_t* null_masks,
                                          bool has_null) const override;

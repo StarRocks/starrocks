@@ -32,6 +32,7 @@
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_profile.h"
 #include "exec/aggregate/compress_serializer.h"
+#include "exec/aggregate/serialized_key_buffer.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
@@ -823,12 +824,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     std::vector<CacheEntry> caches;
 
     template <class... Args>
-    AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
-            : Base(chunk_size, std::forward<Args>(args)...),
-              mem_pool(std::make_unique<MemPool>()),
-              buffer(mem_pool->allocate(static_cast<size_t>(max_one_row_size) * static_cast<size_t>(chunk_size) +
-                                        SLICE_MEMEQUAL_OVERFLOW_PADDING)),
-              _chunk_size(chunk_size) {}
+    AggHashMapWithSerializedKey(int chunk_size, Args&&... args) : Base(chunk_size, std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
     void set_null_key_data(AggDataPtr data) {}
@@ -837,33 +833,15 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         DeferOp free_escaped_keys([this]() { reset_agg_escape_pool(&escape_pool); });
-        slice_sizes.assign(_chunk_size, 0);
-        size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
-        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
-            bool process_by_rows = cur_max_one_row_size > std::numeric_limits<uint32_t>::max();
-            size_t batch_allocate_size = 0;
-            if (!process_by_rows) {
-                batch_allocate_size =
-                        cur_max_one_row_size * static_cast<size_t>(_chunk_size) + SLICE_MEMEQUAL_OVERFLOW_PADDING;
-                process_by_rows = batch_allocate_size > std::numeric_limits<int32_t>::max();
-            }
-            if (process_by_rows) {
-                max_one_row_size = 0;
-                mem_pool->clear();
-                buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                return compute_agg_states_by_rows<Func, HTBuildOp>(chunk_size, key_columns, pool,
-                                                                   std::move(allocate_func), agg_states, extra,
-                                                                   cur_max_one_row_size);
-            }
-            max_one_row_size = static_cast<uint32_t>(cur_max_one_row_size);
-            mem_pool->clear();
-            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
-            // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(batch_allocate_size);
+        // Rows are packed back to back, so the batch path is limited by the chunk's actual key
+        // bytes, not by max_row_size * chunk_size: one long row no longer pushes the whole chunk
+        // onto the per-row path. Every batch row is below 2^31 bytes, so none needs escaping.
+        if (UNLIKELY(!key_buffer.serialize(key_columns, chunk_size))) {
+            return compute_agg_states_by_rows<Func, HTBuildOp>(chunk_size, key_columns, pool, std::move(allocate_func),
+                                                               agg_states, extra, key_buffer.max_row_size());
         }
-        // process by cols
         return compute_agg_states_by_cols<Func, HTBuildOp>(chunk_size, key_columns, pool, std::move(allocate_func),
-                                                           agg_states, extra, cur_max_one_row_size);
+                                                           agg_states, extra);
     }
 
     // There may be additional virtual function overhead, but the bottleneck point for this branch is serialization
@@ -873,6 +851,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
                                                     ExtraAggParam* extra, size_t max_serialize_each_row) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
+        uint8_t* buffer = key_buffer.row_buffer(max_serialize_each_row);
         for (size_t i = 0; i < chunk_size; ++i) {
             auto serialize_cursor = buffer;
             for (const auto& key_column : key_columns) {
@@ -899,31 +878,27 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     }
 
     template <AllocFunc<Self> Func, typename HTBuildOp>
+    // The keys are already in key_buffer (see compute_agg_states()).
     ALWAYS_NOINLINE void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
                                                     Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
-                                                    ExtraAggParam* extra, size_t max_serialize_each_row) {
-        DCHECK_LE(max_serialize_each_row, max_one_row_size);
-        for (const auto& key_column : key_columns) {
-            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_one_row_size);
-        }
+                                                    ExtraAggParam* extra) {
         if (!agg_should_prefetch_table(this->hash_map)) {
             this->template compute_agg_states_by_cols_non_prefetch<Func, HTBuildOp>(
-                    chunk_size, key_columns, pool, std::move(allocate_func), agg_states, extra, max_serialize_each_row);
+                    chunk_size, key_columns, pool, std::move(allocate_func), agg_states, extra);
         } else {
             this->template compute_agg_states_by_cols_prefetch<Func, HTBuildOp>(
-                    chunk_size, key_columns, pool, std::move(allocate_func), agg_states, extra, max_serialize_each_row);
+                    chunk_size, key_columns, pool, std::move(allocate_func), agg_states, extra);
         }
     }
 
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_cols_non_prefetch(size_t chunk_size, const Columns& key_columns,
                                                                  MemPool* pool, Func&& allocate_func,
-                                                                 Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
-                                                                 size_t max_serialize_each_row) {
+                                                                 Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         for (size_t i = 0; i < chunk_size; ++i) {
-            const KeyType key(Slice(buffer + i * max_one_row_size, slice_sizes[i]));
+            const KeyType key(key_buffer.key(i));
             if constexpr (HTBuildOp::process_limit) {
                 if (hash_table_size < extra->limits) {
                     _emplace_key(key, pool, allocate_func, (*agg_states)[i], [&]() { hash_table_size++; });
@@ -943,13 +918,12 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
     template <AllocFunc<Self> Func, typename HTBuildOp>
     ALWAYS_NOINLINE void compute_agg_states_by_cols_prefetch(size_t chunk_size, const Columns& key_columns,
                                                              MemPool* pool, Func&& allocate_func,
-                                                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra,
-                                                             size_t max_serialize_each_row) {
+                                                             Buffer<AggDataPtr>* agg_states, ExtraAggParam* extra) {
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         caches.resize(chunk_size);
         for (size_t i = 0; i < chunk_size; ++i) {
-            caches[i].key = KeyType(Slice(buffer + i * max_one_row_size, slice_sizes[i]));
+            caches[i].key = KeyType(key_buffer.key(i));
         }
         for (size_t i = 0; i < chunk_size; ++i) {
             caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
@@ -1013,14 +987,6 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         }
     }
 
-    size_t get_max_serialize_size(const Columns& key_columns) {
-        size_t max_size = 0;
-        for (const auto& key_column : key_columns) {
-            max_size += key_column->max_one_element_serialize_size_compact();
-        }
-        return max_size;
-    }
-
     void insert_keys_to_columns(ResultVector& keys, MutableColumns& key_columns, int32_t chunk_size) {
         // When GroupBy has multiple columns, the memory is serialized by row.
         // If the length of a row is relatively long and there are multiple columns,
@@ -1044,16 +1010,10 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
 
     static constexpr bool has_single_null_key = false;
 
-    Buffer<uint32_t> slice_sizes;
-    uint32_t max_one_row_size = 8;
-
-    std::unique_ptr<MemPool> mem_pool;
-    uint8_t* buffer;
+    SerializedKeyBuffer key_buffer;
     ResultVector results;
     // Holds the escaped (>= 4 GiB) probe keys of the current chunk.
     MemPool escape_pool;
-
-    int32_t _chunk_size;
 };
 
 template <typename HashMap>

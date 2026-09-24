@@ -200,14 +200,26 @@ public:
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) const override;
 
+    void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const override;
+
+    // Without nulls every row is a flag byte plus the data element (see serialize_batch()).
+    uint32_t serialize_batch_fixed_row_size() const override {
+        if (_has_null) {
+            return 0;
+        }
+        const uint32_t data = _data_column->serialize_batch_fixed_row_size();
+        return data == 0 ? 0 : sizeof(bool) + data;
+    }
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     const uint8_t* deserialize_compact_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
+    // Must match serialize(): the null mask only counts when _has_null is set (see is_null()).
     uint32_t serialize_size(size_t idx) const override {
-        if (immutable_null_column_data()[idx]) {
+        if (_has_null && immutable_null_column_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);

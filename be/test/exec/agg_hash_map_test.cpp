@@ -17,8 +17,10 @@
 #include <gtest/gtest.h>
 
 #include <any>
+#include <limits>
 #include <numeric>
 #include <set>
+#include <string>
 
 #include "column/binary_column.h"
 #include "column/column_helper.h"
@@ -26,6 +28,7 @@
 #include "column/vectorized_fwd.h"
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/aggregate/agg_hash_variant.h"
+#include "exec/aggregate/serialized_key_buffer.h"
 #include "exec/partition/partition_hash_map.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -599,10 +602,13 @@ TEST_F(AggHashMapKeyNotFoundsTest, TestAllocateAndComputeNonFounds_AggHashMapWit
     TestAggHashMapKeyWithStringType<TestAggHashMapKey>(true);
 }
 
-TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32) {
+// One row as large as LARGE_VARCHAR_LENGTH_THRESHOLD used to force the whole chunk onto the
+// per-row path, because the staging buffer was sized max_row_size * chunk_size (> INT32_MAX here).
+// Rows are now packed back to back, so the buffer only has to hold the row itself.
+TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyKeepsOneLargeRowOnTheBatchPath) {
     using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
 
-    RuntimeProfile profile("SerializedKeyUsesPerRowPathWhenBatchEstimateExceedsInt32");
+    RuntimeProfile profile("SerializedKeyKeepsOneLargeRowOnTheBatchPath");
     AggStatistics statistics(&profile);
     constexpr int kEstimatedChunkSize = 4096;
     TestAggHashMapKey key(kEstimatedChunkSize, &statistics);
@@ -616,15 +622,226 @@ TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyUsesPerRowPathWhenBatchEstimateE
     MemPool pool;
     key.build_hash_map(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states);
 
-    EXPECT_EQ(0, key.max_one_row_size);
+    EXPECT_TRUE(key.key_buffer.batched());
     EXPECT_EQ(1, key.hash_map.size());
     EXPECT_NE(nullptr, agg_states[0]);
+    // The one row plus its length header and the SIMD padding, rounded up to MemPool's power of
+    // two -- not 4096 rows' worth.
+    EXPECT_LE(key.key_buffer.capacity(), 2 * (large_value.size() + 64));
 
     Filter not_founds;
     key.build_hash_map_with_selection(1, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states,
                                       &not_founds);
     ASSERT_EQ(1, not_founds.size());
     EXPECT_EQ(0, not_founds[0]);
+}
+
+namespace {
+
+// Three key columns covering the encodings the buffer has to lay out: a nullable string with
+// nulls, a fixed-width int, and a string that crosses the compact length header's one-byte limit.
+Columns make_mixed_key_columns(size_t rows, size_t long_row, size_t long_len) {
+    auto s0 = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    auto i1 = Int32Column::create();
+    auto s2 = BinaryColumn::create();
+    for (size_t i = 0; i < rows; ++i) {
+        if (i % 5 == 3) {
+            s0->append_nulls(1);
+        } else {
+            s0->append_datum(Slice(std::string(i % 7, 'a' + i % 3)));
+        }
+        i1->append(static_cast<int32_t>(i % 11));
+        s2->append(Slice(std::string(i == long_row ? long_len : 1 + i % 300, 'k')));
+    }
+    return Columns{std::move(s0), std::move(i1), std::move(s2)};
+}
+
+size_t max_serialize_size(const Columns& columns) {
+    size_t max_size = 0;
+    for (const auto& c : columns) max_size += c->max_one_element_serialize_size_compact();
+    return max_size;
+}
+
+} // namespace
+
+TEST(SerializedKeyBufferTest, PacksRowsBackToBackWithTheRowWiseEncoding) {
+    constexpr size_t kRows = 257;
+    Columns key_columns = make_mixed_key_columns(kRows, /*long_row=*/100, /*long_len=*/5000);
+
+    SerializedKeyBuffer buffer;
+    ASSERT_TRUE(buffer.serialize(key_columns, kRows));
+    ASSERT_TRUE(buffer.batched());
+
+    std::vector<uint8_t> expected(max_serialize_size(key_columns) + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    size_t total = 0;
+    size_t longest = 0;
+    for (size_t i = 0; i < kRows; ++i) {
+        // Byte-identical to the per-row fallback, or the two paths would split logical keys.
+        uint8_t* cursor = expected.data();
+        for (const auto& c : key_columns) cursor += c->serialize_compact(i, cursor);
+        const Slice key = buffer.key(i);
+        ASSERT_EQ(static_cast<size_t>(cursor - expected.data()), key.size) << "row " << i;
+        ASSERT_EQ(0, memcmp(expected.data(), key.data, key.size)) << "row " << i;
+        if (i > 0) {
+            const Slice prev = buffer.key(i - 1);
+            ASSERT_EQ(prev.data + prev.size, key.data) << "rows are not back to back at " << i;
+        }
+        total += key.size;
+        longest = std::max(longest, key.size);
+    }
+    // Exactly the keys plus padding, rounded up to MemPool's power of two.
+    EXPECT_GE(buffer.capacity(), total + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    EXPECT_LT(buffer.capacity(), 2 * (total + SLICE_MEMEQUAL_OVERFLOW_PADDING));
+    // The actual longest row, not the sum of per-column maxima.
+    EXPECT_EQ(longest, buffer.max_row_size());
+}
+
+// All key columns fixed-width (including a nullable column without nulls): no size pass, rows at a
+// constant stride. The bytes must still be exactly the per-row encoding.
+TEST(SerializedKeyBufferTest, FixedWidthColumnsSkipTheSizePass) {
+    constexpr size_t kRows = 100;
+    auto a = Int32Column::create();
+    auto b = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (size_t i = 0; i < kRows; ++i) {
+        a->append(static_cast<int32_t>(i));
+        b->append_datum(static_cast<int64_t>(i * 7));
+    }
+    Columns key_columns{std::move(a), std::move(b)};
+    const uint32_t stride = sizeof(int32_t) + sizeof(bool) + sizeof(int64_t);
+    ASSERT_EQ(sizeof(int32_t), key_columns[0]->serialize_batch_fixed_row_size());
+    ASSERT_EQ(sizeof(bool) + sizeof(int64_t), key_columns[1]->serialize_batch_fixed_row_size());
+
+    SerializedKeyBuffer buffer;
+    ASSERT_TRUE(buffer.serialize(key_columns, kRows));
+    EXPECT_EQ(stride, buffer.max_row_size());
+    uint8_t expected[64];
+    for (size_t i = 0; i < kRows; ++i) {
+        uint8_t* cursor = expected;
+        for (const auto& c : key_columns) cursor += c->serialize_compact(i, cursor);
+        const Slice key = buffer.key(i);
+        ASSERT_EQ(stride, key.size) << "row " << i;
+        ASSERT_EQ(stride, static_cast<size_t>(cursor - expected)) << "row " << i;
+        ASSERT_EQ(0, memcmp(expected, key.data, key.size)) << "row " << i;
+    }
+
+    // A null makes the nullable column variable-width again: the size pass runs, same bytes.
+    auto c = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    for (size_t i = 0; i < kRows; ++i) {
+        if (i % 3 == 0) {
+            c->append_nulls(1);
+        } else {
+            c->append_datum(static_cast<int64_t>(i));
+        }
+    }
+    EXPECT_EQ(0u, c->serialize_batch_fixed_row_size());
+    Columns with_nulls{key_columns[0], std::move(c)};
+    ASSERT_TRUE(buffer.serialize(with_nulls, kRows));
+    for (size_t i = 0; i < kRows; ++i) {
+        uint8_t* cursor = expected;
+        for (const auto& col : with_nulls) cursor += col->serialize_compact(i, cursor);
+        const Slice key = buffer.key(i);
+        ASSERT_EQ(static_cast<size_t>(cursor - expected), key.size) << "row " << i;
+        ASSERT_EQ(0, memcmp(expected, key.data, key.size)) << "row " << i;
+    }
+}
+
+// Above the batch limit the chunk goes to the caller's per-row path, which sizes its one-row
+// buffer from max_row_size() -- so that must be right even when nothing was batched.
+TEST(SerializedKeyBufferTest, FallsBackAboveTheBatchLimitAndReportsTheLongestRow) {
+    constexpr size_t kRows = 64;
+    Columns key_columns = make_mixed_key_columns(kRows, /*long_row=*/9, /*long_len=*/3000);
+    std::vector<uint8_t> row(max_serialize_size(key_columns) + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    size_t total = 0;
+    size_t longest = 0;
+    for (size_t i = 0; i < kRows; ++i) {
+        uint8_t* cursor = row.data();
+        for (const auto& c : key_columns) cursor += c->serialize_compact(i, cursor);
+        total += cursor - row.data();
+        longest = std::max<size_t>(longest, cursor - row.data());
+    }
+
+    SerializedKeyBuffer buffer;
+    buffer.set_max_batch_bytes_for_test(total - 1);
+    EXPECT_FALSE(buffer.serialize(key_columns, kRows));
+    EXPECT_FALSE(buffer.batched());
+    EXPECT_EQ(longest, buffer.max_row_size());
+
+    buffer.set_max_batch_bytes_for_test(total);
+    EXPECT_TRUE(buffer.serialize(key_columns, kRows)) << "exactly at the limit still batches";
+}
+
+// A single long row in a 4096-row chunk used to size the staging buffer at 4096 * that row;
+// now it costs the row once. The results must not change.
+TEST_F(AggHashMapKeyNotFoundsTest, SerializedKeyBufferHoldsTheChunkNotMaxRowTimesChunk) {
+    using TestAggHashMapKey = SerializedKeyAggHashMap<PhmapSeed1>;
+    constexpr size_t kRows = 4096;
+    constexpr size_t kLongLen = 100 * 1024;
+
+    RuntimeProfile profile("SerializedKeyBufferHoldsTheChunkNotMaxRowTimesChunk");
+    AggStatistics statistics(&profile);
+    TestAggHashMapKey key(kRows, &statistics);
+    MemPool pool;
+    Buffer<AggDataPtr> agg_states(kRows);
+
+    Columns key_columns = make_mixed_key_columns(kRows, /*long_row=*/17, kLongLen);
+    key.build_hash_map(kRows, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool), &agg_states);
+    const size_t max_row = max_serialize_size(key_columns);
+    EXPECT_GT(max_row, kLongLen);
+
+    // Same distinct keys as a reference set over the per-row encoding.
+    std::set<std::string> distinct;
+    std::vector<uint8_t> row(max_row + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+    size_t total = 0;
+    for (size_t i = 0; i < kRows; ++i) {
+        uint8_t* cursor = row.data();
+        for (const auto& c : key_columns) cursor += c->serialize_compact(i, cursor);
+        distinct.emplace(reinterpret_cast<const char*>(row.data()), cursor - row.data());
+        total += cursor - row.data();
+    }
+    // Sized by the chunk's real key bytes (within MemPool's power-of-two rounding), where the
+    // stride layout needed max_row * kRows -- ~400 MiB here.
+    EXPECT_LT(key.key_buffer.capacity(), 2 * (total + SLICE_MEMEQUAL_OVERFLOW_PADDING));
+    EXPECT_LT(key.key_buffer.capacity() * 100, max_row * kRows) << "buffer sized by the long row times the chunk";
+    EXPECT_EQ(distinct.size(), key.hash_map.size());
+
+    // A second, short chunk probes the same map through the same (not reallocated) buffer.
+    const size_t capacity = key.key_buffer.capacity();
+    Filter not_founds;
+    key.build_hash_map_with_selection(kRows, key_columns, &pool, TestAllocateState<TestAggHashMapKey>(&pool),
+                                      &agg_states, &not_founds);
+    EXPECT_EQ(capacity, key.key_buffer.capacity());
+    for (size_t i = 0; i < kRows; ++i) {
+        ASSERT_EQ(0, not_founds[i]) << "row " << i;
+    }
+}
+
+// The set gained a per-row path it did not have (a chunk whose keys exceed INT32_MAX used to be
+// staged at max_row_size * chunk_size regardless). It must build exactly the set the batch path does.
+TEST(AggHashSetOfSerializedKeyTest, PerRowPathMatchesBatchPath) {
+    using TestSet = AggHashSetOfSerializedKey<SliceAggHashSet<PhmapSeed1>>;
+    constexpr size_t kRows = 1000;
+    Columns key_columns = make_mixed_key_columns(kRows, /*long_row=*/7, /*long_len=*/4000);
+
+    RuntimeProfile profile("PerRowPathMatchesBatchPath");
+    AggStatistics statistics(&profile);
+    MemPool pool;
+
+    TestSet batch(kRows, &statistics);
+    batch.build_set<true>(kRows, key_columns, &pool, nullptr);
+
+    TestSet by_rows(kRows, &statistics);
+    by_rows.build_set_by_rows<true>(kRows, key_columns, &pool, nullptr, max_serialize_size(key_columns));
+
+    ASSERT_EQ(batch.hash_set.size(), by_rows.hash_set.size());
+    for (const auto& k : batch.hash_set) {
+        EXPECT_TRUE(by_rows.hash_set.contains(k)) << "key missing from the per-row build";
+    }
+
+    Filter not_founds(kRows, 0); // build_set() sizes this; the direct call does not
+    by_rows.build_set_by_rows<false>(kRows, key_columns, &pool, &not_founds, max_serialize_size(key_columns));
+    for (size_t i = 0; i < kRows; ++i) {
+        ASSERT_EQ(0, not_founds[i]) << "row " << i;
+    }
 }
 
 // get_max_serialize_size() sizes the staging buffer for serialize_batch(), which writes the
@@ -848,7 +1065,7 @@ static std::vector<int> id_range(int begin, int end) {
     return ids;
 }
 
-// The per-row path (a chunk whose batch estimate exceeds int32) and the per-column path serialize and hash the key
+// The per-row path (a chunk whose keys exceed the batch limit) and the per-column path serialize and hash the key
 // separately; the same key has to land in the same group from both.
 TEST(SliceWithHash32Test, PerRowAndPerColumnPathsAgreeOnTheKey) {
     using Map = SerializedKeyAggHashMap<PhmapSeed1>;
@@ -858,6 +1075,9 @@ TEST(SliceWithHash32Test, PerRowAndPerColumnPathsAgreeOnTheKey) {
     Map map(4096, &statistics);
     MemPool pool;
     const std::string large_value(TypeDescriptor::LARGE_VARCHAR_LENGTH_THRESHOLD, 'x');
+    // Rows are packed, so reaching the per-row path for real takes a >2 GiB chunk. Lower the limit
+    // instead: the large row alone exceeds it, a chunk of short keys stays well below.
+    map.key_buffer.set_max_batch_bytes_for_test(large_value.size());
 
     auto make_chunk = [&](bool with_large) {
         auto column = BinaryColumn::create();
@@ -872,12 +1092,12 @@ TEST(SliceWithHash32Test, PerRowAndPerColumnPathsAgreeOnTheKey) {
 
     Buffer<AggDataPtr> by_rows(kKeys + 1);
     map.build_hash_map(kKeys + 1, make_chunk(true), &pool, KeyPrefixAlloc<Map>{&pool}, &by_rows);
-    ASSERT_EQ(0, map.max_one_row_size) << "the first chunk must take the per-row path";
+    ASSERT_FALSE(map.key_buffer.batched()) << "the first chunk must take the per-row path";
     ASSERT_EQ(static_cast<size_t>(kKeys + 1), map.hash_map.size());
 
     Buffer<AggDataPtr> by_cols(kKeys);
     map.build_hash_map(kKeys, make_chunk(false), &pool, KeyPrefixAlloc<Map>{&pool}, &by_cols);
-    ASSERT_GT(map.max_one_row_size, 0u) << "the second chunk must take the per-column path";
+    ASSERT_TRUE(map.key_buffer.batched()) << "the second chunk must take the per-column path";
     ASSERT_EQ(static_cast<size_t>(kKeys + 1), map.hash_map.size());
     for (int i = 0; i < kKeys; i++) {
         ASSERT_EQ(by_rows[i], by_cols[i]) << "key " << i;

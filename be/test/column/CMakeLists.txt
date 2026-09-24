@@ -31,6 +31,7 @@ set(COLUMN_TEST_FILES
     map_column_test.cpp
     mysql_row_buffer_test.cpp
     object_column_core_test.cpp
+    serialize_size_compact_batch_test.cpp
     simd_mulselector_test.cpp
     simd_selector_test.cpp
     struct_column_test.cpp

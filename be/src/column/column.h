@@ -323,6 +323,35 @@ public:
     virtual void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                  uint32_t max_one_row_size) const = 0;
 
+    // Adds to sizes[i] exactly the number of bytes serialize_batch() writes for row i. A key
+    // builder can then lay the rows out back to back instead of at a max-row-size stride:
+    // pre-set slice_sizes[i] to row i's offset in the buffer and call serialize_batch() with
+    // max_one_row_size = 0. That relies on every serialize_batch*() addressing row i only
+    // through `dst + i * max_one_row_size + slice_sizes[i]`, which they all do.
+    // The sizes are 64-bit so a caller can sum any number of columns without an upper bound
+    // first. An override must match what this column's serialize_batch() writes, not its
+    // compact encoding in general: StructColumn and the other nested columns serialize their
+    // children with the persisted encoding, so they keep this per-row default.
+    virtual void serialize_size_compact_batch(Buffer<uint64_t>& sizes, size_t chunk_size) const {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += serialize_size(i);
+        }
+    }
+
+    // If serialize_batch() writes the same number of bytes for every row of this column, returns
+    // that number; otherwise 0. O(1). Lets a key builder skip the per-row size pass when every key
+    // column is fixed-width, where it would cost more than it saves.
+    virtual uint32_t serialize_batch_fixed_row_size() const { return 0; }
+
+    // Size counterpart of serialize_batch_with_null_masks(): a one-byte null flag per row, plus the
+    // element's size for rows that are not null.
+    virtual void serialize_size_compact_batch_with_null_masks(Buffer<uint64_t>& sizes, size_t chunk_size,
+                                                              const uint8_t* null_masks) const {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            sizes[i] += sizeof(bool) + (null_masks[i] ? 0 : serialize_size(i));
+        }
+    }
+
     // A dedicated serialization method used by HashJoin to combine multiple columns into a wide-key
     // column, and it's only implemented by numeric columns right now.
     // This method serializes its elements one by one into the destination buffer starting at
