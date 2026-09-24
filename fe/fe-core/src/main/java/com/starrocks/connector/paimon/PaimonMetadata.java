@@ -209,7 +209,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    private void updatePartitionInfo(String databaseName, String tableName) {
+    private void updateAllPartitionInfos(String databaseName, String tableName) {
         Identifier identifier = new Identifier(databaseName, tableName);
         org.apache.paimon.table.Table paimonTable;
         RowType dataTableRowType;
@@ -298,7 +298,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName,
                                            ConnectorMetadataRequestContext requestContext) {
         Identifier identifier = new Identifier(databaseName, tableName);
-        updatePartitionInfo(databaseName, tableName);
+        updateAllPartitionInfos(databaseName, tableName);
         if (this.partitionInfos.get(identifier) == null) {
             return Lists.newArrayList();
         }
@@ -1007,13 +1007,19 @@ public class PaimonMetadata implements ConnectorMetadata {
                     null, null));
             return result;
         }
-        Map<String, Partition> partitionInfo = this.partitionInfos.get(identifier);
+        Map<String, Partition> partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
+        // Refresh before collecting results so a later cache miss also updates earlier hits.
         for (String partitionName : partitionNames) {
-            if (partitionInfo == null || partitionInfo.get(partitionName) == null) {
-                this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+            if (!partitionInfo.containsKey(partitionName)) {
+                this.updateAllPartitionInfos(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                partitionInfo = this.partitionInfos.getOrDefault(identifier, Collections.emptyMap());
+                break;
             }
-            if (partitionInfo.get(partitionName) != null) {
-                result.add(partitionInfo.get(partitionName));
+        }
+        for (String partitionName : partitionNames) {
+            Partition partition = partitionInfo.get(partitionName);
+            if (partition != null) {
+                result.add(partition);
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }
