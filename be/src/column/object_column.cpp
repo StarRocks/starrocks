@@ -14,6 +14,13 @@
 
 #include "column/object_column.h"
 
+<<<<<<< HEAD
+=======
+#include <stdexcept>
+
+#include "base/phmap/phmap.h"
+#include "column/mysql_row_buffer.h"
+>>>>>>> 36e1cd670b ([BugFix] Rebuild the JSON key column when a set operation deserializes its keys (#77215))
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "types/bitmap_value.h"
@@ -232,7 +239,11 @@ bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
 
 template <typename T>
 void ObjectColumn<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
+    // NOTE: never degrade this into a silent no-op. The callers (set operations and the serialized-key
+    // aggregator) assume `chunk_size` rows have been appended, and returning without appending anything
+    // produces a chunk whose columns disagree on their size, which corrupts every later reader.
     DCHECK(false) << "Don't support object column deserialize and append";
+    throw std::runtime_error("ObjectColumn::deserialize_and_append_batch() is not supported");
 }
 
 template <typename T>
