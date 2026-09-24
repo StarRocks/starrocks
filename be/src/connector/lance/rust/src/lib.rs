@@ -40,33 +40,33 @@ use lance::dataset::scanner::DatasetRecordBatchStream;
 use std::sync::Arc;
 use tokio::runtime::{Builder, Runtime};
 
-const ERROR: c_int = -1;
-const EOF: c_int = 0;
-const BATCH: c_int = 1;
-const PENDING: c_int = 2;
+const SR_LANCE_ERROR: c_int = -1;
+const SR_LANCE_NEXT_EOF: c_int = 0;
+const SR_LANCE_NEXT_BATCH: c_int = 1;
+const SR_LANCE_NEXT_PENDING: c_int = 2;
 type Result<T> = std::result::Result<T, &'static str>;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct LanceString {
+pub struct SrLanceString {
     data: *const c_char,
     len: usize,
 }
 
 #[repr(C)]
-pub struct LanceProperty {
-    key: LanceString,
-    value: LanceString,
+pub struct SrLanceStringPair {
+    key: SrLanceString,
+    value: SrLanceString,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct LanceCancellation {
+pub struct SrLanceCancellation {
     check: Option<unsafe extern "C" fn(*mut c_void) -> bool>,
     context: *mut c_void,
 }
 
-pub struct LanceReader {
+pub struct SrLanceReader {
     stream: DatasetRecordBatchStream,
     version: u64,
     exhausted: bool,
@@ -79,7 +79,7 @@ fn runtime() -> Result<&'static Runtime> {
             Builder::new_multi_thread()
                 .worker_threads(2)
                 .enable_all()
-                .thread_name("lance-reader")
+                .thread_name("starrocks-lance-rs")
                 .build()
                 .map_err(|_| "Cannot initialize Lance runtime")
         })
@@ -97,10 +97,33 @@ unsafe fn items<'a, T>(data: *const T, len: usize) -> Result<&'a [T]> {
     Ok(slice::from_raw_parts(data, len))
 }
 
-unsafe fn string(value: LanceString) -> Result<String> {
+unsafe fn string_from_raw(value: SrLanceString) -> Result<String> {
     std::str::from_utf8(items(value.data.cast::<u8>(), value.len)?)
         .map(str::to_owned)
         .map_err(|_| "Invalid UTF-8 in Lance argument")
+}
+
+// Match the native reader's raw-argument decoding stages while validating lengths
+// before constructing slices. These properties are mapped to SDK options below.
+unsafe fn strings_from_raw(values: *const SrLanceString, len: usize) -> Result<Vec<String>> {
+    items(values, len)?
+        .iter()
+        .map(|value| string_from_raw(*value))
+        .collect()
+}
+
+unsafe fn storage_options_from_raw(
+    values: *const SrLanceStringPair,
+    len: usize,
+) -> Result<HashMap<String, String>> {
+    let mut options = HashMap::new();
+    for pair in items(values, len)? {
+        let value = string_from_raw(pair.value)?;
+        if !value.is_empty() {
+            options.insert(string_from_raw(pair.key)?, value);
+        }
+    }
+    Ok(options)
 }
 
 // Never propagate SDK error text: object-store errors can contain SAS tokens,
@@ -118,21 +141,21 @@ unsafe fn boundary(error: *mut *mut c_char, f: impl FnOnce() -> Result<c_int>) -
                     .expect("static error has no NUL")
                     .into_raw();
             }
-            ERROR
+            SR_LANCE_ERROR
         }
     }
 }
 
-async fn open(
-    uri: String,
+async fn open_reader(
+    dataset_uri: String,
     version: u64,
     columns: Vec<String>,
     batch_size: usize,
-    options: HashMap<String, String>,
-) -> Result<LanceReader> {
+    storage_options: HashMap<String, String>,
+) -> Result<SrLanceReader> {
     // Each dataset owns its session. Do not cache object stores across credentials.
-    let mut builder = DatasetBuilder::from_uri(&uri)
-        .with_storage_options(options)
+    let mut builder = DatasetBuilder::from_uri(&dataset_uri)
+        .with_storage_options(storage_options)
         .with_index_cache_size_bytes(0)
         .with_metadata_cache_size_bytes(8 * 1024 * 1024);
     if version != 0 {
@@ -143,23 +166,25 @@ async fn open(
         .await
         .map_err(|_| "Cannot open Lance dataset (check URI, version and credentials)")?;
     let version = dataset.version().version;
-    let mut scan = dataset.scan();
+    let mut scanner = dataset.scan();
     if columns.is_empty() {
-        scan.empty_project()
+        scanner
+            .empty_project()
             .map_err(|_| "Cannot create empty Lance projection")?;
     } else {
-        scan.project(&columns)
+        scanner
+            .project(&columns)
             .map_err(|_| "Cannot project Lance columns")?;
     }
-    scan.batch_size(batch_size);
-    scan.batch_readahead(1);
-    scan.fragment_readahead(1);
+    scanner.batch_size(batch_size);
+    scanner.batch_readahead(1);
+    scanner.fragment_readahead(1);
     // Full-dataset scan, including every fragment. Do not push a limit ahead of residual filters.
-    let stream = scan
+    let stream = scanner
         .try_into_stream()
         .await
         .map_err(|_| "Cannot create Lance scan stream")?;
-    Ok(LanceReader {
+    Ok(SrLanceReader {
         stream,
         version,
         exhausted: false,
@@ -171,17 +196,17 @@ async fn open(
 /// # Safety
 /// Pointer/length pairs must address valid buffers; out_reader and error must be writable.
 #[no_mangle]
-pub unsafe extern "C" fn sr_lance_open(
-    uri: LanceString,
+pub unsafe extern "C" fn sr_lance_reader_open(
+    dataset_uri: SrLanceString,
     version: u64,
-    columns: *const LanceString,
+    columns: *const SrLanceString,
     column_count: usize,
     batch_size: i32,
     cloud_type: i32,
-    properties: *const LanceProperty,
+    properties: *const SrLanceStringPair,
     property_count: usize,
-    cancellation: LanceCancellation,
-    out_reader: *mut *mut LanceReader,
+    cancellation: SrLanceCancellation,
+    out_reader: *mut *mut SrLanceReader,
     error: *mut *mut c_char,
 ) -> c_int {
     boundary(error, || {
@@ -192,21 +217,18 @@ pub unsafe extern "C" fn sr_lance_open(
         if batch_size <= 0 {
             return Err("Lance batch size must be positive");
         }
-        let uri = string(uri)?;
-        let columns = items(columns, column_count)?
-            .iter()
-            .map(|v| string(*v))
-            .collect::<Result<Vec<_>>>()?;
-        let mut cloud = HashMap::new();
-        for prop in items(properties, property_count)? {
-            let value = string(prop.value)?;
-            if !value.is_empty() {
-                cloud.insert(string(prop.key)?, value);
-            }
-        }
-        let options = storage::options(&uri, cloud_type, &cloud)?;
+        let dataset_uri = string_from_raw(dataset_uri)?;
+        let columns = strings_from_raw(columns, column_count)?;
+        let cloud = storage_options_from_raw(properties, property_count)?;
+        let storage_options = storage::options(&dataset_uri, cloud_type, &cloud)?;
         let reader = runtime()?.block_on(async {
-            let future = open(uri, version, columns, batch_size as usize, options);
+            let future = open_reader(
+                dataset_uri,
+                version,
+                columns,
+                batch_size as usize,
+                storage_options,
+            );
             let mut future = std::pin::pin!(future);
             loop {
                 if cancellation
@@ -224,7 +246,7 @@ pub unsafe extern "C" fn sr_lance_open(
             }
         })?;
         *out_reader = Box::into_raw(Box::new(reader));
-        Ok(BATCH)
+        Ok(SR_LANCE_NEXT_BATCH)
     })
 }
 
@@ -233,28 +255,28 @@ pub unsafe extern "C" fn sr_lance_open(
 /// # Safety
 /// Reader must be live, outputs writable and Arrow outputs released before reuse.
 #[no_mangle]
-pub unsafe extern "C" fn sr_lance_next(
-    reader: *mut LanceReader,
-    array: *mut FFI_ArrowArray,
-    schema: *mut FFI_ArrowSchema,
+pub unsafe extern "C" fn sr_lance_reader_next(
+    reader: *mut SrLanceReader,
+    out_array: *mut FFI_ArrowArray,
+    out_schema: *mut FFI_ArrowSchema,
     error: *mut *mut c_char,
 ) -> c_int {
     boundary(error, || {
-        if reader.is_null() || array.is_null() || schema.is_null() {
+        if reader.is_null() || out_array.is_null() || out_schema.is_null() {
             return Err("Invalid Lance next argument");
         }
         let reader = &mut *reader;
         if reader.exhausted {
-            return Ok(EOF);
+            return Ok(SR_LANCE_NEXT_EOF);
         }
         let result = runtime()?.block_on(async {
             tokio::time::timeout(Duration::from_millis(100), reader.stream.next()).await
         });
         let batch = match result {
-            Err(_) => return Ok(PENDING),
+            Err(_) => return Ok(SR_LANCE_NEXT_PENDING),
             Ok(None) => {
                 reader.exhausted = true;
-                return Ok(EOF);
+                return Ok(SR_LANCE_NEXT_EOF);
             }
             Ok(Some(Err(_))) => {
                 reader.exhausted = true;
@@ -262,8 +284,8 @@ pub unsafe extern "C" fn sr_lance_next(
             }
             Ok(Some(Ok(batch))) => batch,
         };
-        export(batch, array, schema)?;
-        Ok(BATCH)
+        export_batch(batch, out_array, out_schema)?;
+        Ok(SR_LANCE_NEXT_BATCH)
     })
 }
 
@@ -353,24 +375,24 @@ fn normalize_batch(batch: RecordBatch) -> Result<RecordBatch> {
     RecordBatch::try_new(schema, columns).map_err(|_| "Cannot normalize Lance batch")
 }
 
-unsafe fn export(
+unsafe fn export_batch(
     batch: RecordBatch,
-    array: *mut FFI_ArrowArray,
-    schema: *mut FFI_ArrowSchema,
+    out_array: *mut FFI_ArrowArray,
+    out_schema: *mut FFI_ArrowSchema,
 ) -> Result<()> {
     let batch = normalize_batch(batch)?;
     let ffi_schema = FFI_ArrowSchema::try_from(batch.schema().as_ref())
         .map_err(|_| "Cannot export Lance Arrow schema")?;
     let ffi_array = FFI_ArrowArray::new(&StructArray::from(batch).to_data());
-    ptr::write(array, ffi_array);
-    ptr::write(schema, ffi_schema);
+    ptr::write(out_array, ffi_array);
+    ptr::write(out_schema, ffi_schema);
     Ok(())
 }
 
 /// # Safety
 /// Reader must be null or a live handle, with no simultaneous operations.
 #[no_mangle]
-pub unsafe extern "C" fn sr_lance_version(reader: *const LanceReader) -> u64 {
+pub unsafe extern "C" fn sr_lance_reader_version(reader: *const SrLanceReader) -> u64 {
     if reader.is_null() {
         0
     } else {
@@ -381,7 +403,7 @@ pub unsafe extern "C" fn sr_lance_version(reader: *const LanceReader) -> u64 {
 /// # Safety
 /// Reader must be null or a live handle; it must not be used again after close.
 #[no_mangle]
-pub unsafe extern "C" fn sr_lance_close(reader: *mut LanceReader) {
+pub unsafe extern "C" fn sr_lance_reader_close(reader: *mut SrLanceReader) {
     let _ = catch_unwind(AssertUnwindSafe(|| {
         if !reader.is_null() {
             // Stream cleanup may require a Tokio context, even on a BE worker thread.

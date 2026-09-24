@@ -20,7 +20,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
-#include "connector/lance/lance_ffi.h"
+#include "connector/lance/lance_rs_ffi.h"
 
 namespace arrow {
 class RecordBatch;
@@ -51,13 +51,22 @@ public:
                                 const std::shared_ptr<arrow::RecordBatch>& batch, ChunkPtr* chunk);
 
 private:
-    void release_batch();
+    Status _open_reader(const std::string& dataset_uri, const TCloudConfiguration& cloud);
+    Status _next_batch();
+    Status _append_batch_to_read_chunk(ChunkPtr* chunk);
+    void _init_read_fields();
+    bool _batch_is_exhausted() const;
+    void _release_batch();
+
+    RuntimeState* _state = nullptr;
+    int _max_chunk_size = 0;
+    std::vector<std::string> _field_names;
     std::shared_ptr<MemTracker> _mem_tracker;
     int64_t _batch_bytes = 0;
-    LanceReader* _reader = nullptr;
+    SrLanceReader* _reader = nullptr;
     const TupleDescriptor* _tuple = nullptr;
-    std::shared_ptr<arrow::RecordBatch> _batch;
-    int64_t _batch_offset = 0;
+    std::shared_ptr<arrow::RecordBatch> _arrow_batch;
+    int64_t _batch_start_idx = 0;
     int64_t _convert_time_ns = 0;
     int64_t _io_time_ns = 0;
 };
