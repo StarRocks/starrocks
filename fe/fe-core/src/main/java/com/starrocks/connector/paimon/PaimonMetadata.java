@@ -43,6 +43,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
@@ -612,11 +613,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         return nativeTable.copy(dynamicOptions);
     }
 
-    @Override
-    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
-        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
-        PaimonTable paimonTable = (PaimonTable) table;
-        long snapshotId = -1L;
+    private org.apache.paimon.table.Table resolveScanTable(PaimonTable paimonTable, GetRemoteFilesParams params) {
         String currentBranch = consumeRequestedBranch(paimonTable);
         Identifier identifier = new Identifier(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), currentBranch);
@@ -629,7 +626,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         TvrVersionRange tvrVersionRange = params.getTableVersionRange();
-        snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
+        long snapshotId = tvrVersionRange.end().orElse(-1L);
 
         org.apache.paimon.table.Table versionedPaimonTable = getNativeTable(paimonTable.getNativeTable(),
                 tvrVersionRange);
@@ -646,7 +643,27 @@ public class PaimonMetadata implements ConnectorMetadata {
                     CoreOptions.GlobalIndexSearchMode.FULL.toString());
         }
 
-        org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable.copy(options);
+        return versionedPaimonTable.copy(options);
+    }
+
+    @Override
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params) {
+        PaimonTable paimonTable = (PaimonTable) table;
+        org.apache.paimon.table.Table nativeTable = resolveScanTable(paimonTable, params);
+        int[] projected = params.getFieldNames().stream().mapToInt(paimonTable.getFieldNames()::indexOf).toArray();
+        List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
+        // The execution engine counts matching rows. Never cap candidate file rows for this source.
+        return new PaimonRemoteFileInfoSource(nativeTable, predicates, projected,
+                params.getTableVersionRange().end().orElse(-1L),
+                params.getTableVersionRange().start().isEmpty());
+    }
+
+    @Override
+    public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
+        RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
+        PaimonTable paimonTable = (PaimonTable) table;
+        long snapshotId = params.getTableVersionRange().end().orElse(-1L);
+        org.apache.paimon.table.Table paimonNativeTable = resolveScanTable(paimonTable, params);
 
         GetRemoteFilesParams copyParams = params.copy();
         copyParams.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
@@ -805,6 +822,23 @@ public class PaimonMetadata implements ConnectorMetadata {
                 .setStatsSource(Statistics.StatsSource.TABLE_METADATA);
         for (ColumnRefOperator columnRefOperator : columns.keySet()) {
             builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        }
+        // LIMIT can be pushed down after statistics derivation. Do not eagerly exhaust a potential
+        // incremental scan just to estimate its cardinality.
+        // Snapshot row count is an estimate; WHERE selectivity and LIMIT remain optimizer concerns.
+        ConnectContext context = ConnectContext.get();
+        if (context != null && context.getSessionVariable().isEnableConnectorIncrementalScanRanges()
+                && versionRange.start().isEmpty()
+                && ((PaimonTable) table).getNativeTable() instanceof DataTable dataTable) {
+            long snapshotId = versionRange.end().orElse(-1L);
+            Map<String, String> requestedBranches = branches.get();
+            String currentBranch = requestedBranches == null ? DEFAULT_MAIN_BRANCH
+                    : requestedBranches.getOrDefault(tableBranchKey((PaimonTable) table), DEFAULT_MAIN_BRANCH);
+            // Statistics must inspect, but not consume, the branch request needed by scan planning.
+            DataTable statisticsTable = DEFAULT_MAIN_BRANCH.equals(currentBranch)
+                    ? dataTable : dataTable.switchToBranch(currentBranch);
+            long rowCount = snapshotId < 0 ? 0 : statisticsTable.snapshotManager().snapshot(snapshotId).totalRecordCount();
+            return builder.setOutputRowCount(Math.max(1, rowCount)).build();
         }
         List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
         GetRemoteFilesParams params =

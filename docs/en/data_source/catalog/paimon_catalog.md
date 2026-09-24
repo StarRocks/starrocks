@@ -748,6 +748,14 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+For append-only tables, a scan with `WHERE` and `LIMIT` can plan candidate files incrementally. StarRocks continues requesting files when filtering produces too few rows, and stops further planning after execution reaches the limit. For example:
+
+```SQL
+SELECT * FROM <table_name> WHERE <column_name> > 100 LIMIT 10;
+```
+
+This optimization requires connector incremental scan ranges to be enabled. Small limits also reduce the number of scan ranges requested per batch. Manifest batches and in-flight scan tasks can still read ahead; a query with no matching rows may need to inspect all candidate files. Primary-key tables, deletion vectors, data evolution, and SDK query authorization retain native Paimon split planning so that merge and access-control semantics are preserved.
+
 ## Load data from Paimon
 
 Suppose you have an OLAP table named `olap_tbl`, you can transform and load data like below:

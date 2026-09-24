@@ -21,6 +21,7 @@ import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -55,6 +56,7 @@ import org.apache.paimon.utils.JsonSerdeUtil;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
@@ -191,6 +193,7 @@ class PaimonLimitTest {
             commit.commit(write.prepareCommit());
         }
         assertThat(readIds(plan(10, null), 10)).containsExactlyInAnyOrder(1, 2, 3, 4);
+        assertThat(readIncrementalIds()).containsExactlyInAnyOrder(1, 2, 3, 4);
     }
 
     @ParameterizedTest
@@ -223,6 +226,85 @@ class PaimonLimitTest {
                 PaimonScan.create(table, List.of(), new int[] {0, 1}, 10).plan().splits());
         assertThat(fileIO.manifestReads.get()).isEqualTo(20);
         assertThat(readIds(plan, 10)).containsExactlyInAnyOrder(76, 77, 78, 79);
+        assertThat(readIncrementalIds()).containsExactlyInAnyOrder(76, 77, 78, 79);
+    }
+
+    private List<Integer> readIncrementalIds() throws Exception {
+        long snapshot = table.latestSnapshot().get().id();
+        List<Integer> result = new ArrayList<>();
+        try (RemoteFileInfoSource source = new PaimonRemoteFileInfoSource(
+                table.copy(Map.of("scan.snapshot-id", String.valueOf(snapshot))), List.of(), new int[] {0, 1},
+                snapshot, true)) {
+            while (source.hasMoreOutput()) {
+                result.addAll(readIds(((PaimonRemoteFileDesc) source.getOutput().getFiles().get(0)).getPaimonSplitsInfo(), 100));
+            }
+        }
+        return result;
+    }
+
+    @ParameterizedTest
+    @CsvSource({"0, 1, 1", "0, 10, 3", "36, 1, 10", "36, 10, 12", "76, 1, 20", "76, 10, 20", "100, 10, 20"})
+    void testFilteredIncrementalScan(int firstMatch, int limit, int expectedManifestReads) throws Exception {
+        createTable(false, Map.of());
+        writeManifests(20);
+        fileIO.manifestReads.set(0);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(List.of("id", "p"))
+                .setLimit(limit).setPredicate(predicate("id", BinaryType.GE, firstMatch))
+                .setTableVersionRange(TvrTableSnapshot.of(table.latestSnapshot().get().id())).build();
+        RemoteFileInfoSource source = metadata.getRemoteFilesAsync(srTable, params);
+        assertThat(fileIO.manifestReads.get()).as("Creating the source must not enumerate manifests").isZero();
+        List<Integer> matches = new ArrayList<>();
+        try (source) {
+            while (matches.size() < limit && source.hasMoreOutput()) {
+                PaimonSplitsInfo batch = ((PaimonRemoteFileDesc) source.getOutput().getFiles().get(0)).getPaimonSplitsInfo();
+                matches.addAll(readIds(batch, limit - matches.size()));
+            }
+        }
+        assertThat(matches).hasSize(Math.min(limit, Math.max(0, 80 - firstMatch)))
+                .doesNotHaveDuplicates().allMatch(id -> id >= firstMatch && id < 80);
+        assertThat(fileIO.manifestReads.get()).isEqualTo(expectedManifestReads);
+        assertThat(source.hasMoreOutput()).isFalse();
+        assertThat(fileIO.manifestReads.get()).as("Closing the source must not read remaining manifests")
+                .isEqualTo(expectedManifestReads);
+    }
+
+    @Test
+    void testIncrementalScanMergesDeletesAndPinsSnapshot() throws Exception {
+        createTable(true, Map.of());
+        writeManifests(4);
+        long oldSnapshot = table.latestSnapshot().get().id();
+        try (BatchTableCommit commit = table.newBatchWriteBuilder().newCommit()) {
+            commit.truncatePartitions(List.of(Map.of("p", "0")));
+        }
+        for (long snapshot : new long[] {oldSnapshot, table.latestSnapshot().get().id()}) {
+            GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(List.of("id", "p"))
+                    .setLimit(100).setPredicate(predicate("id", BinaryType.GE, 0))
+                    .setTableVersionRange(TvrTableSnapshot.of(snapshot)).build();
+            List<Integer> matches = new ArrayList<>();
+            try (RemoteFileInfoSource source = metadata.getRemoteFilesAsync(srTable, params)) {
+                while (source.hasMoreOutput()) {
+                    matches.addAll(readIds(((PaimonRemoteFileDesc) source.getOutput().getFiles().get(0))
+                            .getPaimonSplitsInfo(), 100));
+                }
+            }
+            assertThat(matches).hasSize(snapshot == oldSnapshot ? 16 : 8).doesNotHaveDuplicates();
+            if (snapshot != oldSnapshot) {
+                assertThat(matches).containsExactlyInAnyOrder(4, 5, 6, 7, 12, 13, 14, 15);
+            }
+        }
+    }
+
+    @Test
+    void testCloseBeforeFirstBatch() throws Exception {
+        createTable(false, Map.of());
+        writeManifests(4);
+        fileIO.manifestReads.set(0);
+        try (RemoteFileInfoSource source = new PaimonRemoteFileInfoSource(table, List.of(), new int[] {0, 1},
+                table.latestSnapshot().get().id(), true)) {
+            source.close();
+            assertThat(source.hasMoreOutput()).isFalse();
+            assertThat(fileIO.manifestReads.get()).isZero();
+        }
     }
 
     private void createTable(boolean partitioned, Map<String, String> extraOptions) throws Exception {

@@ -748,6 +748,14 @@ DROP Catalog paimon_catalog_fs;
    SELECT count(*) FROM <table_name> LIMIT 10;
    ```
 
+对于 append-only 表，带有 `WHERE` 和 `LIMIT` 的扫描可以按需规划候选文件。过滤后行数不足时，StarRocks 会继续请求文件；执行端达到 LIMIT 后，停止后续规划。例如：
+
+```SQL
+SELECT * FROM <table_name> WHERE <column_name> > 100 LIMIT 10;
+```
+
+此优化需要启用连接器的增量扫描范围。较小的 LIMIT 也会减少每批请求的扫描范围数量。Manifest 批次和已提交的扫描任务仍可能提前读取部分文件；没有匹配行的查询可能需要检查所有候选文件。主键表、删除向量、数据演进和 SDK 查询授权场景仍使用 Paimon 原生的 split 规划，以保留合并和访问控制语义。
+
 ## 从 Paimon 导入数据
 
 假设您有一个名为 `olap_tbl` 的 OLAP 表，您可以按如下方式转换和导入数据：
