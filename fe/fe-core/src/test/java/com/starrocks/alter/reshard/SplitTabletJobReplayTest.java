@@ -99,7 +99,7 @@ public class SplitTabletJobReplayTest {
         // in it.
         new MockUp<TabletReshardJobMgr>() {
             @Mock
-            protected void runAfterLeaseValid() {
+            protected void runAfterCatalogReady() {
             }
         };
     }
