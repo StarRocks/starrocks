@@ -679,6 +679,48 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_waits_for_future_nonn
     ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 3, frame_start, frame_end, false));
 }
 
+TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_ready_bound_across_null_runs) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    for (int64_t i = 0; i < 16; ++i) {
+        data_col->append(i);
+        null_col->append(i != 7 && i != 15);
+    }
+    MutableColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    Columns args = build_lead_lag_args(value_col, 1, default_col);
+    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lead_func);
+    lead_func->reset(ctx, args, state->state());
+
+    int64_t ready_end = 1;
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 7, 1, 2, false, &ready_end));
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 8, 1, 2, false, &ready_end));
+    ASSERT_EQ(7, ready_end);
+
+    // Re-enter inside the known-ready range, as when another input chunk arrives.
+    ready_end = 5;
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 8, 5, 6, false, &ready_end));
+    ASSERT_EQ(7, ready_end);
+
+    // The bound is exclusive: row 7 cannot reuse its own non-null value.
+    ready_end = 8;
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 15, 8, 9, false, &ready_end));
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 16, 8, 9, false, &ready_end));
+    ASSERT_EQ(15, ready_end);
+
+    // Contraction shifts the cursor; a subsequent call establishes a fresh local bound.
+    value_col->remove_first_n_values(4);
+    lead_func->reset_state_for_contraction(ctx, state->state(), 4);
+    args = build_lead_lag_args(value_col, 1, default_col);
+    ready_end = 5;
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 5, 6, false, &ready_end));
+    ASSERT_EQ(11, ready_end);
+    ready_end = 12;
+    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 12, 13, false, &ready_end));
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 12, 13, true, &ready_end));
+}
+
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_offset2_needs_two_nonnulls) {
     auto data_col = Int32Column::create();
     auto null_col = NullColumn::create();
@@ -705,7 +747,10 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_offset2_needs_two_non
     // Through index 2: only one non-null (10) after current.
     ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 3, frame_start, frame_end, false));
     // 20 arrives: two non-nulls after current.
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 4, frame_start, frame_end, false));
+    int64_t ready_end = current + 1;
+    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 4, frame_start, frame_end, false,
+                                                  &ready_end));
+    ASSERT_EQ(current + 1, ready_end);
 }
 
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_cursor_with_contraction) {
@@ -1675,6 +1720,24 @@ TEST_F(LeadLagWindowTest, e2e_offset2_sparse_explicit) {
     for (int64_t cs : {1, 3, 8}) {
         expect_equal(run_analytor_lag(input, offset, false, cs), expected, "legacy cs=" + std::to_string(cs));
         expect_equal(run_analytor_lag(input, offset, true, cs), expected, "streaming cs=" + std::to_string(cs));
+    }
+}
+
+TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_ready_bound_spans_output_chunks) {
+    std::vector<OptInt> input(257, std::nullopt);
+    input.back() = 10;
+    for (bool add_second_run : {false, true}) {
+        if (add_second_run) {
+            input.resize(514, std::nullopt);
+            input.back() = 20;
+        }
+        const auto expected = ref_lead_ignore_nulls(input, 1);
+        for (int64_t chunk_rows : {1, 3, 16, 64}) {
+            const std::string tag =
+                    "rows=" + std::to_string(input.size()) + " chunk_rows=" + std::to_string(chunk_rows);
+            expect_equal(run_analytor_lead(input, 1, false, chunk_rows), expected, "legacy " + tag);
+            expect_equal(run_analytor_lead(input, 1, true, chunk_rows), expected, "streaming " + tag);
+        }
     }
 }
 

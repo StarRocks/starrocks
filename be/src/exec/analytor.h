@@ -240,7 +240,7 @@ private:
     void _update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start, int64_t frame_end);
     void _update_window_batch_removable_cumulatively();
     bool _are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
-                                   int64_t frame_end) const;
+                                   int64_t frame_end, int64_t& ready_end) const;
     bool _has_window_result_ready_check() const { return !_window_result_ready_function_index.empty(); }
 
     Status _output_result_chunk(ChunkPtr* chunk);

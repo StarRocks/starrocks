@@ -1086,6 +1086,10 @@ Status Analytor::_materializing_process(RuntimeState* state) {
 Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* state) {
     PRE_PROCESSING();
 
+    // Local to this invocation: buffer contraction cannot invalidate this bound, and it never
+    // extends beyond the partition in which it was established.
+    int64_t ready_end = _current_row_position;
+
     do {
         if (reached_limit() || state->is_cancelled()) {
             return Status::OK();
@@ -1111,8 +1115,11 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
             // already be buffered, but a function can still need more non-nulls ahead. Check every
             // function before mutating any state; if one is not ready, leave `_current_row_position`
             // unchanged so the next chunk resumes this row.
-            if (_has_window_result_ready_check() &&
-                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end)) {
+            // A complete partition can never grow, so no function can still be waiting and every row
+            // below resolves to a value or to the default. For incomplete partitions, reuse the
+            // exclusive bound established by the previous successful readiness check.
+            if (!_partition.is_real && _has_window_result_ready_check() && _current_row_position >= ready_end &&
+                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end, ready_end)) {
                 return Status::OK();
             }
 
@@ -1412,16 +1419,22 @@ void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* stat
 }
 
 bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
-                                         int64_t frame_end) const {
+                                         int64_t frame_end, int64_t& ready_end) const {
+    int64_t common_ready_end = available_end;
     for (size_t i : _window_result_ready_function_index) {
+        // Conservative default: only the current row is ready.
+        // frame_end = current_row + _rows_end_offset + 1.
+        int64_t function_ready_end = frame_end - _rows_end_offset;
         // These functions are always lead/lag, so the frame is not clipped to the partition.
-        if (!_agg_functions[i]->is_window_result_ready(_agg_fn_ctxs[i],
-                                                       _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
-                                                       _agg_intput_columns[i], partition_start, available_end,
-                                                       frame_start, frame_end, _partition.is_real)) {
+        if (!_agg_functions[i]->is_window_result_ready(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
+                    _agg_intput_columns[i], partition_start, available_end, frame_start, frame_end, _partition.is_real,
+                    &function_ready_end)) {
             return false;
         }
+        common_ready_end = std::min(common_ready_end, function_ready_end);
     }
+    ready_end = common_ready_end;
     return true;
 }
 

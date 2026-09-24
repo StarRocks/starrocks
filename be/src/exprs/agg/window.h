@@ -785,7 +785,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
     // existing update path may emit the default.
     bool is_window_result_ready(FunctionContext* ctx, AggDataPtr __restrict state, const Columns& columns,
                                 int64_t partition_start, int64_t available_end, int64_t frame_start, int64_t frame_end,
-                                bool partition_is_complete) const override {
+                                bool partition_is_complete, int64_t* ready_end = nullptr) const override {
         // The cursor fields below exist only in the IGNORE NULLS state specialization, so the whole
         // body must sit inside `if constexpr` to stay uninstantiated for the other cases.
         if constexpr (ignoreNulls && !isLag) { // LEAD .. IGNORE NULLS
@@ -822,11 +822,18 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 lead_state.lead_ready_scan_end = current_row + 1;
                 lead_state.lead_ready_non_null_count = 0;
             } else if (current_row > lead_state.lead_ready_current_row) {
-                // Removing non-nulls not inside window any more
-                const int64_t retract_end = std::min(current_row + 1, lead_state.lead_ready_scan_end);
-                for (int64_t pos = lead_state.lead_ready_current_row + 1; pos < retract_end; ++pos) {
-                    if (!col->is_null(pos)) {
-                        --lead_state.lead_ready_non_null_count;
+                if (offset == 1) {
+                    // At most one non-null is cached, at scan_end - 1. Rows before it cannot
+                    // consume it, even when the caller skips checks across a long NULL run.
+                    if (current_row >= lead_state.lead_ready_scan_end - 1) {
+                        lead_state.lead_ready_non_null_count = 0;
+                    }
+                } else {
+                    const int64_t retract_end = std::min(current_row + 1, lead_state.lead_ready_scan_end);
+                    for (int64_t pos = lead_state.lead_ready_current_row + 1; pos < retract_end; ++pos) {
+                        if (!col->is_null(pos)) {
+                            --lead_state.lead_ready_non_null_count;
+                        }
                     }
                 }
                 lead_state.lead_ready_current_row = current_row;
@@ -843,7 +850,12 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 lead_state.lead_ready_scan_end = next + 1;
                 ++lead_state.lead_ready_non_null_count;
             }
-            return lead_state.lead_ready_non_null_count >= offset;
+            const bool ready = lead_state.lead_ready_non_null_count >= offset;
+            if (ready && ready_end != nullptr && offset == 1) {
+                // Every row strictly before the next non-null has a future value buffered.
+                *ready_end = lead_state.lead_ready_scan_end - 1;
+            }
+            return ready;
         }
         return true;
     }
