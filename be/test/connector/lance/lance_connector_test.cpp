@@ -419,9 +419,7 @@ TEST_F(LanceConnectorTest, PreservesUtcDateAndNegativeTimestampFractions) {
         batch = arrow::RecordBatch::Make(arrow::schema({arrow::field("id", array->type())}), 2, {array});
         ASSERT_OK(LanceNativeReader::convert_batch(_state.get(), timestamp_tuple, batch, &chunk));
         const auto timestamp = chunk->get_column_by_index(0)->get(0).get_timestamp();
-        EXPECT_EQ(unit == arrow::TimeUnit::SECOND  ? -1000000
-                  : unit == arrow::TimeUnit::MILLI ? -1000
-                                                   : -1,
+        EXPECT_EQ(unit == arrow::TimeUnit::SECOND ? -1000000 : unit == arrow::TimeUnit::MILLI ? -1000 : -1,
                   timestamp.to_unix_microsecond());
         auto value = timestamp.to_string();
         EXPECT_EQ(0, value.find("1969-12-31 23:59:59"));
