@@ -342,8 +342,8 @@ public class PreSplitFlowTest {
 
     @Test
     public void dispatchSkipsManuallyPartitioned() {
-        // Partitioned + supportedAutomaticPartition() returns false (manual list/range
-        // partitions) -> the hoisted automatic-partition gate skips before either submit.
+        // Partitioned + supportedAutomaticPartition() returns false and not plain RANGE (a manual
+        // list or expression-range target) -> the partitioning gate skips before either submit.
         //
         // The full multi-partition scaffolding (CN-count, sampler, grouper) is wired even
         // though the gate should short-circuit before any of it runs. This is deliberate:
@@ -375,6 +375,69 @@ public class PreSplitFlowTest {
                     any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
             coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
                     any(), any(), anyList(), anyInt(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void dispatchManualRangeWithoutEmptyPartitionSkipsBeforeSampling() {
+        // A manual RANGE target whose reachable partitions all hold rows cannot be split, so the flow
+        // must not pay for a source sample only to drop every group afterwards.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> sampler = Mockito.mockConstruction(ReservoirSampler.class)) {
+            grouper.when(() -> PartitionSampleGrouper.isManualRangePartitioned(table)).thenReturn(true);
+            grouper.when(() -> PartitionSampleGrouper.hasEmptySingleTabletPartition(eq(7L), eq(table), any()))
+                    .thenReturn(false);
+
+            PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
+                    () -> false, mock(ConnectContext.class));
+
+            Assertions.assertTrue(sampler.constructed().isEmpty(), "no sample without an empty partition");
+            coordinator.verifyNoInteractions();
+        }
+    }
+
+    @Test
+    public void dispatchManualRangeRoutesToExistingPartitionsCombinedSubmit() {
+        // A manual RANGE target with a freshly added (empty) partition takes the multi-partition flow
+        // and the combined submit for existing real partitions.
+        Database database = mock(Database.class);
+        when(database.getId()).thenReturn(7L);
+        OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ false);
+        PreSplitFlow.Prepared prepared = preparedFor(mock(ScanContext.class));
+        SampleSet samples = new SampleSet(List.of(), List.of(), Estimates.ZERO);
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<PartitionSampleGrouper> grouper = Mockito.mockStatic(PartitionSampleGrouper.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                MockedConstruction<ReservoirSampler> ignored = Mockito.mockConstruction(ReservoirSampler.class,
+                        (sampler, ctx) -> when(sampler.sample(any(SampleRequest.class))).thenReturn(samples))) {
+            grouper.when(() -> PartitionSampleGrouper.isManualRangePartitioned(table)).thenReturn(true);
+            grouper.when(() -> PartitionSampleGrouper.hasEmptySingleTabletPartition(eq(7L), eq(table), any()))
+                    .thenReturn(true);
+            grouper.when(() -> PartitionSampleGrouper.group(
+                            any(SampleSet.class), eq(table), any(ConnectContext.class), anyLong(), anyLong(), any()))
+                    .thenReturn(List.of(mock(PartitionSamples.class)));
+            coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                            any(), eq(table), anyList(), anyInt(), any(), any(), any()))
+                    .thenReturn(new PreSplitOutcome.SubmittedCombined(combinedJob, List.of()));
+
+            PreSplitFlow.dispatch(database, table, prepared, LoadKind.INSERT_FROM_FILES,
+                    () -> false, mock(ConnectContext.class));
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    any(), eq(table), anyList(), anyInt(), any(), any(), any()), times(1));
+            coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
+                    any(), eq(table), eq(combinedJob), any()), times(1));
         }
     }
 
