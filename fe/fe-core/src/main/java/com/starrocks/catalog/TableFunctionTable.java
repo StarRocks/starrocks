@@ -86,9 +86,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -902,14 +904,6 @@ public class TableFunctionTable extends Table {
                 .map(Column::getName)
                 .collect(Collectors.toList());
 
-        Set<String> duplicateColumnNames = columns.stream()
-                .map(Column::getName)
-                .filter(name -> Collections.frequency(columnNames, name) > 1)
-                .collect(Collectors.toSet());
-        if (!duplicateColumnNames.isEmpty()) {
-            throw new SemanticException("expect column names to be distinct, but got duplicate(s): " + duplicateColumnNames);
-        }
-
         // parse table function properties
         String single = properties.getOrDefault(PROPERTY_SINGLE, "false");
         if (!single.equalsIgnoreCase("true") && !single.equalsIgnoreCase("false")) {
@@ -940,6 +934,21 @@ public class TableFunctionTable extends Table {
                     "Use any of (parquet, orc, csv)", format));
         }
 
+        // csv writes columns by position; other formats keep the names in a schema that readers resolve by name
+        if (!CSV.equalsIgnoreCase(format)) {
+            Set<String> seenColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            Set<String> duplicateColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            for (String columnName : columnNames) {
+                if (!seenColumnNames.add(columnName)) {
+                    duplicateColumnNames.add(columnName);
+                }
+            }
+            if (!duplicateColumnNames.isEmpty()) {
+                throw new SemanticException("expect column names to be distinct (case-insensitive) for " + format +
+                        " format, but got duplicate(s): " + duplicateColumnNames);
+            }
+        }
+
         // if max_file_size is not specified, use target max file size from session
         if (properties.containsKey(PROPERTY_TARGET_MAX_FILE_SIZE)) {
             this.targetMaxFileSize = Long.parseLong(properties.get(PROPERTY_TARGET_MAX_FILE_SIZE));
@@ -966,19 +975,36 @@ public class TableFunctionTable extends Table {
             // parse and validate partition columns
             List<String> partitionColumnNames = Arrays.asList(properties.get(PROPERTY_PARTITION_BY).split(","));
             partitionColumnNames.replaceAll(String::trim);
-            partitionColumnNames = partitionColumnNames.stream().distinct().collect(Collectors.toList());
-
-            List<String> unmatchedPartitionColumnNames = partitionColumnNames.stream()
-                    .filter(col -> !columnNames.contains(col))
+            Set<String> seenPartitionColumnNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+            partitionColumnNames = partitionColumnNames.stream()
+                    .filter(seenPartitionColumnNames::add)
                     .collect(Collectors.toList());
+
+            // resolve each name case-insensitively to exactly one output column
+            List<String> unmatchedPartitionColumnNames = new ArrayList<>();
+            List<String> ambiguousPartitionColumnNames = new ArrayList<>();
+            List<Integer> partitionColumnIDs = new ArrayList<>();
+            for (String partitionColumnName : partitionColumnNames) {
+                List<Integer> matchedIDs = IntStream.range(0, columnNames.size())
+                        .filter(i -> columnNames.get(i).equalsIgnoreCase(partitionColumnName))
+                        .boxed()
+                        .collect(Collectors.toList());
+                if (matchedIDs.isEmpty()) {
+                    unmatchedPartitionColumnNames.add(partitionColumnName);
+                } else if (matchedIDs.size() > 1) {
+                    ambiguousPartitionColumnNames.add(partitionColumnName);
+                } else {
+                    partitionColumnIDs.add(matchedIDs.get(0));
+                }
+            }
             if (!unmatchedPartitionColumnNames.isEmpty()) {
                 throw new SemanticException("partition columns expected to be a subset of " + columnNames +
                         ", but got extra columns: " + unmatchedPartitionColumnNames);
             }
-
-            List<Integer> partitionColumnIDs = partitionColumnNames.stream()
-                    .map(columnNames::indexOf)
-                    .collect(Collectors.toList());
+            if (!ambiguousPartitionColumnNames.isEmpty()) {
+                throw new SemanticException("partition column(s) " + ambiguousPartitionColumnNames +
+                        " are ambiguous, more than one output column has the same name");
+            }
 
             for (Integer partitionColumnID : partitionColumnIDs) {
                 Column partitionColumn = columns.get(partitionColumnID);
