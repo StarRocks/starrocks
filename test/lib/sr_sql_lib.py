@@ -1995,26 +1995,50 @@ class StarrocksSQLApiLib(object):
 
     def wait_table_rollup_finish(self, check_count=60):
         """
-        wait materialized view job finish and return status
+        Block until the rollup submitted just before this call has landed.
+
+        This is wait_alter_table_finish("ROLLUP", 8) written a second time, from before that one
+        learned to tell whose job it is looking at, to poll at 100ms, to time out, and to wait for
+        the table to be released rather than sleep a flat second and hope. Defer to it instead of
+        carrying the old shape alongside the new one.
+
+        `check_count` was a count of one-second polls, so it maps onto the timeout in seconds. All
+        12 call sites leave it at the default.
+
+        Returns None, which is what this recorded on every path and what the delegate returns on
+        every path but one -- the "no rows at all" reading, which cannot happen here because the
+        caller has just submitted a rollup, and which is swallowed rather than recorded as "".
         """
-        status = ""
-        show_sql = "SHOW ALTER TABLE ROLLUP "
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "FINISHED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
-                break
-            count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+        self.wait_alter_table_finish("ROLLUP", 8, timeout=check_count)
 
     def wait_materialized_view_finish(self, timeout=60):
         """
         Block until the synchronous materialized view created just before this call is usable.
+        See _wait_alter_mv_job, which this and wait_materialized_view_cancel share.
+        """
+        self._wait_alter_mv_job("FINISHED", timeout)
+
+    def wait_materialized_view_cancel(self, check_count=60):
+        """
+        Block until the synchronous materialized view created just before this call has been
+        rejected, and the table it was on is free again.
+
+        A cancel is a terminal state like any other (AlterJobV2.JobState#isFinalState), so the
+        same MaterializedViewHandler#onJobDone runs and the table is released a moment after the
+        job reports CANCELLED -- which is what a case doing this twice on one table needs:
+        test_inverted_index creates two MVs on t_create_mv_with_match, each expected to be
+        refused, and the second CREATE cannot start while the first is still holding the table.
+
+        `check_count` was a count of one-second polls, so it maps onto the timeout in seconds.
+        All 4 call sites -- on branch-4.1, branch-4.0 and branch-3.5; main has none -- leave it
+        at the default.
+        """
+        self._wait_alter_mv_job("CANCELLED", check_count)
+
+    def _wait_alter_mv_job(self, expect_status, timeout):
+        """
+        Block until the alter listed by SHOW ALTER MATERIALIZED VIEW reaches `expect_status` and
+        the table it was on is free again.
 
         Two things stand between "the statement returned" and "the next statement may run", and
         the old code covered both by sleeping a second whenever it saw a terminal state -- on top
@@ -2025,12 +2049,16 @@ class StarrocksSQLApiLib(object):
         an earlier one. JobId separates them: MaterializedViewHandler registers the job inside the
         DDL's own execution path, atomically with its edit log (.java:238-240), so by the time
         this runs the job is listed, and an id no higher than the last one waited on means no job
-        was created.
+        was created. One watermark serves both callers: the ids come from GlobalStateMgr#getNextId
+        and only increase, and what it records is the newest job already accounted for, whatever
+        state that job ended in.
 
-        Second, FINISHED is not the end: the table is released a moment after the job reports it,
-        and a case that creates two MVs on one table back to back -- test_load_channel_profile,
-        say -- runs straight into the gap. wait_table_state_normal is where that is explained and
-        waited on; a sync MV is a rollup, so it reaches it by the same route an ADD ROLLUP does.
+        Second, the terminal state is not the end: the table is released a moment after the job
+        reports it. wait_table_state_normal is where that is explained and waited on; a sync MV is
+        a rollup, so it reaches it by the same route an ADD ROLLUP does.
+
+        Every path returns None -- a `function:` line's value is recorded into the R file, and all
+        42 recorded results across the two callers are None.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
         deadline = time.monotonic() + timeout
@@ -2050,8 +2078,9 @@ class StarrocksSQLApiLib(object):
             row = res["result"][0]
             job_id, table_name, status = int(row[0]), row[1], row[8]
             if seen is not None and job_id <= seen:
-                # No job of our own. Return None like every other path: a `function:` line's value
-                # is recorded into the R file, and all 38 recorded results here are None.
+                # No job of our own, so there is nothing to wait for and nothing holding the
+                # table. Whether that should have happened is the statement's business, not this
+                # helper's -- a CREATE that never made a job recorded its own failure already.
                 return None
 
             if status == "FINISHED" or status == "CANCELLED" or status == "":
@@ -2059,12 +2088,13 @@ class StarrocksSQLApiLib(object):
 
             tools.assert_true(
                 time.monotonic() < deadline,
-                "wait materialized view finish timeout after %ss, job %s is %s" % (timeout, job_id, status),
+                "wait materialized view job %s to reach %s timed out after %ss, it is %s"
+                % (job_id, expect_status, timeout, status),
             )
             time.sleep(0.1)
 
         self._last_alter_mv_job_id = job_id
-        tools.assert_equal("FINISHED", status, "wait materialized view finish error")
+        tools.assert_equal(expect_status, status, "wait materialized view job %s" % job_id)
 
         # The database has to be asked for: this helper has no other way to know which one the
         # case is in.
@@ -2095,25 +2125,6 @@ class StarrocksSQLApiLib(object):
             # Catch any exception raised by execute_sql and return its string representation
             return str(e)
             
-    def wait_materialized_view_cancel(self, check_count=60):
-        """
-        wait materialized view job cancel and return status
-        """
-        status = ""
-        show_sql = "SHOW ALTER MATERIALIZED VIEW"
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "CANCELLED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
-                break
-            count += 1
-        tools.assert_equal("CANCELLED", status, "wait alter table cancel error")
-
     def retry_execute_sql(self, sql: str, ori: bool, max_retry_times: int = 3, pending_time_ms: int = 100):
         """
         execute sql with retry
