@@ -307,6 +307,12 @@ case runs today; what it does is let a case say so, instead of leaving it to be 
 absence of `[ORDER]`. Prefer writing one of the two whenever a statement can answer with more
 than one row -- a plain statement with no tag cannot be told apart from one nobody thought about.
 
+`[UNORDERED]` also makes recording (`-r`) reproducible: its rows are written to the R file sorted,
+so re-recording a statement whose row order is not fixed no longer produces a diff that says
+nothing. Rows of untagged statements are recorded in the order the server returned them, as
+before. Checking is unaffected either way -- an unordered result is compared as a multiset, so a
+sorted R file and an unsorted answer still match.
+
 ```sql
 -- name: ${case name}
 [UNORDERED]select * from t;
