@@ -2030,14 +2030,10 @@ class StarrocksSQLApiLib(object):
         where/order by/limit syntax", ShowExecutor.java:1755), so asking the server to sort would
         silently do nothing.
 
-        Second, FINISHED is not the end. RollupJobV2#onFinished only swaps the shadow index in;
-        the table returns to NORMAL later, in MaterializedViewHandler#onJobDone, and only once
-        this is the table's last unfinished job. Both happen in one pass of runAlterJobV2, so the
-        gap is short, but it is real and documented there: "there is still a short gap between
-        job finish and table become normal, so if user send next alter job right after the job
-        finish, it may encounter table's state not NORMAL error". A case that creates two MVs on
-        one table back to back -- test_load_channel_profile, say -- runs straight into it. So wait
-        for the state rather than guessing how long it takes to arrive.
+        Second, FINISHED is not the end: the table is released a moment after the job reports it,
+        and a case that creates two MVs on one table back to back -- test_load_channel_profile,
+        say -- runs straight into the gap. wait_table_state_normal is where that is explained and
+        waited on; a sync MV is a rollup, so it reaches it by the same route an ADD ROLLUP does.
         """
         seen = getattr(self, "_last_alter_mv_job_id", None)
         deadline = time.monotonic() + timeout
@@ -2072,18 +2068,11 @@ class StarrocksSQLApiLib(object):
         self._last_alter_mv_job_id = job_id
         tools.assert_equal("FINISHED", status, "wait materialized view finish error")
 
+        # The database has to be asked for: this helper has no other way to know which one the
+        # case is in.
         res = self.execute_sql("SELECT DATABASE()", True)
         tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
-        db_name = res["result"][0][0]
-        while True:
-            if self.get_table_state(db_name, table_name) == "NORMAL":
-                return None
-            tools.assert_true(
-                time.monotonic() < deadline,
-                "table %s.%s did not return to NORMAL within %ss after job %s finished"
-                % (db_name, table_name, timeout, job_id),
-            )
-            time.sleep(0.1)
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
 
     """
         Return True or error message if refresh mv failed
