@@ -58,6 +58,11 @@ public enum SkipReason {
     UNSUPPORTED_PARTITION_COLUMN_TYPE,
     /** A sampled partition tuple could not be turned into a usable AddPartitionClause (formatter null or analyzer threw). */
     INVALID_PARTITION_VALUE,
+    /**
+     * Manually range-partitioned target: a sampled partition tuple lies outside every declared range
+     * the load may write. Dropped rather than pre-created -- the load rejects those rows itself.
+     */
+    NO_MATCHING_PARTITION,
     /** Grouping produced no usable target partitions (every row dropped). */
     GROUPER_EMPTY,
     /**

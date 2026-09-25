@@ -14,13 +14,17 @@
 
 package com.starrocks.alter.reshard.presplit;
 
+import com.google.common.collect.Range;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
@@ -33,7 +37,11 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
@@ -48,6 +56,7 @@ import org.mockito.Mockito;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -86,6 +95,7 @@ public class PartitionSampleGrouperTest {
     private static final long TABLE_ID = 200L;
     private static final long BASE_INDEX_META_ID = 300L;
     private static final long TOTAL_FILE_BYTES = 1_000_000L;
+    private static final Column RANGE_COLUMN = new Column("k", IntegerType.INT);
 
     private int savedCap;
     private boolean savedMetricHasInit;
@@ -1036,6 +1046,204 @@ public class PartitionSampleGrouperTest {
         }
     }
 
+    // ---------- manually range-partitioned target ----------
+
+    @Test
+    public void manualRangeMapsSamplesOntoContainingExistingPartitions() throws Exception {
+        // Samples land in the existing partition whose declared range contains them; a value outside
+        // every range is dropped, never turned into an AddPartitionClause.
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 0L, false);
+        installRangePartition(table, partitions, "p1", 12L, 100, 200, 0L, false);
+
+        MetricRepo.hasInit = true;
+        long noMatchBaseline = eligibilitySkipCount(SkipReason.NO_MATCHING_PARTITION);
+        SampleSet samples = sampleSetOf(List.of(
+                intTuple(5), intTuple(150), intTuple(199), intTuple(100), intTuple(250)));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class);
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
+
+            assertEquals(2, out.size());
+            assertEquals("p1", out.get(0).partitionName(), "heaviest first: 150, 199 and 100 fall in p1");
+            assertEquals(3, out.get(0).samples().size());
+            assertEquals("p0", out.get(1).partitionName());
+            assertEquals(1, out.get(1).samples().size());
+            for (PartitionSamples entry : out) {
+                assertTrue(entry.existsInCatalog(), "a manual target's groups must all be existing partitions");
+                assertNull(entry.analyzedClause());
+            }
+            assertEquals(noMatchBaseline + 1L, eligibilitySkipCount(SkipReason.NO_MATCHING_PARTITION),
+                    "250 lies outside every declared range");
+            analyzerUtils.verifyNoInteractions();
+            assertTrue(alterCtor.constructed().isEmpty(), "no AddPartitionClause is analyzed for a manual target");
+        }
+    }
+
+    @Test
+    public void manualRangeDropsNonEmptyPartitionAndKeepsFreshOne() throws Exception {
+        // The repeated-load shape: p0 already holds rows and is ineligible, p1 was just added.
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 42L, false);
+        installRangePartition(table, partitions, "p1", 12L, 100, 200, 0L, false);
+
+        MetricRepo.hasInit = true;
+        long ineligibleBaseline = eligibilitySkipCount(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE);
+        SampleSet samples = sampleSetOf(List.of(intTuple(5), intTuple(6), intTuple(150)));
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
+
+            assertEquals(1, out.size());
+            assertEquals("p1", out.get(0).partitionName());
+            assertEquals(ineligibleBaseline + 1L,
+                    eligibilitySkipCount(SkipReason.PARTITION_NOT_ELIGIBLE_POST_CREATE));
+        }
+    }
+
+    @Test
+    public void manualRangeDropsPartitionWhoseRowCountHasNotCaughtUp() throws Exception {
+        // Right after a load the index row count still reads 0; the visible version is what shows the
+        // partition already holds rows. Neither the pre-check nor the grouper may treat it as empty.
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 0L, false);
+        when(partitions.get(0).getDefaultPhysicalPartition().getVisibleVersion())
+                .thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            assertFalse(PartitionSampleGrouper.hasEmptySingleTabletPartition(
+                    DB_ID, table, PreSplitPartitionScope.unrestricted()));
+            assertTrue(PartitionSampleGrouper.group(
+                    sampleSetOf(List.of(intTuple(5))), table, null, DB_ID, TOTAL_FILE_BYTES, Set.of()).isEmpty());
+        }
+    }
+
+    @Test
+    public void manualRangeNeverCreatesAPartitionThatVanished() throws Exception {
+        // A partition dropped between the range snapshot and the locked pass must be skipped, not
+        // handed to the coordinator as a partition to create.
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 0L, false);
+        when(table.getPartition("p0")).thenReturn(null);
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    sampleSetOf(List.of(intTuple(5))), table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
+
+            assertTrue(out.isEmpty());
+        }
+    }
+
+    @Test
+    public void manualRangeHonorsPartitionCap() throws Exception {
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 0L, false);
+        installRangePartition(table, partitions, "p1", 12L, 100, 200, 0L, false);
+        installRangePartition(table, partitions, "p2", 13L, 200, 300, 0L, false);
+        Config.tablet_pre_split_max_partitions_per_load = 2;
+
+        SampleSet samples = sampleSetOf(List.of(
+                intTuple(1), intTuple(101), intTuple(102), intTuple(201), intTuple(202), intTuple(203)));
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.group(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of());
+
+            assertEquals(List.of("p2", "p1"), out.stream().map(PartitionSamples::partitionName).toList());
+        }
+    }
+
+    @Test
+    public void manualRangeRestrictsToNamedPartitions() throws Exception {
+        // INSERT INTO t PARTITION (p1): a sample that falls in p0 must not split p0.
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 0L, false);
+        installRangePartition(table, partitions, "p1", 12L, 100, 200, 0L, false);
+
+        SampleSet samples = sampleSetOf(List.of(intTuple(5), intTuple(6), intTuple(150)));
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.groupSpecified(
+                    samples, table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(), scopeOf(false, "p1"));
+
+            assertEquals(List.of("p1"), out.stream().map(PartitionSamples::partitionName).toList());
+        }
+    }
+
+    @Test
+    public void manualRangeResolvesNamedTemporaryPartitions() throws Exception {
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 5L, false);
+        installRangePartition(table, partitions, "tp0", 21L, 0, 100, 0L, true);
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            List<PartitionSamples> out = PartitionSampleGrouper.groupSpecified(
+                    sampleSetOf(List.of(intTuple(5))), table, null, DB_ID, TOTAL_FILE_BYTES, Set.of(),
+                    scopeOf(true, "tp0"));
+
+            assertEquals(1, out.size());
+            assertEquals("tp0", out.get(0).partitionName());
+            assertTrue(out.get(0).existsInCatalog());
+        }
+    }
+
+    @Test
+    public void hasEmptySingleTabletPartitionLooksOnlyAtReachablePartitions() throws Exception {
+        List<Partition> partitions = new ArrayList<>();
+        OlapTable table = stubManualRangeTable(partitions);
+        installRangePartition(table, partitions, "p0", 11L, 0, 100, 42L, false);
+
+        try (MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            assertFalse(PartitionSampleGrouper.hasEmptySingleTabletPartition(
+                    DB_ID, table, PreSplitPartitionScope.unrestricted()));
+
+            installRangePartition(table, partitions, "p1", 12L, 100, 200, 0L, false);
+            assertTrue(PartitionSampleGrouper.hasEmptySingleTabletPartition(
+                    DB_ID, table, PreSplitPartitionScope.unrestricted()));
+            assertFalse(PartitionSampleGrouper.hasEmptySingleTabletPartition(
+                    DB_ID, table, scopeOf(false, "p0")), "the empty p1 is outside the named scope");
+            assertFalse(PartitionSampleGrouper.hasEmptySingleTabletPartition(
+                    DB_ID, table, scopeOf(false, "no_such_partition")));
+        }
+    }
+
+    @Test
+    public void onlyPlainRangePartitioningCountsAsManualRange() {
+        OlapTable table = mock(OlapTable.class);
+        when(table.getPartitionInfo()).thenReturn(new RangePartitionInfo(List.of(RANGE_COLUMN)));
+        assertTrue(PartitionSampleGrouper.isManualRangePartitioned(table));
+
+        PartitionInfo list = mock(PartitionInfo.class);
+        when(list.getType()).thenReturn(PartitionType.LIST);
+        when(table.getPartitionInfo()).thenReturn(list);
+        assertFalse(PartitionSampleGrouper.isManualRangePartitioned(table));
+
+        PartitionInfo expressionRange = mock(PartitionInfo.class);
+        when(expressionRange.getType()).thenReturn(PartitionType.EXPR_RANGE_V2);
+        when(table.getPartitionInfo()).thenReturn(expressionRange);
+        assertFalse(PartitionSampleGrouper.isManualRangePartitioned(table));
+    }
+
+    private static PreSplitPartitionScope scopeOf(boolean temporary, String... partitionNames) {
+        InsertStmt insertStmt = mock(InsertStmt.class);
+        when(insertStmt.isSpecifyPartitionNames()).thenReturn(true);
+        when(insertStmt.getTargetPartitionNames()).thenReturn(new PartitionRef(
+                List.of(partitionNames), temporary, NodePosition.ZERO));
+        return PreSplitPartitionScope.fromInsert(insertStmt);
+    }
+
     // ---------- helpers ----------
 
     private static long eligibilitySkipCount(SkipReason reason) {
@@ -1098,10 +1306,10 @@ public class PartitionSampleGrouperTest {
         installPartitionWithTablets(table, partitionName, physicalPartitionId, tabletIds, rowCount, false);
     }
 
-    private static void installPartitionWithTablets(OlapTable table, String partitionName,
-                                                    long physicalPartitionId,
-                                                    List<Long> tabletIds, long rowCount,
-                                                    boolean temporary) {
+    private static Partition installPartitionWithTablets(OlapTable table, String partitionName,
+                                                         long physicalPartitionId,
+                                                         List<Long> tabletIds, long rowCount,
+                                                         boolean temporary) {
         Partition partition = mock(Partition.class);
         PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
         when(physicalPartition.getId()).thenReturn(physicalPartitionId);
@@ -1123,6 +1331,42 @@ public class PartitionSampleGrouperTest {
         if (!temporary) {
             when(table.getPartition(partitionName)).thenReturn(partition);
         }
+        return partition;
+    }
+
+    /**
+     * Stub a manually range-partitioned {@link OlapTable} over one INT column {@code k}: a real
+     * {@link RangePartitionInfo} (so range containment is the production code's own) and a mocked
+     * catalog that {@link #installRangePartition} fills in.
+     */
+    private static OlapTable stubManualRangeTable(List<Partition> partitions) {
+        OlapTable table = stubTable(List.of(RANGE_COLUMN));
+        when(table.getIdToColumn()).thenReturn(Map.of(RANGE_COLUMN.getColumnId(), RANGE_COLUMN));
+        when(table.getPartitionInfo()).thenReturn(new RangePartitionInfo(List.of(RANGE_COLUMN)));
+        when(table.getPartitions()).thenAnswer(invocation -> new ArrayList<>(partitions));
+        return table;
+    }
+
+    /** Install partition {@code [lower, upper)} of a {@link #stubManualRangeTable} table. */
+    private static void installRangePartition(OlapTable table, List<Partition> partitions, String partitionName,
+                                              long partitionId, int lower, int upper, long rowCount,
+                                              boolean temporary) throws Exception {
+        Partition partition = installPartitionWithTablets(table, partitionName, partitionId + 1000L,
+                List.of(partitionId + 2000L), rowCount, temporary);
+        when(partition.getId()).thenReturn(partitionId);
+        when(partition.getName()).thenReturn(partitionName);
+        ((RangePartitionInfo) table.getPartitionInfo()).setRange(partitionId, temporary, Range.closedOpen(
+                PartitionKey.createPartitionKey(List.of(new PartitionValue(String.valueOf(lower))),
+                        List.of(RANGE_COLUMN)),
+                PartitionKey.createPartitionKey(List.of(new PartitionValue(String.valueOf(upper))),
+                        List.of(RANGE_COLUMN))));
+        if (!temporary) {
+            partitions.add(partition);
+        }
+    }
+
+    private static Tuple intTuple(int value) {
+        return tuple(Variant.of(IntegerType.INT, String.valueOf(value)));
     }
 
     private static Tuple tuple(Variant... values) {

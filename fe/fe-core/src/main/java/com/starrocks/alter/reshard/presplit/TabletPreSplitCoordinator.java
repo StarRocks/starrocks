@@ -141,7 +141,7 @@ public final class TabletPreSplitCoordinator {
         if (baseIndex.getTablets().size() != 1) {
             return skipEligibility(SkipReason.MULTIPLE_BASE_INDEX_TABLETS);
         }
-        if (baseIndex.getRowCount() > 0) {
+        if (!PreSplitTargets.isEmptyPartition(partition, baseIndex)) {
             return skipEligibility(SkipReason.PARTITION_NOT_EMPTY);
         }
         if (PreSplitTargets.resolveVisibleIndexTargets(table, partition) == null) {
@@ -941,9 +941,9 @@ public final class TabletPreSplitCoordinator {
                 return null;
             }
             MaterializedIndex baseIndex = physicalPartition.getIndex(table.getBaseIndexMetaId());
-            if (baseIndex == null || baseIndex.getRowCount() > 0) {
+            if (baseIndex == null || !PreSplitTargets.isEmptyPartition(physicalPartition, baseIndex)) {
                 // resolveVisibleIndexTargets covers base tablet count + sort key, but intentionally
-                // not row-count emptiness -- gate that here before resolving the full index set.
+                // not emptiness -- gate that here before resolving the full index set.
                 return null;
             }
             List<IndexPreSplitTarget> targets =
