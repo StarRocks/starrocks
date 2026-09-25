@@ -14,6 +14,7 @@
 
 #include "exprs/geo_functions.h"
 
+#include <charconv>
 #include <optional>
 #include <string_view>
 
@@ -42,6 +43,30 @@ Status check_geography_boundary(const GeoColumn& column) {
         (type.srid.has_value() && type.srid.value() != kCrs84Srid) || descriptor.storage.encoding != GEO_ENCODING_WKB ||
         (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
         return Status::NotSupported("Unsupported GEOGRAPHY SQL boundary descriptor");
+    }
+    return Status::OK();
+}
+
+std::optional<int32_t> derive_srid(std::string_view crs) {
+    if (crs == "OGC:CRS84") return kCrs84Srid;
+    constexpr std::string_view prefix = "EPSG:";
+    if (!crs.starts_with(prefix)) return std::nullopt;
+    int32_t srid;
+    const auto* begin = crs.data() + prefix.size();
+    const auto* end = crs.data() + crs.size();
+    auto [parsed_end, error] = std::from_chars(begin, end, srid);
+    return error == std::errc() && parsed_end == end ? std::optional<int32_t>(srid) : std::nullopt;
+}
+
+Status check_geometry_boundary(const GeoColumn& column) {
+    const auto& descriptor = column.descriptor();
+    const auto& type = descriptor.type;
+    const auto dimension = descriptor.storage.dimension;
+    if (type.logical_type != GEO_LOGICAL_TYPE_GEOMETRY || type.coordinate_system != GEO_COORDINATE_SYSTEM_CARTESIAN ||
+        type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.srid != derive_srid(type.crs) ||
+        descriptor.storage.encoding != GEO_ENCODING_WKB ||
+        (dimension != GEO_DIMENSION_UNKNOWN && dimension != GEO_DIMENSION_XY && dimension != GEO_DIMENSION_MIXED)) {
+        return Status::NotSupported("Unsupported GEOMETRY SQL boundary descriptor");
     }
     return Status::OK();
 }
@@ -122,6 +147,18 @@ StatusOr<MutableColumnPtr> create_geography_result(FunctionContext* context) {
     return NullableColumn::create(std::move(data), NullColumn::create());
 }
 
+StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
+    const auto& type = context->get_return_type();
+    if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value()) {
+        return Status::NotSupported("GEOMETRY constructor requires semantic type metadata");
+    }
+    GeoColumnDescriptor descriptor{type.geo_type.value(),
+                                   {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    auto data = GeoColumn::create(std::move(descriptor));
+    RETURN_IF_ERROR(check_geometry_boundary(*data));
+    return NullableColumn::create(std::move(data), NullColumn::create());
+}
+
 template <LogicalType InputType>
 StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns& columns, bool text) {
     const size_t size = columns[0]->size();
@@ -153,8 +190,49 @@ StatusOr<ColumnPtr> construct_geography(FunctionContext* context, const Columns&
     return result;
 }
 
-template <LogicalType OutputType>
-StatusOr<ColumnPtr> serialize_geography(const Columns& columns, bool text) {
+template <LogicalType InputType>
+StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& columns, bool text) {
+    if (columns.size() != 2 || !columns[1]->is_constant()) {
+        return Status::InvalidArgument("GEOMETRY constructor requires a constant CRS");
+    }
+    ColumnViewer<TYPE_VARCHAR> crs(columns[1]);
+    if (crs.is_null(0)) return Status::InvalidArgument("GEOMETRY constructor requires a non-empty CRS");
+    const Slice crs_value = crs.value(0);
+    const auto& return_type = context->get_return_type();
+    if (!return_type.geo_type.has_value() ||
+        return_type.geo_type->crs != std::string_view(crs_value.data, crs_value.size)) {
+        return Status::InvalidArgument("GEOMETRY constructor CRS does not match its return descriptor");
+    }
+
+    const size_t size = columns[0]->size();
+    const bool constant = ColumnHelper::is_all_const(columns);
+    const size_t rows = constant ? 1 : size;
+    ColumnViewer<InputType> input(columns[0]);
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    constexpr auto semantics = WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        WkbGeometry geometry;
+        const Slice value = input.value(row);
+        Status status = text ? WkbCodec::parse_wkt(std::string_view(value.data, value.size), &geometry, semantics)
+                             : WkbCodec::parse_wkb(value, &geometry, semantics);
+        std::string wkb;
+        if (status.ok()) status = WkbCodec::to_wkb(geometry, &wkb, semantics);
+        if (!status.ok()) {
+            result->append_nulls(1);
+        } else {
+            result->append_datum(Datum(Slice(wkb)));
+        }
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+template <LogicalType OutputType, LogicalType GeoType>
+StatusOr<ColumnPtr> serialize_geo(const Columns& columns, bool text) {
     const size_t size = columns[0]->size();
     if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
     const bool constant = columns[0]->is_constant();
@@ -162,8 +240,15 @@ StatusOr<ColumnPtr> serialize_geography(const Columns& columns, bool text) {
     const Column* source = columns[0].get();
     if (constant) source = down_cast<const ConstColumn*>(source)->data_column().get();
     const NullableColumn* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
-    const auto* geography = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
-    RETURN_IF_ERROR(check_geography_boundary(*geography));
+    const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
+    if constexpr (GeoType == TYPE_GEOGRAPHY) {
+        RETURN_IF_ERROR(check_geography_boundary(*geo));
+    } else {
+        static_assert(GeoType == TYPE_GEOMETRY);
+        RETURN_IF_ERROR(check_geometry_boundary(*geo));
+    }
+    constexpr auto semantics = GeoType == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                         : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
 
     ColumnBuilder<OutputType> result(rows);
     for (size_t row = 0; row < rows; ++row) {
@@ -172,9 +257,10 @@ StatusOr<ColumnPtr> serialize_geography(const Columns& columns, bool text) {
             continue;
         }
         WkbGeometry geometry;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(geography->get_wkb(row), &geometry));
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(geo->get_wkb(row), &geometry, semantics));
         std::string value;
-        RETURN_IF_ERROR(text ? WkbCodec::to_wkt(geometry, &value) : WkbCodec::to_wkb(geometry, &value));
+        RETURN_IF_ERROR(text ? WkbCodec::to_wkt(geometry, &value, semantics)
+                             : WkbCodec::to_wkb(geometry, &value, semantics));
         result.append(Slice(value));
     }
     auto output = result.build(false);
@@ -470,11 +556,27 @@ StatusOr<ColumnPtr> GeoFunctions::st_geog_from_wkb(FunctionContext* context, con
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_as_text(FunctionContext*, const Columns& columns) {
-    return serialize_geography<TYPE_VARCHAR>(columns, true);
+    return serialize_geo<TYPE_VARCHAR, TYPE_GEOGRAPHY>(columns, true);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_as_wkb(FunctionContext*, const Columns& columns) {
-    return serialize_geography<TYPE_VARBINARY>(columns, false);
+    return serialize_geo<TYPE_VARBINARY, TYPE_GEOGRAPHY>(columns, false);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geom_from_text(FunctionContext* context, const Columns& columns) {
+    return construct_geometry<TYPE_VARCHAR>(context, columns, true);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geom_from_wkb(FunctionContext* context, const Columns& columns) {
+    return construct_geometry<TYPE_VARBINARY>(context, columns, false);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_as_text(FunctionContext*, const Columns& columns) {
+    return serialize_geo<TYPE_VARCHAR, TYPE_GEOMETRY>(columns, true);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_as_wkb(FunctionContext*, const Columns& columns) {
+    return serialize_geo<TYPE_VARBINARY, TYPE_GEOMETRY>(columns, false);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_x(FunctionContext*, const Columns& columns) {

@@ -36,6 +36,12 @@ public:
                                                 GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
     }
 
+    static TypeDescriptor geometry_type() {
+        return TypeDescriptor::create_geo_type(
+                TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
+                                "EPSG:3857", 3857});
+    }
+
     static ColumnPtr geography(std::initializer_list<const char*> values) {
         auto input = BinaryColumn::create();
         auto nulls = NullColumn::create();
@@ -55,6 +61,30 @@ public:
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
                 {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)}, geography_type()));
         return GeoFunctions::st_geog_from_text(context.get(), {source}).value();
+    }
+
+    static ColumnPtr geometry(std::initializer_list<const char*> values) {
+        auto input = BinaryColumn::create();
+        auto nulls = NullColumn::create();
+        bool has_null = false;
+        for (const char* value : values) {
+            if (value == nullptr) {
+                input->append_default();
+                nulls->append(1);
+                has_null = true;
+            } else {
+                input->append(value);
+                nulls->append(0);
+            }
+        }
+        ColumnPtr source = input;
+        if (has_null) source = NullableColumn::create(input, nulls);
+        auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", source->size());
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+                {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+                 TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+                geometry_type()));
+        return GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
     }
 };
 
@@ -646,6 +676,101 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_not_supported());
     }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
+    const char* values[] = {"POINT (1000000 2000000)",
+                            "LINESTRING (0 0, 1 1)",
+                            "POLYGON ((0 0, 0 1, 1 1, 0 0))",
+                            "MULTIPOINT (EMPTY, (1 2))",
+                            "MULTILINESTRING (EMPTY, (0 0, 1 1))",
+                            "MULTIPOLYGON (EMPTY, ((0 0, 0 1, 1 1, 0 0)))",
+                            "GEOMETRYCOLLECTION (POINT EMPTY, LINESTRING EMPTY)"};
+    auto input = BinaryColumn::create();
+    for (const char* value : values) input->append(value);
+    auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", input->size());
+    auto type = geometry_type();
+    std::unique_ptr<FunctionContext> constructor(FunctionContext::create_test_context(
+            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+            type));
+    auto native = GeoFunctions::st_geom_from_text(constructor.get(), {input, crs}).value();
+
+    const auto* nullable = down_cast<const NullableColumn*>(native.get());
+    const auto* data = down_cast<const GeoColumn*>(nullable->data_column().get());
+    EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
+    EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
+    EXPECT_EQ(GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED, data->descriptor().storage.validation_state);
+
+    std::unique_ptr<FunctionContext> text_serializer(FunctionContext::create_test_context(
+            {type}, TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    auto text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {native}).value();
+    for (size_t row = 0; row < std::size(values); ++row) {
+        EXPECT_EQ(values[row], text->get(row).get_slice().to_string());
+    }
+
+    std::unique_ptr<FunctionContext> wkb_serializer(FunctionContext::create_test_context(
+            {type}, TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH)));
+    auto wkb = GeoFunctions::st_geometry_as_wkb(wkb_serializer.get(), {native}).value();
+    std::unique_ptr<FunctionContext> wkb_constructor(FunctionContext::create_test_context(
+            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+            type));
+    auto reconstructed = GeoFunctions::st_geom_from_wkb(wkb_constructor.get(), {wkb, crs}).value();
+    auto reconstructed_text = GeoFunctions::st_geometry_as_text(text_serializer.get(), {reconstructed}).value();
+    for (size_t row = 0; row < std::size(values); ++row) {
+        EXPECT_EQ(text->get(row).get_slice().to_string(), reconstructed_text->get(row).get_slice().to_string());
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
+    auto input = BinaryColumn::create();
+    input->append("POINT (1 2)");
+    input->append_default();
+    input->append("POINT (1)");
+    auto nulls = NullColumn::create();
+    nulls->append(0);
+    nulls->append(1);
+    nulls->append(0);
+    auto source = NullableColumn::create(input, nulls);
+    auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", source->size());
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+            {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+            geometry_type()));
+    auto result = GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_TRUE(result->is_null(2));
+
+    auto malformed_wkb = BinaryColumn::create();
+    malformed_wkb->append("not WKB");
+    auto one_crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", 1);
+    std::unique_ptr<FunctionContext> wkb_context(FunctionContext::create_test_context(
+            {TypeDescriptor::create_varbinary_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
+             TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
+            geometry_type()));
+    auto invalid_wkb = GeoFunctions::st_geom_from_wkb(wkb_context.get(), {malformed_wkb, one_crs}).value();
+    EXPECT_TRUE(invalid_wkb->is_null(0));
+
+    auto constant = geometry({"POINT (1 2)"});
+    auto constant_input = ConstColumn::create(constant, 3);
+    auto text = GeoFunctions::st_geometry_as_text(nullptr, {constant_input}).value();
+    EXPECT_TRUE(text->is_constant());
+    EXPECT_EQ(3, text->size());
+
+    auto wrong_crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:4326", source->size());
+    auto mismatch = GeoFunctions::st_geom_from_text(context.get(), {source, wrong_crs});
+    ASSERT_FALSE(mismatch.ok());
+    EXPECT_TRUE(mismatch.status().is_invalid_argument());
+
+    auto varying_crs = BinaryColumn::create();
+    varying_crs->append("EPSG:3857");
+    varying_crs->append("EPSG:3857");
+    varying_crs->append("EPSG:3857");
+    auto nonconstant = GeoFunctions::st_geom_from_text(context.get(), {source, varying_crs});
+    ASSERT_FALSE(nonconstant.ok());
+    EXPECT_TRUE(nonconstant.status().is_invalid_argument());
 }
 
 } // namespace starrocks

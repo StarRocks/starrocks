@@ -21,6 +21,9 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -75,6 +78,30 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ST_Distance('POINT (0 0)', 'POINT (1 1)')",
                 "No matching function with signature: st_distance(varchar, varchar)");
 
+    }
+
+    @Test
+    public void testNativeGeometrySqlBoundary() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1000000 2000000)', 'EPSG:3857')")).getQueryRelation();
+        ScalarType type = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(PrimitiveType.GEOMETRY, type.getPrimitiveType());
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), type.getGeoDescriptor());
+
+        analyzeSuccess("select ST_AsText(ST_GeomFromText('POINT EMPTY', 'EPSG:3857'))");
+        analyzeSuccess("select ST_AsWKT(ST_GeomFromText('LINESTRING (1 2, 3 4)', 'custom:local'))");
+        analyzeSuccess("select ST_AsText(ST_GeomFromWKB(" +
+                "ST_AsWKB(ST_GeomFromText('POINT (1 2)', 'EPSG:3857')), 'EPSG:3857'))");
+
+        QueryRelation legacy = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1 2)')")).getQueryRelation();
+        Assertions.assertTrue(((SelectRelation) legacy).getOutputExpression().get(0).getType().isVarchar());
+
+        analyzeFail("select ST_GeomFromText('POINT (1 2)', '')", "requires CRS to be a non-empty string literal");
+        analyzeFail("select ST_GeomFromText('POINT (1 2)', concat('EPSG:', '3857'))",
+                "requires CRS to be a non-empty string literal");
+        analyzeFail("select ST_GeomFromWKB(cast('x' as varbinary))",
+                "No matching function with signature: st_geomfromwkb(varbinary)");
     }
 
     @Test

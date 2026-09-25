@@ -1,16 +1,18 @@
 ---
 displayed_sidebar: docs
-description: "Serializes a native GEOGRAPHY value as WKB."
+description: "Serializes a native GEOMETRY or GEOGRAPHY value as WKB."
 ---
 
 # ST_AsBinary, ST_AsWKB
 
-Serializes a native `GEOGRAPHY` value as Well-Known Binary (WKB). `ST_AsWKB` is an alias of `ST_AsBinary`.
+Serializes a native `GEOMETRY` or `GEOGRAPHY` value as Well-Known Binary (WKB). `ST_AsWKB` is an alias of `ST_AsBinary`.
 
 ## Syntax
 
 ```Haskell
+VARBINARY ST_AsBinary(GEOMETRY geometry)
 VARBINARY ST_AsBinary(GEOGRAPHY geography)
+VARBINARY ST_AsWKB(GEOMETRY geometry)
 VARBINARY ST_AsWKB(GEOGRAPHY geography)
 ```
 
@@ -26,6 +28,12 @@ SELECT hex(ST_AsBinary(ST_GeogFromText('POINT (1 2)')));
 0101000000000000000000F03F0000000000000040
 ```
 
+The same serializer names accept native `GEOMETRY` values:
+
+```SQL
+SELECT hex(ST_AsBinary(ST_GeomFromText('POINT (1 2)', 'EPSG:3857')));
+```
+
 ## Keywords
 
-ST_ASBINARY, ST_ASWKB, GEOGRAPHY, WKB
+ST_ASBINARY, ST_ASWKB, GEOMETRY, GEOGRAPHY, WKB

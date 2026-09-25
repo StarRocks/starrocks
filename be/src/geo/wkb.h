@@ -42,7 +42,12 @@ struct WkbCoordinate {
     bool operator==(const WkbCoordinate& rhs) const { return x == rhs.x && y == rhs.y; }
 };
 
-// A bounded geometry tree used only at the native GEOGRAPHY SQL boundary.
+enum class WkbCoordinateSemantics {
+    GEOGRAPHY_CRS84,
+    GEOMETRY_CARTESIAN,
+};
+
+// A bounded geometry tree used at native GEO SQL boundaries.
 // S2 and legacy GeoShape bytes never enter the native WKB representation.
 struct WkbGeometry {
     WkbGeometryType type = WkbGeometryType::POINT;
@@ -58,19 +63,24 @@ struct WkbGeometry {
 
 class WkbCodec {
 public:
-    // Parse two-dimensional CRS84 OGC WKT and validate longitude/latitude.
-    static Status parse_wkt(std::string_view input, WkbGeometry* output);
+    // Parse two-dimensional OGC WKT. GEOGRAPHY additionally validates CRS84
+    // longitude/latitude bounds; GEOMETRY accepts finite Cartesian coordinates.
+    static Status parse_wkt(std::string_view input, WkbGeometry* output,
+                            WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);
 
-    // Parse two-dimensional CRS84 OGC WKB in either byte order. EWKB flags and
-    // ISO SQL/MM dimensional type offsets are rejected; SRID is an explicit
+    // Parse two-dimensional OGC WKB in either byte order. EWKB flags and ISO
+    // SQL/MM dimensional type offsets are rejected; CRS is an explicit
     // constructor argument at the SQL boundary.
-    static Status parse_wkb(const Slice& input, WkbGeometry* output);
+    static Status parse_wkb(const Slice& input, WkbGeometry* output,
+                            WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);
 
     // Emit canonical little-endian OGC WKB.
-    static Status to_wkb(const WkbGeometry& geometry, std::string* output);
+    static Status to_wkb(const WkbGeometry& geometry, std::string* output,
+                         WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);
 
     // Emit normalized OGC WKT.
-    static Status to_wkt(const WkbGeometry& geometry, std::string* output);
+    static Status to_wkt(const WkbGeometry& geometry, std::string* output,
+                         WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);
 
     static const char* type_name(WkbGeometryType type);
 };
