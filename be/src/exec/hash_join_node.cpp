@@ -230,11 +230,23 @@ StatusOr<pipeline::OpFactories> HashJoinNode::_decompose_to_pipeline(pipeline::P
     // only on the mismatched case -- which is exactly the case that is wrong without it.
     // A colocate exec group is excluded: there the probe side is deliberately left untouched below,
     // and touching only the build side is what makes the two disagree in the first place.
+    //
+    // Disagreeing is not yet being misaligned: a bucket shuffle join over split tablets has local scans
+    // reporting true against an exchange whose sender already partitioned each bucket per driver with
+    // the function the scans' own local shuffle uses. Re-partitioning such a pair adds a shuffle of the
+    // build side, and its plain hash no longer matches the partition index a pipeline-level
+    // multi-partitioned runtime filter of this join computes for the probe rows.
     const bool join_in_colocate_group =
             context->find_exec_group_by_plan_node_id(_id)->type() == ExecutionGroupType::COLOCATE;
+    const bool rhs_could_local_shuffle = context->could_local_shuffle(rhs_operators);
+    const bool lhs_could_local_shuffle = context->could_local_shuffle(lhs_operators);
+    const auto& shuffled_side = rhs_could_local_shuffle ? rhs_operators : lhs_operators;
+    const auto& received_side = rhs_could_local_shuffle ? lhs_operators : rhs_operators;
+    const bool sides_misaligned =
+            rhs_could_local_shuffle != lhs_could_local_shuffle &&
+            !::starrocks::pipeline::builder::local_shuffle_matches_sender(context, shuffled_side, received_side);
     const bool align_both_sides =
-            !join_in_colocate_group && _distribution_mode != TJoinDistributionMode::BROADCAST &&
-            context->could_local_shuffle(rhs_operators) != context->could_local_shuffle(lhs_operators);
+            !join_in_colocate_group && _distribution_mode != TJoinDistributionMode::BROADCAST && sides_misaligned;
 
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
