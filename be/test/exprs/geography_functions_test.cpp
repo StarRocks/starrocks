@@ -36,10 +36,10 @@ public:
                                                 GEO_EDGE_ALGORITHM_SPHERICAL, "OGC:CRS84", 4326});
     }
 
-    static TypeDescriptor geometry_type() {
+    static TypeDescriptor geometry_type(std::string crs = "EPSG:3857", std::optional<int32_t> srid = 3857) {
         return TypeDescriptor::create_geo_type(
                 TYPE_GEOMETRY, {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR,
-                                "EPSG:3857", 3857});
+                                std::move(crs), srid});
     }
 
     static ColumnPtr geography(std::initializer_list<const char*> values) {
@@ -63,7 +63,7 @@ public:
         return GeoFunctions::st_geog_from_text(context.get(), {source}).value();
     }
 
-    static ColumnPtr geometry(std::initializer_list<const char*> values) {
+    static ColumnPtr geometry(std::initializer_list<const char*> values, const TypeDescriptor& type = geometry_type()) {
         auto input = BinaryColumn::create();
         auto nulls = NullColumn::create();
         bool has_null = false;
@@ -79,11 +79,11 @@ public:
         }
         ColumnPtr source = input;
         if (has_null) source = NullableColumn::create(input, nulls);
-        auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>("EPSG:3857", source->size());
+        auto crs = ColumnHelper::create_const_column<TYPE_VARCHAR>(type.geo_type->crs, source->size());
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
                 {TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH),
                  TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH)},
-                geometry_type()));
+                type));
         return GeoFunctions::st_geom_from_text(context.get(), {source, crs}).value();
     }
 };
@@ -676,6 +676,83 @@ TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityA
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_not_supported());
     }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryInitialFunctionSet) {
+    auto points = geometry({"POINT (1000000.5 -2000000.25)", nullptr});
+    auto x_result = GeoFunctions::st_geometry_x(nullptr, {points});
+    auto y_result = GeoFunctions::st_geometry_y(nullptr, {points});
+    ASSERT_TRUE(x_result.ok()) << x_result.status();
+    ASSERT_TRUE(y_result.ok()) << y_result.status();
+    ColumnViewer<TYPE_DOUBLE> x(std::move(x_result).value());
+    ColumnViewer<TYPE_DOUBLE> y(std::move(y_result).value());
+    EXPECT_DOUBLE_EQ(1000000.5, x.value(0));
+    EXPECT_DOUBLE_EQ(-2000000.25, y.value(0));
+    EXPECT_TRUE(x.is_null(1));
+    EXPECT_TRUE(y.is_null(1));
+
+    auto constant = ConstColumn::create(geometry({"POINT (7 9)"}), 3);
+    auto constant_x_result = GeoFunctions::st_geometry_x(nullptr, {constant});
+    ASSERT_TRUE(constant_x_result.ok()) << constant_x_result.status();
+    auto constant_x = std::move(constant_x_result).value();
+    EXPECT_TRUE(constant_x->is_constant());
+    EXPECT_EQ(3, constant_x->size());
+    EXPECT_DOUBLE_EQ(7, ColumnHelper::get_const_value<TYPE_DOUBLE>(constant_x));
+
+    auto families = geometry({"POINT EMPTY", "LINESTRING (0 0, 1 1)", "POLYGON ((0 0, 0 1, 1 1, 0 0))",
+                              "MULTIPOINT ((0 0), (1 1))", "MULTILINESTRING ((0 0, 1 1))",
+                              "MULTIPOLYGON (((0 0, 0 1, 1 1, 0 0)))", "GEOMETRYCOLLECTION (POINT (0 0))"});
+    auto names_result = GeoFunctions::st_geometry_type(nullptr, {families});
+    ASSERT_TRUE(names_result.ok()) << names_result.status();
+    ColumnViewer<TYPE_VARCHAR> names(std::move(names_result).value());
+    const char* expected[] = {"ST_Point",           "ST_LineString",   "ST_Polygon",           "ST_MultiPoint",
+                              "ST_MultiLineString", "ST_MultiPolygon", "ST_GeometryCollection"};
+    for (size_t row = 0; row < std::size(expected); ++row) {
+        EXPECT_EQ(expected[row], names.value(row).to_string());
+    }
+
+    auto crs84 = geometry_type("OGC:CRS84", 4326);
+    auto lhs = geometry({"POINT (0 0)", "POINT EMPTY", nullptr}, crs84);
+    auto rhs = geometry({"POINT (3 4)", "POINT (3 4)", "POINT (3 4)"}, crs84);
+    auto distance_result = GeoFunctions::st_geometry_distance(nullptr, {lhs, rhs});
+    ASSERT_TRUE(distance_result.ok()) << distance_result.status();
+    ColumnViewer<TYPE_DOUBLE> distance(std::move(distance_result).value());
+    EXPECT_DOUBLE_EQ(5, distance.value(0));
+    EXPECT_TRUE(distance.is_null(1));
+    EXPECT_TRUE(distance.is_null(2));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryComputeRejectsUnsupportedInputs) {
+    auto line = geometry({"LINESTRING (0 0, 1 1)"});
+    auto line_x = GeoFunctions::st_geometry_x(nullptr, {line});
+    ASSERT_FALSE(line_x.ok());
+    EXPECT_TRUE(line_x.status().is_invalid_argument());
+
+    auto non_point = GeoFunctions::st_geometry_distance(nullptr, {line, geometry({"POINT (0 0)"})});
+    ASSERT_FALSE(non_point.ok());
+    EXPECT_TRUE(non_point.status().is_invalid_argument());
+
+    auto incompatible = GeoFunctions::st_geometry_distance(
+            nullptr, {geometry({"POINT (0 0)"}), geometry({"POINT (3 4)"}, geometry_type("EPSG:4326", 4326))});
+    ASSERT_FALSE(incompatible.ok());
+    EXPECT_TRUE(incompatible.status().is_invalid_argument());
+
+    auto mixed_kind = GeoFunctions::st_geometry_x(nullptr, {geography({"POINT (1 2)"})});
+    ASSERT_FALSE(mixed_kind.ok());
+    EXPECT_TRUE(mixed_kind.status().is_not_supported());
+
+    WkbGeometry point;
+    ASSERT_TRUE(WkbCodec::parse_wkt("POINT (1 2)", &point).ok());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(point, &wkb).ok());
+    GeoColumnDescriptor descriptor{
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    auto xyz = GeoColumn::create(std::move(descriptor));
+    xyz->append_wkb(Slice(wkb));
+    auto unsupported_dimension = GeoFunctions::st_geometry_type(nullptr, {xyz});
+    ASSERT_FALSE(unsupported_dimension.ok());
+    EXPECT_TRUE(unsupported_dimension.status().is_not_supported());
 }
 
 TEST_F(geographyFunctionsTest, nativeGeometryWktAndWkbRoundTrip) {
