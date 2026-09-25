@@ -1,0 +1,48 @@
+-- name: test_show_limit_offset
+-- Test Point:
+--   A SHOW statement's LIMIT clamped the end of its range and not the start, so an offset past
+--   the last row left subList(offset, size), which subListRangeCheck rejects with
+--   IllegalArgumentException. MySQL answers an offset past the end with no rows. Both values are
+--   declared long as well, and an offset of 2^32 truncated to an int is 0 -- a valid index, so
+--   the statement answered with the first rows of the list rather than none.
+-- Method: a table with three partitions, and the alter lists of a database that has no alter
+--         jobs at all, which is where an offset is past the end without setting anything up.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+PARTITION BY RANGE(k1) (
+  PARTITION p1 VALUES LESS THAN ("10"),
+  PARTITION p2 VALUES LESS THAN ("20"),
+  PARTITION p3 VALUES LESS THAN ("30")
+)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- No alter job of any kind exists in this database, so every offset is past the end. Each of the
+-- three layouts reaches the clamp by its own proc dir.
+function: print_query_columns("SHOW ALTER TABLE COLUMN LIMIT 10, 1", "JobId")
+function: print_query_columns("SHOW ALTER TABLE ROLLUP LIMIT 10, 1", "JobId")
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE LIMIT 10, 1", "JobId")
+
+-- Three partitions. Inside the list first, so a broken clamp cannot pass by answering nothing.
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 0, 2", "PartitionName")
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 1, 1", "PartitionName")
+
+-- A count that runs off the end keeps what is there.
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 2, 5", "PartitionName")
+
+-- The offset exactly at the end was already answered with no rows -- subList(3, 3) is empty.
+-- One past it is where the range check starts failing.
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 3, 1", "PartitionName")
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 4, 1", "PartitionName")
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 10, 1", "PartitionName")
+
+-- 2^32 truncates to 0, a valid index, so this used to answer with p1.
+function: print_query_columns("SHOW PARTITIONS FROM t1 ORDER BY PartitionName LIMIT 4294967296, 1", "PartitionName")
+
+drop database db_${uuid0} force;
