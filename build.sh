@@ -834,6 +834,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
         fi
         cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
         cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        if ! starrocks_is_darwin; then
+            ${STARROCKS_HOME}/build-support/check_paimon_cpp_runtime.sh \
+                ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib "$(uname -m)"
+        fi
     fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
