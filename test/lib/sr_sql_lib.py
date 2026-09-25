@@ -1872,18 +1872,41 @@ class StarrocksSQLApiLib(object):
         log.warning(f"Table {table_name} not found in database {db_name}")
         return None
 
-    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30, deadline=None):
         """
-        wait table state to normal
+        Block until `table_name` is back in the NORMAL state.
+
+        A table is held for the duration of an alter, and every ALTER TABLE checks that hold
+        before anything else (AlterJobExecutor.java:176), so this is what stands between one
+        alter finishing and the next being allowed to start.
+
+        Whether the job reaching a terminal state already implies the hold is released depends on
+        the alter. SchemaChangeJobV2#onFinished releases the table itself (.java:1065), inside the
+        callback that persists JobState.FINISHED, so for a schema change the two are one event.
+        RollupJobV2#onFinished does not (.java:813-828): the table is released later, by
+        MaterializedViewHandler#onJobDone, and only once this is its last unfinished job. Both
+        happen in one pass of runAlterJobV2, so the gap is short, but it is real and documented
+        where it opens (MaterializedViewHandler.java:1200):
+
+            ATTN(cmy): there is still a short gap between "job finish" and "table become
+            normal", so if user send next alter job right after the "job finish", it may
+            encounter "table's state not NORMAL" error.
+
+        `deadline` lets a caller that is already on a clock -- wait_alter_table_finish, which
+        spends part of its budget waiting for the job itself -- spend the rest here rather than
+        start a second one. Callers that pass nothing keep their own `timeout_sec`.
         """
-        times = 0
-        while times < timeout_sec:
+        if deadline is None:
+            deadline = time.monotonic() + timeout_sec
+        while True:
             state = self.get_table_state(db_name, table_name)
             if state == "NORMAL":
-                break
-            time.sleep(1)
-            times += 1
-        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+                return
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait table state normal error, %s.%s is %s" % (db_name, table_name, state),
+            )
+            time.sleep(0.1)
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
@@ -2451,11 +2474,16 @@ class StarrocksSQLApiLib(object):
         submitted but not yet listed -- so both remaining readings return straight away. The flat
         second is gone from every path; the loop now only sleeps while a job is genuinely running,
         and polls at 100ms so a fast job is not rounded up.
+
+        FINISHED is the whole signal for a schema change but not for a rollup, which is released
+        from the table a moment later; `alter_type` is what tells the two apart, so an ADD ROLLUP
+        waited on with the default COLUMN is not covered. See wait_table_state_normal.
         """
         seen = getattr(self, "_last_alter_job_id", None)
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
+        table_name = None
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2464,7 +2492,7 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            job_id, status = res["result"][0][0], res["result"][0][off]
+            job_id, table_name, status = res["result"][0][0], res["result"][0][1], res["result"][0][off]
             if seen is not None and int(job_id) <= int(seen):
                 # No job of our own: either the alter was applied inline, or it created a job of
                 # a different type than the one being listed (a caller that leaves alter_type at
@@ -2488,6 +2516,14 @@ class StarrocksSQLApiLib(object):
 
         self._last_alter_job_id = int(job_id)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+        if alter_type.upper() == "ROLLUP":
+            # The rollup is finished but the table may not be released yet -- see
+            # wait_table_state_normal, which is where the two alter families differ. The database
+            # has to be asked for: this helper has no other way to know which one the case is in.
+            res = self.execute_sql("SELECT DATABASE()", True)
+            tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+            self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
 
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
         """
