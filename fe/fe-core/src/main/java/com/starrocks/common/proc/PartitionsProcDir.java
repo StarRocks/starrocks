@@ -64,6 +64,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+>>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
@@ -75,6 +79,12 @@ import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.OrderByPair;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.LimitElement;
+>>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
@@ -161,6 +171,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
     }
 
+<<<<<<< HEAD
     public boolean filter(String columnName, Comparable element, Map<String, Expr> filterMap) throws AnalysisException {
         if (filterMap == null) {
             return true;
@@ -216,6 +227,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         return str.matches(expr);
     }
 
+=======
+>>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
     public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
         List<List<Comparable>> partitionInfos = getPartitionInfos();
@@ -234,7 +247,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (List<Comparable> partitionInfo : partitionInfos) {
                 boolean isNeed = true;
                 for (int i = 0; i < partitionInfo.size(); i++) {
-                    isNeed = filter(this.titleNames.get(i), partitionInfo.get(i), filterMap);
+                    isNeed = ProcUtils.filterResult(this.titleNames.get(i), partitionInfo.get(i), filterMap);
                     if (!isNeed) {
                         break;
                     }
