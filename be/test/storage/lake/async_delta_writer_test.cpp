@@ -31,6 +31,7 @@
 #include "common/logging.h"
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
@@ -44,6 +45,7 @@
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -934,6 +936,10 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
         });
     }
     flush_latch.wait();
+    // The flush callback only means the memtable was handed to the flush pool, not that it has been
+    // spilled. Wait for the spills themselves, or finish() can find no spill block yet and answer
+    // inline instead of submitting a merge task.
+    DeltaWriter::io_threads()->wait();
     config::write_buffer_size = old_buffer_size;
 
     // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
