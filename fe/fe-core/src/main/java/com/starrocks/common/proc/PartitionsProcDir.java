@@ -193,14 +193,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
 
         // limit
-        if (limitElement != null && limitElement.hasLimit()) {
-            int beginIndex = (int) limitElement.getOffset();
-            int endIndex = (int) (beginIndex + limitElement.getLimit());
-            if (endIndex > filterPartitionInfos.size()) {
-                endIndex = filterPartitionInfos.size();
-            }
-            filterPartitionInfos = filterPartitionInfos.subList(beginIndex, endIndex);
-        }
+        filterPartitionInfos = ProcUtils.applyLimit(filterPartitionInfos, limitElement);
 
         return getBasicProcResult(filterPartitionInfos);
     }
