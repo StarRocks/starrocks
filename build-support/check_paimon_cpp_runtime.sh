@@ -150,9 +150,13 @@ while IFS= read -r bundled_needed; do
     esac
 done < <(needed_entries "${shim}")
 
-relocated_dir=$(mktemp -d "${TMPDIR:-/tmp}/starrocks-paimon-runtime.XXXXXX")
+runtime_parent=$(cd "$(dirname "${runtime_dir}")" && pwd)
+relocated_dir=$(mktemp -d "${runtime_parent}/.starrocks-paimon-runtime.XXXXXX")
 trap 'rm -rf "${relocated_dir}"' EXIT
-cp -a "${runtime_dir}/." "${relocated_dir}/"
+# Keep the relocation check cheap for the large, unstripped paimon-cpp binaries.
+# The sibling directory is on the same filesystem, so hard links preserve the
+# bytes while forcing the loader to resolve every dependency through a new path.
+cp -al "${runtime_dir}/." "${relocated_dir}/"
 
 ldd_output=$(env -u LD_LIBRARY_PATH ldd "${relocated_dir}/libstarrocks_paimon.so" 2>&1) || {
     echo "relocated Paimon runtime dependency resolution failed:" >&2
