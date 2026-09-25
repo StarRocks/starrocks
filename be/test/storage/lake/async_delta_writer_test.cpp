@@ -28,12 +28,6 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-<<<<<<< HEAD
-=======
-#include "common/thread/threadpool.h"
-#include "compute_env/load_spill/load_spill_block_merge_executor.h"
-#include "fs/fs_factory.h"
->>>>>>> d61b2b1 ([UT] Wait for spills before finish() in the cancelled merge task test (#79746))
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -50,6 +44,7 @@
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
 #include "util/countdown_latch.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
