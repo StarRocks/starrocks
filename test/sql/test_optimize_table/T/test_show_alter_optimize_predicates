@@ -1,0 +1,62 @@
+-- name: test_show_alter_optimize_predicates
+-- Test Point:
+--   SHOW ALTER TABLE OPTIMIZE resolves its ORDER BY against SchemaChangeProcDir's title list
+--   instead of its own, so the name the user wrote and the column that ends up sorted are two
+--   different things. OptimizeProcDir has ten columns and SchemaChangeProcDir thirteen, and only
+--   the first four names line up, so every consequence is visible from the statement itself:
+--   a column OPTIMIZE returns is rejected, one it does not return is accepted, and the three
+--   names that resolve past the tenth column index off the end of the row.
+-- Method: two optimize jobs with different bucket counts, so Operation and JobId both order the
+--         two rows, then project the columns that do not change between runs.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t1 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE t2 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+
+ALTER TABLE t1 DISTRIBUTED BY HASH(k1) BUCKETS 8;
+function: wait_optimize_table_finish()
+
+ALTER TABLE t2 DISTRIBUTED BY HASH(k1) BUCKETS 4;
+function: wait_optimize_table_finish()
+
+-- Both jobs are there to begin with, in ascending job id order.
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE", "TableName", "Operation", "State")
+
+-- Operation is OptimizeProcDir's fifth column and has no counterpart in SchemaChangeProcDir,
+-- whose fifth is IndexName. Ordering by a column the statement itself prints used to be
+-- rejected with "Title name[Operation] does not exist". The two bucket counts make the two
+-- operation strings differ, so the two directions have to disagree.
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Operation ASC", "TableName", "Operation")
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Operation DESC", "TableName", "Operation")
+
+-- Msg, Progress and Timeout sit at 7, 8 and 9 here and at 10, 11 and 12 in SchemaChangeProcDir,
+-- past the end of a ten cell optimize row. Two jobs are what makes this reachable: the
+-- comparator only runs once there is a pair to compare.
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Msg, JobId", "TableName", "State")
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Progress, JobId", "TableName", "State")
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Timeout DESC, JobId", "TableName", "State")
+
+-- State is the sixth column here and the tenth in SchemaChangeProcDir, where the tenth is
+-- Timeout. Both jobs end FINISHED and share a timeout, so this only checks that the name
+-- resolves and the sort runs; AnalyzeShowAlterTest carries the index assertion.
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY State DESC, JobId DESC", "TableName", "State")
+
+-- The other direction: names that belong to the schema change layout alone were accepted and
+-- quietly sorted something else -- SchemaVersion the Msg column, IndexName the Operation one.
+SHOW ALTER TABLE OPTIMIZE ORDER BY SchemaVersion;
+SHOW ALTER TABLE OPTIMIZE ORDER BY IndexName;
+
+drop database db_${uuid0} force;
