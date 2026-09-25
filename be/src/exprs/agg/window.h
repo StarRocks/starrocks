@@ -542,6 +542,8 @@ struct LeadLagState<LT, true> {
     int64_t lead_ready_current_row = INT64_MIN;
     int64_t lead_ready_scan_end = 0;
     int64_t lead_ready_non_null_count = 0;
+    // First non-null in (lead_ready_current_row, lead_ready_scan_end), valid when count > 0.
+    int64_t lead_ready_first_non_null = 0;
     // The partition the cursor above was built in, in local coordinates. It tells a
     // new partition apart from a re-entry into the current one, because `reset()` does not clear the
     // cursor. See `is_window_result_ready`.
@@ -807,8 +809,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             auto& lead_state = this->data(state);
 
             // Both current_row and search_end move forward within a partition. Keep the number of
-            // non-nulls in (lead_ready_current_row, lead_ready_scan_end), retract rows that leave
-            // the window, and only scan newly available rows. This makes the total scan linear.
+            // non-nulls in (lead_ready_current_row, lead_ready_scan_end). The first-non-null cursor
+            // retracts values that leave the window; the scan-end cursor adds newly available ones.
+            // Both cursors advance monotonically, keeping total scanning linear with constant space.
             //
             // The cursor outlives `reset()`, so a new partition must be recognised here. Both
             // `partition_start` and the stored copy are local, post-eviction positions shifted by the
@@ -822,18 +825,12 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 lead_state.lead_ready_scan_end = current_row + 1;
                 lead_state.lead_ready_non_null_count = 0;
             } else if (current_row > lead_state.lead_ready_current_row) {
-                if (offset == 1) {
-                    // At most one non-null is cached, at scan_end - 1. Rows before it cannot
-                    // consume it, even when the caller skips checks across a long NULL run.
-                    if (current_row >= lead_state.lead_ready_scan_end - 1) {
-                        lead_state.lead_ready_non_null_count = 0;
-                    }
-                } else {
-                    const int64_t retract_end = std::min(current_row + 1, lead_state.lead_ready_scan_end);
-                    for (int64_t pos = lead_state.lead_ready_current_row + 1; pos < retract_end; ++pos) {
-                        if (!col->is_null(pos)) {
-                            --lead_state.lead_ready_non_null_count;
-                        }
+                while (lead_state.lead_ready_non_null_count > 0 &&
+                       lead_state.lead_ready_first_non_null <= current_row) {
+                    --lead_state.lead_ready_non_null_count;
+                    if (lead_state.lead_ready_non_null_count > 0) {
+                        lead_state.lead_ready_first_non_null = ColumnHelper::find_nonnull(
+                                col, lead_state.lead_ready_first_non_null + 1, lead_state.lead_ready_scan_end);
                     }
                 }
                 lead_state.lead_ready_current_row = current_row;
@@ -847,13 +844,17 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                     lead_state.lead_ready_scan_end = search_end;
                     break;
                 }
+                if (lead_state.lead_ready_non_null_count == 0) {
+                    lead_state.lead_ready_first_non_null = next;
+                }
                 lead_state.lead_ready_scan_end = next + 1;
                 ++lead_state.lead_ready_non_null_count;
             }
             const bool ready = lead_state.lead_ready_non_null_count >= offset;
-            if (ready && ready_end != nullptr && offset == 1) {
-                // Every row strictly before the next non-null has a future value buffered.
-                *ready_end = lead_state.lead_ready_scan_end - 1;
+            if (ready && ready_end != nullptr) {
+                // All offset future non-nulls remain available for every row strictly before
+                // the first one. This bound works for every positive offset.
+                *ready_end = lead_state.lead_ready_first_non_null;
             }
             return ready;
         }
@@ -886,14 +887,17 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
                 if (lead_data.lead_ready_current_row != INT64_MIN) {
                     lead_data.lead_ready_current_row -= count;
                     lead_data.lead_ready_scan_end -= count;
+                    if (lead_data.lead_ready_non_null_count > 0) {
+                        lead_data.lead_ready_first_non_null -= count;
+                    }
                     // Shifted with the cursor so it stays comparable to `Analytor::_partition.start`,
                     // which the same eviction shifts by the same amount. It may go negative once the
                     // rows at the start of the partition are gone, exactly as `_partition.start` does.
                     lead_data.lead_ready_partition_start -= count;
                     if (lead_data.lead_ready_current_row < 0) {
                         // The row the cursor is anchored to has been evicted. Eviction never passes the
-                        // row being evaluated, so this only happens to a cursor left behind by a
-                        // finished partition; drop it instead of carrying a meaningless position.
+                        // row being evaluated, but readiness checks may have skipped that far ahead.
+                        // Drop the old cursor so the next check rebuilds it at the current row.
                         lead_data.lead_ready_current_row = INT64_MIN;
                     } else {
                         DCHECK_GT(lead_data.lead_ready_scan_end, lead_data.lead_ready_current_row);

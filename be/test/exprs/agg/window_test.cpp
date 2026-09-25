@@ -680,45 +680,57 @@ TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_waits_for_future_nonn
 }
 
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_ready_bound_across_null_runs) {
-    auto data_col = Int32Column::create();
-    auto null_col = NullColumn::create();
-    for (int64_t i = 0; i < 16; ++i) {
-        data_col->append(i);
-        null_col->append(i != 7 && i != 15);
+    for (int64_t offset : {1, 2, 3, 8}) {
+        SCOPED_TRACE("offset=" + std::to_string(offset));
+        const int64_t rows = (offset + 2) * 8;
+        auto data_col = Int32Column::create();
+        auto null_col = NullColumn::create();
+        for (int64_t i = 0; i < rows; ++i) {
+            data_col->append(i);
+            null_col->append(i % 8 != 7);
+        }
+        MutableColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+        auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, rows);
+        Columns args = build_lead_lag_args(value_col, offset, default_col);
+        const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
+        auto state = ManagedAggrState::create(ctx, lead_func);
+        lead_func->reset(ctx, args, state->state());
+
+        int64_t ready_end = 0;
+        int64_t partition_start = 0;
+        auto ready = [&](int64_t current, int64_t available_end, bool complete = false) {
+            ready_end = current + 1;
+            const int64_t frame_end = current + offset + 1;
+            return lead_func->is_window_result_ready(ctx, state->state(), args, partition_start, available_end,
+                                                     frame_end - 1, frame_end, complete, &ready_end);
+        };
+
+        ASSERT_FALSE(ready(0, offset * 8 - 1));
+        ASSERT_TRUE(ready(0, offset * 8));
+        // The first future non-null bounds readiness, not the offset-th one.
+        ASSERT_EQ(7, ready_end);
+
+        // Re-enter inside the known-ready range, as when another input chunk arrives.
+        ASSERT_TRUE(ready(4, offset * 8));
+        ASSERT_EQ(7, ready_end);
+
+        // The bound is exclusive: row 7 cannot count its own non-null value.
+        ASSERT_FALSE(ready(7, (offset + 1) * 8 - 1));
+        ASSERT_TRUE(ready(7, (offset + 1) * 8));
+        ASSERT_EQ(15, ready_end);
+
+        // Contraction shifts both cursors; the next call establishes a fresh local bound.
+        value_col->remove_first_n_values(4);
+        lead_func->reset_state_for_contraction(ctx, state->state(), 4);
+        args = build_lead_lag_args(value_col, offset, default_col);
+        partition_start = -4;
+        ASSERT_TRUE(ready(4, rows - 4));
+        ASSERT_EQ(11, ready_end);
+        ASSERT_TRUE(ready(18, rows - 4));
+        ASSERT_EQ(19, ready_end);
+        ASSERT_FALSE(ready(19, rows - 4));
+        ASSERT_TRUE(ready(19, rows - 4, true));
     }
-    MutableColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
-    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
-    Columns args = build_lead_lag_args(value_col, 1, default_col);
-    const AggregateFunction* lead_func = get_aggregate_function("lead_in", TYPE_INT, TYPE_INT, true);
-    auto state = ManagedAggrState::create(ctx, lead_func);
-    lead_func->reset(ctx, args, state->state());
-
-    int64_t ready_end = 1;
-    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 7, 1, 2, false, &ready_end));
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 8, 1, 2, false, &ready_end));
-    ASSERT_EQ(7, ready_end);
-
-    // Re-enter inside the known-ready range, as when another input chunk arrives.
-    ready_end = 5;
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 8, 5, 6, false, &ready_end));
-    ASSERT_EQ(7, ready_end);
-
-    // The bound is exclusive: row 7 cannot reuse its own non-null value.
-    ready_end = 8;
-    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 15, 8, 9, false, &ready_end));
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, 0, 16, 8, 9, false, &ready_end));
-    ASSERT_EQ(15, ready_end);
-
-    // Contraction shifts the cursor; a subsequent call establishes a fresh local bound.
-    value_col->remove_first_n_values(4);
-    lead_func->reset_state_for_contraction(ctx, state->state(), 4);
-    args = build_lead_lag_args(value_col, 1, default_col);
-    ready_end = 5;
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 5, 6, false, &ready_end));
-    ASSERT_EQ(11, ready_end);
-    ready_end = 12;
-    ASSERT_FALSE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 12, 13, false, &ready_end));
-    ASSERT_TRUE(lead_func->is_window_result_ready(ctx, state->state(), args, -4, 12, 12, 13, true, &ready_end));
 }
 
 TEST_F(LeadLagWindowTest, test_lead_ignore_nulls_readiness_offset2_needs_two_nonnulls) {
@@ -1724,19 +1736,17 @@ TEST_F(LeadLagWindowTest, e2e_offset2_sparse_explicit) {
 }
 
 TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_ready_bound_spans_output_chunks) {
-    std::vector<OptInt> input(257, std::nullopt);
-    input.back() = 10;
-    for (bool add_second_run : {false, true}) {
-        if (add_second_run) {
-            input.resize(514, std::nullopt);
-            input.back() = 20;
+    for (int64_t offset : {1, 2, 3, 8}) {
+        // Enough sparse non-nulls for several ready ranges, followed by rows that use the default.
+        std::vector<OptInt> input((offset + 2) * 257, std::nullopt);
+        for (size_t i = 256; i < input.size(); i += 257) {
+            input[i] = static_cast<int32_t>(i);
         }
-        const auto expected = ref_lead_ignore_nulls(input, 1);
+        const auto expected = ref_lead_ignore_nulls(input, offset);
         for (int64_t chunk_rows : {1, 3, 16, 64}) {
-            const std::string tag =
-                    "rows=" + std::to_string(input.size()) + " chunk_rows=" + std::to_string(chunk_rows);
-            expect_equal(run_analytor_lead(input, 1, false, chunk_rows), expected, "legacy " + tag);
-            expect_equal(run_analytor_lead(input, 1, true, chunk_rows), expected, "streaming " + tag);
+            const std::string tag = "offset=" + std::to_string(offset) + " chunk_rows=" + std::to_string(chunk_rows);
+            expect_equal(run_analytor_lead(input, offset, false, chunk_rows), expected, "legacy " + tag);
+            expect_equal(run_analytor_lead(input, offset, true, chunk_rows), expected, "streaming " + tag);
         }
     }
 }
@@ -1752,7 +1762,7 @@ TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_matches_reference_and_legacy) {
             // A long null gap exercises data-dependent look-ahead.
             {10, std::nullopt, std::nullopt, 20, std::nullopt, std::nullopt, 30, 40},
     };
-    const int64_t offsets[] = {1, 2};
+    const int64_t offsets[] = {1, 2, 3, 8};
     const int64_t chunk_sizes[] = {1, 2, 3, 8};
 
     for (size_t input_idx = 0; input_idx < inputs.size(); ++input_idx) {
@@ -1800,7 +1810,7 @@ TEST_F(LeadLagWindowTest, e2e_lead_ignore_nulls_multi_partition) {
         }
     }
 
-    const int64_t offsets[] = {1, 2};
+    const int64_t offsets[] = {1, 2, 3, 8};
     // Chunk sizes that split partitions mid-way, align with them, and hold several at once.
     const int64_t chunk_sizes[] = {1, 2, 5, 8, 64};
 
