@@ -881,7 +881,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
 
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    auto* merge_executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+    auto* merge_executor = StorageEngine::instance()->load_spill_block_merge_executor();
 
     int64_t old_max_thread = config::load_spill_merge_max_thread;
     config::load_spill_merge_max_thread = 1;
