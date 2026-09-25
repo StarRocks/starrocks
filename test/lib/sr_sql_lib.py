@@ -63,6 +63,7 @@ from timeout_decorator import timeout, TimeoutError
 from dbutils.pooled_db import PooledDB
 
 from lib import skip
+from lib.result_format import format_cell
 from lib import data_delete_lib
 from lib import data_insert_lib
 from lib.connection_base_lib import BaseConnectionLib
@@ -808,7 +809,7 @@ class StarrocksSQLApiLib(object):
             if isinstance(result, tuple) or isinstance(result, list):
                 if len(result) > 0:
                     if isinstance(result[0], tuple):
-                        res_log.extend(["\t".join([str(y) for y in x]) for x in result])
+                        res_log.extend(["\t".join([format_cell(y) for y in x]) for x in result])
                     else:
                         res_log.extend(["\t".join(str(x)) for x in result])
             elif isinstance(result, bytes):
@@ -953,7 +954,7 @@ class StarrocksSQLApiLib(object):
             if isinstance(sql_res, tuple):
                 if len(sql_res) > 0:
                     if isinstance(sql_res[0], tuple):
-                        recorded = ["\t".join([str(y) for y in x]) for x in sql_res]
+                        recorded = ["\t".join([format_cell(y) for y in x]) for x in sql_res]
                     else:
                         recorded = ["\t".join(str(x)) for x in sql_res]
             elif isinstance(sql_res, bytes):
