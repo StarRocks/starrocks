@@ -301,6 +301,31 @@ RES LINE2
 SQL2;
 ```
 
+`[UNORDERED]` is the opposite tag, and says the row order of a multi-row result is not part of
+what the case asserts. It matches the current default, so adding it changes nothing about how a
+case runs today; what it does is let a case say so, instead of leaving it to be inferred from the
+absence of `[ORDER]`. Prefer writing one of the two whenever a statement can answer with more
+than one row -- a plain statement with no tag cannot be told apart from one nobody thought about.
+
+`[UNORDERED]` also makes recording (`-r`) reproducible: its rows are written to the R file sorted,
+so re-recording a statement whose row order is not fixed no longer produces a diff that says
+nothing. Rows of untagged statements are recorded in the order the server returned them, as
+before. Checking is unaffected either way -- an unordered result is compared as a multiset, so a
+sorted R file and an unsorted answer still match.
+
+```sql
+-- name: ${case name}
+[UNORDERED]select * from t;
+-- result: 
+RES LINE1
+RES LINE2
+-- !result
+```
+
+Neither tag reaches a `function:` line. A function's result is compared as one string, so its row
+order is always part of the assertion and the order has to come from the query itself -- with a
+tiebreak, if the sort key can repeat.
+
 
 ### 5. REGULAR CHECKS FOR SQL RESULTS
 Some SQL execution results have variables (such as ID).In addition to using SKIP CHECK and UNCHECK, the framework supports regular checks.  
@@ -500,3 +525,43 @@ CLEANUP {
 * Notes:
 * The framework's built-in cleanup (dropping parsed DATABASE/RESOURCE) still runs; CLEANUP is an addition for fine-grained or external cleanup.
 * Results in CLEANUP are not validated; failures will be logged but do not block other cleanup steps.
+<<<<<<< HEAD
+=======
+
+### 11. SET_VAR
+
+Run a block of SQL statements repeatedly under different session variable combinations. This is useful for verifying that queries produce consistent results regardless of optimizer/runtime settings such as late materialization, runtime filter, etc.
+
+* Usage:
+
+```sql
+-- name: test_with_session_vars
+create database test_db_${uuid0};
+use test_db_${uuid0};
+create table t1 (c1 int, c2 string) DUPLICATE KEY(c1) DISTRIBUTED BY HASH(c1) PROPERTIES('replication_num' = '1');
+insert into t1 values (1, 'a'), (2, 'b'), (3, 'c');
+
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true"}, {"enable_late_materialization": "false"}]
+  select * from t1 order by c1;
+  select count(*) from t1;
+} END SET_VAR
+
+drop database test_db_${uuid0};
+```
+
+* `PROPERTY` must be a JSON array of objects. Each object is a set of `{variable_name: value}` pairs representing one session variable combination.
+* You can specify multiple variables per combination:
+
+```sql
+SET_VAR {
+  PROPERTY: [{"enable_late_materialization": "true", "new_planner_optimize_timeout": "10000"}, {"enable_late_materialization": "false", "new_planner_optimize_timeout": "10000"}]
+  select c1, c3 from t2 where c2 > 10 order by c1;
+} END SET_VAR
+```
+
+* In **record mode** (`-r`), the framework executes the block with the first variable combination and records the results. Subsequent combinations are also executed to verify they succeed.
+* In **validate mode** (`-v`), the framework executes the block once per combination and checks every run against the same expected results from the R file.
+* The `[UC]` (uncheck), `[ORDER]`, `[UNORDERED]`, and `[REGEX]` flags are supported on individual statements inside the block.
+* `SET_VAR` blocks must NOT be nested inside `LOOP` blocks.
+>>>>>>> 357f59a ([UT] SQL-Tester: add an [UNORDERED] tag next to [ORDER] (#79757))
