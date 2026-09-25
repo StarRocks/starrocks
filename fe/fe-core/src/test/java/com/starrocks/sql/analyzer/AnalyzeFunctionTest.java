@@ -105,6 +105,22 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testNativeGeometryInitialFunctions() {
+        analyzeSuccess("select ST_X(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
+        analyzeSuccess("select ST_Y(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
+        analyzeSuccess("select ST_GeometryType(" +
+                "ST_GeomFromText('GEOMETRYCOLLECTION (POINT (1 2))', 'EPSG:3857'))");
+        analyzeSuccess("select ST_Distance(" +
+                "ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), " +
+                "ST_GeomFromText('POINT (3 4)', 'EPSG:3857'))");
+
+        analyzeFail("select ST_Distance(" +
+                        "ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), " +
+                        "ST_GeogFromText('POINT (3 4)'))",
+                "No matching function with signature: st_distance");
+    }
+
+    @Test
     public void testDateTrunc() {
         analyzeSuccess("select date_trunc(\"year\", ti) from tall");
         analyzeSuccess("select date_trunc(\"month\", ti) from tall");

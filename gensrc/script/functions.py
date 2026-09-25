@@ -1096,6 +1096,14 @@ vectorized_functions = [
      "GeoFunctions::st_geography_type"],
     [120083, "ST_Distance", False, False, "DOUBLE", ["GEOGRAPHY", "GEOGRAPHY"],
      "GeoFunctions::st_geography_distance"],
+    [120084, "ST_X", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_x"],
+    [120085, "ST_Y", False, False, "DOUBLE", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_y"],
+    [120086, "ST_GeometryType", False, False, "VARCHAR", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_type"],
+    [120087, "ST_Distance", False, False, "DOUBLE", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_distance"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],

@@ -15,6 +15,7 @@
 #include "exprs/geo_functions.h"
 
 #include <charconv>
+#include <cmath>
 #include <optional>
 #include <string_view>
 
@@ -71,7 +72,15 @@ Status check_geometry_boundary(const GeoColumn& column) {
     return Status::OK();
 }
 
-struct GeographyInput {
+Status check_geometry_compute_boundary(const GeoColumn& column) {
+    RETURN_IF_ERROR(check_geometry_boundary(column));
+    if (column.descriptor().storage.dimension != GEO_DIMENSION_XY) {
+        return Status::NotSupported("GEOMETRY compute functions require XY dimension");
+    }
+    return Status::OK();
+}
+
+struct GeoInput {
     const GeoColumn* data;
     const NullableColumn* nullable;
     bool constant;
@@ -81,20 +90,27 @@ struct GeographyInput {
     Slice wkb(size_t row) const { return data->get_wkb(index(row)); }
 };
 
-StatusOr<GeographyInput> geography_input(const ColumnPtr& column) {
+template <LogicalType Type>
+StatusOr<GeoInput> geo_input(const ColumnPtr& column) {
     const bool constant = column->is_constant();
     const Column* source = constant ? down_cast<const ConstColumn*>(column.get())->data_column().get() : column.get();
     const auto* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
-    const auto* geography = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
-    RETURN_IF_ERROR(check_geography_boundary(*geography));
-    return GeographyInput{geography, nullable, constant};
+    const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
+    if constexpr (Type == TYPE_GEOGRAPHY) {
+        RETURN_IF_ERROR(check_geography_boundary(*geo));
+    } else {
+        RETURN_IF_ERROR(check_geometry_compute_boundary(*geo));
+    }
+    return GeoInput{geo, nullable, constant};
 }
 
-template <bool X>
-StatusOr<ColumnPtr> geography_coordinate(const Columns& columns) {
+template <LogicalType Type, bool X>
+StatusOr<ColumnPtr> geo_coordinate(const Columns& columns) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
     const size_t size = columns[0]->size();
     if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
-    ASSIGN_OR_RETURN(auto input, geography_input(columns[0]));
+    ASSIGN_OR_RETURN(auto input, geo_input<Type>(columns[0]));
     const size_t rows = input.constant ? 1 : size;
     ColumnBuilder<TYPE_DOUBLE> result(rows);
     for (size_t row = 0; row < rows; ++row) {
@@ -103,10 +119,15 @@ StatusOr<ColumnPtr> geography_coordinate(const Columns& columns) {
             continue;
         }
         WkbGeometry geometry;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry));
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, semantics));
         if (geometry.type != WkbGeometryType::POINT || geometry.empty) {
-            return Status::InvalidArgument(X ? "ST_X requires a non-empty POINT GEOGRAPHY"
-                                             : "ST_Y requires a non-empty POINT GEOGRAPHY");
+            if constexpr (Type == TYPE_GEOGRAPHY) {
+                return Status::InvalidArgument(X ? "ST_X requires a non-empty POINT GEOGRAPHY"
+                                                 : "ST_Y requires a non-empty POINT GEOGRAPHY");
+            } else {
+                return Status::InvalidArgument(X ? "ST_X requires a non-empty POINT GEOMETRY"
+                                                 : "ST_Y requires a non-empty POINT GEOMETRY");
+            }
         }
         result.append(X ? geometry.coordinates[0].x : geometry.coordinates[0].y);
     }
@@ -115,7 +136,7 @@ StatusOr<ColumnPtr> geography_coordinate(const Columns& columns) {
     return output;
 }
 
-const char* geography_type_name(WkbGeometryType type) {
+const char* geo_type_name(WkbGeometryType type) {
     switch (type) {
     case WkbGeometryType::POINT:
         return "ST_Point";
@@ -133,6 +154,82 @@ const char* geography_type_name(WkbGeometryType type) {
         return "ST_GeometryCollection";
     }
     return "";
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> geo_type(const Columns& columns) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<Type>(columns[0]));
+    const size_t rows = input.constant ? 1 : size;
+    ColumnBuilder<TYPE_VARCHAR> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        WkbGeometry geometry;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, semantics));
+        result.append(Slice(geo_type_name(geometry.type)));
+    }
+    auto output = result.build(false);
+    if (input.constant) return ConstColumn::create(std::move(output), size);
+    return output;
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> geo_distance(const Columns& columns) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto lhs, geo_input<Type>(columns[0]));
+    ASSIGN_OR_RETURN(auto rhs, geo_input<Type>(columns[1]));
+    if constexpr (Type == TYPE_GEOMETRY) {
+        if (!is_geo_compute_compatible(lhs.data->descriptor(), rhs.data->descriptor())) {
+            return Status::InvalidArgument("ST_Distance requires compatible GEOMETRY descriptors");
+        }
+    }
+    const bool constant = lhs.constant && rhs.constant;
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_DOUBLE> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
+        if (lhs.is_null(row) || rhs.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        WkbGeometry left;
+        WkbGeometry right;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(lhs.wkb(row), &left, semantics));
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(rhs.wkb(row), &right, semantics));
+        if (left.empty || right.empty) {
+            result.append_null();
+            continue;
+        }
+        if (left.type != WkbGeometryType::POINT || right.type != WkbGeometryType::POINT) {
+            if constexpr (Type == TYPE_GEOGRAPHY) {
+                return Status::InvalidArgument("ST_Distance requires POINT/POINT GEOGRAPHY inputs");
+            } else {
+                return Status::InvalidArgument("ST_Distance requires POINT/POINT GEOMETRY inputs");
+            }
+        }
+        if constexpr (Type == TYPE_GEOGRAPHY) {
+            double distance;
+            if (!GeoPoint::st_distance_sphere(left.coordinates[0].x, left.coordinates[0].y, right.coordinates[0].x,
+                                              right.coordinates[0].y, &distance)) {
+                return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
+            }
+            result.append(distance);
+        } else {
+            result.append(std::hypot(right.coordinates[0].x - left.coordinates[0].x,
+                                     right.coordinates[0].y - left.coordinates[0].y));
+        }
+    }
+    auto output = result.build(false);
+    if (constant) return ConstColumn::create(std::move(output), size);
+    return output;
 }
 
 StatusOr<MutableColumnPtr> create_geography_result(FunctionContext* context) {
@@ -580,67 +677,35 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_as_wkb(FunctionContext*, const Col
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_x(FunctionContext*, const Columns& columns) {
-    return geography_coordinate<true>(columns);
+    return geo_coordinate<TYPE_GEOGRAPHY, true>(columns);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_y(FunctionContext*, const Columns& columns) {
-    return geography_coordinate<false>(columns);
+    return geo_coordinate<TYPE_GEOGRAPHY, false>(columns);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_type(FunctionContext*, const Columns& columns) {
-    const size_t size = columns[0]->size();
-    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
-    ASSIGN_OR_RETURN(auto input, geography_input(columns[0]));
-    const size_t rows = input.constant ? 1 : size;
-    ColumnBuilder<TYPE_VARCHAR> result(rows);
-    for (size_t row = 0; row < rows; ++row) {
-        if (input.is_null(row)) {
-            result.append_null();
-            continue;
-        }
-        WkbGeometry geometry;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry));
-        result.append(Slice(geography_type_name(geometry.type)));
-    }
-    auto output = result.build(false);
-    if (input.constant) return ConstColumn::create(std::move(output), size);
-    return output;
+    return geo_type<TYPE_GEOGRAPHY>(columns);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geography_distance(FunctionContext*, const Columns& columns) {
-    const size_t size = columns[0]->size();
-    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
-    ASSIGN_OR_RETURN(auto lhs, geography_input(columns[0]));
-    ASSIGN_OR_RETURN(auto rhs, geography_input(columns[1]));
-    const bool constant = lhs.constant && rhs.constant;
-    const size_t rows = constant ? 1 : size;
-    ColumnBuilder<TYPE_DOUBLE> result(rows);
-    for (size_t row = 0; row < rows; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
-            result.append_null();
-            continue;
-        }
-        WkbGeometry left;
-        WkbGeometry right;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(lhs.wkb(row), &left));
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(rhs.wkb(row), &right));
-        if (left.empty || right.empty) {
-            result.append_null();
-            continue;
-        }
-        if (left.type != WkbGeometryType::POINT || right.type != WkbGeometryType::POINT) {
-            return Status::InvalidArgument("ST_Distance requires POINT/POINT GEOGRAPHY inputs");
-        }
-        double distance;
-        if (!GeoPoint::st_distance_sphere(left.coordinates[0].x, left.coordinates[0].y, right.coordinates[0].x,
-                                          right.coordinates[0].y, &distance)) {
-            return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
-        }
-        result.append(distance);
-    }
-    auto output = result.build(false);
-    if (constant) return ConstColumn::create(std::move(output), size);
-    return output;
+    return geo_distance<TYPE_GEOGRAPHY>(columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_x(FunctionContext*, const Columns& columns) {
+    return geo_coordinate<TYPE_GEOMETRY, true>(columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_y(FunctionContext*, const Columns& columns) {
+    return geo_coordinate<TYPE_GEOMETRY, false>(columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_type(FunctionContext*, const Columns& columns) {
+    return geo_type<TYPE_GEOMETRY>(columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_distance(FunctionContext*, const Columns& columns) {
+    return geo_distance<TYPE_GEOMETRY>(columns);
 }
 
 struct StContainsState {
