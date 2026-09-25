@@ -36,11 +36,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
@@ -940,6 +942,10 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
         });
     }
     flush_latch.wait();
+    // The flush callback only means the memtable was handed to the flush pool, not that it has been
+    // spilled. Wait for the spills themselves, or finish() can find no spill block yet and answer
+    // inline instead of submitting a merge task.
+    DeltaWriter::io_threads()->wait();
     config::write_buffer_size = old_buffer_size;
 
     // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
