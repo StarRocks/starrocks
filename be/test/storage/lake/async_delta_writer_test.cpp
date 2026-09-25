@@ -36,6 +36,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/load_spill_block_manager.h"
+#include "storage/memtable_flush_executor.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -934,6 +935,10 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
         });
     }
     flush_latch.wait();
+    // A spilling writer flushes through a CONCURRENT token, so the flush callback only means the
+    // memtable was handed off. Wait for the spills themselves, or finish() can find no spill block
+    // yet and answer inline instead of submitting a merge task.
+    StorageEngine::instance()->lake_memtable_flush_executor()->get_thread_pool()->wait();
     config::write_buffer_size = old_buffer_size;
 
     // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
