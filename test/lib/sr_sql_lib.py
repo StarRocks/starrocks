@@ -1872,18 +1872,41 @@ class StarrocksSQLApiLib(object):
         log.warning(f"Table {table_name} not found in database {db_name}")
         return None
 
-    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30):
+    def wait_table_state_normal(self, db_name, table_name, timeout_sec=30, deadline=None):
         """
-        wait table state to normal
+        Block until `table_name` is back in the NORMAL state.
+
+        A table is held for the duration of an alter, and every ALTER TABLE checks that hold
+        before anything else (AlterJobExecutor.java:176), so this is what stands between one
+        alter finishing and the next being allowed to start.
+
+        Whether the job reaching a terminal state already implies the hold is released depends on
+        the alter. SchemaChangeJobV2#onFinished releases the table itself (.java:1065), inside the
+        callback that persists JobState.FINISHED, so for a schema change the two are one event.
+        RollupJobV2#onFinished does not (.java:813-828): the table is released later, by
+        MaterializedViewHandler#onJobDone, and only once this is its last unfinished job. Both
+        happen in one pass of runAlterJobV2, so the gap is short, but it is real and documented
+        where it opens (MaterializedViewHandler.java:1200):
+
+            ATTN(cmy): there is still a short gap between "job finish" and "table become
+            normal", so if user send next alter job right after the "job finish", it may
+            encounter "table's state not NORMAL" error.
+
+        `deadline` lets a caller that is already on a clock -- wait_alter_table_finish, which
+        spends part of its budget waiting for the job itself -- spend the rest here rather than
+        start a second one. Callers that pass nothing keep their own `timeout_sec`.
         """
-        times = 0
-        while times < timeout_sec:
+        if deadline is None:
+            deadline = time.monotonic() + timeout_sec
+        while True:
             state = self.get_table_state(db_name, table_name)
             if state == "NORMAL":
-                break
-            time.sleep(1)
-            times += 1
-        tools.assert_equal("NORMAL", state, "wait table state normal error, timeout %s" % timeout_sec)
+                return
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait table state normal error, %s.%s is %s" % (db_name, table_name, state),
+            )
+            time.sleep(0.1)
 
     def show_routine_load(self, routine_load_task_name):
         show_sql = "show routine load for %s" % routine_load_task_name
@@ -2451,11 +2474,16 @@ class StarrocksSQLApiLib(object):
         submitted but not yet listed -- so both remaining readings return straight away. The flat
         second is gone from every path; the loop now only sleeps while a job is genuinely running,
         and polls at 100ms so a fast job is not rounded up.
+
+        FINISHED is the whole signal for a schema change but not for a rollup, which is released
+        from the table a moment later; `alter_type` is what tells the two apart, so an ADD ROLLUP
+        waited on with the default COLUMN is not covered. See wait_table_state_normal.
         """
         seen = getattr(self, "_last_alter_job_id", None)
         deadline = time.monotonic() + timeout
         status = ""
         job_id = None
+        table_name = None
         while True:
             res = self.execute_sql(
                 "SHOW ALTER TABLE %s ORDER BY JobId DESC LIMIT 1" % alter_type,
@@ -2464,7 +2492,7 @@ class StarrocksSQLApiLib(object):
             if (not res["status"]) or len(res["result"]) <= 0:
                 return ""
 
-            job_id, status = res["result"][0][0], res["result"][0][off]
+            job_id, table_name, status = res["result"][0][0], res["result"][0][1], res["result"][0][off]
             if seen is not None and int(job_id) <= int(seen):
                 # No job of our own: either the alter was applied inline, or it created a job of
                 # a different type than the one being listed (a caller that leaves alter_type at
@@ -2489,6 +2517,157 @@ class StarrocksSQLApiLib(object):
         self._last_alter_job_id = int(job_id)
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
+<<<<<<< HEAD
+=======
+        if alter_type.upper() == "ROLLUP":
+            # The rollup is finished but the table may not be released yet -- see
+            # wait_table_state_normal, which is where the two alter families differ. The database
+            # has to be asked for: this helper has no other way to know which one the case is in.
+            res = self.execute_sql("SELECT DATABASE()", True)
+            tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+            self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
+
+    @staticmethod
+    def _canonical_json(value):
+        return json.dumps(value, separators=(",", ":"), sort_keys=True)
+
+    def _show_proc_rows(self, path):
+        res = self.execute_sql("SHOW PROC '%s'" % path, True)
+        tools.assert_true(res["status"], "show proc failed for %s: %s" % (path, res.get("msg")))
+        return res["result"]
+
+    def _show_schema_change_rows(self, db_name, table_name):
+        sql = (
+            "SHOW ALTER TABLE COLUMN FROM %s WHERE TableName = '%s' ORDER BY JobId DESC"
+            % (db_name, table_name.replace("'", "\\'"))
+        )
+        res = self.retry_execute_sql(sql, True)
+        tools.assert_true(res["status"], "show alter table column failed: %s" % res.get("msg"))
+        return res["result"]
+
+    def wait_table_schema_change_finish(self, db_name, table_name, expect_state="FINISHED", timeout_sec=300):
+        """
+        wait schema change job for the specified table finish and return status
+        """
+        elapsed = 0
+        status = ""
+        while elapsed < timeout_sec:
+            rows = self._show_schema_change_rows(db_name, table_name)
+            if rows:
+                status = rows[0][9]
+                if status in ("FINISHED", "CANCELLED", ""):
+                    break
+            time.sleep(1)
+            elapsed += 1
+        tools.assert_equal(expect_state, status, "wait table schema change finish error for %s.%s" % (db_name, table_name))
+        return status
+
+    def get_schema_change_job_count(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        return len({str(row[0]) for row in rows})
+
+    def assert_schema_change_job_count(self, db_name, table_name, expected_count):
+        actual_count = self.get_schema_change_job_count(db_name, table_name)
+        tools.assert_equal(int(expected_count), actual_count, "unexpected schema change job count for %s.%s" % (db_name, table_name))
+
+    def get_latest_schema_change_job_info(self, db_name, table_name):
+        rows = self._show_schema_change_rows(db_name, table_name)
+        if not rows:
+            return self._canonical_json({})
+        row = rows[0]
+        info = {
+            "job_id": str(row[0]),
+            "table_name": str(row[1]),
+            "index_name": str(row[4]),
+            "index_id": str(row[5]),
+            "origin_index_id": str(row[6]),
+            "schema_version": str(row[7]),
+            "transaction_id": str(row[8]),
+            "state": str(row[9]),
+            "msg": str(row[10]),
+            "progress": str(row[11]),
+            "timeout": str(row[12]),
+        }
+        if len(row) > 13:
+            info["warehouse"] = str(row[13])
+        return self._canonical_json(info)
+
+    def assert_latest_schema_change_job_path(self, db_name, table_name, expected_path):
+        info = json.loads(self.get_latest_schema_change_job_info(db_name, table_name))
+        tools.assert_true(info, "no schema change job found for %s.%s" % (db_name, table_name))
+        tools.assert_equal("FINISHED", info["state"], "latest schema change job is not finished for %s.%s" % (db_name, table_name))
+        same_index = info["index_id"] == info["origin_index_id"]
+        if expected_path == "slow":
+            tools.assert_false(same_index, "expected slow path for %s.%s, but latest job kept same index id" % (db_name, table_name))
+        elif expected_path in ("fast", "fast_v1"):
+            tools.assert_true(same_index, "expected fast path for %s.%s, but latest job used shadow index" % (db_name, table_name))
+        else:
+            tools.assert_true(False, "unknown schema change path expectation: %s" % expected_path)
+
+    def get_index_identity_snapshot(self, db_name, table_name):
+        rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        identities = [{"index_id": str(row[0]), "index_name": str(row[1])} for row in rows]
+        identities.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(identities)
+
+    def get_index_schema_snapshot(self, db_name, table_name):
+        index_rows = self._show_proc_rows("/dbs/%s/%s/index_schema" % (db_name, table_name))
+        snapshot = []
+        for index_row in index_rows:
+            index_id = str(index_row[0])
+            index_name = str(index_row[1])
+            schema_rows = self._show_proc_rows("/dbs/%s/%s/index_schema/%s" % (db_name, table_name, index_id))
+            columns = []
+            for row in schema_rows:
+                columns.append({
+                    "field": str(row[0]),
+                    "type": str(row[1]),
+                    "null": str(row[2]),
+                    "key": str(row[3]),
+                })
+            snapshot.append({
+                "index_id": index_id,
+                "index_name": index_name,
+                "columns": columns,
+            })
+        snapshot.sort(key=lambda item: (item["index_name"], item["index_id"]))
+        return self._canonical_json(snapshot)
+
+    def assert_sync_fast_path(self, db_name, table_name, expected_previous_job_count, expected_index_snapshot):
+        self.assert_schema_change_job_count(db_name, table_name, int(expected_previous_job_count) + 1)
+        self.assert_latest_schema_change_job_path(db_name, table_name, "fast")
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for sync fast path on %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_identity_snapshot(self, db_name, table_name, expected_index_snapshot):
+        actual_index_snapshot = self.get_index_identity_snapshot(db_name, table_name)
+        tools.assert_equal(
+            expected_index_snapshot,
+            actual_index_snapshot,
+            "unexpected index identity snapshot for %s.%s" % (db_name, table_name),
+        )
+
+    def assert_index_schema_columns(self, db_name, table_name, index_name, *expected_columns):
+        snapshot = json.loads(self.get_index_schema_snapshot(db_name, table_name))
+        for index in snapshot:
+            if index["index_name"] == index_name:
+                actual_columns = [
+                    "%s|%s|%s|%s" % (column["field"], column["type"], column["null"], column["key"])
+                    for column in index["columns"]
+                ]
+                tools.assert_equal(
+                    list(expected_columns),
+                    actual_columns,
+                    "unexpected schema for index %s on %s.%s" % (index_name, db_name, table_name),
+                )
+                return
+        tools.assert_true(False, "index %s not found on %s.%s" % (index_name, db_name, table_name))
+
+>>>>>>> 26bf1d0 ([UT] Wait for the table to leave ROLLUP, not just for the job to finish (#79737))
     def wait_alter_table_not_pending(self, alter_type="COLUMN"):
         """
         wait until the status of the latest alter table job becomes from PNEDING to others
