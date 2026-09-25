@@ -1497,14 +1497,9 @@ public class StatisticsCalculatorTest {
         ExpressionContext expressionContext = new ExpressionContext(groupExpression);
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
 
-        // With unknown partition stats we fall back to the conservative unpartitioned estimate instead of
-        // fabricating a tight per-partition size from the default group-by coefficients.
+        // Without partition statistics, the partition size and row-number NDV cannot be estimated reliably.
         ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
-        Assertions.assertFalse(rowNumberStatistic.isUnknown());
-        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
-        Assertions.assertEquals(1000, rowNumberStatistic.getMaxValue(), 0.001);
-        Assertions.assertEquals(1000, rowNumberStatistic.getDistinctValuesCount(), 0.001);
-        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
+        Assertions.assertTrue(rowNumberStatistic.isUnknown());
     }
 
     @Test

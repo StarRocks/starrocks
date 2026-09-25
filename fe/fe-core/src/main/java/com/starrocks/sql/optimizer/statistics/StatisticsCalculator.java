@@ -185,6 +185,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -2198,11 +2199,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             return ExpressionStatisticCalculator.calculate(call, inputStatistics);
         }
         double rowCount = inputStatistics.getOutputRowCount();
-        double rowsPerPartition = estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount);
+        OptionalDouble rowsPerPartition = estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount);
+        if (rowsPerPartition.isEmpty()) {
+            return ColumnStatistic.unknown();
+        }
         return ColumnStatistic.builder()
                 .setMinValue(1)
-                .setMaxValue(rowsPerPartition)
-                .setDistinctValuesCount(rowsPerPartition)
+                .setMaxValue(rowsPerPartition.getAsDouble())
+                .setDistinctValuesCount(rowsPerPartition.getAsDouble())
                 .setNullsFraction(0)
                 .setAverageRowSize(call.getType().getTypeSize())
                 .build();
@@ -2210,10 +2214,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     // The window partitions are the groups a GROUP BY on the partition columns would produce, so the average
     // partition size follows from that group count. Assumes partitions are evenly sized.
-    private static double estimateRowsPerPartition(List<ScalarOperator> partitionExpressions,
-                                                   Statistics inputStatistics, double rowCount) {
+    private static OptionalDouble estimateRowsPerPartition(List<ScalarOperator> partitionExpressions,
+                                                           Statistics inputStatistics, double rowCount) {
         if (partitionExpressions.isEmpty() || !partitionExpressions.stream().allMatch(ScalarOperator::isColumnRef)) {
-            return rowCount;
+            return OptionalDouble.of(rowCount);
         }
 
         // Duplicate partition keys (e.g. PARTITION BY pk, pk) do not create extra partitions, so deduplicate
@@ -2233,11 +2237,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (partitionColumns.stream().anyMatch(column ->
                 !columnsWithMultiColumnStats.contains(column) &&
                         inputStatistics.getColumnStatistic(column).isUnknown())) {
-            return rowCount;
+            return OptionalDouble.empty();
         }
 
         double partitionCount = computeGroupByStatistics(partitionColumns, inputStatistics, new HashMap<>());
-        return rowCount / Math.max(1, partitionCount);
+        return OptionalDouble.of(rowCount / Math.max(1, partitionCount));
     }
 
     public Statistics estimateStatistics(List<ScalarOperator> predicateList, Statistics statistics) {
