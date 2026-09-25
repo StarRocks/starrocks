@@ -71,17 +71,17 @@ void ProbeKeyConstructorForOneKey<LT>::build_key(const JoinHashTableItems& table
     } else {
         probe_state->null_array = std::nullopt;
     }
-    if constexpr (lt_is_string<LT>) {
-        const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state->key_columns)[0]);
-        data_column->build_slices(probe_state->probe_slice);
-    }
 }
 
 template <LogicalType LT>
-auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state)
-        -> const ImmBuffer<CppType> {
+auto ProbeKeyConstructorForOneKey<LT>::get_key_data(const HashTableProbeState& probe_state) -> const KeyData {
     if constexpr (lt_is_string<LT>) {
-        return probe_state.probe_slice;
+        const auto* data_column = ColumnHelper::get_data_column((*probe_state.key_columns)[0]);
+        if (UNLIKELY(data_column->is_large_binary())) {
+            return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->immutable_data();
+        } else {
+            return ColumnHelper::as_raw_column<BinaryColumn>(data_column)->immutable_data();
+        }
     } else {
         const auto* data_column = ColumnHelper::get_data_column_by_type<LT>((*probe_state.key_columns)[0]);
         return data_column->get_data();

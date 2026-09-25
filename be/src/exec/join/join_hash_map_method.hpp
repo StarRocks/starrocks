@@ -85,9 +85,9 @@ void BucketChainedJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void BucketChainedJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                               const ImmBuffer<CppType>& build_keys,
-                                               const ImmBuffer<CppType>& probe_keys,
+                                               const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                                                const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     const uint32_t row_count = probe_state->probe_row_count;
     const auto* firsts = table_items.first.data();
@@ -284,10 +284,11 @@ void TLinearChainedJoinHashMap<LT, NeedBuildChained>::construct_hash_table(
 }
 
 template <LogicalType LT, bool NeedBuildChained>
+template <typename ProbeKeys>
 void TLinearChainedJoinHashMap<LT, NeedBuildChained>::lookup_init(const JoinHashTableItems& table_items,
                                                                   HashTableProbeState* probe_state,
                                                                   const ImmBuffer<CppType>& build_keys,
-                                                                  const ImmBuffer<CppType>& probe_keys,
+                                                                  const ProbeKeys& probe_keys,
                                                                   const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     auto process = [&]<bool IsNullable>() {
         const uint32_t bucket_size_mask = table_items.bucket_size - 1;
@@ -461,10 +462,10 @@ void LinearChainedAsofJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* 
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void LinearChainedAsofJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
                                                    HashTableProbeState* probe_state,
-                                                   const ImmBuffer<CppType>& build_keys,
-                                                   const ImmBuffer<CppType>& probe_keys,
+                                                   const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                                                    const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     auto process = [&]<bool IsNullable>() {
         const uint32_t bucket_size_mask = table_items.bucket_size - 1;
@@ -592,9 +593,9 @@ void DirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems* tabl
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void DirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items, HashTableProbeState* probe_state,
-                                               const ImmBuffer<CppType>& build_keys,
-                                               const ImmBuffer<CppType>& probe_keys,
+                                               const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                                                const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
 
@@ -673,10 +674,10 @@ void RangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableItems*
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void RangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
                                                     HashTableProbeState* probe_state,
-                                                    const ImmBuffer<CppType>& build_keys,
-                                                    const ImmBuffer<CppType>& probe_keys,
+                                                    const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                                                     const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
 
@@ -741,10 +742,10 @@ void RangeDirectMappingJoinHashSet<LT>::construct_hash_table(JoinHashTableItems*
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void RangeDirectMappingJoinHashSet<LT>::lookup_init(const JoinHashTableItems& table_items,
                                                     HashTableProbeState* probe_state,
-                                                    const ImmBuffer<CppType>& build_keys,
-                                                    const ImmBuffer<CppType>& probe_keys,
+                                                    const ImmBuffer<CppType>& build_keys, const ProbeKeys& probe_keys,
                                                     const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
 
@@ -903,10 +904,11 @@ void DenseRangeDirectMappingJoinHashMap<LT>::construct_hash_table(JoinHashTableI
 }
 
 template <LogicalType LT>
+template <typename ProbeKeys>
 void DenseRangeDirectMappingJoinHashMap<LT>::lookup_init(const JoinHashTableItems& table_items,
                                                          HashTableProbeState* probe_state,
                                                          const ImmBuffer<CppType>& build_keys,
-                                                         const ImmBuffer<CppType>& probe_keys,
+                                                         const ProbeKeys& probe_keys,
                                                          const std::optional<ImmBuffer<uint8_t>> is_nulls) {
     probe_state->active_coroutines = 0; // the ht data is not large, so disable it always.
 
