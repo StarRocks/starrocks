@@ -20,7 +20,6 @@ import com.starrocks.common.StarRocksException;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Data-tier {@link SampleSubqueryExecutor} for the INSERT-from-table path.
@@ -56,8 +55,8 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
                 context.wherePredicateSql(),
                 context.sourceTotalBytes(),
                 context.computeResource(),
-                identsOf(mapToSource(request.getSortKey(), context.targetToSourceColumnNames())),
-                identsOf(mapToSource(request.getPartitionSourceColumns(), context.targetToSourceColumnNames())),
+                projections(request.getSortKey(), context),
+                projections(request.getPartitionSourceColumns(), context),
                 request.getSortKey(),
                 request.getPartitionSourceColumns(),
                 context.sourceTotalRows(),
@@ -65,17 +64,16 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
     }
 
     /**
-     * Projects each rollup's sort key by remapping every column to its source-table name via the
-     * scan context's target-&gt;source map. The base sort key is projected the same way in
-     * {@link #resolveSampleSpec}; both go through {@link #mapToSource}, so a rollup whose sort key
-     * reorders or subsets the base is projected correctly regardless of source column naming.
+     * Projects each rollup's sort key through the scan context's maps, exactly as
+     * {@link #resolveSampleSpec} projects the base sort key, so a rollup whose sort key reorders or
+     * subsets the base is projected correctly regardless of source column naming.
      */
     @Override
     protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
         InsertFromTableScanContext context = contextOf(request);
         List<String> idents = new ArrayList<>();
         for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
-            idents.addAll(identsOf(mapToSource(spec.sortKey(), context.targetToSourceColumnNames())));
+            idents.addAll(projections(spec.sortKey(), context));
         }
         return idents;
     }
@@ -91,19 +89,22 @@ final class InsertFromTableSampleSubqueryExecutor extends AbstractSqlSampleSubqu
     }
 
     /**
-     * Remaps target columns (a sort key -- base or rollup -- or the partition columns) to their
-     * source-table column names via {@link InsertSelectSourceColumns#lookup}. Throws (-&gt; the
-     * sample fails -&gt; the load proceeds without pre-split) if any column is unmapped, so a
+     * Projects target columns (a sort key -- base or rollup -- or the partition columns): each by the
+     * source-table column that backs it, or -- when the SELECT feeds it a literal -- by that literal
+     * cast to the column type ({@link InsertSelectSourceColumns#projections}). Throws (-&gt; the
+     * sample fails -&gt; the load proceeds without pre-split) if a column is backed by neither, so a
      * boundary is never computed against the wrong source column. {@code prepare} gates this at
      * admission time; the throw remains as the fail-safe for a metadata race between prepare and
      * sampling.
      */
-    private static List<String> mapToSource(
-            List<Column> targetColumns, Map<String, String> targetToSourceColumnNames) throws StarRocksException {
-        List<String> sourceNames = InsertSelectSourceColumns.lookup(targetColumns, targetToSourceColumnNames);
-        if (sourceNames == null) {
-            throw new StarRocksException(ERROR_PREFIX + "a projected column has no source-table column mapping");
+    private static List<String> projections(
+            List<Column> targetColumns, InsertFromTableScanContext context) throws StarRocksException {
+        List<String> projections = InsertSelectSourceColumns.projections(
+                targetColumns, context.targetToSourceColumnNames(), context.targetToConstantSql());
+        if (projections == null) {
+            throw new StarRocksException(
+                    ERROR_PREFIX + "a projected column has no source-table column mapping and is not a literal");
         }
-        return sourceNames;
+        return projections;
     }
 }
