@@ -2025,10 +2025,7 @@ class StarrocksSQLApiLib(object):
         an earlier one. JobId separates them: MaterializedViewHandler registers the job inside the
         DDL's own execution path, atomically with its edit log (.java:238-240), so by the time
         this runs the job is listed, and an id no higher than the last one waited on means no job
-        was created. Note the rows are read whole and the newest picked here -- ShowExecutor
-        applies WHERE/ORDER BY/LIMIT only for SchemaChangeProcDir ("Only SchemaChangeProc support
-        where/order by/limit syntax", ShowExecutor.java:1755), so asking the server to sort would
-        silently do nothing.
+        was created.
 
         Second, FINISHED is not the end: the table is released a moment after the job reports it,
         and a case that creates two MVs on one table back to back -- test_load_channel_profile,
@@ -2041,15 +2038,16 @@ class StarrocksSQLApiLib(object):
         job_id = None
         table_name = None
         while True:
-            res = self.execute_sql("SHOW ALTER MATERIALIZED VIEW", True)
+            res = self.execute_sql(
+                "SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True
+            )
             # A failed query and a successful empty one both arrive with no rows, and only one of
             # them means "no job to wait for".
             tools.assert_true(res["status"], "show alter materialized view failed: %s" % res["msg"])
-            rows = list(res["result"])
-            if not rows:
+            if not res["result"]:
                 return None
 
-            row = max(rows, key=lambda r: int(r[0]))
+            row = res["result"][0]
             job_id, table_name, status = int(row[0]), row[1], row[8]
             if seen is not None and job_id <= seen:
                 # No job of our own. Return None like every other path: a `function:` line's value
