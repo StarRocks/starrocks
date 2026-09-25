@@ -526,6 +526,7 @@ final class PreSplitFlow {
             return new SampleSet(sortKeyTuples, partitionSourceTuples,
                     new Estimates(prepared.estimatedBytes(), 0L));
         } catch (StarRocksException | RuntimeException metaTierFailure) {
+            PreSplitProfile.recordMetaTierFallbackReason(metaTierFailure);
             LOG.info("Pre-split meta tier (multi-partition) unavailable for table {}; falling back to "
                     + "data tier: {}", table.getName(), metaTierFailure.getMessage());
             return null;
