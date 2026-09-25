@@ -26,6 +26,7 @@ set(EXEC_RUNTIME_TEST_FILES
     pipeline_builder_context_exec_runtime_test.cpp
     pipeline_fragment_context_exec_runtime_test.cpp
     pipeline/query_context_manger_test.cpp
+    pipeline/sink/file_sink_operator_test.cpp
 )
 
 set(EXEC_RUNTIME_TEST_LINK_LIBS
