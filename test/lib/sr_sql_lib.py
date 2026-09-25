@@ -917,7 +917,26 @@ class StarrocksSQLApiLib(object):
         args = {"table_name": table_name, "database_name": database_name, "query": query}
         return self.delete_from(args)
 
-    def treatment_record_res(self, sql, sql_res, res_container: list = None):
+    def treatment_record_res(self, sql, sql_res, res_container: list = None, sort_rows: bool = False):
+        """
+        Record one statement's result into the R file under construction.
+
+        `sort_rows` is set for a statement that carried [UNORDERED]. Recording writes the rows in
+        the order the server returned them, so re-recording a statement whose row order is not
+        fixed produces a diff that says nothing -- and says it in the middle of the diff that
+        does. Sorting the lines makes the recording reproducible for exactly the statements that
+        have declared their row order is not part of what they assert.
+
+        The sort is applied to the assembled lines rather than inside one of the branches below,
+        because an ordinary query does not arrive here as rows at all: execute_sql is called
+        without `ori`, so it has already joined the rows into a single newline-delimited string
+        and the tuple branch is not the one that runs. Only the callers that ask for the original
+        result -- and the non-SQL recorders -- see a tuple.
+
+        Nothing else is sorted. An untagged statement is only unordered by default, not by
+        anyone's decision, so canonicalising it would rewrite row orders no one has looked at. A
+        failed statement is not sorted either; there is one line and it is not a row.
+        """
 
         res_container = res_container if res_container is not None else self.res_log
 
@@ -930,19 +949,27 @@ class StarrocksSQLApiLib(object):
         else:
             # msg info no need to be checked
             sql_res = sql_res["result"] if "result" in sql_res else ""
+            recorded = []
             if isinstance(sql_res, tuple):
                 if len(sql_res) > 0:
                     if isinstance(sql_res[0], tuple):
-                        res_container.extend(["\t".join([str(y) for y in x]) for x in sql_res])
+                        recorded = ["\t".join([str(y) for y in x]) for x in sql_res]
                     else:
-                        res_container.extend(["\t".join(str(x)) for x in sql_res])
+                        recorded = ["\t".join(str(x)) for x in sql_res]
             elif isinstance(sql_res, bytes):
                 if sql_res != b"":
-                    res_container.append(str(sql_res).strip())
+                    recorded = [str(sql_res).strip()]
             elif sql_res is not None and str(sql_res).strip() != "":
-                res_container.append(str(sql_res))
+                recorded = [str(sql_res)]
             else:
                 log.info("SQL result: %s" % sql_res)
+
+            if sort_rows and recorded:
+                # One entry may hold every row, newline joined, so split before sorting and put it
+                # back the way it came -- the R file is written from these entries verbatim.
+                lines = sorted(line for entry in recorded for line in entry.split("\n"))
+                recorded = ["\n".join(lines)] if len(recorded) == 1 else lines
+            res_container.extend(recorded)
 
         res_container.append(RESULT_END_FLAT)
 
@@ -1196,6 +1223,9 @@ class StarrocksSQLApiLib(object):
         execute single statement and return result
         """
         order = False
+        # Distinct from `order`: False covers both "[UNORDERED] was written" and "nothing was
+        # written", and only the first one may have its recording sorted.
+        unordered = False
         res_container = res_container if res_container is not None else self.res_log
 
         if statement.startswith(TRINO_FLAG):
@@ -1282,10 +1312,16 @@ class StarrocksSQLApiLib(object):
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
 
-            # order flag
+            # order flags. Both are written out, rather than only the one that differs from the
+            # default, so that a case says which it meant and the default can be changed without
+            # reading every case to find out. [UNORDERED] is the current default, so it does
+            # nothing today beyond recording the intent.
             if statement.startswith(ORDER_FLAG):
                 order = True
                 statement = statement[len(ORDER_FLAG) :]
+            elif statement.startswith(UNORDERED_FLAG):
+                unordered = True
+                statement = statement[len(UNORDERED_FLAG) :]
 
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
@@ -1294,7 +1330,7 @@ class StarrocksSQLApiLib(object):
             self_print(statement)
 
             if record_mode:
-                self.treatment_record_res(statement, actual_res, res_container)
+                self.treatment_record_res(statement, actual_res, res_container, sort_rows=unordered)
 
             actual_res = actual_res["result"] if actual_res["status"] else "E: %s" % str(actual_res["msg"])
 
