@@ -32,6 +32,7 @@ FUNCTION_FLAG = "function: "
 NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
+UNORDERED_FLAG = "[UNORDERED]"
 REGEX_FLAG = "[REGEX]"
 
 # loop -- end loop
