@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
 import com.nimbusds.jose.JWSHeader;
@@ -54,8 +55,17 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class AuthenticationHandlerTest {
 
-    private RSAKey jwtRsaKey;
-    private String[] originalAuthChain;
+    // field initializers run before each test, like @BeforeEach
+    private final RSAKey jwtRsaKey = generateRsaKey();
+    private final String[] originalAuthChain = Config.authentication_chain;
+
+    private static RSAKey generateRsaKey() {
+        try {
+            return new RSAKeyGenerator(2048).keyID("test-kid").generate();
+        } catch (JOSEException e) {
+            throw new IllegalStateException(e);
+        }
+    }
 
     @BeforeAll
     public static void setUpPersistJournal() throws Exception {
@@ -149,8 +159,7 @@ public class AuthenticationHandlerTest {
                 ldapGroupProvider2.getGroup(authCtx.getCurrentUserIdentity(), authCtx.getDistinguishedName()));
     }
 
-    private void setUpJwtSecurityIntegration(AuthenticationMgr authenticationMgr, String name, String issuer)
-            throws Exception {
+    private void setUpJwtSecurityIntegration(AuthenticationMgr authenticationMgr, String name, String issuer) {
         Map<String, String> props = new HashMap<>();
         props.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, AuthPlugin.Server.AUTHENTICATION_JWT.name());
         props.put(JWTAuthenticationProvider.JWT_JWKS_URL, name + "-jwks.json");
@@ -169,12 +178,6 @@ public class AuthenticationHandlerTest {
                 new JWSHeader.Builder(JWSAlgorithm.RS256).type(JOSEObjectType.JWT).keyID("test-kid").build(), claims);
         signedJWT.sign(new RSASSASigner(jwtRsaKey));
         return signedJWT.serialize();
-    }
-
-    @BeforeEach
-    public void setUpJwt() throws Exception {
-        jwtRsaKey = new RSAKeyGenerator(2048).keyID("test-kid").generate();
-        originalAuthChain = Config.authentication_chain;
     }
 
     @AfterEach
