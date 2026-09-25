@@ -20,6 +20,8 @@ import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.IntLiteral;
+import com.starrocks.sql.ast.expression.LikePredicate;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
@@ -150,16 +152,55 @@ public class ProcUtilsTest {
     }
 
     @Test
-    public void testFilterResultLeavesAnUnrecognisedShapeAlone() throws AnalysisException {
-        // A string right-hand side with an operator other than = matches neither branch. It passes
-        // rather than throwing: the analyzer is what rejects predicates it does not support.
-        Map<String, Expr> filter = Map.of("tablename",
+    public void testFilterResultOnAStringComparedWithAnOrderingOperator() {
+        // Neither an equality on a string nor a comparison on a date, so the integer branch takes
+        // it. This is PartitionsProcDir's behaviour, kept as it was, and which exception comes out
+        // depends on the cell, because the left side is parsed before the right side is cast.
+        //
+        // How SHOW PARTITIONS reaches it: ShowStmtAnalyzer restricts the operator for
+        // PartitionName/State but never checks the right-hand side of
+        // PartitionId/Buckets/ReplicationNum, so WHERE Buckets > 'abc' analyzes. The cell is an
+        // integer, so the parse succeeds and the cast is what fails.
+        Map<String, Expr> onBuckets = Map.of("buckets",
+                new BinaryPredicate(BinaryType.GT, new SlotRef(null, "Buckets"), new StringLiteral("abc")));
+        Assertions.assertThrows(ClassCastException.class,
+                () -> ProcUtils.filterResult("Buckets", 8L, onBuckets));
+
+        // No alter statement can produce the shape at all -- ShowAlterStmtAnalyzer takes = only,
+        // for TableName and State -- which is why this path may take PartitionsProcDir's reading
+        // without any statement changing. Reached directly, a non-numeric cell fails the parse.
+        Map<String, Expr> onTableName = Map.of("tablename",
                 new BinaryPredicate(BinaryType.GT, new SlotRef(null, "TableName"), new StringLiteral("t1")));
-        Assertions.assertTrue(ProcUtils.filterResult("TableName", "t2", filter));
+        Assertions.assertThrows(NumberFormatException.class,
+                () -> ProcUtils.filterResult("TableName", "t2", onTableName));
+    }
+
+    @Test
+    public void testFilterResultOnANumericColumn() throws AnalysisException {
+        // SHOW PARTITIONS' own columns, the branch that came over from PartitionsProcDir.
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.GT, 4)));
+        Assertions.assertFalse(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.GT, 16)));
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.EQ, 8)));
+        Assertions.assertFalse(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.NE, 8)));
+        Assertions.assertTrue(ProcUtils.filterResult("Buckets", 8L, intFilter(BinaryType.LE, 8)));
+    }
+
+    @Test
+    public void testFilterResultOnALikePredicate() throws AnalysisException {
+        // SHOW PARTITIONS is the only statement whose analyzer admits LIKE.
+        Map<String, Expr> filter = Map.of("partitionname", new LikePredicate(
+                LikePredicate.Operator.LIKE, new SlotRef(null, "PartitionName"), new StringLiteral("p2024%")));
+        Assertions.assertTrue(ProcUtils.filterResult("PartitionName", "p202401", filter));
+        Assertions.assertFalse(ProcUtils.filterResult("PartitionName", "p202301", filter));
     }
 
     private static Expr eq(String value) {
         return new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "col"), new StringLiteral(value));
+    }
+
+    private static Map<String, Expr> intFilter(BinaryType op, long value) {
+        return Map.of("buckets",
+                new BinaryPredicate(op, new SlotRef(null, "Buckets"), new IntLiteral(value)));
     }
 
     private static Map<String, Expr> dateFilter(BinaryType op, String value) {
