@@ -897,15 +897,21 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
 
     CountDownLatch blocker_started(1);
     CountDownLatch release_blocker(1);
+    CountDownLatch blocker_finished(1);
     ASSERT_OK(merge_executor->get_thread_pool()->submit_func([&]() {
         blocker_started.count_down();
         release_blocker.wait();
+        blocker_finished.count_down();
     }));
     // The merge pool's only thread is now busy, so nothing submitted below can start.
     blocker_started.wait();
 
     DeferOp restore([&]() {
         release_blocker.count_down();
+        // Releasing the blocker is not enough: these latches live on this frame, and the pool
+        // thread is still inside release_blocker.wait() reacquiring its lock. Wait for the task to
+        // return before letting them go out of scope.
+        blocker_finished.wait();
         config::load_spill_merge_max_thread = old_max_thread;
         (void)merge_executor->refresh_max_thread_num();
     });
