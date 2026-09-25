@@ -2012,24 +2012,65 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_materialized_view_finish(self, check_count=60):
+    def wait_materialized_view_finish(self, timeout=60):
         """
-        wait materialized view job finish and return status
+        Block until the synchronous materialized view created just before this call is usable.
+
+        Two things stand between "the statement returned" and "the next statement may run", and
+        the old code covered both by sleeping a second whenever it saw a terminal state -- on top
+        of polling once a second, which rounds a sub-second rollup up to two.
+
+        First, the row cannot be attributed. SHOW ALTER MATERIALIZED VIEW resolves to the rollup
+        proc dir, so a terminal row is either the job this call should wait for or a leftover from
+        an earlier one. JobId separates them: MaterializedViewHandler registers the job inside the
+        DDL's own execution path, atomically with its edit log (.java:238-240), so by the time
+        this runs the job is listed, and an id no higher than the last one waited on means no job
+        was created.
+
+        Second, FINISHED is not the end: the table is released a moment after the job reports it,
+        and a case that creates two MVs on one table back to back -- test_load_channel_profile,
+        say -- runs straight into the gap. wait_table_state_normal is where that is explained and
+        waited on; a sync MV is a rollup, so it reaches it by the same route an ADD ROLLUP does.
         """
+        seen = getattr(self, "_last_alter_mv_job_id", None)
+        deadline = time.monotonic() + timeout
         status = ""
-        show_sql = "SHOW ALTER MATERIALIZED VIEW"
-        count = 0
-        while count < check_count:
-            res = self.execute_sql(show_sql, True)
-            status = res["result"][-1][8]
-            if status != "FINISHED":
-                time.sleep(1)
-            else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
+        job_id = None
+        table_name = None
+        while True:
+            res = self.execute_sql(
+                "SHOW ALTER MATERIALIZED VIEW ORDER BY JobId DESC LIMIT 1", True
+            )
+            # A failed query and a successful empty one both arrive with no rows, and only one of
+            # them means "no job to wait for".
+            tools.assert_true(res["status"], "show alter materialized view failed: %s" % res["msg"])
+            if not res["result"]:
+                return None
+
+            row = res["result"][0]
+            job_id, table_name, status = int(row[0]), row[1], row[8]
+            if seen is not None and job_id <= seen:
+                # No job of our own. Return None like every other path: a `function:` line's value
+                # is recorded into the R file, and all 38 recorded results here are None.
+                return None
+
+            if status == "FINISHED" or status == "CANCELLED" or status == "":
                 break
-            count += 1
-        tools.assert_equal("FINISHED", status, "wait alter table finish error")
+
+            tools.assert_true(
+                time.monotonic() < deadline,
+                "wait materialized view finish timeout after %ss, job %s is %s" % (timeout, job_id, status),
+            )
+            time.sleep(0.1)
+
+        self._last_alter_mv_job_id = job_id
+        tools.assert_equal("FINISHED", status, "wait materialized view finish error")
+
+        # The database has to be asked for: this helper has no other way to know which one the
+        # case is in.
+        res = self.execute_sql("SELECT DATABASE()", True)
+        tools.assert_true(res["status"], "select database() failed: %s" % res["msg"])
+        self.wait_table_state_normal(res["result"][0][0], table_name, deadline=deadline)
 
     """
         Return True or error message if refresh mv failed
