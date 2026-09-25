@@ -1282,10 +1282,16 @@ class StarrocksSQLApiLib(object):
             # sql
             log.info("[%s] SQL: %s" % (sql_id, statement))
 
-            # order flag
+            # order flags. Both are written out, rather than only the one that differs from the
+            # default, so that a case says which it meant and the default can be changed without
+            # reading every case to find out. [UNORDERED] is the current default, so it does
+            # nothing today beyond recording the intent.
             if statement.startswith(ORDER_FLAG):
                 order = True
                 statement = statement[len(ORDER_FLAG) :]
+            elif statement.startswith(UNORDERED_FLAG):
+                order = False
+                statement = statement[len(UNORDERED_FLAG) :]
 
             # analyse var set
             var, statement = self.analyse_var(statement, thread_key=var_key)
