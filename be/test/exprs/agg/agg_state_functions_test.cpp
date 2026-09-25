@@ -1745,4 +1745,124 @@ TEST_F(AggStateFunctionsTest, test_agg_state_combine_error_cases) {
     test_agg_state_combine_error_cases<int32_t>(ctx, "sum", arg_type_descs, return_type_desc);
 }
 
+namespace {
+// Runs `state_func` on `columns` and returns the serialized state of every row, "NULL" for a null row.
+std::vector<std::string> execute_state_function(FunctionContext* ctx, StateFunction& state_func,
+                                                const Columns& columns) {
+    auto result = state_func.execute(ctx, columns);
+    EXPECT_TRUE(result.ok()) << result.status();
+    std::vector<std::string> rows;
+    if (!result.ok()) {
+        return rows;
+    }
+    const ColumnPtr& column = result.value();
+    for (size_t i = 0; i < column->size(); i++) {
+        if (column->is_null(i)) {
+            rows.emplace_back("NULL");
+        } else {
+            rows.emplace_back(column->get(i).get_slice().to_string());
+        }
+    }
+    return rows;
+}
+} // namespace
+
+// A `_state` function called on a constant expression, e.g. avg_state(5), gets a ConstColumn as its first argument.
+// It must produce the same states as the same values in a plain data column.
+TEST_F(AggStateFunctionsTest, test_state_function_const_first_arg) {
+    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
+    auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
+    auto ctx = utils->get_fn_ctx();
+
+    constexpr size_t num_rows = 3;
+    for (bool nullable : {false, true}) {
+        AggStateDesc agg_state_desc("avg", return_type_desc, arg_type_descs, nullable, 1);
+        StateFunction state_func(agg_state_desc, intermediate_type_desc, {nullable});
+
+        auto value = Int32Column::create();
+        value->append(5);
+        ColumnPtr const_column = ConstColumn::create(std::move(value), num_rows);
+
+        auto data_column = Int32Column::create();
+        for (size_t i = 0; i < num_rows; i++) {
+            data_column->append(5);
+        }
+
+        auto const_rows = execute_state_function(ctx, state_func, {const_column});
+        auto data_rows = execute_state_function(ctx, state_func, {std::move(data_column)});
+        ASSERT_EQ(num_rows, const_rows.size()) << "nullable=" << nullable;
+        ASSERT_EQ(data_rows, const_rows) << "nullable=" << nullable;
+    }
+}
+
+// A `_state` function called on a NULL constant, e.g. avg_state(CAST(NULL AS INT)), gets a ConstColumn wrapping a
+// one-row NullableColumn as its first argument. It must produce the same NULL rows as a data column of NULLs, and when
+// the argument is declared non-nullable it must fail with a status instead of reading the ConstColumn as a data column.
+TEST_F(AggStateFunctionsTest, test_state_function_const_null_first_arg) {
+    TypeDescriptor arg_type_desc = TypeDescriptor(TYPE_INT);
+    TypeDescriptor return_type_desc = TypeDescriptor(TYPE_DOUBLE);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_type_descs = {arg_type_desc};
+    auto utils = std::make_unique<FunctionUtils>(nullptr, return_type_desc, arg_type_descs);
+    auto ctx = utils->get_fn_ctx();
+
+    constexpr size_t num_rows = 3;
+    AggStateDesc agg_state_desc("avg", return_type_desc, arg_type_descs, true, 1);
+    {
+        StateFunction state_func(agg_state_desc, intermediate_type_desc, {true});
+
+        auto data_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        data_column->append_nulls(num_rows);
+
+        auto const_rows =
+                execute_state_function(ctx, state_func, {ColumnHelper::create_const_null_column(num_rows)});
+        auto data_rows = execute_state_function(ctx, state_func, {std::move(data_column)});
+        ASSERT_EQ(std::vector<std::string>(num_rows, "NULL"), const_rows);
+        ASSERT_EQ(data_rows, const_rows);
+    }
+    {
+        StateFunction state_func(agg_state_desc, intermediate_type_desc, {false});
+        auto result = state_func.execute(ctx, {ColumnHelper::create_const_null_column(num_rows)});
+        ASSERT_FALSE(result.ok());
+        ASSERT_TRUE(result.status().is_internal_error()) << result.status();
+    }
+}
+
+// Only the first argument is unpacked: a later constant argument, like the quantile of percentile_approx, must stay a
+// ConstColumn because the aggregate function reads it as one.
+TEST_F(AggStateFunctionsTest, test_state_function_const_args_percentile_approx) {
+    TypeDescriptor double_type_desc = TypeDescriptor(TYPE_DOUBLE);
+    TypeDescriptor intermediate_type_desc = TypeDescriptor(TYPE_VARBINARY);
+    std::vector<TypeDescriptor> arg_type_descs = {double_type_desc, double_type_desc};
+    auto utils = std::make_unique<FunctionUtils>(nullptr, double_type_desc, arg_type_descs);
+    auto ctx = utils->get_fn_ctx();
+
+    AggStateDesc agg_state_desc("percentile_approx", double_type_desc, arg_type_descs, false, 1);
+    StateFunction state_func(agg_state_desc, intermediate_type_desc, {false, false});
+
+    constexpr size_t num_rows = 3;
+    auto make_quantile = [&]() -> ColumnPtr {
+        auto quantile = DoubleColumn::create();
+        quantile->append(0.5);
+        return ConstColumn::create(std::move(quantile), num_rows);
+    };
+
+    auto value = DoubleColumn::create();
+    value->append(5.0);
+    ColumnPtr const_column = ConstColumn::create(std::move(value), num_rows);
+
+    auto data_column = DoubleColumn::create();
+    for (size_t i = 0; i < num_rows; i++) {
+        data_column->append(5.0);
+    }
+
+    auto const_rows = execute_state_function(ctx, state_func, {const_column, make_quantile()});
+    auto data_rows = execute_state_function(ctx, state_func, {std::move(data_column), make_quantile()});
+    ASSERT_EQ(num_rows, const_rows.size());
+    ASSERT_EQ(data_rows, const_rows);
+}
+
 } // namespace starrocks
