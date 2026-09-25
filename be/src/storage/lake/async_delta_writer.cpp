@@ -205,6 +205,10 @@ public:
 
     // Report |st| through the finish callback unless the task has already answered it.
     void fail(const Status& st) {
+        // An OK here would report a tablet that never finished as if it had: the caller's callback
+        // would add it to the finished set and take a txn log out of a StatusOr that carries none.
+        // closed_status() cannot return OK today; this is what keeps that true.
+        DCHECK(!st.ok()) << "a dropped merge task must not answer its callback with OK";
         if (_claim()) {
             _finish_task->cb(st);
         }
