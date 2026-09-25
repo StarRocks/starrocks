@@ -1817,8 +1817,7 @@ TEST_F(AggStateFunctionsTest, test_state_function_const_null_first_arg) {
         auto data_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
         data_column->append_nulls(num_rows);
 
-        auto const_rows =
-                execute_state_function(ctx, state_func, {ColumnHelper::create_const_null_column(num_rows)});
+        auto const_rows = execute_state_function(ctx, state_func, {ColumnHelper::create_const_null_column(num_rows)});
         auto data_rows = execute_state_function(ctx, state_func, {std::move(data_column)});
         ASSERT_EQ(std::vector<std::string>(num_rows, "NULL"), const_rows);
         ASSERT_EQ(data_rows, const_rows);
