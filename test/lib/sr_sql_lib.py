@@ -2005,11 +2005,18 @@ class StarrocksSQLApiLib(object):
         `check_count` was a count of one-second polls, so it maps onto the timeout in seconds. All
         12 call sites leave it at the default.
 
-        Returns None, which is what this recorded on every path and what the delegate returns on
-        every path but one -- the "no rows at all" reading, which cannot happen here because the
-        caller has just submitted a rollup, and which is swallowed rather than recorded as "".
+        The delegate returns "" for a SHOW that failed and for one that came back empty alike,
+        and None otherwise. Neither reading is survivable for a caller that has just submitted a
+        rollup, and the code this replaces did not survive them either -- it indexed the result
+        straight away, so a failed query raised KeyError (execute_sql leaves out "result"
+        entirely) and an empty one IndexError. Assert rather than let either become a quiet
+        success. All 6 recorded results are None and stay None; no green case is on that path,
+        since it used to raise there.
         """
-        self.wait_alter_table_finish("ROLLUP", 8, timeout=check_count)
+        tools.assert_true(
+            self.wait_alter_table_finish("ROLLUP", 8, timeout=check_count) is None,
+            "no rollup job to wait for: SHOW ALTER TABLE ROLLUP failed or came back empty",
+        )
 
     def wait_materialized_view_finish(self, timeout=60):
         """
