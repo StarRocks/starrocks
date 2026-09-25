@@ -2223,10 +2223,16 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 .distinct()
                 .collect(Collectors.toList());
 
-        // Without statistics on the partition columns, computeGroupByStatistics falls back to default group-by
-        // coefficients that would fabricate a confident, tight per-partition size (and range) from no information.
-        // Prefer the conservative unpartitioned estimate instead.
-        if (partitionColumns.stream().anyMatch(column -> inputStatistics.getColumnStatistic(column).isUnknown())) {
+        // Without statistics on an uncovered partition column, computeGroupByStatistics falls back to default
+        // group-by coefficients that would fabricate a confident, tight per-partition size (and range) from no
+        // information. Combined NDV statistics can still cover unknown individual columns, so preserve them.
+        Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats =
+                inputStatistics.getLargestSubsetMCStats(new HashSet<>(partitionColumns));
+        Set<ColumnRefOperator> columnsWithMultiColumnStats =
+                mcStats == null ? Collections.emptySet() : mcStats.first;
+        if (partitionColumns.stream().anyMatch(column ->
+                !columnsWithMultiColumnStats.contains(column) &&
+                        inputStatistics.getColumnStatistic(column).isUnknown())) {
             return rowCount;
         }
 
