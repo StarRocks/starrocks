@@ -1,0 +1,37 @@
+# Check that the SQL-Tester case files a PR touches are shaped so their cases actually run.
+#
+# All three things this looks for are silent: the case sits in the tree looking normal and
+# is never executed. See test/check_case_files.py for what each one is.
+#
+# Scope is the files the PR changes, not the whole tree. Touching a case file means bringing
+# that file up to standard, which is how the existing ones get worked off.
+name: CI SQL-Tester Case Files
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+    branches:
+      - main
+      - 'branch*'
+    paths:
+      - 'test/sql/**'
+      - 'test/check_case_files.py'
+
+permissions:
+  contents: read
+
+jobs:
+  case-files:
+    runs-on: ubuntu-latest
+    name: CASE FILES
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The check compares against the merge base, so it needs both sides.
+          fetch-depth: 0
+
+      - name: CHECK
+        run: python3 test/check_case_files.py --base "origin/${{ github.base_ref }}"
