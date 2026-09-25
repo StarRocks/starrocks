@@ -424,8 +424,10 @@ public class QueryRuntimeProfile {
         // before the isomorphic merge collapses host-level information.
         Optional<RuntimeProfile> perTableScanStats = buildScanStatsByTableAndHost();
 
+        // QueryPeakMemoryUsage and QueryCumulativeCpuTime are BE-scoped values carried by every fragment
+        // instance on that BE, so they must be deduplicated by BE address before summing.
         Map<String, Long> peakMemoryEachBE = Maps.newHashMap();
-        long sumQueryCumulativeCpuTime = 0;
+        Map<String, Long> cpuTimeEachBE = Maps.newHashMap();
         long sumQuerySpillBytes = 0;
         long maxQueryPeakMemoryUsage = 0;
         long maxQueryExecutionWallTime = 0;
@@ -459,7 +461,8 @@ public class QueryRuntimeProfile {
                 // Get query level peak memory usage, cpu cost, wall time
                 Counter toBeRemove = instanceProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME);
                 if (toBeRemove != null) {
-                    sumQueryCumulativeCpuTime += toBeRemove.getValue();
+                    String beAddress = instanceProfile.getInfoString("Address");
+                    cpuTimeEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
                 }
                 instanceProfile.removeCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME);
 
@@ -607,7 +610,7 @@ public class QueryRuntimeProfile {
 
         Counter queryCumulativeCpuTime =
                 newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME, TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
+        queryCumulativeCpuTime.setValue(cpuTimeEachBE.values().stream().reduce(0L, Long::sum));
         Counter queryPeakMemoryUsage =
                 newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_PEAK_MEMORY_USAGE_PER_NODE, TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
