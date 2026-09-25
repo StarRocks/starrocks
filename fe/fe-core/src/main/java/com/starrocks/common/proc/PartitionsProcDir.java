@@ -55,11 +55,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
-import com.starrocks.common.util.DateUtils;
-=======
-import com.starrocks.common.FeConstants;
->>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
