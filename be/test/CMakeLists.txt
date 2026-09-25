@@ -48,6 +48,7 @@ set(EXEC_FILES
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
@@ -318,6 +319,7 @@ SET(DW_TEST_FILES
     ./storage/lake/tablet_test.cpp
     ./storage/lake/tablet_writer_test.cpp
     ./storage/lake/delete_test.cpp
+    ./storage/lake/multi_node_write_txn_log_test.cpp
     ./storage/lake/transactions_test.cpp
     ./storage/lake/pk_tablet_sst_writer_test.cpp
     ./storage/lake/txn_log_applier_test.cpp
@@ -458,9 +460,11 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        connector/paimon/paimon_blob_converter_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()

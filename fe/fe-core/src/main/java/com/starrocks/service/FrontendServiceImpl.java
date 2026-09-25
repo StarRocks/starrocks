@@ -433,7 +433,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1181,8 +1180,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             // authenticate() populates ctx.currentUserIdentity + currentRoleIds (with group-derived roles),
             // so we MUST NOT overwrite them afterward; doing so would drop LDAP/security-integration groups
             // and the OPERATE/NODE checks below would falsely reject privileged callers.
-            AuthenticationHandler.authenticate(ctx, request.getUser(), host,
-                    request.getPasswd().getBytes(StandardCharsets.UTF_8));
+            AuthenticationHandler.authenticateWithClearPassword(ctx, request.getUser(), host,
+                    request.getPasswd());
 
             // getRequired_privilege() can return null when a newer BE sends an enum value
             // this FE doesn't know (TPrivilegeRequirement.findByValue returns null); guard
@@ -1287,13 +1286,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (checkIsInternalLoad(user, passwd, db, tbl, clientIp)) {
             return UserIdentity.ROOT;
         }
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
-                passwd.getBytes(StandardCharsets.UTF_8));
+        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = AuthenticationHandler.authenticateWithClearPassword(
+                context, user, clientIp, passwd);
         // check INSERT action on table
         try {
-            ConnectContext context = new ConnectContext();
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            // Reuse the context authentication just populated: it already carries the identity and the
+            // group-derived roles. Rebuilding it from currentUser alone would drop those groups.
             Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
@@ -3026,6 +3025,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setStatus(errorStatus);
             return result;
         }
+        // Multi-node write: the width OlapTableSink.createLocation resolved for THIS table when this
+        // load was planned, and the nodes alive now to spend it on. A load long enough to create a
+        // partition can outlive the node list it was planned against, so the candidates are resolved
+        // here rather than carried. Both are left at their no-spread values unless that table's plan
+        // recorded a width, which it does only for a table whose own sink also carries
+        // enable_multi_node_write -- see TransactionState. Asking per table matters because one
+        // transaction can carry several and only some of them may be eligible.
+        final int writerWidth = txnState.getMultiNodeWriteWidth(olapTable.getId());
+        final List<Long> writerCandidates = writerWidth > 1
+                ? OlapTableSink.resolveWriterCandidates(warehouseManager, computeResource)
+                : Collections.emptyList();
         for (String partitionName : partitionNames) {
             // get partition info from snapshot
             TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition(olapTable.getId()).get(partitionName);
@@ -3058,6 +3068,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             for (MaterializedIndex index :
                     txnState.getPartitionLoadedIndexesWithoutLock(olapTable.getId(), physicalPartition)) {
                 if (olapTable.isCloudNativeTable()) {
+                    int tabletCount = index.getTablets().size();
                     for (Tablet tablet : index.getTablets()) {
                         try {
                             // use default warehouse nodes
@@ -3069,8 +3080,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                 result.setStatus(errorStatus);
                                 return result;
                             }
+                            // One node unless this load spreads a tablet's write, which is the whole reason
+                            // a brand-new partition -- typically one tablet, since its data boundaries have
+                            // not been seen yet -- would otherwise funnel through a single node for the rest
+                            // of the load.
                             TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
-                                    Collections.singletonList(computeNodeId));
+                                    OlapTableSink.buildRuntimePartitionNodeIds(computeNodeId, writerCandidates,
+                                            writerWidth, tabletCount, tablet.getId()));
                             tablets.add(tabletLocation);
                             txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
                         } catch (Exception exception) {

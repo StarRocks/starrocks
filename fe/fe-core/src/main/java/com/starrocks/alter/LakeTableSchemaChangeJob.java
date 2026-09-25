@@ -44,7 +44,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.Status;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
@@ -73,6 +72,7 @@ import com.starrocks.sql.ast.expression.ExprUtils;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -83,7 +83,6 @@ import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -103,8 +102,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -171,10 +168,16 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     // Package-private so same-package tests can verify the leader-handoff reset without reflection.
     AgentBatchTask schemaChangeBatchTask = new AgentBatchTask();
 
-    // runtime variable for synchronization between cancel and runPendingJob
+    // Leader-session transients of the PENDING phase. The CreateReplicaTasks are dispatched in one
+    // scheduler round and polled in the following ones, so the batch task, its latch and the deadline
+    // have to outlive a single runPendingJob() call. Reset by resetTransientState().
     private MarkedCountDownLatch<Long, Long> createReplicaLatch = null;
-    private AtomicBoolean waitingCreatingReplica = new AtomicBoolean(false);
-    private AtomicBoolean isCancelling = new AtomicBoolean(false);
+    private AgentBatchTask createReplicaBatchTask = null;
+    private long createReplicaDeadlineMs = -1;
+    // Node id -> that node's lastStartTime read at dispatch. Null until the tasks are handed to the
+    // RPC pool, and a node missing from it was never dispatched - either way findNodeThatLostItsTasks
+    // refuses to judge, because only a restart that happened AFTER the send can have killed a task.
+    private Map<Long, Long> createReplicaNodeStartTime = null;
     private boolean isFileBundling = false;
 
     final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -194,12 +197,11 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         // Start from an empty batch: the WAITING_TXN handler APPENDS to it (double-add hazard),
         // and getInfo dereferences the field, so fresh-empty rather than null. No AgentTaskQueue
         // cleanup needed - the demotion drain (abandonInFlightAgentTasks) already emptied the
-        // queue before this hook runs. watershedTxnId/Gtid stay - they are durable with the
-        // WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
+        // queue before this hook runs, which is also why abandonCreateReplicaTasks() below just
+        // clears the PENDING-phase transients. watershedTxnId/Gtid stay - they are durable with
+        // the WAITING_TXN entry, and runPendingJob reassigns them unconditionally at PENDING.
         schemaChangeBatchTask = new AgentBatchTask();
-        createReplicaLatch = null;
-        waitingCreatingReplica.set(false);
-        isCancelling.set(false);
+        abandonCreateReplicaTasks();
     }
 
     public LakeTableSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -370,64 +372,204 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @VisibleForTesting
-    public static void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
-                                            long timeoutSeconds, AtomicBoolean waitingCreatingReplica,
-                                            AtomicBoolean isCancelling) throws AlterCancelException {
+    public void sendCreateReplicaTasks(AgentBatchTask batchTask) {
+        recordDispatchEpochs(batchTask);
         AgentTaskQueue.addBatchTask(batchTask);
         AgentTaskExecutor.submit(batchTask);
-        long timeout = 1000L * Math.min(timeoutSeconds, Config.max_create_table_timeout_second);
-        boolean ok = false;
+    }
+
+    /**
+     * Snapshot each target node's restart epoch at the moment the batch goes out. Building the batch
+     * walks every shadow tablet under the table lock, so reading the epoch there could capture a
+     * value that is already stale by the time the tasks are actually sent: the node would have
+     * restarted before the send, received the tasks in its new process, and still been reported as
+     * having lost them. Reading here narrows that to the pool hand-off.
+     *
+     * <p>It does not close the window completely - lastStartTime trails the real restart by up to one
+     * heartbeat - so treat this as a heuristic whose safe direction is the deadline, never a silent
+     * wait. A wrong call cancels the job with the same retryable message the timeout produces.
+     */
+    @VisibleForTesting
+    void recordDispatchEpochs(AgentBatchTask batchTask) {
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        Map<Long, Long> nodeStartTime = new HashMap<>();
+        for (AgentTask task : batchTask.getAllTasks()) {
+            ComputeNode node = systemInfo.getBackendOrComputeNode(task.getBackendId());
+            if (node != null) {
+                nodeStartTime.put(task.getBackendId(), node.getLastStartTime());
+            }
+        }
+        createReplicaNodeStartTime = nodeStartTime;
+    }
+
+    /**
+     * Poll the dispatched CreateReplicaTasks. Never blocks: the schema change scheduler is a single
+     * LeaderDaemon thread shared by every alter job in the cluster, so waiting here for the tablets
+     * to appear stalls every sibling job as well.
+     *
+     * @return true once every shadow tablet has been created
+     * @throws AlterCancelException if a task reported an error, if a node that still owes a report
+     *                              has restarted, or if the creation deadline has passed
+     */
+    private boolean createReplicaTasksDone() throws AlterCancelException {
+        if (createReplicaLatch.getCount() == 0 && createReplicaLatch.getStatus().ok()) {
+            return true;
+        }
+
+        String errMsg = null;
+        if (!createReplicaLatch.getStatus().ok()) {
+            errMsg = createReplicaLatch.getStatus().getErrorMsg();
+        } else {
+            List<Map.Entry<Long, Long>> unfinishedMarks = createReplicaLatch.getLeftMarks();
+            long lostNodeId = findNodeThatLostItsTasks(unfinishedMarks);
+            if (lostNodeId != -1) {
+                errMsg = "node " + lostNodeId + " restarted or was removed, its create tablet tasks are lost. "
+                        + errorTabletsMessage(unfinishedMarks);
+            } else if (System.currentTimeMillis() >= createReplicaDeadlineMs) {
+                errMsg = errorTabletsMessage(unfinishedMarks);
+            }
+        }
+
+        if (errMsg == null) {
+            return false;
+        }
+        abandonCreateReplicaTasks();
+        throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
+    }
+
+    private static String errorTabletsMessage(List<Map.Entry<Long, Long>> unfinishedMarks) {
+        // only show at most 3 results
+        List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
+        return "Error tablets:" + Joiner.on(", ").join(subList);
+    }
+
+    /**
+     * A node that restarted after its CreateReplicaTask was dispatched will never report that task
+     * back: the task died with the process and ReportHandler.taskReport deliberately excludes
+     * TTaskType.CREATE from the diff-task resend. Without this check the latch could only be
+     * released by the deadline, which is what made a one-second BE restart cost the job the full
+     * min(tablet_create_timeout_second * numTablets, max_create_table_timeout_second).
+     *
+     * <p>The comparison is against the lastStartTime read at dispatch (see recordDispatchEpochs)
+     * rather than against wall clock now, so FE/BE clock skew cannot turn a node that booted long ago
+     * into a false positive, and a restart that predates the send is not mistaken for one that
+     * killed the tasks.
+     *
+     * @return the id of the first such node, or -1 if every unfinished mark still has a live node
+     */
+    private long findNodeThatLostItsTasks(List<Map.Entry<Long, Long>> unfinishedMarks) {
+        if (createReplicaNodeStartTime == null) {
+            return -1; // nothing dispatched yet, so nothing can have been lost
+        }
+        SystemInfoService systemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        for (Map.Entry<Long, Long> mark : unfinishedMarks) {
+            long nodeId = mark.getKey();
+            Long startTimeAtDispatch = createReplicaNodeStartTime.get(nodeId);
+            if (startTimeAtDispatch == null || startTimeAtDispatch <= 0) {
+                // No usable reading at dispatch (the node had not reported a reboot time yet), so a
+                // later reading cannot prove a restart. Leave this one to the deadline.
+                continue;
+            }
+            ComputeNode node = systemInfo.getBackendOrComputeNode(nodeId);
+            if (node == null || node.getLastStartTime() != startTimeAtDispatch) {
+                return nodeId;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * Drop whatever CreateReplicaTasks are still queued for this job. Before the PENDING phase was
+     * made non-blocking this cleanup lived inside the wait, which cancel() reached by force-releasing
+     * the latch from outside the job monitor.
+     */
+    private void abandonCreateReplicaTasks() {
+        if (createReplicaBatchTask != null) {
+            AgentTaskQueue.removeBatchTask(createReplicaBatchTask, TTaskType.CREATE);
+        }
+        createReplicaBatchTask = null;
+        createReplicaLatch = null;
+        createReplicaDeadlineMs = -1;
+        createReplicaNodeStartTime = null;
+    }
+
+    /**
+     * Creating the shadow tablets is this job's only phase that waits on a deadline of its own, and
+     * polling the latch needs no compute resource, so honour it here too.
+     */
+    @Override
+    protected void onComputeResourceUnavailable() {
+        if (jobState != JobState.PENDING || createReplicaLatch == null) {
+            return;
+        }
         try {
-            waitingCreatingReplica.set(true);
-            if (isCancelling.get()) {
-                AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-                return;
-            }
-            ok = countDownLatch.await(timeout, TimeUnit.MILLISECONDS) && countDownLatch.getStatus().ok();
-        } catch (InterruptedException e) {
-            LOG.warn("InterruptedException: ", e);
-            ok = false;
-        } finally {
-            waitingCreatingReplica.set(false);
+            createReplicaTasksDone();
+        } catch (AlterCancelException e) {
+            cancelInternal(e.getMessage());
         }
-
-        if (!ok) {
-            AgentTaskQueue.removeBatchTask(batchTask, TTaskType.CREATE);
-            String errMsg;
-            if (!countDownLatch.getStatus().ok()) {
-                errMsg = countDownLatch.getStatus().getErrorMsg();
-            } else {
-                // only show at most 3 results
-                List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
-                List<Map.Entry<Long, Long>> subList = unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
-                errMsg = "Error tablets:" + Joiner.on(", ").join(subList);
-            }
-            throw new AlterCancelException("Create tablet failed. Error: " + errMsg);
-        }
-    }
-
-    @VisibleForTesting
-    public void setIsCancelling(boolean isCancelling) {
-        this.isCancelling.set(isCancelling);
-    }
-
-    @VisibleForTesting
-    public boolean isCancelling() {
-        return this.isCancelling.get();
-    }
-
-    @VisibleForTesting
-    public void setWaitingCreatingReplica(boolean waitingCreatingReplica) {
-        this.waitingCreatingReplica.set(waitingCreatingReplica);
-    }
-
-    @VisibleForTesting
-    public boolean waitingCreatingReplica() {
-        return this.waitingCreatingReplica.get();
     }
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+        if (createReplicaLatch != null) {
+            // The CreateReplicaTasks went out in an earlier scheduler round.
+            if (!createReplicaTasksDone()) {
+                return; // Still creating. Poll again next round; do not hold up the sibling jobs.
+            }
+        } else if (createShadowTablets()) {
+            // Just dispatched. Hand the scheduler thread back so it can serve the other alter jobs;
+            // this job resumes at the poll above on the next round.
+            return;
+        }
+
+        // Add shadow indexes to table.
+        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
+            OlapTable table = getTableOrThrow();
+            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
+            watershedTxnId = getNextTransactionId();
+            watershedGtid = getNextGtid();
+            addShadowIndexToCatalog(table, watershedTxnId);
+        }
+
+        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
+        // transaction A begins between these operations. This is safe as long as A gets the tablet
+        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
+        // writes to it. All current import transactions do this (beginTransaction first), so even
+        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
+        // is just a convention not a requirement. If violated, transactions with IDs greater than
+        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
+        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
+        long nextTxnId = peekNextTransactionId();
+        if (nextTxnId != watershedTxnId + 1) {
+            throw new AlterCancelException(
+                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
+        }
+
+        if (span != null) {
+            span.setAttribute("watershedTxnId", this.watershedTxnId);
+            span.addEvent("setWaitingTxn");
+        }
+
+        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
+        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
+        persistStateChange(this, JobState.WAITING_TXN);
+
+        // The shadow tablets exist and the state change is durable, so runPendingJob cannot need the
+        // CreateReplicaTasks again. Release them rather than carry one task per shadow tablet (each
+        // holding a full TTabletSchema) for the hours the rewrite may run.
+        abandonCreateReplicaTasks();
+
+        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
+                watershedTxnId);
+    }
+
+    /**
+     * Build the shadow tablets' CreateReplicaTasks and dispatch them without waiting.
+     *
+     * @return true if tasks were dispatched and the job now has to wait for them, false when the
+     *         light-weight path turned tablet creation into a no-op and the job can go straight on
+     */
+    private boolean createShadowTablets() throws AlterCancelException {
         boolean enableTabletCreationOptimization = Config.lake_enable_tablet_creation_optimization;
         long numTablets = 0;
         AgentBatchTask batchTask = new AgentBatchTask();
@@ -456,7 +598,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                         .mapToLong(List::size).sum();
             }
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
-            createReplicaLatch = countDownLatch;
             long baseIndexMetaId = table.getBaseIndexMetaId();
             long gtid = getNextGtid();
             final WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
@@ -546,45 +687,19 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             throw new AlterCancelException(e.getMessage());
         }
 
-        if (!lightWeight) {
-            sendAgentTaskAndWait(batchTask, countDownLatch, Config.tablet_create_timeout_second * numTablets,
-                                 waitingCreatingReplica, isCancelling);
+        if (lightWeight) {
+            return false;
         }
 
-        // Add shadow indexes to table.
-        try (AutoCloseableLock ignore = new AutoCloseableLock(dbId, List.of(tableId), LockType.WRITE)) {
-            OlapTable table = getTableOrThrow();
-            Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            watershedTxnId = getNextTransactionId();
-            watershedGtid = getNextGtid();
-            addShadowIndexToCatalog(table, watershedTxnId);
-        }
-
-        // Getting the `watershedTxnId` and adding the shadow index are not atomic. It's possible a
-        // transaction A begins between these operations. This is safe as long as A gets the tablet
-        // list(with database lock) after beginTransaction(), so that it sees the shadow index and
-        // writes to it. All current import transactions do this (beginTransaction first), so even
-        // without checking the `nextTxnId` here it should be safe. However, beginTransaction() first
-        // is just a convention not a requirement. If violated, transactions with IDs greater than
-        // the `watershedTxnId` may ignore the shadow index. To avoid this, we ensure no new
-        // beginTransaction() succeeds between getting the `watershedTxnId` and adding the shadow index.
-        long nextTxnId = peekNextTransactionId();
-        if (nextTxnId != watershedTxnId + 1) {
-            throw new AlterCancelException(
-                    "concurrent transaction detected while adding shadow index, please re-run the alter table command");
-        }
-
-        if (span != null) {
-            span.setAttribute("watershedTxnId", this.watershedTxnId);
-            span.addEvent("setWaitingTxn");
-        }
-
-        // can't add addRollIndexToCatalog into the applier, because of the nextTxnId check.
-        // But addRollIndexToCatalog is idempotent, so it's ok to re-add if Leader transferred.
-        persistStateChange(this, JobState.WAITING_TXN);
-
-        LOG.info("transfer schema change job {} state to {}, watershed txn_id: {}", jobId, this.jobState,
-                watershedTxnId);
+        createReplicaLatch = countDownLatch;
+        createReplicaBatchTask = batchTask;
+        long timeoutSeconds = Math.min(Config.tablet_create_timeout_second * numTablets,
+                Config.max_create_table_timeout_second);
+        createReplicaDeadlineMs = System.currentTimeMillis() + 1000L * timeoutSeconds;
+        sendCreateReplicaTasks(batchTask);
+        LOG.info("Sent create shadow tablet tasks for schema change job {}, table {}, tablet num: {}, timeout: {}s",
+                jobId, tableName, numTablets, timeoutSeconds);
+        return true;
     }
 
     @Override
@@ -1284,25 +1399,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
     }
 
     @Override
-    public final boolean cancel(String errMsg, boolean force) {
-        // Pre-monitor work: signal the running thread to stop and release the
-        // createReplicaLatch (PENDING phase). Must happen OUTSIDE the synchronized
-        // block in super.cancel() — otherwise if run() currently holds the monitor
-        // while waiting on the latch, cancel would deadlock until task timeout.
-        // Applies to both the regular cancel path and the FORCE escape hatch.
-        isCancelling.set(true);
-        try {
-            if (waitingCreatingReplica.get()) {
-                Preconditions.checkState(createReplicaLatch != null);
-                createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
-            }
-            return super.cancel(errMsg, force);
-        } finally {
-            isCancelling.set(false);
-        }
-    }
-
-    @Override
     protected boolean cancelImpl(String errMsg) {
         return cancelImpl(errMsg, false);
     }
@@ -1348,6 +1444,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         if (schemaChangeBatchTask != null) {
             AgentTaskQueue.removeBatchTask(schemaChangeBatchTask, TTaskType.ALTER);
         }
+        abandonCreateReplicaTasks();
 
         this.errMsg = errMsg;
         this.finishedTimeMs = System.currentTimeMillis();

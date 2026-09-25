@@ -34,12 +34,18 @@ namespace {
 Status check_transport_descriptor(const GeoColumnDescriptor& descriptor) {
     const auto& type = descriptor.type;
     const auto& storage = descriptor.storage;
-    if (type.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY || type.coordinate_system != GEO_COORDINATE_SYSTEM_SPHERICAL ||
-        !GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) || type.edge_algorithm == GEO_EDGE_ALGORITHM_UNKNOWN ||
-        type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR || type.crs.empty() || type.crs.size() > 65536 ||
+    const bool geography = type.logical_type == GEO_LOGICAL_TYPE_GEOGRAPHY &&
+                           type.coordinate_system == GEO_COORDINATE_SYSTEM_SPHERICAL &&
+                           GeoEdgeAlgorithmPB_IsValid(type.edge_algorithm) &&
+                           type.edge_algorithm != GEO_EDGE_ALGORITHM_UNKNOWN &&
+                           type.edge_algorithm != GEO_EDGE_ALGORITHM_PLANAR;
+    const bool geometry = type.logical_type == GEO_LOGICAL_TYPE_GEOMETRY &&
+                          type.coordinate_system == GEO_COORDINATE_SYSTEM_CARTESIAN &&
+                          type.edge_algorithm == GEO_EDGE_ALGORITHM_PLANAR;
+    if ((!geography && !geometry) || type.crs.empty() || type.crs.size() > 65536 ||
         storage.encoding != GEO_ENCODING_WKB || !GeoDimensionPB_IsValid(storage.dimension) ||
         !GeoValidationStatePB_IsValid(storage.validation_state)) {
-        return Status::NotSupported("Unsupported GEOGRAPHY transport descriptor");
+        return Status::NotSupported("Unsupported GEO transport descriptor");
     }
     return Status::OK();
 }
@@ -305,7 +311,7 @@ StatusOr<uint8_t*> GeoColumn::serialize_column(uint8_t* dst) const {
     const auto bytes = _data->get_immutable_bytes();
     const auto& offsets = _data->get_offset();
     if (offsets.size() > UINT32_MAX || descriptor_size > 65536) {
-        return Status::NotSupported("GEOGRAPHY transport column exceeds format limits");
+        return Status::NotSupported("GEO transport column exceeds format limits");
     }
     // Version, descriptor length, WKB bytes length, offset count; all little endian.
     encode_fixed32_le(dst, 1);
@@ -328,26 +334,26 @@ StatusOr<uint8_t*> GeoColumn::serialize_column(uint8_t* dst) const {
 }
 
 StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const uint8_t* end) {
-    if (end - src < 16) return Status::Corruption("Truncated GEOGRAPHY transport header");
-    if (decode_fixed32_le(src) != 1) return Status::NotSupported("Unsupported GEOGRAPHY transport version");
+    if (end - src < 16) return Status::Corruption("Truncated GEO transport header");
+    if (decode_fixed32_le(src) != 1) return Status::NotSupported("Unsupported GEO transport version");
     const uint32_t descriptor_size = decode_fixed32_le(src + 4);
     const uint32_t bytes_size = decode_fixed32_le(src + 8);
     const uint32_t offset_count = decode_fixed32_le(src + 12);
     src += 16;
     const uint64_t total_size = uint64_t(descriptor_size) + bytes_size + uint64_t(offset_count) * sizeof(uint32_t);
     if (descriptor_size > 65536 || offset_count == 0 || total_size > static_cast<uint64_t>(end - src)) {
-        return Status::Corruption("Invalid GEOGRAPHY transport lengths");
+        return Status::Corruption("Invalid GEO transport lengths");
     }
     GeoColumnDescPB pb;
     if (!pb.ParseFromArray(src, descriptor_size) || !pb.has_type() || !pb.has_storage() ||
         !pb.unknown_fields().empty() || !pb.type().unknown_fields().empty() || !pb.storage().unknown_fields().empty()) {
-        return Status::Corruption("Invalid or unsupported GEOGRAPHY transport metadata");
+        return Status::Corruption("Invalid or unsupported GEO transport metadata");
     }
     auto descriptor = GeoColumnDescriptor::from_protobuf(pb);
     RETURN_IF_ERROR(check_transport_descriptor(descriptor));
     // The receiving plan owns semantic identity; only storage metadata comes from the wire.
     if (_descriptor.type != descriptor.type) {
-        return Status::Corruption("GEOGRAPHY transport descriptor does not match the receiving type");
+        return Status::Corruption("GEO transport descriptor does not match the receiving type");
     }
     const auto* bytes = src + descriptor_size;
     const auto* offsets = bytes + bytes_size;
@@ -365,11 +371,11 @@ StatusOr<const uint8_t*> GeoColumn::deserialize_column(const uint8_t* src, const
     for (uint32_t i = 0; i < offset_count; ++i) {
         const auto offset = decoded_offsets[i];
         if ((i == 0 && offset != 0) || offset < previous || offset > bytes_size) {
-            return Status::Corruption("Invalid GEOGRAPHY transport offsets");
+            return Status::Corruption("Invalid GEO transport offsets");
         }
         previous = offset;
     }
-    if (previous != bytes_size) return Status::Corruption("GEOGRAPHY transport offsets do not cover payload");
+    if (previous != bytes_size) return Status::Corruption("GEO transport offsets do not cover payload");
 
     // No payload allocation or destination mutation before all metadata/offset checks succeed.
     auto& data = _data->get_bytes();

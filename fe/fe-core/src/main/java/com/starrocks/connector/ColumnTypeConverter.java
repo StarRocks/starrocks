@@ -20,6 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.type.ArrayType;
+import com.starrocks.type.FileType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.MapType;
 import com.starrocks.type.NullType;
@@ -577,6 +578,10 @@ public class ColumnTypeConverter {
 
         public Type visit(org.apache.paimon.types.VariantType variantType) {
             return VariantType.VARIANT;
+        }
+
+        public Type visit(org.apache.paimon.types.BlobType blobType) {
+            return FileType.FILE;
         }
 
         public Type visit(org.apache.paimon.types.ArrayType arrayType) {

@@ -665,6 +665,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：Pipeline 执行引擎扫描线程池任务队列的最大队列长度。
 - 引入版本：-
 
+### case_when_selective_eval_ratio
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：控制 searched `CASE WHEN` 的每个 `THEN` 分支是否只在该分支实际拥有的行上求值，而不是在整个 chunk 上求值一遍再逐行挑选。仅在 `CASE` 返回复合类型（ARRAY/MAP/STRUCT）或 VARIANT 时生效，因为只有这些类型单行物化的代价才足以抵消把分支输入行压实成子 chunk 的拷贝开销。只有当 `owned_rows * case_when_selective_eval_ratio < chunk_rows`，即该分支拥有的行数少于 chunk 的 `1 / case_when_selective_eval_ratio` 时才会压实；超过阈值的分支仍在整个 chunk 上求值，因为此时压实输入的拷贝开销会超过省下的求值开销。设置为 `1` 表示只要分支不独占整个 chunk 就压实。设置为 `0` 或负数表示完全关闭该优化、回到原有行为，包括它带来的行为变更：当没有任何行选中某个 `THEN` 或 `ELSE` 时，即使它会报错也不再被求值。
+- 引入版本：-
+
 ### enable_lock_free_scan_task_queue
 
 - 默认值：true
@@ -1312,6 +1321,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 是否动态：是
 - 描述：启用后，load-channel Open 类型的 RPC（例如 PTabletWriterOpen）的处理会从 BRPC worker 转移到一个专用的线程池：请求处理器会创建一个 ChannelOpenTask 并将其提交到内部 `_async_rpc_pool`，而不是内联执行 `LoadChannelMgr::_open`。这样可以减少 BRPC 线程内的工作量和阻塞，并允许通过 `load_channel_rpc_thread_pool_num` 和 `load_channel_rpc_thread_pool_queue_size` 调整并发。如果线程池提交失败（池已满或已关闭），该请求会被取消并返回错误状态。该线程池会在 `LoadChannelMgr::close()` 时关闭，因此在启用该功能时需要考虑容量和生命周期，以避免请求被拒绝或处理延迟。
 - 引入版本：v3.5.0
+
+### enable_load_chunk_all_null_encoding
+
+- 默认值：true
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：该 BE 是否在导入的 tablet sink RPC（把数据按分桶路由到目标 tablet 所在 BE 的那一跳）上参与全 NULL 列的紧凑编码。开启后，接收端 BE 会在 tablet writer 的 open 响应中声明支持该编码；发送端 BE 看到声明后，对于整列都是 NULL 的列，只发送一个行数，而不再逐行发送 NULL 标记和偏移量。列数多、且大部分列没有数据的宽表收益最明显，这一跳的传输字节数和两端的序列化开销都会下降。只有收发两端都认可该编码时才会启用，因此混合版本集群和版本回退都会自动回落到原有格式。把发送端或接收端任意一侧的该配置设为 `false`，即可关闭经过该节点的导入的这项编码。该配置不支持动态修改：接收端要用它同时决定对外声明的能力和是否按发送端声明的方式解析数据，运行期改动会让这两个判断不一致。
+- 引入版本：v4.2.0
 
 ### load_channel_rpc_thread_pool_num
 

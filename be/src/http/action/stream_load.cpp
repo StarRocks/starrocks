@@ -311,6 +311,17 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         }
     }
 
+    if (http_req->header(HTTP_FORMAT_KEY).empty()) {
+        ctx->format = TFileFormatType::FORMAT_CSV_PLAIN;
+    } else {
+        ctx->format = parse_format(http_req->header(HTTP_FORMAT_KEY));
+        if (ctx->format == TFileFormatType::FORMAT_UNKNOWN) {
+            std::stringstream ss;
+            ss << "unknown data format, format=" << http_req->header(HTTP_FORMAT_KEY);
+            return Status::InternalError(ss.str());
+        }
+    }
+
     // check content length
     ctx->body_bytes = 0;
     size_t max_body_bytes = config::streaming_load_max_mb * 1024 * 1024;
@@ -328,6 +339,15 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         }
 
         if (ctx->format == TFileFormatType::FORMAT_JSON) {
+            size_t max_batch_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
+            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
+            if (!ignore_json_size && ctx->body_bytes > max_batch_bytes) {
+                std::stringstream ss;
+                ss << "The size of this batch exceed the max size [" << max_batch_bytes << "]  of json type data "
+                   << " data [ " << ctx->body_bytes
+                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
+                return Status::InternalError(ss.str());
+            }
             // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             ASSIGN_OR_RETURN(ctx->buffer,
@@ -341,29 +361,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
         evhttp_connection_set_max_body_size(evhttp_request_get_connection(http_req->get_evhttp_request()),
                                             max_body_bytes);
 #endif
-    }
-    // get format of this put
-    if (http_req->header(HTTP_FORMAT_KEY).empty()) {
-        ctx->format = TFileFormatType::FORMAT_CSV_PLAIN;
-    } else {
-        ctx->format = parse_format(http_req->header(HTTP_FORMAT_KEY));
-        if (ctx->format == TFileFormatType::FORMAT_UNKNOWN) {
-            std::stringstream ss;
-            ss << "unknown data format, format=" << http_req->header(HTTP_FORMAT_KEY);
-            return Status::InternalError(ss.str());
-        }
-
-        if (ctx->format == TFileFormatType::FORMAT_JSON) {
-            size_t max_body_bytes = config::streaming_load_max_batch_size_mb * 1024 * 1024;
-            auto ignore_json_size = boost::iequals(http_req->header(HTTP_IGNORE_JSON_SIZE), "true");
-            if (!ignore_json_size && ctx->body_bytes > max_body_bytes) {
-                std::stringstream ss;
-                ss << "The size of this batch exceed the max size [" << max_body_bytes << "]  of json type data "
-                   << " data [ " << ctx->body_bytes
-                   << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
-                return Status::InternalError(ss.str());
-            }
-        }
     }
 
     if (!http_req->header(HTTP_TIMEOUT).empty()) {

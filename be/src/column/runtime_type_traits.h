@@ -19,6 +19,7 @@
 #include "base/types/int256.h"
 #include "column/binary_column.h"
 #include "column/decimalv3_column.h"
+#include "column/file_column.h"
 #include "column/geo_column.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
@@ -89,6 +90,8 @@ template <>
 inline constexpr bool isArithmeticLT<TYPE_VARBINARY> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_VARIANT> = false;
+template <>
+inline constexpr bool isArithmeticLT<TYPE_FILE> = false;
 template <>
 inline constexpr bool isArithmeticLT<TYPE_GEOGRAPHY> = false;
 template <>
@@ -339,6 +342,12 @@ struct RunTimeTypeTraits<TYPE_STRUCT> {
     using CppType = DatumStruct;
     using ColumnType = StructColumn;
     using ImmContainerType = ColumnType::Container;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_FILE> {
+    using CppType = DatumStruct;
+    using ColumnType = FileColumn;
 };
 
 template <>
