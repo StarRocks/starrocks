@@ -57,7 +57,8 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
                 sumFileBytes(sourceTable.loadFileList()),
                 insertFromFilesContext.computeResource(),
                 insertFromFilesContext.wherePredicateSql(),
-                insertFromFilesContext.targetToSourceColumnNames());
+                insertFromFilesContext.targetToSourceColumnNames(),
+                insertFromFilesContext.targetToConstantSql());
     }
 
     /**
@@ -74,8 +75,8 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
         }
         List<String> idents = new ArrayList<>();
         for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
-            idents.addAll(filesProjectionIdents(
-                    spec.sortKey(), insertFromFilesContext.targetToSourceColumnNames()));
+            idents.addAll(filesProjections(spec.sortKey(), insertFromFilesContext.targetToSourceColumnNames(),
+                    insertFromFilesContext.targetToConstantSql()));
         }
         return idents;
     }

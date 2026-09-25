@@ -35,8 +35,8 @@ import java.util.Map;
  *
  * <p>Two shapes the data tier serves are declined here so the pipeline falls back to it: a WHERE
  * clause, because a footer describes every row in the file and no footer statistic can be narrowed
- * to the rows a predicate keeps; and a sort-key column the projection leaves unmapped, which no
- * file column backs.
+ * to the rows a predicate keeps; and a sort-key column no file column backs -- one the projection
+ * leaves unmapped, or one the SELECT feeds with a literal, which lives in no footer.
  */
 final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatisticsProvider {
 
@@ -88,7 +88,8 @@ final class InsertFromFilesRowGroupStatisticsProvider implements RowGroupStatist
         List<String> sourceNames = InsertSelectSourceColumns.lookup(sortKeyColumns, targetToSourceColumnNames);
         if (sourceNames == null) {
             throw new MetaTierUnavailableException(
-                    "a sort-key column has no FILES column mapping, so no footer statistic describes it");
+                    "a sort-key column has no FILES column behind it (unmapped, or fed by a literal), "
+                            + "so no footer statistic describes it");
         }
         List<Column> renamed = new ArrayList<>(sortKeyColumns.size());
         for (int i = 0; i < sortKeyColumns.size(); i++) {
