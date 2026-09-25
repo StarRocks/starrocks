@@ -1090,11 +1090,11 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_as_wkb"],
     [120080, "ST_X", False, False, "DOUBLE", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_x"],
-    [120090, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
+    [120081, "ST_Y", False, False, "DOUBLE", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_y"],
-    [120170, "ST_GeometryType", False, False, "VARCHAR", ["GEOGRAPHY"],
+    [120082, "ST_GeometryType", False, False, "VARCHAR", ["GEOGRAPHY"],
      "GeoFunctions::st_geography_type"],
-    [120180, "ST_Distance", False, False, "DOUBLE", ["GEOGRAPHY", "GEOGRAPHY"],
+    [120083, "ST_Distance", False, False, "DOUBLE", ["GEOGRAPHY", "GEOGRAPHY"],
      "GeoFunctions::st_geography_distance"],
 
     # percentile function
