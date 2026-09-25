@@ -70,8 +70,8 @@ void AddChunkProbe::settled_by(int64_t tablet_id) {
 
 std::string AddChunkProbe::describe(int64_t now_ns) const {
     std::ostringstream os;
-    os << "txn_id=" << _txn_id << " index_id=" << _index_id << " sender_id=" << _sender_id
-       << " eos=" << (_eos ? 1 : 0) << " running=" << (now_ns - _start_ns) / kNanosPerSec << "s"
+    os << "txn_id=" << _txn_id << " index_id=" << _index_id << " sender_id=" << _sender_id << " eos=" << (_eos ? 1 : 0)
+       << " running=" << (now_ns - _start_ns) / kNanosPerSec << "s"
        << " phase=" << _phase.load(std::memory_order_relaxed);
 
     if (const Latch* latch = _latch.load(std::memory_order_acquire); latch != nullptr) {
