@@ -1,0 +1,83 @@
+-- name: test_show_alter_optimize_predicates
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t2 (
+  k1 int,
+  v1 int
+) DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 2
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t1 DISTRIBUTED BY HASH(k1) BUCKETS 8;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t2 DISTRIBUTED BY HASH(k1) BUCKETS 4;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE", "TableName", "Operation", "State")
+-- result:
+t1	DISTRIBUTED BY HASH(`k1`) BUCKETS 8	FINISHED
+t2	DISTRIBUTED BY HASH(`k1`) BUCKETS 4	FINISHED
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Operation ASC", "TableName", "Operation")
+-- result:
+t2	DISTRIBUTED BY HASH(`k1`) BUCKETS 4
+t1	DISTRIBUTED BY HASH(`k1`) BUCKETS 8
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Operation DESC", "TableName", "Operation")
+-- result:
+t1	DISTRIBUTED BY HASH(`k1`) BUCKETS 8
+t2	DISTRIBUTED BY HASH(`k1`) BUCKETS 4
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Msg, JobId", "TableName", "State")
+-- result:
+t1	FINISHED
+t2	FINISHED
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Progress, JobId", "TableName", "State")
+-- result:
+t1	FINISHED
+t2	FINISHED
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY Timeout DESC, JobId", "TableName", "State")
+-- result:
+t1	FINISHED
+t2	FINISHED
+-- !result
+function: print_query_columns("SHOW ALTER TABLE OPTIMIZE ORDER BY State DESC, JobId DESC", "TableName", "State")
+-- result:
+t2	FINISHED
+t1	FINISHED
+-- !result
+SHOW ALTER TABLE OPTIMIZE ORDER BY SchemaVersion;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Title name[SchemaVersion] does not exist.')
+-- !result
+SHOW ALTER TABLE OPTIMIZE ORDER BY IndexName;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Title name[IndexName] does not exist.')
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
