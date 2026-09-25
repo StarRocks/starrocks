@@ -302,6 +302,10 @@ public:
     Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                           void (*deleter)(const CacheKey& key, void* value),
                           CachePriority priority = CachePriority::NORMAL);
+    // Like insert(), but never evicts: returns nullptr, leaving `value` owned by the caller,
+    // when the entry does not fit in the remaining capacity.
+    Cache::Handle* insert_no_evict(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
+                                   void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
     Cache::Handle* insert_if_absent(const CacheKey& key, uint32_t hash, void* value, size_t value_size,
                                     void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                                     CachePriority priority = CachePriority::NORMAL);
@@ -373,6 +377,9 @@ public:
     Handle* insert(const CacheKey& key, void* value, size_t value_size,
                    void (*deleter)(const CacheKey& key, void* value),
                    CachePriority priority = CachePriority::NORMAL) override;
+    // See LRUCache::insert_no_evict(). Capacity is checked against the key's shard.
+    Handle* insert_no_evict(const CacheKey& key, void* value, size_t value_size,
+                            void (*deleter)(const CacheKey& key, void* value), CachePriority priority);
     Handle* insert_if_absent(const CacheKey& key, void* value, size_t value_size,
                              void (*deleter)(const CacheKey& key, void* value), bool* inserted,
                              CachePriority priority = CachePriority::NORMAL) override;
