@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.Config;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -342,6 +343,21 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
                 new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
                         Map.of("other", "other"), /*wherePredicateSql=*/ null),
                 List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void literalFedSortKeyColumnFallsBackToDataTier() throws Exception {
+        // ORDER BY (dt, sort_key) with '20260917' AS dt: dt lives in no footer, so the meta tier
+        // cannot describe the key and must hand the load to the data tier, which projects the literal.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(new Column("dt", DateType.DATE), new Column("sort_key", IntegerType.BIGINT)),
                 Long.MAX_VALUE, /*seed=*/ 0L);
 
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));

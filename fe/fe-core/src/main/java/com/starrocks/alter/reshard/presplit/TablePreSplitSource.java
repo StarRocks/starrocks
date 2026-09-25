@@ -116,20 +116,22 @@ final class TablePreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target, resolvedSource.sourceTable(),
                 resolvedSource.normalizedName(), resolvedSource.sourceAlias(),
                 sortKeyColumns, partitionColumns, InsertSelectSourceColumns.SchemaPairing.EXACT);
-        if (targetToSource == null) {
+        if (resolved == null) {
             return null;
         }
+        Map<String, String> targetToSource = resolved.targetToSource();
         List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            // A rollup sort-key column with no source mapping (e.g. a range DUP rollup whose ORDER BY
-            // promotes a generated column) cannot be projected by source name -> skip pre-split for the
-            // whole load, using the same lookup gate as the base sort key above. The executor's
-            // mapToSource throw stays as the fail-safe for a metadata race between here and sampling.
-            if (InsertSelectSourceColumns.lookup(spec.sortKey(), targetToSource) == null) {
+            // A rollup sort-key column backed by neither a source column nor a literal (e.g. a range
+            // DUP rollup whose ORDER BY promotes a generated column), or a rollup key made only of
+            // literals, cannot be sampled -> skip pre-split for the whole load, using the same gate as
+            // the base sort key above. The executor's projections throw stays as the fail-safe for a
+            // metadata race between here and sampling.
+            if (!InsertSelectSourceColumns.sortKeySampleable(spec.sortKey(), resolved)) {
                 return null;
             }
         }
@@ -153,7 +155,8 @@ final class TablePreSplitSource implements InsertPreSplitSource {
                 resolvedSource.sourceTable(), resolvedSource.sourceFromSql(),
                 targetToSource,
                 wherePredicateSql, context.getCurrentComputeResource(),
-                estimates.totalBytes(), estimates.totalRows());
+                estimates.totalBytes(), estimates.totalRows(),
+                resolved.targetToConstantSql());
         long estimatedBytes = estimates.totalBytes();
         return new PreSplitFlow.Prepared(scanContext, sortKeyColumns, partitionColumns,
                 estimatedBytes, context.getCurrentComputeResource(), secondaryIndexSpecs);

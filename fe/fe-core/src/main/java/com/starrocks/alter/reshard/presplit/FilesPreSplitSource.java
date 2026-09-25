@@ -85,25 +85,27 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        Map<String, String> targetToSource = InsertSelectSourceColumns.resolve(
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
                 insertStmt, selectRelation, target, sourceTable,
                 filesRelation.getName(), /*sourceAlias*/ null, sortKeyColumns, partitionColumns,
                 InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
-        if (targetToSource == null) {
+        if (resolved == null) {
             return null;
         }
+        Map<String, String> targetToSource = resolved.targetToSource();
         List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
         for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            // A rollup sort-key column with no FILES column behind it cannot be projected by source
-            // name -> skip pre-split for the whole load, using the same lookup gate the base sort key
-            // already passed inside resolve(). Mirrors TablePreSplitSource.
-            if (InsertSelectSourceColumns.lookup(spec.sortKey(), targetToSource) == null) {
+            // A rollup sort-key column backed by neither a FILES column nor a literal, or a rollup key
+            // made only of literals, cannot be sampled -> skip pre-split for the whole load, using the
+            // same gate the base sort key already passed inside resolve(). Mirrors TablePreSplitSource.
+            if (!InsertSelectSourceColumns.sortKeySampleable(spec.sortKey(), resolved)) {
                 return null;
             }
         }
         InsertFromFilesScanContext scanContext =
                 new InsertFromFilesScanContext(sourceTable, context.getCurrentComputeResource(),
-                        context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql);
+                        context.getSessionVariable().getTimeZone(), targetToSource, wherePredicateSql,
+                        resolved.targetToConstantSql());
         // Deliberately the WHOLE file byte total even when a predicate narrows the load: FILES()
         // exposes no row count, so the data tier has no denominator to turn its observed hit ratio
         // into a filtered size the way the table path does. Sizing from the full input can only

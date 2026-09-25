@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
@@ -183,6 +184,58 @@ class InsertFromTableSampleSubqueryExecutorTest {
         Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(0).getStringValue());
         Assertions.assertEquals(1, rows.get(0).partitionSourceTuple().size());
         Assertions.assertEquals("20", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void projectsALiteralFedPartitionColumnAsTheLiteralCastToTheColumnType() throws Exception {
+        // INSERT INTO t SELECT k, v, '20260917' AS dt FROM src: no source column backs dt, so the
+        // sample projects the literal, cast the way the load casts it, and decodes the DATE the
+        // load routes on into the partition tuple.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"10\", \"2026-09-17\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(bigintColumn("k")), List.of(new Column("dt", DateType.DATE)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `k`, CAST('20260917' AS date) FROM"),
+                "the literal stands in for the partition column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("2026-09-17", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void literalFedSortKeyColumnIsProjectedAndDecodedIntoTheSortKeyTuple() throws Exception {
+        // ORDER BY (dt, k) with '20260917' AS dt: the boundary tuple must carry the DATE the rows have.
+        OlapTable sourceTable = mockOlapTable(0L);
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromTableSampleSubqueryExecutor executor = new InsertFromTableSampleSubqueryExecutor(
+                (sql, computeResource, ignoredTimeout) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", \"10\"]}"));
+                });
+        InsertFromTableScanContext scanContext = new InsertFromTableScanContext(
+                sourceTable, "`db`.`src`", Map.of("k", "k"), /*where=*/ null, Mockito.mock(ComputeResource.class),
+                /*sourceTotalBytes=*/ 0L, /*sourceTotalRows=*/ 0L, Map.of("dt", "'20260917'"));
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                scanContext, List.of(new Column("dt", DateType.DATE), bigintColumn("k")), List.of(),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT CAST('20260917' AS date), `k` FROM"),
+                "the literal stands in for the sort-key column: " + capturedSql);
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals("2026-09-17", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("10", rows.get(0).sortKeyTuple().get(1).getStringValue());
     }
 
     // ---------------------------------------------------------------------------

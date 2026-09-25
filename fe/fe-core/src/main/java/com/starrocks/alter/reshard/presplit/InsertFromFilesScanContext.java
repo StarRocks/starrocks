@@ -40,6 +40,11 @@ import java.util.Objects;
  * from the same physical column the load writes. An EMPTY map means the projection is
  * name-identity and every consumer may project a target column by its own name.
  *
+ * <p>{@code targetToConstantSql} maps each target column the SELECT feeds with a literal
+ * (lower-cased target name) to the literal's SQL. No file column backs such a column: the data tier
+ * projects the literal itself, and the meta tier -- which reads only file footers -- declines a sort
+ * key that contains one, so the pipeline falls back to the data tier.
+ *
  * <p>{@code wherePredicateSql} is the statement's WHERE clause rendered back to SQL, or
  * {@code null}. The data tier copies it into its sampling sub-query; the meta tier cannot apply a
  * predicate to a footer at all and declines the request when one is present.
@@ -49,12 +54,21 @@ public record InsertFromFilesScanContext(
         ComputeResource computeResource,
         String loadTimeZone,
         Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> FILES column name
-        String wherePredicateSql) implements ScanContext {                              // nullable
+        String wherePredicateSql,                        // nullable
+        Map<String, String> targetToConstantSql) implements ScanContext {
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(computeResource, "computeResource");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
+        Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+    }
+
+    /** Every key column is backed by a FILES column. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone,
+            Map<String, String> targetToSourceColumnNames, String wherePredicateSql) {
+        this(sourceTable, computeResource, loadTimeZone, targetToSourceColumnNames, wherePredicateSql, Map.of());
     }
 
     /** A name-identity projection with no predicate -- the original bare {@code SELECT *} shape. */
