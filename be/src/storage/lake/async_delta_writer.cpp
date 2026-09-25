@@ -178,9 +178,15 @@ public:
     // is running but cancels the ones still queued, so a task that never runs has to answer for
     // the callback itself. Dropping it silently parks that closure forever, its connection is
     // never recycled, and the BE cannot finish brpc's Server::Join() on exit.
-    ~MergeBlockTask() override { fail(Status::Cancelled("load spill block merge task was dropped")); }
+    //
+    // Report through closed_status(), not a status of our own: on the cancel path
+    // TabletsChannel::cancel() has already recorded the reason the coordinator sent -- the error
+    // that actually ended the load -- before abort() closes the writers and gets us here.
+    // WriteContext::update_status() is first-wins, so answering with a status of our own would put
+    // this derived message in the response and hide that reason.
+    ~MergeBlockTask() override { fail(_async_writer->closed_status("load spill block merge task was dropped")); }
 
-    void cancel() override { fail(Status::Cancelled("load spill block merge task was cancelled")); }
+    void cancel() override { fail(_async_writer->closed_status("load spill block merge task was cancelled")); }
 
     void run() override {
         if (!_claim()) {
