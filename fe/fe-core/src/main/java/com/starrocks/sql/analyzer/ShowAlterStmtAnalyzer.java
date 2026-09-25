@@ -29,6 +29,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.RollupProcDir;
@@ -139,14 +140,19 @@ public class ShowAlterStmtAnalyzer {
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
                     try {
-                        // Resolve against the columns the statement will actually return. Rollup
-                        // and materialized view rows come from RollupProcDir, whose layout parts
-                        // company with SchemaChangeProcDir's at the fourth column -- State is 8
-                        // there and 9 here -- so resolving everything against one list sorts by
-                        // the wrong column.
-                        index = isRollupLayout()
-                                ? RollupProcDir.analyzeColumn(rollupColumnName(slotRef.getColumnName()))
-                                : SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        // Resolve against the columns the statement will actually return. The three
+                        // layouts part company early -- State is index 9 for a schema change, 8 for
+                        // a rollup and 6 for an optimize -- so resolving everything against one of
+                        // them sorts by whatever sits at that position in the others. The branches
+                        // here match the ones handleShowAlterTable uses to pick the proc path, and
+                        // the ones ShowResultMetaFactory uses to pick the column names.
+                        if (isRollupLayout()) {
+                            index = RollupProcDir.analyzeColumn(rollupColumnName(slotRef.getColumnName()));
+                        } else if (alterType == ShowAlterStmt.AlterType.OPTIMIZE) {
+                            index = OptimizeProcDir.analyzeColumn(slotRef.getColumnName());
+                        } else {
+                            index = SchemaChangeProcDir.analyzeColumn(slotRef.getColumnName());
+                        }
                     } catch (AnalysisException e) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                     }
