@@ -84,16 +84,35 @@ public class ProcUtils {
             Collections.sort(selected, new ListComparator<>(orderByPairs.toArray(orderByPairArr)));
         }
 
-        if (limitElement != null && limitElement.hasLimit()) {
-            int beginIndex = (int) limitElement.getOffset();
-            int endIndex = (int) (beginIndex + limitElement.getLimit());
-            if (endIndex > selected.size()) {
-                endIndex = selected.size();
-            }
-            selected = selected.subList(beginIndex, endIndex);
-        }
+        selected = applyLimit(selected, limitElement);
 
         return toProcResult(titleNames, selected);
+    }
+
+    /**
+     * Narrow rows that have already been filtered and ordered to the statement's LIMIT.
+     *
+     * An offset past the end answers with no rows, the way MySQL does. Clamping only the end does
+     * not manage that: LIMIT 10, 1 over three rows leaves subList(10, 3), and subListRangeCheck
+     * rejects fromIndex > toIndex with IllegalArgumentException. Over no rows it is the same,
+     * which is what SHOW ALTER TABLE COLUMN LIMIT 10, 1 usually has. An offset exactly equal to
+     * the size is already fine -- subList(3, 3) is empty -- so the break starts one past it.
+     *
+     * The arithmetic stays in long until the end because that is how LimitElement declares both
+     * values, and truncating to int goes wrong in two different directions. At 2^31 the cast is
+     * negative and subList rejects it; at 2^32 it is zero, which is a valid index, so the
+     * statement answers with the first rows of the list instead of none. That one is the reason
+     * to care: it is wrong rather than loud.
+     */
+    public static <T> List<T> applyLimit(List<T> rows, LimitElement limitElement) {
+        if (limitElement == null || !limitElement.hasLimit()) {
+            return rows;
+        }
+        long size = rows.size();
+        long begin = Math.min(Math.max(limitElement.getOffset(), 0), size);
+        long limit = Math.max(limitElement.getLimit(), 0);
+        long end = limit >= size - begin ? size : begin + limit;
+        return rows.subList((int) begin, (int) end);
     }
 
     /**
