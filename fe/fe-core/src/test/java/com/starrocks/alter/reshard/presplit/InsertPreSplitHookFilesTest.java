@@ -53,7 +53,6 @@ import java.util.List;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.mockConnectContextWithSessionPreSplit;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -62,6 +61,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 /**
@@ -169,16 +169,100 @@ public class InsertPreSplitHookFilesTest {
     }
 
     @Test
-    public void skipsFilesInsertWithProperties() throws Exception {
-        // INSERT PROPERTIES(strict_mode=true) ... SELECT * FROM FILES(...) — load
-        // properties are validated only after this hook, so skip conservatively.
-        // Source-agnostic pre-filter: passesCommonPreFilters runs before source
-        // selection, so this is parity coverage, not a FILES-isolating gate test.
-        InsertStmt stmt = simpleFilesInsertStmt();
-        when(stmt.getProperties()).thenReturn(java.util.Map.of("strict_mode", "true"));
+    public void filesInsertByNameWithLoadPropertiesReachesTheCoordinator() {
+        // The shape this path exists for:
+        //
+        //     INSERT INTO t BY NAME
+        //     PROPERTIES("strict_mode" = "true", "max_filter_ratio" = "0.1")
+        //     SELECT * FROM FILES("path" = "s3://...", "format" = "parquet", ...)
+        //
+        // BY NAME pairs each FILES column with the target column of the same name, which is also
+        // how the sampler reads the source, so the schema-alignment gate does not apply. The
+        // PROPERTIES clause used to stop the statement dead in passesCommonPreFilters; that gate is
+        // gone, because no INSERT load property can move a row to a different tablet. A third key
+        // the gate rejected outright (enable_push_down_schema) rides along to pin that down. Every
+        // other gate is wired eligible, so the properties gate is the SOLE barrier -- reinstating
+        // it makes this test fail.
+        ConnectContext context = mockConnectContextWithSessionPreSplit(true);
+        when(context.isBypassAuthorizerCheck()).thenReturn(true);
+        when(context.getCurrentComputeResource()).thenReturn(mock(ComputeResource.class));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        OlapTable target = mock(OlapTable.class);
+        when(target.getName()).thenReturn("abt_test");
+        when(target.isCloudNativeTableOrMaterializedView()).thenReturn(true);
+        when(target.isRangeDistribution()).thenReturn(true);
+        when(target.getState()).thenReturn(OlapTable.OlapTableState.NORMAL);
+        when(target.getVisibleIndexMetas())
+                .thenReturn(List.of(mock(com.starrocks.catalog.MaterializedIndexMeta.class)));
+        com.starrocks.catalog.PartitionInfo partitionInfo = mock(com.starrocks.catalog.PartitionInfo.class);
+        when(partitionInfo.isPartitioned()).thenReturn(false);
+        when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
+        when(target.getPartitionInfo()).thenReturn(partitionInfo);
+        // BY NAME pairs FILES columns with the target's written columns, so the target must list its
+        // sort key too; an empty base schema leaves the sort key unpaired and the statement declined.
+        when(target.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(bigintColumn("k")));
+
+        FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
+        TableFunctionTable filesTable = mock(TableFunctionTable.class);
+        when(filesTable.loadFileList()).thenReturn(List.of());
+        // The inferred FILES() schema must carry the sort key: the sampler projects it by name, so a
+        // schema without it leaves nothing to sample and the statement is declined before the coordinator.
+        // Stub both views of it -- the column pairing reads the visible schema, the key guard the full one.
+        when(filesTable.getFullSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k")));
+        when(filesRelation.getTable()).thenReturn(filesTable);
+        InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
+        when(stmt.isColumnMatchByName()).thenReturn(true);
+        when(stmt.getTableRef()).thenReturn(mock(TableRef.class));
+        when(stmt.getProperties()).thenReturn(java.util.Map.of(
+                "strict_mode", "true", "max_filter_ratio", "0.1", "enable_push_down_schema", "true"));
+
+        Database database = mock(Database.class);
+        when(database.getFullName()).thenReturn("target_db");
+
+        try (MockedStatic<com.starrocks.alter.reshard.TabletReshardUtils> reshardUtils =
+                     PresplitTestSupport.stubComputeNodeCount(1);
+                MockedStatic<com.starrocks.server.GlobalStateMgr> globalStateMgr =
+                        Mockito.mockStatic(com.starrocks.server.GlobalStateMgr.class);
+                MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedStatic<com.starrocks.sql.common.MetaUtils> metaUtils =
+                        Mockito.mockStatic(com.starrocks.sql.common.MetaUtils.class);
+                MockedStatic<PreSplitTargets> targets = Mockito.mockStatic(PreSplitTargets.class);
+                MockedStatic<DefaultPreSplitPipeline> pipelineStatic =
+                        Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                MockedStatic<TabletPreSplitCoordinator> coordinator =
+                        Mockito.mockStatic(TabletPreSplitCoordinator.class);
+                org.mockito.MockedConstruction<com.starrocks.sql.analyzer.QueryAnalyzer> ignoredAnalyzer =
+                        Mockito.mockConstruction(com.starrocks.sql.analyzer.QueryAnalyzer.class)) {
+            com.starrocks.server.GlobalStateMgr globalState = mock(com.starrocks.server.GlobalStateMgr.class);
+            com.starrocks.server.MetadataMgr metadataMgr = mock(com.starrocks.server.MetadataMgr.class);
+            when(globalState.getMetadataMgr()).thenReturn(metadataMgr);
+            globalStateMgr.when(com.starrocks.server.GlobalStateMgr::getCurrentState).thenReturn(globalState);
+            when(metadataMgr.getDb(any(), any(), eq("target_db"))).thenReturn(database);
+
+            TableRef normalizedRef = mock(TableRef.class);
+            when(normalizedRef.getCatalogName()).thenReturn("default_catalog");
+            when(normalizedRef.getDbName()).thenReturn("target_db");
+            analyzerUtils.when(() -> AnalyzerUtils.normalizedTableRef(any(), any())).thenReturn(normalizedRef);
+
+            metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getSessionAwareTable(any(), eq(database), any()))
+                    .thenReturn(target);
+            metaUtils.when(() -> com.starrocks.sql.common.MetaUtils.getRangeDistributionColumns(target))
+                    .thenReturn(List.of(bigintColumn("k")));
+
+            targets.when(() -> PreSplitTargets.findEligibleTarget(database, target))
+                    .thenReturn(new PreSplitTargets.EligibleTarget(database, target, /*partitionId*/ 11L,
+                            List.of(new IndexPreSplitTarget(/*indexMetaId*/ 1L, /*oldTabletId*/ 22L,
+                                    List.of(bigintColumn("k"))))));
+            pipelineStatic.when(() -> DefaultPreSplitPipeline.forLoadKind(
+                    any(), any(), any(), anyLong(), any(), any()))
+                    .thenReturn(mock(DefaultPreSplitPipeline.class));
+
+            InsertPreSplitHook.maybeRunPreSplit(stmt, context);
+
+            coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), times(1));
+        }
     }
 
     @Test
@@ -209,11 +293,14 @@ public class InsertPreSplitHookFilesTest {
         when(partitionInfo.isPartitioned()).thenReturn(false);
         when(partitionInfo.getPartitionColumns(any())).thenReturn(List.of());
         when(mv.getPartitionInfo()).thenReturn(partitionInfo);
+        when(mv.getBaseSchemaWithoutGeneratedColumn()).thenReturn(List.of(bigintColumn("k")));
 
-        // FILES INSERT shape with by-name mapping so prepare skips schema alignment.
+        // FILES INSERT shape with by-name mapping over a file whose only column IS the sort key,
+        // so the column mapping resolves and prepare() would hand back a Prepared bundle.
         FileTableFunctionRelation filesRelation = mock(FileTableFunctionRelation.class);
         TableFunctionTable filesTable = mock(TableFunctionTable.class);
         when(filesTable.loadFileList()).thenReturn(List.of());
+        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(bigintColumn("k")));
         when(filesRelation.getTable()).thenReturn(filesTable);
         InsertStmt stmt = insertStmtWithQueryRelation(bareStarSelectRelationOver(filesRelation));
         when(stmt.isColumnMatchByName()).thenReturn(true);
@@ -359,27 +446,33 @@ public class InsertPreSplitHookFilesTest {
     }
 
     @Test
-    public void testExpressionProjectionShortCircuits() throws Exception {
-        // INSERT INTO t SELECT col + 1 FROM FILES(...) — expression projection
-        // changes the inserted values; the sampler reads source columns
-        // verbatim and would observe different values than the load writes.
+    public void testExpressionProjectionIsAdmitted() {
+        // INSERT INTO t SELECT upper(v) FROM FILES(...) — an expression over a non-key column is
+        // admitted at the shape gate; InsertSelectSourceColumns then leaves that output out of the
+        // target->FILES map, and prepare() declines only if a SORT KEY ends up unmapped.
         SelectListItem exprItem = mock(SelectListItem.class);
         when(exprItem.isStar()).thenReturn(false);
 
-        InsertStmt stmt = insertStmtWithQueryRelation(
-                filesSelectRelationWithSelectList(selectListOf(exprItem)));
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        SelectRelation selectRelation = filesSelectRelationWithSelectList(selectListOf(exprItem));
+        assertTrue(InsertPreSplitHook.hasSupportedProjectionShape(selectRelation));
+        assertTrue(new FilesPreSplitSource().matches(mock(InsertStmt.class), selectRelation));
     }
 
     @Test
-    public void testMultipleSelectItemsShortCircuits() throws Exception {
-        // INSERT INTO t SELECT a, b FROM FILES(...) — even when each item is
-        // a plain column, naming a subset of FILES' columns produces a
-        // different inserted row shape than a bare `SELECT *`.
+    public void testExplicitColumnListIsAdmitted() {
+        // INSERT INTO t SELECT a, b FROM FILES(...) — an explicit list without stars is the shape
+        // the INSERT-from-table path has always accepted; the FILES path now maps it the same way.
         SelectList twoColumnSelectList = selectListOf(mock(SelectListItem.class), mock(SelectListItem.class));
 
-        InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(twoColumnSelectList));
+        SelectRelation selectRelation = filesSelectRelationWithSelectList(twoColumnSelectList);
+        assertTrue(InsertPreSplitHook.hasSupportedProjectionShape(selectRelation));
+        assertTrue(new FilesPreSplitSource().matches(mock(InsertStmt.class), selectRelation));
+    }
+
+    @Test
+    public void testEmptySelectListShortCircuits() throws Exception {
+        // Defensive: a projection with no items maps nothing, so there is no sort key to sample.
+        InsertStmt stmt = insertStmtWithQueryRelation(filesSelectRelationWithSelectList(selectListOf()));
         assertHookDoesNotDelegate(() ->
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
@@ -430,15 +523,16 @@ public class InsertPreSplitHookFilesTest {
     }
 
     @Test
-    public void testWhereClauseShortCircuits() throws Exception {
-        // INSERT INTO t SELECT * FROM FILES(...) WHERE x > 10 — the sampler
-        // ignores the predicate, so it would observe rows the load filters out.
+    public void testWhereClauseIsAdmitted() {
+        // INSERT INTO t SELECT * FROM FILES(...) WHERE dt >= '2026-01-01' — the sampler copies the
+        // predicate into its own sub-query (SamplingPredicateGate decides whether it may), so the
+        // sampled row set is the loaded one. Only the meta tier, which cannot filter a footer,
+        // declines.
         SelectRelation selectRelation = bareStarSelectRelationOver(mock(FileTableFunctionRelation.class));
         when(selectRelation.hasWhereClause()).thenReturn(true);
 
-        InsertStmt stmt = insertStmtWithQueryRelation(selectRelation);
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+        assertTrue(InsertPreSplitHook.hasSupportedProjectionShape(selectRelation));
+        assertTrue(new FilesPreSplitSource().matches(mock(InsertStmt.class), selectRelation));
     }
 
     @Test
@@ -521,74 +615,6 @@ public class InsertPreSplitHookFilesTest {
                 InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
     }
 
-    @Test
-    public void testSchemasAlignWhenByPositionNamesMatch() {
-        InsertStmt stmt = byPositionInsertStmt();
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("k", "v");
-
-        assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
-    @Test
-    public void testSchemasMisalignedWhenByPositionNamesDifferAtOrdinal() {
-        // Target is (k, v) but FILES is (v, k). The load writes file column v
-        // into target column k while the sampler reads file column k by name.
-        InsertStmt stmt = byPositionInsertStmt();
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
-
-        assertFalse(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
-    @Test
-    public void testSchemasMisalignedWhenArityDiffers() {
-        InsertStmt stmt = byPositionInsertStmt();
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("k", "v", "extra");
-
-        assertFalse(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
-    @Test
-    public void testSchemasAlignWhenByNameMappingEvenWithReorderedSource() {
-        // By-name mapping pairs target column k with FILES column k regardless of
-        // position, so the by-name sampler read matches what the load writes.
-        InsertStmt stmt = mock(InsertStmt.class);
-        when(stmt.isColumnMatchByName()).thenReturn(true);
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("v", "k");
-
-        assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
-    @Test
-    public void testSchemasAlignWithPartialColumnListMatchingFiles() {
-        // INSERT INTO t (k) SELECT * FROM FILES(...): target is (k, v) but the parquet
-        // has only column k. The effective target columns are the list (k), which
-        // aligns by position-name with the FILES schema (k).
-        InsertStmt stmt = byPositionInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("k"));
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("k");
-
-        assertTrue(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
-    @Test
-    public void testSchemasMisalignedWhenColumnListOrderDiffersFromFiles() {
-        // INSERT INTO t (v, k) SELECT * FROM FILES(k, v): by position the load writes
-        // FILES column k into target v and FILES column v into target k, so the
-        // effective target names (v, k) disagree with the FILES names (k, v) at every
-        // ordinal — the by-name sampler would read the wrong column.
-        InsertStmt stmt = byPositionInsertStmt();
-        when(stmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
-        OlapTable target = olapTableWithColumns("k", "v");
-        TableFunctionTable source = tableFunctionTableWithColumns("k", "v");
-
-        assertFalse(FilesPreSplitSource.schemasAlignForByPositionInsert(stmt, target, source));
-    }
-
     private static InsertStmt byPositionInsertStmt() {
         InsertStmt stmt = mock(InsertStmt.class);
         when(stmt.isColumnMatchByName()).thenReturn(false);
@@ -601,13 +627,6 @@ public class InsertPreSplitHookFilesTest {
         List<Column> columns = columnsNamed(columnNames);
         OlapTable table = mock(OlapTable.class);
         when(table.getBaseSchemaWithoutGeneratedColumn()).thenReturn(columns);
-        return table;
-    }
-
-    private static TableFunctionTable tableFunctionTableWithColumns(String... columnNames) {
-        List<Column> columns = columnsNamed(columnNames);
-        TableFunctionTable table = mock(TableFunctionTable.class);
-        when(table.getFullSchema()).thenReturn(columns);
         return table;
     }
 

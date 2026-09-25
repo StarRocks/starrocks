@@ -177,6 +177,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于授权 Azure Data Lake Storage Gen2 请求的托管标识的租户 ID。
 - 引入版本: v3.4.4
 
+### `azure_adls2_oauth2_token_file`
+
+- 默认值：空字符串
+- 类型：String
+- 单位：-
+- 是否动态：否
+- 描述：创建内置 ADLS2 存储卷时，为 Workload Identity 认证指定的联合令牌文件路径。需同时配置 `azure_adls2_oauth2_tenant_id` 和 `azure_adls2_oauth2_client_id`，并将 `azure_adls2_oauth2_use_managed_identity` 保持为 `false`。请在所有 FE 和 CN 上将文件挂载到相同的可读路径。空字符串表示不使用令牌文件认证。修改后需重启 FE。
+
 ### `azure_adls2_oauth2_use_managed_identity`
 
 - 默认值: false
@@ -374,6 +382,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: No
 - 描述: 是否使用绑定到 Compute Engine 的服务账户。
 - 引入版本: v3.5.1
+
+### `group_provider`
+
+- 默认值: 空
+- 类型: String[]
+- 单位: -
+- 是否可变: Yes
+- 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
+- 引入版本: v3.5
 
 ### `hdfs_file_system_expire_seconds`
 
@@ -651,6 +668,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: Colocate Group 抽样的密度保护阈值，以允许的最大空采样百分比表示。如果某个被抽中的 Tablet 在候选 Compute Node 上没有副本（尚未放置，或不在该 Compute Node 上），则该次采样为空采样。当空采样占比超过该百分比时，说明该 Group 放置过于稀疏，抽样结果无法代表其真实分布（Group 正在从空状态批量填充时即为此种情况），调度器会丢弃本次抽样并回退到全量扫描。换言之，只有当至少 (100 - 该值)% 的抽样 Tablet 已放置在候选 Compute Node 上时，抽样结果才被采信，因此该值越小越保守，要求 Group 更稠密才允许抽样。稳定且已完全放置的 Group 空采样比例接近 0%，无论该值为多少都会走抽样快路径，因此该配置项只影响批量填充的过渡阶段。设置为 `100` 表示永不回退。该配置项仅在 `lake_scheduler_enable_colocate_group_sample` 设置为 `true` 时生效。
 - 引入版本: v4.1.5
 
+### `lake_enable_incremental_shard_replica_journal`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：StarMgr 是否将仅涉及副本的 Tablet 变更以副本增量的形式记入元数据日志，而非记录完整的 Tablet 快照。否则，新增、删除或变更单个副本都会重新序列化整条 Tablet 元数据，包括文件路径、存储凭证、属性以及全部副本，其中约 95% 的内容描述的是任何副本操作都不会改变的状态。在 Tablet 调度频繁的集群中，这些快照会成为元数据日志的主要来源。所有提供该配置项的 FE 在回放时都能识别该增量日志条目，该配置项仅约束写入方。因此，应先部署提供该配置项的版本并保持其为 `false`，使集群具备回放该条目的能力，之后再将其设置为 `true`。当集群中仍有 FE 运行较早版本时，请勿启用：此类 FE 会跳过所有副本更新（而非单条），并在不报错的情况下将由此产生的元数据分歧写入自身的 Checkpoint。如需回退，请先将该项设置为 `false`，强制触发一次元数据 Checkpoint 以使镜像吸收已写入的日志条目，然后再降级版本，因为将该项设置为 `false` 并不会撤销日志中已有的条目。仅 Leader FE 上的取值生效。运行时修改是安全的，因为同时包含两种条目的日志可以被正确回放。
+- 引入版本：v4.2.0
+
+### `lake_enable_worker_shard_reverse_index`
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：否
+- 描述：StarMgr 是否维护 Compute Node 到 Tablet 的反向索引。否则，重新调度已重启 Compute Node 上的 Tablet，以及校验 Compute Node 每次心跳上报的副本，都需要扫描完整的 Tablet 映射并逐个判断该 Tablet 在该 Compute Node 上是否存在副本，对每个 Compute Node 的开销与集群 Tablet 总数成正比。启用该索引后，开销仅与该 Compute Node 自身的 Tablet 数量相关。该索引属于派生状态：在加载元数据镜像时根据 Tablet 映射重建，此后在同一把锁的保护下维护；当该项为 `false` 时既不构建也不占用内存，因此保持关闭不会带来额外开销。StarMgr 仅在加载元数据镜像时读取该项一次，因此修改后需重启 FE 才会生效。
+- 引入版本：v4.2.0
+
 ### `lake_online_rewrite_partition_retry_timeout_second`
 
 - 默认值: 600
@@ -716,6 +751,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
 - 引入版本: v3.2.0
+
+### `lake_publish_version_retry_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离（lake）模式下，PublishVersionDaemon 重试上次发布失败的分区之前的最小间隔。单事务发布路径和批量发布路径均适用。只有真正失败的分区才会等待：首次尝试即成功发布的分区不会被延迟，仅在等待前序版本可见的分区不算作失败。增大该值可以降低发布持续失败时 leader 和对象存储的负载，但问题恢复后的追赶速度也会变慢。设置为 `0` 表示每个守护线程周期都重试，即退避机制引入之前的行为。负值按 `0` 处理。
+- 引入版本: v4.1
 
 ### `lake_enable_batch_publish_version`
 
@@ -865,6 +909,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于 StarRocks 集群内部身份验证的令牌。如果未指定此参数，StarRocks 会在集群 Leader FE 首次启动时为集群生成一个随机令牌。
 - 引入版本: -
 
+### `authentication_failure_cache_capacity`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `authentication_failure_cache_ttl_second` 最多记住多少条被拒绝的凭据。用于限制一个客户端（或一个不断更换用户名的攻击者）能占用的内存，超出后按最早写入的顺序淘汰。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
+- 引入版本: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串
@@ -900,6 +971,42 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
 
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 socket 读超时。参见 `authentication_ldap_simple_conn_timeout_ms`。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 TCP 连接超时。不设置时会退回到操作系统的 TCP 超时，目录不可达时可能把处理请求的线程占住几分钟——security integration 现在也为 HTTP、Arrow Flight 和 BE→FE 的导入 RPC 做认证，占住的就是这些通道的工作线程。需要认证快速失败时可以调小。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_group_source`
+
+- 默认值: group_provider
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 经 LDAP 认证的用户，其用户组从哪里来的集群级默认值。取值：`group_provider`（只使用已配置的 Group Provider，与低版本行为一致）、`memberof`（只使用用户自身 LDAP 条目上的组成员属性）、`both`（两者取并集）。Security Integration 上的同名属性会覆盖该值。非法取值按 `group_provider` 处理并打印 ERROR 日志，避免一处笔误导致所有 LDAP 用户无法登录。
+- 引入版本: v4.2
+
+### `authentication_ldap_simple_memberof_attr`
+
+- 默认值: memberOf
+- 类型: String
+- 单位: -
+- 是否可变: Yes
+- 描述: 用户条目上承载组成员关系的属性名的集群级默认值，在 `authentication_ldap_simple_group_source` 取 `memberof` 或 `both` 时使用。`memberOf` 适用于 Active Directory 以及安装了 `memberof` overlay 的 OpenLDAP；Oracle Directory Server 与 389 Directory Server 使用 `isMemberOf`。Security Integration 上的同名属性会覆盖该值。
+- 引入版本: v4.2
+
 ### `authentication_ldap_simple_server_host`
 
 - 默认值: 空字符串
@@ -924,7 +1031,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: String
 - 单位: -
 - 是否可变: Yes
-- 描述: 在 LDAP 对象中标识用户的属性名称。
+- 描述: 用户条目上承载登录名的属性名，用于拼接搜索绑定模式的过滤器。`uid` 适用于 OpenLDAP；Active Directory 上请设为 `sAMAccountName`，因为 AD 条目的 RDN 是显示名，而它的 `uid` 除非管理员填过否则为空。这个选择同时排除了 `authentication_ldap_simple_bind_dn_pattern`——详见 [Security Integration](../../user_privs/authentication/security_integration.md) 里的同名属性。
 - 引入版本: -
 
 ### `backup_clean_check_interval_seconds`

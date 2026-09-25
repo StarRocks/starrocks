@@ -1,29 +1,33 @@
 ---
 displayed_sidebar: docs
-description: "If point is of a valid Point type, return the corresponding Y-coordinate value."
+description: "Returns the Y coordinate of a point. For GEOGRAPHY, Y is latitude in degrees."
 ---
 
 # ST_Y
 
+Returns the Y coordinate of a point.
 
-
-If point is of a valid Point type, return the corresponding Y-coordinate value.
+For a `GEOGRAPHY` value, Y is latitude in degrees under the OGC:CRS84 spherical contract. The value must be a non-empty `POINT`.
 
 ## Syntax
 
-```Haskell
-DOUBLE ST_Y(POINT point)
+```SQL
+DOUBLE ST_Y(VARCHAR point)
+DOUBLE ST_Y(GEOGRAPHY point)
 ```
+
+## Return value
+
+Returns `NULL` when the input is `NULL`. For `GEOGRAPHY`, an empty value or a non-`POINT` family produces an error. Unsupported dimensions or descriptors also produce an error.
 
 ## Examples
 
-```Plain Text
-MySQL > SELECT ST_Y(ST_Point(24.7, 56.7));
-+----------------------------+
-| st_y(st_point(24.7, 56.7)) |
-+----------------------------+
-|                       56.7 |
-+----------------------------+
+```SQL
+SELECT ST_Y(ST_Point(24.7, 56.7));
+-- 56.7
+
+SELECT ST_Y(ST_GeogFromText('POINT (24.7 56.7)'));
+-- 56.7
 ```
 
 ## keyword

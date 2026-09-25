@@ -51,6 +51,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
@@ -272,6 +273,38 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
 
     public String getCatalogName() {
         return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
+    /**
+     * Whether the FE metadata lock can protect this table, i.e. whether it may be a target of
+     * {@link com.starrocks.sql.analyzer.PlannerMetaLocker} / Locker. A table for which this is false is never
+     * in the lock set, so it must not influence lock scope either -- see
+     * AnalyzerUtils.CopyUnsafeTablesCollector.
+     * <p>
+     * The question is about ownership, not engine type: is this object's in-memory metadata something the FE
+     * itself owns and rewrites in place? Answering it by listing table types is what makes it fragile, because
+     * the list keeps missing cases:
+     * <ul>
+     *   <li>an internal view is neither native nor an FE transaction participant, yet AlterJobMgr.alterView
+     *       rewrites its definition, schema and security in place under this very lock;</li>
+     *   <li>a resource-mapping table (ENGINE=HIVE/ICEBERG/HUDI created from a resource) reports a
+     *       resource-mapping catalog name, yet HiveTable.modifyTableSchema clears and refills its fullSchema
+     *       inside lockDatabase(WRITE), and LocalMetastore.replayModifyHiveTableColumn does the same on
+     *       replay.</li>
+     * </ul>
+     * So the predicate is "does it live in an internal database", expressed as {@code !isExternalCatalog}.
+     * That is deliberately not {@code isInternalCatalog}: the two differ exactly on resource-mapping catalogs,
+     * which {@link CatalogMgr#isExternalCatalog} already classifies as not-external. It is also fail-closed --
+     * a table kind nobody has classified yet keeps its lock, which costs a little contention rather than
+     * silently losing mutual exclusion.
+     */
+    public boolean isMetaLockTarget() {
+        // Spelled out, CatalogMgr.isExternalCatalog negated is: the internal catalog, or a resource-mapping
+        // pseudo-catalog (ENGINE=HIVE/ICEBERG/HUDI created from a RESOURCE -- those live in an internal
+        // database too), or no catalog name at all (ENGINE=JDBC from a RESOURCE leaves it null, as do a few
+        // other connector tables). Using it rather than open-coding those three keeps the null case handled:
+        // both isInternalCatalog and isResourceMappingCatalog throw on a null name.
+        return !CatalogMgr.isExternalCatalog(getCatalogName());
     }
 
     public String getResourceName() {
@@ -742,20 +775,96 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
     }
 
     /**
-     * onCreate is called when this table is created
+     * Called when this table's in-memory state has to be (re)derived from the rest of the catalog: from
+     * {@link #onCreate}, when replaying a create-table journal entry, when loading an image, and when an
+     * alter job swaps in a new schema. Implementations rebuild derived state only -- see
+     * {@link OlapTable#onReload} (partition info, rollup index meta, constraints) and
+     * {@link MaterializedView#onReload}, which resolves every base table and may reach external catalogs.
+     *
+     * <p>The lock context is caller-specific, so an implementation must not rely on any lock being held, and
+     * must not take the database lock itself:
+     * <ul>
+     *   <li>{@link com.starrocks.server.LocalMetastore#replayCreateTable} calls this with no lock held: the
+     *   table is not visible to anyone yet, and for an MV the reload is slow and remote, so holding the
+     *   database write lock across it would stall every query on that database.</li>
+     *   <li>The alter jobs (e.g. {@link com.starrocks.alter.SchemaChangeJobV2}) call this under the
+     *   database/table write lock and from inside the edit-log applier, because there the table is already
+     *   visible and the schema flip plus this reload must land as one atomic step.</li>
+     * </ul>
+     *
+     * <p>Where it does run unlocked, a reload can be observed half-done -- an MV is transiently inactive
+     * while reloading -- so a consumer that cannot tolerate that must wait for it explicitly, see
+     * {@link MaterializedView#waitForReloaded}.
      */
     public void onReload() {
         // Do nothing by default.
     }
 
     /**
-     * This method is called right after the calling of {@link com.starrocks.server.LocalMetastore#onCreate)}.
+     * This method is called by {@link com.starrocks.server.LocalMetastore#onCreate}, still under the
+     * database write lock, right after the create-table journal record has been written.
      * If error occurs, DdlException should be thrown to abort the creation of the table.
      * @param database database where the table is created
      * @throws DdlException thrown if any error occurs during onCreate
      */
     public void onCreate(Database database) throws DdlException  {
+        reloadOnCreate();
+    }
+
+    /**
+     * The reload {@link #onCreate} performs, split out as its own step because {@code onCreate} runs under
+     * the database write lock: a subclass whose reload contacts external systems overrides this to do
+     * nothing and does the work in {@link #onCreateAfterUnlock} instead. See
+     * {@link MaterializedView#reloadOnCreate}.
+     */
+    protected void reloadOnCreate() {
         onReload();
+    }
+
+    /**
+     * The part of table creation that must not run under the database write lock, called by
+     * {@link com.starrocks.server.LocalMetastore#onCreate} once it has released that lock.
+     *
+     * <p>At this point the table is registered and the creation is journaled, so what runs here is
+     * observable by other threads and cannot be undone by simply not registering the table. Throwing from
+     * here aborts the DDL, and {@code LocalMetastore#onCreate} then rolls the creation back with a real,
+     * journaled drop -- the same contract as throwing from {@link #onCreate}, only the undo is more
+     * expensive. Whatever a reader can observe in between is the same thing it can observe between the
+     * journal record and {@code onReload} on a replaying follower, which registers first and reloads
+     * afterwards for the same reason.
+     *
+     * <h3>A concurrent drop is tolerated, not prevented</h3>
+     *
+     * A reader is not all that can arrive in this window: a concurrent {@code DROP} takes the database write
+     * lock, unregisters the table and runs its cleanup, and this method can then finish and re-publish
+     * relationships the drop has just taken down -- for an MV, the base tables' related-MV sets, the
+     * connector table info, and the global constraints. Closing that window means holding the database lock
+     * across the connector calls this split exists to get out of it, and the leftover does not justify that:
+     *
+     * <ul>
+     *   <li><b>It is not persisted.</b> {@link #gsonPostProcess} resets {@code relatedMaterializedViews} to
+     *       an empty set on load, {@code ConnectorTblMetaInfoMgr} and {@code GlobalConstraintManager} are
+     *       built fresh in {@code GlobalStateMgr}, so every one of these is rebuilt from scratch at image
+     *       load. The inconsistency is bounded by the time to the next restart or checkpoint.</li>
+     *   <li><b>It does not break a reader.</b> Everything that walks these sets resolves the id through the
+     *       catalog and skips it when it is gone -- {@code AlterJobMgr#invalidateRelatedMaterializedViews},
+     *       {@code AlterMVJobExecutor}, {@code LakeTableSchemaChangeJob}; {@code LoadJobMVListener} removes
+     *       the dangling entry as it walks, so writes to the base table heal it without a restart.</li>
+     *   <li><b>What it does cost</b>, until then: {@code AnalyzerUtils.CopyUnsafeTablesCollector} counts the
+     *       related-MV set without resolving it, so a dangling entry inflates that count and can push a
+     *       table over {@code skip_whole_phase_lock_mv_limit}; and a stale
+     *       {@code GlobalConstraintManager} entry keeps the dropped object reachable. Both are bounded, and
+     *       the race is rare enough that neither is worth a lock held across a connector round trip.</li>
+     * </ul>
+     *
+     * {@code LocalMetastore#onCreate} logs a warning naming the table when it detects this, so an operator
+     * seeing one of the effects above can tie it to the cause instead of guessing.
+     *
+     * @param database database where the table is created
+     * @throws DdlException thrown if any error occurs, aborting (and rolling back) the creation
+     */
+    public void onCreateAfterUnlock(Database database) throws DdlException {
+        // Do nothing by default.
     }
 
     /**

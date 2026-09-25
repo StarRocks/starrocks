@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.pct;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -29,6 +30,7 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.DelegatingConnectorMetadata;
 import com.starrocks.connector.HivePartitionDataInfo;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.HiveMetadata;
 import com.starrocks.mv.MVMetaVersionRepairer;
 import com.starrocks.server.GlobalStateMgr;
@@ -159,8 +161,17 @@ public class MVPCTMetaRepairer {
         LOG.info("try to get updated partitions names based on data.partitionNames:{}, isAutoRefresh:{}," +
                         " autoRefreshPartitionsLimit:{}, updatedPartitionNames:{}",
                 partitionNames, isAutoRefresh, autoRefreshPartitionsLimit, updatedPartitionNames);
+        // Resolve the partition metadata here, beside getHivePartitionRepairInfo above, rather than
+        // inside the repair: the repair runs under the MV's write lock and is meant to be a pure meta
+        // update ("acquire db write lock to modify meta of mv"), while this is a connector call.
+        // The condition mirrors the one it replaces -- nothing was fetched when every partition had
+        // already changed, because then the repair needs no partition metadata at all.
+        Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos = Maps.newHashMap();
+        if (partitionNames.stream().anyMatch(name -> !updatedPartitionNames.contains(name))) {
+            newPartitionInfos = PartitionUtil.getPartitionNameWithPartitionInfo(table, partitionNames);
+        }
         // if partition is not modified, change the last refresh time to update
-        repairMvBaseTableMeta(mv, baseTableInfo, table, updatedPartitionNames);
+        repairMvBaseTableMeta(mv, baseTableInfo, table, updatedPartitionNames, newPartitionInfos);
     }
 
     private List<String> getUpdatedPartitionNames(
@@ -191,7 +202,8 @@ public class MVPCTMetaRepairer {
     }
 
     private void repairMvBaseTableMeta(MaterializedView mv, BaseTableInfo oldBaseTableInfo,
-                                       Table newTable, List<String> updatedPartitionNames) {
+                                       Table newTable, List<String> updatedPartitionNames,
+                                       Map<String, com.starrocks.connector.PartitionInfo> newPartitionInfos) {
         if (oldBaseTableInfo.isInternalCatalog()) {
             return;
         }
@@ -203,7 +215,8 @@ public class MVPCTMetaRepairer {
                     db.getFullName(), mv.getName(), db.getFullName());
         }
         try {
-            MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames);
+            MVMetaVersionRepairer.repairExternalBaseTableInfo(mv, oldBaseTableInfo, newTable, updatedPartitionNames,
+                    newPartitionInfos);
         } finally {
             locker.unLockTableWithIntensiveDbLock(db.getId(), mv.getId(), LockType.WRITE);
         }

@@ -193,6 +193,8 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
     RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
+    RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
     RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
     COUNTER_SET(rpc_count, _rpc_count.load());
@@ -201,11 +203,11 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
-    // WaitTime consists two parts
-    // 1. buffer full time
-    // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time.load());
-    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+    const int64_t buffer_full_time = _full_time.load();
+    const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
+    COUNTER_SET(buffer_full_timer, buffer_full_time);
+    COUNTER_SET(pending_finish_timer, pending_finish_time);
+    COUNTER_SET(wait_timer, buffer_full_time + pending_finish_time);
 
     RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);

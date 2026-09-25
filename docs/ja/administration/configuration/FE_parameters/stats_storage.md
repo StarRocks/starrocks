@@ -760,7 +760,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Boolean
 - 単位：-
 - 変更可能：Yes
-- 説明：ソースが内部 OLAP テーブルまたは外部 Iceberg テーブルである `INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
+- 説明：`INSERT INTO ... SELECT FROM <table>` 形式の取り込みに対して、サンプリングベースのタブレット事前分割を有効にするかどうか。ソースには内部 OLAP テーブルのほか、Hive、Iceberg、Paimon、Delta Lake、Hudi、JDBC、Elasticsearch など External Catalog のテーブルを指定できます。ビューはソースとしてサポートされません。外部ソースのサイズをテーブル統計から見積もれない場合、その取り込みは事前分割をスキップします。自動 Range パーティションのターゲットをサポートし、明示的に指定された通常／一時パーティション、および static／dynamic の両方の `INSERT OVERWRITE` を含みます。v4.1.0 で GA となり既定で有効。クラスタ全体で無効化するには `false` に設定します。事前分割が実行されるには、セッション変数 `enable_tablet_pre_split` も `true` である必要があります。ロールバックする場合は `false` に設定してください。以降の INSERT-from-table 取り込みは即座に事前分割をスキップします。
 - 導入時期：v4.1.0
 
 ### `enable_tablet_pre_split_for_mv_refresh`
@@ -814,7 +814,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ：Int
 - 単位：-
 - 変更可能：Yes
-- 説明：サンプリングベースのタブレット事前分割の meta tier が `FILES()` ソースから並行して読み取る Parquet/ORC フッターの数。フッターの読み取りはファイルごとに独立しており、サンプラーは集約した統計情報をソートするため、並行化は事前分割フックの実時間を短縮するだけです（各フッターはリモートへの 1 往復であり、ファイル数の多いソースではこれを直列に数百回繰り返すことになります）。`1` に設定すると並行化を無効化します。
+- 説明：サンプリングベースのタブレット事前分割の meta tier がファイルベースのロードソース（`FILES()` または Broker Load）から並行して読み取る Parquet/ORC フッターの数。フッターの読み取りはファイルごとに独立しており、サンプラーは集約した統計情報をソートするため、並行化は事前分割フックの実時間を短縮するだけです（各フッターはリモートへの 1 往復であり、ファイル数の多いソースではこれを直列に数百回繰り返すことになります）。`1` に設定すると並行化を無効化します。
 - 導入時期：v4.1.0
 
 ### `tablet_pre_split_max_partitions_per_load`
@@ -839,7 +839,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 ダウングレード前あるいは本番環境でのロールバック時に、安全に本機能を無効化する手順：
 
 1. 4 つの事前分割フラグをすべて `false` に設定します：`enable_tablet_pre_split_for_insert_from_files`、`enable_tablet_pre_split_for_broker_load`、`enable_tablet_pre_split_for_insert_from_table`、`enable_tablet_pre_split_for_mv_refresh`。新規取り込みは即座に事前分割をスキップします。
-2. 事前分割が作成した進行中の reshard ジョブが排出されるのを待ちます。`SHOW TABLET RESHARD JOB` でモニターし、`RUNNING` または `PENDING` の行が無くなった時点でロールバック完了です。
+2. 事前分割が作成した進行中の reshard ジョブがすべて終わるのを待ちます。次のクエリで状況を確認します。
+
+   ```SQL
+   SELECT DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   このクエリが 1 行も返さなくなればロールバックは完了です。終了状態は `FINISHED` と `ABORTED` だけで、`PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` のいずれかにあるジョブはまだ実行中です。
 3. ダウングレードを実施します。基盤となる External-Boundaries Tablet Split は事前分割フィーチャーフラグとは独立しており、事前分割のオン／オフに関わらず利用可能です。
 
 #### マルチパーティション版サンプリングベースのタブレット事前分割の動作上の注意（P2-a）

@@ -411,6 +411,29 @@ public class TransactionState implements Writable, GsonPreProcessable {
     // Therefore, a snapshot of this information is maintained here.
     private Map<Long, ConcurrentMap<String, TOlapTablePartition>> tableToPartitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+    // Multi-node write (TOlapTableSink.enable_multi_node_write): per TABLE, how many compute nodes
+    // the planner resolved for one of its tablets. Absent -- or 1, OlapTableSink.NO_MULTI_NODE_WRITE
+    // -- means one node per tablet, the behaviour that existed before that feature.
+    //
+    // A partition that automatic partitioning creates DURING the load is not in the plan, so its
+    // tablets get their node lists from FrontendServiceImpl.buildCreatePartitionResponse instead of
+    // from OlapTableSink.createLocation. This is how the plan's decision reaches that path, so a
+    // runtime-created partition spreads the same way the planned ones did.
+    //
+    // Keyed by table id, like tableToPartitionNameToTPartition above, because the decision is
+    // per table and one transaction can carry several: a multi-table Broker Load builds one
+    // LoadLoadingTask per table, all on this txn id, and plans every one of them before any runs.
+    // Every input is per table -- isFileBundling(), canUseColocateMVIndex(), and the estimated size
+    // the width is derived from (LoadPlanner.setEstimatedWriteBytes, that table's own file bytes).
+    // A single scalar here would let an eligible table's width decide an ineligible table's sink,
+    // whichever order they happened to be planned in.
+    //
+    // Written only when that table's sink also set enable_multi_node_write, and that ordering is the
+    // point: without the flag BE reads a tablet's node list as a REPLICA set and writes every row to
+    // every node in it. A width > 1 for a table therefore always means the flag went out with it.
+    //
+    // Not persisted, like tabletIdToTTabletLocation: it describes the statement in flight.
+    private final ConcurrentMap<Long, Integer> tableToMultiNodeWriteWidth = Maps.newConcurrentMap();
 
     private Map<Long, List<String>> tableToCreatedPartitionNames = Maps.newHashMap();
     private AtomicBoolean isCreatePartitionFailed = new AtomicBoolean(false);
@@ -574,6 +597,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
         this.traceParent = txnState.traceParent;
         this.tableToPartitionNameToTPartition = txnState.tableToPartitionNameToTPartition;
         this.tabletIdToTTabletLocation = txnState.tabletIdToTTabletLocation;
+        this.tableToMultiNodeWriteWidth.putAll(txnState.tableToMultiNodeWriteWidth);
         this.tableToCreatedPartitionNames = txnState.tableToCreatedPartitionNames;
         this.isCreatePartitionFailed = txnState.isCreatePartitionFailed;
         this.txnLock = txnState.txnLock;
@@ -1495,6 +1519,14 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
         return tabletIdToTTabletLocation;
+    }
+
+    public int getMultiNodeWriteWidth(long tableId) {
+        return tableToMultiNodeWriteWidth.getOrDefault(tableId, 1);
+    }
+
+    public void setMultiNodeWriteWidth(long tableId, int multiNodeWriteWidth) {
+        tableToMultiNodeWriteWidth.put(tableId, multiNodeWriteWidth);
     }
 
     public List<String> getCreatedPartitionNames(long tableId) {

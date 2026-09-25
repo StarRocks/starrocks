@@ -450,6 +450,7 @@
         "max_tablet_write_chunk_bytes",
         "max_load_dop",
         "enable_load_colocate_mv",
+        "enable_load_chunk_all_null_encoding",
         "send_channel_buffer_limit",
         "enable_http_stream_load_limit",
         "enable_stream_load_verbose_log",
@@ -697,6 +698,8 @@
         "starlet_star_cache_disk_size_percent",
         "starlet_star_cache_mem_size_bytes",
         "starlet_star_cache_mem_size_percent",
+        "starlet_star_cache_skip_fresh_block_checksum_verification",
+        "starlet_starmgr_client_compression_type",
         "starlet_use_star_cache"
       ]
     },
@@ -886,6 +889,7 @@
         "lake_replication_slow_log_ms",
         "lake_replication_read_buffer_size",
         "lake_replication_max_file_copy_retry",
+        "lake_replication_max_parallel_files_per_tablet",
         "lake_replication_parallel_copy_min_file_count",
         "enable_lake_segment_metadata_filter",
         "enable_lake_prepared_split_pre_refinement",
@@ -1012,6 +1016,7 @@
       "path": "be/src/common/config_expr_fwd.h",
       "configs": [
         "bitmap_serialize_version",
+        "case_when_selective_eval_ratio",
         "enable_bitmap_union_disk_format_with_set",
         "jit_lru_cache_size",
         "jit_lru_object_cache_size",

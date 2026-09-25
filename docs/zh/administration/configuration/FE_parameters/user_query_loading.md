@@ -193,6 +193,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 外部表（Iceberg）统计信息收集的**辅助**扫描行数预算。统计扫描在估算扫描行数达到该预算后即提前停止。由于单个 split 的行数只能估算（记录数按文件而非按 split 记录），该预算仅作为辅助软限，而非主控制项。默认值与 `connector_table_query_trigger_analyze_small_table_rows` 对齐。取值 `0` 或更小表示该维度不限制。可通过 `ANALYZE TABLE ... PROPERTIES("scan_rows_cap" = "...")` 按语句覆盖。
 - 引入版本: v4.1
 
+### `connector_table_analyze_query_timeout`
+
+- 默认值: 360
+- 类型: Long
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 单条外部表统计信息收集查询允许运行的最长时间。统计收集会按 (分区, 列组) 拆分成多条查询，每条只读取一个分区、受上述扫描预算限制并产出固定大小的 sketch，正常情况下远小于一秒即可返回。若没有该上限，每条查询都会继承 `statistic_collect_query_timeout` 的剩余时间——而后者是整个收集任务的预算，因此一条被过载 BE 卡住的查询就可能耗尽全部预算，导致其后的所有分区都来不及采集。对于冷存储或远端对象存储，受限扫描确实可能更慢，可调大该值。取值 `0` 或更小表示不设置独立上限，查询可再次使用任务的全部剩余预算。实际生效的超时始终取该值与任务剩余预算中的较小者。
+- 引入版本: v4.1
+
 ### `connector_table_query_trigger_analyze_large_table_interval`
 
 - 默认值: 12 * 3600
@@ -568,6 +577,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位: -
 - 是否可变: No
 - 描述: 是否启用 UDF。
+- 引入版本: -
+
+### `enable_virtual_columns`
+
+- 默认值: true
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: 是否在内表上提供 `_tablet_id_` 等虚拟列。虚拟列是在查询时计算生成的只读元数据列，不会存储。当该参数设置为 `false` 时，查询中引用虚拟列会因无法解析该列而报错。更多信息，参见 [虚拟列](../../../table_design/virtual_columns.md)。
 - 引入版本: -
 
 ### `expr_children_limit`

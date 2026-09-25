@@ -19,13 +19,17 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TBrokerFileStatus;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Production data-tier {@link SampleSubqueryExecutor} for the INSERT-from-FILES
  * path. Re-issues the load's original {@code FILES(...)} properties verbatim
  * via {@link FilesSampleSubqueryExecutor}'s shared scaffolding so the BE scan
- * covers the same files the load will scan.
+ * covers the same files the load will scan, carrying over the statement's WHERE
+ * predicate and projecting every key column through the scan context's
+ * target-&gt;FILES column mapping so a renamed or reordered projection is sampled
+ * from the column the load actually writes.
  */
 final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
@@ -51,7 +55,29 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
         return new Source(
                 sourceTable.getProperties(),
                 sumFileBytes(sourceTable.loadFileList()),
-                insertFromFilesContext.computeResource());
+                insertFromFilesContext.computeResource(),
+                insertFromFilesContext.wherePredicateSql(),
+                insertFromFilesContext.targetToSourceColumnNames());
+    }
+
+    /**
+     * Projects each rollup's sort key through the same target-&gt;FILES mapping the base sort key
+     * uses, rather than by the target's own column names as the default does: a projection that
+     * renames or reorders columns leaves a rollup key under a different name in the file too.
+     */
+    @Override
+    protected List<String> secondaryProjectionIdents(SampleRequest request) throws StarRocksException {
+        ScanContext scanContext = request.getScanContext();
+        if (!(scanContext instanceof InsertFromFilesScanContext insertFromFilesContext)) {
+            throw new StarRocksException(ERROR_PREFIX + "received a "
+                    + scanContext.getClass().getSimpleName() + " — wire only the INSERT-from-FILES load kind here");
+        }
+        List<String> idents = new ArrayList<>();
+        for (SecondaryIndexSpec spec : request.getSecondaryIndexSortKeys()) {
+            idents.addAll(filesProjectionIdents(
+                    spec.sortKey(), insertFromFilesContext.targetToSourceColumnNames()));
+        }
+        return idents;
     }
 
     private static long sumFileBytes(List<TBrokerFileStatus> fileStatuses) {

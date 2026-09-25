@@ -225,7 +225,11 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
             // we will count how many extra bytes we read because of alignment.
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
-        sb.buffer.reserve(sb.size);
+        // A range larger than max_buffer_size gets a shared buffer of its own size, so sb.size is
+        // the size of a whole column chunk and is bounded only by the file. check_mem_limit() above
+        // only reports a tracker that is already over its limit; it does not account for the bytes
+        // about to be reserved here, which is what this scope adds.
+        TRY_CATCH_BAD_ALLOC(sb.buffer.reserve(sb.size));
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
     *buffer = sb.buffer.data() + offset - sb.offset;

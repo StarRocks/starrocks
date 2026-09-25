@@ -76,6 +76,68 @@ public class AnalyzeShowAlterTest {
     }
 
     @Test
+    public void testFinishTimeSpellingOnRollupLayout() {
+        // RollupProcDir shows the column as FinishedTime; SchemaChangeProcDir and OptimizeProcDir
+        // show it as FinishTime, and the analyzer's vocabulary was written against the latter.
+        // ROLLUP and MATERIALIZED VIEW take either spelling and key the filter by their own.
+        for (String prefix : new String[] {"SHOW ALTER TABLE ROLLUP FROM db", "SHOW ALTER MATERIALIZED VIEW FROM db"}) {
+            for (String column : new String[] {"FinishedTime", "FinishTime"}) {
+                ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
+                        prefix + " WHERE `" + column + "` > '2019-12-04 00:00:00'");
+                Assertions.assertTrue(statement.getFilterMap().containsKey("finishedtime"),
+                        prefix + " WHERE " + column + " should be keyed by finishedtime");
+                Assertions.assertFalse(statement.getFilterMap().containsKey("finishtime"));
+            }
+        }
+
+        // CreateTime shares the same branch and is spelled the same everywhere, so it keeps its key.
+        ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(
+                "SHOW ALTER TABLE ROLLUP FROM db WHERE `CreateTime` > '2019-12-04 00:00:00'");
+        Assertions.assertTrue(statement.getFilterMap().containsKey("createtime"));
+
+        // The other two layouts are untouched: FinishTime keeps its key, FinishedTime is not a
+        // column they return and stays rejected.
+        for (String prefix : new String[] {"SHOW ALTER TABLE COLUMN FROM db", "SHOW ALTER TABLE OPTIMIZE FROM db"}) {
+            ShowAlterStmt stmt = (ShowAlterStmt) analyzeSuccess(
+                    prefix + " WHERE `FinishTime` > '2019-12-04 00:00:00'");
+            Assertions.assertTrue(stmt.getFilterMap().containsKey("finishtime"));
+            analyzeFail(prefix + " WHERE `FinishedTime` > '2019-12-04 00:00:00'",
+                    "The columns of TableName/CreateTime/FinishTime/State are supported");
+        }
+
+        // An unknown column names the spelling that layout actually returns.
+        analyzeFail("SHOW ALTER TABLE ROLLUP FROM db WHERE `bad_column` = 'x'",
+                "The columns of TableName/CreateTime/FinishedTime/State are supported");
+    }
+
+    @Test
+    public void testOrderByResolvesAgainstTheAnsweringLayout() {
+        // The three layouts disagree on where a column sits, and the index the analyzer produces is
+        // handed straight to ListComparator. Resolving against the wrong list does not fail - it
+        // sorts by whatever sits at that position in the list that actually answers.
+        assertOrderByIndex("SHOW ALTER TABLE COLUMN FROM db ORDER BY State", 9);
+        assertOrderByIndex("SHOW ALTER TABLE ROLLUP FROM db ORDER BY State", 8);
+        assertOrderByIndex("SHOW ALTER MATERIALIZED VIEW FROM db ORDER BY State", 8);
+        // OPTIMIZE used to fall through to SchemaChangeProcDir's list and come back with 9, which
+        // is Timeout in OptimizeProcDir's.
+        assertOrderByIndex("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY State", 6);
+
+        // A column only one layout has resolves there and is rejected elsewhere.
+        assertOrderByIndex("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY Operation", 4);
+        analyzeFail("SHOW ALTER TABLE COLUMN FROM db ORDER BY Operation",
+                "Title name[Operation] does not exist");
+        assertOrderByIndex("SHOW ALTER TABLE COLUMN FROM db ORDER BY SchemaVersion", 7);
+        analyzeFail("SHOW ALTER TABLE OPTIMIZE FROM db ORDER BY SchemaVersion",
+                "Title name[SchemaVersion] does not exist");
+    }
+
+    private static void assertOrderByIndex(String sql, int expectedIndex) {
+        ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(sql);
+        Assertions.assertEquals(1, statement.getOrderByPairs().size(), sql);
+        Assertions.assertEquals(expectedIndex, statement.getOrderByPairs().get(0).getIndex(), sql);
+    }
+
+    @Test
     public void normalTest() {
         analyzeSuccess("SHOW ALTER TABLE COLUMN ORDER BY CreateTime DESC LIMIT 1;");
         analyzeFail("SHOW ALTER TABLE COLUMN FROM errordb",
