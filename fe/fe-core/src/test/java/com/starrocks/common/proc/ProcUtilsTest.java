@@ -18,23 +18,13 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.DateUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.LikePredicate;
-import com.starrocks.sql.ast.expression.SlotRef;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
->>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -208,18 +198,13 @@ public class ProcUtilsTest {
         return new BinaryPredicate(BinaryType.EQ, new SlotRef(null, "col"), new StringLiteral(value));
     }
 
-<<<<<<< HEAD
-    private static Map<String, Expr> dateFilter(BinaryType op, String value) throws AnalysisException {
-        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), Type.DATETIME);
-=======
     private static Map<String, Expr> intFilter(BinaryType op, long value) {
         return Map.of("buckets",
                 new BinaryPredicate(op, new SlotRef(null, "Buckets"), new IntLiteral(value)));
     }
 
-    private static Map<String, Expr> dateFilter(BinaryType op, String value) {
-        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), DateType.DATETIME);
->>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
+    private static Map<String, Expr> dateFilter(BinaryType op, String value) throws AnalysisException {
+        DateLiteral right = new DateLiteral(DateUtils.parseStrictDateTime(value), Type.DATETIME);
         return Map.of("createtime", new BinaryPredicate(op, new SlotRef(null, "CreateTime"), right));
     }
 }

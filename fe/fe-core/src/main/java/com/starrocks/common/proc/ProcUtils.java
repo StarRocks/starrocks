@@ -20,6 +20,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
@@ -29,18 +30,6 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
-import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.DateType;
->>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -201,28 +190,7 @@ public class ProcUtils {
         long rightVal;
         if (subExpr.getChild(1) instanceof DateLiteral) {
             LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
-<<<<<<< HEAD
-            Long leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
-            Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
-            switch (binaryPredicate.getOp()) {
-                case EQ:
-                case EQ_FOR_NULL:
-                    return leftVal.equals(rightVal);
-                case GE:
-                    return leftVal >= rightVal;
-                case GT:
-                    return leftVal > rightVal;
-                case LE:
-                    return leftVal <= rightVal;
-                case LT:
-                    return leftVal < rightVal;
-                case NE:
-                    return !leftVal.equals(rightVal);
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
-=======
-            leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
+            leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
             rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
         } else {
             // Carried over from PartitionsProcDir unchanged, ClassCastException and all.
@@ -250,7 +218,6 @@ public class ProcUtils {
                 return leftVal != rightVal;
             default:
                 Preconditions.checkState(false, "No defined binary operator.");
->>>>>>> 0cf9587 ([Refactor] Merge the last copy of a proc dir's WHERE filter (#79754))
         }
         return true;
     }
