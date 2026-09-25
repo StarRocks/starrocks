@@ -301,6 +301,12 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
                     // Report through the task so that it, and not this branch, decides whether the
                     // callback still needs an answer.
                     merge_task->fail(st);
+                } else {
+                    // Queued, not yet run. A test has to reach this point before closing the
+                    // writer, or close() shuts the token down first, submit() fails, and the
+                    // branch above answers the callback -- which passes whether or not the task
+                    // itself would have.
+                    TEST_SYNC_POINT("AsyncDeltaWriterImpl::merge_task_submitted");
                 }
             } else {
                 auto res = delta_writer->finish_with_txnlog(finish_task->finish_mode);

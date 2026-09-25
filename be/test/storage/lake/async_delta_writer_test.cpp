@@ -942,12 +942,24 @@ TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_tas
     flush_latch.wait();
     config::write_buffer_size = old_buffer_size;
 
+    // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
+    // shut the token down first, submit() would fail and its own branch would answer the callback,
+    // which passes whether or not a cancelled task answers for itself.
+    CountDownLatch merge_task_submitted(1);
+    SyncPoint::GetInstance()->SetCallBack("AsyncDeltaWriterImpl::merge_task_submitted",
+                                          [&](void*) { merge_task_submitted.count_down(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriterImpl::merge_task_submitted");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
     std::atomic<int> finish_calls{0};
     delta_writer->finish([&](StatusOr<TxnLogPtr> res) { finish_calls.fetch_add(1); });
 
-    // Give the execution queue time to reach _block_merge_token->submit(). The task cannot start,
-    // so once it is queued it stays queued.
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    ASSERT_TRUE(merge_task_submitted.wait_for(std::chrono::seconds(30)))
+            << "finish() never submitted a merge task -- did the writer end up with no spill block?";
+    // Queued behind the blocker, so it cannot have run.
     ASSERT_EQ(0, finish_calls.load());
 
     // close() shuts the merge token down, which cancels the queued task.
