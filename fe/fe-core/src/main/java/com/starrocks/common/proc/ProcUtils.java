@@ -20,6 +20,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
@@ -154,10 +155,18 @@ public class ProcUtils {
      * Decide whether one cell of one row survives a SHOW statement's WHERE clause.
      *
      * The filter map is keyed by lower-cased column name and was built by the statement's analyzer,
-     * which is also where a date column's right-hand side was cast to DATETIME. That cast is what
-     * this reads: a right side that is still a StringLiteral can only be compared for equality,
-     * while a DateLiteral gets the full set of operators. A column the filter does not mention, or
-     * a shape neither branch recognises, passes - filtering is opt-in per column.
+     * so what can arrive here is only what some analyzer lets through, and the two statements that
+     * reach this let through different things. SHOW ALTER TABLE takes a binary predicate and
+     * nothing else, over TableName and State compared for equality against a string, or a time
+     * column whose right-hand side its analyzer has already cast to DATETIME. SHOW PARTITIONS also
+     * takes LIKE, and its columns include numeric ones - PartitionId, Buckets, ReplicationNum -
+     * so its right-hand side can be an IntLiteral. Hence the branches below; each statement only
+     * ever walks the ones its own analyzer can produce.
+     *
+     * A column the filter does not mention passes: filtering is opt-in per column.
+     *
+     * This is the union of the two copies it replaces, and where they disagreed it keeps
+     * PartitionsProcDir's reading, which is the only one any statement can reach.
      */
     public static boolean filterResult(String columnName, Comparable<?> element, Map<String, Expr> filter)
             throws AnalysisException {
@@ -168,33 +177,61 @@ public class ProcUtils {
         if (subExpr == null) {
             return true;
         }
+        if (!(subExpr instanceof BinaryPredicate)) {
+            return like((String) element, ((StringLiteral) subExpr.getChild(1)).getValue());
+        }
+
         BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
         if (subExpr.getChild(1) instanceof StringLiteral && binaryPredicate.getOp() == BinaryType.EQ) {
             return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
         }
+
+        long leftVal;
+        long rightVal;
         if (subExpr.getChild(1) instanceof DateLiteral) {
             LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
-            Long leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
-            Long rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
-            switch (binaryPredicate.getOp()) {
-                case EQ:
-                case EQ_FOR_NULL:
-                    return leftVal.equals(rightVal);
-                case GE:
-                    return leftVal >= rightVal;
-                case GT:
-                    return leftVal > rightVal;
-                case LE:
-                    return leftVal <= rightVal;
-                case LT:
-                    return leftVal < rightVal;
-                case NE:
-                    return !leftVal.equals(rightVal);
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
+            leftVal = new DateLiteral(elementDateTime, Type.DATETIME).getLongValue();
+            rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
+        } else {
+            // Carried over from PartitionsProcDir unchanged, ClassCastException and all.
+            // ShowStmtAnalyzer restricts the operator for SHOW PARTITIONS' string columns but
+            // never checks the right-hand side of PartitionId/Buckets/ReplicationNum, so
+            // WHERE Buckets > 'abc' analyzes and lands here on a StringLiteral. Making that a
+            // reported error is worth doing -- at the analyzer, where the type is known -- but
+            // it is a change to what a statement does, and this is not the change that makes it.
+            leftVal = Long.parseLong(element.toString());
+            rightVal = ((IntLiteral) subExpr.getChild(1)).getLongValue();
+        }
+        switch (binaryPredicate.getOp()) {
+            case EQ:
+            case EQ_FOR_NULL:
+                return leftVal == rightVal;
+            case GE:
+                return leftVal >= rightVal;
+            case GT:
+                return leftVal > rightVal;
+            case LE:
+                return leftVal <= rightVal;
+            case LT:
+                return leftVal < rightVal;
+            case NE:
+                return leftVal != rightVal;
+            default:
+                Preconditions.checkState(false, "No defined binary operator.");
         }
         return true;
+    }
+
+    /**
+     * SQL LIKE against one cell, for the only statement whose analyzer admits a LIKE predicate.
+     */
+    private static boolean like(String str, String expr) {
+        expr = expr.toLowerCase();
+        expr = expr.replace(".", "\\.");
+        expr = expr.replace("?", ".");
+        expr = expr.replace("%", ".*");
+        str = str.toLowerCase();
+        return str.matches(expr);
     }
 
     /**

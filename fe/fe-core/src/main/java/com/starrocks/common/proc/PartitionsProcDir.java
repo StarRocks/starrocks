@@ -38,13 +38,8 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.BinaryType;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -59,7 +54,6 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
@@ -161,61 +155,6 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
     }
 
-    public boolean filter(String columnName, Comparable element, Map<String, Expr> filterMap) throws AnalysisException {
-        if (filterMap == null) {
-            return true;
-        }
-        Expr subExpr = filterMap.get(columnName.toLowerCase());
-        if (subExpr == null) {
-            return true;
-        }
-        if (subExpr instanceof BinaryPredicate) {
-            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (subExpr.getChild(1) instanceof StringLiteral &&
-                    binaryPredicate.getOp() == BinaryType.EQ) {
-                return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
-            }
-            long leftVal;
-            long rightVal;
-            if (subExpr.getChild(1) instanceof DateLiteral) {
-                leftVal = (new DateLiteral((String) element, Type.DATETIME)).getLongValue();
-                rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
-            } else {
-                leftVal = Long.parseLong(element.toString());
-                rightVal = ((IntLiteral) subExpr.getChild(1)).getLongValue();
-            }
-            switch (binaryPredicate.getOp()) {
-                case EQ:
-                case EQ_FOR_NULL:
-                    return leftVal == rightVal;
-                case GE:
-                    return leftVal >= rightVal;
-                case GT:
-                    return leftVal > rightVal;
-                case LE:
-                    return leftVal <= rightVal;
-                case LT:
-                    return leftVal < rightVal;
-                case NE:
-                    return leftVal != rightVal;
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
-        } else {
-            return like((String) element, ((StringLiteral) subExpr.getChild(1)).getValue());
-        }
-        return true;
-    }
-
-    public boolean like(String str, String expr) {
-        expr = expr.toLowerCase();
-        expr = expr.replace(".", "\\.");
-        expr = expr.replace("?", ".");
-        expr = expr.replace("%", ".*");
-        str = str.toLowerCase();
-        return str.matches(expr);
-    }
-
     public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
                                           LimitElement limitElement) throws AnalysisException {
         List<List<Comparable>> partitionInfos = getPartitionInfos();
@@ -234,7 +173,7 @@ public class PartitionsProcDir implements ProcDirInterface {
             for (List<Comparable> partitionInfo : partitionInfos) {
                 boolean isNeed = true;
                 for (int i = 0; i < partitionInfo.size(); i++) {
-                    isNeed = filter(this.titleNames.get(i), partitionInfo.get(i), filterMap);
+                    isNeed = ProcUtils.filterResult(this.titleNames.get(i), partitionInfo.get(i), filterMap);
                     if (!isNeed) {
                         break;
                     }
