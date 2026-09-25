@@ -29,12 +29,9 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
-=======
-import com.starrocks.common.proc.OptimizeProcDir;
->>>>>>> 59e93ed ([BugFix] Resolve SHOW ALTER TABLE OPTIMIZE's ORDER BY against its own columns (#79687))
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.OrderByPair;
