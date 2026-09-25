@@ -72,11 +72,11 @@ t1	FINISHED
 -- !result
 SHOW ALTER TABLE OPTIMIZE ORDER BY SchemaVersion;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Title name[SchemaVersion] does not exist.')
+E: (5064, 'Getting analyzing error. Detail message: Title name[SchemaVersion] does not exist.')
 -- !result
 SHOW ALTER TABLE OPTIMIZE ORDER BY IndexName;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Title name[IndexName] does not exist.')
+E: (5064, 'Getting analyzing error. Detail message: Title name[IndexName] does not exist.')
 -- !result
 drop database db_${uuid0} force;
 -- result:
