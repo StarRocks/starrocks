@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LikePredicate;
+import com.starrocks.sql.ast.expression.LimitElement;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.DateType;
@@ -192,6 +193,49 @@ public class ProcUtilsTest {
                 LikePredicate.Operator.LIKE, new SlotRef(null, "PartitionName"), new StringLiteral("p2024%")));
         Assertions.assertTrue(ProcUtils.filterResult("PartitionName", "p202401", filter));
         Assertions.assertFalse(ProcUtils.filterResult("PartitionName", "p202301", filter));
+    }
+
+    @Test
+    public void testApplyLimitWithinTheList() {
+        List<String> rows = List.of("a", "b", "c", "d");
+        Assertions.assertEquals(List.of("a", "b"), ProcUtils.applyLimit(rows, new LimitElement(0, 2)));
+        Assertions.assertEquals(List.of("b", "c"), ProcUtils.applyLimit(rows, new LimitElement(1, 2)));
+        Assertions.assertEquals(List.of("d"), ProcUtils.applyLimit(rows, new LimitElement(3, 1)));
+    }
+
+    @Test
+    public void testApplyLimitPastTheEnd() {
+        List<String> rows = List.of("a", "b", "c");
+        // The offset lands past the last row: no rows, not an exception. SHOW ALTER TABLE COLUMN
+        // LIMIT 10, 1 is the everyday way to reach this, since that list is usually empty.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(10, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(List.of(), new LimitElement(10, 1)));
+        // One past the size is where it starts going wrong; the size itself was already fine,
+        // since subList(3, 3) is empty rather than a range check failure.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(4, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(3, 1)));
+        // A count that runs off the end keeps what is there.
+        Assertions.assertEquals(List.of("c"), ProcUtils.applyLimit(rows, new LimitElement(2, 99)));
+    }
+
+    @Test
+    public void testApplyLimitDoesNotTruncateToInt() {
+        List<String> rows = List.of("a", "b", "c");
+        // Both values are declared long, and truncating to int fails in two directions: 2^31 casts
+        // negative, and 2^32 casts to 0, which is a valid index -- so the statement answered with
+        // the first rows of the list.
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(4294967296L, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(2147483648L, 1)));
+        Assertions.assertEquals(List.of(), ProcUtils.applyLimit(rows, new LimitElement(Long.MAX_VALUE, 1)));
+        // And a count that large must not overflow when added to the offset.
+        Assertions.assertEquals(List.of("b", "c"), ProcUtils.applyLimit(rows, new LimitElement(1, Long.MAX_VALUE)));
+    }
+
+    @Test
+    public void testApplyLimitWithoutOne() {
+        List<String> rows = List.of("a", "b");
+        Assertions.assertSame(rows, ProcUtils.applyLimit(rows, null));
+        Assertions.assertSame(rows, ProcUtils.applyLimit(rows, LimitElement.NO_LIMIT));
     }
 
     private static Expr eq(String value) {
