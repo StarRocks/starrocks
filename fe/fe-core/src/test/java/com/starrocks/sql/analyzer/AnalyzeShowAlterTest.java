@@ -133,8 +133,8 @@ public class AnalyzeShowAlterTest {
 
     private static void assertOrderByIndex(String sql, int expectedIndex) {
         ShowAlterStmt statement = (ShowAlterStmt) analyzeSuccess(sql);
-        Assertions.assertEquals(1, statement.getOrderByPairs().size(), sql);
-        Assertions.assertEquals(expectedIndex, statement.getOrderByPairs().get(0).getIndex(), sql);
+        Assertions.assertEquals(1, statement.getOrderPairs().size(), sql);
+        Assertions.assertEquals(expectedIndex, statement.getOrderPairs().get(0).getIndex(), sql);
     }
 
     @Test
