@@ -36,6 +36,9 @@ public class MaterializedViewExceptions {
     public static final String INACTIVE_REASON_FOR_INCREMENTAL_BREAKING =
             "incremental refresh broken by non-append-only base change: ";
 
+    public static final String INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH =
+            "incremental refresh broken: materialized view schema no longer matches its definition: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -74,19 +77,69 @@ public class MaterializedViewExceptions {
         return INACTIVE_REASON_FOR_INCREMENTAL_BREAKING + mvName;
     }
 
+    /**
+     * Which reason to inactivate with, for a failure {@link #isIncrementalBreakingFailure} accepted.
+     * A base-table column change and a column ALTER on the MV itself raise the same two schema
+     * markers, so that branch states the condition without attributing a cause it cannot tell apart.
+     */
+    public static String inactiveReasonForBreakingFailure(Throwable e, String mvName) {
+        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains(MV_SCHEMA_COLUMN_CHANGED_MARKER)
+                    || msg.contains(MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER))) {
+                return INACTIVE_REASON_FOR_MV_SCHEMA_MISMATCH + mvName;
+            }
+        }
+        return inactiveReasonForIncrementalBreaking(mvName);
+    }
+
     // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
     // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
     public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
 
+    // Both classifiers of a stored schema that no longer matches the maintenance query --
+    // isIncrementalBreakingFailure and MVRefreshSchemaChecker#isLikelyDriftException -- match these,
+    // so wording and detection can't drift apart.
+    public static final String MV_SCHEMA_COLUMN_CHANGED_MARKER = "base table schema changed for columns: ";
+    public static final String MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER = "column schema not compatible: ";
+
     /**
      * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
+<<<<<<< HEAD
      * refresh (vs. a transient error), so a single caller can inactivate the MV. Walks the cause chain
      * since the marker may be wrapped by the refresh pipeline.
+=======
+     * refresh (as opposed to a transient error). Covers the FE-detected non-append-only change, a
+     * BE-detected non-trackable CHANGES failure, and a stored schema that no longer matches the
+     * maintenance query, so a single caller handles OLAP and external tables the same way. Walks the
+     * cause chain because the marker may be wrapped by the refresh pipeline.
+>>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708))
      */
     public static boolean isIncrementalBreakingFailure(Throwable e) {
         for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
             String msg = t.getMessage();
+<<<<<<< HEAD
             if (msg != null && msg.contains(FE_NON_APPEND_ONLY_MARKER)) {
+=======
+            if (msg != null && (msg.contains(FE_NON_APPEND_ONLY_MARKER)
+                    || msg.contains(MV_SCHEMA_COLUMN_CHANGED_MARKER)
+                    || msg.contains(MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER)
+                    || CdcErrorUtils.isChangeNotTrackable(msg))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether the backend rejected the CHANGES scan as non-trackable. Narrower than
+     * {@link #isIncrementalBreakingFailure}: it deliberately excludes the frontend-detected marker, because
+     * that one is already caught while the plan is built and never reaches execution.
+     */
+    public static boolean isChangeNotTrackableFailure(Throwable e) {
+        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
+            if (CdcErrorUtils.isChangeNotTrackable(t.getMessage())) {
+>>>>>>> d7d6842cb10 ([BugFix] Reject column ALTER on an incrementally maintained materialized view (#61708))
                 return true;
             }
         }
@@ -114,11 +167,20 @@ public class MaterializedViewExceptions {
     }
 
     public static String inactiveReasonForColumnNotCompatible(String existingType, String newType) {
-        return String.format("column schema not compatible: (%s) and (%s)", existingType, newType);
+        return String.format("%s(%s) and (%s)", MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER, existingType, newType);
     }
 
     public static String inactiveReasonForColumnChanged(Set<String> columns) {
-        return "base table schema changed for columns: " + StringUtils.join(columns, ",");
+        return MV_SCHEMA_COLUMN_CHANGED_MARKER + StringUtils.join(columns, ",");
+    }
+
+    public static String unsupportedReasonForIvmColumnChange(String operation, String columnName, String mvName) {
+        return String.format("Cannot %s column '%s' on incrementally maintained materialized view '%s': its "
+                        + "stored schema carries hidden columns whose layout is fixed at creation, so a column "
+                        + "change breaks every later incremental refresh. Rebuild instead: CREATE a new "
+                        + "materialized view with the columns you want, REFRESH it, 'ALTER MATERIALIZED VIEW %s "
+                        + "SWAP WITH <new_mv>', then DROP the swapped-out one.",
+                operation, columnName, mvName, mvName);
     }
 
     public static String inactiveReasonForSchemaCheckFailed(String mvName, String detail) {
