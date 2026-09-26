@@ -14,6 +14,8 @@
 
 #include "rowset_update_state.h"
 
+#include <unordered_set>
+
 #include "base/debug/trace.h"
 #include "base/phmap/phmap.h"
 #include "base/testutil/sync_point.h"
@@ -92,6 +94,13 @@ static bool has_auto_increment_partial_update_state(const RowsetUpdateStateParam
 // Helper to check if this transaction involves any type of partial update
 static bool has_partial_update(const RowsetUpdateStateParams& params) {
     return has_partial_update_state(params) || has_auto_increment_partial_update_state(params);
+}
+
+// A flexible partial update applied in row mode (partial_update_mode=flexible_row): every row of the
+// update files writes only the columns of its own column set (RowsetTxnMetaPB.distinct_column_sets,
+// indexed by the row's hidden "__cset__" value).
+static bool flexible_partial_update_enabled(const TxnLogPB_OpWrite& op_write) {
+    return op_write.has_txn_meta() && op_write.txn_meta().flexible_partial_update();
 }
 
 // Determines whether segment lazy loading should be enabled for primary key column iteration.
@@ -278,6 +287,21 @@ Status RowsetUpdateState::_do_load_upserts(uint32_t segment_id, const RowsetUpda
 static std::vector<ColumnId> get_read_columns_ids(const TxnLogPB_OpWrite& op_write,
                                                   const TabletSchemaCSPtr& tablet_schema) {
     const auto& txn_meta = op_write.txn_meta();
+
+    // Flexible partial update: each row writes only the columns of its own column set, so no value
+    // column is written by every row, and the rewrite needs the current value of EVERY value column as
+    // the fallback for the rows that do not declare it (a default for a new key). Key columns come from
+    // the update file itself; auto-increment tables are rejected before a flexible load is planned.
+    if (flexible_partial_update_enabled(op_write)) {
+        std::vector<ColumnId> value_column_ids;
+        for (uint32_t i = 0, num_cols = tablet_schema->num_columns(); i < num_cols; i++) {
+            const auto& col = tablet_schema->column(i);
+            if (!col.is_key() && !col.is_auto_increment()) {
+                value_column_ids.push_back(i);
+            }
+        }
+        return value_column_ids;
+    }
 
     std::set<ColumnUID> modified_column_unique_ids(txn_meta.partial_update_column_unique_ids().begin(),
                                                    txn_meta.partial_update_column_unique_ids().end());
@@ -542,6 +566,108 @@ StatusOr<bool> RowsetUpdateState::file_exist(const std::string& full_path) {
 // materializing one per segment.
 static const Filter kNoRowSelector;
 
+Status RowsetUpdateState::_rewrite_flexible_segment(uint32_t segment_id, const RowsetUpdateStateParams& params,
+                                                    const FileInfo& src, const std::vector<ColumnId>& value_column_ids,
+                                                    RewriteVectorIndexOptions vector_index_opts,
+                                                    SegmentFileInfo* file_info) {
+    const auto& txn_meta = params.op_write.txn_meta();
+    const size_t num_rows = _upserts[segment_id]->standalone_pk_column()->size();
+    // The current value of every value column of each update row (a default for a new key), in the row
+    // order of the update file: see get_read_columns_ids().
+    MutableColumns& write_columns = _partial_update_states[segment_id].write_columns;
+    RETURN_ERROR_IF_FALSE(write_columns.size() == value_column_ids.size(),
+                          "flexible partial update: base columns do not match the value columns");
+    for (const auto& column : write_columns) {
+        // update_rows() below only DCHECKs its destination rowids.
+        RETURN_ERROR_IF_FALSE(column != nullptr && column->size() == num_rows,
+                              "flexible partial update: base column row count differs from the update rows");
+    }
+
+    ASSIGN_OR_RETURN(auto set_ids, _rowset_ptr->read_column_set_ids(static_cast<int>(segment_id)));
+    if (set_ids.size() != num_rows) {
+        return Status::InternalError(
+                fmt::format("flexible partial update: segment {} has {} rows but {} column-set ids", segment_id,
+                            num_rows, set_ids.size()));
+    }
+    std::vector<std::unordered_set<ColumnUID>> column_sets;
+    column_sets.reserve(txn_meta.distinct_column_sets_size());
+    for (const auto& set_pb : txn_meta.distinct_column_sets()) {
+        column_sets.emplace_back(set_pb.column_unique_ids().begin(), set_pb.column_unique_ids().end());
+    }
+    for (int16_t set_id : set_ids) {
+        if (set_id < 0 || static_cast<size_t>(set_id) >= column_sets.size()) {
+            return Status::InternalError(fmt::format("flexible partial update: column-set id {} out of range ({} sets)",
+                                                     set_id, column_sets.size()));
+        }
+    }
+
+    // The value columns the update file holds (partial_update_column_unique_ids also lists the key, which
+    // every row carries), in schema order, read by the tablet schema's column ids.
+    std::unordered_map<ColumnUID, size_t> uid_to_write_pos;
+    for (size_t p = 0; p < value_column_ids.size(); ++p) {
+        uid_to_write_pos.emplace(params.tablet_schema->column(value_column_ids[p]).unique_id(), p);
+    }
+    std::unordered_set<ColumnUID> written_uids(txn_meta.partial_update_column_unique_ids().begin(),
+                                               txn_meta.partial_update_column_unique_ids().end());
+    std::vector<ColumnId> upt_column_ids;
+    for (ColumnId cid : value_column_ids) {
+        if (written_uids.count(params.tablet_schema->column(cid).unique_id()) > 0) {
+            upt_column_ids.push_back(cid);
+        }
+    }
+    if (!upt_column_ids.empty()) {
+        Schema upt_schema = ChunkHelper::convert_schema(params.tablet_schema, upt_column_ids);
+        OlapReaderStatistics stats;
+        ASSIGN_OR_RETURN(auto iter,
+                         _rowset_ptr->get_segment_iterator_with_schema(static_cast<int>(segment_id), upt_schema,
+                                                                       params.tablet_schema, true, &stats));
+        RETURN_ERROR_IF_FALSE(iter != nullptr, "flexible partial update: the update segment has no rows to read");
+        DeferOp close_iter([&]() { iter->close(); });
+        auto upt_chunk = ChunkFactory::new_chunk(upt_schema, num_rows);
+        auto tmp_chunk = ChunkFactory::new_chunk(upt_schema, DEFAULT_CHUNK_SIZE);
+        while (true) {
+            tmp_chunk->reset();
+            auto st = iter->get_next(tmp_chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            TRY_CATCH_BAD_ALLOC(upt_chunk->append(*tmp_chunk));
+        }
+        if (upt_chunk->num_rows() != num_rows) {
+            return Status::InternalError(fmt::format("flexible partial update: segment {} read {} rows, expected {}",
+                                                     segment_id, upt_chunk->num_rows(), num_rows));
+        }
+
+        // A cell takes the update file's value only when the row's column set covers the column; every
+        // other cell keeps the current value already in write_columns, never the placeholder.
+        std::vector<uint32_t> covered_rows;
+        covered_rows.reserve(num_rows);
+        for (size_t c = 0; c < upt_column_ids.size(); ++c) {
+            const ColumnUID uid = params.tablet_schema->column(upt_column_ids[c]).unique_id();
+            covered_rows.clear();
+            for (uint32_t r = 0; r < num_rows; ++r) {
+                if (column_sets[set_ids[r]].count(uid) > 0) {
+                    covered_rows.push_back(r);
+                }
+            }
+            if (covered_rows.empty()) {
+                continue;
+            }
+            const auto& upt_col = upt_chunk->get_column_by_index(c);
+            auto selected = upt_col->clone_empty();
+            TRY_CATCH_BAD_ALLOC(selected->append_selective(*upt_col, covered_rows.data(), 0, covered_rows.size()));
+            RETURN_IF_EXCEPTION(write_columns[uid_to_write_pos.at(uid)]->update_rows(*selected, covered_rows.data()));
+        }
+    }
+
+    // Keys from the update file, every value column from the merge: a complete new segment, without
+    // "__cset__" (the tablet schema has no such column).
+    return SegmentRewriter::rewrite_full_row_lake(src, file_info, params.tablet_schema, value_column_ids, write_columns,
+                                                  segment_id, params.tablet, std::move(vector_index_opts),
+                                                  &file_info->vector_index_ids);
+}
+
 Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, const RowsetUpdateStateParams& params,
                                           std::map<int, SegmentFileInfo>* replace_segments,
                                           std::vector<FileMetaPB>* orphan_files) {
@@ -666,8 +792,33 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     const bool filter_unowned_rows = narrowed_emit || !reported_owned.empty();
 
     int64_t t_rewrite_start = MonotonicMillis();
-    if (has_auto_increment_partial_update_state(params) &&
-        !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
+    if (flexible_partial_update_enabled(params.op_write)) {
+        // FE keeps flexible loads off range-distributed tables, so this segment holds only this tablet's
+        // rows; the masked rewrite below writes every row of it.
+        if (filter_unowned_rows) {
+            return Status::NotSupported("flexible partial update is not supported on range-distributed tables");
+        }
+        // FE also rejects tables with an auto-increment column.
+        if (has_auto_increment_col) {
+            return Status::NotSupported("flexible partial update does not support auto-increment columns");
+        }
+        if (_upserts[segment_id] == nullptr || _upserts[segment_id]->standalone_pk_column()->size() == 0) {
+            // A flush that held only deletes leaves an empty segment; there is no row to merge and the
+            // segment stays as it is.
+            need_rename = false;
+        } else {
+            SegmentFileInfo file_info;
+            file_info.path = params.tablet->segment_location(dest_path);
+            RETURN_IF_ERROR(_rewrite_flexible_segment(segment_id, params, src, unmodified_column_ids,
+                                                      std::move(vector_index_opts), &file_info));
+            file_info.path = dest_path;
+            // Every column goes through a column writer, so a synchronous vector index of the dest has been
+            // built inline and nothing is carried over from src, as for rewrite_auto_increment_lake.
+            stamp_rewrite_vector_index_owner(params, &file_info);
+            (*replace_segments)[segment_id] = file_info;
+        }
+    } else if (has_auto_increment_partial_update_state(params) &&
+               !_auto_increment_partial_update_states[segment_id].skip_rewrite) {
         SegmentFileInfo file_info;
         file_info.path = params.tablet->segment_location(dest_path);
         RETURN_IF_ERROR(SegmentRewriter::rewrite_auto_increment_lake(

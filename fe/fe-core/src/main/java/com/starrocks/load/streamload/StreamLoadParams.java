@@ -48,6 +48,14 @@ public interface StreamLoadParams {
     Optional<Long> getLogRejectedRecordNum();
     Optional<Boolean> getPartialUpdate();
     Optional<TPartialUpdateMode> getPartialUpdateMode();
+
+    /**
+     * Flexible partial update: each row updates only the columns present in it. Only the thrift request of a
+     * stream load carries it (set by the BE for partial_update_mode=flexible_row).
+     */
+    default Optional<Boolean> isFlexiblePartialUpdate() {
+        return Optional.empty();
+    }
     Optional<String> getPayloadCompressionType();
     Optional<String> getWarehouse();
 

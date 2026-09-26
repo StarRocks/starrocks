@@ -19,11 +19,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
@@ -52,6 +54,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TOpType;
 import com.starrocks.thrift.TRoutineLoadMetaColumn;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TStreamSourceMetaKind;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BitmapType;
@@ -814,5 +817,257 @@ public class LoadTest {
 
         Assertions.assertNull(exprsByName.get(Load.LOAD_OP_COLUMN));
         Assertions.assertNull(slotDescByName.get(Load.LOAD_OP_COLUMN));
+    }
+
+    // A flexible partial update declares the hidden per-row column-set id as a source field, typed as a
+    // materialized SMALLINT, so that the json scanner has a slot to fill and the destination slot maps to it.
+    @Test
+    public void testInitColumnsFlexible() throws StarRocksException {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c0Name, null));
+        String c1Name = "c1";
+        columns.add(new Column(c1Name, IntegerType.INT, false, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c1Name, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                minTimes = 0;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                minTimes = 0;
+                table.getColumn(c1Name);
+                result = columns.get(1);
+                minTimes = 0;
+                // The hidden set-id column is a source-only field, not a table column.
+                table.getColumn(Load.LOAD_CSET_COLUMN);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, true, true, true, null, null);
+
+        SlotDescriptor csetSlot = slotDescByName.get(Load.LOAD_CSET_COLUMN);
+        Assertions.assertNotNull(csetSlot);
+        Assertions.assertEquals(IntegerType.SMALLINT, csetSlot.getColumn().getType());
+        Assertions.assertTrue(csetSlot.isMaterialized());
+        Assertions.assertNotNull(slotDescByName.get(c0Name));
+        Assertions.assertNotNull(slotDescByName.get(c1Name));
+    }
+
+    // Without the flag the source tuple is exactly what it was before flexible partial update existed.
+    @Test
+    public void testInitColumnsWithoutFlexibleHasNoColumnSetSlot() throws StarRocksException {
+        String c0Name = "c0";
+        columns.add(new Column(c0Name, IntegerType.INT, true, null, true, null, ""));
+        columnExprs.add(new ImportColumnDesc(c0Name, null));
+
+        new Expectations() {
+            {
+                table.getBaseSchema();
+                result = columns;
+                minTimes = 0;
+                table.getColumn(c0Name);
+                result = columns.get(0);
+                minTimes = 0;
+            }
+        };
+
+        Load.initColumns(table, columnExprs, null, exprsByName, new DescriptorTable(), srcTupleDesc,
+                slotDescByName, params, true, true, columnsFromPath, true, true, null, null);
+        Assertions.assertNotNull(slotDescByName.get(c0Name));
+        Assertions.assertNull(slotDescByName.get(Load.LOAD_CSET_COLUMN));
+    }
+
+    // checkFlexiblePartialUpdate: the shapes whose apply could leave a column of a row silently unapplied or
+    // overwritten are rejected; a plain shared-data primary key table passes.
+    @Test
+    public void testCheckFlexiblePartialUpdate(@Mocked OlapTable localTbl, @Mocked OlapTable cnValid,
+                                               @Mocked OlapTable cnDup, @Mocked OlapTable cnRange,
+                                               @Mocked OlapTable cnAi, @Mocked OlapTable cnCset,
+                                               @Mocked OlapTable cnGenerated, @Mocked OlapTable cnSortKey,
+                                               @Mocked OlapTable cnPkSortKey) {
+        Column pk = new Column("pk", IntegerType.BIGINT, true, null, false, null, "");
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        Column ai = new Column("id", IntegerType.BIGINT, false, null, false, null, "");
+        ai.setIsAutoIncrement(true);
+        // Upper case on purpose: column names are case-insensitive.
+        Column cset = new Column(Load.LOAD_CSET_COLUMN.toUpperCase(), IntegerType.INT, false, null, true, null, "");
+
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+
+                cnDup.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnDup.getKeysType();
+                result = KeysType.DUP_KEYS;
+                minTimes = 0;
+
+                cnRange.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnRange.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnRange.isRangeDistribution();
+                result = true;
+                minTimes = 0;
+
+                cnAi.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnAi.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnAi.getBaseSchema();
+                result = Lists.newArrayList(pk, ai, v);
+                minTimes = 0;
+
+                cnCset.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnCset.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnCset.getBaseSchema();
+                result = Lists.newArrayList(pk, v, cset);
+                minTimes = 0;
+
+                cnGenerated.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnGenerated.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnGenerated.hasGeneratedColumn();
+                result = true;
+                minTimes = 0;
+                cnGenerated.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+
+                // ORDER BY (v): the sort key holds a value column.
+                cnSortKey.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnSortKey.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnSortKey.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+                cnSortKey.getIndexMetaByMetaId(anyLong);
+                result = new MaterializedIndexMeta(1L, Lists.newArrayList(pk, v), 0, 0, (short) 1,
+                        TStorageType.COLUMN, KeysType.PRIMARY_KEYS, null, Lists.newArrayList(1));
+                minTimes = 0;
+
+                // ORDER BY (pk): a sort key made only of primary key columns.
+                cnPkSortKey.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnPkSortKey.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnPkSortKey.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+                cnPkSortKey.getIndexMetaByMetaId(anyLong);
+                result = new MaterializedIndexMeta(1L, Lists.newArrayList(pk, v), 0, 0, (short) 1,
+                        TStorageType.COLUMN, KeysType.PRIMARY_KEYS, null, Lists.newArrayList(0));
+                minTimes = 0;
+            }
+        };
+
+        List<ImportColumnDesc> plain = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, null, plain));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, "", null));
+        // The hidden __op mapping targets the op slot, not a value column.
+        List<ImportColumnDesc> withOp = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"),
+                new ImportColumnDesc(Load.LOAD_OP_COLUMN, new IntLiteral(0)));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnValid, null, withOp));
+
+        // Not cloud-native (an unstubbed mock), or not a primary key table.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data primary key",
+                () -> Load.checkFlexiblePartialUpdate(localTbl, null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data primary key",
+                () -> Load.checkFlexiblePartialUpdate(cnDup, null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "range-distributed",
+                () -> Load.checkFlexiblePartialUpdate(cnRange, null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
+                () -> Load.checkFlexiblePartialUpdate(cnValid, "v", plain));
+        List<ImportColumnDesc> derived = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("tmp"),
+                new ImportColumnDesc("v", new ArithmeticExpr(ArithmeticExpr.Operator.ADD, new SlotRef(null, "tmp"),
+                        new IntLiteral(1))));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "column mappings or expressions",
+                () -> Load.checkFlexiblePartialUpdate(cnValid, null, derived));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "generated column",
+                () -> Load.checkFlexiblePartialUpdate(cnGenerated, null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "auto-increment",
+                () -> Load.checkFlexiblePartialUpdate(cnAi, null, plain));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, Load.LOAD_CSET_COLUMN,
+                () -> Load.checkFlexiblePartialUpdate(cnCset, null, plain));
+        // A row that omits a value column of the sort key would be placed by its NULL placeholder.
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "sort key",
+                () -> Load.checkFlexiblePartialUpdate(cnSortKey, null, plain));
+        ExceptionChecker.expectThrowsNoException(() -> Load.checkFlexiblePartialUpdate(cnPkSortKey, null, plain));
+    }
+
+    // resolveFlexiblePartialUpdate either plans the flexible bit or fails the load; it never drops the bit.
+    @Test
+    public void testResolveFlexiblePartialUpdate(@Mocked OlapTable localTbl, @Mocked OlapTable cnValid)
+            throws DdlException {
+        Column pk = new Column("pk", IntegerType.BIGINT, true, null, false, null, "");
+        Column v = new Column("v", IntegerType.INT, false, null, true, null, "");
+        new Expectations() {
+            {
+                cnValid.isCloudNativeTableOrMaterializedView();
+                result = true;
+                minTimes = 0;
+                cnValid.getKeysType();
+                result = KeysType.PRIMARY_KEYS;
+                minTimes = 0;
+                cnValid.getBaseSchema();
+                result = Lists.newArrayList(pk, v);
+                minTimes = 0;
+            }
+        };
+        List<ImportColumnDesc> plain = Lists.newArrayList(new ImportColumnDesc("pk"), new ImportColumnDesc("v"));
+
+        boolean saved = Config.enable_flexible_partial_update;
+        try {
+            for (boolean enabled : new boolean[] {false, true}) {
+                Config.enable_flexible_partial_update = enabled;
+                // Not requested: never flexible, whatever the config and the table.
+                Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(cnValid, false, null, plain));
+                Assertions.assertFalse(Load.resolveFlexiblePartialUpdate(localTbl, false, "v", plain));
+            }
+
+            Config.enable_flexible_partial_update = false;
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "enable_flexible_partial_update",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, true, null, plain));
+
+            Config.enable_flexible_partial_update = true;
+            Assertions.assertTrue(Load.resolveFlexiblePartialUpdate(cnValid, true, null, plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "shared-data primary key",
+                    () -> Load.resolveFlexiblePartialUpdate(localTbl, true, null, plain));
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class, "merge_condition",
+                    () -> Load.resolveFlexiblePartialUpdate(cnValid, true, "v", plain));
+        } finally {
+            Config.enable_flexible_partial_update = saved;
+        }
     }
 }

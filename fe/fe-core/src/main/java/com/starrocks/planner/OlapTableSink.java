@@ -159,6 +159,9 @@ public class OlapTableSink extends DataSink {
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
+    // Flexible partial update: set by the planner that put the hidden per-row column-set slot
+    // (Load.LOAD_CSET_COLUMN) right before "__op" in the tuple. The flag, not the slot names, tells BE.
+    private boolean flexiblePartialUpdate = false;
     private ComputeResource computeResource = WarehouseManager.DEFAULT_RESOURCE;
     private long automaticBucketSize = 0;
     private boolean enableDynamicOverwrite = false;
@@ -288,6 +291,12 @@ public class OlapTableSink extends DataSink {
     // whenever any precondition of the feature is not met.
     private int writerNodeCount(TOlapTableSink tSink, TransactionState txnState) {
         if (!dstTable.isCloudNativeTableOrMaterializedView()) {
+            return NO_MULTI_NODE_WRITE;
+        }
+        // A flexible partial update is a stream load, which never spreads (see isStreamingLoad below). Stated
+        // on its own because its per-row column-set dictionary is delivered on the assumption that one node
+        // writes each tablet.
+        if (flexiblePartialUpdate) {
             return NO_MULTI_NODE_WRITE;
         }
         // Rows sharing a key are not spread: an aggregate, unique or primary key table routes by a
@@ -529,6 +538,15 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+    // Must be called before complete(), which writes it to the thrift sink.
+    public void setFlexiblePartialUpdate(boolean flexiblePartialUpdate) {
+        this.flexiblePartialUpdate = flexiblePartialUpdate;
+    }
+
+    public boolean isFlexiblePartialUpdate() {
+        return flexiblePartialUpdate;
+    }
+
     public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
         this.enableDynamicOverwrite = enableDynamicOverwrite;
     }
@@ -691,7 +709,11 @@ public class OlapTableSink extends DataSink {
             }
             tSink.setNum_replicas(numReplicas);
             tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
-            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true));
+            tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor, targetWriteIndexId, true,
+                    flexiblePartialUpdate));
+            if (flexiblePartialUpdate) {
+                tSink.setFlexible_partial_update(true);
+            }
 
             TransactionState txnState = getTransactionState(tSink, dstTable.isOlapExternalTable());
 
@@ -814,6 +836,14 @@ public class OlapTableSink extends DataSink {
     // passes true.
     public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
                                                      @Nullable Long targetWriteIndexId, boolean emitDistributedExprs) {
+        return createSchema(dbId, table, tupleDescriptor, targetWriteIndexId, emitDistributedExprs, false);
+    }
+
+    // flexiblePartialUpdate: the tuple carries the hidden per-row column-set slot right before "__op" (see
+    // setFlexiblePartialUpdate), and the index column lists name it at the same place.
+    public static TOlapTableSchemaParam createSchema(long dbId, OlapTable table, TupleDescriptor tupleDescriptor,
+                                                     @Nullable Long targetWriteIndexId, boolean emitDistributedExprs,
+                                                     boolean flexiblePartialUpdate) {
         TOlapTableSchemaParam schemaParam = new TOlapTableSchemaParam();
         schemaParam.setDb_id(dbId);
         schemaParam.setTable_id(table.getId());
@@ -856,6 +886,9 @@ public class OlapTableSink extends DataSink {
             }
 
             if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (flexiblePartialUpdate) {
+                    columns.add(Load.LOAD_CSET_COLUMN);
+                }
                 columns.add(Load.LOAD_OP_COLUMN);
             }
 

@@ -33,6 +33,7 @@
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/logging.h"
 #include "common/runtime_profile.h"
 #include "data_workflows/load/tablet_writer/load_channel.h"
@@ -1272,6 +1273,58 @@ TEST_F(LakeTabletsChannelTest, test_missing_timeout_ms) {
         ASSERT_TRUE(msg.find("missing timeout_ms") != std::string::npos) << msg;
     }
     ASSERT_FALSE(close_channel);
+}
+
+// Flexible partial update: a request carries the entries of the load's column-set dictionary that its rows
+// use for the first time, and the channel merges them into this node's registry before it writes the rows,
+// because the delta writers decode the set-ids when their memtables flush.
+TEST_F(LakeTabletsChannelTest, test_column_set_dict_merged_before_write) {
+    auto open_request = _open_request;
+    open_request.set_num_senders(1);
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    constexpr int kChunkSize = 32;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    auto chunk = generate_data(kChunkSize);
+    PTabletWriterAddChunkRequest request;
+    request.set_index_id(kIndexId);
+    request.set_sender_id(0);
+    request.set_eos(false);
+    request.set_timeout_ms(60000);
+    request.set_packet_seq(0);
+    for (int i = 0; i < kChunkSize; i++) {
+        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+        request.add_tablet_ids(tablet_id);
+        request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+    }
+    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+    request.mutable_chunk()->Swap(&chunk_pb);
+    auto* dict_pb = request.mutable_column_set_dict();
+    dict_pb->set_first_set_id(0);
+    dict_pb->add_sets()->add_column_names("c0");
+    auto* set1 = dict_pb->add_sets();
+    set1->add_column_names("c1");
+    set1->add_column_names("c0");
+
+    bool close_channel;
+    PTabletWriterAddBatchResult resp;
+    _tablets_channel->add_chunk(&chunk, request, &resp, &close_channel);
+    ASSERT_EQ(TStatusCode::OK, resp.status().status_code()) << resp.status().DebugString();
+    auto dict = FlexiblePartialUpdateRegistry::instance()->get(kTxnId);
+    ASSERT_NE(nullptr, dict);
+    ASSERT_EQ(2, dict->size());
+    EXPECT_EQ((std::vector<std::string>{"c0", "c1"}), dict->snapshot(1)[0]);
+
+    // Entries that start beyond the end of the dictionary would leave set-ids without entries.
+    request.set_packet_seq(1);
+    request.mutable_column_set_dict()->set_first_set_id(5);
+    PTabletWriterAddBatchResult resp2;
+    _tablets_channel->add_chunk(&chunk, request, &resp2, &close_channel);
+    ASSERT_NE(TStatusCode::OK, resp2.status().status_code());
+    ASSERT_GE(resp2.status().error_msgs_size(), 1);
+    EXPECT_TRUE(resp2.status().error_msgs(0).find("arrived before") != std::string::npos)
+            << resp2.status().error_msgs(0);
+    EXPECT_EQ(2, dict->size());
 }
 
 TEST_F(LakeTabletsChannelTest, test_negative_timeout_ms) {

@@ -26,6 +26,7 @@
 #include "column/serde/encode_level.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "data_sink/tablet/olap_table_sink.h"
@@ -939,6 +940,74 @@ TEST_F(TabletSinkIndexChannelTest, ConcurrentSendAndIncrementalInit) {
     EXPECT_TRUE(init_acquired_lock.load());
 
     (void)sink->close(runtime_state.get(), Status::OK());
+}
+
+static AddChunksRequestBuilder make_two_index_builder(int64_t txn_id, bool flexible_partial_update) {
+    AddChunksChannelSpec spec;
+    spec.flexible_partial_update = flexible_partial_update;
+    for (int64_t index_id : {1, 2}) {
+        PerIndexSpec index;
+        index.index_id = index_id;
+        index.txn_id = txn_id;
+        spec.indexes.push_back(index);
+    }
+    AddChunksRequestBuilder builder;
+    builder.init(std::move(spec));
+    return builder;
+}
+
+// A flexible partial update ships every entry of the load's column-set dictionary once, with the first
+// request built after the entry was interned, to every index of the node.
+TEST(AddChunksRequestBuilderTest, flexible_partial_update_ships_new_dictionary_entries) {
+    constexpr int64_t kTxnId = 730101;
+    auto dict = FlexiblePartialUpdateRegistry::instance()->retain(kTxnId);
+    DeferOp release([&]() { FlexiblePartialUpdateRegistry::instance()->release(kTxnId); });
+    auto builder = make_two_index_builder(kTxnId, true);
+    const std::vector<std::vector<int64_t>> tablet_ids(2);
+    AddChunksSendOptions opts;
+
+    ASSERT_EQ(0, dict->intern({"k", "v1"}));
+    ASSERT_EQ(1, dict->intern({"v2", "k"}));
+    auto first = builder.build(tablet_ids, opts);
+    ASSERT_EQ(2, first.requests_size());
+    for (const auto& request : first.requests()) {
+        ASSERT_TRUE(request.has_column_set_dict());
+        EXPECT_EQ(0, request.column_set_dict().first_set_id());
+        ASSERT_EQ(2, request.column_set_dict().sets_size());
+        ASSERT_EQ(2, request.column_set_dict().sets(1).column_names_size());
+        EXPECT_EQ("k", request.column_set_dict().sets(1).column_names(0));
+        EXPECT_EQ("v2", request.column_set_dict().sets(1).column_names(1));
+    }
+
+    // No new entry, nothing to ship.
+    auto second = builder.build(tablet_ids, opts);
+    EXPECT_FALSE(second.requests(0).has_column_set_dict());
+    EXPECT_FALSE(second.requests(1).has_column_set_dict());
+
+    ASSERT_EQ(2, dict->intern({"k"}));
+    opts.eos = true;
+    auto last = builder.build(tablet_ids, opts);
+    for (const auto& request : last.requests()) {
+        ASSERT_TRUE(request.has_column_set_dict());
+        EXPECT_EQ(2, request.column_set_dict().first_set_id());
+        ASSERT_EQ(1, request.column_set_dict().sets_size());
+        EXPECT_EQ("k", request.column_set_dict().sets(0).column_names(0));
+    }
+}
+
+// Any other load never carries the dictionary, even when one exists for its txn.
+TEST(AddChunksRequestBuilderTest, other_loads_ship_no_dictionary) {
+    constexpr int64_t kTxnId = 730102;
+    auto dict = FlexiblePartialUpdateRegistry::instance()->retain(kTxnId);
+    DeferOp release([&]() { FlexiblePartialUpdateRegistry::instance()->release(kTxnId); });
+    ASSERT_EQ(0, dict->intern({"k", "v1"}));
+    auto builder = make_two_index_builder(kTxnId, false);
+    const std::vector<std::vector<int64_t>> tablet_ids(2);
+    AddChunksSendOptions opts;
+    opts.eos = true;
+    auto request = builder.build(tablet_ids, opts);
+    EXPECT_FALSE(request.requests(0).has_column_set_dict());
+    EXPECT_FALSE(request.requests(1).has_column_set_dict());
 }
 
 } // namespace starrocks

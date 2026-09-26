@@ -1047,6 +1047,15 @@ This topic introduces the following types of BE configurations:
 - Description: Specifies whether to log the HTTP requests and responses for Stream Load jobs.
 - Introduced in: v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
+### enable_flexible_partial_update
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: [Experimental] Whether this BE or CN accepts Stream Load jobs with `partial_update_mode` set to `flexible_row` (flexible partial updates of shared-data Primary Key tables, in which each row of a JSON-formatted load updates only the columns present in that row). The FE configuration item of the same name must also be set to `true`. When set to `false` (default), such loads fail. Enable this only after all BEs and CNs have been upgraded to a version that supports flexible partial update: a node of an earlier version would apply such a load as a plain partial update and set the columns that a row omits to `NULL`. For the same reason, before downgrading, disable it and wait until all flexible partial update loads have been published.
+- Introduced in: -
+
 ### flush_thread_num_per_store
 
 - Default: 2

@@ -135,6 +135,9 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+    // Flexible partial update: each row updates only the columns present in it. Only a stream load planned on
+    // the pipeline engine (Config.enable_pipeline_stream_load) reaches this planner with it.
+    private boolean flexiblePartialUpdate = false;
 
     private final ComputeResource computeResource;
 
@@ -238,6 +241,7 @@ public class LoadPlanner {
         this.sessionVariables = sessionVariables;
         this.computeResource = streamLoadInfo.getComputeResource();
         this.mergeConditionStr = streamLoadInfo.getMergeConditionStr();
+        this.flexiblePartialUpdate = streamLoadInfo.isFlexiblePartialUpdate();
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, String dbName, OlapTable destTable,
@@ -318,6 +322,10 @@ public class LoadPlanner {
         } else if (!isPrimaryKey && partialUpdate) {
             throw new DdlException("Only primary key table support partial update");
         }
+        // Flexible partial update: planned as asked or the load fails, never silently planned as a plain partial
+        // update. StreamLoadScanNode reads the same StreamLoadInfo flag.
+        flexiblePartialUpdate = Load.resolveFlexiblePartialUpdate(destTable, flexiblePartialUpdate, mergeConditionStr,
+                columnDescs);
         List<Boolean> isMissAutoIncrementColumn = Lists.newArrayList();
         if (partialUpdate) {
             if (this.etlJobType == EtlJobType.BROKER) {
@@ -434,6 +442,13 @@ public class LoadPlanner {
         }
         // Add op type slotdesc for primary tabale
         if (isPrimaryKey) {
+            if (flexiblePartialUpdate) {
+                // The per-row column-set id, immediately before "__op" so that "__op" stays the last column.
+                SlotDescriptor csetSlot = descTable.addSlotDescriptor(tupleDesc);
+                csetSlot.setIsMaterialized(true);
+                csetSlot.setColumn(new Column(Load.LOAD_CSET_COLUMN, IntegerType.SMALLINT));
+                csetSlot.setIsNullable(false);
+            }
             SlotDescriptor slotDesc = descTable.addSlotDescriptor(tupleDesc);
             slotDesc.setIsMaterialized(true);
             slotDesc.setColumn(new Column(Load.LOAD_OP_COLUMN, IntegerType.TINYINT));
@@ -525,6 +540,7 @@ public class LoadPlanner {
             if (olapTable.getAutomaticBucketSize() > 0) {
                 ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
             }
+            ((OlapTableSink) dataSink).setFlexiblePartialUpdate(flexiblePartialUpdate);
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);

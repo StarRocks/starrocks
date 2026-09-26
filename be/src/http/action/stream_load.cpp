@@ -134,6 +134,16 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
 static Status stream_load_put_internal(const TStreamLoadPutRequest& request, int32_t rpc_timeout_ms,
                                        TStreamLoadPutResult* result);
 
+// Whether FE planned the load as a flexible partial update, which it marks on the table sink.
+static bool planned_as_flexible_partial_update(const TExecPlanFragmentParams& params) {
+    if (!params.__isset.fragment || !params.fragment.__isset.output_sink) {
+        return false;
+    }
+    const auto& sink = params.fragment.output_sink;
+    return sink.__isset.olap_table_sink && sink.olap_table_sink.__isset.flexible_partial_update &&
+           sink.olap_table_sink.flexible_partial_update;
+}
+
 StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, orchestration::StreamLoadOrchestrator* stream_load_orchestrator,
                                    StreamLoadExecutor* stream_load_executor, ConcurrentLimiter* limiter,
                                    BatchWriteMgr* batch_write_mgr)
@@ -621,6 +631,25 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
         } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
             request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_UPSERT_MODE);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible_row") {
+            // Flexible partial update: each JSON row updates only the columns present in it, applied in row
+            // mode. The separate flexible bit makes FE plan the per-row column sets. Without it the load
+            // would run as a plain partial update of the union of the columns and overwrite the columns a
+            // row omits with NULL, so the token is refused, not ignored, while the feature is off.
+            if (!config::enable_flexible_partial_update) {
+                return Status::NotSupported(
+                        "partial_update_mode=flexible_row requires enable_flexible_partial_update to be enabled on "
+                        "the BE and the FE");
+            }
+            request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
+            request.__set_flexible_partial_update(true);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "flexible") {
+            // The column-mode apply of a flexible partial update is not supported yet. Refuse the token rather
+            // than ignore it: run as a plain partial update, the load would overwrite the columns a row omits
+            // with NULL.
+            return Status::NotSupported(
+                    "partial_update_mode=flexible (flexible partial update in column mode) is not supported yet; "
+                    "use partial_update_mode=flexible_row");
         }
     }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
@@ -675,6 +704,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!plan_status.ok()) {
         LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << ctx->brief();
         return plan_status;
+    }
+    // An FE that does not know about flexible partial update ignores the flexible bit and plans a plain partial
+    // update of the union of the columns, which would overwrite the columns a row omits with NULL. A flexible
+    // plan always marks its table sink, so refuse to run one that does not.
+    if (request.__isset.flexible_partial_update && request.flexible_partial_update &&
+        !planned_as_flexible_partial_update(ctx->put_result.params)) {
+        return Status::NotSupported(
+                "the FE did not plan this load as a flexible partial update; set enable_flexible_partial_update to "
+                "true only after every FE supports it");
     }
     VLOG(3) << "params is " << thrift_plan_debug_string(ctx->put_result.params);
     // if we not use streaming, we must download total content before we begin

@@ -1042,6 +1042,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。`true` 表示启用，`false` 表示不启用。
 - 引入版本：v2.5.17, v3.0.9, v3.1.6, v3.2.1
 
+### enable_flexible_partial_update
+
+- 默认值：false
+- 类型：Boolean
+- 单位：-
+- 是否动态：是
+- 描述：【实验功能】当前 BE 或 CN 是否接受 `partial_update_mode` 为 `flexible_row` 的 Stream Load 导入（存算分离主键表的灵活部分更新：JSON 格式导入的每一行只更新该行中出现的列）。同名的 FE 配置项也需要设置为 `true`。设置为 `false`（默认）时，这类导入会失败。请在所有 BE 和 CN 都升级到支持灵活部分更新的版本之后再开启：更早版本的节点会把这类导入当作普通部分更新执行，把行中未出现的列更新为 `NULL`。出于同样的原因，降级之前请先关闭此配置，并等待所有灵活部分更新的导入完成发布。
+- 引入版本：-
+
 ### flush_thread_num_per_store
 
 - 默认值：2

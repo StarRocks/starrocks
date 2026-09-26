@@ -1121,6 +1121,9 @@ struct TStreamLoadPutRequest {
     56: optional string payload_compression_type
     // CDC envelope format
     57: optional PlanNodes.TEnvelopeType envelope
+    // Flexible partial update: set by the BE stream load handler for partial_update_mode=flexible_row.
+    // partial_update_mode carries the storage mode; this bit asks FE to plan per-row column sets.
+    58: optional bool flexible_partial_update
 
     // begin from 101, in case of conflict with other's change
     101: optional string warehouse  // deprecated, use backend_id implicitly convey information about the warehouse

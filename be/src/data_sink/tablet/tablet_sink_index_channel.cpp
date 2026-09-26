@@ -29,6 +29,7 @@
 #include "common/config_compression_fwd.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/statusor.h"
 #include "common/tracer.h"
 #include "common/util/thrift_util.h"
@@ -63,8 +64,22 @@ AddChunksBatchPayload AddChunksBatchAccumulator::take_batch(ChunkUniquePtr chunk
 }
 
 PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<std::vector<int64_t>>& tablet_ids,
-                                                             const AddChunksSendOptions& opts) const {
+                                                             const AddChunksSendOptions& opts) {
     PTabletWriterAddChunksRequest req;
+    // Flexible partial update: the entries of the load's per-row column-set dictionary (column-NAME sets)
+    // that no earlier request of this channel carried, read from this process's registry by txn_id. The json
+    // scanners of this plan intern a row's set before the row reaches the sink, so the entries up to the
+    // dictionary's current size cover every set-id of this request, and the tablet writers need them before
+    // their memtables flush. Requests reach a node in order, so every entry arrives before the rows that use
+    // it. Names rather than unique ids, because the writer owns the tablet schema and translates them.
+    const size_t first_new_set = _column_sets_sent;
+    std::vector<std::vector<std::string>> new_sets;
+    if (_spec.flexible_partial_update && !_spec.indexes.empty()) {
+        if (auto dict = FlexiblePartialUpdateRegistry::instance()->get(_spec.indexes[0].txn_id); dict != nullptr) {
+            new_sets = dict->snapshot(first_new_set);
+            _column_sets_sent += new_sets.size();
+        }
+    }
     if (_spec.load_id != nullptr) {
         req.mutable_id()->CopyFrom(*_spec.load_id);
     }
@@ -95,6 +110,18 @@ PTabletWriterAddChunksRequest AddChunksRequestBuilder::build(const std::vector<s
             if (it != _spec.index_id_to_partition_ids->end()) {
                 for (auto pid : it->second) {
                     sub->add_partition_ids(pid);
+                }
+            }
+        }
+        // Every index's tablets channel on the node receives the entries: each merges them into the node's
+        // registry before it writes the rows, whichever of them processes the request first.
+        if (!new_sets.empty()) {
+            auto* dict_pb = sub->mutable_column_set_dict();
+            dict_pb->set_first_set_id(static_cast<int32_t>(first_new_set));
+            for (const auto& names : new_sets) {
+                auto* set_pb = dict_pb->add_sets();
+                for (const auto& name : names) {
+                    set_pb->add_column_names(name);
                 }
             }
         }
@@ -173,6 +200,7 @@ Status NodeChannel::init(RuntimeState* state) {
     spec.load_id = &_parent->_load_id;
     spec.enable_colocate_mv_index = _enable_colocate_mv_index;
     spec.index_id_to_partition_ids = &_parent->_index_id_partition_ids;
+    spec.flexible_partial_update = _parent->_flexible_partial_update;
     spec.indexes.reserve(_index_tablets_map.size());
     for (const auto& [index_id, tablets] : _index_tablets_map) {
         PerIndexSpec s;
@@ -244,6 +272,12 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
     } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_UPDATE_MODE) {
         request.set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+    }
+    // Flexible partial update: forward TOlapTableSink.flexible_partial_update to the tablet writer as
+    // the explicit PTabletWriterOpenRequest.flexible_partial_update flag; the writer never infers it from the
+    // slot names. Left unset for non-flexible loads so the request is byte-identical to before.
+    if (_parent->_flexible_partial_update) {
+        request.set_flexible_partial_update(true);
     }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
