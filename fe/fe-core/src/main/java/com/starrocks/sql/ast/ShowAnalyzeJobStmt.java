@@ -16,8 +16,10 @@ package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,18 +52,23 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
 
         if (!analyzeJob.isAnalyzeAllDb()) {
             String dbName = analyzeJob.getDbName();
-            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, analyzeJob.getCatalogName(), dbName);
-
-            if (db == null) {
-                throw new MetaNotFoundException("No found database: " + dbName);
+            String privilegeDbName = dbName;
+            row.set(2, dbName);
+            if (analyzeJob.isNative()) {
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getDb(context, analyzeJob.getCatalogName(), dbName);
+                if (db == null) {
+                    throw new MetaNotFoundException("No found database: " + dbName);
+                }
+                row.set(2, db.getOriginName());
+                privilegeDbName = db.getFullName();
             }
-
-            row.set(2, db.getOriginName());
 
             if (!analyzeJob.isAnalyzeAllTable()) {
                 String tableName = analyzeJob.getTableName();
-                Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .getTable(context, analyzeJob.getCatalogName(), dbName, tableName);
+                BasicTable table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getBasicTable(context, analyzeJob.getCatalogName(), dbName, tableName,
+                                Config.enable_external_catalog_information_schema_tables_access_full_metadata);
 
                 if (table == null) {
                     throw new MetaNotFoundException("No found table: " + tableName);
@@ -73,18 +80,27 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, privilegeDbName, table);
                 } catch (AccessDeniedException e) {
                     return null;
                 }
 
-                if (null != columns && !columns.isEmpty()
-                        && (columns.size() != table.getBaseSchema().size())) {
-                    String str = String.join(",", columns);
-                    if (str.length() > 100) {
-                        row.set(4, str.substring(0, 100) + "...");
-                    } else {
-                        row.set(4, str);
+                if (null != columns && !columns.isEmpty()) {
+                    // Internal-catalog path returns a real Table; preserve the
+                    // legacy "ALL" rendering when the explicit column list
+                    // equals the full schema. External catalogs only get a
+                    // BasicTable stub here (no schema, no network IO), so we
+                    // always render the captured column names.
+                    long fullSchemaSize = (table instanceof Table)
+                            ? ((Table) table).getBaseSchema().size()
+                            : -1L;
+                    if (columns.size() != fullSchemaSize) {
+                        String str = String.join(",", columns);
+                        if (str.length() > 100) {
+                            row.set(4, str.substring(0, 100) + "...");
+                        } else {
+                            row.set(4, str);
+                        }
                     }
                 }
             }
