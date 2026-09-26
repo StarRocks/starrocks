@@ -26,6 +26,12 @@
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
+#if defined(__linux__)
+#include <sys/auxv.h>
+#if __has_include(<asm/hwcap.h>)
+#include <asm/hwcap.h>
+#endif
+#endif
 #include "base/coding.h"
 
 namespace starrocks::crc32c {
@@ -156,7 +162,7 @@ static inline uint32_t LE_LOAD32(const uint8_t* p) {
     return decode_fixed32_le(p);
 }
 
-#if defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))
+#if (defined(__SSE4_2__) && (defined(__LP64__) || defined(_WIN64))) || (defined(__ARM_NEON) && defined(__aarch64__))
 static inline uint64_t LE_LOAD64(const uint8_t* p) {
     return decode_fixed64_le(p);
 }
@@ -175,10 +181,8 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 #ifndef __SSE4_2__
 #if defined(__ARM_NEON) && defined(__aarch64__)
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
-    *l = __crc32cw(static_cast<unsigned int>(*l), LE_LOAD32(*p));
-    *p += 4;
+    *l = __crc32cd(static_cast<uint32_t>(*l), LE_LOAD64(*p));
+    *p += 8;
 #else
     Slow_CRC32(l, p);
 #endif // defined(__ARM_NEON) && defined(__aarch64__)
@@ -240,6 +244,23 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 uint32_t crc32c_sse42_simd(uint32_t crc, const char* buf, size_t len);
 #endif
 
+#if defined(__ARM_NEON) && defined(__aarch64__)
+namespace {
+inline bool has_arm_pmull() {
+#if defined(__APPLE__)
+    return true;
+#elif defined(__linux__) && defined(HWCAP_PMULL)
+    static const bool s_has_pmull = (getauxval(AT_HWCAP) & HWCAP_PMULL) != 0;
+    return s_has_pmull;
+#else
+    return false;
+#endif
+}
+} // namespace
+
+uint32_t crc32c_pmull_simd(uint32_t crc, const char* buf, size_t len);
+#endif
+
 uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
 #if defined(__SSE4_2__) && defined(__PCLMUL__)
     constexpr size_t CRC32C_SSE42_CHUNKSIZE_MASK = ((1 << 4) - 1);
@@ -248,6 +269,16 @@ uint32_t Extend(uint32_t crc, const char* buf, size_t size) {
         size_t chunk_size = size & ~CRC32C_SSE42_CHUNKSIZE_MASK;
         size &= CRC32C_SSE42_CHUNKSIZE_MASK;
         crc = ~crc32c_sse42_simd(~crc, buf, chunk_size);
+        if (!size) return crc;
+        buf += chunk_size;
+    }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+    constexpr size_t CRC32C_CHUNKSIZE_MASK = ((1 << 4) - 1);
+    constexpr size_t CRC32C_MINIMUM_LENGTH = (1 << 6);
+    if (size >= CRC32C_MINIMUM_LENGTH && has_arm_pmull()) {
+        size_t chunk_size = size & ~CRC32C_CHUNKSIZE_MASK;
+        size &= CRC32C_CHUNKSIZE_MASK;
+        crc = ~crc32c_pmull_simd(~crc, buf, chunk_size);
         if (!size) return crc;
         buf += chunk_size;
     }
