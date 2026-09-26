@@ -58,7 +58,6 @@ import org.mockito.Mockito;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.function.Consumer;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.assertHookDoesNotDelegate;
@@ -199,19 +198,28 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void testInsertWithLoadPropertiesShortCircuits() throws Exception {
-        // INSERT PROPERTIES(strict_mode=true) ... — load properties are only validated by
-        // InsertAnalyzer.analyzeProperties after this hook, so pre-splitting for a statement that
-        // may fail property validation is wrong. Skip conservatively when any property is present.
-        // The gate reads the parse-time key set, not getProperties(), which the analyzer overwrites.
-        InsertStmt stmt = simpleTableInsertStmt();
-        when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("strict_mode"));
+    public void testInsertWithLoadPropertiesDispatches() throws Exception {
+        // A PROPERTIES(...) clause no longer disqualifies the statement. No INSERT load property can
+        // move a row to a different tablet: the live ones (strict_mode, max_filter_ratio,
+        // merge_condition) only remove rows, and the rest are shared load vocabulary an INSERT
+        // ignores. So the sampled boundaries stay valid and the statement must reach the flow.
+        // Driven with the mix the requirement asks for plus two keys the removed gate rejected
+        // (partial_update, merge_condition) and a max_filter_ratio the analyzer will itself reject,
+        // so re-adding any arm of that gate makes this fail.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "2.0",
+                    "partial_update", "true", "merge_condition", "v"));
 
-        assertHookDoesNotDelegate(() ->
-                InsertPreSplitHook.maybeRunPreSplit(stmt, mockConnectContextWithSessionPreSplit(true)));
+            InsertPreSplitHook.maybeRunPreSplit(fixture.insertStmt, fixture.context);
+
+            flow.verify(() -> PreSplitFlow.dispatch(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context),
+                    any(PreSplitPartitionScope.class)), times(1));
+        }
     }
-
-    // ---------- extractSingleTableSource: query-shape filters ----------
 
     @Test
     public void testNullQueryStatementShortCircuits() throws Exception {
@@ -601,9 +609,8 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
             Assertions.assertNotNull(scanContext, "prepare must build a scan context for the eligible source");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames(),
-                    "scan context must carry the resolved source sort-key column");
-            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames(),
+                    "scan context must carry the full resolved target->source column map");
             Assertions.assertNull(scanContext.wherePredicateSql(),
                     "no WHERE clause must yield a null predicate SQL");
             Assertions.assertSame(fixture.sourceTable, scanContext.sourceTable(),
@@ -614,7 +621,7 @@ public class InsertPreSplitHookTableTest {
     @Test
     public void prepareAllowsExpressionOnNonKeyColumn() throws Exception {
         // target [k, v]; SELECT k, parse_json(v) FROM src. The sampler only needs
-        // target key k, so the value expression never has to resolve to a source column.
+        // target key k, so the value expression is intentionally absent from the map.
         try (SourceFixture fixture = sourceFixture()) {
             SelectRelation selectRelation =
                     (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
@@ -627,8 +634,41 @@ public class InsertPreSplitHookTableTest {
             InsertFromTableScanContext scanContext = fixture.prepareScanContext();
 
             Assertions.assertNotNull(scanContext);
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
-            Assertions.assertEquals(List.of(), scanContext.partitionSourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareAcceptsPartialTargetColumnList() throws Exception {
+        // target base (k, v, extra); INSERT INTO t (k, v) SELECT * FROM src(k, v). This path used
+        // to decline every non-identity list; the shared targetColumnListIsPreSplitSafe gate (see
+        // InsertPreSplitHookColumnListTest) is now the only column-list gate, and the omitted
+        // "extra" -- defaulted by the load -- simply never enters the map.
+        try (SourceFixture fixture = sourceFixture(List.of("k", "v", "extra"), List.of("k", "v"))) {
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("k", "v"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a partial target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
+        }
+    }
+
+    @Test
+    public void prepareAcceptsReorderedTargetColumnList() throws Exception {
+        // INSERT INTO t (v, k) SELECT k, v FROM src -- outputs pair against the list as written,
+        // so the target sort key k is sampled from source column v, not from source column k.
+        try (SourceFixture fixture = sourceFixture()) {
+            SelectRelation selectRelation =
+                    (SelectRelation) fixture.insertStmt.getQueryStatement().getQueryRelation();
+            SelectList projection = selectListOf(bareColumnItem("k"), bareColumnItem("v"));
+            when(selectRelation.getSelectList()).thenReturn(projection);
+            when(fixture.insertStmt.getTargetColumnNames()).thenReturn(List.of("v", "k"));
+
+            InsertFromTableScanContext scanContext = fixture.prepareScanContext();
+
+            Assertions.assertNotNull(scanContext, "a reordered target column list must not skip pre-split");
+            Assertions.assertEquals(Map.of("k", "v", "v", "k"), scanContext.targetToSourceColumnNames());
         }
     }
 
@@ -673,7 +713,7 @@ public class InsertPreSplitHookTableTest {
             Assertions.assertNotNull(scanContext, "source == target must still build a scan context");
             Assertions.assertSame(fixture.target(), scanContext.sourceTable(),
                     "scan context must carry the target table as its source when source == target");
-            Assertions.assertEquals(List.of("k"), scanContext.sortKeySourceColumnNames());
+            Assertions.assertEquals(Map.of("k", "k", "v", "v"), scanContext.targetToSourceColumnNames());
         }
     }
 
@@ -718,7 +758,6 @@ public class InsertPreSplitHookTableTest {
             when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
             when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
                     "strict_mode", "true", "max_filter_ratio", "0.0", "timeout", "14400"));
-            when(fixture.insertStmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of());
 
             InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
 
@@ -729,12 +768,24 @@ public class InsertPreSplitHookTableTest {
     }
 
     @Test
-    public void dynamicOverwriteHookSkipsUserSpecifiedProperties() throws Exception {
-        assertDynamicOverwriteHookSkips(42L, stmt -> {
-            when(stmt.isDynamicOverwrite()).thenReturn(true);
-            when(stmt.hasOverwriteJob()).thenReturn(true);
-            when(stmt.getUserSpecifiedPropertyKeys()).thenReturn(Set.of("max_filter_ratio"));
-        });
+    public void dynamicOverwriteHookDispatchesWithUserSpecifiedProperties() throws Exception {
+        // Parity with the normal entry point, which the properties gate used to break separately:
+        // this hook is the one that runs AFTER analysis, so it sees a getProperties() the analyzer
+        // has already filled. Neither the parse-time key set nor that map may disqualify it.
+        try (SourceFixture fixture = sourceFixture();
+                MockedStatic<PreSplitFlow> flow = Mockito.mockStatic(PreSplitFlow.class)) {
+            when(fixture.insertStmt.isDynamicOverwrite()).thenReturn(true);
+            when(fixture.insertStmt.hasOverwriteJob()).thenReturn(true);
+            when(fixture.insertStmt.getProperties()).thenReturn(Map.of(
+                    "strict_mode", "true", "max_filter_ratio", "0.1", "timeout", "14400",
+                    "timezone", "Asia/Shanghai"));
+
+            InsertPreSplitHook.maybeRunDynamicOverwritePreSplit(fixture.insertStmt, fixture.context, 42L);
+
+            flow.verify(() -> PreSplitFlow.runDynamicOverwriteFlow(
+                    any(Database.class), eq(fixture.targetTable), any(PreSplitFlow.Prepared.class),
+                    eq(LoadKind.INSERT_FROM_TABLE), any(), eq(fixture.context), eq(42L)), times(1));
+        }
     }
 
     @Test

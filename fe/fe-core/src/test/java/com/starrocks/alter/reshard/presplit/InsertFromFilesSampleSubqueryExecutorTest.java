@@ -24,6 +24,7 @@ import com.starrocks.common.util.SqlUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
@@ -445,6 +446,122 @@ class InsertFromFilesSampleSubqueryExecutorTest {
         Assertions.assertInstanceOf(DecimalVariant.class, rows.get(0).sortKeyTuple().get(0));
         Assertions.assertEquals("12.34", rows.get(0).sortKeyTuple().get(0).getStringValue());
         Assertions.assertEquals("56.78", rows.get(1).sortKeyTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void wherePredicateIsCopiedIntoTheSampleSubquery() throws Exception {
+        // INSERT INTO t SELECT * FROM FILES(...) WHERE dt >= '2026-01-01': the sampler builds its
+        // own FROM clause, so the statement's predicate only reaches the BE if the scan context
+        // carries it -- otherwise the sample would span rows the load never writes.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), "`dt` >= '2026-01-01'"),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("WHERE (`dt` >= '2026-01-01') AND rand(0)"),
+                "the statement's predicate must gate the sample: " + capturedSql);
+    }
+
+    @Test
+    void renamedProjectionIsSampledFromTheFilesColumnThatBacksIt() throws Exception {
+        // INSERT INTO t(sort_key, ...) SELECT file_col, ... FROM FILES(...): the load writes
+        // file_col into sort_key, so the sample must read file_col. Projecting the TARGET name
+        // would either fail (no such file column) or read an unrelated one.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "file_col"), /*wherePredicateSql=*/ null),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith("SELECT `file_col` FROM FILES("),
+                "the projection must name the FILES column, not the target column: " + capturedSql);
+    }
+
+    @Test
+    void literalFedPartitionColumnIsProjectedAsTheLiteralCastToTheColumnType() throws Exception {
+        // INSERT INTO t BY NAME SELECT k, '20260917' AS dt FROM FILES("path" = ".../dt=20260917/*"):
+        // dt is in the directory name, not the file, so projecting a FILES column for it would fail.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/dt=20260917/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/dt=20260917/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(bigintColumn("sort_key")), List.of(new Column("dt", DateType.DATE)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(
+                capturedSql.toString().startsWith("SELECT `sort_key`, CAST('20260917' AS date) FROM FILES("),
+                "the literal stands in for the partition column: " + capturedSql);
+    }
+
+    @Test
+    void literalFedSortKeyColumnIsProjectedAsTheLiteral() throws Exception {
+        // ORDER BY (dt, sort_key) with dt fed by '20260917': the constant sits in the sort-key tuple
+        // exactly as the load writes it.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/dt=20260917/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/dt=20260917/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+        Column dt = new Column("dt", DateType.DATE);
+
+        executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "file_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(dt, bigintColumn("sort_key")),
+                /*partitionSourceColumns=*/ List.of(dt),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date) FROM FILES("),
+                "the literal stands in for dt in the sort key and the partition column: " + capturedSql);
+    }
+
+    @Test
+    void projectedColumnWithNoFilesMappingThrows() {
+        // Fail-safe for a metadata race between the admitting gate and sampling: never compute a
+        // boundary from a column the mapping cannot account for.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
     }
 
     private static TableFunctionTable mockSourceTable(

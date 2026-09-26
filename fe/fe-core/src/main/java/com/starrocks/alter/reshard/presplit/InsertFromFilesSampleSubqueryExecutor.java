@@ -25,7 +25,10 @@ import java.util.List;
  * Production data-tier {@link SampleSubqueryExecutor} for the INSERT-from-FILES
  * path. Re-issues the load's original {@code FILES(...)} properties verbatim
  * via {@link FilesSampleSubqueryExecutor}'s shared scaffolding so the BE scan
- * covers the same files the load will scan.
+ * covers the same files the load will scan, carrying over the statement's WHERE
+ * predicate and projecting every key column through the scan context's
+ * target-&gt;FILES column mapping so a renamed or reordered projection is sampled
+ * from the column the load actually writes.
  */
 final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExecutor {
 
@@ -51,7 +54,10 @@ final class InsertFromFilesSampleSubqueryExecutor extends FilesSampleSubqueryExe
         return new Source(
                 sourceTable.getProperties(),
                 sumFileBytes(sourceTable.loadFileList()),
-                insertFromFilesContext.computeResource());
+                insertFromFilesContext.computeResource(),
+                insertFromFilesContext.wherePredicateSql(),
+                insertFromFilesContext.targetToSourceColumnNames(),
+                insertFromFilesContext.targetToConstantSql());
     }
 
     private static long sumFileBytes(List<TBrokerFileStatus> fileStatuses) {
