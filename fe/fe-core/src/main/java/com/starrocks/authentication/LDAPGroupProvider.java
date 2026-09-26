@@ -166,6 +166,11 @@ public class LDAPGroupProvider extends GroupProvider {
             // different cache entries.
             lookupKey = LDAPAuthProvider.canonicalDn(distinguishedName);
         }
+        if (lookupKey == null) {
+            // The cache is a ConcurrentHashMap, which rejects a null key with an NPE instead of reporting
+            // a miss - so a caller with nothing to look up has to be answered here.
+            return Set.of();
+        }
         return userToGroupCache.getOrDefault(lookupKey, Set.of());
     }
 
