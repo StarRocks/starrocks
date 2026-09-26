@@ -15,10 +15,14 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.slot.DeployState;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanFragmentExecParams;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
@@ -52,6 +56,42 @@ public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
             connectContext.getSessionVariable().setEnablePhasedScheduler(true);
             runSchedule();
         }
+    }
+
+
+    @Test
+    public void testIncrementalRequestCarriesRefreshedCloudConfiguration() throws Exception {
+        connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(true);
+        connectContext.getSessionVariable().setConnectorIncrementalScanRangeNumber(20);
+        new MockUp<Deployer>() {
+            @Mock
+            public void deployFragments(DeployState deployState) {
+            }
+        };
+        DefaultCoordinator coordinator = startScheduling("select * from hive0.file_split_db.file_split_tbl");
+
+        ExecutionFragment scanFragment = coordinator.getExecutionDAG().getFragmentsInPostorder().stream()
+                .filter(fragment -> !fragment.getScanNodes().isEmpty())
+                .findFirst().orElseThrow();
+        FragmentInstance instance = scanFragment.getInstances().get(0);
+        int scanId = scanFragment.getScanNodes().iterator().next().getId().asInt();
+        TFragmentInstanceFactory factory = new TFragmentInstanceFactory(connectContext,
+                coordinator.getJobSpec(), coordinator.getExecutionDAG(), new TNetworkAddress("127.0.0.1", 9020));
+
+        // A freshly re-vended credential stashed on the fragment rides the incremental request,
+        // keyed by scan node id, so the BE can refresh its filesystem token mid-query.
+        TCloudConfiguration cc = new TCloudConfiguration();
+        cc.setCloud_properties(Map.of("fs.gs.temporary.access.token", "tok2"));
+        scanFragment.setRefreshedNodeCloudConfigs(Map.of(scanId, cc));
+        TExecPlanFragmentParams withRefresh = factory.createIncrementalScanRanges(instance);
+        Assertions.assertTrue(withRefresh.params.isSetNode_to_cloud_configuration());
+        Assertions.assertEquals("tok2", withRefresh.params.getNode_to_cloud_configuration()
+                .get(scanId).getCloud_properties().get("fs.gs.temporary.access.token"));
+
+        // Nothing stashed (the common case): the field stays unset so the wire cost is zero.
+        scanFragment.setRefreshedNodeCloudConfigs(null);
+        TExecPlanFragmentParams withoutRefresh = factory.createIncrementalScanRanges(instance);
+        Assertions.assertFalse(withoutRefresh.params.isSetNode_to_cloud_configuration());
     }
 
     public void runSchedule() throws Exception {
