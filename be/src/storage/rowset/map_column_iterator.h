@@ -49,11 +49,14 @@ public:
     StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range,
                                                                         Column* dst) override;
 
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec_by_ordinal(const OrdinalSparseRange& range,
+                                                                                   Column* dst) override;
+
     std::string name() const override { return "MapColumnIterator"; }
 
 private:
-    Status get_element_range_vec(const SparseRange<>& range, MapColumn* map_column, bool seek,
-                                 SparseRange<>& element_read_range, size_t& read_rows);
+    Status get_element_range_vec(const OrdinalSparseRange& range, MapColumn* map_column, bool seek,
+                                 OrdinalSparseRange& element_read_range, size_t& read_rows);
 
     ColumnReader* _reader;
 
