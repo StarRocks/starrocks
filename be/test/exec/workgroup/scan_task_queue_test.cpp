@@ -17,18 +17,32 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <future>
 #include <memory>
 #include <mutex>
 #include <thread>
 
+<<<<<<< HEAD:be/test/exec/workgroup/scan_task_queue_test.cpp
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
+=======
+#include "base/metrics.h"
+#include "base/testutil/assert.h"
+#include "base/testutil/parallel_test.h"
+#include "compute_env/workgroup/priority_scan_task_queue.h"
+#include "compute_env/workgroup/scan_executor.h"
+#include "compute_env/workgroup/work_group.h"
+#include "compute_env/workgroup/work_group_scan_task_queue.h"
+#include "compute_env/workgroup/work_group_schedule_policy.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/pipeline_metrics.h"
+>>>>>>> ec7f3f53b2 ([Enhancement] Export worker-thread metrics for the scan executors (#77435)):be/test/compute_env/workgroup/scan_task_queue_test.cpp
 
 namespace starrocks::workgroup {
 
@@ -98,4 +112,105 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
     ASSERT_EQ(submit_tasks, finished_tasks.load());
 }
 
+<<<<<<< HEAD:be/test/exec/workgroup/scan_task_queue_test.cpp
+=======
+PARALLEL_TEST(ScanExecutorTest, test_thread_pool_metrics) {
+    constexpr int kNumThreads = 4;
+    // Declared before the registry so that the registry is destroyed first.
+    pipeline::ScanExecutorMetrics metrics;
+    MetricRegistry registry("test");
+    metrics.thread_pool.register_all_metrics(&registry, "pipe_scan_");
+
+    auto& expected_threads = metrics.thread_pool.expected_worker_threads;
+    auto& alive_threads = metrics.thread_pool.worker_threads;
+    ASSERT_TRUE(registry.get_metric("pipe_scan_expected_worker_threads") != nullptr);
+    ASSERT_TRUE(registry.get_metric("pipe_scan_worker_threads") != nullptr);
+
+    auto make_executor = [&]() {
+        std::unique_ptr<ThreadPool> thread_pool;
+        CHECK(ThreadPoolBuilder("scan_metrics")
+                      .set_min_threads(0)
+                      .set_max_threads(kNumThreads)
+                      .set_max_queue_size(100)
+                      .build(&thread_pool)
+                      .ok());
+        return std::make_unique<ScanExecutor>(std::move(thread_pool), std::make_unique<PriorityScanTaskQueue>(100),
+                                              &metrics);
+    };
+    // Workers are started asynchronously.
+    auto collect_until_alive = [&](uint64_t target) {
+        for (int i = 0; i < 500 && alive_threads.value() != target; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            registry.trigger_hook();
+        }
+    };
+
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
+
+    {
+        auto executor = make_executor();
+
+        // No worker is expected before initialize(), even though the pool can already hold them.
+        registry.trigger_hook();
+        ASSERT_EQ(0, expected_threads.value());
+        ASSERT_EQ(0, alive_threads.value());
+
+        executor->initialize(kNumThreads);
+        collect_until_alive(kNumThreads);
+        ASSERT_EQ(kNumThreads, expected_threads.value());
+        ASSERT_EQ(kNumThreads, alive_threads.value());
+
+        // Shrinking the executor lowers the expectation immediately, so a resource group being
+        // resized cannot be mistaken for workers that went missing. The workers themselves only
+        // leave once they wake up for a task, so the count of alive ones may lag behind.
+        executor->change_num_threads(kNumThreads / 2);
+        registry.trigger_hook();
+        ASSERT_EQ(kNumThreads / 2, expected_threads.value());
+        ASSERT_GE(alive_threads.value(), expected_threads.value());
+
+        executor->close();
+        registry.trigger_hook();
+        ASSERT_EQ(0, expected_threads.value());
+        ASSERT_EQ(0, alive_threads.value());
+    }
+
+    // An executor destroyed without close() must stop being sampled as well: a sampler left behind
+    // would reach into freed memory on the next collection.
+    {
+        auto executor = make_executor();
+        registry.trigger_hook();
+    }
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
+
+    // Every executor contributes, as a resource group with exclusive executors has its own.
+    auto first = make_executor();
+    auto second = make_executor();
+    first->initialize(kNumThreads);
+    second->initialize(kNumThreads);
+    collect_until_alive(2 * kNumThreads);
+    ASSERT_EQ(2 * kNumThreads, expected_threads.value());
+    ASSERT_EQ(2 * kNumThreads, alive_threads.value());
+    first->close();
+    second->close();
+    registry.trigger_hook();
+    ASSERT_EQ(0, expected_threads.value());
+    ASSERT_EQ(0, alive_threads.value());
+}
+
+PARALLEL_TEST(WorkGroupScanTaskQueueTest, test_should_yield_uses_injected_policy) {
+    auto wg = std::make_shared<WorkGroup>("scan_wg", 101, WorkGroup::DEFAULT_VERSION, 1, 0.5, 10, 1.0,
+                                          WorkGroupType::WG_NORMAL, WorkGroup::DEFAULT_MEM_POOL);
+
+    FakeWorkGroupSchedulePolicy policy;
+    policy.should_yield_func = [expected = wg.get()](const WorkGroup* actual) { return actual == expected; };
+    WorkGroupScanTaskQueue queue(ScanSchedEntityType::OLAP, policy);
+
+    ASSERT_TRUE(queue.should_yield(wg->scan_sched_entity(), 0));
+}
+
+>>>>>>> ec7f3f53b2 ([Enhancement] Export worker-thread metrics for the scan executors (#77435)):be/test/compute_env/workgroup/scan_task_queue_test.cpp
 } // namespace starrocks::workgroup
