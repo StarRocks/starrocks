@@ -103,10 +103,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
@@ -226,6 +228,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         try {
             List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            Set<String> currentPartitionNames = new HashSet<>();
             boolean partitionLegacyName = getPartitionLegacyName(paimonTable);
             for (org.apache.paimon.partition.Partition partition : partitions) {
                 String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
@@ -233,8 +236,10 @@ public class PaimonMetadata implements ConnectorMetadata {
                         Arrays.stream(partitionPath.split("/")).map(part -> part.split("=")[1]).toArray(String[]::new);
                 Partition srPartition =
                         getPartition(partition, partitionColumnNames, partitionColumnTypes, partitionValues, partitionLegacyName);
+                currentPartitionNames.add(srPartition.getPartitionName());
                 this.partitionInfos.get(identifier).put(srPartition.getPartitionName(), srPartition);
             }
+            this.partitionInfos.get(identifier).keySet().retainAll(currentPartitionNames);
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
         }
