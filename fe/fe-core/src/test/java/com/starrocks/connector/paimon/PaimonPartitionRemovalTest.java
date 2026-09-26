@@ -55,7 +55,7 @@ public class PaimonPartitionRemovalTest {
     }
 
     private org.apache.paimon.partition.Partition partition(String value, long time) {
-        return new org.apache.paimon.partition.Partition(Map.of("dt", value), 1L, 1L, 1L, time, 1, true);
+        return new org.apache.paimon.partition.Partition(Map.of("dt", value), 1L, 1L, 1L, time, true);
     }
 
     @Test
