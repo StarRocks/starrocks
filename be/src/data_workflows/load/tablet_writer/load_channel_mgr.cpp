@@ -20,7 +20,9 @@
 #include <memory>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/sync_point.h"
 #include "common/config_ingest_fwd.h"
+#include "common/process_exit.h"
 #include "common/system/cpu_info.h"
 #include "common/thread/thread.h"
 #include "data_workflows/load/tablet_writer/load_channel.h"
@@ -41,12 +43,15 @@ public:
             : _load_channel_mgr(load_channel_mgr), _open_context(open_context) {}
 
     ~ChannelOpenTask() override {
+        // Covers both the completed run() path and a cancelled task whose run() never ran.
+        _load_channel_mgr->dec_open_rpc_inflight();
         if (!_is_done) {
             cancel_task(Status::ServiceUnavailable("Thread pool was shut down"));
         }
     }
 
     void run() override {
+        TEST_SYNC_POINT("ChannelOpenTask::run:before_open");
         if (_try_mark_done()) {
             _load_channel_mgr->_open(_open_context);
         }
@@ -122,6 +127,11 @@ void LoadChannelMgr::close() {
     }
 }
 
+size_t LoadChannelMgr::pending_work_count() const {
+    std::lock_guard l(_lock);
+    return _load_channels.size();
+}
+
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
@@ -149,8 +159,14 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     open_context.response = response;
     open_context.done = done;
     open_context.receive_rpc_time_ns = MonotonicNanos();
+    // Drain-visible before the admission check (same order as fragment RPCs): wait_for_finish
+    // force-rejects then re-samples pending_work_count. If the check ran first, a deschedule
+    // gap could let drain see 0, finish, and still create a channel from a stale true snapshot.
+    inc_open_rpc_inflight();
+    open_context.admitted_at_open = should_accept_load_channel_open();
     if (!config::enable_load_channel_rpc_async) {
         _open(open_context);
+        dec_open_rpc_inflight();
         return;
     }
     auto task = std::make_shared<ChannelOpenTask>(this, open_context);
@@ -191,6 +207,15 @@ void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
             const auto& reason = aborted_iter->second.second;
             response->mutable_status()->set_status_code(TStatusCode::ABORTED);
             response->mutable_status()->add_error_msgs(reason);
+            return;
+        } else if (!open_context.admitted_at_open) {
+            // Teardown. Snapshot at open() so a queued worker is not aborted solely
+            // because it ran later. No local provenance: first remote successor and
+            // brand-new load_id are indistinguishable, so cutoff still admits all
+            // new channels; incremental opens of existing channels stay served.
+            response->mutable_status()->set_status_code(TStatusCode::ABORTED);
+            response->mutable_status()->add_error_msgs(
+                    "load channel rejected: BE is shutting down, please choose another BE");
             return;
         } else if (!is_tracker_hit_hard_limit(_mem_tracker, config::load_process_max_memory_hard_limit_ratio) ||
                    config::enable_new_load_on_memory_limit_exceeded) {
