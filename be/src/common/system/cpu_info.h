@@ -41,6 +41,9 @@ public:
     static const int64_t AVX2 = (1 << 6);
     static const int64_t AVX512F = (1 << 7);
     static const int64_t AVX512BW = (1 << 8);
+    static const int64_t ARM_NEON = (1 << 9);
+    static const int64_t ARM_CRC32 = (1 << 10);
+    static const int64_t ARM_PMULL = (1 << 11);
 
     /// Cache enums for L1 (data), L2 and L3
     enum CacheLevel {
