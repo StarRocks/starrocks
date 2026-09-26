@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 -- name: test_lake_rollup @native
 CREATE TABLE tbl1 (
     k1 date,
@@ -52,6 +53,9 @@ SELECT v1 FROM rollup1 [_SYNC_MV_] ORDER BY v1;
 -- !result
 
 -- name: test_lake_rollup2 @native
+=======
+-- name: test_lake_rollup_2 @native
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 CREATE TABLE tbl2 (
     k1 date,
     k2 int,
@@ -63,7 +67,10 @@ CREATE TABLE tbl2 (
     PROPERTIES('replication_num' = '1', 'file_bundling' = 'false');
 -- result:
 -- !result
+<<<<<<< HEAD
 
+=======
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 INSERT INTO tbl2
 VALUES
     ("2020-01-12",4,100),
@@ -71,7 +78,10 @@ VALUES
     ("2020-01-11",4,100);
 -- result:
 -- !result
+<<<<<<< HEAD
 
+=======
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 ALTER TABLE tbl2 ADD ROLLUP rollup2 (k1, v1) FROM tbl2;
 -- result:
 -- !result
@@ -79,17 +89,26 @@ function: wait_alter_table_finish("ROLLUP", 8)
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 
 INSERT INTO tbl2 VALUES("2020-01-11",6,100);
 -- result:
 -- !result
 
+=======
+INSERT INTO tbl2 VALUES("2020-01-11",6,100);
+-- result:
+-- !result
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 SELECT v1 FROM rollup2 [_SYNC_MV_] ORDER BY v1;
 -- result:
 100
 300
 -- !result
+<<<<<<< HEAD
 
+=======
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 ALTER TABLE tbl2 MODIFY COLUMN k2 BIGINT;
 -- result:
 -- !result
@@ -97,7 +116,10 @@ function: wait_alter_table_finish("COLUMN")
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 
+=======
+>>>>>>> e8219e2 ([UT] SQL-Tester: make test_hive_mv runnable, and record it with test_lake_rollup_2 (#79798))
 SELECT v1 FROM rollup2 [_SYNC_MV_] ORDER BY v1;
 -- result:
 100
