@@ -1491,8 +1491,8 @@ public class SchemaChangeHandler extends AlterHandler {
             // For current_timestamp/now() this freezes ALTER-time into defaultValue so BE can backfill pre-existing
             // rows. New rows still resolve through defaultExpr (calculatedDefaultValue checks the expr first), and
             // metadata display is handled in getMetaDefaultValue.
-            long startTime = ConnectContext.get().getStartTime();
-            newColumn.setDefaultValue(newColumn.calculatedDefaultValueWithTime(startTime));
+            newColumn.setDefaultValue(
+                    newColumn.calculatedDefaultValueWithTime(ConnectContext.get().getStartTimeInstant()));
         }
 
         String newColName = newColumn.getName();
