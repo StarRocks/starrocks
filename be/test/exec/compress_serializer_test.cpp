@@ -82,7 +82,7 @@ TEST_F(CompressSerializerTest, OnlyNullConstantKeyLeavesItsNeighbourIntact) {
     }
 
     // And it all reads back: key0 keeps its values and is not null, key1 comes back entirely null.
-    MutableColumns out;
+    Columns out;
     out.emplace_back(NullableColumn::create(Int64Column::create(), NullColumn::create()));
     out.emplace_back(NullableColumn::create(Int64Column::create(), NullColumn::create()));
     bitcompress_deserialize(out, bases, offsets, used_bits, kRows, sizeof(int64_t), keys.data());
