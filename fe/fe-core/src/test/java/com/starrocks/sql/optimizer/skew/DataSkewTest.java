@@ -135,44 +135,90 @@ public class DataSkewTest {
     }
 
     @Test
-    void itShouldReturnMoreSkewedMetric() {
-        // GIVEN
+    void itShouldReportOnlyNullSkewWhenMcvNotSkewed() {
+        // GIVEN: NULL fraction above threshold, MCVs are not skewed
+        final var nonSkewedHistogram = getNonSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.9) // heavily null skewed
+                .setHistogram(nonSkewedHistogram) //
+                .build();
+
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats) //
+                .build();
+
+        // WHEN
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+
+        // THEN
+        assertTrue(skewInfo.isSkewed());
+        assertTrue(skewInfo.hasNullSkew());
+        assertFalse(skewInfo.hasMcvSkew());
+    }
+
+    @Test
+    void itShouldReportOnlyMcvSkewWhenNullNotSkewed() {
+        // GIVEN: MCVs above threshold, NULL fraction is not skewed
         final var skewedHistogram = getSkewedHistogram();
-        final var nullAndMcvButMoreNullSkewedCol = createNewTestColumn();
-        final var nullAndMcvButMoreNullSkewedStats = ColumnStatistic.builder()
-                .setNullsFraction(99) //
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
+                .setNullsFraction(0.01) // not null skewed
                 .setHistogram(skewedHistogram) //
                 .build();
 
-        final var nullAndMcvButMoreMcvSkewedCol = createNewTestColumn();
-        final var nullAndMcvButMoreMcvSkewedStats = ColumnStatistic.builder()
+        final var stats = new Statistics.Builder()
+                .setOutputRowCount(100_000)
+                .addColumnStatistic(col, colStats) //
+                .build();
+
+        // WHEN
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
+
+        // THEN
+        assertTrue(skewInfo.isSkewed());
+        assertFalse(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
+
+        final var expectedMcvs =
+                List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L),
+                        Pair.create("4", 5000L), Pair.create("5", 500L));
+        assertEquals(expectedMcvs.size(), skewInfo.maybeMcvs().get().size());
+        for (final var value : expectedMcvs) {
+            assertTrue(skewInfo.maybeMcvs().get().contains(value));
+        }
+    }
+
+    @Test
+    void itShouldReportBothNullAndMcvSkewWhenBothPresent() {
+        // GIVEN: NULL fraction and MCVs both above threshold at the same time
+        final var skewedHistogram = getSkewedHistogram();
+        final var col = createNewTestColumn();
+        final var colStats = ColumnStatistic.builder()
                 .setNullsFraction(0.6) //
                 .setHistogram(skewedHistogram) //
                 .build();
 
         final var stats = new Statistics.Builder()
                 .setOutputRowCount(100_000)
-                .addColumnStatistic(nullAndMcvButMoreNullSkewedCol, nullAndMcvButMoreNullSkewedStats) //
-                .addColumnStatistic(nullAndMcvButMoreMcvSkewedCol, nullAndMcvButMoreMcvSkewedStats) //
+                .addColumnStatistic(col, colStats) //
                 .build();
 
-        // WHEN / THEN
-        final var nullAndMcvButMoreNullSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreNullSkewedStats);
-        assertTrue(nullAndMcvButMoreNullSkewInfo.isSkewed());
-        assertEquals(DataSkew.SkewType.SKEWED_NULL, nullAndMcvButMoreNullSkewInfo.type());
-        assertFalse(nullAndMcvButMoreNullSkewInfo.maybeMcvs().isPresent());
+        // WHEN
+        final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
 
-        final var nullAndMcvButMoreMcvSkewInfo = DataSkew.getColumnSkewInfo(stats, nullAndMcvButMoreMcvSkewedStats);
-        assertTrue(nullAndMcvButMoreMcvSkewInfo.isSkewed());
-        assertEquals(DataSkew.SkewType.SKEWED_MCV, nullAndMcvButMoreMcvSkewInfo.type());
-        assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().isPresent());
+        // THEN: neither kind of skew is dropped
+        assertTrue(skewInfo.isSkewed());
+        assertTrue(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
 
         final var expectedMcvs =
-                List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L), Pair.create("4", 5000L),
-                        Pair.create("5", 500L));
-        assertEquals(expectedMcvs.size(), nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().size());
+                List.of(Pair.create("1", 50000L), Pair.create("2", 20000L), Pair.create("3", 10000L),
+                        Pair.create("4", 5000L), Pair.create("5", 500L));
+        assertEquals(expectedMcvs.size(), skewInfo.maybeMcvs().get().size());
         for (final var value : expectedMcvs) {
-            assertTrue(nullAndMcvButMoreMcvSkewInfo.maybeMcvs().get().contains(value));
+            assertTrue(skewInfo.maybeMcvs().get().contains(value));
         }
     }
 
@@ -308,7 +354,8 @@ public class DataSkewTest {
         assertTrue(DataSkew.isColumnSkewed(stats, colStats));
 
         final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
-        assertEquals(DataSkew.SkewType.SKEWED_MCV, skewInfo.type());
+        assertFalse(skewInfo.hasNullSkew());
+        assertTrue(skewInfo.hasMcvSkew());
     }
 
     @Test
@@ -334,7 +381,8 @@ public class DataSkewTest {
         assertFalse(DataSkew.isColumnSkewed(stats, colStats));
 
         final var skewInfo = DataSkew.getColumnSkewInfo(stats, colStats);
-        assertEquals(DataSkew.SkewType.NOT_SKEWED, skewInfo.type());
+        assertFalse(skewInfo.hasNullSkew());
+        assertFalse(skewInfo.hasMcvSkew());
         assertEquals(DataSkew.AdditionalInfo.INACCURATE_ROW_COUNT, skewInfo.additionalInfo());
     }
 

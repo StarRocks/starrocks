@@ -375,6 +375,7 @@ public class SkewJoinTest extends PlanTestBase {
                 }
             };
             setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
             connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
@@ -391,7 +392,6 @@ public class SkewJoinTest extends PlanTestBase {
             // Left side should include CASE WHEN <col> IS NULL THEN round(...)
             assertCContains(plan, "IS NULL THEN");
             assertCContains(plan, """
-                      5:Project
                       |  <slot 9> : [NULL]
                     """);
         } finally {
@@ -403,7 +403,56 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
-    void testSkewJoinWithNullOnlySkewAndMcvSkew() throws Exception {
+    void testSkewJoinWithMcvOnlySkewByStats() throws Exception {
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        try {
+            final var emptyStatisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder() //
+                                .setNullsFraction(0.01) //
+                                .setHistogram(new Histogram(List.of(), Map.of("11", 400L, "22", 200L))) // MCV skew
+                                .build();
+                    }
+
+                    return ColumnStatistic.builder() //
+                            .setNullsFraction(0.0) //
+                            .build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), 1337);
+            setTableStatistics(getOlapTable("t1"), 1337);
+            connectContext.getGlobalStateMgr().setStatisticStorage(emptyStatisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+
+            // LEFT JOIN here to keep consistent with siblink tests; Only MCVs are skewed
+            String sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
+            String plan = getFragmentPlan(sql);
+
+            // Rewrite should add rand_col equality and build skew value salt infra
+            assertCContains(plan, "rand_col = ");
+            assertCContains(plan, "unnest");
+            assertCContains(plan, "generate_serials");
+            // MCV-only
+            assertCContains(plan, """
+                      |  <slot 9> : [11,22]
+                    """);
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
+    @Test
+    void testSkewJoinWithNullAndMcvSkewByStats() throws Exception {
         final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
         final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
         final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
@@ -442,11 +491,9 @@ public class SkewJoinTest extends PlanTestBase {
             // Left side should include CASE WHEN <col> IS NULL THEN round(...)
             assertCContains(plan, "IS NULL THEN");
 
-            // In this case, the MCV should be selected since:
-            //  - 0.3 null fractions * 1337 rows < 400 rows (11) + 200 rows (22)
+            // Both skews present, NULL and both MCVs are salted together
             assertCContains(plan, """
-                      5:Project
-                      |  <slot 9> : [11,22]
+                      |  <slot 9> : [NULL,11,22]
                     """);
         } finally {
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
@@ -497,6 +544,70 @@ public class SkewJoinTest extends PlanTestBase {
             // THEN
             assertNotContains(plan, "rand_col");
             assertNotContains(plan, "generate_serials");
+        } finally {
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(oldEnableRewrite);
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(oldMaxOverlap);
+            connectContext.getGlobalStateMgr().setStatisticStorage(oldStatisticsStorage);
+        }
+    }
+
+    @Test
+    void testSkewJoinKeepsNullSaltWhenCombinedSkewButMcvOverlapTooHigh() throws Exception {
+        // GIVEN
+        final var oldStatisticsStorage = connectContext.getGlobalStateMgr().getStatisticStorage();
+        final double oldThreshold = connectContext.getSessionVariable().getSkewJoinDataSkewThreshold();
+        final boolean oldEnableStats = connectContext.getSessionVariable().isEnableStatsToOptimizeSkewJoin();
+        final boolean oldEnableRewrite = connectContext.getSessionVariable().isEnableOptimizerSkewJoinOptimizeV1();
+        final long oldMaxOverlap = connectContext.getSessionVariable().getSkewJoinMaxOtherSideOverlapRowCount();
+        try {
+            final long totalRows = 10_000;
+            final var statisticsStorage = new EmptyStatisticStorage() {
+                @Override
+                public ColumnStatistic getColumnStatistic(Table table, String column) {
+                    // t0.v1: MCV and NULL Skew
+                    if (table.getName().equalsIgnoreCase("t0") && column.equalsIgnoreCase("v1")) {
+                        return ColumnStatistic.builder()
+                                .setNullsFraction(0.3)
+                                .setHistogram(new Histogram(List.of(),
+                                    Map.of("11", 4000L, "22", 3000L)))
+                                .build();
+                    }
+                    // t1.v4: same MCV values ut low counts: NOT skewed
+                    if (table.getName().equalsIgnoreCase("t1") && column.equalsIgnoreCase("v4")) {
+                        return ColumnStatistic.builder()
+                                .setNullsFraction(0.0)
+                                .setHistogram(new Histogram(List.of(),
+                                    Map.of("11", 100L, "22", 100L)))
+                                .build();
+                    }
+                    return ColumnStatistic.builder().setNullsFraction(0.0).build();
+                }
+            };
+            setTableStatistics(getOlapTable("t0"), totalRows);
+            setTableStatistics(getOlapTable("t1"), totalRows);
+            connectContext.getGlobalStateMgr().setStatisticStorage(statisticsStorage);
+            connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0.1);
+            connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
+            connectContext.getSessionVariable().setEnableOptimizerSkewJoinOptimizeV1(true);
+            // Overlapping rows on other side = 100 + 100 = 200, set guard threshold below that.
+            connectContext.getSessionVariable().setSkewJoinMaxOtherSideOverlapRowCount(150);
+
+            // WHEN
+            // Important to use a LEFT JOIN here so NULLs are preserved
+            String sql = "select * from t0 left join t1 on t0.v1 = t1.v4";
+            String plan = getFragmentPlan(sql);
+
+            // THEN
+            assertCContains(plan, "rand_col = ");
+            assertCContains(plan, "unnest");
+            assertCContains(plan, "generate_serials");
+            assertCContains(plan, "IS NULL THEN");
+            assertCContains(plan, """
+                      |  <slot 9> : [NULL]
+                    """);
+            assertNotContains(plan, "[NULL,11,22]");
         } finally {
             connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(oldThreshold);
             connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(oldEnableStats);
