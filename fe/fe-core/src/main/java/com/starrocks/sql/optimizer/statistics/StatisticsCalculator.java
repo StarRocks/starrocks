@@ -185,6 +185,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalDouble;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -2194,17 +2195,53 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private static ColumnStatistic estimateWindowCall(CallOperator call, Statistics inputStatistics,
                                                       List<ScalarOperator> partitionExpressions) {
-        if (!partitionExpressions.isEmpty() || !FunctionSet.ROW_NUMBER.equals(call.getFnName())) {
+        if (!FunctionSet.ROW_NUMBER.equals(call.getFnName())) {
             return ExpressionStatisticCalculator.calculate(call, inputStatistics);
         }
         double rowCount = inputStatistics.getOutputRowCount();
+        OptionalDouble rowsPerPartition = estimateRowsPerPartition(partitionExpressions, inputStatistics, rowCount);
+        if (rowsPerPartition.isEmpty()) {
+            return ColumnStatistic.unknown();
+        }
         return ColumnStatistic.builder()
                 .setMinValue(1)
-                .setMaxValue(rowCount)
-                .setDistinctValuesCount(rowCount)
+                .setMaxValue(rowsPerPartition.getAsDouble())
+                .setDistinctValuesCount(rowsPerPartition.getAsDouble())
                 .setNullsFraction(0)
                 .setAverageRowSize(call.getType().getTypeSize())
                 .build();
+    }
+
+    // The window partitions are the groups a GROUP BY on the partition columns would produce, so the average
+    // partition size follows from that group count. Assumes partitions are evenly sized.
+    private static OptionalDouble estimateRowsPerPartition(List<ScalarOperator> partitionExpressions,
+                                                           Statistics inputStatistics, double rowCount) {
+        if (partitionExpressions.isEmpty() || !partitionExpressions.stream().allMatch(ScalarOperator::isColumnRef)) {
+            return OptionalDouble.of(rowCount);
+        }
+
+        // Duplicate partition keys (e.g. PARTITION BY pk, pk) do not create extra partitions, so deduplicate
+        // before estimating the group count to avoid multiplying the cardinality for the same column.
+        List<ColumnRefOperator> partitionColumns = partitionExpressions.stream()
+                .map(ScalarOperator::<ColumnRefOperator>cast)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Without statistics on an uncovered partition column, computeGroupByStatistics falls back to default
+        // group-by coefficients that would fabricate a confident, tight per-partition size (and range) from no
+        // information. Combined NDV statistics can still cover unknown individual columns, so preserve them.
+        Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats =
+                inputStatistics.getLargestSubsetMCStats(new HashSet<>(partitionColumns));
+        Set<ColumnRefOperator> columnsWithMultiColumnStats =
+                mcStats == null ? Collections.emptySet() : mcStats.first;
+        if (partitionColumns.stream().anyMatch(column ->
+                !columnsWithMultiColumnStats.contains(column) &&
+                        inputStatistics.getColumnStatistic(column).isUnknown())) {
+            return OptionalDouble.empty();
+        }
+
+        double partitionCount = computeGroupByStatistics(partitionColumns, inputStatistics, new HashMap<>());
+        return OptionalDouble.of(rowCount / Math.max(1, partitionCount));
     }
 
     public Statistics estimateStatistics(List<ScalarOperator> predicateList, Statistics statistics) {

@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -1413,7 +1414,7 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testPartitionedRowNumberKeepsLegacyStatistics() {
+    public void testPartitionedRowNumberStatistics() {
         ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
         ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
         CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
@@ -1435,6 +1436,102 @@ public class StatisticsCalculatorTest {
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
 
         ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
+        Assertions.assertFalse(rowNumberStatistic.isUnknown());
+        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testPartitionedRowNumberStatisticsWithDuplicateKeys() {
+        ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
+        ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
+        CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        Statistics.Builder childStats = Statistics.builder();
+        childStats.setOutputRowCount(1000);
+        childStats.addColumnStatistic(pk, ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100).setDistinctValuesCount(100).setNullsFraction(0).build());
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childStats.build());
+
+        // Duplicate partition keys (PARTITION BY pk, pk) must not create extra partitions, so the estimate
+        // should match PARTITION BY pk instead of multiplying the group count.
+        LogicalWindowOperator windowOperator = new LogicalWindowOperator.Builder()
+                .setWindowCall(ImmutableMap.of(rn, rowNumber))
+                .setPartitionExpressions(Lists.newArrayList(pk, pk))
+                .build();
+        GroupExpression groupExpression = new GroupExpression(windowOperator, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
+        Assertions.assertFalse(rowNumberStatistic.isUnknown());
+        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testPartitionedRowNumberStatisticsWithUnknownPartitionStats() {
+        ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
+        ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
+        CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        // No statistics are provided for the partition column pk, so its ColumnStatistic is unknown.
+        Statistics.Builder childStats = Statistics.builder();
+        childStats.setOutputRowCount(1000);
+        childStats.addColumnStatistic(pk, ColumnStatistic.unknown());
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childStats.build());
+
+        LogicalWindowOperator windowOperator = new LogicalWindowOperator.Builder()
+                .setWindowCall(ImmutableMap.of(rn, rowNumber))
+                .setPartitionExpressions(Lists.newArrayList(pk))
+                .build();
+        GroupExpression groupExpression = new GroupExpression(windowOperator, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        // Without partition statistics, the partition size and row-number NDV cannot be estimated reliably.
+        ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
         Assertions.assertTrue(rowNumberStatistic.isUnknown());
+    }
+
+    @Test
+    public void testPartitionedRowNumberStatisticsWithCombinedStats() {
+        ColumnRefOperator pk1 = columnRefFactory.create("pk1", IntegerType.BIGINT, false);
+        ColumnRefOperator pk2 = columnRefFactory.create("pk2", IntegerType.BIGINT, false);
+        ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
+        CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        Statistics.Builder childStats = Statistics.builder();
+        childStats.setOutputRowCount(1000);
+        childStats.addColumnStatistic(pk1, ColumnStatistic.unknown());
+        childStats.addColumnStatistic(pk2, ColumnStatistic.unknown());
+        childStats.addMultiColumnStatistics(
+                ImmutableSet.of(pk1, pk2), new MultiColumnCombinedStats(100));
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childStats.build());
+
+        LogicalWindowOperator windowOperator = new LogicalWindowOperator.Builder()
+                .setWindowCall(ImmutableMap.of(rn, rowNumber))
+                .setPartitionExpressions(Lists.newArrayList(pk1, pk2))
+                .build();
+        GroupExpression groupExpression = new GroupExpression(windowOperator, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
+        ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
+        Assertions.assertFalse(rowNumberStatistic.isUnknown());
+        Assertions.assertEquals(1, rowNumberStatistic.getMinValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getMaxValue(), 0.001);
+        Assertions.assertEquals(10, rowNumberStatistic.getDistinctValuesCount(), 0.001);
+        Assertions.assertEquals(0, rowNumberStatistic.getNullsFraction(), 0.001);
     }
 }
