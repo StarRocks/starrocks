@@ -19,6 +19,7 @@ import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
@@ -34,6 +35,7 @@ public class DeltaLakeMetadataFactory {
     private final HdfsEnvironment hdfsEnvironment;
     protected final ConnectorProperties connectorProperties;
     protected final MetastoreType metastoreType;
+    private final Map<String, String> properties;
 
     public DeltaLakeMetadataFactory(String catalogName, IDeltaLakeMetastore metastore, CachingHiveMetastoreConf hmsConf,
                                     Map<String, String> properties, HdfsEnvironment hdfsEnvironment,
@@ -48,9 +50,15 @@ public class DeltaLakeMetadataFactory {
                     properties.get(HIVE_METASTORE_URIS));
         }
         this.metastoreType = metastoreType;
+        this.properties = Map.copyOf(properties);
     }
 
     protected CachingDeltaLakeMetastore createQueryLevelCacheMetastore() {
+        if (metastoreType == MetastoreType.UNITY) {
+            IDeltaLakeMetastore queryMetastore = new UnityDeltaLakeMetastore(catalogName, properties,
+                    hdfsEnvironment.getConfiguration(), ConnectContext.get());
+            return createQueryLevelInstance(queryMetastore, perQueryMetastoreMaxNum);
+        }
         return createQueryLevelInstance(metastore, perQueryMetastoreMaxNum);
     }
 
@@ -78,7 +86,7 @@ public class DeltaLakeMetadataFactory {
     public void metastoreCacheInvalidateCache() {
         if (metastore instanceof CachingDeltaLakeMetastore) {
             ((CachingDeltaLakeMetastore) metastore).invalidateAll();
-        } else {
+        } else if (metastore != null) {
             ((DeltaLakeMetastore) metastore).invalidateAll();
         }
     }

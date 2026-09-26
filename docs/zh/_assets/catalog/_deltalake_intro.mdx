@@ -6,8 +6,8 @@ Delta Lake catalog 是一种 external catalog，允许您在不导入的情况�
 
 - 分布式文件系统 (HDFS) 或对象存储，如 AWS S3、Microsoft Azure Storage、Google GCS 或其他兼容 S3 的存储系统（例如 MinIO）
 
-- 元存储如 Hive metastore 或 AWS Glue
+- 元存储如 Hive metastore、AWS Glue 或 Unity Catalog REST API
 
 :::note
-如果选择 AWS S3 作为存储，可以使用 HMS 或 AWS Glue 作为元存储。如果选择其他存储系统，则只能使用 HMS 作为元存储。
+AWS S3 可使用 HMS 或 AWS Glue。ADLS Gen2 可使用 HMS 或下文所述的 Unity Catalog REST 选项。Unity 选项通过表范围的 SAS 凭据支持只读 Parquet Delta 表。其他存储系统需要 HMS。
 :::
