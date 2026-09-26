@@ -123,4 +123,67 @@ public class RangeExtractTest extends PlanTestBase {
         Assertions.assertTrue(plan.contains("PREDICATES: 1: t1a = '12345'\n"));
     }
 
+    @Test
+    public void testIsNullBranchUnion() throws Exception {
+        String sql = "select * from t0 where (v1 = 1 and v2 = 2) or (v1 is null and v2 = 4)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "(1: v1 = 1) OR (1: v1 IS NULL)");
+        assertContains(plan, "2: v2 IN (2, 4)");
+    }
+
+    @Test
+    public void testEqForNullWithNullBranchUnion() throws Exception {
+        String sql = "select * from t0 where (v1 <=> null and v2 = 2) or (v1 = 3 and v2 = 4)";
+        String plan = getFragmentPlan(sql);
+        // `v1 <=> NULL` is TRUE for NULL rows, so the derived filter must keep them with an
+        // OR'd IS NULL. Folding NULL into the value list would lose them: `NULL IN (NULL, 3)`
+        // is NULL, not TRUE
+        assertContains(plan, "(1: v1 = 3) OR (1: v1 IS NULL)");
+        assertNotContains(plan, "v1 IN");
+        assertContains(plan, "2: v2 IN (2, 4)");
+    }
+
+    @Test
+    public void testEqForNullWithConstantBranchUnion() throws Exception {
+        String sql = "select * from t0 where (v1 <=> 5 and v2 = 2) or (v1 = 3 and v2 = 4)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1: v1 IN (5, 3)");
+        assertContains(plan, "2: v2 IN (2, 4)");
+    }
+
+    @Test
+    public void testIsNullWithRangeBranchUnion() throws Exception {
+        String sql = "select * from t0 where (v1 > 2 and v2 = 2) or (v1 is null and v2 = 4)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "(1: v1 > 2) OR (1: v1 IS NULL)");
+    }
+
+    @Test
+    public void testEqForNullContradiction() throws Exception {
+        String sql = "select * from t0 where v1 <=> null and v1 = 3";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EMPTYSET");
+    }
+
+    @Test
+    public void testNullAlternativeDeriveDisabled() throws Exception {
+        connectContext.getSessionVariable().setCboDerivePredicateNullAlternative(false);
+        try {
+            String plan = getFragmentPlan("select * from t0 where (v1 = 1 and v2 = 2) or (v1 is null and v2 = 4)");
+            assertNotContains(plan, "(1: v1 = 1) OR (1: v1 IS NULL)");
+            String plan2 = getFragmentPlan("select * from t0 where v1 <=> null and v1 = 3");
+            assertNotContains(plan2, "0:EMPTYSET");
+        } finally {
+            connectContext.getSessionVariable().setCboDerivePredicateNullAlternative(true);
+        }
+    }
+
+    @Test
+    public void testIsNotNullBranchNotDerived() throws Exception {
+        String sql = "select * from t0 where (v1 = 1 and v2 = 2) or (v1 is not null and v2 = 4)";
+        String plan = getFragmentPlan(sql);
+        // IS NOT NULL cannot be described as a value set, so nothing is derived for v1
+        assertNotContains(plan, "v1 IN (");
+        assertContains(plan, "2: v2 IN (2, 4)");
+    }
 }
