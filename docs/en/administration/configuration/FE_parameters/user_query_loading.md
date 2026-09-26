@@ -148,6 +148,22 @@ This topic introduces the following types of FE configurations:
 - Description: Provider protocol for SYSTEM `ai_embed`. Must be exactly `openai_compatible`; the empty default prevents SYSTEM embedding calls until configured. Chat provider configuration is not reused. Changes need no FE restart and apply to newly analyzed and planned queries; existing plans retain their snapshot.
 - Introduced in: -
 
+### `ai_query_admission_max_estimated_input_tokens`
+
+- Default: 0
+- Type: Long
+- Unit: Estimated input tokens
+- Valid range: [0, 9223372036854775807]
+- Is mutable: Yes
+- Description: Limits statistically estimated input tokens for asynchronous AI functions executed by AIProject. `0` disables admission. A positive value rejects execution if the estimate is `UNKNOWN` or exceeds the limit; an estimate equal to the limit is allowed. Admission is checked once when the physical plan is finalized, before scheduling. Changes require no FE restart and apply to newly built or rebuilt plans; plans that have already passed admission are not checked again unless rebuilt. The legacy `ai_query` function is not covered.
+- Introduced in: -
+
+Estimation supports the pass-through text inputs of `ai_complete`, `ai_custom_query`, `ai_embed`, and `ai_custom_embedding` without options. String literals use their known UTF-8 byte length. Direct native-table `VARCHAR` column references with supported analyzed statistics use four times their average character length because the statistics do not record the actual UTF-8 width. This conversion allows up to four bytes per character; it is not a guarantee against statistical underestimation. Each resulting byte is counted as one estimated text token. Each planned chat evaluation adds a reserve of 16 tokens for the fixed system/user messages. This is a heuristic allowance, not a measured provider token count. Inputs that are provably NULL contribute zero; statistics alone do not eliminate NULL evaluations from the framing reserve. These estimates are multiplied by the planned evaluation counts and summed across AI calls.
+
+Complex expressions, AI functions with built-in prompt templates, options, joins, CTEs, unsupported or missing statistics, and local TopN plans can produce `UNKNOWN`. Before enabling admission or choosing a limit, use `EXPLAIN VERBOSE` or `EXPLAIN COSTS` to inspect `AI INPUT TOKENS` for representative queries. This is a per-query preflight check, not a workload-wide observation mode. `EXPLAIN ANALYZE` executes the statement and applies admission; other `EXPLAIN` levels, including `SCHEDULER`, do not apply admission to the explained statement.
+
+Use this setting to control estimated input work for one planned execution. It is not an exact tokenizer, billing quota, or output-token limit, and does not account for additional HTTP retry attempts.
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - Default: 60000

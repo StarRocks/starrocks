@@ -148,6 +148,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: SYSTEM `ai_embed` 使用的提供商协议，必须严格为 `openai_compatible`。默认空值意味着配置前不能使用 SYSTEM 向量调用，不会复用聊天提供商配置。修改无需重启 FE，仅影响新分析和新规划的查询；已有计划保留快照。
 - 引入版本: -
 
+### `ai_query_admission_max_estimated_input_tokens`
+
+- 默认值: 0
+- 类型: Long
+- 单位: 预估输入 token 数
+- 取值范围: [0, 9223372036854775807]
+- 是否可变: Yes
+- 描述: 限制通过 AIProject 执行的异步 AI 函数的统计预估输入 token 数。`0` 表示关闭准入检查。设为正值时，预估结果为 `UNKNOWN` 或超过上限会拒绝执行，等于上限则允许执行。在物理计划完成构建、开始调度之前进行一次准入检查。修改无需重启 FE，适用于新建或重新构建的计划；已通过检查的计划，除非重新构建，否则不重复检查。旧版 `ai_query` 函数不受此配置限制。
+- 引入版本: -
+
+支持估计不带 options 的 `ai_complete`、`ai_custom_query`、`ai_embed` 和 `ai_custom_embedding` 的透传文本输入。字符串字面量使用已知的 UTF-8 字节数；具有受支持 ANALYZE 统计信息的原生表 `VARCHAR` 列的直接引用，因统计信息不记录实际 UTF-8 编码宽度，按平均字符长度的四倍估计。这按每个字符最多四个字节换算，但不保证统计估算不会偏低。换算后的每个字节计为一个预估文本 token。每次计划中的聊天求值为固定的 system/user 消息额外计入 16 token 的预留量；这是启发式预留，并非提供商实测 token 数。能确定为 NULL 的输入贡献为零；仅有统计信息时，不会从消息预留量中扣除 NULL 求值。将这些值乘以计划中的求值次数，再汇总所有 AI 调用。
+
+复杂表达式、带内置提示词模板的 AI 函数、options、JOIN、CTE、不支持或缺失的统计信息，以及局部 TopN 计划，都可能导致 `UNKNOWN`。启用准入检查或设置上限前，可通过 `EXPLAIN VERBOSE` 或 `EXPLAIN COSTS` 查看代表性查询的 `AI INPUT TOKENS`。这是逐查询的预检查，不是覆盖整个工作负载的观察模式。`EXPLAIN ANALYZE` 会执行语句并进行准入检查；其他 `EXPLAIN` 级别（包括 `SCHEDULER`）不对被解释的语句进行准入检查。
+
+此配置用于控制一次计划执行的预估输入工作量，并非精确分词器、计费配额或输出 token 上限，也不计入额外的 HTTP 重试请求。
+
 ### `brpc_send_plan_fragment_timeout_ms`
 
 - 默认值: 60000
