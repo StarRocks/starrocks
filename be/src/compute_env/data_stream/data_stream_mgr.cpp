@@ -132,6 +132,18 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
     return {};
 }
 
+Status DataStreamMgr::update_exchange_senders(const PUpdateExchangeSendersRequest& request) {
+    TUniqueId finst_id;
+    finst_id.hi = request.finst_id().hi();
+    finst_id.lo = request.finst_id().lo();
+    std::shared_ptr<DataStreamRecvr> recvr = find_recvr(finst_id, request.node_id());
+    if (recvr == nullptr) {
+        return Status::NotFound("exchange receiver not found: fragment_instance_id=" + print_id(request.finst_id()) +
+                                " node_id=" + std::to_string(request.node_id()));
+    }
+    return recvr->update_senders(request.be_number(), request.unregister());
+}
+
 Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::google::protobuf::Closure** done) {
     const PUniqueId& finst_id = request.finst_id();
     // TODO(zc): Use PUniqueId directly
