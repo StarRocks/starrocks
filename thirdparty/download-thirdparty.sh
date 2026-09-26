@@ -734,6 +734,8 @@ if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
         # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
         apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
+        # cap parser nesting depth so deeply nested JSON fails instead of overflowing the stack
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-nesting-depth.patch
         touch $PATCHED_MARK
     fi
     cd -
