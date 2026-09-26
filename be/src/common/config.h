@@ -2236,6 +2236,13 @@ CONF_mDouble(json_flat_sparsity_factor, "0.3");
 // the maximum number of extracted JSON sub-field
 CONF_mInt32(json_flat_column_max, "100");
 
+// Maximum object/array nesting depth accepted when parsing JSON (parse_json, CAST AS JSON, JSON
+// column ingest, ...). The velocypack parser recurses once per level, so an unbounded depth lets a
+// crafted document overflow the thread stack and abort the BE. A positive value sets the cap; 0 or
+// below keeps the parser's built-in default (1024) rather than disabling the check, so the guard
+// cannot be silently turned off by leaving it unset. Mutable so it can be tuned without a restart.
+CONF_mInt32(json_max_parse_nesting_depth, "1024");
+
 // for whitelist on flat json remain data, max set 1kb
 CONF_mInt32(json_flat_remain_filter_max_bytes, "1024");
 // ======================= FLAT JSON end ==============================================

@@ -33,6 +33,7 @@ namespace arangodb::velocypack {
 class Slice;
 class Builder;
 class Exception;
+struct Options;
 enum class ValueType : uint8_t;
 } // namespace arangodb::velocypack
 
@@ -124,6 +125,13 @@ public:
     static StatusOr<JsonValue> parse(const Slice& src);
     // Try to parse it as JSON object, otherwise consider it as a string
     static StatusOr<JsonValue> parse_json_or_string(const Slice& src);
+    // Effective JSON nesting-depth cap from config (json_max_parse_nesting_depth), with a built-in
+    // fallback (1024) so it is never silently disabled. Single source of truth shared by the
+    // velocypack parse path (parse_options_from_config) and the simdjson ingest path (SimdJsonConverter).
+    static int max_nesting_depth();
+    // Build velocypack parse options from config (applies json_max_parse_nesting_depth). Shared by
+    // every JSON parse entrypoint so the nesting-depth cap stays uniform and honors the config.
+    static vpack::Options parse_options_from_config();
 
     ////////////////// serialization  //////////////////////
     size_t serialize(uint8_t* dst) const;

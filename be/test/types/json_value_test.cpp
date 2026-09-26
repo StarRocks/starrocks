@@ -23,6 +23,8 @@
 #include <tuple>
 #include <vector>
 
+#include "base/utility/defer_op.h"
+#include "common/config_json_flat_fwd.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks {
@@ -47,6 +49,36 @@ TEST(JsonValueTest, Parse) {
     oversized.size = kJSONLengthLimit + 1;
     auto oversized_json = JsonValue::parse_json_or_string(oversized);
     ASSERT_FALSE(oversized_json.ok());
+}
+
+// A deeply nested value used to overflow the recursive velocypack parser's stack and take the whole
+// BE down with an unreportable signal. parse_json_or_string now rejects anything nested past the cap
+// before it reaches the parser, so the same input fails cleanly instead of crashing.
+TEST(JsonValueTest, ParseRejectsExcessiveNestingDepth) {
+    // 100k levels is far past the cap and, before the fix, past the point the stack blows.
+    const int deep = 100000;
+    std::string deep_json = std::string(deep, '[') + std::string(deep, ']');
+    auto res = JsonValue::parse_json_or_string(Slice(deep_json));
+    ASSERT_FALSE(res.ok());
+    ASSERT_EQ(TStatusCode::DATA_QUALITY_ERROR, res.status().code()) << res.status();
+
+    // Comfortably over the cap is rejected too. The exact boundary depends on how velocypack counts
+    // top-level nesting, so this stays a few levels past 1024 rather than testing off-by-one.
+    std::string over = std::string(1100, '[') + std::string(1100, ']');
+    ASSERT_FALSE(JsonValue::parse_json_or_string(Slice(over)).ok());
+}
+
+// The cap must not reject legitimately nested JSON, and brackets inside string literals must not
+// count toward depth.
+TEST(JsonValueTest, ParseAcceptsNestingWithinLimit) {
+    // Nesting just under the cap parses fine.
+    const int ok_depth = 999;
+    std::string ok_json = std::string(ok_depth, '[') + std::string(ok_depth, ']');
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(ok_json)).ok()) << "depth " << ok_depth;
+
+    // A shallow value whose string content is full of brackets is not nesting.
+    std::string bracket_string = R"(["]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]]"])";
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(bracket_string)).ok());
 }
 
 TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
@@ -340,6 +372,43 @@ TEST(JsonValueTest, ConvertFromSimdjsonErrorMalformedObjectBounded) {
     auto maybe_json = JsonValue::from_simdjson(&obj);
     ASSERT_FALSE(maybe_json.ok());
     ASSERT_TRUE(maybe_json.status().is_data_quality_error());
+}
+
+// A JSON document nested past json_max_parse_nesting_depth must be rejected on the native simdjson
+// ingest path (from_simdjson -> SimdJsonConverter), the same as parse_json, instead of recursing
+// once per level. The converter builds a vpack::Builder directly and never runs vpack::Parser, so it
+// needs its own depth guard driven by the same config.
+TEST(JsonValueTest, ConvertFromSimdjsonRejectsExcessiveNestingDepth) {
+    using namespace simdjson;
+    const int32_t saved = config::json_max_parse_nesting_depth;
+    DeferOp restore([&]() { config::json_max_parse_nesting_depth = saved; });
+
+    // 20 levels of nested objects: well within simdjson's own limit, but past the configured cap of 5.
+    std::string deep = "1";
+    for (int i = 0; i < 20; ++i) {
+        deep = std::string(R"({"a":)") + deep + "}";
+    }
+
+    config::json_max_parse_nesting_depth = 5;
+    {
+        ondemand::parser parser;
+        padded_string json_str(deep);
+        ondemand::document doc = parser.iterate(json_str);
+        ondemand::object obj = doc.get_object();
+        auto res = JsonValue::from_simdjson(&obj);
+        ASSERT_FALSE(res.ok());
+        ASSERT_TRUE(res.status().is_data_quality_error()) << res.status();
+    }
+
+    // Raising the cap above the input depth lets the same document convert successfully.
+    config::json_max_parse_nesting_depth = 100;
+    {
+        ondemand::parser parser;
+        padded_string json_str(deep);
+        ondemand::document doc = parser.iterate(json_str);
+        ondemand::object obj = doc.get_object();
+        ASSERT_TRUE(JsonValue::from_simdjson(&obj).ok());
+    }
 }
 
 } // namespace starrocks
