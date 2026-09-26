@@ -1377,4 +1377,34 @@ public class MaterializedViewAggPushDownRewriteTest extends MaterializedViewTest
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "mv_hourly_events");
     }
+
+    @Test
+    public void testAggPushDown_CaseWhenFallsBackToExecutionPredicate() {
+        // Control query uses the simplified WHERE on the same join/agg shape.
+        boolean prevPushDown = connectContext.getSessionVariable().isEnableMaterializedViewPushDownRewrite();
+        boolean prevSimplify = connectContext.getSessionVariable().isEnableSimplifyCaseWhen();
+        try {
+            connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(true);
+            connectContext.getSessionVariable().setEnableSimplifyCaseWhen(true);
+            String mv = "CREATE MATERIALIZED VIEW mv0 REFRESH MANUAL as " +
+                    "select LO_ORDERDATE, LO_LINENUMBER, sum(LO_REVENUE) as revenue_sum " +
+                    "from lineorder where LO_LINENUMBER = 1 " +
+                    "group by LO_ORDERDATE, LO_LINENUMBER";
+            starRocksAssert.withMaterializedView(mv, () -> {
+                String control = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                        "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                        "where l.LO_LINENUMBER = 1 " +
+                        "group by l.LO_ORDERDATE";
+                sql(control).contains("mv0");
+                String query = "select l.LO_ORDERDATE, sum(l.LO_REVENUE) " +
+                        "from lineorder l join dates d on l.LO_ORDERDATE = d.d_datekey " +
+                        "where CASE WHEN l.LO_LINENUMBER = 1 THEN 'a' ELSE 'b' END = 'a' " +
+                        "group by l.LO_ORDERDATE";
+                sql(query).contains("mv0");
+            });
+        } finally {
+            connectContext.getSessionVariable().setEnableMaterializedViewPushDownRewrite(prevPushDown);
+            connectContext.getSessionVariable().setEnableSimplifyCaseWhen(prevSimplify);
+        }
+    }
 }
