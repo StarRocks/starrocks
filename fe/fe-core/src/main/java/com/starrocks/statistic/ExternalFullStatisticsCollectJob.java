@@ -345,7 +345,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     //
     // That budget counts queries, while a backend short of memory rejects them for as long as the shortage
     // lasts - so a spike would exhaust it in seconds no matter how large it is. Those rejections are waited
-    // out rather than counted (see collectWithRetryOnProcessMemoryPressure); the budget is left for failures
+    // out rather than counted (see collectWithRetryOnSharedMemoryPressure); the budget is left for failures
     // that waiting cannot fix.
     //
     // Job-level conditions are not tolerated: a user KILL and an exhausted overall analyze deadline are
@@ -359,7 +359,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             calculateAndSetRemainingTimeout(context, analyzeStatus);
             context.getSessionVariable().setPipelineDop(parallelism);
 
-            Exception failure = collectWithRetryOnProcessMemoryPressure(task, context, analyzeStatus);
+            Exception failure = collectWithRetryOnSharedMemoryPressure(task, context, analyzeStatus);
             if (failure != null) {
                 failedSQLNum++;
                 lastFailure = failure;
@@ -416,10 +416,12 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     // collected moments later. Waiting is both cheap and, in the case this was written for, sufficient: the
     // spike lasted seconds, while the job's budget was gone in thirteen.
     //
-    // Only process-wide exhaustion is retried. A query-level limit means this query is too big for its own
-    // budget, which a retry would reproduce exactly; the distinction comes from the backend's own wording
-    // (see MemTracker::err_msg in be/src/runtime/mem_tracker.cpp, which names the tracker that was exceeded).
-    private Exception collectWithRetryOnProcessMemoryPressure(CollectTask task, ConnectContext context,
+    // Only a shared budget running out is retried - the backend process, the query pool, a resource group
+    // or its shared memory pool, any of which a neighbour can fill. A limit that belongs to this query alone
+    // (the single-query limit, a resource group's big-query limit) means it is too big for its own budget,
+    // which a retry would reproduce exactly; the distinction comes from the backend's own wording (see
+    // StatisticsCollectJob#isSharedMemoryExhausted).
+    private Exception collectWithRetryOnSharedMemoryPressure(CollectTask task, ConnectContext context,
                                                               AnalyzeStatus analyzeStatus) throws Exception {
         for (int attempt = 0; ; attempt++) {
             try {
@@ -433,7 +435,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 checkCancelled(analyzeStatus);
                 calculateAndSetRemainingTimeout(context, analyzeStatus);
 
+<<<<<<< HEAD
                 if (attempt >= PROCESS_MEMORY_RETRY_BACKOFF_MS.length || !isProcessMemoryExhausted(e)) {
+=======
+                if (attempt >= maxSharedMemoryRetries() || !isSharedMemoryExhausted(e)) {
+>>>>>>> 17789c24157... [BugFix] Retry external statistics collection on shared memory limits, not only process OOM (#63864)
                     return e;
                 }
                 long backoffMs = retryBackoffMillis(attempt);
@@ -922,7 +928,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
                 if (StringUtils.contains(errorMessage, TOO_MANY_VERSIONS_MARKER)) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
-                } else if (StringUtils.contains(errorMessage, PROCESS_MEMORY_EXHAUSTED_MARKER)) {
+                } else if (isSharedMemoryExhausted(errorMessage)) {
                     // Same transient condition the collection queries wait out, hitting the write instead of
                     // the read: the backend is out of memory because of something else, and this insert is a
                     // few hundred small rows. Failing here is the worst moment to fail - every partition has
