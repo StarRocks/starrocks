@@ -58,6 +58,21 @@ See [ST_AsText and ST_AsWKT](st_astext.md) and [ST_AsBinary and ST_AsWKB](st_asb
 
 See [ST_X](st_x.md), [ST_Y](st_y.md), [ST_GeometryType](st_geometrytype.md), and [ST_Distance](st_distance.md).
 
+## Containment predicates
+
+| Signature | Function ID | Boundary behavior |
+| --- | ---: | --- |
+| `ST_Contains(GEOGRAPHY polygon, GEOGRAPHY point)` | 120190 | Returns `true` only for a point in the polygon interior. |
+| `ST_Contains(GEOMETRY polygon, GEOMETRY point)` | 120191 | Returns `true` only for a point in the polygon interior. |
+| `ST_Within(GEOGRAPHY point, GEOGRAPHY polygon)` | 120200 | Converse of `ST_Contains`; excludes the boundary. |
+| `ST_Within(GEOMETRY point, GEOMETRY polygon)` | 120201 | Converse of `ST_Contains`; excludes the boundary. |
+| `ST_Covers(GEOGRAPHY polygon, GEOGRAPHY point)` | 120210 | Includes exterior and interior-ring boundaries. |
+| `ST_Covers(GEOMETRY polygon, GEOMETRY point)` | 120211 | Includes exterior and interior-ring boundaries. |
+| `ST_CoveredBy(GEOGRAPHY point, GEOGRAPHY polygon)` | 120220 | Converse of `ST_Covers`; includes the boundary. |
+| `ST_CoveredBy(GEOMETRY point, GEOMETRY polygon)` | 120221 | Converse of `ST_Covers`; includes the boundary. |
+
+These overloads support an XY `POINT` with a `POLYGON` or `MULTIPOLYGON`. `GEOGRAPHY` evaluates spherical CRS84 edges; `GEOMETRY` evaluates planar edges and requires matching descriptors. `NULL` propagates, while an `EMPTY` input returns `false`. Unsupported families, dimensions, descriptors, and mixed `GEOGRAPHY`/`GEOMETRY` calls are rejected. See [ST_Contains](st_contains.md), [ST_Within](st_within.md), [ST_Covers](st_covers.md), and [ST_CoveredBy](st_coveredby.md).
+
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:
@@ -70,6 +85,7 @@ The native overloads do not renumber or replace the existing `VARCHAR` functions
 | `ST_AsWKT(VARCHAR)` | 120005 |
 | `ST_GeometryFromText(VARCHAR)` | 120006 |
 | `ST_GeomFromText(VARCHAR)` | 120007 |
+| `ST_Contains(VARCHAR, VARCHAR)` | 120014 |
 
 ## Upgrade and reference-test contract
 

@@ -14,10 +14,15 @@
 
 #include "exprs/geo_functions.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <limits>
+#include <memory>
 #include <optional>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
@@ -226,6 +231,157 @@ StatusOr<ColumnPtr> geo_distance(const Columns& columns) {
             result.append(std::hypot(right.coordinates[0].x - left.coordinates[0].x,
                                      right.coordinates[0].y - left.coordinates[0].y));
         }
+    }
+    auto output = result.build(false);
+    if (constant) return ConstColumn::create(std::move(output), size);
+    return output;
+}
+
+enum class PointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
+
+constexpr long double kPlanarBoundaryUlps = 32;
+
+bool planar_point_on_segment(const WkbCoordinate& point, const WkbCoordinate& lhs, const WkbCoordinate& rhs) {
+    const long double px = point.x;
+    const long double py = point.y;
+    const long double ax = lhs.x;
+    const long double ay = lhs.y;
+    const long double bx = rhs.x;
+    const long double by = rhs.y;
+    const long double scale =
+            std::max({1.0L, std::abs(px), std::abs(py), std::abs(ax), std::abs(ay), std::abs(bx), std::abs(by)});
+    const long double tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * scale;
+    const long double cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+    if (std::abs(cross) > tolerance * scale) return false;
+    return px >= std::min(ax, bx) - tolerance && px <= std::max(ax, bx) + tolerance &&
+           py >= std::min(ay, by) - tolerance && py <= std::max(ay, by) + tolerance;
+}
+
+PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring, const WkbCoordinate& point) {
+    bool inside = false;
+    for (size_t i = 1; i < ring.size(); ++i) {
+        const auto& lhs = ring[i - 1];
+        const auto& rhs = ring[i];
+        if (planar_point_on_segment(point, lhs, rhs)) return PointPolygonRelation::BOUNDARY;
+        if ((lhs.y > point.y) != (rhs.y > point.y)) {
+            const long double intersection_x =
+                    static_cast<long double>(lhs.x) + (static_cast<long double>(point.y) - lhs.y) *
+                                                              (static_cast<long double>(rhs.x) - lhs.x) /
+                                                              (static_cast<long double>(rhs.y) - lhs.y);
+            if (static_cast<long double>(point.x) < intersection_x) inside = !inside;
+        }
+    }
+    return inside ? PointPolygonRelation::INSIDE : PointPolygonRelation::OUTSIDE;
+}
+
+PointPolygonRelation planar_polygon_relation(const WkbGeometry& polygon, const WkbCoordinate& point) {
+    auto relation = planar_ring_relation(polygon.rings[0], point);
+    if (relation != PointPolygonRelation::INSIDE) return relation;
+    for (size_t i = 1; i < polygon.rings.size(); ++i) {
+        relation = planar_ring_relation(polygon.rings[i], point);
+        if (relation == PointPolygonRelation::BOUNDARY) return relation;
+        if (relation == PointPolygonRelation::INSIDE) return PointPolygonRelation::OUTSIDE;
+    }
+    return PointPolygonRelation::INSIDE;
+}
+
+PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, const WkbCoordinate& point) {
+    if (polygon.type == WkbGeometryType::POLYGON) return planar_polygon_relation(polygon, point);
+    PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
+    for (const auto& child : polygon.children) {
+        if (child.empty) continue;
+        const auto relation = planar_polygon_relation(child, point);
+        if (relation == PointPolygonRelation::BOUNDARY) return relation;
+        if (relation == PointPolygonRelation::INSIDE) result = relation;
+    }
+    return result;
+}
+
+StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& polygon, const GeoPoint& point) {
+    GeoCoordinateListList rings;
+    for (const auto& ring : polygon.rings) {
+        auto* coordinates = new GeoCoordinateList();
+        for (const auto& coordinate : ring) {
+            coordinates->add({coordinate.x, coordinate.y});
+        }
+        rings.add(coordinates);
+    }
+    GeoPolygon native_polygon;
+    if (native_polygon.from_coords(rings) != GEO_PARSE_OK) {
+        return Status::InvalidArgument("Invalid GEOGRAPHY polygon topology");
+    }
+    switch (native_polygon.point_relation(point)) {
+    case GeoPointPolygonRelation::BOUNDARY:
+        return PointPolygonRelation::BOUNDARY;
+    case GeoPointPolygonRelation::INSIDE:
+        return PointPolygonRelation::INSIDE;
+    case GeoPointPolygonRelation::OUTSIDE:
+        return PointPolygonRelation::OUTSIDE;
+    }
+    __builtin_unreachable();
+}
+
+StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeometry& polygon,
+                                                                 const WkbCoordinate& coordinate) {
+    GeoPoint point;
+    if (point.from_coord(coordinate.x, coordinate.y) != GEO_PARSE_OK) {
+        return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
+    }
+    if (polygon.type == WkbGeometryType::POLYGON) return spherical_polygon_relation(polygon, point);
+    PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
+    for (const auto& child : polygon.children) {
+        if (child.empty) continue;
+        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(child, point));
+        if (relation == PointPolygonRelation::BOUNDARY) return relation;
+        if (relation == PointPolygonRelation::INSIDE) result = relation;
+    }
+    return result;
+}
+
+template <LogicalType Type, bool PolygonFirst, bool IncludeBoundary>
+StatusOr<ColumnPtr> geo_containment_predicate(const Columns& columns, const char* function_name) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto lhs, geo_input<Type>(columns[0]));
+    ASSIGN_OR_RETURN(auto rhs, geo_input<Type>(columns[1]));
+    if constexpr (Type == TYPE_GEOMETRY) {
+        if (!is_geo_compute_compatible(lhs.data->descriptor(), rhs.data->descriptor())) {
+            return Status::InvalidArgument(std::string(function_name) + " requires compatible GEOMETRY descriptors");
+        }
+    }
+    const bool constant = lhs.constant && rhs.constant;
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_BOOLEAN> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
+        if (lhs.is_null(row) || rhs.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        WkbGeometry left;
+        WkbGeometry right;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(lhs.wkb(row), &left, semantics));
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(rhs.wkb(row), &right, semantics));
+        const auto& polygon = PolygonFirst ? left : right;
+        const auto& point = PolygonFirst ? right : left;
+        if (point.type != WkbGeometryType::POINT ||
+            (polygon.type != WkbGeometryType::POLYGON && polygon.type != WkbGeometryType::MULTIPOLYGON)) {
+            return Status::InvalidArgument(std::string(function_name) +
+                                           " supports only POINT with POLYGON/MULTIPOLYGON inputs");
+        }
+        if (point.empty || polygon.empty) {
+            result.append(false);
+            continue;
+        }
+        PointPolygonRelation relation;
+        if constexpr (Type == TYPE_GEOGRAPHY) {
+            ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, point.coordinates[0]));
+        } else {
+            relation = planar_polygon_family_relation(polygon, point.coordinates[0]);
+        }
+        result.append(relation == PointPolygonRelation::INSIDE ||
+                      (IncludeBoundary && relation == PointPolygonRelation::BOUNDARY));
     }
     auto output = result.build(false);
     if (constant) return ConstColumn::create(std::move(output), size);
@@ -706,6 +862,38 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_type(FunctionContext*, const Colum
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_distance(FunctionContext*, const Columns& columns) {
     return geo_distance<TYPE_GEOMETRY>(columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_contains(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, true, false>(columns, "ST_Contains");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_contains(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, true, false>(columns, "ST_Contains");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_within(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, false, false>(columns, "ST_Within");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_within(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, false, false>(columns, "ST_Within");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_covers(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, true, true>(columns, "ST_Covers");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_covers(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, true, true>(columns, "ST_Covers");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_covered_by(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, false, true>(columns, "ST_CoveredBy");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_covered_by(FunctionContext*, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, false, true>(columns, "ST_CoveredBy");
 }
 
 struct StContainsState {

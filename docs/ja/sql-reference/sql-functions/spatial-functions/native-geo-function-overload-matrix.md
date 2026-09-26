@@ -58,6 +58,21 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md) を参照してください。
 
+## 包含関係の述語
+
+| シグネチャ | 関数 ID | 境界の動作 |
+| --- | ---: | --- |
+| `ST_Contains(GEOGRAPHY polygon, GEOGRAPHY point)` | 120190 | 点がポリゴン内部にある場合のみ `true`。 |
+| `ST_Contains(GEOMETRY polygon, GEOMETRY point)` | 120191 | 点がポリゴン内部にある場合のみ `true`。 |
+| `ST_Within(GEOGRAPHY point, GEOGRAPHY polygon)` | 120200 | `ST_Contains` の逆で、境界を含みません。 |
+| `ST_Within(GEOMETRY point, GEOMETRY polygon)` | 120201 | `ST_Contains` の逆で、境界を含みません。 |
+| `ST_Covers(GEOGRAPHY polygon, GEOGRAPHY point)` | 120210 | 外周および内周の境界を含みます。 |
+| `ST_Covers(GEOMETRY polygon, GEOMETRY point)` | 120211 | 外周および内周の境界を含みます。 |
+| `ST_CoveredBy(GEOGRAPHY point, GEOGRAPHY polygon)` | 120220 | `ST_Covers` の逆で、境界を含みます。 |
+| `ST_CoveredBy(GEOMETRY point, GEOMETRY polygon)` | 120221 | `ST_Covers` の逆で、境界を含みます。 |
+
+これらのオーバーロードは、XY `POINT` と `POLYGON` または `MULTIPOLYGON` の組み合わせに対応します。`GEOGRAPHY` は球面 CRS84 エッジ、`GEOMETRY` は平面エッジで評価し、後者は一致するディスクリプタを必要とします。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、次元、ディスクリプタ、および `GEOGRAPHY`/`GEOMETRY` の混在呼び出しは拒否されます。[ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md)、[ST_CoveredBy](st_coveredby.md) を参照してください。
+
 ## レガシー互換性
 
 ネイティブオーバーロードは、既存の `VARCHAR` 関数を再採番または置換しません。
@@ -70,6 +85,7 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | `ST_AsWKT(VARCHAR)` | 120005 |
 | `ST_GeometryFromText(VARCHAR)` | 120006 |
 | `ST_GeomFromText(VARCHAR)` | 120007 |
+| `ST_Contains(VARCHAR, VARCHAR)` | 120014 |
 
 ## アップグレードと参照テストの契約
 

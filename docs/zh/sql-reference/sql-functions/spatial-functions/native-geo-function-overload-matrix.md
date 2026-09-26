@@ -58,6 +58,21 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 参见 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md) 和 [ST_Distance](st_distance.md)。
 
+## 包含关系谓词
+
+| 签名 | 函数 ID | 边界行为 |
+| --- | ---: | --- |
+| `ST_Contains(GEOGRAPHY polygon, GEOGRAPHY point)` | 120190 | 仅当点位于多边形内部时返回 `true`。 |
+| `ST_Contains(GEOMETRY polygon, GEOMETRY point)` | 120191 | 仅当点位于多边形内部时返回 `true`。 |
+| `ST_Within(GEOGRAPHY point, GEOGRAPHY polygon)` | 120200 | `ST_Contains` 的反向关系，不包含边界。 |
+| `ST_Within(GEOMETRY point, GEOMETRY polygon)` | 120201 | `ST_Contains` 的反向关系，不包含边界。 |
+| `ST_Covers(GEOGRAPHY polygon, GEOGRAPHY point)` | 120210 | 包含外环和内环边界。 |
+| `ST_Covers(GEOMETRY polygon, GEOMETRY point)` | 120211 | 包含外环和内环边界。 |
+| `ST_CoveredBy(GEOGRAPHY point, GEOGRAPHY polygon)` | 120220 | `ST_Covers` 的反向关系，包含边界。 |
+| `ST_CoveredBy(GEOMETRY point, GEOMETRY polygon)` | 120221 | `ST_Covers` 的反向关系，包含边界。 |
+
+这些重载支持 XY `POINT` 与 `POLYGON` 或 `MULTIPOLYGON`。`GEOGRAPHY` 按球面 CRS84 边计算；`GEOMETRY` 按平面边计算并要求描述符匹配。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、维度、描述符以及混合 `GEOGRAPHY`/`GEOMETRY` 调用会被拒绝。参见 [ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md) 和 [ST_CoveredBy](st_coveredby.md)。
+
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：
@@ -70,6 +85,7 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `ST_AsWKT(VARCHAR)` | 120005 |
 | `ST_GeometryFromText(VARCHAR)` | 120006 |
 | `ST_GeomFromText(VARCHAR)` | 120007 |
+| `ST_Contains(VARCHAR, VARCHAR)` | 120014 |
 
 ## 升级与参考测试契约
 
