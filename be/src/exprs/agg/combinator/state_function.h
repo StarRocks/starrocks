@@ -47,7 +47,13 @@ public:
         Columns new_columns;
         new_columns.reserve(columns.size());
         for (auto i = 0; i < columns.size(); i++) {
-            ASSIGN_OR_RETURN(ColumnPtr new_column, _convert_to_nullable_column(columns[i], _arg_nullables[i], false));
+            // Prepare the arguments the way the Aggregator does before convert_to_serialize_format: the first
+            // argument is always unpacked, because aggregate functions read it as a data column of its concrete
+            // type, while later constant arguments (e.g. the quantile of percentile_approx) stay constant.
+            // The first argument is constant when the call is made on a constant expression, e.g. avg_state(5).
+            const bool is_unpack_column = (i == 0);
+            ASSIGN_OR_RETURN(ColumnPtr new_column,
+                             _convert_to_nullable_column(columns[i], _arg_nullables[i], is_unpack_column));
             new_columns.emplace_back(new_column);
         }
 
