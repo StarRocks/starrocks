@@ -709,6 +709,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_ICEBERG_COLUMN_STATISTICS = "enable_iceberg_column_statistics";
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
+    public static final String ENABLE_DELTA_LAKE_SCAN_PREFETCH = "enable_delta_lake_scan_prefetch";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
 
     public static final String DISABLE_TABLE_STATS_FROM_METADATA_FOR_SINGLE_TABLE =
@@ -3501,6 +3502,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION)
     private boolean enableReadIcebergEqDeleteWithPartitionEvolution = false;
 
+    @VarAttr(name = ENABLE_DELTA_LAKE_SCAN_PREFETCH)
+    private boolean enableDeltaLakeScanPrefetch = false;
+
     @VarAttr(name = ENABLE_DELTA_LAKE_COLUMN_STATISTICS)
     private boolean enableDeltaLakeColumnStatistics = false;
 
@@ -3649,6 +3653,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableReadIcebergPuffinNdv(boolean enableReadIcebergPuffinNdv) {
         this.enableReadIcebergPuffinNdv = enableReadIcebergPuffinNdv;
+    }
+
+    public boolean isEnableDeltaLakeScanPrefetch() {
+        return enableDeltaLakeScanPrefetch;
+    }
+
+    public void setEnableDeltaLakeScanPrefetch(boolean enabled) {
+        enableDeltaLakeScanPrefetch = enabled;
     }
 
     public boolean enableDeltaLakeColumnStatistics() {
