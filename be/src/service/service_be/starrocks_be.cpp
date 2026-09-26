@@ -32,6 +32,7 @@
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/process_exit.h"
@@ -325,6 +326,16 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // Client-side flag, only consulted when brpc_connection_type is "pooled". brpc re-reads it on every
     // pooled get/return, so it can also be tuned at runtime through brpc's builtin /flags page.
     brpc::FLAGS_max_connection_pool_size = config::brpc_max_connection_pool_size;
+
+    // Both knobs look reasonable on their own, but a pool smaller than the in-flight limit silently
+    // defeats the point of raising the limit: the connections above the pool capacity are closed on
+    // return and rebuilt on the next RPC, which burns ephemeral ports exactly as short connections do.
+    if (config::brpc_connection_type == "pooled" && config::brpc_max_inflight_rpc_per_stub > 0 &&
+        config::brpc_max_connection_pool_size < config::brpc_max_inflight_rpc_per_stub) {
+        LOG(WARNING) << "brpc_max_connection_pool_size (" << config::brpc_max_connection_pool_size
+                     << ") is below brpc_max_inflight_rpc_per_stub (" << config::brpc_max_inflight_rpc_per_stub
+                     << "); connections above the pool capacity will be created and closed repeatedly";
+    }
 
     auto brpc_server = std::make_unique<brpc::Server>();
 

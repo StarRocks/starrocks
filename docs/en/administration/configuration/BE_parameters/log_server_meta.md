@@ -276,6 +276,15 @@ This topic introduces the following types of BE configurations:
 - Description: The number of idle connections the client caches for each remote server endpoint. Only takes effect when `brpc_connection_type` is set to `"pooled"`. This is the capacity of the idle-connection cache, not a cap on the number of connections: when no idle connection is available a new one is always created, and when a connection is returned it is closed if the pool already holds this many. Setting the value below the peak number of in-flight RPCs to a single peer makes the excess connections be created and closed repeatedly, which behaves like short connections and consumes ephemeral ports. Set it no lower than that peak. Increasing the value raises the number of file descriptors and the memory held by idle connections. A value of `0` or below disables connection reuse, which makes `"pooled"` behave like `"short"`. Changing the value takes effect immediately and only affects connections returned afterwards.
 - Introduced in: v4.2.0
 
+### brpc_max_inflight_rpc_per_stub
+
+- Default: 0
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of RPCs one bRPC stub may have in flight. `0` or below disables the limit, which is the default. When `brpc_connection_type` is `"pooled"` a stub checks out exactly one pooled connection per in-flight RPC, so this also caps the connections one stub opens to its peer; the cap per peer is this value multiplied by `brpc_max_connections_per_server`. When `brpc_connection_type` is `"single"` the limit still applies but caps no connections, because one connection multiplexes every in-flight RPC. An RPC that exceeds the limit fails immediately instead of waiting, so set the value well above the peak concurrency and treat it as a safety valve rather than a throttle. Set `brpc_max_connection_pool_size` no lower than this value, otherwise the connections above the pool capacity are still created and closed repeatedly.
+- Introduced in: v4.2.0
+
 ### brpc_max_connections_per_server
 
 - Default: 1
