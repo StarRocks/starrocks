@@ -1011,6 +1011,32 @@ TEST_F(TabletReshardHelperTest, set_all_data_files_shared_covers_op_add_index) {
     EXPECT_TRUE(txn_log.op_add_index().segment_entries(0).entry().shared_file());
 }
 
+// Peer of the .idx case above: the `.cols` files the ADD INDEX fast path rewrote
+// for DCG-overlaid columns are referenced by every child of a split, so a
+// cross-published OpAddIndex must mark them shared too. apply_add_index carries
+// the flag into DeltaColumnGroupVerPB.shared_files; without it one child's
+// vacuum could reclaim a file a sibling still reads.
+TEST_F(TabletReshardHelperTest, test_set_all_data_files_shared_marks_add_index_dcg_entries) {
+    TxnLogPB txn_log;
+    auto* op_add_index = txn_log.mutable_op_add_index();
+    auto* de0 = op_add_index->add_dcg_entries();
+    de0->set_segment_id(3);
+    de0->set_column_file("rewritten_0.cols");
+    de0->add_col_unique_ids(100);
+    auto* de1 = op_add_index->add_dcg_entries();
+    de1->set_segment_id(4);
+    de1->set_column_file("rewritten_1.cols");
+    de1->add_col_unique_ids(101);
+    // Pre-split state: a plain alter writes these unshared.
+    ASSERT_FALSE(op_add_index->dcg_entries(0).shared());
+
+    set_all_data_files_shared(&txn_log);
+
+    ASSERT_EQ(2, txn_log.op_add_index().dcg_entries_size());
+    EXPECT_TRUE(txn_log.op_add_index().dcg_entries(0).shared());
+    EXPECT_TRUE(txn_log.op_add_index().dcg_entries(1).shared());
+}
+
 TEST_F(TabletReshardHelperTest, has_shared_files_all_private) {
     TabletMetadataPB metadata;
     auto* rowset = metadata.add_rowsets();
