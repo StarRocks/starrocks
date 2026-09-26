@@ -23,6 +23,7 @@ import com.starrocks.http.rest.TransactionLoadCoordinatorMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -48,6 +49,9 @@ import java.util.concurrent.Future;
 
 import static com.starrocks.http.TransactionLoadActionTest.newTxnStateWithCoordinator;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestMethodOrder(MethodName.class)
 public class TransactionLoadCoordinatorMgrTest {
@@ -142,6 +146,71 @@ public class TransactionLoadCoordinatorMgrTest {
             Assertions.assertTrue(e.getMessage().contains("Can't find db[empty_db] " +
                     "for label[label_transactionLoadLabelCacheTest]. The db may be dropped."));
         }
+    }
+
+    @Test
+    public void allocateReplacesRemovedCachedCoordinator() throws Exception {
+        String label = "removed_coordinator_begin";
+        TransactionLoadCoordinatorMgr coordinatorMgr = new TransactionLoadCoordinatorMgr();
+        coordinatorMgr.put(label, 9876L);
+
+        ComputeNode node = coordinatorMgr.allocate(label, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+
+        assertEquals(1234L, node.getId());
+        assertEquals(1234L, coordinatorMgr.get(label, DB_NAME).getId());
+    }
+
+    @Test
+    public void getFallsBackToTransactionStateWhenCachedCoordinatorIsRemoved() throws Exception {
+        String label = "removed_coordinator_load";
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(DB_NAME);
+                result = db;
+            }
+        };
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(testDbId, label);
+                result = newTxnStateWithCoordinator(-1, label,
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        TransactionStatus.UNKNOWN, "localhost", 1234);
+            }
+        };
+        TransactionLoadCoordinatorMgr coordinatorMgr = new TransactionLoadCoordinatorMgr();
+        coordinatorMgr.put(label, 9876L);
+
+        ComputeNode node = coordinatorMgr.get(label, DB_NAME);
+
+        assertEquals(1234L, node.getId());
+        assertFalse(coordinatorMgr.existInCache(label));
+    }
+
+    @Test
+    public void getDoesNotReassignTransactionWhenCoordinatorIsRemoved() throws Exception {
+        String label = "removed_coordinator_prepare";
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getLocalMetastore().getDb(DB_NAME);
+                result = db;
+            }
+        };
+        new Expectations() {
+            {
+                globalTransactionMgr.getLabelTransactionState(testDbId, label);
+                result = newTxnStateWithCoordinator(-1, label,
+                        TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                        TransactionStatus.UNKNOWN, "localhost", 9876);
+            }
+        };
+        TransactionLoadCoordinatorMgr coordinatorMgr = new TransactionLoadCoordinatorMgr();
+        coordinatorMgr.put(label, 9876L);
+
+        StarRocksException exception = assertThrows(StarRocksException.class,
+                () -> coordinatorMgr.get(label, DB_NAME));
+
+        assertTrue(exception.getMessage().contains("Can't find node id 9876"));
+        assertFalse(coordinatorMgr.existInCache(label));
     }
 
     @Test
