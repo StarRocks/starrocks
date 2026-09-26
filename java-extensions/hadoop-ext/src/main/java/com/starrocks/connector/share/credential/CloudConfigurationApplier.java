@@ -99,6 +99,13 @@ public class CloudConfigurationApplier {
                 CloudConfigurationConstants.AWS_S3_ENABLE_SSL, "true");
         conf.set(Constants.SECURE_CONNECTIONS, enableSSL);
 
+        // SSE-C: mirror AwsCloudConfiguration.applyToConfiguration so JNI S3A scanners can read
+        // customer-key-encrypted objects. S3A derives the key MD5 itself, so only the key is needed.
+        if (AwsSseCUtil.isSseCEnabled(props)) {
+            conf.set("fs.s3a.encryption.algorithm", AwsSseCUtil.SSE_C_ALGORITHM_S3A);
+            conf.set("fs.s3a.encryption.key", props.get(CloudConfigurationConstants.AWS_S3_SSE_KEY));
+        }
+
         // Apply credentials
         applyAwsCredentials(props, conf);
     }
