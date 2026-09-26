@@ -15,16 +15,45 @@ v3.4.1以降、StarRocks は SSL で暗号化されたセキュアな接続を�
 StarRocks で SSL 認証を有効にするには、FE 構成ファイル **fe.conf** で以下のパラメータを構成します：
 
 - `ssl_keystore_location`：SSL 証明書とキーを格納するキーストアファイルへのパスを指定します。
+- `ssl_keystore_type`：キーストアタイプ。デフォルト値は空で、StarRocks が JKS と PKCS12 を自動検出することを示します。BCFKS などの形式を使用する場合は、このパラメータを明示的に設定します。
+- `ssl_keystore_provider`：キーストアのロードに使用するセキュリティ provider。このパラメータは任意です。
 - `ssl_keystore_password`：キーストアファイルにアクセスするためのパスワード。StarRocks は、キーストアファイルを読み取るためにこのパスワードを要求します。
 - `ssl_key_password`：キーにアクセスするためのパスワード。StarRocks は、キーストアからキーを取得するためにこのパスワードを要求します。
+- `ssl_truststore_location`：トラストストアファイルのパスを指定します。このパラメータは任意です。
+- `ssl_truststore_type`：MySQL SSL で使用するトラストストアタイプ。デフォルト値は空で、StarRocks が JKS と PKCS12 を自動検出することを示します。BCFKS などの形式を使用する場合は、このパラメータを明示的に設定します。
+- `ssl_truststore_provider`：MySQL SSL トラストストアのロードに使用するセキュリティ provider。このパラメータは任意です。
+- `ssl_truststore_password`：トラストストアファイルにアクセスするためのパスワード。`ssl_truststore_location` を設定する場合、このパラメータが必要です。
+- `ssl_security_provider_class`：キーストアまたはトラストストアをロードする前に登録するセキュリティ provider クラス。このパラメータは任意です。
+- `ssl_security_provider_name`：期待される provider 名。このパラメータは任意です。
+- `ssl_security_provider_path`：provider JAR のパス。このパラメータは任意です。provider JAR がすでに FE classpath に追加されている場合、このパラメータを設定する必要はありません。
 - `ssl_force_secure_transport`: SSL 認証を強制するかどうか。デフォルト値：`FALSE`。この項目を `TRUE` に設定すると、SSL で暗号化されていない接続はシステムによって拒否されます。
 
 例：
 
 ```Properties
 ssl_keystore_location = // キーストアファイルへのパス。
+ssl_keystore_type =
 ssl_keystore_password = // キーストアファイルのパスワード
 ssl_key_password = // キーにアクセスするためのパスワード
+```
+
+Bouncy Castle FIPS provider で BCFKS 形式のキーストアとトラストストアをロードするには、provider JAR を FE classpath (例: `$STARROCKS_HOME/lib`) に配置するか、`ssl_security_provider_path` を設定してから、以下の設定を追加します。これらのパラメータはキーストアとトラストストアのロードのみを構成します。これだけで TLS engine が FIPS validated JSSE provider を使用することは保証されません。
+
+```Properties
+ssl_keystore_location = /path/to/starrocks-keystore.bcfks
+ssl_keystore_type = BCFKS
+ssl_keystore_provider = BCFIPS
+ssl_keystore_password = // キーストアファイルのパスワード
+ssl_key_password = // キーにアクセスするためのパスワード
+
+ssl_truststore_location = /path/to/starrocks-truststore.bcfks
+ssl_truststore_type = BCFKS
+ssl_truststore_provider = BCFIPS
+ssl_truststore_password = // トラストストアファイルのパスワード
+
+ssl_security_provider_class = org.bouncycastle.jcajce.provider.BouncyCastleFipsProvider
+ssl_security_provider_name = BCFIPS
+ssl_security_provider_path = /path/to/bc-fips.jar
 ```
 
 ### SSL 証明書の生成
