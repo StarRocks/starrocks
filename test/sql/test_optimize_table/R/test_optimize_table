@@ -75,7 +75,7 @@ None
 
 
 
--- name: test_change_no_partition_distribution
+-- name: test_change_no_partition_distribution @native
 create table t(k int) distributed by hash(k) buckets 10;
 -- result:
 -- !result
@@ -145,7 +145,7 @@ select * from t;
 
 
 
--- name: test_change_partition_distribution
+-- name: test_change_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
@@ -382,7 +382,7 @@ PROPERTIES (
 
 
 
--- name: test_online_optimize_table_basic @sequential @slow
+-- name: test_online_optimize_table_basic @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
