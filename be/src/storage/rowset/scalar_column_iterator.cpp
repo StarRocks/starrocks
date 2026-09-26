@@ -932,6 +932,24 @@ StatusOr<std::vector<std::pair<int64_t, int64_t>>> ScalarColumnIterator::get_io_
     return res;
 }
 
+std::vector<std::pair<int64_t, int64_t>> ScalarColumnIterator::get_pending_dict_page_io_ranges() const {
+    std::vector<std::pair<int64_t, int64_t>> res;
+    // The encoding dictionary: _init_dict_decoder_func is set only for a dictionary-encoded column,
+    // and _dict_decoder stays null until _load_dict_page() has read the page.
+    if (_init_dict_decoder_func != nullptr && _dict_decoder == nullptr) {
+        const PagePointer pp = _reader->get_dict_page_pointer();
+        if (pp.size > 0) {
+            res.emplace_back(static_cast<int64_t>(pp.offset), static_cast<int64_t>(pp.size));
+        }
+    }
+    // The ZSTD compression dictionary: read by the column's first data page, once per ColumnReader.
+    const PagePointer zstd_pp = _reader->pending_zstd_compression_dict_page();
+    if (zstd_pp.size > 0) {
+        res.emplace_back(static_cast<int64_t>(zstd_pp.offset), static_cast<int64_t>(zstd_pp.size));
+    }
+    return res;
+}
+
 bool ScalarColumnIterator::support_push_down_predicate(
         const std::vector<const ColumnPredicate*>& compound_and_predicates) {
     // Check if there's a binary column != '' predicate
