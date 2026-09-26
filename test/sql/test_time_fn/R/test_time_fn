@@ -952,17 +952,10 @@ select to_iso8601(date'2020-01-01'), to_iso8601(datetime'2020-01-01 00:00:00'),t
 2020-01-01	2020-01-01T00:00:00.000000	2020-01-01T00:00:00.100000
 -- !result
 
-<<<<<<< HEAD
 -- name: test_timestamp_add
 select timestampadd(MILLISECOND, 1, '2019-01-02 00:00:00');
 -- result:
 2019-01-02 00:00:00.001000
-=======
--- name: test_sec_to_time
-select sec_to_time(NULL);
--- result:
-None
->>>>>>> c6d83db ([UT] SQL-Tester: rename the three cases nose was never collecting (#79770))
 -- !result
 
 -- name: test_timestamp_diff

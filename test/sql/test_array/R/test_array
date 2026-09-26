@@ -403,12 +403,8 @@ SELECT array_flatten(array_slice(COLB, 1, 2)) FROM flatten_one_layer_arr_test OR
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 44. Detail message: The only one input of array_flatten should be an array of arrays, rather than array<int(11)>.')
 -- !result
 
-<<<<<<< HEAD
 
--- name: null_or_empty
-=======
 -- name: test_null_or_empty
->>>>>>> c6d83db ([UT] SQL-Tester: rename the three cases nose was never collecting (#79770))
 select null_or_empty([1, 2]);
 -- result:
 0
