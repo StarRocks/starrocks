@@ -153,12 +153,31 @@ void ChunkCursor::_reset_with_next_chunk() {
         return;
     }
 
-    // prepare order by columns
+    _latch_status(_build_order_by_columns());
+}
+
+void ChunkCursor::_latch_status(const Status& status) {
+    if (status.ok()) {
+        return;
+    }
+    _status.update(status);
+    // _build_order_by_columns() stops at the failing expression, so _current_order_by_columns is
+    // shorter than _sort_exprs. operator<() indexes the other cursor's vector up to its own size and
+    // the merger compares cursors before it gets a chance to look at the latched status, so a
+    // half-built cursor would be read out of bounds. Leave it looking exhausted instead: the merger
+    // drops it from the heap and picks the status up on its way out.
+    _current_order_by_columns.clear();
+    _current_chunk.reset();
+    _current_pos = -1;
+}
+
+Status ChunkCursor::_build_order_by_columns() {
     _current_order_by_columns.reserve(_sort_exprs->size());
     for (ExprContext* expr_ctx : *_sort_exprs) {
-        auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
+        ASSIGN_OR_RETURN(auto col, expr_ctx->evaluate(_current_chunk.get()));
         _current_order_by_columns.push_back(std::move(col));
     }
+    return Status::OK();
 }
 
 void ChunkCursor::next_chunk_for_pipeline() {
@@ -172,12 +191,7 @@ void ChunkCursor::next_chunk_for_pipeline() {
     }
     DCHECK(!_current_chunk->is_empty());
 
-    // prepare order by columns
-    _current_order_by_columns.reserve(_sort_exprs->size());
-    for (ExprContext* expr_ctx : *_sort_exprs) {
-        auto col = EVALUATE_NULL_IF_ERROR(expr_ctx, expr_ctx->root(), _current_chunk.get());
-        _current_order_by_columns.push_back(std::move(col));
-    }
+    _latch_status(_build_order_by_columns());
 }
 
 } // namespace starrocks

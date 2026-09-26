@@ -257,7 +257,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
         TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1));
-        eval_join_runtime_filters(chunk);
+        RETURN_IF_ERROR(eval_join_runtime_filters(chunk));
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
         // reach scan node limit

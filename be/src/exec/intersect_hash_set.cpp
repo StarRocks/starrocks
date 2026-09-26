@@ -36,12 +36,12 @@ Status IntersectHashSet<HashSet>::init(RuntimeState* state) {
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunkPtr,
-                                          const std::vector<ExprContext*>& exprs, MemPool* pool) {
+Status IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& chunkPtr,
+                                            const std::vector<ExprContext*>& exprs, MemPool* pool) {
     size_t chunk_size = chunkPtr->num_rows();
 
     _slice_sizes.assign(state->chunk_size(), 0);
-    size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
+    ASSIGN_OR_RETURN(size_t cur_max_one_row_size, _get_max_serialize_size(chunkPtr, exprs));
     // The trigger is hoisted out of the growth check on purpose: a narrow key never widens the
     // stride, so testing it inside would leave the failpoint unable to fire at all.
     bool force_by_rows = false;
@@ -62,7 +62,7 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
         _buffer = _mem_pool->allocate(batch_allocate_size);
     }
 
-    _serialize_columns(chunkPtr, exprs, chunk_size);
+    RETURN_IF_ERROR(_serialize_columns(chunkPtr, exprs, chunk_size));
 
     for (size_t i = 0; i < chunk_size; ++i) {
         IntersectSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
@@ -73,14 +73,15 @@ void IntersectHashSet<HashSet>::build_set(RuntimeState* state, const ChunkPtr& c
             ctor(pos, key.slice.size);
         });
     }
+    return Status::OK();
 }
 
 // There may be additional virtual function overhead, but the bottleneck of this branch is serialization.
 template <typename HashSet>
-ALWAYS_NOINLINE void IntersectHashSet<HashSet>::_build_set_by_rows(const ChunkPtr& chunkPtr,
-                                                                   const std::vector<ExprContext*>& exprs,
-                                                                   MemPool* pool, size_t chunk_size) {
-    Columns key_columns = _evaluate_key_columns(chunkPtr, exprs);
+ALWAYS_NOINLINE Status IntersectHashSet<HashSet>::_build_set_by_rows(const ChunkPtr& chunkPtr,
+                                                                     const std::vector<ExprContext*>& exprs,
+                                                                     MemPool* pool, size_t chunk_size) {
+    ASSIGN_OR_RETURN(Columns key_columns, _evaluate_key_columns(chunkPtr, exprs));
     for (size_t i = 0; i < chunk_size; ++i) {
         IntersectSliceFlag key(_buffer, _serialize_one_row(key_columns, i));
         _hash_set->lazy_emplace(key, [&](const auto& ctor) {
@@ -90,6 +91,7 @@ ALWAYS_NOINLINE void IntersectHashSet<HashSet>::_build_set_by_rows(const ChunkPt
             ctor(pos, key.slice.size);
         });
     }
+    return Status::OK();
 }
 
 template <typename HashSet>
@@ -97,7 +99,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
                                                        const std::vector<ExprContext*>& exprs, const int hit_times) {
     size_t chunk_size = chunkPtr->num_rows();
     _slice_sizes.assign(state->chunk_size(), 0);
-    size_t cur_max_one_row_size = _get_max_serialize_size(chunkPtr, exprs);
+    ASSIGN_OR_RETURN(size_t cur_max_one_row_size, _get_max_serialize_size(chunkPtr, exprs));
     // The trigger is hoisted out of the growth check on purpose: a narrow key never widens the
     // stride, so testing it inside would leave the failpoint unable to fire at all.
     bool force_by_rows = false;
@@ -113,8 +115,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
                 return Status::InternalError("Mem usage has exceed the limit of BE");
             }
             RETURN_IF_LIMIT_EXCEEDED(state, "Intersect, while probe hash table.");
-            _refine_intersect_row_by_rows(chunkPtr, exprs, chunk_size, hit_times);
-            return Status::OK();
+            return _refine_intersect_row_by_rows(chunkPtr, exprs, chunk_size, hit_times);
         }
         _max_one_row_size = cur_max_one_row_size;
         _mem_pool->clear();
@@ -125,7 +126,7 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
         RETURN_IF_LIMIT_EXCEEDED(state, "Intersect, while probe hash table.");
     }
 
-    _serialize_columns(chunkPtr, exprs, chunk_size);
+    RETURN_IF_ERROR(_serialize_columns(chunkPtr, exprs, chunk_size));
 
     for (size_t i = 0; i < chunk_size; ++i) {
         IntersectSliceFlag key(_buffer + i * _max_one_row_size, _slice_sizes[i]);
@@ -138,10 +139,10 @@ Status IntersectHashSet<HashSet>::refine_intersect_row(RuntimeState* state, cons
 }
 
 template <typename HashSet>
-ALWAYS_NOINLINE void IntersectHashSet<HashSet>::_refine_intersect_row_by_rows(const ChunkPtr& chunkPtr,
-                                                                              const std::vector<ExprContext*>& exprs,
-                                                                              size_t chunk_size, int hit_times) {
-    Columns key_columns = _evaluate_key_columns(chunkPtr, exprs);
+ALWAYS_NOINLINE Status IntersectHashSet<HashSet>::_refine_intersect_row_by_rows(const ChunkPtr& chunkPtr,
+                                                                                const std::vector<ExprContext*>& exprs,
+                                                                                size_t chunk_size, int hit_times) {
+    ASSIGN_OR_RETURN(Columns key_columns, _evaluate_key_columns(chunkPtr, exprs));
     for (size_t i = 0; i < chunk_size; ++i) {
         IntersectSliceFlag key(_buffer, _serialize_one_row(key_columns, i));
         auto iter = _hash_set->find(key);
@@ -149,6 +150,7 @@ ALWAYS_NOINLINE void IntersectHashSet<HashSet>::_refine_intersect_row_by_rows(co
             iter->hit_times = hit_times;
         }
     }
+    return Status::OK();
 }
 
 template <typename HashSet>
@@ -182,11 +184,11 @@ int64_t IntersectHashSet<HashSet>::mem_usage() const {
 }
 
 template <typename HashSet>
-size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkPtr,
-                                                          const std::vector<ExprContext*>& exprs) {
+StatusOr<size_t> IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkPtr,
+                                                                    const std::vector<ExprContext*>& exprs) {
     size_t max_size = 0;
     for (auto* expr : exprs) {
-        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get());
+        ASSIGN_OR_RETURN(ColumnPtr key_column, expr->evaluate(chunkPtr.get()));
         max_size += key_column->max_one_element_serialize_size();
         if (!key_column->is_nullable()) {
             max_size += sizeof(bool);
@@ -196,12 +198,13 @@ size_t IntersectHashSet<HashSet>::_get_max_serialize_size(const ChunkPtr& chunkP
 }
 
 template <typename HashSet>
-Columns IntersectHashSet<HashSet>::_evaluate_key_columns(const ChunkPtr& chunkPtr,
-                                                         const std::vector<ExprContext*>& exprs) {
+StatusOr<Columns> IntersectHashSet<HashSet>::_evaluate_key_columns(const ChunkPtr& chunkPtr,
+                                                                   const std::vector<ExprContext*>& exprs) {
     Columns key_columns;
     key_columns.reserve(exprs.size());
     for (auto* expr : exprs) {
-        key_columns.emplace_back(EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get()));
+        ASSIGN_OR_RETURN(auto key_column, expr->evaluate(chunkPtr.get()));
+        key_columns.emplace_back(std::move(key_column));
     }
     return key_columns;
 }
@@ -225,10 +228,10 @@ size_t IntersectHashSet<HashSet>::_serialize_one_row(const Columns& key_columns,
 }
 
 template <typename HashSet>
-void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
-                                                   size_t chunk_size) {
+Status IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
+                                                     size_t chunk_size) {
     for (auto expr : exprs) {
-        ColumnPtr key_column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunkPtr.get());
+        ASSIGN_OR_RETURN(ColumnPtr key_column, expr->evaluate(chunkPtr.get()));
 
         // The serialized buffer is always nullable.
         if (key_column->is_nullable()) {
@@ -238,6 +241,7 @@ void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, con
                                                         false);
         }
     }
+    return Status::OK();
 }
 
 // instantiation
