@@ -184,6 +184,42 @@ public class QueryRuntimeProfileTest {
         Assertions.assertEquals(1000000000L, indexProfile2.getCounter("__MIN_OF_AddChunkTime").getValue());
     }
 
+    @Test
+    public void testQueryLevelCountersMergedPerBackend() {
+        // Every instance carries its BE's query-level cumulative value at report time,
+        // so the query total is the max per BE summed over BEs, not the sum over instances.
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(2);
+        RuntimeProfile fragment0 = profile.getFragmentProfiles().get(0);
+        RuntimeProfile fragment1 = profile.getFragmentProfiles().get(1);
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-1", "10.0.0.1:9060"), 10, 100, 1000));
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-2", "10.0.0.1:9060"), 30, 300, 3000));
+        fragment0.addChild(withQueryCounters(buildInstanceProfile("inst-3", "10.0.0.2:9060"), 5, 50, 500));
+        fragment1.addChild(withQueryCounters(buildInstanceProfile("inst-4", "10.0.0.1:9060"), 20, 200, 2000));
+
+        RuntimeProfile queryProfile = profile.buildQueryProfile(true);
+        Assertions.assertEquals(35, queryProfile.getCounter("QueryCumulativeCpuTime").getValue());
+        Assertions.assertEquals(350, queryProfile.getCounter("QuerySpillBytes").getValue());
+        Assertions.assertEquals(3000, queryProfile.getCounter("QueryPeakMemoryUsagePerNode").getValue());
+        Assertions.assertEquals(3500, queryProfile.getCounter("QuerySumMemoryUsage").getValue());
+    }
+
+    private static RuntimeProfile withQueryCounters(RuntimeProfile instance, long cpuTime, long spillBytes,
+                                                    long peakMemory) {
+        instance.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null).setValue(cpuTime);
+        instance.addCounter("QuerySpillBytes", TUnit.BYTES, null).setValue(spillBytes);
+        instance.addCounter("QueryPeakMemoryUsage", TUnit.BYTES, null).setValue(peakMemory);
+        return instance;
+    }
+
+    private RuntimeProfile buildInstanceProfile(String instanceId, String address) {
+        RuntimeProfile instance = new RuntimeProfile("Instance " + instanceId + " (host=" + address + ")");
+        instance.addInfoString("Address", address);
+        instance.addInfoString("InstanceId", instanceId);
+        instance.addChild(new RuntimeProfile("Pipeline (driver_id=0)"));
+        return instance;
+    }
+
     private TReportExecStatusParams buildReportStatus(long valueBase) {
         RuntimeProfile profile = new RuntimeProfile("LoadChannel");
         profile.addInfoString("LoadId", "288fb1df-f955-472f-a377-cb1e10e4d993");
