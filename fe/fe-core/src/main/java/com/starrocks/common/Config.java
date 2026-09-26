@@ -4531,6 +4531,25 @@ public class Config extends ConfigBase {
     public static boolean enable_mv_list_partition_for_external_table = false;
 
     /**
+     * For range materialized views partitioned by date_trunc(granularity >= day, col), use the
+     * "mirror" partition mapper so the MV mirrors the base table's ACTUAL partition boundaries
+     * (e.g. historical month partitions produced by ALTER TABLE ... OPTIMIZE stay as month MV
+     * partitions, recent day partitions stay as day MV partitions), instead of unrolling coarser
+     * base ranges into fixed-granularity cells.
+     * <p>
+     * For base partitions that are exactly one granularity unit wide (the normal day partitions of
+     * a date_trunc('day') table, including discrete/multi-union cases), the mirror mapper is
+     * IDENTICAL to the default eager mapper, so this flag is a no-op there. It only diverges for
+     * coarser-than-granularity base partitions (merged months). On any non-aligned / overlapping
+     * input it falls back to the eager mapper, so it is never weaker than the default.
+     * <p>
+     * Set to false to restore the original eager (unroll) behavior.
+     */
+    @ConfField(mutable = true, comment = "Whether mirror the base table's actual (possibly mixed granularity) " +
+            "partition boundaries for date_trunc range materialized views instead of unrolling them")
+    public static boolean enable_mv_mirror_base_partition = false;
+
+    /**
      * The refresh partition number when refreshing materialized view at once by default.
      */
     @ConfField(mutable = true)
