@@ -73,7 +73,11 @@ public class SysFeMemoryUsage {
 
         TFeMemoryRes response = new TFeMemoryRes();
 
-        MemoryUsageTracker.MEMORY_USAGE.forEach((moduleName, module) -> {
+        // Collect rather than read what is already there. The periodic task stopped filling
+        // MEMORY_USAGE when estimateSize() was moved out of it, so reading the map answers an
+        // empty table on a server nobody has curled /api/memory_usage on -- which is every server,
+        // since that endpoint only answers 127.0.0.1.
+        MemoryUsageTracker.collectMemoryUsage().forEach((moduleName, module) -> {
             if (module != null) {
                 module.forEach((className, memoryStat) -> {
                     TFeMemoryItem item = new TFeMemoryItem();
