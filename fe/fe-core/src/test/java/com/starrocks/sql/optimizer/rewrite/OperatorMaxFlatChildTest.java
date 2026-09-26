@@ -86,4 +86,79 @@ public class OperatorMaxFlatChildTest extends PlanTestBase {
         });
     }
 
+    // A 2-layer single-referenced CTE chain reproducing "Expression too complex": each layer's CASE
+    // WHEN references the previous column 7 times, so inlining c1 into c2 multiplies the node count
+    // (~20 -> ~153). Single-referenced CTEs are inlined, then MergeTwoProjectRule collapses the
+    // projects and ReplaceColumnRefRewriter clones the expression per reference, tripping the limit.
+    @Test
+    public void testNestedCteExpressionBloat() throws Exception {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 100;
+        try {
+            String sql =
+                    "WITH \n" +
+                    "  c1 AS (SELECT CASE WHEN t1c = 1 THEN t1c + 1 WHEN t1c = 2 THEN t1c + 2 " +
+                    "                     WHEN t1c = 3 THEN t1c + 3 ELSE t1c END AS x FROM test_all_type),\n" +
+                    "  c2 AS (SELECT CASE WHEN x = 11 THEN x + 11 WHEN x = 22 THEN x + 22 " +
+                    "                     WHEN x = 33 THEN x + 33 ELSE x END AS x FROM c1)\n" +
+                    "SELECT x FROM c2";
+            assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        } finally {
+            Config.max_scalar_operator_flat_children = prev;
+        }
+    }
+
+    // Same 2-layer chain, but c1 carries a [materialized] hint, so RelationTransformer materializes it
+    // (buildCTEAnchorAndProducer + addForceCTE) instead of inlining. c2 then references c1's output
+    // column (1 node) rather than inlining c1's CASE WHEN, so there is no project-merge bloat: at
+    // limit = 100 it does not throw and the plan shows a MultiCastDataSinks producer -- also confirming
+    // a single-referenced forced CTE survives the optimizer's inline rules.
+    @Test
+    public void testNestedCteMaterializedHintNoBloat() throws Exception {
+        final int prev = Config.max_scalar_operator_flat_children;
+        Config.max_scalar_operator_flat_children = 100;   // same tiny limit as the inline case
+        try {
+            String sql =
+                    "WITH \n" +
+                    "  c1 AS (SELECT CASE WHEN t1c = 1 THEN t1c + 1 WHEN t1c = 2 THEN t1c + 2 " +
+                    "                     WHEN t1c = 3 THEN t1c + 3 ELSE t1c END AS x FROM test_all_type) [materialized],\n" +
+                    "  c2 AS (SELECT CASE WHEN x = 11 THEN x + 11 WHEN x = 22 THEN x + 22 " +
+                    "                     WHEN x = 33 THEN x + 33 ELSE x END AS x FROM c1)\n" +
+                    "SELECT x FROM c2";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "MultiCastDataSinks");
+        } finally {
+            Config.max_scalar_operator_flat_children = prev;
+        }
+    }
+
+    // C.2 auto fix (cascading): with cbo_cte_force_reuse_inlined_node_count on, the nested-CTE chain
+    // that would blow up (each layer's CASE WHEN references the previous column 7 times, so the
+    // inlined size cascades 20 -> 153 -> 1084) is auto-materialized in RelationTransformer -- no hint.
+    // The estimator materializes c2 (its inlined size 153 > 100), which caps c3 back to ~20; nothing
+    // exceeds the 200 flat-children limit and the plan shows MultiCastDataSinks.
+    @Test
+    public void testNestedCteAutoForceReuseByInlinedNodeCount() throws Exception {
+        final int prevLimit = Config.max_scalar_operator_flat_children;
+        final int prevThreshold = connectContext.getSessionVariable().getCboCTEForceReuseInlinedNodeCount();
+        Config.max_scalar_operator_flat_children = 200;
+        connectContext.getSessionVariable().setCboCTEForceReuseInlinedNodeCount(100);
+        try {
+            String sql =
+                    "WITH \n" +
+                    "  c1 AS (SELECT CASE WHEN t1c = 1 THEN t1c + 1 WHEN t1c = 2 THEN t1c + 2 " +
+                    "                     WHEN t1c = 3 THEN t1c + 3 ELSE t1c END AS x FROM test_all_type),\n" +
+                    "  c2 AS (SELECT CASE WHEN x = 11 THEN x + 11 WHEN x = 22 THEN x + 22 " +
+                    "                     WHEN x = 33 THEN x + 33 ELSE x END AS x FROM c1),\n" +
+                    "  c3 AS (SELECT CASE WHEN x = 44 THEN x + 44 WHEN x = 55 THEN x + 55 " +
+                    "                     WHEN x = 66 THEN x + 66 ELSE x END AS x FROM c2)\n" +
+                    "SELECT x FROM c3";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "MultiCastDataSinks");
+        } finally {
+            Config.max_scalar_operator_flat_children = prevLimit;
+            connectContext.getSessionVariable().setCboCTEForceReuseInlinedNodeCount(prevThreshold);
+        }
+    }
+
 }
