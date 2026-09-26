@@ -295,9 +295,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Map<ColumnRefOperator, SubfieldOperator> subfieldColumns = Maps.newHashMap();
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (entry.getValue() instanceof SubfieldOperator && (node instanceof LogicalScanOperator ||
-                        node instanceof PhysicalScanOperator)) {
-                    subfieldColumns.put(entry.getKey(), (SubfieldOperator) entry.getValue());
+                if (entry.getValue() instanceof SubfieldOperator subfieldOperator &&
+                        (node instanceof LogicalScanOperator ||
+                        node instanceof PhysicalScanOperator) &&
+                        canUseSubfieldStatistics(subfieldOperator)) {
+                    subfieldColumns.put(entry.getKey(), subfieldOperator);
                 } else {
                     statisticsBuilder.addColumnStatistic(entry.getKey(),
                             ExpressionStatisticCalculator.calculate(entry.getValue(), statisticsBuilder.build()));
@@ -310,6 +312,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
         context.setStatistics(statisticsBuilder.build());
         return null;
+    }
+
+    private static boolean canUseSubfieldStatistics(SubfieldOperator subfieldOperator) {
+        // Persistent subfield statistics paths must be rooted directly at a table column. Expression roots such as
+        // array_col[1] cannot be represented by a persistent STRUCT path.
+        return subfieldOperator.getChild(0) instanceof ColumnRefOperator;
     }
 
     private void addSubFiledStatistics(Operator node, Map<ColumnRefOperator, SubfieldOperator> subfieldColumns,
@@ -1191,11 +1199,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         for (ColumnRefOperator requiredColumnRefOperator : columnRefMap.keySet()) {
             ScalarOperator mapOperator = columnRefMap.get(requiredColumnRefOperator);
-            if (mapOperator instanceof SubfieldOperator && context.getOptExpression() != null) {
+            if (mapOperator instanceof SubfieldOperator subfieldOperator &&
+                    canUseSubfieldStatistics(subfieldOperator) &&
+                    context.getOptExpression() != null) {
                 Operator child = context.getOptExpression().inputAt(0).getOp();
                 if (child instanceof LogicalScanOperator || child instanceof PhysicalScanOperator) {
-                    addSubFiledStatistics(child, ImmutableMap.of(requiredColumnRefOperator,
-                            (SubfieldOperator) mapOperator), builder);
+                    addSubFiledStatistics(child, ImmutableMap.of(requiredColumnRefOperator, subfieldOperator), builder);
                     continue;
                 }
             }
