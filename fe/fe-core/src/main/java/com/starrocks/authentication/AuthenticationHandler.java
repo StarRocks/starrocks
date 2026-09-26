@@ -311,7 +311,7 @@ public class AuthenticationHandler {
                         authMechanism, securityIntegration.getType());
                 continue;
             }
-            if (!expectedClientPlugin.equalsIgnoreCase(authContext.getAuthPlugin())) {
+            if (!clientPluginMatches(expectedClientPlugin, authContext.getAuthPlugin(), authResponse)) {
                 continue;
             }
 
@@ -382,6 +382,70 @@ public class AuthenticationHandler {
         }
 
         return authenticationResult;
+    }
+
+    /**
+     * Whether an integration expecting {@code expectedClientPlugin} may serve a caller that declared
+     * {@code declaredClientPlugin} with {@code credential}.
+     * <p>
+     * Usually that is plain equality. The exception is JWT on a channel with no authentication negotiation of
+     * its own -- Arrow Flight SQL, the HTTP REST API, the BE to FE load RPCs. Those declare
+     * mysql_clear_password and put the whole credential in the password field, which is exactly how a client
+     * presents an id token to them; the openid_connect client plugin they would otherwise have to declare only
+     * exists inside the MySQL handshake. Without this a JWT integration is skipped on every one of those
+     * channels, so only LDAP users can authenticate there.
+     * <p>
+     * A password must still never reach a JWT verifier, so the token integration is considered only for a
+     * credential actually shaped like a compact JWS. A password that happens to be shaped like one is no worse
+     * off: the integration is only tried, and the token then has to satisfy the provider's signature, issuer,
+     * audience and principal checks before anything is admitted.
+     * <p>
+     * OAuth2 is deliberately excluded -- its flow needs a browser round trip these channels cannot perform.
+     */
+    private static boolean clientPluginMatches(String expectedClientPlugin, String declaredClientPlugin,
+                                               byte[] credential) {
+        if (expectedClientPlugin.equalsIgnoreCase(declaredClientPlugin)) {
+            return true;
+        }
+
+        return AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString().equalsIgnoreCase(expectedClientPlugin)
+                && AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString().equalsIgnoreCase(declaredClientPlugin)
+                && looksLikeCompactJws(credential);
+    }
+
+    /**
+     * Compact JWS serialization: three non-empty base64url segments separated by dots. Deliberately a shape
+     * test only -- it decides which integration is worth trying, never whether anything is admitted.
+     */
+    private static boolean looksLikeCompactJws(byte[] credential) {
+        if (credential == null || credential.length < 5) {
+            return false;
+        }
+
+        int segments = 1;
+        int segmentLength = 0;
+        for (byte b : credential) {
+            if (b == '.') {
+                if (segmentLength == 0) {
+                    return false;
+                }
+                segments++;
+                segmentLength = 0;
+                continue;
+            }
+            // A trailing NUL is how some clients terminate a cleartext password; anything else outside the
+            // base64url alphabet means this is not a token.
+            if (b == 0) {
+                return false;
+            }
+            boolean base64Url = (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z') || (b >= '0' && b <= '9')
+                    || b == '-' || b == '_';
+            if (!base64Url) {
+                return false;
+            }
+            segmentLength++;
+        }
+        return segments == 3 && segmentLength > 0;
     }
 
     private static void setAuthenticationResultToContext(ConnectContext context,
