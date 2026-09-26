@@ -84,6 +84,7 @@ public class MockIcebergMetadata implements ConnectorMetadata {
 
     public static final String MOCKED_UNPARTITIONED_TABLE_NAME0 = "t0";
     public static final String MOCKED_UNPARTITIONED_V2_TABLE_NAME = "t0_v2";
+    public static final String MOCKED_UNPARTITIONED_V1_TABLE_NAME = "t0_v1";
     public static final String MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME = "variant_t0";
     public static final String MOCKED_UNPARTITIONED_TABLE_NUMERIC = "t_numeric";
     public static final String MOCKED_UNKNOWN_TYPE_TABLE_NAME = "t_unknown_types";
@@ -194,6 +195,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         required(4, "data", Types.StringType.get()),
                         required(5, "date", Types.StringType.get())),
                 2);
+        // V1 unpartitioned table: format version 1 has no row-level deletes at all
+        registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_V1_TABLE_NAME,
+                ImmutableList.of(new Column("id", IntegerType.INT, true),
+                        new Column("data", StringType.STRING, true),
+                        new Column("date", StringType.STRING, true)),
+                new Schema(required(3, "id", Types.IntegerType.get()),
+                        required(4, "data", Types.StringType.get()),
+                        required(5, "date", Types.StringType.get())),
+                1);
         registerUnpartitionedTable(icebergTableInfoMap, MOCKED_UNPARTITIONED_VARIANT_TABLE_NAME,
                 ImmutableList.of(new Column("id", IntegerType.INT, true),
                         new Column("v", VariantType.VARIANT, true)),
