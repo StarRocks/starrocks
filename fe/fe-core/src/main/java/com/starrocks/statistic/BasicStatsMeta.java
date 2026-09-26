@@ -298,6 +298,37 @@ public class BasicStatsMeta implements Writable {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
     }
 
+    /**
+     * The columns present in {@code previous} but no longer in {@code current} (case-insensitive).
+     * Used on the edit-log replay path to invalidate the cached statistics of columns whose meta
+     * entry was revoked (e.g. by the type-change cleanup): the replay refresh only covers the
+     * columns still listed in the new meta, so removed ones must be expired explicitly.
+     */
+    public static List<String> removedColumns(BasicStatsMeta previous, BasicStatsMeta current) {
+        if (previous == null) {
+            return Collections.emptyList();
+        }
+        List<String> currentColumns = current.getColumns();
+        return previous.getColumns().stream()
+                .filter(c -> currentColumns.stream().noneMatch(c::equalsIgnoreCase))
+                .collect(Collectors.toList());
+    }
+
+    public void removeColumnStatsMeta(Collection<String> columnNames) {
+        for (String columnName : columnNames) {
+            columnStatsMetaMap.keySet().removeIf(k -> k.equalsIgnoreCase(columnName));
+        }
+        // The deprecated legacy column list is still serialized for rollback compatibility and
+        // becomes authoritative again once columnStatsMetaMap is empty (see getColumns()), so it
+        // must be kept consistent, otherwise a removed entry would resurrect. Rebuild instead of
+        // removeIf: the passed-in list may be immutable.
+        if (columns != null) {
+            columns = columns.stream()
+                    .filter(c -> columnNames.stream().noneMatch(c::equalsIgnoreCase))
+                    .collect(Collectors.toList());
+        }
+    }
+
     public void resetDeltaRows() {
         this.deltaRows = 0;
     }

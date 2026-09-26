@@ -323,6 +323,27 @@ public class StatisticSQLBuilder {
         return "DELETE FROM " + tableName + " WHERE TABLE_ID IN (" + tids + ")";
     }
 
+    /**
+     * Delete the statistics rows of specific columns of a table, across all partitions.
+     * Both statistics tables carry (table_id, column_name) as key columns, so this predicate is
+     * legal on the UNIQUE_KEYS variants as well.
+     */
+    public static String buildDropColumnStatisticsSQL(Long tableId, List<String> columnNames,
+                                                      StatsConstants.AnalyzeType analyzeType) {
+        Preconditions.checkState(columnNames != null && !columnNames.isEmpty());
+        String tableName;
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+            tableName = SAMPLE_STATISTICS_TABLE_NAME;
+        } else {
+            tableName = FULL_STATISTICS_TABLE_NAME;
+        }
+
+        String columnsIn = columnNames.stream()
+                .map(c -> "'" + SqlUtils.escapeSqlString(c) + "'").collect(Collectors.joining(", "));
+        return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId +
+                " AND COLUMN_NAME IN (" + columnsIn + ")";
+    }
+
     public static String buildDropMultipleStatisticsSQL(Long tableId) {
         return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID = " + tableId;
     }
