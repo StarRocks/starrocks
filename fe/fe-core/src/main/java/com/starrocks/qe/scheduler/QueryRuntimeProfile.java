@@ -413,16 +413,9 @@ public class QueryRuntimeProfile {
         newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
         newQueryProfile.copyAllCountersFrom(queryProfile);
 
-<<<<<<< HEAD
-=======
-        // Build a per-(table, host) scan summary from the un-merged fragment profiles
-        // before the isomorphic merge collapses host-level information.
-        Optional<RuntimeProfile> perTableScanStats = buildScanStatsByTableAndHost();
-
         // QueryPeakMemoryUsage, QueryCumulativeCpuTime and QuerySpillBytes are query-level values of one BE,
         // attached to every fragment instance report of that BE. Take the max per BE, then sum over BEs;
         // summing over instances would count each BE once per instance.
->>>>>>> d171d5b ([BugFix] Fix QueryCumulativeCpuTime and QuerySpillBytes counted once per fragment instance (#79774))
         Map<String, Long> peakMemoryEachBE = Maps.newHashMap();
         Map<String, Long> cpuTimeEachBE = Maps.newHashMap();
         Map<String, Long> spillBytesEachBE = Maps.newHashMap();
@@ -456,12 +449,8 @@ public class QueryRuntimeProfile {
                 }
 
                 // Get query level peak memory usage, cpu cost, wall time
-<<<<<<< HEAD
-                Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
-=======
                 String beAddress = instanceProfile.getInfoString("Address");
-                Counter toBeRemove = instanceProfile.getCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME);
->>>>>>> d171d5b ([BugFix] Fix QueryCumulativeCpuTime and QuerySpillBytes counted once per fragment instance (#79774))
+                Counter toBeRemove = instanceProfile.getCounter("QueryCumulativeCpuTime");
                 if (toBeRemove != null) {
                     cpuTimeEachBE.merge(beAddress, toBeRemove.getValue(), Long::max);
                 }
@@ -605,29 +594,16 @@ public class QueryRuntimeProfile {
         queryPeakScheduleTime.setValue(maxScheduleTime);
         newQueryProfile.getCounterTotalTime().setValue(0);
 
-<<<<<<< HEAD
         Counter queryCumulativeCpuTime = newQueryProfile.addCounter("QueryCumulativeCpuTime", TUnit.TIME_NS, null);
-        queryCumulativeCpuTime.setValue(sumQueryCumulativeCpuTime);
-        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsagePerNode", TUnit.BYTES, null);
-=======
-        Counter queryCumulativeCpuTime =
-                newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_CUMULATIVE_CPU_TIME, TUnit.TIME_NS, null);
         queryCumulativeCpuTime.setValue(cpuTimeEachBE.values().stream().reduce(0L, Long::sum));
-        Counter queryPeakMemoryUsage =
-                newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_PEAK_MEMORY_USAGE_PER_NODE, TUnit.BYTES, null);
->>>>>>> d171d5b ([BugFix] Fix QueryCumulativeCpuTime and QuerySpillBytes counted once per fragment instance (#79774))
+        Counter queryPeakMemoryUsage = newQueryProfile.addCounter("QueryPeakMemoryUsagePerNode", TUnit.BYTES, null);
         queryPeakMemoryUsage.setValue(maxQueryPeakMemoryUsage);
         Counter sumQueryPeakMemoryUsage = newQueryProfile.addCounter("QuerySumMemoryUsage", TUnit.BYTES, null);
         sumQueryPeakMemoryUsage.setValue(peakMemoryEachBE.values().stream().reduce(0L, Long::sum));
         Counter queryExecutionWallTime = newQueryProfile.addCounter("QueryExecutionWallTime", TUnit.TIME_NS, null);
         queryExecutionWallTime.setValue(maxQueryExecutionWallTime);
-<<<<<<< HEAD
         Counter querySpillBytes = newQueryProfile.addCounter("QuerySpillBytes", TUnit.BYTES, null);
-        querySpillBytes.setValue(sumQuerySpillBytes);
-=======
-        Counter querySpillBytes = newQueryProfile.addCounter(ProfileKeyDictionary.QUERY_SPILL_BYTES, TUnit.BYTES, null);
         querySpillBytes.setValue(spillBytesEachBE.values().stream().reduce(0L, Long::sum));
->>>>>>> d171d5b ([BugFix] Fix QueryCumulativeCpuTime and QuerySpillBytes counted once per fragment instance (#79774))
 
         if (execPlan != null) {
             newQueryProfile.addInfoString("Topology", execPlan.getProfilingPlan().toTopologyJson());

@@ -16,7 +16,7 @@
 
 #include <memory>
 
-#include "exec/runtime/query_context.h"
+#include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/query_statistics.h"
@@ -31,11 +31,10 @@ TEST(FileSinkOperatorTest, query_statistic_merges_upstream) {
     ctx.init_mem_tracker(parent->limit(), parent.get());
     ctx.set_final_sink();
 
-    auto& query_runtime_state = ctx.query_runtime_state();
-    query_runtime_state.incr_cpu_cost(17);
-    query_runtime_state.incr_cur_scan_rows_num(5);
-    query_runtime_state.incr_cur_scan_bytes(7);
-    query_runtime_state.update_scan_stats(100, 5, 7);
+    ctx.incr_cpu_cost(17);
+    ctx.incr_cur_scan_rows_num(5);
+    ctx.incr_cur_scan_bytes(7);
+    ctx.update_scan_stats(100, 5, 7);
 
     PQueryStatistics upstream;
     upstream.set_cpu_cost_ns(100);
