@@ -122,6 +122,8 @@ Usage: $0 <options>
                         build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
+     --without-connector-lance
+                        build Backend without the Lance Rust connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
      --with-clang-tidy  build Backend with clang-tidy(default without clang-tidy)
      --with-glibc-compat
@@ -190,6 +192,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
+  -l 'without-connector-lance' \
   -l 'with-dynamic' \
   -l 'module' \
   -l 'with-clang-tidy' \
@@ -233,6 +236,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
+WITH_CONNECTOR_LANCE=ON
 WITH_CLANG_TIDY=OFF
 WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
@@ -361,6 +365,7 @@ else
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
             --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+            --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;
             --with-clang-tidy) WITH_CLANG_TIDY=ON; shift ;;
@@ -435,6 +440,7 @@ echo "Get params:
     WITH_CONNECTOR_ELASTICSEARCH -- $WITH_CONNECTOR_ELASTICSEARCH
     WITH_CONNECTOR_JDBC         -- $WITH_CONNECTOR_JDBC
     WITH_CONNECTOR_MYSQL        -- $WITH_CONNECTOR_MYSQL
+    WITH_CONNECTOR_LANCE        -- $WITH_CONNECTOR_LANCE
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
     WITH_GLIBC_COMPAT           -- $WITH_GLIBC_COMPAT
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
@@ -516,6 +522,8 @@ if [ "x$DISABLE_JAVA_CHECK_STYLE" = "xON" ] ; then
     addon_mvn_opts="${addon_mvn_opts} -Dcheckstyle.skip=true"
 fi
 
+java_ext_mvn_opts="${addon_mvn_opts}"
+
 # Clean and build Backend
 if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
     if ! ${CMAKE_CMD} --version; then
@@ -589,6 +597,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
                   -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC}            \
                   -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL}          \
+                  -DWITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE}          \
                   -DENABLE_MULTI_DYNAMIC_LIBS=${ENABLE_MULTI_DYNAMIC_LIBS}\
                   -DWITH_CLANG_TIDY=${WITH_CLANG_TIDY}                  \
                   -DWITH_GLIBC_COMPAT=${WITH_GLIBC_COMPAT}              \
@@ -638,9 +647,9 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         echo "Build Java Extensions"
         cd ${STARROCKS_HOME}/java-extensions
         if [ ${CLEAN} -eq 1 ]; then
-            ${MVN_CMD} clean
+            ${MVN_CMD} ${java_ext_mvn_opts} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T ${PARALLEL}
+        ${MVN_CMD} ${java_ext_mvn_opts} package -DskipTests -T ${PARALLEL}
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -762,6 +771,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/starrocks_be ${STARROCKS_OUTPUT}/be/lib/
+    # CMake install leaves artifacts from previous configurations in be/output.
+    # An incremental opt-out build must not repackage an old Lance shared library.
+    if [ "${WITH_CONNECTOR_LANCE}" = "OFF" ]; then
+        rm -f "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.so" \
+              "${STARROCKS_HOME}/be/output/lib/libstarrocks_lance.dylib"
+    fi
     shopt -s nullglob
     be_shared_libs=(${STARROCKS_HOME}/be/output/lib/*.so ${STARROCKS_HOME}/be/output/lib/*.so.*)
     if starrocks_is_darwin; then

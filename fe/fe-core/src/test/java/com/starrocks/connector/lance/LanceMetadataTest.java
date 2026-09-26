@@ -21,6 +21,7 @@ import com.starrocks.catalog.LanceTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -33,6 +34,8 @@ import static com.starrocks.type.FloatType.DOUBLE;
 import static com.starrocks.type.FloatType.FLOAT;
 import static com.starrocks.type.IntegerType.BIGINT;
 import static com.starrocks.type.IntegerType.INT;
+import static com.starrocks.type.IntegerType.SMALLINT;
+import static com.starrocks.type.VarbinaryType.VARBINARY;
 import static com.starrocks.type.VarcharType.VARCHAR;
 
 public class LanceMetadataTest {
@@ -48,6 +51,14 @@ public class LanceMetadataTest {
         Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("string"));
         Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us]"));
         Assertions.assertEquals(DATETIME, LanceApiConverter.parseType("timestamp[us, tz=UTC]"));
+
+        Assertions.assertEquals(SMALLINT, LanceApiConverter.parseType("uint8"));
+        Assertions.assertEquals(INT, LanceApiConverter.parseType("uint16"));
+        Assertions.assertEquals(BIGINT, LanceApiConverter.parseType("uint32"));
+        Assertions.assertEquals(TypeFactory.createUnifiedDecimalType(20, 0), LanceApiConverter.parseType("uint64"));
+        Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("large_string"));
+        Assertions.assertEquals(VARCHAR, LanceApiConverter.parseType("large_utf8"));
+        Assertions.assertEquals(VARBINARY, LanceApiConverter.parseType("large_binary"));
 
         // Nested types
         Type arrayType = LanceApiConverter.parseType("list<float32>");
@@ -101,8 +112,11 @@ public class LanceMetadataTest {
         Assertions.assertTrue(discovered.isLanceTable());
         LanceTable lanceDiscovered = (LanceTable) discovered;
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
+        Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
+        Assertions.assertEquals("vectors_db", lanceDiscovered.getCatalogDBName());
+        Assertions.assertEquals("vectors_db", lanceDiscovered.toThrift(List.of()).getDbName());
+        Assertions.assertTrue(lanceDiscovered.isSupported());
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
-        Assertions.assertFalse(lanceDiscovered.isSupported()); // verified unsupported in planning
 
         Table events = metadata.getTable(null, "vectors_db", "events");
         Assertions.assertNotNull(events);
@@ -159,4 +173,20 @@ public class LanceMetadataTest {
         Assertions.assertNotNull(embeddingCol);
         Assertions.assertTrue(embeddingCol.getType().isArrayType());
     }
+    @Test
+    public void testCatalogIdentityAndAzureSasConfiguration() {
+        LanceMetadata metadata = new LanceMetadata("azure_lance", java.util.Map.of(
+                "table.rows.uri", "abfss://data@account.dfs.core.windows.net/rows.lance",
+                "table.rows.schema", "id:int64",
+                "azure.adls2.storage_account", "account",
+                "azure.adls2.sas_token", "sig=test-sas"));
+        Assertions.assertEquals("azure_lance", metadata.getTable(null, "default", "rows").getCatalogName());
+        Assertions.assertTrue(metadata.getTable(null, "default", "rows").isSupported());
+        com.starrocks.thrift.TCloudConfiguration thrift = new com.starrocks.thrift.TCloudConfiguration();
+        metadata.getCloudConfiguration().toThrift(thrift);
+        Assertions.assertEquals(com.starrocks.thrift.TCloudType.AZURE, thrift.getCloud_type());
+        Assertions.assertEquals("sig=test-sas",
+                thrift.getCloud_properties().get("fs.azure.sas.fixed.token.account.dfs.core.windows.net"));
+    }
+
 }

@@ -361,3 +361,26 @@ if (WITH_CONNECTOR_JDBC)
             libxml2
     )
 endif()
+
+if (WITH_CONNECTOR_LANCE)
+    add_subdirectory(lance)
+    ADD_BE_LIB(ConnectorLance
+            lance/lance_connector.cpp
+            lance/lance_native_reader.cpp
+    )
+
+    target_link_libraries(ConnectorLance PUBLIC
+            FormatCore
+            ConnectorPrimitive
+            Expr
+            Runtime
+            ChunkCore
+            ColumnCore
+            Types
+            Common
+            Base
+            Gutil
+            StarRocksGen
+    )
+    target_link_libraries(ConnectorLance PRIVATE lance_rust arrow)
+endif()
