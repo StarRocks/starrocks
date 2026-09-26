@@ -246,6 +246,99 @@ select sum(result) from ( select ngram_search("normal_string", "normal_string", 
 -- !result
 
 
+-- name: test_ngram_search_utf8
+set ngram_search_support_utf8 = true;
+-- result:
+-- !result
+select ngram_search('Расулов Сунатулло', 'Расулов Сунатулло', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('Бабоев Мухаммаджон', 'Бабоев Мухаммаджон', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('Назаров Назарали', 'Назаров Назар', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('Акрамов Хусейн', 'Акрамов Хусейн Махмадалиевич', 4);
+-- result:
+0.4399999976158142
+-- !result
+select ngram_search('Иванов Иван', 'Петров Петр', 4);
+-- result:
+0.0
+-- !result
+select ngram_search_case_insensitive('РАСУЛОВ СУНАТУЛЛО', 'расулов сунатулло', 4);
+-- result:
+1.0
+-- !result
+select ngram_search_case_insensitive('Акрамов Хусейн', 'АКРАМОВ ХУСЕЙН', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('北京大学', '北京大学', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('北京大学', '北京师范大学', 4);
+-- result:
+0.0
+-- !result
+select ngram_search('Hello Мир', 'Hello Мир', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('Привет World', 'Привет World', 4);
+-- result:
+1.0
+-- !result
+select ngram_search('Ми', 'Мир', 4);
+-- result:
+0.0
+-- !result
+select ngram_search('北京', '北京大学', 4);
+-- result:
+0.0
+-- !result
+CREATE TABLE utf8_names (
+  id INT,
+  name_cyrillic VARCHAR(100),
+  name_latin VARCHAR(100)
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO utf8_names VALUES
+(1, 'Расулов Сунатулло Ашуралиевич', 'Rasulov Sunatullo Ashuralevich'),
+(2, 'Бабоев Мухаммаджон Алиджонович', 'Baboev Mukhammadjon Alidjonovich'),
+(3, 'Акрамов Хусейн Махмадалиевич', 'Akramov Khusein Makhmadalievich'),
+(4, 'Назаров Назарали Захирджонович', 'Nazarov Nazarali Zakhirdjonovich');
+-- result:
+-- !result
+select id, ngram_search(name_cyrillic, 'Расулов Сунатулло', 4) as similarity
+from utf8_names
+order by similarity desc, id;
+-- result:
+1	1.0
+2	0.0
+3	0.0
+4	0.0
+-- !result
+select id, ngram_search_case_insensitive(name_cyrillic, 'РАСУЛОВ СУНАТУЛЛО', 4) as similarity
+from utf8_names
+order by similarity desc, id;
+-- result:
+1	1.0
+2	0.0
+3	0.0
+4	0.0
+-- !result
+
+
 -- name: test_strpos
 -- function: strpos basic tests
 select strpos('abc', 'b');
