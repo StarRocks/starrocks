@@ -19,6 +19,7 @@
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
+#include "exprs/builtin_functions.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
@@ -848,6 +849,52 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     auto nonconstant = GeoFunctions::st_geom_from_text(context.get(), {source, varying_crs});
     ASSERT_FALSE(nonconstant.ok());
     EXPECT_TRUE(nonconstant.status().is_invalid_argument());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
+    struct ExpectedFunction {
+        uint64_t id;
+        const char* name;
+        const char* return_type;
+        std::vector<const char*> arg_types;
+    };
+    const ExpectedFunction expected[] = {
+            {120020, "ST_GeogFromText", "GEOGRAPHY", {"VARCHAR"}},
+            {120021, "ST_GeogFromText", "GEOGRAPHY", {"VARCHAR", "INT"}},
+            {120022, "ST_GeomFromText", "GEOMETRY", {"VARCHAR", "VARCHAR"}},
+            {120030, "ST_GeogFromWKB", "GEOGRAPHY", {"VARBINARY"}},
+            {120031, "ST_GeogFromWKB", "GEOGRAPHY", {"VARBINARY", "INT"}},
+            {120032, "ST_GeomFromWKB", "GEOMETRY", {"VARBINARY", "VARCHAR"}},
+            {120040, "ST_AsText", "VARCHAR", {"GEOGRAPHY"}},
+            {120041, "ST_AsText", "VARCHAR", {"GEOMETRY"}},
+            {120050, "ST_AsWKT", "VARCHAR", {"GEOGRAPHY"}},
+            {120051, "ST_AsWKT", "VARCHAR", {"GEOMETRY"}},
+            {120060, "ST_AsBinary", "VARBINARY", {"GEOGRAPHY"}},
+            {120061, "ST_AsBinary", "VARBINARY", {"GEOMETRY"}},
+            {120070, "ST_AsWKB", "VARBINARY", {"GEOGRAPHY"}},
+            {120071, "ST_AsWKB", "VARBINARY", {"GEOMETRY"}},
+            {120080, "ST_X", "DOUBLE", {"GEOGRAPHY"}},
+            {120081, "ST_X", "DOUBLE", {"GEOMETRY"}},
+            {120090, "ST_Y", "DOUBLE", {"GEOGRAPHY"}},
+            {120091, "ST_Y", "DOUBLE", {"GEOMETRY"}},
+            {120170, "ST_GeometryType", "VARCHAR", {"GEOGRAPHY"}},
+            {120171, "ST_GeometryType", "VARCHAR", {"GEOMETRY"}},
+            {120180, "ST_Distance", "DOUBLE", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120181, "ST_Distance", "DOUBLE", {"GEOMETRY", "GEOMETRY"}},
+    };
+
+    for (const auto& function : expected) {
+        SCOPED_TRACE(function.id);
+        const auto* descriptor = BuiltinFunctions::find_builtin_function(function.id);
+        ASSERT_NE(nullptr, descriptor);
+        EXPECT_EQ(function.name, descriptor->name);
+        EXPECT_STREQ(function.return_type, descriptor->return_type);
+        ASSERT_EQ(function.arg_types.size(), descriptor->arg_types.size());
+        EXPECT_EQ(function.arg_types.size(), descriptor->args_nums);
+        for (size_t i = 0; i < function.arg_types.size(); ++i) {
+            EXPECT_STREQ(function.arg_types[i], descriptor->arg_types[i]);
+        }
+    }
 }
 
 } // namespace starrocks
