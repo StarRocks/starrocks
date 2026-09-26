@@ -67,7 +67,7 @@ public class AnalyzeExprTest {
     public void testTranslateArrowExprForValue() {
         // NOTE quotes will be removed in toString
         testTranslateArrowExprForValue("select parse_json('{\"a\": 1}')->'k1'",
-                "json_query(parse_json({\"a\": 1}), k1)");
+                "json_query_from_string({\"a\": 1}, k1)");
     }
 
     private void testTranslateArrowExprForValue(String sql, String expected) {
