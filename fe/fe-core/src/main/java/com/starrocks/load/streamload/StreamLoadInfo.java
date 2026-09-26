@@ -64,6 +64,7 @@ public class StreamLoadInfo {
     private TFileType fileType;
     private TFileFormatType formatType;
     private boolean stripOuterArray;
+    private boolean fillDefaultOnAbsentKey;
     private String jsonPaths;
     private String jsonRoot;
     private TEnvelopeType envelope = TEnvelopeType.NONE;
@@ -110,6 +111,7 @@ public class StreamLoadInfo {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
+        this.fillDefaultOnAbsentKey = false;
     }
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType, Optional<Integer> timeout) {
@@ -120,6 +122,7 @@ public class StreamLoadInfo {
         this.jsonPaths = "";
         this.jsonRoot = "";
         this.stripOuterArray = false;
+        this.fillDefaultOnAbsentKey = false;
         timeout.ifPresent(integer -> this.timeout = integer);
     }
 
@@ -233,6 +236,14 @@ public class StreamLoadInfo {
 
     public void setStripOuterArray(boolean stripOuterArray) {
         this.stripOuterArray = stripOuterArray;
+    }
+
+    public boolean isFillDefaultOnAbsentKey() {
+        return fillDefaultOnAbsentKey;
+    }
+
+    public void setFillDefaultOnAbsentKey(boolean fillDefaultOnAbsentKey) {
+        this.fillDefaultOnAbsentKey = fillDefaultOnAbsentKey;
     }
 
     public String getJsonPaths() {
@@ -397,6 +408,7 @@ public class StreamLoadInfo {
             params.getJsonPaths().ifPresent(value -> jsonPaths = value);
             params.getJsonRoot().ifPresent(value -> jsonRoot = value);
             params.getStripOuterArray().ifPresent(value -> stripOuterArray = value);
+            params.getFillDefaultOnAbsentKey().ifPresent(value -> fillDefaultOnAbsentKey = value);
         }
 
         Optional<TEnvelopeType> envelopeOpt = params.getEnvelope();
@@ -424,6 +436,24 @@ public class StreamLoadInfo {
         params.getLogRejectedRecordNum().ifPresent(value -> logRejectedRecordNum = value);
         params.getPartialUpdate().ifPresent(value -> partialUpdate = value);
         params.getPartialUpdateMode().ifPresent(value -> partialUpdateMode = value);
+
+        // Both settings answer the same question, and they answer it differently. A partial update
+        // already leaves a column the load did not supply at its stored value, while this one fills
+        // it from the column's DEFAULT. Rather than pick a winner behind the user's back, refuse.
+        // Resolving a jsonpath cannot tell a key that is absent from one that is present with a
+        // null value, so nothing is filled on that path. Refuse the combination rather than accept
+        // a request that would quietly do nothing.
+        if (fillDefaultOnAbsentKey && jsonPaths != null && !jsonPaths.isEmpty()) {
+            throw new StarRocksException(
+                    "fill_default_on_absent_key cannot be used together with jsonpaths, because a jsonpath "
+                            + "cannot distinguish an absent key from a key whose value is null.");
+        }
+
+        if (fillDefaultOnAbsentKey && partialUpdate) {
+            throw new StarRocksException(
+                    "fill_default_on_absent_key cannot be used together with partial_update, because a partial "
+                            + "update already keeps a column the load did not supply at its stored value.");
+        }
 
         Optional<String> compressionType = params.getPayloadCompressionType();
         if (compressionType.isPresent()) {

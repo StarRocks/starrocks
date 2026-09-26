@@ -73,6 +73,7 @@ static const std::string HTTP_IGNORE_JSON_SIZE = "ignore_json_size";
 static const std::string HTTP_STRIP_OUTER_ARRAY = "strip_outer_array";
 static const std::string HTTP_ENVELOPE = "envelope";
 static const std::string HTTP_PARTIAL_UPDATE = "partial_update";
+static const std::string HTTP_FILL_DEFAULT_ON_ABSENT_KEY = "fill_default_on_absent_key";
 static const std::string HTTP_TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
 static const std::string HTTP_LOAD_DOP = "load_dop";
 static const std::string HTTP_ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
