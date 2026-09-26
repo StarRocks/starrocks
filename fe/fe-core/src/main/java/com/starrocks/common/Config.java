@@ -2409,6 +2409,24 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_memberof_attr = "memberOf";
 
     /**
+     * Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case.
+     * <p>
+     * When true, a login whose name differs only in case from a user created with
+     * AUTHENTICATION_LDAP_SIMPLE still resolves to that user, so its per-user DN and the roles
+     * granted to it apply; and a login authenticated by an LDAP security integration takes its
+     * session identity from the name the directory holds rather than the one the client typed.
+     * <p>
+     * This both widens which stored user a login may resolve to and changes the value reported by
+     * current_user() and SHOW PROCESSLIST, so it is opt-in. Native-password, JWT and OAuth2 users
+     * are never affected. Group names are matched without regard to case independently of this.
+     */
+    @ConfField(mutable = true, comment = "Whether to relax LDAP/AD user name matching to be " +
+            "case-insensitive on the StarRocks side. Affects native users whose auth plugin is " +
+            "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
+            "Does not affect native-password, JWT or OAuth2 users.")
+    public static boolean authentication_ldap_case_insensitive = false;
+
+    /**
      * For forward compatibility, will be removed later.
      * check token when download image file.
      */
