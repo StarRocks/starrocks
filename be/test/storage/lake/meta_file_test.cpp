@@ -36,6 +36,7 @@
 #include "storage/lake/column_mode_partial_update_handler.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
@@ -3131,6 +3132,122 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_clears_shared_segments_for_rewrite
     EXPECT_FALSE(rowset.segment_metas(0).shared());
     EXPECT_EQ(rowset.segment_metas(1).filename(), "orig1.dat");
     EXPECT_TRUE(rowset.segment_metas(1).shared());
+}
+
+// A multi-statement transaction on a table with file bundling: each statement's segment of this
+// tablet lives inside that statement's bundle file, at its own offset. A row-mode partial update
+// among the statements replaces its segment with a standalone rewrite file, but the other
+// statement's segment stays where it is, so it must keep its offset. A rowset is either all bundled
+// or all standalone, so the rewrite is recorded as a bundle file holding only itself.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_bundled_segments) {
+    const int64_t tablet_id = 10042;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Statement 1: a row-mode partial update whose only segment, bundled, is rewritten.
+    TxnLogPB_OpWrite partial;
+    {
+        auto* segment = partial.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle1.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(8192);
+    }
+    SegmentFileInfo rewrite;
+    rewrite.path = "rewrite1.dat";
+    rewrite.size = 300;
+    builder.batch_apply_opwrite(partial, {{0, rewrite}}, {});
+    // Statement 2: a plain write whose segment lives inside another bundle file.
+    TxnLogPB_OpWrite plain;
+    {
+        auto* segment = plain.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle2.dat");
+        segment->set_size(200);
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(plain, {}, {});
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    // The rewrite: offset 0 and the size of the whole file.
+    EXPECT_EQ("rewrite1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(300, rowset.segment_metas(0).size());
+    ASSERT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    // The plain write's segment: still at its offset inside its bundle file.
+    EXPECT_EQ("bundle2.dat", rowset.segment_metas(1).filename());
+    EXPECT_EQ(200, rowset.segment_metas(1).size());
+    ASSERT_TRUE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(4096, rowset.segment_metas(1).bundle_file_offset());
+
+    // The legacy offset array a rolled-back BE reads can encode the rowset: every segment has an offset.
+    RowsetMetadataPB legacy(rowset);
+    ASSERT_OK(normalize_rowset_before_save(&legacy));
+    ASSERT_EQ(2, legacy.deprecated_bundle_file_offsets_size());
+    EXPECT_EQ(0, legacy.deprecated_bundle_file_offsets(0));
+    EXPECT_EQ(4096, legacy.deprecated_bundle_file_offsets(1));
+
+    // And the metadata can be saved: a rowset mixing bundled and standalone segments is refused.
+    metadata->set_version(11);
+    ASSERT_OK(builder.finalize(next_id()));
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 11));
+    ASSERT_EQ(1, persisted->rowsets_size());
+    ASSERT_EQ(2, persisted->rowsets(0).segment_metas_size());
+    EXPECT_EQ(0, persisted->rowsets(0).segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(4096, persisted->rowsets(0).segment_metas(1).bundle_file_offset());
+}
+
+// The same transaction when no other segment of the merged rowset is bundled: the rewrite of a
+// bundled segment is standalone, like the rest of the rowset.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_among_standalone_segments) {
+    const int64_t tablet_id = 10043;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(10);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_keys_type(PRIMARY_KEYS);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Statement 1: a row-mode partial update whose only segment, bundled, is rewritten.
+    TxnLogPB_OpWrite partial;
+    {
+        auto* segment = partial.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle1.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(0);
+    }
+    SegmentFileInfo rewrite;
+    rewrite.path = "rewrite1.dat";
+    rewrite.size = 300;
+    builder.batch_apply_opwrite(partial, {{0, rewrite}}, {});
+    // Statement 2: a plain write of two standalone segments.
+    TxnLogPB_OpWrite plain;
+    for (const char* name : {"plain2a.dat", "plain2b.dat"}) {
+        auto* segment = plain.mutable_rowset()->add_segment_metas();
+        segment->set_filename(name);
+        segment->set_size(200);
+    }
+    builder.batch_apply_opwrite(plain, {}, {});
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    ASSERT_EQ(3, rowset.segment_metas_size());
+    EXPECT_EQ("rewrite1.dat", rowset.segment_metas(0).filename());
+    EXPECT_EQ(300, rowset.segment_metas(0).size());
+    for (const auto& segment : rowset.segment_metas()) {
+        EXPECT_FALSE(segment.has_bundle_file_offset()) << segment.filename();
+    }
+
+    metadata->set_version(11);
+    ASSERT_OK(builder.finalize(next_id()));
 }
 
 // --- Lake IDG (ADD/DROP INDEX fast path) --------------------------------
