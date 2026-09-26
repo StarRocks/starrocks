@@ -19,6 +19,7 @@
 #include "column/array_column.h"
 #include "column/column_builder.h"
 #include "column/column_visitor_adapter.h"
+#include "column/const_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
 #include "column/runtime_type_traits.h"
@@ -228,6 +229,27 @@ private:
 StatusOr<ColumnPtr> cast_nested_to_json(const ColumnPtr& column, bool allow_throw_exception) {
     ColumnBuilder<TYPE_JSON> column_builder(column->size());
     vpack::Builder json_builder;
+    if (column->is_constant()) {
+        const auto& const_column = down_cast<const ConstColumn&>(*column);
+        const auto& data_column = const_column.data_column();
+        // Array literals are represented as ConstColumn(ArrayColumn). Serialize its
+        // single physical row once, then preserve its logical row count in the result.
+        // Do not unwrap scalar ConstColumns because to_json does not support scalar input.
+        if (data_column->is_array()) {
+            auto st = CastColumnItemVisitor::cast_datum_to_json(data_column, 0, "", &json_builder);
+            if (!st.ok()) {
+                if (allow_throw_exception) {
+                    return st;
+                }
+                return ColumnHelper::create_const_null_column(column->size());
+            }
+
+            auto result = JsonColumn::create();
+            result->append(JsonValue(json_builder.slice()));
+            return ConstColumn::create(std::move(result), column->size());
+        }
+    }
+
     if (allow_throw_exception) {
         for (int row = 0; row < column->size(); row++) {
             if (column->is_null(row)) {
