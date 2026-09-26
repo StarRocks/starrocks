@@ -82,13 +82,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     }
 
     if (_sender != nullptr) {
-        auto query_statistic = std::make_shared<QueryStatistics>();
-        QueryContext* query_ctx = state->query_ctx();
-        query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
-        query_statistic->add_cpu_costs(query_ctx->cpu_cost());
-        query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
-        query_statistic->set_returned_rows(num_written_rows);
-        _sender->set_query_statistics(query_statistic);
+        _sender->set_query_statistics(build_file_sink_query_statistic(state->query_ctx(), num_written_rows));
         Status final_status = _fragment_ctx->final_status();
         Status io_status = get_io_status();
         if (!io_status.ok() && final_status.ok()) {
