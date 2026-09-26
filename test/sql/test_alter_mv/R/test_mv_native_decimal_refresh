@@ -1,0 +1,76 @@
+-- name: test_mv_native_decimal_refresh
+CREATE TABLE decimal_base (id INT, amount DECIMAL(10,2)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO decimal_base VALUES (1,12.34);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW decimal_mv DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH DEFERRED MANUAL AS SELECT id,amount FROM decimal_base;
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW decimal_mv FORCE WITH SYNC MODE;
+SELECT * FROM decimal_mv ORDER BY id;
+-- result:
+1	12.34
+-- !result
+ADMIN SET FRONTEND CONFIG('enable_active_materialized_view_schema_strict_check'='false');
+-- result:
+-- !result
+ALTER TABLE decimal_base MODIFY COLUMN amount DECIMAL(12,4);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER MATERIALIZED VIEW decimal_mv ACTIVE;
+-- result:
+-- !result
+INSERT INTO decimal_base VALUES (2,12.3456);
+-- result:
+-- !result
+[UC] REFRESH MATERIALIZED VIEW decimal_mv FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%column schema not compatible%'
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'decimal_mv';
+-- result:
+false	1
+-- !result
+SELECT * FROM decimal_mv ORDER BY id;
+-- result:
+1	12.34
+-- !result
+SET enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+-- result:
+2	12.3456
+-- !result
+SET enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+SET materialized_view_rewrite_mode = 'default';
+-- result:
+-- !result
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+-- result:
+2	12.3456
+-- !result
+SET materialized_view_rewrite_mode = 'force';
+-- result:
+-- !result
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+-- result:
+2	12.3456
+-- !result
+SET materialized_view_rewrite_mode = 'default';
+-- result:
+-- !result
+DROP MATERIALIZED VIEW decimal_mv;
+-- result:
+-- !result
+DROP TABLE decimal_base;
+-- result:
+-- !result

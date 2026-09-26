@@ -21,7 +21,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -40,9 +39,9 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Detect schema drift between a still-active MV and its external (iceberg / hive / hudi / delta)
- * base tables, and mark the MV inactive when the current base schemas no longer match what the
- * MV captured at CREATE time. Invoked from the refresh pipeline after the connector metadata
+ * Detect schema drift between a still-active MV and its base tables, and mark the MV inactive
+ * when the current base schemas no longer match what the MV captured at CREATE time.
+ * Invoked from the refresh pipeline after the connector metadata
  * cache has been refreshed; deliberately opposite to {@code MVActiveChecker}, which is the
  * background daemon that tries to take inactive MVs back to active.
  */
@@ -54,31 +53,25 @@ public final class MVRefreshSchemaChecker {
     }
 
     /**
-     * Detect schema drift on a still-active MV against its external (iceberg / hive / hudi / delta)
-     * base tables and mark it inactive on mismatch. Must be called <b>after</b>
+     * Detect schema drift on a still-active MV against its base tables and mark it inactive on mismatch.
+     * Must be called <b>after</b>
      * {@code refreshExternalTable} so the analyzer reads the current connector schema.
      */
-    public static void checkExternalBaseSchemaCompat(MaterializedView mv) {
+    public static void checkBaseSchemaCompat(MaterializedView mv) {
         if (!mv.isActive()) {
             return;
         }
-        boolean hasExternalBase = false;
         for (BaseTableInfo bti : mv.getBaseTableInfos()) {
             Optional<Table> baseTableOpt = MvUtils.getTable(bti);
-            boolean isExternalCatalog = !CatalogMgr.isInternalCatalog(bti.getCatalogName());
-
-            if (!baseTableOpt.isPresent() && isExternalCatalog) {
+            if (!baseTableOpt.isPresent()) {
                 mv.setInactiveAndReason(
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(bti.getTableName()));
                 return;
             }
-            if (baseTableOpt.isPresent() && !baseTableOpt.get().isNativeTableOrMaterializedView()) {
-                hasExternalBase = true;
-            }
         }
-        if (!hasExternalBase) {
-            return;
-        }
+        // Native schema changes invalidate dependent MVs, but relaxed activation can reactivate
+        // them with the old storage schema. Check again before INSERT: a decimal scale reduction
+        // can round successfully, so filtered-row/overflow checks do not guarantee a lossless refresh.
 
         // IVM derives its rewritten query (with hidden __ROW_ID__ / __AGG_STATE_* columns) at
         // refresh time, so the schema check must compare against that same rewrite, not the
