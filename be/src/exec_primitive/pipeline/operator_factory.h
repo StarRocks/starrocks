@@ -70,6 +70,8 @@ public:
         return _runtime_filter_collector->get_rf_probe_collector();
     }
 
+    const std::vector<ExprContext*>& get_runtime_in_filters() const { return _runtime_in_filters; }
+
     const std::vector<SlotId>& get_filter_null_value_columns() const override { return _filter_null_value_columns; }
 
     void set_runtime_state(RuntimeState* state) { this->_state = state; }
@@ -100,7 +102,6 @@ protected:
         std::call_once(_prepare_runtime_in_filters_once, [this, state]() { this->_prepare_runtime_in_filters(state); });
     }
 
-    std::vector<ExprContext*>& get_runtime_in_filters() { return _runtime_in_filters; }
     // acquire local colocate runtime filter
     std::vector<ExprContext*> get_colocate_runtime_in_filters(size_t driver_sequence);
     void _prepare_runtime_in_filters(RuntimeState* state);

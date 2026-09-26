@@ -731,6 +731,25 @@ struct TTableSampleOptions {
   5: optional double probability_percent_v2; // new field; can carry sub-1% values such as 0.5, takes precedence when set
 }
 
+// One partition column's domain and physical IDs.
+struct TPartitionBoundary {
+  1: optional list<i64> physical_partition_ids
+  2: optional Types.TSlotId slot_id
+  // Values take the i64 encoding for TINYINT/SMALLINT/INT/BIGINT/DATE, the literal one otherwise.
+  // LIST
+  3: optional list<Exprs.TExpr> list_values
+  4: optional list<i64> list_int_values
+  // RANGE
+  5: optional Exprs.TExpr range_lower
+  6: optional Exprs.TExpr range_upper
+  7: optional i64 range_lower_int
+  8: optional i64 range_upper_int
+  // Whether the partition definition routes NULL here.
+  9: optional bool contains_null = false
+  // Lower bounds are inclusive; upper bounds are exclusive unless set.
+  10: optional bool range_upper_closed = false
+}
+
 // Extension point for TOlapScanNode. DO NOT MODIFY: do not add fields here,
 // and do not rename, renumber or remove it. The field numbers inside are
 // allocated separately, so anything added here collides with them, and
@@ -791,6 +810,7 @@ struct TOlapScanNode {
 
   57: optional list<Exprs.TExpr> partition_conjuncts
   59: optional TOlapScanNodeExt ext
+  60: optional list<TPartitionBoundary> partition_boundaries
 }
 
 struct TJDBCScanNode {
