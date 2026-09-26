@@ -986,10 +986,10 @@ select  timestampdiff(MILLISECOND, '2003-02-01 00:00:00', '2003-05-01 12:05:55')
 7733155000
 -- !result
 
--- name: sec_to_time
+-- name: test_sec_to_time
 select sec_to_time(NULL);
 -- result:
-NULL
+None
 -- !result
 select sec_to_time(0);
 -- result:
