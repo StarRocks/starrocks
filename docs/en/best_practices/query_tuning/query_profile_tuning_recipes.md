@@ -145,7 +145,7 @@ StarRocks relies on a vectorized, pipeline-friendly hash-join core that can be w
 
 **Oversized shuffle or broadcast** – If `NetworkTime` exceeds 30 % and `BytesSent` is large, the query is shipping too much data. Re‑evaluate the join strategy and reduce the shuffle/broadcast volume (e.g., enforce shuffle instead of broadcast, or pre‑filter upstream).
 
-**Receiver backlog** – High `WaitTime` in the sink with sender queues that stay full indicates the receiver cannot keep up. Increase the receiver thread pool (`brpc_num_threads`) and confirm NIC bandwidth and QoS settings.
+**Receiver backlog** – High `BufferFullTime` in the sink with sender queues that stay full indicates the receiver cannot keep up. Increase the receiver thread pool (`brpc_num_threads`) and confirm NIC bandwidth and QoS settings.
 
 **Enable exchange compression** – When network bandwidth is the bottleneck, compress exchange payloads. Set `SET transmission_compression_type = 'zstd';` and optionally increase `SET transmission_encode_level = 7;` to enable adaptive column encoding. Expect higher CPU usage in exchange for reduced bytes on the wire.
 

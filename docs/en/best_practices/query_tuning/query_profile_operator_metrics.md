@@ -262,7 +262,9 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | OverallThroughput | Throughput rate. |
 | NetworkTime | Time taken for data packet transmission (excluding post-reception processing time). |
 | NetworkBandwidth | Estimated network bandwidth. |
-| WaitTime | Waiting time due to a full sender queue. |
+| WaitTime | Sum of `BufferFullTime` and `PendingFinishTime`. |
+| BufferFullTime | Accumulated recorded time that the sender buffer was full. A child of `WaitTime`. |
+| PendingFinishTime | Elapsed time since the sink buffer began finishing, measured when the profile is updated; zero before finishing begins. A child of `WaitTime`, separate from the Pipeline-level counter of the same name. |
 | OverallTime | Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet. |
 | RpcAvgTime | Average time for RPC. |
 | RpcCount | Total number of RPCs. |
