@@ -1,0 +1,3 @@
+{"id":1,"name":"alice","score":9.5,"active":true,"tags":["a","b"]}
+{"id":2,"name":"bob","score":7.0,"active":false,"tags":["c"]}
+{"id":3,"name":"carol","score":8.3,"active":true,"tags":[]}
