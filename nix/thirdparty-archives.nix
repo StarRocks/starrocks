@@ -164,11 +164,6 @@ let
       md5 = "c5ac53ca70cc667189ec824c6048914a";
       sha256 = "1d38yknmvvym19s8hia14pkrccqr7lq5iclm9j9hqvpyx0h0ww0l";
     };
-    "hyperscan-5.4.0.tar.gz" = {
-      url = "https://github.com/intel/hyperscan/archive/v5.4.0.tar.gz";
-      md5 = "65e08385038c24470a248f6ff2fa379b";
-      sha256 = "0vqhz8zj8ra2ray1dg6vnmipgyi7s4250bl5c8891qs7mwwvl6p5";
-    };
     "icu4c-76_1-src.zip" = {
       url = "https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.zip";
       md5 = "f5f5c827d94af8445766c7023aca7f6b";
@@ -334,10 +329,10 @@ let
       md5 = "232e035ff80c5fb4b7243f0be3a76b02";
       sha256 = "1r66jr1wx0jgzlzzpag3zvia9gzbak2z474kn0qxdhf5lhwmiyp0";
     };
-    "vectorscan-5.4.12.tar.gz" = {
-      url = "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.12.tar.gz";
-      md5 = "384eab5b23831993df96e5fa55f9951e";
-      sha256 = "1vdkr5z53cln2qvxszyrzy0v2imjlqil9b07y5rkj5mc730g7i0s";
+    "vectorscan-5.4.13.tar.gz" = {
+      url = "https://github.com/VectorCamp/vectorscan/archive/refs/tags/vectorscan/5.4.13.tar.gz";
+      md5 = "29bb5ad2756504d5299f106a156c6ac3";
+      sha256 = "12dxzahiyx8v17w7h00lpsi3yamijj9b1srf3a6s1n1jvqnwvgqi";
     };
     "velocypack-XYZ1.0.tar.gz" = {
       url = "https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz";
@@ -494,7 +489,7 @@ let
       "breakpad-2024.02.16.tar.gz"
       "hadoop-3.4.3-src.tar.gz"
       "ragel-6.10.tar.gz"
-      "hyperscan-5.4.0.tar.gz"
+      "vectorscan-5.4.13.tar.gz"
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
@@ -564,7 +559,7 @@ let
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
       "hadoop-3.4.3-src.tar.gz"
       "ragel-6.10.tar.gz"
-      "vectorscan-5.4.12.tar.gz"
+      "vectorscan-5.4.13.tar.gz"
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"
@@ -634,7 +629,7 @@ let
       "ryu-aa31ca9361d21b1a00ee054aac49c87d07e74abc.zip"
       "hadoop-3.4.3-src.tar.gz"
       "ragel-6.10.tar.gz"
-      "vectorscan-5.4.12.tar.gz"
+      "vectorscan-5.4.13.tar.gz"
       "mariadb-connector-c-3.1.14.tar.gz"
       "aws-sdk-cpp-1.11.267.tar.gz"
       "velocypack-XYZ1.0.tar.gz"

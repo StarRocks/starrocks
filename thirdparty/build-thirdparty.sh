@@ -1276,7 +1276,7 @@ build_hyperscan() {
     # different x86_64 micro-architectures.  Vectorscan on AArch64 does not
     # benefit from this (ARM NEON is the baseline), and the option can cause
     # build issues, so disable it only for aarch64.
-    local FAT_RUNTIME_FLAG=""
+    local FAT_RUNTIME_FLAG="-DNO_SIMDE_IN_FAT=ON"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         FAT_RUNTIME_FLAG="-DFAT_RUNTIME=OFF"
     fi
