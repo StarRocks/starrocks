@@ -1,0 +1,73 @@
+-- name: test_iceberg_bucket_aware_agg_fallback
+
+-- Adaptive fallback for bucket-aware execution on lake (issue: equality pruning on the bucket
+-- source column leaves too few buckets to parallelize a high-NDV one-stage aggregation).
+--
+-- The fallback compares the estimated surviving bucket count against
+-- lake_bucket_aware_min_buckets_per_worker * alive workers. CI cluster size varies, so plan-shape
+-- assertions force the decision through the ratio variable instead of relying on worker count:
+-- a huge ratio forces the fallback (two-stage agg), 0 disables it (one-stage agg retained).
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+-- bucket + month composite partitioning; repeated inserts create multiple files per partition
+create table t_fallback (
+  project_id bigint,
+  email string,
+  created_at date
+)
+partition by bucket(project_id, 4), month(created_at)
+properties ("file_format"="parquet");
+
+-- two identical inserts => >1 file inside the same (bucket, month) partitions
+insert into t_fallback
+select 100, concat('u', generate_series, '@x.com'), '2024-01-15'
+from table(generate_series(1, 5000));
+insert into t_fallback
+select 100, concat('u', generate_series, '@x.com'), '2024-01-15'
+from table(generate_series(1, 5000));
+-- a second month spread over all buckets
+insert into t_fallback
+select generate_series % 7, concat('v', generate_series, '@x.com'), '2024-02-15'
+from table(generate_series(1, 5000));
+
+set pipeline_dop = 2;
+
+-- ############### correctness: forced fallback vs feature-off ground truth ###############
+set enable_bucket_aware_execution_on_lake = true;
+set lake_bucket_aware_min_buckets_per_worker = 1000000;
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+select project_id, count(*) from t_fallback where project_id = 100 group by project_id order by project_id;
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+
+set enable_bucket_aware_execution_on_lake = false;
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+select project_id, count(*) from t_fallback where project_id = 100 group by project_id order by project_id;
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+
+-- ############### correctness: default settings (fallback decided adaptively) ###############
+set enable_bucket_aware_execution_on_lake = true;
+set lake_bucket_aware_min_buckets_per_worker = 1.0;
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+
+-- ############### plan shape ###############
+-- forced fallback: two-stage aggregation with a shuffle
+set lake_bucket_aware_min_buckets_per_worker = 1000000;
+function: assert_explain_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'merge finalize')
+function: assert_explain_not_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'update finalize')
+-- fallback disabled: bucket-aware one-stage aggregation retained
+set lake_bucket_aware_min_buckets_per_worker = 0;
+function: assert_explain_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'update finalize')
+
+-- restore session state so it does not leak into subsequent statements/tests
+set lake_bucket_aware_min_buckets_per_worker = 1.0;
+set pipeline_dop = 0;
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.t_fallback force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};
