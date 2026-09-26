@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 -- name: test_next_day
 CREATE TABLE `next_day_test` (
   `d1` DATE,
@@ -740,6 +741,9 @@ None
 -- !result
 
 -- name: test_day_of_week_iso
+=======
+-- name: test_dayofweek_iso
+>>>>>>> e91d16b ([UT] SQL-Tester: run four cases that have never executed, drop a fifth as duplicate (#79811))
 select dayofweek_iso("2023-01-01");
 -- result:
 7
@@ -761,6 +765,7 @@ select dayofweek_iso(NULL);
 None
 -- !result
 
+<<<<<<< HEAD
 -- name: test_makedate
 CREATE TABLE IF NOT EXISTS `makedate_test` (
   `id` int,
@@ -920,6 +925,8 @@ select d1, optional, last_day(d1, optional), d2, optional, last_day(d2, optional
 -- !result
 drop database test_last_day_db;
 
+=======
+>>>>>>> e91d16b ([UT] SQL-Tester: run four cases that have never executed, drop a fifth as duplicate (#79811))
 -- name: test_to_iso8601
 CREATE TABLE IF NOT EXISTS `to_iso8601_test`(
   `d1` DATE,
