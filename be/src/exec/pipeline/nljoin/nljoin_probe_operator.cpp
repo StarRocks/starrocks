@@ -91,8 +91,9 @@ void NLJoinProbeOperator::_advance_join_stage(JoinStage stage) const {
 }
 
 bool NLJoinProbeOperator::_skip_probe() const {
-    // Empty build table could skip probe unless it's LEFT/FULL OUTER JOIN or LEFT ANTI JOIN
-    return is_ready() && !_is_left_join() && !_is_left_anti_join() && _cross_join_context->is_build_chunk_empty();
+    // Empty or invalid (e.g. all-NULL) build table could skip probe unless it is LEFT/FULL OUTER JOIN or LEFT ANTI JOIN
+    return is_ready() && !_is_left_join() && !_is_left_anti_join() &&
+           (_cross_join_context->is_build_chunk_empty() || _cross_join_context->is_build_chunk_invalid());
 }
 
 void NLJoinProbeOperator::_check_post_probe() const {

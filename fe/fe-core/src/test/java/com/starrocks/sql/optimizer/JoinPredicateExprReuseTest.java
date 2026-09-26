@@ -165,7 +165,7 @@ public class JoinPredicateExprReuseTest extends PlanTestBase {
             String sql = "select * from t0 right join t1 on t0.v1 > t1.v4 where " +
                     "bit_shift_left(t0.v1 + t1.v4, 1) = 10 or bit_shift_left(t0.v1 + t1.v4, 1) = 20";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  |  other join predicates: 1: v1 > 4: v4\n" +
+            assertContains(plan, "  |  other join predicates: 4: v4 < 1: v1\n" +
                     "  |  other predicates: (8: bit_shift_left = 10) OR (8: bit_shift_left = 20), " +
                     "8: bit_shift_left IN (10, 20)\n" +
                     "  |    common sub expr:\n" +

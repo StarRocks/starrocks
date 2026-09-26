@@ -159,6 +159,7 @@ public:
 
     int32_t get_num_builders() const { return _num_right_sinkers; }
     bool is_build_chunk_empty() const { return num_build_rows() == 0; }
+    bool is_build_chunk_invalid() const { return _is_build_chunk_invalid; }
     size_t num_build_rows() const { return _num_build_rows; }
 
     int32_t num_build_chunks() const { return _build_chunks.size(); }
@@ -210,6 +211,7 @@ private:
     std::atomic<int32_t> _num_closed_left_probers = 0;
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
+    bool _is_build_chunk_invalid = false;
 
     // Join states
     mutable std::mutex _join_stage_mutex;                                 // Protects join states
