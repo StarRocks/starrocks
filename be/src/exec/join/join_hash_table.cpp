@@ -14,12 +14,15 @@
 
 #include "exec/join/join_hash_table.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/failpoint/fail_point.h"
 #include "base/simd/simd.h"
 #include "base/utility/defer_op.h"
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/stack_util.h"
@@ -637,6 +640,111 @@ int64_t JoinHashTable::mem_usage() const {
     }
     usage += _table_items->build_slice.size() * sizeof(Slice);
     return usage;
+}
+
+namespace {
+
+// Returns true if appending |src| into |dst| may force one of |dst|'s own containers to
+// reallocate. Errs towards true: whenever the two shapes do not line up, or a column kind
+// cannot be inspected in constant time, the caller must keep reserving as before.
+bool column_may_reallocate(const Column& dst, const Column& src) {
+    // ConstColumn forwards is_nullable()/is_array() to the column it wraps, so the down_casts
+    // below would not match the dynamic type. Bail out before relying on either predicate.
+    if (dst.is_constant() || src.is_constant()) {
+        return true;
+    }
+    if (dst.is_nullable()) {
+        const auto& nullable_dst = down_cast<const NullableColumn&>(dst);
+        const Column& dst_null = *nullable_dst.null_column();
+        if (src.is_nullable()) {
+            const auto& nullable_src = down_cast<const NullableColumn&>(src);
+            return column_may_reallocate(*nullable_dst.data_column(), *nullable_src.data_column()) ||
+                   column_may_reallocate(dst_null, *nullable_src.null_column());
+        }
+        // A non-nullable source still appends one null flag per row.
+        return column_may_reallocate(*nullable_dst.data_column(), src) ||
+               dst_null.capacity() < dst_null.size() + src.size();
+    }
+    if (src.is_nullable()) {
+        // append_chunk() upgrades |dst| to nullable first, which allocates a whole null column.
+        return true;
+    }
+
+    // Element capacity. Exact for fixed-width and object columns, and it covers the offsets
+    // array of binary and array columns.
+    if (dst.capacity() < dst.size() + src.size()) {
+        return true;
+    }
+
+    // A binary column owns a byte buffer that grows independently of its offsets array.
+    if (dst.is_binary()) {
+        const size_t container = dst.container_memory_usage();
+        const size_t used = dst.byte_size();
+        const size_t free_bytes = container > used ? container - used : 0;
+        return free_bytes < src.byte_size();
+    }
+
+    // An array column's elements grow independently of its offsets array.
+    if (dst.is_array()) {
+        if (!src.is_array()) {
+            return true;
+        }
+        return column_may_reallocate(down_cast<const ArrayColumn&>(dst).elements(),
+                                     down_cast<const ArrayColumn&>(src).elements());
+    }
+
+    // capacity() fully describes a fixed-width or object column: its element vector is the only
+    // container it owns. Every other kind (json, variant, map, struct, the view columns, ...)
+    // owns storage that cannot be inspected cheaply here, so assume it may grow.
+    return !(dst.is_numeric() || dst.is_decimal() || dst.is_date() || dst.is_timestamp() || dst.is_object());
+}
+
+} // namespace
+
+size_t JoinHashTable::estimated_expand_bytes(const ChunkPtr& chunk) const {
+    // Build-side columns accumulate into a single growing `build_chunk`, and their containers are
+    // std::vector-backed, so they grow geometrically rather than on every append. On the pushes
+    // that do reallocate, the old and new buffers coexist and the transient requirement is about
+    // twice the current container size; on every other push it is zero.
+    //
+    // Reporting the whole hash table on every push instead (as this used to) inflates the query's
+    // peak memory by roughly one extra copy of the build side for as long as the build runs, which
+    // can by itself push a query past the spill watermark and make it spill without ever having
+    // been short on memory.
+    if (_table_items == nullptr || _table_items->build_chunk == nullptr || chunk == nullptr) {
+        return 0;
+    }
+
+    size_t expand_bytes = 0;
+    auto accumulate = [&expand_bytes](const Column& dst, const Column& src) {
+        if (column_may_reallocate(dst, src)) {
+            // Geometric growth: the replacement buffer is about twice the current container, and
+            // the current one is still held while the data is copied over.
+            expand_bytes += dst.container_memory_usage() * 2;
+        }
+    };
+
+    // A concurrent cancel can clear these while a memory-tracking query races in, the same way
+    // mem_usage() can observe a torn-down table; stay within whatever is still there.
+    const auto& columns = _table_items->build_chunk->columns();
+    const size_t build_column_count =
+            std::min({_table_items->build_column_count, columns.size(), _table_items->build_slots.size()});
+    for (size_t i = 0; i < build_column_count; i++) {
+        SlotDescriptor* slot = _table_items->build_slots[i].slot;
+        accumulate(*columns[i], *chunk->get_column_by_slot_id(slot->id()));
+    }
+    // Join keys that are not slot refs are appended into their own columns; the key columns
+    // themselves are not part of |chunk|, so size them by the row count instead.
+    const size_t key_column_count = std::min(_table_items->key_columns.size(), _table_items->join_keys.size());
+    for (size_t i = 0; i < key_column_count; i++) {
+        if (_table_items->join_keys[i].col_ref == nullptr) {
+            const Column& key_column = *_table_items->key_columns[i];
+            if (key_column.capacity() < key_column.size() + chunk->num_rows()) {
+                expand_bytes += key_column.container_memory_usage() * 2;
+            }
+        }
+    }
+    return expand_bytes;
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
