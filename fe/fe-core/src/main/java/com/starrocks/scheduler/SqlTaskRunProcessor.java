@@ -16,6 +16,7 @@ package com.starrocks.scheduler;
 
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.OriginStatement;
@@ -36,7 +37,7 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
         try {
             ConnectContext ctx = context.getCtx();
             // Set query source to TASK for task-submitted queries
-            ctx.setQuerySource(com.starrocks.qe.QueryDetail.QuerySource.TASK);
+            ctx.setQuerySource(QueryDetail.QuerySource.TASK);
             ctx.getAuditEventBuilder().reset();
             ctx.getAuditEventBuilder()
                     .setTimestamp(System.currentTimeMillis())

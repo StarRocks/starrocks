@@ -17,8 +17,10 @@ package com.starrocks.authorization;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.common.Config;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.persist.OperationType;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -46,14 +48,238 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 
 public class GrantRoleToGroupTest {
+    private boolean previousCacheEnabled;
+
+    @Test
+    public void testGroupMappingChangesInvalidateCachedPrivileges() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        ConnectContext caller = groupCacheCaller();
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_child");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        execute(root, "REVOKE group_cache_child FROM EXTERNAL GROUP group_cache");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+
+        long roleId = manager.getRoleIdByNameAllowNull("group_cache_child");
+        manager.replayGrantRoleToGroup(List.of(roleId), "group_cache");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        manager.replayRevokeRoleFromGroup(List.of(roleId), "group_cache");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testGroupRoleAndInheritanceChangesInvalidateCachedPrivileges() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        ConnectContext caller = groupCacheCaller();
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_parent");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+        execute(root, "GRANT group_cache_parent TO ROLE group_cache_child");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        execute(root, "REVOKE OPERATE ON SYSTEM FROM ROLE group_cache_parent");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_parent");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        execute(root, "REVOKE group_cache_parent FROM ROLE group_cache_child");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+        execute(root, "GRANT group_cache_parent TO ROLE group_cache_child");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        execute(root, "DROP ROLE group_cache_parent");
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testReplayedGroupRolePrivilegeChangesInvalidateCache() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        AuthorizationMgr manager = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        ConnectContext caller = groupCacheCaller();
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_parent");
+        execute(root, "GRANT group_cache_parent TO ROLE group_cache_child");
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        long roleId = manager.getRoleIdByNameAllowNull("group_cache_parent");
+        RolePrivilegeCollectionV2 current = manager.getRolePrivilegeCollection("group_cache_parent");
+        RolePrivilegeCollectionV2 revoked = current.clone();
+        revoked.revoke(ObjectType.SYSTEM, List.of(PrivilegeType.OPERATE), Collections.singletonList(null));
+        manager.replayUpdateRolePrivilegeCollection(new RolePrivilegeCollectionInfo(Map.of(roleId, revoked),
+                manager.getProviderPluginId(), manager.getProviderPluginVersion()));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+        manager.replayUpdateRolePrivilegeCollection(new RolePrivilegeCollectionInfo(Map.of(roleId, current),
+                manager.getProviderPluginId(), manager.getProviderPluginVersion()));
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        manager.replayDropRole(new RolePrivilegeCollectionInfo(Map.of(roleId, current),
+                manager.getProviderPluginId(), manager.getProviderPluginVersion()));
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+    }
+
+    @Test
+    public void testEphemeralSessionRetainsActiveRolesUntilIdentityIsRefreshed() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_child");
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        UserIdentity identity = UserIdentity.createEphemeralUserIdent("external_cache_user", "%");
+        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(identity);
+        caller.setGroups(Set.of("group_cache"));
+        // AuthenticationHandler uses this overload when the external identity logs in.
+        caller.setCurrentRoleIds(identity, caller.getGroups());
+        Set<Long> loginRoles = Set.copyOf(caller.getCurrentRoleIds());
+        Assertions.assertFalse(loginRoles.isEmpty());
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+
+        execute(root, "REVOKE group_cache_child FROM EXTERNAL GROUP group_cache");
+        // Main keeps a synchronous session's authenticated active roles. Revoking a mapping prevents
+        // a refreshed identity from acquiring the role; it does not rewrite an existing session.
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+        Assertions.assertEquals(loginRoles, caller.getCurrentRoleIds());
+
+        ConnectContext refreshed = UtFrameUtils.initCtxForNewPrivilege(identity);
+        refreshed.setGroups(caller.getGroups());
+        refreshed.setCurrentRoleIds(identity, refreshed.getGroups());
+        Assertions.assertTrue(refreshed.getCurrentRoleIds().isEmpty());
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(refreshed, PrivilegeType.OPERATE));
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        // Group grants remain effective independently of the active-role selection, as in main.
+        Authorizer.checkSystemAction(refreshed, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE);
+    }
+
+    @Test
+    public void testEphemeralRolePrivilegeRevocationImmediatelyAffectsExistingContexts() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_child");
+        execute(root, "GRANT USAGE ON AI FUNCTION ai_complete TO ROLE group_cache_child");
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        UserIdentity identity = UserIdentity.createEphemeralUserIdent("external_cache_user", "%");
+        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(identity);
+        caller.setGroups(Set.of("group_cache"));
+        caller.setCurrentRoleIds(identity, caller.getGroups());
+        ConnectContext roleOnly = UtFrameUtils.initCtxForNewPrivilege(identity);
+        roleOnly.setGroups(Set.of());
+        roleOnly.setCurrentRoleIds(Set.copyOf(caller.getCurrentRoleIds()));
+        List<ConnectContext> contexts = List.of(caller, roleOnly);
+        for (ConnectContext context : contexts) {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            Authorizer.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE);
+        }
+
+        execute(root, "REVOKE OPERATE ON SYSTEM FROM ROLE group_cache_child");
+        for (ConnectContext context : contexts) {
+            Assertions.assertThrows(AccessDeniedException.class,
+                    () -> Authorizer.checkSystemAction(context, PrivilegeType.OPERATE));
+            Authorizer.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE);
+        }
+        execute(root, "REVOKE USAGE ON AI FUNCTION ai_complete FROM ROLE group_cache_child");
+        for (ConnectContext context : contexts) {
+            Assertions.assertThrows(AccessDeniedException.class,
+                    () -> Authorizer.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE));
+        }
+
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_child");
+        execute(root, "GRANT USAGE ON AI FUNCTION ai_complete TO ROLE group_cache_child");
+        for (ConnectContext context : contexts) {
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
+            Authorizer.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE);
+        }
+        execute(root, "DROP ROLE group_cache_child");
+        for (ConnectContext context : contexts) {
+            Assertions.assertThrows(AccessDeniedException.class,
+                    () -> Authorizer.checkSystemAction(context, PrivilegeType.OPERATE));
+            Assertions.assertThrows(AccessDeniedException.class,
+                    () -> Authorizer.checkAIFunctionAction(context, "ai_complete", PrivilegeType.USAGE));
+        }
+    }
+
+    @Test
+    public void testEphemeralGroupPrivilegesDoNotMutateActiveRoleSet() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        execute(root, "GRANT OPERATE ON SYSTEM TO ROLE group_cache_child");
+        execute(root, "GRANT group_cache_child TO EXTERNAL GROUP group_cache");
+        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(
+                UserIdentity.createEphemeralUserIdent("external_cache_user", "%"));
+        caller.setGroups(Set.of("group_cache"));
+        caller.setCurrentRoleIds(Set.of());
+        Assertions.assertDoesNotThrow(() -> Authorizer.checkSystemAction(caller, PrivilegeType.OPERATE));
+        Assertions.assertTrue(caller.getCurrentRoleIds().isEmpty());
+    }
+
+    @Test
+    public void testNativeAndEphemeralIdentitiesDoNotShareCachedPrivileges() throws Exception {
+        ConnectContext root = createGroupCacheFixture();
+        execute(root, "GRANT OPERATE ON SYSTEM TO USER group_cache_user");
+        ConnectContext nativeCaller = groupCacheCaller();
+        nativeCaller.setGroups(Set.of());
+        Authorizer.checkSystemAction(nativeCaller, PrivilegeType.OPERATE);
+
+        ConnectContext ephemeralCaller = UtFrameUtils.initCtxForNewPrivilege(
+                UserIdentity.createEphemeralUserIdent("group_cache_user", "%"));
+        ephemeralCaller.setGroups(Set.of());
+        ephemeralCaller.setCurrentRoleIds(Set.of());
+        Assertions.assertThrows(AccessDeniedException.class,
+                () -> Authorizer.checkSystemAction(ephemeralCaller, PrivilegeType.OPERATE));
+        Authorizer.checkSystemAction(nativeCaller, PrivilegeType.OPERATE);
+    }
+
+    @Test
+    public void testPrivilegeCacheKeySnapshotsGroupsAndActiveRoles() {
+        Set<String> groups = new HashSet<>(Set.of("group_cache"));
+        Set<Long> roles = new HashSet<>(Set.of(1L));
+        AuthorizationMgr.UserPrivKey key = new AuthorizationMgr.UserPrivKey(UserIdentity.ROOT, groups, roles);
+        AuthorizationMgr.UserPrivKey snapshot = new AuthorizationMgr.UserPrivKey(
+                UserIdentity.ROOT, Set.of("group_cache"), Set.of(1L));
+        int hashCode = key.hashCode();
+        groups.clear();
+        roles.clear();
+        Assertions.assertEquals(snapshot, key);
+        Assertions.assertEquals(hashCode, key.hashCode());
+    }
+
+    private static ConnectContext createGroupCacheFixture() throws Exception {
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(new AuthorizationMgr(new DefaultAuthorizationProvider()));
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+        ConnectContext root = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        execute(root, "CREATE USER group_cache_user");
+        execute(root, "CREATE ROLE group_cache_parent, group_cache_child");
+        return root;
+    }
+
+    private static ConnectContext groupCacheCaller() throws Exception {
+        ConnectContext caller = UtFrameUtils.initCtxForNewPrivilege(new UserIdentity("group_cache_user", "%"));
+        caller.setCurrentRoleIds(Set.of());
+        caller.setGroups(Set.of("group_cache"));
+        return caller;
+    }
+
+    private static void execute(ConnectContext context, String sql) throws Exception {
+        try (var ignored = context.bindScope()) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, context), context);
+        }
+    }
 
     @BeforeEach
     public void setUpPersistJournal() throws Exception {
+        previousCacheEnabled = Config.authorization_enable_priv_collection_cache;
+        Config.authorization_enable_priv_collection_cache = true;
         // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
         // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory. Per-test
         // (not @BeforeAll) so testPersist()'s replayNextJournal sees only its own ops on a freshly cleared queue.
@@ -62,6 +288,7 @@ public class GrantRoleToGroupTest {
 
     @AfterEach
     public void tearDownPersistJournal() {
+        Config.authorization_enable_priv_collection_cache = previousCacheEnabled;
         UtFrameUtils.tearDownForPersisTest();
     }
 

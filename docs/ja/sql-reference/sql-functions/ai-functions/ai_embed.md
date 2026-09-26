@@ -6,6 +6,8 @@ sidebar_position: 22
 
 # ai_embed
 
+関数と Provider の権限要件は [AI 関数の権限](ai_functions.mdx#ai-function-privileges) を参照してください。
+
 SYSTEM OpenAI 互換 embeddings エンドポイントでテキスト埋め込みを生成します。結果は NULL 許容の `ARRAY<FLOAT>` であり、Snowflake VECTOR 型ではありません。使用する前に、すべての FE と BE をアップグレードしてください。
 
 :::warning

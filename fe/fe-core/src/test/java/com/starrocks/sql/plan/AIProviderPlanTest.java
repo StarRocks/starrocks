@@ -109,11 +109,12 @@ public class AIProviderPlanTest extends PlanTestBase {
             AIProjectNode node = (AIProjectNode) template.getFragments().stream()
                     .flatMap(fragment -> fragment.collectNodes().stream())
                     .filter(AIProjectNode.class::isInstance).findFirst().orElseThrow();
-            ExecPlan plan = new ExecPlan();
+            ExecPlan plan = new ExecPlan(connectContext, List.of(), null, List.of(), false);
             Map<String, AIModelConfigs.ModelConfig> first = plan.bindAIModelConfigs(new HashMap<>(node.getSlotMap()));
             manager().alterProvider(name, properties("current-model"), false);
             Map<String, AIModelConfigs.ModelConfig> repeated = plan.bindAIModelConfigs(new HashMap<>(node.getSlotMap()));
-            Map<String, AIModelConfigs.ModelConfig> fresh = new ExecPlan()
+            Map<String, AIModelConfigs.ModelConfig> fresh =
+                    new ExecPlan(connectContext, List.of(), null, List.of(), false)
                     .bindAIModelConfigs(new HashMap<>(node.getSlotMap()));
             Assertions.assertSame(first.get("provider:0"), repeated.get("provider:0"));
             Assertions.assertEquals("original-model", repeated.get("provider:0").model());
@@ -254,16 +255,20 @@ public class AIProviderPlanTest extends PlanTestBase {
     }
 
     @Test
-    public void testOptimizedAwayProviderCallsDoNotReadMetadata() throws Exception {
-        new MockUp<AIProviderMgr>() {
+    public void testOptimizedAwayProviderCallsAreAuthorizedWithoutCapturingConfiguration() throws Exception {
+        Assertions.assertThrows(SemanticException.class, () -> getExecPlan("select k1 from (select k1, "
+                + "ai_custom_query('missing_provider', k1) as unused from t7) t"));
+        Assertions.assertThrows(SemanticException.class, () -> getExecPlan(
+                "select ai_custom_embedding('missing_provider', k1) from t7 where false"));
+        new MockUp<AIModelConfigs>() {
             @Mock
-            public AIProvider getProvider(String name) {
-                throw new AssertionError("An eliminated call must not access the Provider registry");
+            public AIModelConfigs.ModelConfig fromProvider(AIProvider provider) {
+                throw new AssertionError("An eliminated call must not capture execution configuration");
             }
         };
         Assertions.assertTrue(aiNodes(getExecPlan("select k1 from (select k1, "
-                + "ai_custom_query('missing_provider', k1) as unused from t7) t")).isEmpty());
-        Assertions.assertTrue(aiNodes(getExecPlan("select ai_custom_embedding('missing_provider', k1) "
+                + "ai_custom_query('text_plan_chat', k1) as unused from t7) t")).isEmpty());
+        Assertions.assertTrue(aiNodes(getExecPlan("select ai_custom_embedding('text_plan_embedding', k1) "
                 + "from t7 where false")).isEmpty());
     }
 

@@ -12,6 +12,39 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 AI 関数は、SQL から設定済みのモデルサービスを呼び出します。テキスト生成については [ai_complete](ai_complete.md) を参照してください。
 
+## AI 関数の権限 {/* #ai-function-privileges */}
+
+AI 関数の実行には SYSTEM の `USE AI FUNCTIONS` または対象 AI FUNCTION ファミリーの `USAGE` が必要です。Provider を使用する呼び出しには、選択した AI PROVIDER の `USAGE` も必要です。これらの権限は互いを包含しません。
+
+対象は `ai_complete`、`ai_sentiment`、`ai_classify`、`ai_extract`、`ai_fix_grammar`、`ai_redact`、`ai_translate`、`ai_similarity`、`ai_summarize`、`ai_filter`、`ai_embed`、`ai_custom_query`、`ai_custom_embedding` です。同じ関数ファミリーのオーバーロードは権限を共有します。従来の組み込み関数 `ai_query(VARCHAR, JSON)` は対象外です。
+
+`public` ロールには AI 権限を暗黙に付与しません。組み込み `root` と `db_admin` ロールはグローバルな AI 関数使用権限と全 Provider の使用権限を持ちます。既存のテーブル、列、ビューの権限も必要です。ビューの参照権限は、その AI 関数を実行する権限を付与しません。
+
+```sql
+GRANT USAGE ON AI FUNCTION ai_complete TO ROLE ai_user;
+GRANT USE AI FUNCTIONS ON SYSTEM TO ROLE ai_user;
+GRANT USAGE ON AI PROVIDER support_chat TO ROLE ai_user;
+GRANT USAGE ON ALL AI PROVIDERS TO ROLE ai_admin;
+```
+
+Provider 名は大文字と小文字を区別して完全一致します。権限は Provider の UUID に紐づきます。ALTER は権限を維持しますが、削除後に同じ名前で作成しても権限は継承されません。`ON ALL AI PROVIDERS` は将来の Provider も含みます。名前が `*` の Provider は個別に指定できません。全体への付与には明示的な ALL 構文を使用してください。
+
+SYSTEM 関数は既存の設定経路を維持し、Provider の権限を必要としません。Provider の CREATE、ALTER、DROP、SET DEFAULT、SHOW、DESC には従来どおり SYSTEM OPERATE が必要です。USAGE はこれらの管理操作を許可しません。
+
+関数または Provider の権限の取り消しは、プリペアド EXECUTE を含む後続の実行と再計画に適用されます。実行中のクエリはキャンセルしません。この機能はネイティブ認可に対応します。AI チェックを実装していない外部アクセスコントローラーは対象操作を拒否します。
+
+同期セッションは既存の外部ユーザーのロール動作を維持します。外部グループからロールを取り消しても、認証済みセッションのロールは削除されません。ID を更新するには再接続してください。ロールから権限を取り消すと、既存セッションの後続の権限検査にも反映されます。
+
+権限を有効にする前にすべての FE をアップグレードしてください。古い FE は新しいオブジェクト型を認可せず、その権限メタデータの読み込みを拒否する場合もあります。未知の権限メタデータを無視して非互換のダウングレードを回避しないでください。既存の一般ユーザーにはアップグレード後に AI 権限を明示的に付与する必要があります。
+
+### 非同期実行
+
+ユーザーが SUBMIT で作成する AI タスクには、認証済みの作成者 ID が必要です。実行ごとに現在のグループとロールを再取得し、同じ関数とプロバイダーの権限を検査します。タスクに認可結果、グループの所属情報、プロバイダーの認証情報は保存しません。既存の作成者ベースのタスクと同様に、実行時に現在付与されているロールを有効化します。送信したセッションのアクティブロール選択は保存しません。
+
+作成者の認証メタデータがない既存の AI タスクは再作成してください。`EXECUTE AS` 後、または認証検査を無効化した状態での AI タスクの送信はサポートしません。作成者として再接続して認証してください。ユーザー、セキュリティ統合、設定済みのグループプロバイダーが存在しない場合は失敗し、root にフォールバックしません。`mv_use_creator_based_authorization` はこれらの AI タスクの実行 ID を変更しません。
+
+MV 更新、PIPE、Load の式実行では AI 式をサポートしません。AI を含まない通常のタスクは既存の動作を維持します。AI タスクを有効化する前にすべての FE をアップグレードしてください。古い FE は新しいタスク ID の契約を実施または転送できません。
+
 ## AI 入力行数の削減 {/* #reducing-ai-input-rows */}
 
 `LIMIT` が正で `OFFSET` を含まない `ORDER BY ... LIMIT` クエリでは、ソート列が AI 投影とその間の通常の Project を変更されずに通過する場合、StarRocks は AI 投影の評価前に候補行を選択できます。

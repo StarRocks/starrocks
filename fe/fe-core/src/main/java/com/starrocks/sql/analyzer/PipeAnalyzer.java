@@ -171,6 +171,9 @@ public class PipeAnalyzer {
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());
         stmt.setInsertSql(insertSql);
         Analyzer.analyze(insertStmt, context);
+        if (ResolvedAIFunctionDetector.contains(insertStmt)) {
+            throw new SemanticException("AI functions are not supported in PIPE");
+        }
         stmt.setTargetTableRef(insertStmt.getTableRef());
 
         analyzePipeName(stmt.getPipeName(), insertStmt.getDbName());

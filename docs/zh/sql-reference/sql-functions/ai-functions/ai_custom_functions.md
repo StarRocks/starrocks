@@ -9,8 +9,10 @@ sidebar_position: 23
 `ai_custom_query` 和 `ai_custom_embedding` 复用集群现有的 [AI provider 注册表](../../sql-statements/cluster-management/ai_provider/CREATE_AI_PROVIDER.md)。它们按名称选择已注册的 provider，而不是逐行变化的远端模型名。使用前请升级所有 FE 和 BE。
 
 :::warning
-调用会将输入数据发送到集群外，并可能产生提供商费用。本功能不新增 AI 函数或 provider 对象的调用权限。Provider 管理仍要求 SYSTEM OPERATE，已有表、列和视图权限检查也保持不变，但这些检查不提供按 provider 隔离调用的能力。应仅允许可信查询用户使用符合其数据和费用要求的已批准 provider。
+调用会将输入数据发送到集群外，并可能产生提供商费用。请只向查询用户授予已批准的函数族和 Provider。Provider 管理仍要求 SYSTEM OPERATE，已有表、列和视图检查也保持不变。
 :::
+
+函数和 Provider 的授权要求见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
 
 ## 语法
 
@@ -46,7 +48,7 @@ Provider API key 保存在 FE 元数据 journal 和 image 中，并经现有内�
 
 ## 查询快照与 SYSTEM 兼容性
 
-每个物理执行计划在首次需要某个 provider 时捕获其配置，同一计划中该 provider 的所有调用复用这一快照。被优化器消除的调用不解析 provider 元数据。后续 ALTER 或 DROP 不改变已捕获的配置，也不会取消正在执行的查询。新构建的计划（包括重试时重新规划或下一次预处理 EXECUTE）会捕获当前元数据。
+每个物理执行计划在首次需要某个 provider 时捕获其配置，同一计划中该 provider 的所有调用复用这一快照。权限检查在优化前覆盖所有已解析的 AI 调用。只有保留到物理计划的 AI 调用才捕获执行配置；配置进入计划前，会对实际捕获的 Provider UUID 再次授权检查。后续 ALTER 或 DROP 不改变已捕获的配置，也不会取消正在执行的查询。新构建的计划（包括重试时重新规划或下一次预处理 EXECUTE）会捕获当前元数据。
 
 Query dump 不捕获 provider 元数据。暂不支持具名 provider 调用的离线重放，也不能用当前同名 provider 替代未捕获的快照。
 
