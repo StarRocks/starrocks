@@ -50,6 +50,17 @@ class BIGINT(mysql_types.BIGINT):
 class LARGEINT(sqltypes.Integer):
     __visit_name__ = "LARGEINT"
 
+    def result_processor(self, dialect: Dialect, coltype: object):
+        # The server sends LARGEINT as text.
+        def process(value):
+            if value is None or isinstance(value, int):
+                return value
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("ascii")
+            return int(value)
+
+        return process
+
 
 class DECIMAL(mysql_types.DECIMAL):
     __visit_name__ = "DECIMAL"
@@ -86,22 +97,38 @@ class VARBINARY(sqltypes.VARBINARY):
 class DATETIME(mysql_types.DATETIME):
     __visit_name__ = "DATETIME"
 
-    _reg = re.compile(r"(\d+)-(\d+)-(\d+) (\d+):(\d+):(\d+)\.?(\d+)?")
+    _reg = re.compile(r"(\d+)-(\d+)-(\d+)[ T](\d+):(\d+):(\d+)(?:\.(\d{1,6}))?$")
+
+    def bind_processor(self, dialect: Dialect):
+        # DATETIME has no time zone and the driver drops a bound value's UTC
+        # offset, so reject an aware value instead of storing it as wall time.
+        def process(value):
+            if isinstance(value, datetime) and value.utcoffset() is not None:
+                raise ValueError(
+                    "StarRocks DATETIME has no time zone; convert %r to a naive "
+                    "datetime in the intended zone" % (value,)
+                )
+            return value
+
+        return process
 
     def result_processor(self, dialect: Dialect, coltype: object):
         def process(value):
+            if isinstance(value, (bytes, bytearray)):
+                value = value.decode("ascii")
             if isinstance(value, str):
-                m = self._reg.match(value)
+                m = self._reg.match(value.strip())
                 if not m:
                     raise ValueError(
                         "could not parse %r as a datetime value" % (value,)
                     )
-                return datetime(*[int(x or 0) for x in m.groups()])
+                *parts, fraction = m.groups()
+                # ".5" is 500000 microseconds, not 5.
+                return datetime(*(int(x) for x in parts), int((fraction or "").ljust(6, "0")))
             else:
                 return value
 
         return process
-
 
 class TIME(mysql_types.TIME):
     """StarRocks ``TIME``, a signed duration rather than a time of day.
@@ -214,6 +241,18 @@ class StructuredType(UserDefinedType):
         """
         raise NotImplementedError("get_sub_item_types is not implemented for this pure Structuredtype")
 
+    def result_processor(self, dialect: Dialect, coltype: object):
+        def process(value):
+            if value is None:
+                return None
+            if isinstance(value, (str, bytes, bytearray)):
+                value = parse_complex_value(value)
+            elif isinstance(value, dict):
+                value = list(value.items())
+            return _convert_structured(self, value, dialect)
+
+        return process
+
 
 class ARRAY(StructuredType):
     """
@@ -249,24 +288,6 @@ class ARRAY(StructuredType):
             types.update(self.item_type.get_sub_item_types())
         return types
 
-    def result_processor(self, dialect: Dialect, coltype: object):
-        item_processor = self.item_type.result_processor(dialect, coltype)
-
-        def process(value):
-            if value is None:
-                return None
-            if isinstance(value, str):
-                try:
-                    parsed = json.loads(value, parse_float=Decimal)
-                except json.JSONDecodeError:
-                    return value
-            else:
-                parsed = value
-            if item_processor is None:
-                return parsed
-            return [item_processor(item) if item is not None else None for item in parsed]
-
-        return process
 
 class MAP(StructuredType):
     """
@@ -306,37 +327,9 @@ class MAP(StructuredType):
             types.update(self.value_type.get_sub_item_types())
         return types
 
-    def result_processor(self, dialect: Dialect, coltype: object):
-        key_processor = self.key_type.result_processor(dialect, coltype)
-        value_processor = self.value_type.result_processor(dialect, coltype)
 
-        # JSON always serializes keys as strings; if the key type is not str, cast back.
-        if key_processor is None:
-            try:
-                key_py_type = self.key_type.python_type
-                if key_py_type is not str:
-                    key_processor = key_py_type
-            except NotImplementedError:
-                pass
+_PLAIN_FIELD_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
-        def process(value):
-            if value is None:
-                return None
-            if isinstance(value, str):
-                try:
-                    parsed = json.loads(value, parse_float=Decimal)
-                except json.JSONDecodeError:
-                    return value
-            else:
-                parsed = value
-            return {
-                (key_processor(k) if key_processor is not None else k): (
-                    value_processor(v) if value_processor is not None and v is not None else v
-                )
-                for k, v in parsed.items()
-            }
-
-        return process
 
 class STRUCT(StructuredType):
     """
@@ -371,10 +364,19 @@ class STRUCT(StructuredType):
         )
         return f"STRUCT({fields})"
 
+    def adapt(self, cls, **kw):
+        # The default constructor copy cannot see the fields (they are passed
+        # positionally), so a copied or dialect-adapted STRUCT had none.
+        if isclass(cls) and issubclass(cls, STRUCT):
+            return cls(*self.field_tuples)
+        return super().adapt(cls, **kw)
+
     def get_col_spec(self, **kw) -> str:
         fields_sql = []
         for name, type_ in self.field_tuples:
             type_sql = self.get_sub_type_col_spec(type_, **kw)
+            if not _PLAIN_FIELD_NAME.fullmatch(name):
+                name = "`" + name.replace("`", "``") + "`"
             fields_sql.append(f"{name} {type_sql}")
         return f"STRUCT<{', '.join(fields_sql)}>"
 
@@ -385,27 +387,6 @@ class STRUCT(StructuredType):
             if hasattr(type_, 'get_sub_item_types'):
                 types.update(type_.get_sub_item_types())
         return types
-
-    def result_processor(self, dialect: Dialect, coltype: object):
-        processors = {
-            name: type_.result_processor(dialect, coltype)
-            for name, type_ in self.field_tuples
-        }
-
-        def process(value):
-            if value is None:
-                return None
-            parsed = json.loads(value, parse_float=Decimal) if isinstance(value, str) else value
-            return {
-                k: (
-                    proc(v)
-                    if (proc := processors.get(k)) is not None and v is not None
-                    else v
-                )
-                for k, v in parsed.items()
-            }
-
-        return process
 
 
 class JSON(sqltypes.JSON):
@@ -447,3 +428,174 @@ class VARIANT(sqltypes.TypeEngine):
             return json.loads(value)
 
         return process
+
+
+_ESCAPES = {'"': '"', "'": "'", "\\": "\\", "/": "/", "b": "\b", "f": "\f", "n": "\n", "r": "\r", "t": "\t"}
+_NUMBER = re.compile(r"-?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?")
+_INTEGER = re.compile(r"-?\d+")
+_BAREWORDS = {"null": None, "true": True, "false": False}
+
+
+class _ComplexValueParser:
+    """Parser for the server's text rendering of ARRAY/MAP/STRUCT values.
+
+    That rendering is JSON-like but not JSON: map keys of non-string types are
+    unquoted (``{1:"a"}``), JSON items inside an array are single-quoted, and
+    strings may contain raw control characters.
+    """
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.pos = 0
+
+    def fail(self, message: str) -> ValueError:
+        return ValueError(
+            "could not parse complex value at offset %d: %s: %r" % (self.pos, message, self.text)
+        )
+
+    def skip_ws(self) -> None:
+        while self.pos < len(self.text) and self.text[self.pos].isspace():
+            self.pos += 1
+
+    def expect_one_of(self, *tokens: str) -> str:
+        self.skip_ws()
+        for token in tokens:
+            if self.text.startswith(token, self.pos):
+                self.pos += len(token)
+                return token
+        raise self.fail("expected one of %s" % (tokens,))
+
+    def parse(self) -> Any:
+        value = self.value()
+        self.skip_ws()
+        if self.pos != len(self.text):
+            raise self.fail("trailing characters")
+        return value
+
+    def value(self) -> Any:
+        self.skip_ws()
+        if self.pos >= len(self.text):
+            raise self.fail("unexpected end of input")
+        char = self.text[self.pos]
+        if char == "[":
+            self.pos += 1
+            items: List[Any] = []
+            self.skip_ws()
+            if self.text.startswith("]", self.pos):
+                self.pos += 1
+                return items
+            while True:
+                items.append(self.value())
+                if self.expect_one_of(",", "]") == "]":
+                    return items
+        if char == "{":
+            # Pairs, not a dict: keys are converted by the declared key type first.
+            self.pos += 1
+            pairs: List[Tuple[Any, Any]] = []
+            self.skip_ws()
+            if self.text.startswith("}", self.pos):
+                self.pos += 1
+                return pairs
+            while True:
+                key = self.value()
+                self.expect_one_of(":")
+                pairs.append((key, self.value()))
+                if self.expect_one_of(",", "}") == "}":
+                    return pairs
+        if char in "\"'":
+            return self.string(char)
+        m = _NUMBER.match(self.text, self.pos)
+        if m:
+            self.pos = m.end()
+            token = m.group()
+            return int(token) if _INTEGER.fullmatch(token) else Decimal(token)
+        for word, result in _BAREWORDS.items():
+            if self.text.startswith(word, self.pos):
+                self.pos += len(word)
+                return result
+        raise self.fail("unexpected character")
+
+    def string(self, quote: str) -> str:
+        self.pos += 1
+        out: List[str] = []
+        while self.pos < len(self.text):
+            char = self.text[self.pos]
+            if char == quote:
+                self.pos += 1
+                return "".join(out)
+            if char == "\\":
+                escape = self.text[self.pos + 1:self.pos + 2]
+                if escape == "u":
+                    out.append(chr(int(self.text[self.pos + 2:self.pos + 6], 16)))
+                    self.pos += 6
+                    continue
+                if escape not in _ESCAPES:
+                    raise self.fail("invalid escape \\%s" % escape)
+                out.append(_ESCAPES[escape])
+                self.pos += 2
+                continue
+            out.append(char)
+            self.pos += 1
+        raise self.fail("unterminated string")
+
+
+def parse_complex_value(text: Union[str, bytes]) -> Any:
+    """Parse an ARRAY/MAP/STRUCT value as rendered by the server.
+
+    Maps and structs are returned as lists of ``(key, value)`` pairs and numbers
+    as ``int`` or ``Decimal``, so nothing is lost before the declared type
+    converts them. Raises ``ValueError`` rather than returning undecoded text.
+    """
+    if isinstance(text, (bytes, bytearray)):
+        text = text.decode("utf-8")
+    return _ComplexValueParser(text).parse()
+
+
+def _element_converter(type_: Any, dialect: Dialect) -> Callable[[Any], Any]:
+    type_ = StructuredType._check_subtype(type_)
+    if isinstance(type_, StructuredType):
+        return lambda value: _convert_structured(type_, value, dialect)
+    impl = type_.dialect_impl(dialect)
+    if isinstance(impl, sqltypes.Boolean):
+        return lambda value: value if isinstance(value, bool) else bool(value)
+    if isinstance(impl, sqltypes.Integer):
+        return int
+    if isinstance(impl, sqltypes.Float):
+        return float
+    if isinstance(impl, sqltypes.Numeric):
+        return (lambda value: Decimal(str(value))) if impl.asdecimal else float
+    if isinstance(impl, sqltypes._Binary):
+        # Binary values nested in a complex value are rendered as hex.
+        return lambda value: value if isinstance(value, bytes) else bytes.fromhex(value)
+    if isinstance(impl, sqltypes.String):
+        return str
+    processor = impl.result_processor(dialect, None)
+    return processor if processor is not None else (lambda value: value)
+
+
+def _nullable(convert: Callable[[Any], Any]) -> Callable[[Any], Any]:
+    return lambda value: None if value is None else convert(value)
+
+
+def _convert_structured(type_: StructuredType, value: Any, dialect: Dialect) -> Any:
+    if value is None:
+        return None
+    if isinstance(type_, ARRAY):
+        if not isinstance(value, list):
+            raise ValueError("expected an ARRAY value, got %r" % (value,))
+        item = _nullable(_element_converter(type_.item_type, dialect))
+        return [item(element) for element in value]
+    if not isinstance(value, list) or any(not isinstance(pair, tuple) for pair in value):
+        raise ValueError("expected a %s value, got %r" % (type_.__visit_name__, value))
+    if isinstance(type_, MAP):
+        key = _nullable(_element_converter(type_.key_type, dialect))
+        val = _nullable(_element_converter(type_.value_type, dialect))
+        return {key(k): val(v) for k, v in value}
+    fields = {
+        name.lower(): _nullable(_element_converter(field_type, dialect))
+        for name, field_type in type_.field_tuples
+    }
+    return {
+        k: fields[k.lower()](v) if isinstance(k, str) and k.lower() in fields else v
+        for k, v in value
+    }
