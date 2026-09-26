@@ -95,6 +95,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         List<Long> tabletIds = finishedTablets.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
+        Map<Long, List<Long>> ignoredTabletsByPartition = Maps.newHashMap();
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
             if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
@@ -105,6 +106,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             }
             if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
+                // Rows written into those tablets are dropped while this transaction still succeeds, record
+                // them so that the loss leaves a trace, see TxnStateLogUtils.
+                ignoredTabletsByPartition.computeIfAbsent(tabletMeta.getPhysicalPartitionId(), id -> Lists.newArrayList())
+                        .add(tabletIds.get(i));
                 continue;
             }
             dirtyPartitionSet.add(tabletMeta.getPhysicalPartitionId());
@@ -157,6 +162,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             throw new TransactionCommitFailedException(
                     "table '" + table.getName() + "\" has unfinished tablets: " + unfinishedTablets);
         }
+
+        // Reported only once this commit is going through, so that a commit rejected above is not
+        // recorded as having dropped rows.
+        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
     }
 
     @Override

@@ -37,6 +37,7 @@ import com.starrocks.task.ClearTransactionTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -100,6 +101,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         List<Long> tabletIds =
                 tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
         List<TabletMeta> tabletMetaList = tabletInvertedIndex.getTabletMetaList(tabletIds);
+        Map<Long, List<Long>> ignoredTabletsByPartition = new HashMap<>();
         for (int i = 0; i < tabletMetaList.size(); i++) {
             TabletMeta tabletMeta = tabletMetaList.get(i);
             if (tabletMeta == TabletInvertedIndex.NOT_EXIST_TABLET_META) {
@@ -114,7 +116,10 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (table.getPhysicalPartition(physicalPartitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
-                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
+                // Rows written into those tablets are dropped while this transaction still succeeds, so
+                // record them: this is the only trace left when a partition is replaced or dropped under
+                // a running load. Aggregated per partition below to keep one line per partition.
+                ignoredTabletsByPartition.computeIfAbsent(physicalPartitionId, id -> new ArrayList<>()).add(tabletId);
                 continue;
             }
             dirtyPhysicalPartitionSet.add(physicalPartitionId);
@@ -246,6 +251,10 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                 }
             }
         }
+
+        // Reported only once this commit is going through, so that a commit rejected above is not
+        // recorded as having dropped rows.
+        TxnStateLogUtils.logIgnoredTablets(txnState, table.getId(), ignoredTabletsByPartition);
     }
 
     @Override
