@@ -40,6 +40,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.ColumnIdExpr;
@@ -348,6 +349,21 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
 
     public boolean isNameWithPrefix(String prefix) {
         return this.name.startsWith(prefix);
+    }
+
+    /**
+     * True for the hidden column that materializes a complex partition expression
+     * (__generated_partition_column_*). Such a column is invisible to users and its value is always
+     * functionally determined by the key columns, because the analyzer rejects partition expressions
+     * that reference an aggregated column.
+     * <p>
+     * The name prefix is enough to identify it here, as everywhere else in the code base: with
+     * allow_system_reserved_names a user column may carry the prefix, but CreateTableAnalyzer only
+     * treats a generated column as internal when it is also a partition column of the statement, so
+     * an aggregate table cannot end up holding a user column that merely borrows the name.
+     */
+    public boolean isGeneratedPartitionColumn() {
+        return isGeneratedColumn() && isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX);
     }
 
     public void setIsKey(boolean isKey) {
