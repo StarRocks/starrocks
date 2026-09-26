@@ -251,3 +251,14 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
     target_link_libraries(connector_elasticsearch_test ${CONNECTOR_ELASTICSEARCH_TEST_LINK_LIBS} gtest_main)
     set_target_properties(connector_elasticsearch_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
+
+if (WITH_CONNECTOR_LANCE)
+    add_executable(connector_lance_test
+            ${BE_TEST_MACOS_LINK_STUBS}
+            ${BE_TEST_JNI_ENV_STUB}
+            hive/hive_test_main.cpp
+            lance/lance_connector_test.cpp
+    )
+    target_link_libraries(connector_lance_test ConnectorLance ${CONNECTOR_HIVE_TEST_LINK_LIBS} hdfs jvm)
+    set_target_properties(connector_lance_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+endif()
