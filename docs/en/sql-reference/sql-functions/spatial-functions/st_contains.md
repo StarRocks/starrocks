@@ -1,38 +1,38 @@
 ---
 displayed_sidebar: docs
-description: "Checks whether the geometric figure shape1 can fully contain shape2."
+description: "Tests whether a polygon strictly contains a point."
 ---
 
 # ST_Contains
 
-
-
-Checks whether the geometric figure shape1 can fully contain shape2.
+Returns whether a polygon contains a point in its interior. A point on the exterior boundary or on a hole boundary is not contained.
 
 ## Syntax
 
-```Haskell
-BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
+```SQL
+ST_Contains(GEOGRAPHY polygon, GEOGRAPHY point)
+ST_Contains(GEOMETRY polygon, GEOMETRY point)
+ST_Contains(VARCHAR shape1, VARCHAR shape2)
 ```
+
+The native overloads accept an XY `POINT` as the second argument and an XY `POLYGON` or `MULTIPOLYGON` as the first. Both `GEOMETRY` arguments must have matching descriptors. Mixed native `GEOGRAPHY`/`GEOMETRY` calls are rejected. `NULL` propagates, and an `EMPTY` input returns `false`.
+
+The `VARCHAR` signature is the existing legacy overload and remains unchanged.
 
 ## Examples
 
-```Plain Text
-MySQL > SELECT ST_Contains(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"), ST_Point(5, 5));
-+----------------------------------------------------------------------------------------+
-| st_contains(st_polygon('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'), st_point(5.0, 5.0)) |
-+----------------------------------------------------------------------------------------+
-|                                                                                      1 |
-+----------------------------------------------------------------------------------------+
+```SQL
+SELECT ST_Contains(
+    ST_GeomFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))', 'EPSG:3857'),
+    ST_GeomFromText('POINT (5 5)', 'EPSG:3857'));
+-- true
 
-MySQL > SELECT ST_Contains(ST_Polygon("POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"), ST_Point(50, 50));
-+------------------------------------------------------------------------------------------+
-| st_contains(st_polygon('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'), st_point(50.0, 50.0)) |
-+------------------------------------------------------------------------------------------+
-|                                                                                        0 |
-+------------------------------------------------------------------------------------------+
+SELECT ST_Contains(
+    ST_GeogFromText('POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))'),
+    ST_GeogFromText('POINT (0 5)'));
+-- false: the point is on the boundary
 ```
 
-## keyword
+## Keywords
 
 ST_CONTAINS,ST,CONTAINS

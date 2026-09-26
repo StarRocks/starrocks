@@ -851,6 +851,79 @@ TEST_F(geographyFunctionsTest, nativeGeometryNullInvalidAndCrsChecks) {
     EXPECT_TRUE(nonconstant.status().is_invalid_argument());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoContainmentPredicates) {
+    constexpr const char* polygon = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))";
+    auto polygons = geometry({polygon, polygon, polygon, polygon, polygon});
+    auto points = geometry({"POINT (1 1)", "POINT (0 5)", "POINT (5 5)", "POINT (3 5)", "POINT (20 20)"});
+
+    ColumnViewer<TYPE_BOOLEAN> contains(GeoFunctions::st_geometry_contains(nullptr, {polygons, points}).value());
+    ColumnViewer<TYPE_BOOLEAN> within(GeoFunctions::st_geometry_within(nullptr, {points, polygons}).value());
+    ColumnViewer<TYPE_BOOLEAN> covers(GeoFunctions::st_geometry_covers(nullptr, {polygons, points}).value());
+    ColumnViewer<TYPE_BOOLEAN> covered_by(GeoFunctions::st_geometry_covered_by(nullptr, {points, polygons}).value());
+    const bool strict_expected[] = {true, false, false, false, false};
+    const bool inclusive_expected[] = {true, true, false, true, false};
+    for (size_t row = 0; row < std::size(strict_expected); ++row) {
+        EXPECT_EQ(strict_expected[row], contains.value(row));
+        EXPECT_EQ(strict_expected[row], within.value(row));
+        EXPECT_EQ(inclusive_expected[row], covers.value(row));
+        EXPECT_EQ(inclusive_expected[row], covered_by.value(row));
+    }
+
+    auto multipolygon =
+            geometry({"MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), "
+                      "((10 10, 12 10, 12 12, 10 12, 10 10)))"});
+    auto second_polygon_point = geometry({"POINT (11 11)"});
+    ColumnViewer<TYPE_BOOLEAN> multipolygon_result(
+            GeoFunctions::st_geometry_contains(nullptr, {multipolygon, second_polygon_point}).value());
+    EXPECT_TRUE(multipolygon_result.value(0));
+
+    auto constant_polygon = ConstColumn::create(geometry({polygon}), 3);
+    auto constant_point = ConstColumn::create(geometry({"POINT (1 1)"}), 3);
+    auto constant_result = GeoFunctions::st_geometry_covers(nullptr, {constant_polygon, constant_point}).value();
+    EXPECT_TRUE(constant_result->is_constant());
+    EXPECT_EQ(3, constant_result->size());
+    EXPECT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(constant_result));
+
+    auto dateline_polygon = geography({"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))"});
+    auto dateline_points = geography({"POINT (179 0)"});
+    ColumnViewer<TYPE_BOOLEAN> dateline_contains(
+            GeoFunctions::st_geography_contains(nullptr, {dateline_polygon, dateline_points}).value());
+    EXPECT_TRUE(dateline_contains.value(0));
+
+    auto boundary_point = geography({"POINT (170 0)"});
+    ColumnViewer<TYPE_BOOLEAN> boundary_contains(
+            GeoFunctions::st_geography_contains(nullptr, {dateline_polygon, boundary_point}).value());
+    ColumnViewer<TYPE_BOOLEAN> boundary_covers(
+            GeoFunctions::st_geography_covers(nullptr, {dateline_polygon, boundary_point}).value());
+    EXPECT_FALSE(boundary_contains.value(0));
+    EXPECT_TRUE(boundary_covers.value(0));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoContainmentNullEmptyAndRejection) {
+    auto polygon = geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
+    auto point = geometry({"POINT (1 1)"});
+
+    auto null_result = GeoFunctions::st_geometry_contains(nullptr, {polygon, geometry({nullptr})}).value();
+    EXPECT_TRUE(null_result->is_null(0));
+    auto empty_result = GeoFunctions::st_geometry_contains(nullptr, {geometry({"POLYGON EMPTY"}), point}).value();
+    ColumnViewer<TYPE_BOOLEAN> empty(empty_result);
+    EXPECT_FALSE(empty.value(0));
+
+    auto incompatible = GeoFunctions::st_geometry_contains(
+            nullptr, {polygon, geometry({"POINT (1 1)"}, geometry_type("EPSG:4326", 4326))});
+    ASSERT_FALSE(incompatible.ok());
+    EXPECT_TRUE(incompatible.status().is_invalid_argument());
+
+    auto unsupported = GeoFunctions::st_geometry_contains(
+            nullptr, {geometry({"GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0)))"}), point});
+    ASSERT_FALSE(unsupported.ok());
+    EXPECT_TRUE(unsupported.status().is_invalid_argument());
+
+    auto mixed_kind = GeoFunctions::st_geometry_contains(nullptr, {polygon, geography({"POINT (1 1)"})});
+    ASSERT_FALSE(mixed_kind.ok());
+    EXPECT_TRUE(mixed_kind.status().is_not_supported());
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     struct ExpectedFunction {
         uint64_t id;
@@ -881,6 +954,14 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120171, "ST_GeometryType", "VARCHAR", {"GEOMETRY"}},
             {120180, "ST_Distance", "DOUBLE", {"GEOGRAPHY", "GEOGRAPHY"}},
             {120181, "ST_Distance", "DOUBLE", {"GEOMETRY", "GEOMETRY"}},
+            {120190, "ST_Contains", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120191, "ST_Contains", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
+            {120200, "ST_Within", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120201, "ST_Within", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
+            {120210, "ST_Covers", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120211, "ST_Covers", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
+            {120220, "ST_CoveredBy", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120221, "ST_CoveredBy", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
     };
 
     for (const auto& function : expected) {
