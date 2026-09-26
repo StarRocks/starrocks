@@ -209,6 +209,7 @@ PROPERTIES (
 
 insert into __row_util_1 select generate_series from TABLE(generate_series(0, 5000));
 
+<<<<<<< HEAD
 
 -- id随机，nation低基数
 CREATE TABLE left_table (
@@ -221,6 +222,17 @@ DISTRIBUTED BY HASH(id) buckets 32
 PROPERTIES (
     "replication_num" = "1" 
 );
+=======
+-- Search within Cyrillic names
+select id, ngram_search(name_cyrillic, 'Расулов Сунатулло', 4) as similarity
+from utf8_names
+order by similarity desc, id;
+
+-- Case insensitive search
+select id, ngram_search_case_insensitive(name_cyrillic, 'РАСУЛОВ СУНАТУЛЛО', 4) as similarity
+from utf8_names
+order by similarity desc, id;
+>>>>>>> e91d16b ([UT] SQL-Tester: run four cases that have never executed, drop a fifth as duplicate (#79811))
 
 insert into left_table 
 select
