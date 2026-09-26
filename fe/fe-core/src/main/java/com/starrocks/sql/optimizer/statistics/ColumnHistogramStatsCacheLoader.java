@@ -131,6 +131,12 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
 
         List<Bucket> buckets = HistogramUtils.convertBuckets(statisticData.histogram, columnType);
         Map<String, Long> mcv = HistogramUtils.convertMCV(statisticData.histogram);
+        if (buckets.isEmpty()) {
+            LOG.warn("Stored histogram for column {} has no buckets; re-collect statistics to restore accurate "
+                    + "row count estimation.", statisticData.columnName);
+            return new Histogram(mcv);
+        }
+
         return new Histogram(buckets, mcv);
     }
 }
