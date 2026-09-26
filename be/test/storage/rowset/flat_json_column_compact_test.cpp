@@ -413,6 +413,22 @@ TEST_F(FlatJsonColumnCompactTest, testLegacyFlatJsonRootTotalMemFootprintFallbac
     EXPECT_EQ(child_mem_footprint, handle.reader->total_mem_footprint());
 }
 
+TEST_F(FlatJsonColumnCompactTest, testFlatJsonLargeStringValueCompaction) {
+    std::string big_string(1024 * 1024 + 32, 'x');
+    const std::string json = fmt::format(R"({{"payload": "{}"}})", big_string);
+    MutableColumns jsons = to_mutable_columns({normal_json(json, false)});
+
+    auto handle = write_segment(jsons, /*need_flat=*/true, "/flat_json_large_string_compaction.data",
+                                /*is_compaction=*/true);
+    ASSERT_TRUE(handle.meta->json_meta().is_flat());
+    ASSERT_EQ(1, handle.num_rows);
+    ASSERT_TRUE(handle.reader->is_flat_json());
+
+    MutableColumnPtr output = jsons[0]->clone_empty();
+    EXPECT_OK(read_segment(handle, ReadMode::kBatch, output.get()));
+    EXPECT_EQ(json, output->debug_item(0));
+}
+
 TEST_F(FlatJsonColumnCompactTest, testJsonCompactToJson) {
     // clang-format off
     MutableColumns jsons = to_mutable_columns({
