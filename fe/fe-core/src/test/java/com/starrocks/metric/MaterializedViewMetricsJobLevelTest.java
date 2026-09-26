@@ -177,9 +177,8 @@ public class MaterializedViewMetricsJobLevelTest extends MVTestBase {
             // Mirror production: the scheduler always adds batch N to history before dispatching batch N+1.
             GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory().addHistory(taskRun1.getStatus());
 
-            // Regression: Database.getFullName() is unqualified while a stored TaskRunStatus keeps the
-            // "default_cluster:" prefix; matchByTaskName compares against the stripped getDbName(), so the
-            // roll-up must still find earlier in-memory batches (not only archived ones) via the plain db name.
+            // Regression: matchByTaskName compares the plain database name, so the roll-up must still find
+            // earlier in-memory batches (not only archived ones) via Database.getFullName().
             String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
             boolean foundEarlierBatch = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunHistory()
                     .lookupLastJobOfTasks(DB_NAME, Collections.singleton(mvTaskName))
