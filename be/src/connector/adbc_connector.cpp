@@ -1,0 +1,168 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "connector/adbc_connector.h"
+
+#include <sstream>
+
+#include "exec/adbc_scanner.h"
+#include "gutil/casts.h"
+#include "runtime/descriptors.h"
+#include "runtime/descriptors_ext.h"
+
+namespace starrocks::connector {
+
+// Assemble a SQL query string from TADBCScanNode fields.
+// This is a free function so it can be tested independently.
+std::string get_adbc_sql(const std::string& table, const std::vector<std::string>& columns,
+                         const std::vector<std::string>& filters, int64_t limit) {
+    std::ostringstream oss;
+    oss << "SELECT";
+    for (size_t i = 0; i < columns.size(); i++) {
+        oss << (i == 0 ? "" : ",") << " " << columns[i];
+    }
+    oss << " FROM " << table;
+    if (!filters.empty()) {
+        oss << " WHERE ";
+        for (size_t i = 0; i < filters.size(); i++) {
+            oss << (i == 0 ? "" : " AND ") << "(" << filters[i] << ")";
+        }
+    }
+    if (limit != -1) {
+        oss << " LIMIT " << limit;
+    }
+    return oss.str();
+}
+
+// ================================
+
+DataSourceProviderPtr ADBCConnector::create_data_source_provider(ConnectorScanNode* scan_node,
+                                                                 const TPlanNode& plan_node) const {
+    return std::make_unique<ADBCDataSourceProvider>(scan_node, plan_node);
+}
+
+// ================================
+
+ADBCDataSourceProvider::ADBCDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node)
+        : _scan_node(scan_node), _adbc_scan_node(plan_node.adbc_scan_node) {}
+
+DataSourcePtr ADBCDataSourceProvider::create_data_source(const TScanRange& scan_range) {
+    return std::make_unique<ADBCDataSource>(this, scan_range);
+}
+
+const TupleDescriptor* ADBCDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_adbc_scan_node.tuple_id);
+}
+
+// ================================
+
+ADBCDataSource::ADBCDataSource(const ADBCDataSourceProvider* provider, const TScanRange& scan_range)
+        : _provider(provider) {}
+
+ADBCDataSource::~ADBCDataSource() = default;
+
+std::string ADBCDataSource::name() const {
+    return "ADBCDataSource";
+}
+
+Status ADBCDataSource::open(RuntimeState* state) {
+    const TADBCScanNode& scan_node = _provider->_adbc_scan_node;
+
+    // Get tuple descriptor (also set base class member for _init_chunk_if_needed)
+    auto* tuple_desc = state->desc_tbl().get_tuple_descriptor(scan_node.tuple_id);
+    _tuple_desc = tuple_desc;
+
+    // Read connection params from ADBCTableDescriptor
+    const auto* adbc_table = down_cast<const ADBCTableDescriptor*>(tuple_desc->table_desc());
+    DCHECK(adbc_table != nullptr);
+
+    // Build ADBCScanContext from table descriptor + scan node
+    ADBCScanContext ctx;
+    ctx.driver = adbc_table->adbc_driver();
+    ctx.adbc_options = adbc_table->adbc_options();
+
+    // uri, username, password come from adbc_options map (forwarded by FE)
+    auto it = ctx.adbc_options.find("uri");
+    if (it != ctx.adbc_options.end()) {
+        ctx.uri = it->second;
+    }
+    it = ctx.adbc_options.find("username");
+    if (it != ctx.adbc_options.end()) {
+        ctx.username = it->second;
+    }
+    it = ctx.adbc_options.find("password");
+    if (it != ctx.adbc_options.end()) {
+        ctx.password = it->second;
+    }
+
+    // Query params from scan node
+    ctx.sql = get_adbc_sql(scan_node.table_name, scan_node.columns, scan_node.filters,
+                           scan_node.__isset.limit ? scan_node.limit : -1);
+
+    VLOG(2) << "ADBC connector: driver=" << ctx.driver << " sql=" << ctx.sql;
+
+    // Create scanner with context struct; pass the data source's runtime
+    // profile so RowsRead/IOTime/FillChunkTime/ConnectTime show up in
+    // EXPLAIN ANALYZE.
+    _scanner = std::make_unique<ADBCScanner>(ctx, tuple_desc, _runtime_profile);
+
+    RETURN_IF_ERROR(_scanner->open(state));
+
+    return Status::OK();
+}
+
+void ADBCDataSource::close(RuntimeState* state) {
+    if (_scanner) {
+        _scanner->close(state);
+        _scanner.reset();
+    }
+}
+
+Status ADBCDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    VLOG(3) << "ADBC connector: get_next called, _tuple_desc=" << (void*)_tuple_desc;
+    bool eos = false;
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, 0));
+    VLOG(3) << "ADBC connector: _init_chunk_if_needed OK, chunk=" << (void*)chunk->get();
+    do {
+        RETURN_IF_ERROR(_scanner->get_next(state, chunk, &eos));
+    } while (!eos && (*chunk)->num_rows() == 0);
+
+    if (eos) {
+        VLOG(3) << "ADBC connector: EOS reached";
+        return Status::EndOfFile("");
+    }
+
+    _rows_read += (*chunk)->num_rows();
+    _bytes_read += (*chunk)->bytes_usage();
+    VLOG(3) << "ADBC connector: get_next returning " << (*chunk)->num_rows() << " rows";
+    return Status::OK();
+}
+
+int64_t ADBCDataSource::raw_rows_read() const {
+    return _rows_read;
+}
+
+int64_t ADBCDataSource::num_rows_read() const {
+    return _rows_read;
+}
+
+int64_t ADBCDataSource::num_bytes_read() const {
+    return _bytes_read;
+}
+
+int64_t ADBCDataSource::cpu_time_spent() const {
+    return 0;
+}
+
+} // namespace starrocks::connector

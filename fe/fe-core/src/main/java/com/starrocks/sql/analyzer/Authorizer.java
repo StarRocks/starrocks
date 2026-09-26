@@ -254,6 +254,7 @@ public class Authorizer {
             case ICEBERG_VIEW:
             case HUDI:
             case JDBC:
+            case ADBC:
             case DELTALAKE:
             case FILE:
             case SCHEMA:
