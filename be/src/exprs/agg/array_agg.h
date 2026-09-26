@@ -21,6 +21,7 @@
 #include "column/type_traits.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/array_size_limit.h"
 #include "exprs/function_context.h"
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
@@ -28,6 +29,7 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
+
 // Primary template: non-string-or-binary types
 template <LogicalType PT, bool is_distinct, typename MyHashSet = std::set<int>, typename = guard::Guard>
 struct ArrayAggAggregateState {
@@ -75,6 +77,15 @@ struct ArrayAggAggregateState {
             }
         }
         return &data_column;
+    }
+
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
     }
 
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
@@ -161,6 +172,15 @@ struct ArrayAggAggregateState<PT, is_distinct, MyHashSet, StringOrBinaryGuard<PT
         return &data_column;
     }
 
+    size_t element_count() const {
+        if constexpr (is_distinct) {
+            DCHECK(data_column.size() == 0 || data_column.size() == set.size());
+            return set.size() + null_count;
+        } else {
+            return data_column.size() + null_count;
+        }
+    }
+
     bool check_overflow(FunctionContext* ctx) const { return check_overflow(data_column, ctx); }
 
     static bool check_overflow(const Column& col, FunctionContext* ctx) {
@@ -216,8 +236,8 @@ public:
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& state_impl = this->data(const_cast<AggDataPtr>(state));
-        // should check overflow before append, otherwise will generate invalid result.
-        if (UNLIKELY(state_impl.check_overflow(ctx))) {
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", state_impl.element_count()) ||
+                     state_impl.check_overflow(ctx))) {
             return;
         }
 
@@ -475,6 +495,9 @@ public:
             }
             index.resize(res_num);
             elem_size = res_num;
+        }
+        if (UNLIKELY(reject_if_array_too_large(ctx, "array_agg", elem_size))) {
+            return;
         }
         if (index.empty()) {
             array_col->elements_column()->append(*res, 0, elem_size);

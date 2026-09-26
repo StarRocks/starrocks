@@ -352,6 +352,10 @@ struct TQueryOptions {
   191: optional i64 column_view_concat_bytes_limit;
 
   217: optional bool enable_cache_udaf = false;
+
+  // Maximum number of elements in an array produced by an array function. The query fails once an
+  // array exceeds it. Only array_agg enforces it so far. <=0 disables the limit. Default 0.
+  218: optional i64 max_array_length = 0;
 }
 
 // A scan range plus the parameters needed to execute that scan.
