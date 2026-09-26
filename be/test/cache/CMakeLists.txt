@@ -24,6 +24,7 @@ set(CACHE_TEST_FILES
     datacache_metrics_test.cpp
     datacache_utils_test.cpp
     dynamic_cache_test.cpp
+    mem_space_monitor_test.cpp
     mem_cache/lrucache_engine_test.cpp
     mem_cache/page_handle_test.cpp
     mem_cache/page_cache_test.cpp
