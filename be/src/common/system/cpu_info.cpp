@@ -44,6 +44,10 @@
 #ifdef __linux__
 #include <linux/magic.h>
 #endif
+#if defined(__linux__) && defined(__aarch64__)
+#include <asm/hwcap.h>
+#include <sys/auxv.h>
+#endif
 #include <sched.h>
 #ifdef __linux__
 #include <sys/sysinfo.h>
@@ -63,11 +67,14 @@
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <cctype>
+#include <cerrno>
 #include <cstdlib>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string_view>
 #include <system_error>
 
 #include "base/path/file_util.h"
@@ -111,45 +118,230 @@ std::vector<long> CpuInfo::cache_sizes;
 std::vector<long> CpuInfo::cache_line_sizes;
 
 const std::vector<CpuInfo::FlagMapping>& CpuInfo::_flag_mappings() {
+#if defined(__x86_64__) || defined(__i386__)
     static const std::vector<FlagMapping> mappings = {
             {"ssse3", CpuInfo::SSSE3},     {"sse4_1", CpuInfo::SSE4_1},     {"sse4_2", CpuInfo::SSE4_2},
             {"popcnt", CpuInfo::POPCNT},   {"avx", CpuInfo::AVX},           {"avx2", CpuInfo::AVX2},
             {"avx512f", CpuInfo::AVX512F}, {"avx512bw", CpuInfo::AVX512BW},
     };
+#elif defined(__aarch64__)
+    static const std::vector<FlagMapping> mappings = {
+            {"asimd", CpuInfo::ARM_NEON}, {"crc32", CpuInfo::ARM_CRC32}, {"pmull", CpuInfo::ARM_PMULL},
+            {"aes", CpuInfo::ARM_AES},    {"atomics", CpuInfo::ARM_LSE}, {"sve", CpuInfo::ARM_SVE},
+            {"sve2", CpuInfo::ARM_SVE2},  {"sha1", CpuInfo::ARM_SHA1},   {"sha2", CpuInfo::ARM_SHA2},
+    };
+#else
+#error "CpuInfo CPU feature mappings support only x86 or aarch64"
+#endif
     return mappings;
 }
 
-int64_t CpuInfo::_parse_cpu_flags(const string& values) {
+int64_t CpuInfo::_parse_flags(const string& values, const std::vector<FlagMapping>& mappings) {
     int64_t flags = 0;
-    for (const auto& flag_mapping : _flag_mappings()) {
-        if (contains(values, flag_mapping.name)) {
-            flags |= flag_mapping.flag;
+    for (StringPiece token : strings::Split(values, " ", strings::SkipWhitespace())) {
+        const std::string_view token_view(token.data(), token.size());
+        for (const auto& flag_mapping : mappings) {
+            if (token_view == flag_mapping.name) {
+                flags |= flag_mapping.flag;
+                break;
+            }
         }
     }
     return flags;
 }
 
+#if defined(__aarch64__)
+// ARM64 Linux HWCAP / HWCAP2 constants for getauxval
+#ifndef HWCAP_ASIMD
+#define HWCAP_ASIMD (1UL << 1)
+#endif
+#ifndef HWCAP_AES
+#define HWCAP_AES (1UL << 3)
+#endif
+#ifndef HWCAP_PMULL
+#define HWCAP_PMULL (1UL << 4)
+#endif
+#ifndef HWCAP_SHA1
+#define HWCAP_SHA1 (1UL << 5)
+#endif
+#ifndef HWCAP_SHA2
+#define HWCAP_SHA2 (1UL << 6)
+#endif
+#ifndef HWCAP_CRC32
+#define HWCAP_CRC32 (1UL << 7)
+#endif
+#ifndef HWCAP_ATOMICS
+#define HWCAP_ATOMICS (1UL << 8)
+#endif
+#ifndef HWCAP_SVE
+#define HWCAP_SVE (1UL << 22)
+#endif
+#ifndef HWCAP2_SVE2
+#define HWCAP2_SVE2 (1UL << 1)
+#endif
+
+int64_t CpuInfo::_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
+    int64_t flags = 0;
+    if (hwcap & HWCAP_ASIMD) flags |= ARM_NEON;
+    if (hwcap & HWCAP_CRC32) flags |= ARM_CRC32;
+    if (hwcap & HWCAP_PMULL) flags |= ARM_PMULL;
+    if (hwcap & HWCAP_AES) flags |= ARM_AES;
+    if (hwcap & HWCAP_ATOMICS) flags |= ARM_LSE;
+    if (hwcap & HWCAP_SVE) flags |= ARM_SVE;
+    if (hwcap2 & HWCAP2_SVE2) flags |= ARM_SVE2;
+    if (hwcap & HWCAP_SHA1) flags |= ARM_SHA1;
+    if (hwcap & HWCAP_SHA2) flags |= ARM_SHA2;
+    return flags;
+}
+#endif
+
+int64_t CpuInfo::_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
+    std::string line;
+    std::string name;
+    std::string value;
+    int64_t intersection_flags = 0;
+    bool first_features_line = true;
+
+    while (getline(stream, line)) {
+        size_t colon = line.find(':');
+        if (colon != std::string::npos) {
+            name = line.substr(0, colon);
+            value = line.substr(colon + 1);
+            trim(name);
+            trim(value);
+            if (name == "Features") {
+                int64_t core_flags = _parse_flags(value, mappings);
+                if (first_features_line) {
+                    intersection_flags = core_flags;
+                    first_features_line = false;
+                } else {
+                    intersection_flags &= core_flags;
+                }
+            }
+        }
+    }
+    if (stream.bad() || (stream.fail() && !stream.eof())) {
+        return 0; // Fail closed on truncated or corrupted stream
+    }
+    return intersection_flags;
+}
+
+bool CpuInfo::_hwcap_available(unsigned long hwcap) {
+    // glibc's getauxval() special-cases AT_HWCAP/AT_HWCAP2: it reads GLRO(dl_hwcap) directly
+    // and never sets errno for these two auxv types (verified against glibc 2.39 in PR #79278
+    // review), so an errno==0 check can never observe "unavailable" -- it is always true.
+    // NEON/ASIMD is mandatory on every conforming AArch64 core, so a genuinely all-zero HWCAP
+    // is the only signal we can trust that the auxv vector could not be populated (non-glibc
+    // libc, sandboxed/emulated environment).
+    return hwcap != 0;
+}
+
+#if defined(__aarch64__)
+int64_t CpuInfo::_init_arm_procfs(std::istream& stream) {
+    return _intersect_procfs_features(stream, _flag_mappings());
+}
+
+int64_t CpuInfo::_init_arm_darwin(const std::function<bool(const char*)>& check_sysctl) {
+    int64_t flags = 0;
+
+    // Advanced SIMD / NEON
+    if (check_sysctl("hw.optional.AdvSIMD") || check_sysctl("hw.optional.neon") ||
+        check_sysctl("hw.optional.arm.AdvSIMD") || check_sysctl("hw.optional.floatingpoint")) {
+        flags |= ARM_NEON;
+    }
+
+    // CRC32
+    if (check_sysctl("hw.optional.armv8_crc32") || check_sysctl("hw.optional.arm.FEAT_CRC32")) {
+        flags |= ARM_CRC32;
+    }
+
+    // Large System Extensions (LSE Atomics)
+    if (check_sysctl("hw.optional.armv8_1_atomics") || check_sysctl("hw.optional.arm.FEAT_LSE")) {
+        flags |= ARM_LSE;
+    }
+
+    // Crypto extensions
+    if (check_sysctl("hw.optional.arm.FEAT_PMULL")) {
+        flags |= ARM_PMULL;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_AES")) {
+        flags |= ARM_AES;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SHA1")) {
+        flags |= ARM_SHA1;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SHA256") || check_sysctl("hw.optional.arm.FEAT_SHA2")) {
+        flags |= ARM_SHA2;
+    }
+
+    // SVE / SVE2
+    if (check_sysctl("hw.optional.arm.FEAT_SVE")) {
+        flags |= ARM_SVE;
+    }
+    if (check_sysctl("hw.optional.arm.FEAT_SVE2")) {
+        flags |= ARM_SVE2;
+    }
+
+    // Fail closed: Unknown capability state must NOT enable optional extensions blindly.
+    return flags;
+}
+#endif
+
+int64_t CpuInfo::_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
+    if (aux_available) {
+        return aux_flags;
+    }
+    return procfs_flags;
+}
+
 void CpuInfo::init() {
     if (initialized_) return;
-    string line;
-    string name;
-    string value;
 
     float max_mhz = 0;
     int num_cores = 0;
 
-    // Read from /proc/cpuinfo
-    std::ifstream cpuinfo("/proc/cpuinfo");
+#if defined(__linux__) && defined(__aarch64__)
+    const unsigned long hwcap = getauxval(AT_HWCAP);
+    const unsigned long hwcap2 = getauxval(AT_HWCAP2);
+    const bool hwcap_available = _hwcap_available(hwcap);
+    int64_t aux_flags = _init_arm_auxval(hwcap, hwcap2);
+#endif
+
+#if defined(__linux__)
+    std::string cpuinfo_content;
+    {
+        std::ifstream file("/proc/cpuinfo");
+        if (file.is_open()) {
+            std::stringstream buffer;
+            std::string line;
+            while (std::getline(file, line)) {
+                buffer << line << "\n";
+            }
+            if (file.bad() || (file.fail() && !file.eof())) {
+                LOG(ERROR) << "I/O error reading /proc/cpuinfo; CPU feature detection may be incomplete";
+                cpuinfo_content.clear();
+            } else {
+                cpuinfo_content = buffer.str();
+            }
+        } else {
+            LOG(ERROR) << "Unable to open /proc/cpuinfo; CPU feature detection may be incomplete";
+        }
+    }
+    std::string line;
+    std::string name;
+    std::string value;
+
+    std::istringstream cpuinfo(cpuinfo_content);
     while (cpuinfo) {
         getline(cpuinfo, line);
         size_t colon = line.find(':');
         if (colon != string::npos) {
-            name = line.substr(0, colon - 1);
+            name = line.substr(0, colon);
             value = line.substr(colon + 1, string::npos);
             trim(name);
             trim(value);
             if (name.compare("flags") == 0) {
-                hardware_flags_ |= _parse_cpu_flags(value);
+                hardware_flags_ |= _parse_flags(value, _flag_mappings());
             } else if (name.compare("cpu MHz") == 0) {
                 // Every core will report a different speed.  We'll take the max, assuming
                 // that when impala is running, the core will not be in a lower power state.
@@ -164,6 +356,31 @@ void CpuInfo::init() {
             }
         }
     }
+
+#endif
+
+#if defined(__linux__) && defined(__aarch64__)
+    {
+        // Only parse /proc/cpuinfo when auxv genuinely could not supply flags -- when
+        // hwcap_available is true (the overwhelming common case), the procfs result would be
+        // computed and immediately discarded by _resolve_arm_flags below, so skip the work.
+        int64_t procfs_arm_flags = 0;
+        if (!hwcap_available) {
+            std::istringstream arm_cpuinfo(cpuinfo_content);
+            procfs_arm_flags = _init_arm_procfs(arm_cpuinfo);
+        }
+        hardware_flags_ |= _resolve_arm_flags(hwcap_available, aux_flags, procfs_arm_flags);
+    }
+#endif
+
+#if defined(__APPLE__) && defined(__aarch64__)
+    auto check_sysctl = [](const char* name) -> bool {
+        int val = 0;
+        size_t len = sizeof(val);
+        return sysctlbyname(name, &val, &len, nullptr, 0) == 0 && val != 0;
+    };
+    hardware_flags_ |= _init_arm_darwin(check_sysctl);
+#endif
 
     if (max_mhz != 0) {
         cycles_per_ms_ = max_mhz * 1000;
@@ -491,9 +708,54 @@ std::vector<std::string> CpuInfo::unsupported_cpu_flags_from_current_env() {
                 unsupported = true;
                 break;
 #endif
+#if defined(__aarch64__) && defined(__ARM_NEON)
+            case CpuInfo::ARM_NEON:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_CRC32)
+            case CpuInfo::ARM_CRC32:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_PMULL))
+            case CpuInfo::ARM_PMULL:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_AES))
+            case CpuInfo::ARM_AES:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_ATOMICS)
+            case CpuInfo::ARM_LSE:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE)
+            case CpuInfo::ARM_SVE:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && defined(__ARM_FEATURE_SVE2)
+            case CpuInfo::ARM_SVE2:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_SHA1))
+            case CpuInfo::ARM_SHA1:
+                unsupported = true;
+                break;
+#endif
+#if defined(__aarch64__) && (defined(__ARM_FEATURE_CRYPTO) || defined(__ARM_FEATURE_SHA2))
+            case CpuInfo::ARM_SHA2:
+                unsupported = true;
+                break;
+#endif
             }
             if (unsupported) {
-                unsupported_flags.push_back(flag_mapping.name);
+                unsupported_flags.emplace_back(flag_mapping.name);
             }
         }
     }
