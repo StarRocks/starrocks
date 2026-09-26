@@ -2338,6 +2338,299 @@ TEST_F(MetaFileTest, test_batch_apply_opwrite_mixed_segment_meta_presence) {
     EXPECT_EQ(603, metadata->next_rowset_id());
 }
 
+// The op_writes of a batch publish (the statements of one multi-statement transaction) are merged
+// into one rowset, but a rowset's segments must all be bundled or all be standalone files, and a
+// statement bundles its segment only when it wrote the tablet in one flush at the end of the load. A
+// batch with both kinds is split into consecutive rowsets, one per run of op_writes of the same kind,
+// without moving any rssid: each part's id is next_rowset_id() plus its first slot.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_splits_bundled_and_standalone_segments) {
+    const int64_t tablet_id = 30004;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(40);
+    metadata->set_next_rowset_id(100);
+    metadata->mutable_schema()->set_id(7);
+    (*metadata->mutable_rowset_to_schema())[1] = 7;
+
+    MetaFileBuilder builder(*tablet, metadata);
+    auto set_uid = [](RowsetMetadataPB* rowset, int64_t lo) {
+        rowset->mutable_uid()->set_hi(1);
+        rowset->mutable_uid()->set_lo(lo);
+    };
+
+    // Statement 1 wrote one bundled segment and deletes some keys: rssid slot 0.
+    TxnLogPB_OpWrite op_write1;
+    op_write1.mutable_rowset()->set_num_rows(10);
+    op_write1.mutable_rowset()->set_data_size(100);
+    set_uid(op_write1.mutable_rowset(), 1);
+    {
+        auto* segment = op_write1.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle1.dat");
+        segment->set_size(100);
+        segment->set_bundle_file_offset(0);
+    }
+    op_write1.add_dels_meta()->set_name("d1.del");
+    op_write1.add_del_num_rows(1);
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    // Statement 2 flushed twice, so its two segments are standalone files: slots 1 and 2.
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->set_num_rows(20);
+    op_write2.mutable_rowset()->set_data_size(200);
+    op_write2.mutable_rowset()->set_overlapped(true);
+    set_uid(op_write2.mutable_rowset(), 2);
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s2.dat");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    // Statement 3 only deletes: no segment, slot 3.
+    TxnLogPB_OpWrite op_write3;
+    set_uid(op_write3.mutable_rowset(), 3);
+    op_write3.add_dels_meta()->set_name("d3.del");
+    op_write3.add_del_num_rows(2);
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    // Statement 4 wrote one bundled segment again: slot 4.
+    TxnLogPB_OpWrite op_write4;
+    op_write4.mutable_rowset()->set_num_rows(5);
+    op_write4.mutable_rowset()->set_data_size(50);
+    set_uid(op_write4.mutable_rowset(), 4);
+    {
+        auto* segment = op_write4.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle2.dat");
+        segment->set_size(50);
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(op_write4, {}, {});
+
+    // Deletes the publish marked on the segments of statements 1, 2 and 4.
+    ASSERT_OK(builder.update_num_del_stat({{100, 2}, {102, 3}, {104, 1}}));
+    ASSERT_OK(builder.set_final_rowset());
+
+    ASSERT_EQ(3, metadata->rowsets_size());
+    EXPECT_EQ(105, metadata->next_rowset_id()); // unchanged by the split: last slot 4 + 1
+
+    // Statement 1, alone: bundled.
+    const auto& part1 = metadata->rowsets(0);
+    EXPECT_EQ(100, part1.id());
+    EXPECT_EQ(40, part1.version());
+    ASSERT_EQ(1, part1.segment_metas_size());
+    EXPECT_EQ("bundle1.dat", part1.segment_metas(0).filename());
+    EXPECT_EQ(0, part1.segment_metas(0).segment_idx());
+    ASSERT_TRUE(part1.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(0, part1.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(10, part1.num_rows());
+    EXPECT_EQ(100, part1.data_size());
+    EXPECT_EQ(2, part1.num_dels());
+    EXPECT_FALSE(part1.overlapped());
+    EXPECT_EQ(1, part1.uid().lo());
+    ASSERT_EQ(1, part1.del_files_size());
+    EXPECT_EQ("d1.del", part1.del_files(0).name());
+    EXPECT_EQ(100, part1.del_files(0).origin_rowset_id());
+    EXPECT_EQ(0, part1.del_files(0).op_offset());
+    EXPECT_EQ(1, part1.del_files(0).num_rows());
+
+    // Statements 2 and 3: standalone, from slot 1, so its rssids are still 101 and 102.
+    const auto& part2 = metadata->rowsets(1);
+    EXPECT_EQ(101, part2.id());
+    ASSERT_EQ(2, part2.segment_metas_size());
+    EXPECT_EQ("s1.dat", part2.segment_metas(0).filename());
+    EXPECT_EQ("s2.dat", part2.segment_metas(1).filename());
+    EXPECT_EQ(101, get_rssid(part2, 0));
+    EXPECT_EQ(102, get_rssid(part2, 1));
+    EXPECT_FALSE(part2.segment_metas(0).has_bundle_file_offset());
+    EXPECT_FALSE(part2.segment_metas(1).has_bundle_file_offset());
+    EXPECT_EQ(20, part2.num_rows());
+    EXPECT_EQ(200, part2.data_size());
+    EXPECT_EQ(3, part2.num_dels());
+    EXPECT_TRUE(part2.overlapped());
+    EXPECT_EQ(2, part2.uid().lo());
+    // Statement 3's delete follows statement 2's segments and precedes statement 4's: slot 3, past
+    // this rowset's last segment, so it is clamped to that segment like a trailing pure delete.
+    ASSERT_EQ(1, part2.del_files_size());
+    EXPECT_EQ("d3.del", part2.del_files(0).name());
+    EXPECT_EQ(101, part2.del_files(0).origin_rowset_id());
+    EXPECT_EQ(1, part2.del_files(0).op_offset());
+    EXPECT_EQ(2, part2.del_files(0).num_rows());
+
+    // Statement 4: bundled, from slot 4.
+    const auto& part3 = metadata->rowsets(2);
+    EXPECT_EQ(104, part3.id());
+    ASSERT_EQ(1, part3.segment_metas_size());
+    EXPECT_EQ("bundle2.dat", part3.segment_metas(0).filename());
+    EXPECT_EQ(104, get_rssid(part3, 0));
+    EXPECT_EQ(4096, part3.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(5, part3.num_rows());
+    EXPECT_EQ(1, part3.num_dels());
+    EXPECT_EQ(4, part3.uid().lo());
+    EXPECT_EQ(0, part3.del_files_size());
+
+    for (uint32_t id : {100, 101, 104}) {
+        ASSERT_EQ(1, metadata->rowset_to_schema().count(id)) << id;
+        EXPECT_EQ(7, metadata->rowset_to_schema().at(id));
+    }
+
+    // Each rowset is all bundled or all standalone, so the metadata can be saved.
+    ASSERT_OK(builder.finalize(next_id()));
+    ASSIGN_OR_ABORT(auto persisted, _tablet_manager->get_tablet_metadata(tablet_id, 40));
+    ASSERT_EQ(3, persisted->rowsets_size());
+    EXPECT_EQ(4096, persisted->rowsets(2).segment_metas(0).bundle_file_offset());
+}
+
+// An op_write without segments before any segment -- a statement that only deleted, first in the
+// transaction -- goes with the first rowset, which therefore starts at slot 0.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_split_keeps_leading_delete_in_first_rowset) {
+    const int64_t tablet_id = 30005;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(50);
+    metadata->set_next_rowset_id(200);
+
+    MetaFileBuilder builder(*tablet, metadata);
+
+    TxnLogPB_OpWrite op_write1;
+    op_write1.add_dels_meta()->set_name("d1.del");
+    builder.batch_apply_opwrite(op_write1, {}, {});
+
+    TxnLogPB_OpWrite op_write2;
+    op_write2.mutable_rowset()->set_num_rows(3);
+    op_write2.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    builder.batch_apply_opwrite(op_write2, {}, {});
+
+    TxnLogPB_OpWrite op_write3;
+    op_write3.mutable_rowset()->set_num_rows(4);
+    {
+        auto* segment = op_write3.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_bundle_file_offset(128);
+    }
+    builder.batch_apply_opwrite(op_write3, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(2, metadata->rowsets_size());
+    const auto& first = metadata->rowsets(0);
+    EXPECT_EQ(200, first.id());
+    ASSERT_EQ(1, first.segment_metas_size());
+    EXPECT_EQ(201, get_rssid(first, 0));
+    EXPECT_EQ(3, first.num_rows());
+    ASSERT_EQ(1, first.del_files_size());
+    EXPECT_EQ(0, first.del_files(0).op_offset()); // before statement 2's segment, as applied
+    const auto& second = metadata->rowsets(1);
+    EXPECT_EQ(202, second.id());
+    EXPECT_EQ(202, get_rssid(second, 0));
+    EXPECT_EQ(128, second.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(4, second.num_rows());
+    EXPECT_EQ(203, metadata->next_rowset_id());
+}
+
+// Statements that all bundled their segments stay one rowset, offsets and all.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_all_bundled_stays_one_rowset) {
+    const int64_t tablet_id = 30006;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(60);
+    metadata->set_next_rowset_id(300);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    for (int i = 0; i < 2; i++) {
+        TxnLogPB_OpWrite op_write;
+        auto* segment = op_write.mutable_rowset()->add_segment_metas();
+        segment->set_filename(fmt::format("bundle{}.dat", i));
+        segment->set_bundle_file_offset(i * 64);
+        builder.batch_apply_opwrite(op_write, {}, {});
+    }
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(1, metadata->rowsets_size());
+    const auto& rowset = metadata->rowsets(0);
+    EXPECT_EQ(300, rowset.id());
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_EQ(0, rowset.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(64, rowset.segment_metas(1).bundle_file_offset());
+    EXPECT_EQ(302, metadata->next_rowset_id());
+}
+
+// A row-mode partial update's rewrite is a standalone file, but the other statements' segments of the
+// batch may still live in bundle files: only the rewritten segment loses its offset, and the batch is
+// split so that no rowset mixes the two kinds.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_rewrite_keeps_other_statements_bundled) {
+    const int64_t tablet_id = 30008;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(80);
+    metadata->set_next_rowset_id(500);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    // Statement 1: a row-mode partial update whose only segment, bundled, is rewritten.
+    TxnLogPB_OpWrite partial;
+    partial.mutable_rowset()->mutable_uid()->set_hi(1);
+    partial.mutable_rowset()->mutable_uid()->set_lo(1);
+    {
+        auto* segment = partial.mutable_rowset()->add_segment_metas();
+        segment->set_filename("partial.dat");
+        segment->set_bundle_file_offset(0);
+    }
+    SegmentFileInfo rewrite;
+    rewrite.path = "rewrite.dat";
+    rewrite.size = 300;
+    builder.batch_apply_opwrite(partial, {{0, rewrite}}, {});
+    // Statement 2: a plain write whose segment lives inside a bundle file.
+    TxnLogPB_OpWrite plain;
+    plain.mutable_rowset()->mutable_uid()->set_hi(1);
+    plain.mutable_rowset()->mutable_uid()->set_lo(2);
+    {
+        auto* segment = plain.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_bundle_file_offset(4096);
+    }
+    builder.batch_apply_opwrite(plain, {}, {});
+
+    ASSERT_OK(builder.set_final_rowset());
+    ASSERT_EQ(2, metadata->rowsets_size());
+    const auto& rewritten = metadata->rowsets(0);
+    EXPECT_EQ(500, rewritten.id());
+    ASSERT_EQ(1, rewritten.segment_metas_size());
+    EXPECT_EQ("rewrite.dat", rewritten.segment_metas(0).filename());
+    EXPECT_FALSE(rewritten.segment_metas(0).has_bundle_file_offset());
+    // The rewritten data is private to this tablet, so it no longer shares the op_write's uid.
+    EXPECT_FALSE(rewritten.uid().hi() == 1 && rewritten.uid().lo() == 1);
+    const auto& bundled = metadata->rowsets(1);
+    EXPECT_EQ(501, bundled.id());
+    ASSERT_EQ(1, bundled.segment_metas_size());
+    EXPECT_EQ("bundle.dat", bundled.segment_metas(0).filename());
+    ASSERT_TRUE(bundled.segment_metas(0).has_bundle_file_offset());
+    EXPECT_EQ(4096, bundled.segment_metas(0).bundle_file_offset());
+    EXPECT_EQ(2, bundled.uid().lo());
+    EXPECT_EQ(502, metadata->next_rowset_id());
+}
+
+// One op_write never holds both kinds (a load bundles only the single segment it writes in one
+// flush), so the split refuses one rather than cut it in two.
+TEST_F(MetaFileTest, test_batch_apply_opwrite_split_rejects_mixed_op_write) {
+    const int64_t tablet_id = 30007;
+    auto tablet = std::make_shared<Tablet>(_tablet_manager.get(), tablet_id);
+    auto metadata = std::make_shared<TabletMetadata>();
+    metadata->set_id(tablet_id);
+    metadata->set_version(70);
+    metadata->set_next_rowset_id(400);
+
+    MetaFileBuilder builder(*tablet, metadata);
+    TxnLogPB_OpWrite op_write;
+    op_write.mutable_rowset()->add_segment_metas()->set_filename("s1.dat");
+    {
+        auto* segment = op_write.mutable_rowset()->add_segment_metas();
+        segment->set_filename("bundle.dat");
+        segment->set_bundle_file_offset(0);
+    }
+    builder.batch_apply_opwrite(op_write, {}, {});
+    auto st = builder.set_final_rowset();
+    EXPECT_TRUE(st.is_internal_error()) << st;
+    EXPECT_EQ(0, metadata->rowsets_size());
+}
+
 TEST_F(MetaFileTest, test_sstable_delvec_integration) {
     // Test SSTable delvec integration: test new get_del_vec(DelvecPagePB) function and
     // version reference collection from SSTable delvecs during finalization
