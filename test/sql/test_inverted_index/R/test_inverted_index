@@ -248,6 +248,10 @@ PROPERTIES (
 DROP TABLE t_gin_var;
 -- result:
 -- !result
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+} END CLEANUP
+
 
 -- name: test_gin_view @native
 ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");

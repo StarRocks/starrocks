@@ -156,12 +156,12 @@ INSERT INTO utf8_names VALUES
 -- Search within Cyrillic names
 select id, ngram_search(name_cyrillic, 'Расулов Сунатулло', 4) as similarity
 from utf8_names
-order by similarity desc;
+order by similarity desc, id;
 
 -- Case insensitive search
 select id, ngram_search_case_insensitive(name_cyrillic, 'РАСУЛОВ СУНАТУЛЛО', 4) as similarity
 from utf8_names
-order by similarity desc;
+order by similarity desc, id;
 
 -- name: test_strpos
 select strpos('abc', 'b');

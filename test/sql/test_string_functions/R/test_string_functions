@@ -321,7 +321,7 @@ INSERT INTO utf8_names VALUES
 -- !result
 select id, ngram_search(name_cyrillic, 'Расулов Сунатулло', 4) as similarity
 from utf8_names
-order by similarity desc;
+order by similarity desc, id;
 -- result:
 1	1.0
 2	0.0
@@ -330,7 +330,7 @@ order by similarity desc;
 -- !result
 select id, ngram_search_case_insensitive(name_cyrillic, 'РАСУЛОВ СУНАТУЛЛО', 4) as similarity
 from utf8_names
-order by similarity desc;
+order by similarity desc, id;
 -- result:
 1	1.0
 2	0.0
