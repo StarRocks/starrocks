@@ -121,6 +121,62 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
+    public void testNativeGeoFunctionContract() {
+        assertFunctionContract("select ST_GeogFromText('POINT (1 2)')", 120020, PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeogFromText('POINT (1 2)', 4326)", 120021,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeomFromText('POINT (1 2)', 'EPSG:3857')", 120022,
+                PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_GeogFromWKB(cast('x' as varbinary))", 120030,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeogFromWKB(cast('x' as varbinary), 4326)", 120031,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeomFromWKB(cast('x' as varbinary), 'EPSG:3857')", 120032,
+                PrimitiveType.GEOMETRY);
+
+        String geography = "ST_GeogFromText('POINT (1 2)')";
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        assertFunctionContract("select ST_AsText(" + geography + ")", 120040, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsText(" + geometry + ")", 120041, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(" + geography + ")", 120050, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(" + geometry + ")", 120051, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsBinary(" + geography + ")", 120060, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsBinary(" + geometry + ")", 120061, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsWKB(" + geography + ")", 120070, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsWKB(" + geometry + ")", 120071, PrimitiveType.VARBINARY);
+
+        assertFunctionContract("select ST_X(" + geography + ")", 120080, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_X(" + geometry + ")", 120081, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(" + geography + ")", 120090, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(" + geometry + ")", 120091, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_GeometryType(" + geography + ")", 120170, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeometryType(" + geometry + ")", 120171, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_Distance(" + geography + ", " + geography + ")", 120180,
+                PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Distance(" + geometry + ", " + geometry + ")", 120181,
+                PrimitiveType.DOUBLE);
+
+        assertFunctionContract("select ST_X(ST_Point(1, 2))", 120001, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(ST_Point(1, 2))", 120002, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_AsText(ST_Point(1, 2))", 120004, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(ST_Point(1, 2))", 120005, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeometryFromText('POINT (1 2)')", 120006, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeomFromText('POINT (1 2)')", 120007, PrimitiveType.VARCHAR);
+    }
+
+    private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
+        if (returnType == PrimitiveType.GEOGRAPHY) {
+            Assertions.assertEquals(AnyGeographyType.GEOGRAPHY, call.getType(), sql);
+        } else {
+            Assertions.assertEquals(returnType, call.getType().getPrimitiveType(), sql);
+        }
+    }
+
+    @Test
     public void testDateTrunc() {
         analyzeSuccess("select date_trunc(\"year\", ti) from tall");
         analyzeSuccess("select date_trunc(\"month\", ti) from tall");
