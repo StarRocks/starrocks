@@ -469,10 +469,23 @@ cd -
 echo "Finished patching $HYPERSCAN_SOURCE"
 
 # patch vpack
+<<<<<<< HEAD
 cd $TP_SOURCE_DIR/$VPACK_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
     patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
     touch $PATCHED_MARK
+=======
+if [[ -d $TP_SOURCE_DIR/$VPACK_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$VPACK_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+        # non-throwing Parser::tryParse()/tryFromJson() for invalid JSON input
+        apply_patch -p1 $TP_PATCH_DIR/velocypack-XYZ1.0-tryparse.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $VPACK_SOURCE"
+>>>>>>> bd9c74c ([BugFix] Report invalid JSON from velocypack without throwing per row (#78831))
 fi
 cd -
 echo "Finished patching $VPACK_SOURCE"
