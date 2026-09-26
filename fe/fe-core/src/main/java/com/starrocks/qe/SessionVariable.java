@@ -838,6 +838,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String PAIMON_FORCE_JNI_READER = "paimon_force_jni_reader";
     public static final String PAIMON_READER_MODE = "paimon_reader_mode";
+    public static final String PAIMON_GLOBAL_INDEX_SCAN_STAGE = "paimon_global_index_scan_stage";
     public static final String AVRO_USE_JNI_READER = "avro_use_jni_reader";
     public static final String ENABLE_DYNAMIC_PRUNE_SCAN_RANGE = "enable_dynamic_prune_scan_range";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
@@ -3032,6 +3033,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PAIMON_READER_MODE)
     private String paimonReaderMode = PaimonReaderMode.AUTO.name();
 
+    // Controls how a Paimon Global Index is read:
+    //   0: disable the index and plan a full scan.
+    //   1: let the Paimon Java SDK evaluate the index during split planning.
+    //   2: evaluate the index distributively on BEs before planning data splits.
+    @VariableMgr.VarAttr(name = PAIMON_GLOBAL_INDEX_SCAN_STAGE)
+    private int paimonGlobalIndexScanStage = 1;
+
     @VariableMgr.VarAttr(name = AVRO_USE_JNI_READER)
     private boolean avroUseJNIReader = false;
 
@@ -3952,6 +3960,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setPaimonReaderMode(String paimonReaderMode) {
         this.paimonReaderMode = paimonReaderMode.toUpperCase(Locale.ROOT);
+    }
+
+    public int getPaimonGlobalIndexScanStage() {
+        return paimonGlobalIndexScanStage;
+    }
+
+    public void setPaimonGlobalIndexScanStage(int paimonGlobalIndexScanStage) {
+        if (paimonGlobalIndexScanStage < 0 || paimonGlobalIndexScanStage > 2) {
+            throw new IllegalArgumentException(
+                    "paimon_global_index_scan_stage must be one of {0, 1, 2}, but got "
+                            + paimonGlobalIndexScanStage);
+        }
+        this.paimonGlobalIndexScanStage = paimonGlobalIndexScanStage;
     }
 
     public boolean getAvroUseJNIReader() {
