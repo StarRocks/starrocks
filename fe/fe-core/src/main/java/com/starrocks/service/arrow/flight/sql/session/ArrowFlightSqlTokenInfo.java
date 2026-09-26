@@ -51,6 +51,8 @@ public class ArrowFlightSqlTokenInfo {
 
     private final UserIdentity currentUser;
     private final String token;
+    // expiration time of the JWT used to open this session, 0 when the session was not opened with a JWT
+    private final long jwtExpireTimeMs;
 
     /**
      * Creates an instance of {@code ArrowFlightSqlTokenInfo} with null values.
@@ -69,8 +71,20 @@ public class ArrowFlightSqlTokenInfo {
      * @param token       the unique token string used to identify the session
      */
     public ArrowFlightSqlTokenInfo(UserIdentity currentUser, String token) {
+        this(currentUser, token, 0L);
+    }
+
+    /**
+     * Constructs a new {@code ArrowFlightSqlTokenInfo} for a session opened with a JWT.
+     *
+     * @param currentUser     the user identity associated with the session
+     * @param token           the unique token string used to identify the session
+     * @param jwtExpireTimeMs expiration time of the JWT in milliseconds, 0 if it never expires
+     */
+    public ArrowFlightSqlTokenInfo(UserIdentity currentUser, String token, long jwtExpireTimeMs) {
         this.currentUser = currentUser;
         this.token = token;
+        this.jwtExpireTimeMs = jwtExpireTimeMs;
     }
 
     /**
@@ -89,5 +103,15 @@ public class ArrowFlightSqlTokenInfo {
      */
     public UserIdentity getCurrentUser() {
         return currentUser;
+    }
+
+    /**
+     * Returns whether the JWT used to open this session has expired.
+     *
+     * @param nowMs current time in milliseconds
+     * @return true if the session was opened with a JWT that is now expired
+     */
+    public boolean isJwtExpired(long nowMs) {
+        return jwtExpireTimeMs > 0 && nowMs >= jwtExpireTimeMs;
     }
 }
