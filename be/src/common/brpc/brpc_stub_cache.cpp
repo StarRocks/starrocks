@@ -41,9 +41,6 @@ std::mutex& singleton_cache_mutex() {
     return mutex;
 }
 
-inline int64_t absolute_deadline_us(int64_t ttl_seconds) {
-    return butil::gettimeofday_us() + ttl_seconds * 1000 * 1000;
-}
 } // namespace
 
 template <typename CacheT, typename ExtractFn>
@@ -121,16 +118,16 @@ bool BrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
     std::lock_guard<SpinLock> l(_lock);
 
+    const int64_t now_us = butil::gettimeofday_us();
     auto stub_pool = _stub_map.seek(endpoint);
     if (stub_pool == nullptr) {
         auto new_pool = std::make_shared<StubPool>();
-        new_pool->_cleanup_task =
-                std::make_shared<EndpointCleanupTask<BrpcStubCache>>(this, endpoint, config::brpc_stub_expire_s);
-        new_pool->_cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        new_pool->_cleanup_task = std::make_shared<EndpointCleanupTask<BrpcStubCache>>(this, endpoint);
+        new_pool->_cleanup_task->renew_locked(now_us);
         _stub_map.insert(endpoint, new_pool);
         stub_pool = _stub_map.seek(endpoint);
 
-        timespec tm = butil::microseconds_to_timespec((*stub_pool)->_cleanup_task->deadline_locked());
+        timespec tm = butil::microseconds_to_timespec((*stub_pool)->_cleanup_task->next_fire_time_locked(now_us));
         auto status = _timer->schedule((*stub_pool)->_cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
@@ -138,7 +135,7 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
             return new_pool->get_or_create(endpoint);
         }
     } else {
-        (*stub_pool)->_cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        (*stub_pool)->_cleanup_task->renew_locked(now_us);
     }
 
     return (*stub_pool)->get_or_create(endpoint);
@@ -258,21 +255,21 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
         return Status::ServiceUnavailable("HttpBrpcStubCache is not initialized");
     }
 
+    const int64_t now_us = butil::gettimeofday_us();
     auto stub_pair_ptr = _stub_map.seek(endpoint);
     if (stub_pair_ptr == nullptr) {
         // create
-        auto new_task =
-                std::make_shared<EndpointCleanupTask<HttpBrpcStubCache>>(this, endpoint, config::brpc_stub_expire_s);
+        auto new_task = std::make_shared<EndpointCleanupTask<HttpBrpcStubCache>>(this, endpoint);
         auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "http");
         if (!stub->reset_channel().ok()) {
             return Status::RuntimeError("init http brpc channel error on " + taddr.hostname + ":" +
                                         std::to_string(taddr.port));
         }
-        new_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        new_task->renew_locked(now_us);
         _stub_map.insert(endpoint, StubEntry{stub, new_task});
         stub_pair_ptr = _stub_map.seek(endpoint);
 
-        timespec tm = butil::microseconds_to_timespec(stub_pair_ptr->cleanup_task->deadline_locked());
+        timespec tm = butil::microseconds_to_timespec(stub_pair_ptr->cleanup_task->next_fire_time_locked(now_us));
         auto status = _timer->schedule(stub_pair_ptr->cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
@@ -280,7 +277,7 @@ StatusOr<std::shared_ptr<PInternalService_RecoverableStub>> HttpBrpcStubCache::g
             return stub;
         }
     } else {
-        stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        stub_pair_ptr->cleanup_task->renew_locked(now_us);
     }
 
     return stub_pair_ptr->stub;
@@ -349,21 +346,21 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
         return Status::ServiceUnavailable("LakeServiceBrpcStubCache is not initialized");
     }
 
+    const int64_t now_us = butil::gettimeofday_us();
     auto stub_pair_ptr = _stub_map.seek(endpoint);
     FAIL_POINT_TRIGGER_EXECUTE(get_stub_return_nullptr, { stub_pair_ptr = nullptr; });
     if (stub_pair_ptr == nullptr) {
         // create
         auto stub = std::make_shared<starrocks::LakeService_RecoverableStub>(endpoint, "");
-        auto new_task = std::make_shared<EndpointCleanupTask<LakeServiceBrpcStubCache>>(this, endpoint,
-                                                                                        config::brpc_stub_expire_s);
+        auto new_task = std::make_shared<EndpointCleanupTask<LakeServiceBrpcStubCache>>(this, endpoint);
         if (!stub->reset_channel().ok()) {
             return Status::RuntimeError("init lakeService brpc channel error on " + host + ":" + std::to_string(port));
         }
-        new_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        new_task->renew_locked(now_us);
         _stub_map.insert(endpoint, StubEntry{stub, new_task});
         stub_pair_ptr = _stub_map.seek(endpoint);
 
-        timespec tm = butil::microseconds_to_timespec(stub_pair_ptr->cleanup_task->deadline_locked());
+        timespec tm = butil::microseconds_to_timespec(stub_pair_ptr->cleanup_task->next_fire_time_locked(now_us));
         auto status = _timer->schedule(stub_pair_ptr->cleanup_task.get(), tm);
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
@@ -371,7 +368,7 @@ StatusOr<std::shared_ptr<starrocks::LakeService_RecoverableStub>> LakeServiceBrp
             return stub;
         }
     } else {
-        stub_pair_ptr->cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
+        stub_pair_ptr->cleanup_task->renew_locked(now_us);
     }
 
     return stub_pair_ptr->stub;

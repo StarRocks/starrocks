@@ -264,6 +264,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: BRPC stub キャッシュの有効期限。デフォルトは60分です。
 - 導入バージョン: -
 
+### brpc_unhealthy_stub_expire_s
+
+- デフォルト: 300
+- タイプ: Int
+- 単位: Seconds
+- 変更可能: Yes
+- 説明: 異常な bRPC stub キャッシュの有効期限。デフォルトは 5 分です。エンドポイントのすべてのチャネルが bRPC の失敗状態にある場合、そのエンドポイントは異常とみなされます。`brpc_stub_expire_s` より短いため、ピアが IP アドレスを変更した後、応答しなくなったアドレスへのプローブを速やかに停止できます。この項目を `brpc_stub_expire_s` 以上の値に設定すると、このルールは無効になり、無条件のアイドル期限のみが適用されます。
+- 導入バージョン: -
+
 ### compress_rowbatches
 
 - デフォルト: true

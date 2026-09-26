@@ -306,6 +306,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：BRPC stub 缓存的过期时间，默认 60 minutes。
 - 引入版本：-
 
+### brpc_unhealthy_stub_expire_s
+
+- 默认值：300
+- 类型：Int
+- 单位：Seconds
+- 是否动态：是
+- 描述：非健康 bRPC Stub 缓存的过期时间，默认 5 分钟。如果一个 Endpoint 的所有 Channel 都处于 bRPC 失败状态，则该 Endpoint 被视为非健康。该值小于 `brpc_stub_expire_s`，以便在对端更换 IP 地址后，尽快停止对其不再响应的旧地址进行探测。将该项设置为大于或等于 `brpc_stub_expire_s` 的值可禁用该规则，仅保留无条件的空闲过期机制。
+- 引入版本：-
+
 ### compress_rowbatches
 
 - 默认值：true

@@ -19,6 +19,7 @@
 
 #include <base/testutil/assert.h>
 #include <gtest/gtest.h>
+#include <unistd.h>
 
 #include "base/failpoint/fail_point.h"
 #include "common/config_network_fwd.h"
@@ -32,8 +33,10 @@ public:
     void SetUp() override {
         _saved_brpc_max_connections_per_server = config::brpc_max_connections_per_server;
         _saved_brpc_stub_expire_s = config::brpc_stub_expire_s;
+        _saved_brpc_unhealthy_stub_expire_s = config::brpc_unhealthy_stub_expire_s;
         config::brpc_max_connections_per_server = 1;
         config::brpc_stub_expire_s = 3600;
+        config::brpc_unhealthy_stub_expire_s = 300;
         _timer = std::make_unique<BthreadTimer>();
         ASSERT_OK(_timer->start());
     }
@@ -41,12 +44,28 @@ public:
         _timer.reset();
         config::brpc_max_connections_per_server = _saved_brpc_max_connections_per_server;
         config::brpc_stub_expire_s = _saved_brpc_stub_expire_s;
+        config::brpc_unhealthy_stub_expire_s = _saved_brpc_unhealthy_stub_expire_s;
     }
 
-private:
+    // Drives the stub's channel into brpc's failed state by issuing synchronous RPCs
+    // to an address with no listener. Synchronous calls pass a null closure, so no
+    // RecoverableClosure is created and the EHOSTDOWN reset path stays out of the way.
+    static bool drive_channel_to_failed(const std::shared_ptr<PInternalService_RecoverableStub>& stub) {
+        for (int i = 0; i < 100 && !stub->channel_failed(); ++i) {
+            brpc::Controller cntl;
+            cntl.set_timeout_ms(100);
+            PTransmitChunkParams request;
+            PTransmitChunkResult response;
+            stub->stub()->transmit_chunk(&cntl, &request, &response, nullptr);
+            usleep(20 * 1000);
+        }
+        return stub->channel_failed();
+    }
+
     std::unique_ptr<BthreadTimer> _timer;
     int32_t _saved_brpc_max_connections_per_server = 0;
     int32_t _saved_brpc_stub_expire_s = 0;
+    int32_t _saved_brpc_unhealthy_stub_expire_s = 0;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {
@@ -262,6 +281,27 @@ TEST_F(BrpcStubCacheTest, test_lake_active_access_keeps_stub_alive_across_expire
     }
 }
 #endif
+
+TEST_F(BrpcStubCacheTest, test_unhealthy_idle_endpoint_is_retired_before_the_idle_ttl) {
+    config::brpc_stub_expire_s = 3600;
+    config::brpc_unhealthy_stub_expire_s = 1;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 48122;
+
+    auto stub1 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub1);
+    ASSERT_TRUE(drive_channel_to_failed(stub1)) << "channel never entered brpc's failed state";
+
+    sleep(3);
+
+    auto stub2 = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub2);
+    ASSERT_NE(stub1, stub2) << "an idle endpoint whose channels are failed must be retired early";
+    ASSERT_NE(nullptr, stub2->stub());
+    ASSERT_OK(stub2->reset_channel());
+}
 
 TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
     auto timer2 = std::make_unique<BthreadTimer>();
