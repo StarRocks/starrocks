@@ -92,6 +92,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -134,6 +135,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergMetadataScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJDBCScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalKuduScanOperator;
@@ -742,6 +744,32 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     public Void visitPhysicalPaimonScan(PhysicalPaimonScanOperator node, ExpressionContext context) {
         return computePaimonScanNode(node, context, node.getTable(),
                 node.getColRefToColumnMetaMap(), TvrTableSnapshot.empty());
+    }
+
+    @Override
+    public Void visitLogicalIndexScan(LogicalIndexScanOperator node, ExpressionContext context) {
+        return computeIndexScanNode(node, context);
+    }
+
+    @Override
+    public Void visitPhysicalIndexScan(PhysicalIndexScanOperator node, ExpressionContext context) {
+        return computeIndexScanNode(node, context);
+    }
+
+    private Void computeIndexScanNode(LogicalScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(
+                node.getTable(), node.getColRefToColumnMetaMap(), optimizerContext);
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
+    }
+
+    private Void computeIndexScanNode(PhysicalScanOperator node, ExpressionContext context) {
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(
+                node.getTable(), node.getColRefToColumnMetaMap(), optimizerContext);
+        builder.setOutputRowCount(1);
+        context.setStatistics(builder.build());
+        return visitOperator(node, context);
     }
 
     private Void computePaimonScanNode(Operator node, ExpressionContext context, Table table,

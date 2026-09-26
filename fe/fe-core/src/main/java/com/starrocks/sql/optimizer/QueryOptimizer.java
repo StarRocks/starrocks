@@ -779,6 +779,11 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
+        // Stage 2 builds the two-stage plan that evaluates the Paimon Global Index on BEs.
+        // Stages 0 and 1 keep a regular connector scan, which is safe during rolling upgrades.
+        if (context.getSessionVariable().getPaimonGlobalIndexScanStage() == 2) {
+            scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.APPLY_CONNECTOR_INDEX_RULES);
+        }
 
         scheduler.rewriteOnce(tree, rootTaskContext, SplitJoinORToUnionRule.getInstance());
         // this rule should be after mv

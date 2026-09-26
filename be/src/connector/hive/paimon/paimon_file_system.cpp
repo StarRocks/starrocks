@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <mutex>
+#include <new>
 #include <string_view>
 #include <utility>
 
@@ -27,6 +28,8 @@
 #include "common/config_cache_fwd.h"
 #include "common/config_scan_io_fwd.h"
 #include "fs/fs.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
@@ -177,43 +180,85 @@ class PaimonInputStream final : public paimon::InputStream {
 public:
     PaimonInputStream(std::unique_ptr<RandomAccessFile> file, std::shared_ptr<PaimonFileSystemStats> stats,
                       CacheInputStream* cache_stream = nullptr,
-                      SharedBufferedInputStream* shared_buffered_stream = nullptr)
-            : _file(std::move(file)),
+                      SharedBufferedInputStream* shared_buffered_stream = nullptr,
+                      std::shared_ptr<MemTracker> query_mem_tracker = nullptr)
+            : _query_mem_tracker(std::move(query_mem_tracker)),
+              _file(std::move(file)),
+              _filename(_file->filename()),
               _stats(std::move(stats)),
               _cache_stream(cache_stream),
               _shared_buffered_stream(shared_buffered_stream) {}
-    ~PaimonInputStream() override { (void)Close(); }
+    ~PaimonInputStream() override {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        (void)Close();
+        _stats.reset();
+        std::string().swap(_filename);
+    }
+
+    // Paimon returns this wrapper through unique_ptr<InputStream> with the default
+    // deleter. Keep the small wrapper allocation process-owned; its retained file
+    // buffers are released under the query tracker in Close().
+    static void* operator new(size_t size) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        return ::operator new(size);
+    }
+
+    static void operator delete(void* ptr) noexcept {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
+        ::operator delete(ptr);
+    }
 
     paimon::Status Close() override {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        std::lock_guard<std::mutex> lock(_positional_mutex);
         _finalize_stream_stats();
         _file.reset();
         return paimon::Status::OK();
     }
 
     paimon::Status Seek(int64_t offset, paimon::SeekOrigin origin) override {
+        auto* caller_tracker = CurrentThread::mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        std::lock_guard<std::mutex> lock(_positional_mutex);
         int64_t new_position = offset;
         if (origin == paimon::SeekOrigin::FS_SEEK_CUR) {
             new_position += _pos;
         } else if (origin == paimon::SeekOrigin::FS_SEEK_END) {
-            auto result = Length();
+            if (_file == nullptr) {
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+                return paimon::Status::Invalid(fmt::format("seek on closed file {}", _filename));
+            }
+            auto result = _file->get_size();
             if (!result.ok()) {
-                return result.status();
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+                return paimon::Status::IOError(fmt::format("Failed to get length for file {}, reason: {}", _filename,
+                                                           result.status().detailed_message()));
             }
             new_position += result.value();
         }
         if (new_position < 0) {
-            return paimon::Status::Invalid(
-                    fmt::format("negative seek position {} for {}", new_position, _file->filename()));
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::Invalid(fmt::format("negative seek position {} for {}", new_position, _filename));
         }
         _pos = new_position;
         return paimon::Status::OK();
     }
 
-    paimon::Result<int64_t> GetPos() const override { return _pos; }
+    paimon::Result<int64_t> GetPos() const override {
+        std::lock_guard<std::mutex> lock(_positional_mutex);
+        return _pos;
+    }
 
     paimon::Result<int64_t> Read(char* buffer, int64_t size) override {
         if (size < 0) {
-            return paimon::Status::Invalid(fmt::format("negative read size {} for {}", size, _file->filename()));
+            return paimon::Status::Invalid(fmt::format("negative read size {} for {}", size, _filename));
+        }
+        auto* caller_tracker = CurrentThread::mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        std::lock_guard<std::mutex> lock(_positional_mutex);
+        if (_file == nullptr) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::Invalid(fmt::format("read from closed file {}", _filename));
         }
         const int64_t start_ns = MonotonicNanos();
         // paimon-cpp treats a short Read as a hard error (e.g. StreamUtils::ReadFully reads a
@@ -225,7 +270,8 @@ public:
             if (!result.ok()) {
                 _stats->record_app_read(PaimonFileSystemStats::ReadType::SEQUENTIAL, total_read,
                                         MonotonicNanos() - start_ns);
-                return paimon::Status::IOError(fmt::format("Failed to read file {}, reason: {}", _file->filename(),
+                SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+                return paimon::Status::IOError(fmt::format("Failed to read file {}, reason: {}", _filename,
                                                            result.status().detailed_message()));
             }
             if (result.value() == 0) {
@@ -239,52 +285,68 @@ public:
     }
 
     paimon::Result<int64_t> Read(char* buffer, int64_t size, int64_t offset) override {
-        if (size < 0 || offset < 0) {
-            return paimon::Status::Invalid(
-                    fmt::format("invalid positional read for {}: size={}, offset={}", _file->filename(), size, offset));
-        }
-        const int64_t start_ns = MonotonicNanos();
-        const Status status = _file->read_at_fully(offset, buffer, size);
-        _stats->record_app_read(PaimonFileSystemStats::ReadType::POSITIONAL, status.ok() ? size : 0,
-                                MonotonicNanos() - start_ns);
-        if (!status.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to read file {} at offset {}, reason: {}",
-                                                       _file->filename(), offset, status.detailed_message()));
-        }
-        return size;
+        return _read_at(buffer, size, offset, PaimonFileSystemStats::ReadType::POSITIONAL);
     }
 
     void ReadAsync(char* buffer, int64_t size, int64_t offset,
                    std::function<void(paimon::Status)>&& callback) override {
-        if (size < 0 || offset < 0) {
-            callback(paimon::Status::Invalid(
-                    fmt::format("invalid async read for {}: size={}, offset={}", _file->filename(), size, offset)));
-            return;
-        }
-        const int64_t start_ns = MonotonicNanos();
-        const Status status = _file->read_at_fully(offset, buffer, size);
-        _stats->record_app_read(PaimonFileSystemStats::ReadType::ASYNC, status.ok() ? size : 0,
-                                MonotonicNanos() - start_ns);
-        if (!status.ok()) {
-            callback(paimon::Status::IOError(fmt::format("Failed to read file {} at offset {}, reason: {}",
-                                                         _file->filename(), offset, status.detailed_message())));
-            return;
-        }
-        callback(paimon::Status::OK());
+        // Lumina invokes this method from its own worker threads. The common helper
+        // restores the query tracker while filling retained buffers, releases the
+        // positional mutex, and restores the caller before user callback reentry.
+        auto result = _read_at(buffer, size, offset, PaimonFileSystemStats::ReadType::ASYNC);
+        callback(result.ok() ? paimon::Status::OK() : result.status());
     }
 
-    paimon::Result<std::string> GetUri() const override { return _file->filename(); }
+    paimon::Result<std::string> GetUri() const override {
+        std::lock_guard<std::mutex> lock(_positional_mutex);
+        return _filename;
+    }
 
     paimon::Result<int64_t> Length() const override {
+        auto* caller_tracker = CurrentThread::mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        std::lock_guard<std::mutex> lock(_positional_mutex);
+        if (_file == nullptr) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::Invalid(fmt::format("length of closed file {}", _filename));
+        }
         auto result = _file->get_size();
         if (!result.ok()) {
-            return paimon::Status::IOError(fmt::format("Failed to get length for file {}, reason: {}",
-                                                       _file->filename(), result.status().detailed_message()));
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::IOError(fmt::format("Failed to get length for file {}, reason: {}", _filename,
+                                                       result.status().detailed_message()));
         }
         return result.value();
     }
 
 private:
+    paimon::Result<int64_t> _read_at(char* buffer, int64_t size, int64_t offset, PaimonFileSystemStats::ReadType type) {
+        if (size < 0 || offset < 0) {
+            return paimon::Status::Invalid(
+                    fmt::format("invalid positional read for {}: size={}, offset={}", _filename, size, offset));
+        }
+        auto* caller_tracker = CurrentThread::mem_tracker();
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_owner_tracker());
+        std::lock_guard<std::mutex> lock(_positional_mutex);
+        if (_file == nullptr) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::Invalid(fmt::format("read from closed file {}", _filename));
+        }
+        const int64_t start_ns = MonotonicNanos();
+        const Status status = _file->read_at_fully(offset, buffer, size);
+        _stats->record_app_read(type, status.ok() ? size : 0, MonotonicNanos() - start_ns);
+        if (!status.ok()) {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
+            return paimon::Status::IOError(fmt::format("Failed to read file {} at offset {}, reason: {}", _filename,
+                                                       offset, status.detailed_message()));
+        }
+        return size;
+    }
+
+    MemTracker* _owner_tracker() const {
+        return _query_mem_tracker != nullptr ? _query_mem_tracker.get() : CurrentThread::mem_tracker();
+    }
+
     void _finalize_stream_stats() {
         if (_cache_stream != nullptr && _shared_buffered_stream != nullptr) {
             _stats->record_stream_stats(_cache_stream->stats(),
@@ -294,10 +356,14 @@ private:
         _shared_buffered_stream = nullptr;
     }
 
+    // Declared first so it outlives all retained query-owned stream state.
+    std::shared_ptr<MemTracker> _query_mem_tracker;
     std::unique_ptr<RandomAccessFile> _file;
+    std::string _filename;
     std::shared_ptr<PaimonFileSystemStats> _stats;
     // Sequential position of this stream; see the class comment.
     int64_t _pos = 0;
+    mutable std::mutex _positional_mutex;
     CacheInputStream* _cache_stream = nullptr;
     SharedBufferedInputStream* _shared_buffered_stream = nullptr;
 };
@@ -334,10 +400,19 @@ private:
 
 } // namespace
 
+PaimonFileSystem::~PaimonFileSystem() {
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_query_mem_tracker != nullptr ? _query_mem_tracker.get()
+                                                                         : CurrentThread::mem_tracker());
+    _stats.reset();
+}
+
 paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(const std::string& path) const {
+    auto* caller_tracker = CurrentThread::mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_query_mem_tracker != nullptr ? _query_mem_tracker.get() : caller_tracker);
     RandomAccessFileOptions options;
     auto result = _file_system->new_random_access_file(options, path);
     if (!result.ok()) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
         return paimon::Status::IOError(
                 fmt::format("Failed to open file {}, reason: {}", path, result.status().detailed_message()));
     }
@@ -349,11 +424,13 @@ paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(cons
 
     if (!_datacache_options.enable_datacache) {
         auto counted_file = std::make_unique<RandomAccessFile>(input_stream, filename);
-        return std::make_unique<PaimonInputStream>(std::move(counted_file), _stats);
+        return std::make_unique<PaimonInputStream>(std::move(counted_file), _stats, nullptr, nullptr,
+                                                   _query_mem_tracker);
     }
 
     auto size_result = raw_file->get_size();
     if (!size_result.ok()) {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller_tracker);
         return paimon::Status::IOError(fmt::format("Failed to get file size for {}, reason: {}", path,
                                                    size_result.status().detailed_message()));
     }
@@ -378,7 +455,7 @@ paimon::Result<std::unique_ptr<paimon::InputStream>> PaimonFileSystem::Open(cons
     auto cache_file = std::make_unique<RandomAccessFile>(cache_input_stream, filename);
     cache_file->set_size(file_size);
     return std::make_unique<PaimonInputStream>(std::move(cache_file), _stats, cache_input_stream.get(),
-                                               shared_buffered_input_stream.get());
+                                               shared_buffered_input_stream.get(), _query_mem_tracker);
 }
 
 paimon::Result<std::unique_ptr<paimon::OutputStream>> PaimonFileSystem::Create(const std::string&, bool) const {

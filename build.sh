@@ -778,15 +778,66 @@ if [ ${BUILD_BE} -eq 1 ]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     fi
     if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
-        # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
-        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
+        # All paimon-cpp libraries and the Lumina runtime live in be/lib/paimon-cpp-lib.
+        # Check every match explicitly instead of relying on the shell's nullglob state: if this
+        # block is ever moved, an unmatched pattern must not become a literal cp source.
+        paimon_lumina_supported=0
+        if ! starrocks_is_darwin && [[ "$(uname -m)" == "x86_64" ]]; then
+            paimon_lumina_supported=1
+        fi
+        paimon_cpp_libs=()
+        paimon_lumina_plugin_found=0
+        for paimon_cpp_lib in "${STARROCKS_THIRDPARTY}"/installed/paimon-cpp/lib/libpaimon*.so*; do
+            if [[ -e "${paimon_cpp_lib}" || -L "${paimon_cpp_lib}" ]]; then
+                paimon_cpp_lib_name="${paimon_cpp_lib##*/}"
+                if [[ "${paimon_cpp_lib_name}" == libpaimon_lumina_index.so* ]]; then
+                    if (( paimon_lumina_supported == 0 )); then
+                        continue
+                    fi
+                    paimon_lumina_plugin_found=1
+                fi
+                paimon_cpp_libs+=("${paimon_cpp_lib}")
+            fi
+        done
         if (( ${#paimon_cpp_libs[@]} == 0 )); then
             echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
             exit 1
         fi
+        # Lumina 0.3.1 is Linux x86-64 only. Do not package a stale, foreign-arch
+        # artifact from a reused thirdparty prefix on ARM. On x86-64 the runtime
+        # is required by the Lumina plugin and is also linked directly by the shim
+        # so its $ORIGIN RUNPATH can resolve the colocated runtime. The supported
+        # x86-64 gate validates basename DT_NEEDED and relocated dlopen behavior.
+        if (( paimon_lumina_supported == 1 )); then
+            if (( paimon_lumina_plugin_found == 0 )); then
+                echo "Error: Linux x86-64 Paimon Vector support requires libpaimon_lumina_index under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp"
+                exit 1
+            fi
+            lumina_libs=()
+            for lumina_lib in "${STARROCKS_THIRDPARTY}"/installed/paimon-cpp/lib/liblumina*.so*; do
+                if [[ -e "${lumina_lib}" || -L "${lumina_lib}" ]]; then
+                    lumina_libs+=("${lumina_lib}")
+                fi
+            done
+            if (( ${#lumina_libs[@]} == 0 )); then
+                echo "Error: Linux x86-64 Paimon Vector support requires liblumina under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp"
+                exit 1
+            fi
+            paimon_cpp_libs+=("${lumina_libs[@]}")
+        fi
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
+        if (( paimon_lumina_supported == 0 )); then
+            # Reusing an output directory from an x86-64 build must not leak foreign-arch
+            # Lumina binaries into an ARM package.
+            rm -f "${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib"/libpaimon_lumina_index.so* \
+                  "${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib"/liblumina.so*
+        fi
         cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
         cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        if ! starrocks_is_darwin; then
+            ${STARROCKS_HOME}/build-support/check_paimon_cpp_runtime.sh \
+                ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib "$(uname -m)"
+        fi
     fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
@@ -832,8 +883,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
         strip --strip-debug $BE_BIN
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
-        # The thirdparty libpaimon*.so ship with debug info (>1 GB unstripped); strip them in place.
-        for so in paimon-cpp-lib/libpaimon*.so; do
+        # The thirdparty paimon-cpp and Lumina libraries ship with debug info; strip them in place.
+        for so in paimon-cpp-lib/libpaimon*.so paimon-cpp-lib/liblumina*.so; do
             [[ -f ${so} ]] || continue
             echo "Strip $so debug symbol ..."
             strip --strip-debug $so

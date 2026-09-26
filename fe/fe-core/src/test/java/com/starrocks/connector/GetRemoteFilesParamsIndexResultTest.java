@@ -1,0 +1,50 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package com.starrocks.connector;
+
+import com.starrocks.connector.index.ConnectorIndexResult;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+public class GetRemoteFilesParamsIndexResultTest {
+    @Test
+    public void testCopyPreservesConnectorIndexResult() {
+        ConnectorIndexResult indexResult = () -> 7L;
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setConnectorIndexResult(indexResult)
+                .build();
+
+        assertSame(indexResult, params.copy().getConnectorIndexResult());
+
+        ConnectorIndexResult replacement = () -> 8L;
+        params.setConnectorIndexResult(replacement);
+        assertSame(replacement, params.getConnectorIndexResult());
+    }
+
+    @Test
+    public void testCopyPreservesDisableGlobalIndex() {
+        GetRemoteFilesParams defaults = GetRemoteFilesParams.newBuilder().build();
+        assertFalse(defaults.isDisableGlobalIndex());
+
+        GetRemoteFilesParams disabled = GetRemoteFilesParams.newBuilder()
+                .setDisableGlobalIndex(true)
+                .build();
+        assertTrue(disabled.isDisableGlobalIndex());
+        assertTrue(disabled.copy().isDisableGlobalIndex());
+    }
+}

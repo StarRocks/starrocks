@@ -88,7 +88,19 @@ target_link_libraries(ConnectorHive PUBLIC
 
 target_link_libraries(ConnectorHive PRIVATE Formats)
 
-# The paimon-cpp shim: the only binary linked against libpaimon.so. It is
+# Sources compiled into the paimon-cpp shim in production and into a dedicated
+# object library for UT. Keeping the UT objects under the src build tree makes
+# them visible to the BE gcov collector, which intentionally scans src objects.
+set(PAIMON_CPP_IMPLEMENTATION_SOURCES
+        hive/paimon/paimon_predicate_converter.cpp
+        hive/paimon/paimon_file_system.cpp
+        hive/paimon/paimon_global_index_evaluator.cpp
+        hive/paimon/paimon_global_index_scanner.cpp
+        hive/paimon/paimon_scanner.cpp
+        hive/paimon/paimon_blob_converter.cpp
+)
+
+# The paimon-cpp shim: the only production binary linked against libpaimon.so. It is
 # loaded lazily by paimon_cpp_loader.cpp (compiled into ConnectorHive above)
 # through dlopen on the first paimon-native scan, so starrocks_be carries no
 # paimon DT_NEEDED and starts without the paimon libraries. BE symbols
@@ -98,16 +110,15 @@ target_link_libraries(ConnectorHive PRIVATE Formats)
 # sources are compiled again in this target (not reused from ConnectorHive)
 # because regular BE objects are not built with -fPIC, and linking BE static
 # libs would duplicate global state.
-# Skipped for UT builds (the test binary compiles the sources directly) and
-# for format-lib builds (no starrocks_be to load it, and its objects would
-# carry -DBUILD_FORMAT_LIB).
-if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND NOT BUILD_FORMAT_LIB)
+# Skipped for format-lib builds (no starrocks_be to load it, and its objects
+# would carry -DBUILD_FORMAT_LIB).
+if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND "${MAKE_TEST}" STREQUAL "ON")
+    add_library(paimon_cpp_test_objs OBJECT ${PAIMON_CPP_IMPLEMENTATION_SOURCES})
+    target_link_libraries(paimon_cpp_test_objs PRIVATE paimon)
+elseif ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT BUILD_FORMAT_LIB)
     add_library(starrocks_paimon SHARED
             hive/paimon/paimon_cpp_entry.cpp
-            hive/paimon/paimon_predicate_converter.cpp
-            hive/paimon/paimon_file_system.cpp
-            hive/paimon/paimon_scanner.cpp
-            hive/paimon/paimon_blob_converter.cpp
+            ${PAIMON_CPP_IMPLEMENTATION_SOURCES}
     )
     set_target_properties(starrocks_paimon PROPERTIES POSITION_INDEPENDENT_CODE ON)
     # WRAP_LINKER_FLAGS keeps __cxa_throw/__floattidf wrapping consistent with
@@ -125,7 +136,8 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON" AND NOT "${MAKE_TEST}" STREQUAL "ON" AND 
     # directory; CMAKE_SKIP_RPATH is ON, so set the rpath by hand.
     target_link_options(starrocks_paimon PRIVATE "LINKER:-rpath,$ORIGIN")
     # build.sh copies this directory into the package as be/lib/paimon-cpp-lib,
-    # together with the libpaimon*.so files from thirdparty.
+    # together with the libpaimon*.so plugins and, on supported x86-64 builds,
+    # the liblumina runtime from thirdparty.
     install(TARGETS starrocks_paimon LIBRARY DESTINATION ${OUTPUT_DIR}/lib/paimon-cpp-lib)
 endif ()
 
