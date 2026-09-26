@@ -93,7 +93,7 @@ PROPERTIES (
 INSERT INTO t_gin_var VALUES (1, "abc bcd");
 SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
 SET enable_gin_filter = false;
-SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+function: assert_query_error_contains('SELECT * FROM t_gin_var WHERE v1 MATCH "abc"', 'Match can only used as a pushdown predicate on column with GIN in a single query')
 SET enable_gin_filter = true;
 SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
 DROP TABLE t_gin_var;
