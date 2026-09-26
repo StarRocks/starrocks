@@ -227,6 +227,10 @@ Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, S
     }
     ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
+    if (ctx->buffer == nullptr) {
+        // no data is received, e.g. the body is empty
+        ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(0));
+    }
     ctx->buffer->flip_to_read();
     return _batch_write_mgr->append_data(ctx);
 }
@@ -348,13 +352,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
                    << " ]. Set ignore_json_size to skip the check, although it may lead huge memory consuming.";
                 return Status::InternalError(ss.str());
             }
-            // Allocate buffer in advance, since the json payload cannot be parsed in stream mode.
-            // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
-            ASSIGN_OR_RETURN(ctx->buffer,
-                             ByteBuffer::allocate_with_tracker(ctx->body_bytes, simdjson::SIMDJSON_PADDING));
-        } else if (ctx->enable_batch_write) {
-            // batch write does not support parsing data in stream mode
-            ASSIGN_OR_RETURN(ctx->buffer, ByteBuffer::allocate_with_tracker(ctx->body_bytes));
         }
     } else {
 #ifndef BE_TEST
@@ -410,10 +407,19 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
     while ((len = evbuffer_get_length(evbuf)) > 0) {
         if (ctx->buffer == nullptr) {
             // Initialize buffer.
-            ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
-                    ctx->status, ctx->buffer,
-                    ByteBuffer::allocate_with_tracker(processInBatchMode ? std::max(len, ctx->kDefaultBufferSize)
-                                                                         : len));
+            if (processInBatchMode && ctx->body_bytes > 0) {
+                // For json format or batch write, the data cannot be parsed in stream mode, so allocate the whole
+                // body at once. For efficiency reasons, simdjson requires a string with a few bytes
+                // (simdjson::SIMDJSON_PADDING) at the end.
+                size_t padding = ctx->format == TFileFormatType::FORMAT_JSON ? simdjson::SIMDJSON_PADDING : 0;
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(ctx->status, ctx->buffer,
+                                                         ByteBuffer::allocate_with_tracker(ctx->body_bytes, padding));
+            } else {
+                ASSIGN_OR_SET_STATUS_AND_RETURN_IF_ERROR(
+                        ctx->status, ctx->buffer,
+                        ByteBuffer::allocate_with_tracker(processInBatchMode ? std::max(len, ctx->kDefaultBufferSize)
+                                                                             : len));
+            }
         } else if (ctx->buffer->remaining() < len) {
             if (processInBatchMode) {
                 // For json format or batch write, we need build a complete data before we push the buffer to the pipe.
