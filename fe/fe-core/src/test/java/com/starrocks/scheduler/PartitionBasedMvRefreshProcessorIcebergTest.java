@@ -20,17 +20,26 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -45,6 +54,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.function.Executable;
 
 import java.util.Collection;
 import java.util.HashMap;
@@ -55,6 +65,9 @@ import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
 public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
+
+    private static final String EVOLVED_ICEBERG_TABLE =
+            "`iceberg0`.`partitioned_transforms_db`.`t0_date_month_identity_evolution`";
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -672,41 +685,191 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
     @Test
     public void testRefreshMvWithIcebergPartitionEvolution() throws Exception {
-        String mvName = "iceberg_refresh_evolution_unpartitioned_mv";
-        starRocksAssert.useDatabase("test")
-                .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
-                        "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
-                        "REFRESH DEFERRED MANUAL\n" +
-                        "PROPERTIES (\n" +
-                        "\"replication_num\" = \"1\"\n" +
-                        ")\n" +
-                        "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
-                        + "`t0_date_month_identity_evolution` as a;");
-
         Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
-        MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                .getTable(testDb.getFullName(), mvName));
-        Assertions.assertTrue(mv.getPartitionInfo().isUnPartitioned());
+        getEvolvedIcebergTable();
+        starRocksAssert.useDatabase("test");
 
-        triggerRefreshMv(testDb, mv);
+        // an un-partitioned mv is not affected by the base table's partition evolution.
+        String mvName = "iceberg_refresh_evolution_unpartitioned_mv";
+        starRocksAssert.withMaterializedView(mvOnEvolvedIcebergTable(mvName, null), () -> {
+            MaterializedView mv = getMv(mvName);
+            Assertions.assertTrue(mv.getPartitionInfo().isUnPartitioned());
+            triggerRefreshMv(testDb, mv);
+        });
 
-        String mvName2 = "iceberg_evolution_partitioned_mv";
+        // a partitioned mv is rejected at creation time since the user has not opted in.
+        Exception e = Assertions.assertThrows(Exception.class,
+                () -> starRocksAssert.withMaterializedView(
+                        mvOnEvolvedIcebergTable("iceberg_evolution_partitioned_mv", "date_trunc('month', ts)")),
+                "Creation should fail because the Iceberg table has partition evolution");
+        Assertions.assertTrue(String.valueOf(e.getMessage()).contains("partition evolution"),
+                "Creation should be rejected by the partition-evolution check, but got: " + e.getMessage());
+    }
+
+    @Test
+    public void testRefreshMvWithIcebergPartitionEvolutionAtRefresh() {
+        boolean originalConfig = Config.enable_mv_on_iceberg_table_with_partition_evolution;
+        Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        IcebergTable baseTable = getEvolvedIcebergTable();
+        String mvName = "iceberg_refresh_evolution_partitioned_mv";
         try {
-            starRocksAssert.useDatabase("test")
-                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName2 + "`\n" +
-                            "PARTITION BY date_trunc('month', ts)\n" +
-                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
-                            "REFRESH DEFERRED MANUAL\n" +
-                            "PROPERTIES (\n" +
-                            "\"replication_num\" = \"1\"\n" +
-                            ")\n" +
-                            "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`."
-                            + "`t0_date_month_identity_evolution` as a;");
-            Assertions.fail("Should fail because Iceberg table has partition evolution");
-        } catch (Exception e) {
-            Assertions.assertTrue(e.getMessage().contains("partition evolution"));
-        }
+            starRocksAssert.useDatabase("test");
+            starRocksAssert.withMaterializedView(mvOnEvolvedIcebergTable(mvName, "date_trunc('month', ts)"), () -> {
+                MaterializedView mv = getMv(mvName);
+                // Pretend the old-spec data has been fully rewritten into the current spec, otherwise the
+                // opt-in branch is never reached.
+                new MockUp<IcebergTable>() {
+                    @Mock
+                    public boolean isCurrentSnapshotAllOnCurrentSpec() {
+                        return true;
+                    }
+                };
 
-        starRocksAssert.dropMaterializedView(mvName);
+                // 1. opted in, no old-spec data left and the transform is still compatible: refresh is allowed.
+                String allowed = refreshMvAndGetError(testDb, mv);
+                Assertions.assertFalse(allowed.contains("partition evolution")
+                                || allowed.contains("partition transform has evolved"),
+                        "Refresh should have passed the partition-evolution check, but got: " + allowed);
+
+                // 2. not opted in: the refresh is rejected by MVRefreshProcessor's spec check.
+                Config.enable_mv_on_iceberg_table_with_partition_evolution = false;
+                String rejected = refreshMvAndGetError(testDb, mv);
+                Assertions.assertTrue(rejected.contains("has undergone partition evolution"),
+                        "Refresh should be rejected by MVRefreshProcessor's spec check, but got: " + rejected);
+
+                // 3. opted in, but the base table transform has evolved away from the mv's partition expr.
+                Config.enable_mv_on_iceberg_table_with_partition_evolution = true;
+                new MockUp<MaterializedView>() {
+                    @Mock
+                    public Map<Table, List<Expr>> getRefBaseTablePartitionExprs(boolean isRefreshBaseTable) {
+                        return ImmutableMap.of(baseTable, Lists.newArrayList((Expr) null));
+                    }
+
+                    @Mock
+                    public Map<Table, List<SlotRef>> getRefBaseTablePartitionSlots() {
+                        return ImmutableMap.of(baseTable, Lists.newArrayList((SlotRef) null));
+                    }
+                };
+                new MockUp<IcebergPartitionUtils>() {
+                    @Mock
+                    public boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
+                                                                             Expr partitionByExpr,
+                                                                             SlotRef slotRef) {
+                        throw new StarRocksConnectorException("Materialized view partition expr "
+                                + "date_trunc('month', ts) must be the same with base table partition "
+                                + "transform DAY");
+                    }
+                };
+                String incompatible = refreshMvAndGetError(testDb, mv);
+                Assertions.assertTrue(incompatible.contains("partition transform has evolved"),
+                        "Refresh should be rejected with an evolved-transform error, but got: " + incompatible);
+            });
+        } finally {
+            Config.enable_mv_on_iceberg_table_with_partition_evolution = originalConfig;
+        }
+    }
+
+    @Test
+    public void testRefreshMvIcebergTransformChecksAllPartitionPairsAfterEvolution() {
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        IcebergTable baseTable = getEvolvedIcebergTable();
+
+        // The mv starts with 2 partition exprs but only 1 slot, the missing slot is added later on.
+        List<Expr> exprs = Lists.newArrayList((Expr) null, (Expr) null);
+        List<SlotRef> slots = Lists.newArrayList((SlotRef) null);
+        new MockUp<MaterializedView>() {
+            @Mock
+            public String getName() {
+                return "iceberg_refresh_evolution_multi_transform_incompat";
+            }
+
+            @Mock
+            public PartitionInfo getPartitionInfo() {
+                return new SinglePartitionInfo();
+            }
+
+            @Mock
+            public Map<Table, List<Expr>> getRefBaseTablePartitionExprs(boolean isRefreshBaseTable) {
+                return ImmutableMap.of(baseTable, exprs);
+            }
+
+            @Mock
+            public Map<Table, List<SlotRef>> getRefBaseTablePartitionSlots() {
+                return ImmutableMap.of(baseTable, slots);
+            }
+        };
+
+        MaterializedView mv = new MaterializedView();
+        TaskRunContext taskRunContext = new TaskRunContext();
+        taskRunContext.setCtx(connectContext);
+        taskRunContext.setProperties(new HashMap<>());
+        MVPCTRefreshProcessor processor = new MVPCTRefreshProcessor(testDb, mv,
+                new MvTaskRunContext(taskRunContext), null, mv.getCurrentRefreshMode());
+        Executable check =
+                () -> Deencapsulation.invoke(processor, "checkIcebergPartitionTransformStillCompatible", baseTable);
+
+        // 1. inconsistent expr/slot sizes are reported rather than silently checking fewer pairs.
+        Assertions.assertTrue(Assertions.assertThrows(DmlException.class, check).getMessage()
+                .contains("expressions and slots are inconsistent"));
+
+        // 2. every expr/slot pair is validated: here only the second pair is incompatible.
+        slots.add(null);
+        int[] checkedPairs = {0};
+        new MockUp<IcebergPartitionUtils>() {
+            @Mock
+            public boolean checkPartitionTransformCompatibleWithSpec(IcebergTable table,
+                                                                     Expr partitionByExpr,
+                                                                     SlotRef slotRef) {
+                if (++checkedPairs[0] == 2) {
+                    throw new StarRocksConnectorException("Materialized view partition expr date_trunc('day', ts) "
+                            + "must be the same with base table partition transform MONTH");
+                }
+                return false;
+            }
+        };
+
+        DmlException e = Assertions.assertThrows(DmlException.class, check);
+        Assertions.assertTrue(String.valueOf(e.getMessage()).contains("partition transform has evolved"),
+                "Refresh should be rejected with an evolved-transform error from a later partition pair, but got: "
+                        + e.getMessage());
+        Assertions.assertEquals(2, checkedPairs[0],
+                "Refresh should validate every partition expression/slot pair, not just the first one");
+    }
+
+
+
+    /**
+     * Builds a mv on the partition-evolved mock iceberg table, a null {@code partitionBy} means un-partitioned.
+     */
+    private static String mvOnEvolvedIcebergTable(String mvName, String partitionBy) {
+        return "CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n"
+                + (partitionBy == null ? "" : "PARTITION BY " + partitionBy + "\n")
+                + "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n"
+                + "REFRESH DEFERRED MANUAL\n"
+                + "PROPERTIES (\"replication_num\" = \"1\")\n"
+                + "AS SELECT id, data, ts FROM " + EVOLVED_ICEBERG_TABLE + " as a;";
+    }
+
+    private static IcebergTable getEvolvedIcebergTable() {
+        IcebergTable baseTable = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getTable(connectContext, "iceberg0", "partitioned_transforms_db",
+                        "t0_date_month_identity_evolution");
+        Assertions.assertNotNull(baseTable);
+        Assertions.assertTrue(baseTable.getNativeTable().specs().size() > 1,
+                "mock table must have >1 partition specs to exercise the evolution branch");
+        return baseTable;
+    }
+
+    /**
+     * @return the mv refresh failure message, empty if the refresh succeeded.
+     */
+    private static String refreshMvAndGetError(Database db, MaterializedView mv) {
+        try {
+            triggerRefreshMv(db, mv);
+            return "";
+        } catch (Exception e) {
+            return String.valueOf(e.getMessage());
+        }
     }
 }
