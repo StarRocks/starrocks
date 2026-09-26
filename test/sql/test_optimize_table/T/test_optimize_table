@@ -4,13 +4,13 @@ alter table t distributed by random buckets 10;
 
 -- name: test_optimize_table
 create table t(k int) distributed by hash(k) buckets 10;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 insert into t values(1),(2),(3);
 select * from t;
 alter table t distributed by hash(k);
 function: wait_optimize_table_finish()
 select * from t;
-show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 
 -- name: test_optimize_table_by_partition_name
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -44,7 +44,7 @@ PROPERTIES (
 alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p202008) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 4;
 function: wait_optimize_table_finish()
 
--- name: test_change_no_partition_distribution
+-- name: test_change_no_partition_distribution @native
 create table t(k int) distributed by hash(k) buckets 10;
 insert into t values(1),(2),(3);
 select * from t;
@@ -59,7 +59,7 @@ function: wait_optimize_table_finish()
 show create table t;
 select * from t;
 
--- name: test_change_partition_distribution
+-- name: test_change_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
@@ -108,6 +108,7 @@ show create table t;
 alter table t partitions(p202006,p202008) distributed by random;
 show create table t;
 
+<<<<<<< HEAD
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -125,6 +126,9 @@ function: wait_optimize_table_finish()
 
 
 -- name: test_online_optimize_table_basic @sequential
+=======
+-- name: test_online_optimize_table_basic @sequential @slow @native
+>>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 admin set frontend config ('enable_online_optimize_table'='true');
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -176,11 +180,13 @@ INSERT INTO t VALUES(20, '2020-06-01'),(20, '2020-07-01'),(20, '2020-08-01');
 SELECT SLEEP(1);
 INSERT INTO t VALUES(21, '2020-06-01'),(21, '2020-07-01'),(21, '2020-08-01');
 select sleep(1);
+-- Mid-optimize, so which partitions have been re-bucketed by now is whatever order the
+-- job reached them in -- nothing stable to assert. The one after the wait is the assertion.
 -- show partitions from t;
 select * from t;
 function: wait_optimize_table_finish()
 show create table t;
--- show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 select * from t;
 CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
@@ -237,7 +243,7 @@ CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
 
--- name: test_online_optimize_table_stream_load @sequential @native
+-- name: test_online_optimize_table_stream_load @sequential @native @slow
 admin set frontend config ('enable_online_optimize_table'='true');
 create database db_${uuid0};
 use db_${uuid0};
@@ -291,11 +297,13 @@ shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/strea
 select sleep(1);
 shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_8486.csv -XPUT ${url}/api/db_${uuid0}/t/_stream_load
 select sleep(1);
+-- Mid-optimize, so which partitions have been re-bucketed by now is whatever order the
+-- job reached them in -- nothing stable to assert. The one after the wait is the assertion.
 -- show partitions from t;
 select count(*) from t;
 function: wait_optimize_table_finish()
 show create table t;
--- show partitions from t;
+function: print_query_columns("show partitions from t", "PartitionName", "Buckets")
 select count(*) from t;
 CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
