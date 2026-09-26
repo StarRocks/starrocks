@@ -27,6 +27,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
@@ -176,17 +177,10 @@ public class TaskManager implements MemoryTrackable {
     }
 
     /**
-     * Fire-and-forget stop for leader demotion. TaskManager owns two ScheduledExecutorService
-     * instances and is not a LeaderDaemon (its dispatch loop runs inside the executor with an
-     * embedded leader check), so it has no worker to self-clean; demotion calls {@code stop(0)}
-     * as the equivalent of a daemon's {@link LeaderDaemon#stopBestEffort()}.
-     *
-     * shutdownNow() interrupts in-flight TaskRun checks so they exit promptly even if blocked in
-     * metadata locks. Demotion does not wait for the pools to drain; if a straggler dispatch
-     * iteration outlives demotion, {@link #schedulersStoppedButNotTerminated()} reports it to the
-     * re-activation cleanliness gate, which restarts the process on re-election rather than let a
-     * fresh scheduler from the next {@link #start()} overlap the still-running old generation. The
-     * {@code timeoutMs > 0} path performs a bounded synchronous drain for callers that want one.
+     * Cooperatively close all leader-session pools. GlobalStateMgr calls stop(0) without waiting for
+     * task runs before follower replay, and checks actual termination before re-activation. Queued tasks skip execution,
+     * delayed/periodic schedules are cancelled, and active checks and task runs finish without interrupt.
+     * A positive timeout requests a bounded local wait as well.
      *
      * @param timeoutMs maximum time to wait for both schedulers to drain, in milliseconds. Zero
      *                  or negative means do not wait (the demotion path). The budget is split
@@ -200,19 +194,17 @@ public class TaskManager implements MemoryTrackable {
         // a still-firing future against the new periodScheduler.
         for (ScheduledFuture<?> future : periodFutureMap.values()) {
             try {
-                future.cancel(true);
+                future.cancel(false);
             } catch (Throwable t) {
                 LOG.warn("cancel periodic task future failed", t);
             }
         }
         periodFutureMap.clear();
-        periodScheduler.shutdownNow();
-        dispatchScheduler.shutdownNow();
-        // Stop the task-run pool like every other leader-session pool: shutdownNow interrupts in-flight
-        // MV-refresh / INSERT task runs (their transactions abort) so a previous term's run cannot race
-        // the next leader's re-driven run of the same task or rewrite the archived status object that
-        // clearUnfinishedTaskRun journals as FAILED on re-election.
-        taskRunManager.getTaskRunExecutor().shutdownNow();
+        LeaderDaemon.shutdownLeaderExecutor(periodScheduler);
+        LeaderDaemon.shutdownLeaderExecutor(dispatchScheduler);
+        // Keep actual task bodies and completion callbacks visible until they exit, so they cannot
+        // race a re-elected leader's cleanup of unfinished task statuses.
+        taskRunManager.getTaskRunExecutor().shutdown();
         if (timeoutMs > 0L) {
             long deadline = System.currentTimeMillis() + timeoutMs;
             try {

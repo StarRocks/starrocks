@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -47,13 +48,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *    Follower state should not retain that data, both to free memory and to avoid leaking stale
  *    leader state into replay paths.
  *
- * Demotion is fire-and-forget: {@link #stopBestEffort()} only requests the worker to stop and
- * returns without joining it. The worker exits on its own, runs {@link #onStopped()}, and clears
- * {@link #isRunning} at the tail of {@link #loop()}. A straggler that never finishes keeps
- * {@code isRunning == true}; the re-activation cleanliness gate
- * ({@code GlobalStateMgr.assertLeaderSessionQuiescedOrExit}) then terminates the process when this
- * node is re-elected, because a concurrent second worker would be strictly more dangerous than a
- * process restart.
+ * A stop request wakes the worker without interrupting business code. The worker finishes its safe
+ * step, runs {@link #onStopped()}, and clears {@link #isRunning} only after cleanup succeeds.
+ * Demotion requests every stop, then waits only for journal-visible state resets before follower replay.
+ * Other workers finish asynchronously and must be quiesced before re-activation. A required reset
+ * timing out or any cleanup failure terminates the FE.
  */
 public abstract class LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
@@ -81,11 +80,8 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Block until every given daemon has fully quiesced: worker exited, onStopped() completed,
-     * {@link #isRunning} false. Used by leader demotion for the daemons whose onStopped() rewrites
-     * journal-visible state - those resets must complete before the follower replayer starts, so
-     * they cannot stay fire-and-forget like the rest of the daemons. Throws IllegalStateException
-     * on timeout; the demotion stage runner treats that as a failed stage (process exit).
+     * Wait for the given daemons' workers and onStopped hooks to finish. Throws on timeout so a
+     * failed cleanup dependency cannot be mistaken for a quiesced session.
      */
     public static void awaitQuiesced(List<LeaderDaemon> daemons, long timeoutMs) {
         long deadlineMs = System.currentTimeMillis() + Math.max(1L, timeoutMs);
@@ -106,35 +102,38 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Shut down a leader-session pool and wait — WITHOUT a deadline — until it actually terminates.
-     * onStopped() implementations that own pools call this, so that when the worker finally clears
-     * {@link #isRunning} at the tail of {@link #loop()} (after onStopped returns), the owned pools are
-     * provably terminated too. That makes the daemon's {@code isRunning} the single quiescence signal
-     * the re-activation cleanliness gate reads, without the gate having to enumerate pools and without a
-     * per-daemon restart guard. A task that never terminates keeps the worker blocked here (isRunning
-     * stays true), so the gate exits the process on re-election rather than let a stale pool task race a
-     * new leader session. The worker is a JVM daemon thread, so this wait never blocks process exit.
+     * Close a leader-session pool without interrupting active tasks and wait for actual termination.
+     * The owning daemon stays registered/isRunning until this returns. GlobalStateMgr bounds the wait
+     * only for journal-visible state resets before replay; all other pools may finish asynchronously
+     * but must terminate before re-activation. The daemon thread here never blocks process exit.
      */
-    protected static void shutdownNowAndAwaitTermination(String poolName, ExecutorService pool) {
+    public static void shutdownAndAwaitTermination(String poolName, ExecutorService pool) {
         if (pool == null) {
             return;
         }
-        pool.shutdownNow();
+        shutdownLeaderExecutor(pool);
         boolean terminated = false;
         while (!terminated) {
             try {
                 terminated = pool.awaitTermination(1, TimeUnit.MINUTES);
                 if (!terminated) {
-                    LOG.warn("{} has not terminated after shutdownNow; still draining. A stuck task keeps this "
-                            + "daemon non-quiesced; the re-activation gate restarts the process if it outlives "
-                            + "demotion.", poolName);
+                    LOG.warn("{} has not terminated after cooperative shutdown; still draining. "
+                            + "The owning daemon remains registered until this pool terminates.", poolName);
                 }
             } catch (InterruptedException e) {
-                // onStopped runs after the worker's stop-interrupt was already cleared; if re-interrupted, keep
-                // draining - leaving a pool half-stopped would defeat the isRunning quiescence signal.
-                Thread.interrupted();
+                // An unrelated interrupt cannot make a live pool look quiesced. Keep draining.
             }
         }
+    }
+
+    /** Reject new work without interrupting running tasks or running delayed work from an old session. */
+    public static void shutdownLeaderExecutor(ExecutorService pool) {
+        if (pool instanceof ScheduledThreadPoolExecutor) {
+            ScheduledThreadPoolExecutor scheduler = (ScheduledThreadPoolExecutor) pool;
+            scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+            scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        }
+        pool.shutdown();
     }
 
     private final String name;
@@ -200,34 +199,26 @@ public abstract class LeaderDaemon {
     }
 
     /**
-     * Mark stop requested and wake the worker (interrupting it). Does not wait for the worker to
+     * Mark stop requested and wake the worker without interrupting it. Does not wait for the worker to
      * exit; the worker still runs {@link #onStopped()} on its way out. Used for cooperative
      * self-stop from within the loop (e.g. once the lease is lost); demotion uses
      * {@link #stopBestEffort()}.
      */
     public void setStop() {
-        requestStop(true);
+        requestStop();
     }
 
     /**
-     * Fire-and-forget stop for leader demotion: request stop (interrupting the worker unless
-     * {@link #interruptOnStop()} is overridden to {@code false}) and return immediately WITHOUT
-     * joining the worker. The worker exits on its own and runs {@link #onStopped()} + deregisters at
-     * the tail of {@link #loop()}; the re-activation cleanliness gate then verifies quiescence and
-     * exits the process if this worker is still alive when the node is re-elected. Preferred on the
-     * demotion path so the single state-change thread is not blocked waiting for ~40 daemons to drain.
+     * Request cooperative stop and return without joining. The worker finishes its current safe
+     * business step, runs {@link #onStopped()}, and only then deregisters. Demotion requests every
+     * stop before waiting for journal-visible state resets, so one slow daemon cannot delay notifying
+     * the others. Never interrupt a worker: it may be inside JE or a committed WAL apply.
      */
     public final void stopBestEffort() {
-        requestStop(interruptOnStop());
+        requestStop();
     }
 
-    /**
-     * Contract note: the interrupt below is sent AFTER the stop flag/notify/onStopRequested, so it can
-     * land at any later point of the worker's exit path, INCLUDING inside onStopped(). Every onStopped()
-     * implementation must therefore tolerate a pending interrupt (the standard pattern clears it with
-     * Thread.interrupted() before awaiting pool termination, see shutdownNowAndAwaitTermination).
-     */
-    private void requestStop(boolean interruptWorker) {
+    private void requestStop() {
         if (!isStopRequested.compareAndSet(false, true)) {
             return;
         }
@@ -239,9 +230,20 @@ public abstract class LeaderDaemon {
         } catch (Throwable th) {
             LOG.warn("{} onStopRequested failed", name, th);
         }
-        Thread t = worker;
-        if (interruptWorker && t != null) {
-            t.interrupt();
+    }
+
+    /** Check between business steps, never while applying an already committed WAL entry. */
+    protected final boolean shouldStop() {
+        LeaderLease lease = capturedLease;
+        return isStopRequested.get() || (lease.isValid() && !getGlobalStateMgr().isLeaderLeaseValid(lease));
+    }
+
+    /** A bounded business delay that stopBestEffort can wake without interrupting the worker. */
+    protected final void sleepUntilNextStep(long millis) throws InterruptedException {
+        synchronized (stopSignal) {
+            if (!shouldStop() && millis > 0) {
+                stopSignal.wait(millis);
+            }
         }
     }
 
@@ -249,11 +251,6 @@ public abstract class LeaderDaemon {
         while (!isStopRequested.get()) {
             try {
                 runOneCycle();
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                if (isStopRequested.get()) {
-                    break;
-                }
             } catch (Throwable e) {
                 LOG.error("{} got exception", name, e);
             }
@@ -271,34 +268,26 @@ public abstract class LeaderDaemon {
                     synchronized (stopSignal) {
                         // Re-check INSIDE the monitor: requestStop() sets the flag and notifies under
                         // stopSignal, so a notify landing between the flag check above and this wait()
-                        // would otherwise be lost - delaying the stop of an interrupt-unsafe daemon
-                        // (interruptOnStop() == false, e.g. CheckpointController) by a full interval.
+                        // would otherwise be lost, delaying cooperative stop by a full interval.
                         if (isStopRequested.get()) {
                             break;
                         }
                         stopSignal.wait(intervalMs);
                     }
                 } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    if (isStopRequested.get()) {
-                        break;
-                    }
+                    LOG.warn("{} interval wait failed", name, ie);
                 }
             }
         }
         LOG.info("{} exits", name);
-        // The worker cleans up its own leader-session state as its last act (race-free: nothing else is
-        // running for this daemon by now). Unconditionally clear any pending interrupt first - whatever set
-        // it (the stop-request interrupt, a self-stop setStop() on a lost lease, or the loop's own re-assert
-        // on InterruptedException). This is deliberately NOT gated on interruptOnStop(): onStopped()'s drain
-        // (e.g. pool.awaitTermination) must run to completion, otherwise isRunning would clear with owned
-        // pools not yet terminated and a straggler would slip past the re-activation gate. It is the dying
-        // worker's last act, so the flag has no other consumer to preserve it for.
-        Thread.interrupted();
+        // The worker cleans up its own leader-session state after the last cycle. onStopped's pool
+        // drain must finish before isRunning can clear.
         try {
             onStopped();
         } catch (Throwable th) {
-            LOG.warn("{} onStopped failed", name, th);
+            LOG.error("{} onStopped failed; leader-session cleanup is incomplete, terminating the process", name, th);
+            System.exit(-1);
+            return;
         }
         // Deregister BEFORE clearing isRunning: start() CASes on isRunning and then re-adds this
         // singleton, so the old order let a preempted dying worker's late remove() delete the NEW
@@ -331,7 +320,7 @@ public abstract class LeaderDaemon {
             // anyway: it costs nothing and self-heals any future path that invalidates the lease while
             // isReady stays true. The worker is running this check, not blocked, so no interrupt is
             // needed; just request stop and the loop breaks on its next isStopRequested check.
-            requestStop(false);
+            requestStop();
             return;
         }
         runAfterLeaseValid();
@@ -341,18 +330,11 @@ public abstract class LeaderDaemon {
      * The body of each iteration. Runs only after FE is ready and the captured leader lease
      * is still valid. Subclasses must not block indefinitely.
      *
-     * By default leader demotion INTERRUPTS the worker (see {@link #stopBestEffort()}), so
-     * subclasses should block only in interruptible primitives and must let an
-     * {@link InterruptedException} propagate (or re-check {@link #isStopRequested()} and return) - they
-     * MUST NOT map it to a business outcome (e.g. cancel a healthy job as "timeout"). A cycle that
-     * never finishes keeps the worker (and thus the daemon's {@code isRunning}) alive past demotion,
-     * so the re-activation cleanliness gate restarts the process on re-election rather than run two
-     * workers against the same singleton state.
-     *
-     * A subclass that runs interrupt-unsafe work on its own thread - a direct BDBJE/JE call
-     * (interrupting it can invalidate the environment) or an uninterruptible native/socket read -
-     * must override {@link #interruptOnStop()} to return {@code false} and cooperatively bail out
-     * by polling {@link #isStopRequested()} and/or waking its wait in {@link #onStopRequested()}.
+     * Demotion never interrupts a running cycle. Check {@link #shouldStop()} between business steps
+     * and after blocking calls, and bound waits or wake them through {@link #onStopRequested()}.
+     * Already admitted WAL operations must finish commit/apply before a check may abandon further work.
+     * A cycle that cannot drain keeps isRunning true and prevents re-activation. Only daemons whose
+     * cleanup resets journal-visible state must also finish before follower replay.
      */
     protected abstract void runAfterLeaseValid() throws InterruptedException;
 
@@ -368,7 +350,7 @@ public abstract class LeaderDaemon {
      * Re-validate the lease captured at the start of this cycle. Subclasses that perform irreversible
      * external side effects (e.g. deleting object-store data or BE tablets/shards) inside a long cycle
      * should call this before that work and bail out when it returns {@code false}, so a demotion that
-     * lands mid-cycle (interrupt possibly eaten) cannot keep acting under a leadership this node has
+     * lands mid-cycle cannot keep acting under a leadership this node has
      * already lost. Same-node re-election bumps the generation, so a stale captured lease fails here too.
      */
     protected final boolean isCapturedLeaseValid() {
@@ -380,32 +362,20 @@ public abstract class LeaderDaemon {
      * daemon self-stopped on a lost lease or was stopped for demotion). Subclasses MUST clear all
      * leader-session-only state here (queues, pending maps, executors) so memory is reclaimed promptly
      * and follower state does not retain it. A subclass that owns pools should drain them here via
-     * {@link #shutdownNowAndAwaitTermination(String, ExecutorService)} so that {@code isRunning}, once
-     * cleared, implies the owned pools are terminated too.
+     * {@link #shutdownAndAwaitTermination(String, ExecutorService)} so that {@code isRunning}, once
+     * cleared, implies the owned pools are terminated too. If this hook throws, the process exits
+     * without marking the daemon quiesced, because its leader-session cleanup is incomplete.
      */
     protected void onStopped() {
     }
 
     /**
      * Optional hook called immediately after a stop request is accepted, from the thread that
-     * requested the stop. Most daemons do not need it: the default stop interrupts the worker, which
-     * already breaks any interruptible wait. It matters only for daemons that override
-     * {@link #interruptOnStop()} to {@code false} and therefore need to cooperatively wake their own
-     * uninterruptible wait (e.g. offer a sentinel to a result queue, or disconnect an in-flight HTTP
-     * connection).
+     * requested the stop. Use it to wake a business wait (for example, offer a sentinel to a result
+     * queue or disconnect an owned HTTP connection). It must not interrupt any business thread or
+     * reset state still used by the running cycle.
      */
     protected void onStopRequested() {
-    }
-
-    /**
-     * Whether a stop request may interrupt the worker thread. Default {@code true}: interrupt is the
-     * fast, standard way to cancel a blocked cycle. Override to return {@code false} ONLY for daemons
-     * whose worker executes interrupt-unsafe work directly on its own thread - a raw BDBJE/JE operation
-     * (an interrupt can invalidate the environment) or an uninterruptible native/socket read - and
-     * instead bail out cooperatively via {@link #isStopRequested()} polling and {@link #onStopRequested()}.
-     */
-    protected boolean interruptOnStop() {
-        return true;
     }
 
     /**

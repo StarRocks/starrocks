@@ -95,13 +95,9 @@ public final class ExportChecker extends LeaderDaemon {
     }
 
     /**
-     * Fire-and-forget stop for leader demotion. Requests stop on each checker (no join) and
-     * shutdownNow()s every owned LeaderTaskExecutor WITHOUT waiting for the pools to drain, so the
-     * single state-change thread is not blocked. Each checker's worker self-cleans in onStopped() and
-     * deregisters on exit; the export pool tasks (ExportExportingTask) treat the interrupt as a
-     * shutdown signal and unwind, leaving healthy export jobs for the next leader. The re-activation
-     * cleanliness gate verifies the checkers are quiesced; the next {@link #init(long)} call (run by
-     * the re-elected leader) replaces the static maps with fresh instances.
+     * Request cooperative stop on each checker and close its work pools without interrupting tasks.
+     * GlobalStateMgr waits for both the registered checkers and these static pools before follower
+     * replay. The next init(long) rebuilds the pools only after the previous session has quiesced.
      */
     public static void stopAll() {
         for (ExportChecker exportChecker : checkers.values()) {

@@ -36,6 +36,7 @@ package com.starrocks.task;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LeaderDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -113,7 +114,12 @@ public class LeaderTaskExecutor {
             }
 
             try {
-                Future<?> future = executor.submit(task);
+                ThreadPoolExecutor sessionPool = executor;
+                Future<?> future = sessionPool.submit(() -> {
+                    if (!sessionPool.isShutdown()) {
+                        task.run();
+                    }
+                });
                 runningTasks.put(signature, future);
                 return true;
             } catch (RejectedExecutionException e) {
@@ -142,23 +148,13 @@ public class LeaderTaskExecutor {
     }
 
     /**
-     * Coordinated stop for leader demotion. Uses shutdownNow() on the work executor so in-flight
-     * tasks are interrupted and cancelled fast instead of waiting out their bounded awaits. Tasks
-     * on this pool (e.g. ExportExportingTask) treat the interrupt as a shutdown signal - they
-     * unwind and leave a healthy job for the next leader to reschedule, rather than mapping it to
-     * a business TIMEOUT cancel. The scheduled TaskChecker pool is shut down gracefully (bookkeeping).
-     *
-     * If {@code awaitMillis > 0}, also blocks up to that budget waiting for both internal
-     * pools to actually terminate. This is required on the leader demotion drain path so a
-     * re-elected leader does not race the old leader's still-running tasks.
-     *
-     * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
-     *                    or negative means do not wait (legacy behaviour). The budget is
-     *                    split across the two internal pools.
+     * Close admission without interrupting active work. Queued tasks skip their bodies after shutdown.
+     * A zero timeout only requests stop; the re-activation gate checks actual pool termination before
+     * starting the next leader session. A positive timeout provides a bounded local wait.
      */
     public void close(long awaitMillis) {
-        scheduledThreadPool.shutdown();
-        executor.shutdownNow();
+        LeaderDaemon.shutdownLeaderExecutor(scheduledThreadPool);
+        LeaderDaemon.shutdownLeaderExecutor(executor);
         if (awaitMillis > 0L) {
             long deadline = System.currentTimeMillis() + awaitMillis;
             try {

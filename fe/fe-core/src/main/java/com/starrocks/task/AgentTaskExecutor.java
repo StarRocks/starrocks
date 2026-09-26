@@ -19,6 +19,8 @@ package com.starrocks.task;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 
 import java.util.concurrent.ExecutorService;
 
@@ -35,7 +37,8 @@ public class AgentTaskExecutor {
         if (task == null) {
             return;
         }
-        EXECUTOR.submit(task);
+        LeaderLease lease = GlobalStateMgr.getCurrentState().captureLeaderLease();
+        EXECUTOR.submit(() -> task.run(lease));
     }
 
 }

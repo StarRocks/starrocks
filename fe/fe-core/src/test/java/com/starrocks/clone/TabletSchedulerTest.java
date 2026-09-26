@@ -321,6 +321,25 @@ public class TabletSchedulerTest {
     }
 
     @Test
+    public void testBlockingAddStopsAfterYieldWithoutInterrupt() throws Exception {
+        TabletScheduler scheduler = org.mockito.Mockito.spy(new TabletScheduler(tabletSchedulerStat));
+        TabletSchedCtx ctx = org.mockito.Mockito.mock(TabletSchedCtx.class);
+        org.mockito.Mockito.doReturn(TabletScheduler.AddResult.LIMIT_EXCEED).when(scheduler).addTablet(ctx, false);
+        YieldableLock heldLock = org.mockito.Mockito.mock(YieldableLock.class);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            scheduler.stopBestEffort();
+            return null;
+        }).when(heldLock).sleepUnlocked(org.mockito.Mockito.anyLong());
+
+        Pair<Boolean, Long> result = scheduler.blockingAddTabletCtxToScheduler(ctx, false, heldLock);
+
+        Assertions.assertFalse(result.first);
+        Assertions.assertTrue(result.second > 0);
+        Assertions.assertFalse(Thread.currentThread().isInterrupted());
+        org.mockito.Mockito.verify(scheduler).addTablet(ctx, false);
+    }
+
+    @Test
     public void testPendingAddTabletCtxWithIntensiveTableLock() throws InterruptedException {
         int oldVal = Config.tablet_sched_max_scheduling_tablets;
         Config.tablet_sched_max_scheduling_tablets = 8;
@@ -780,6 +799,24 @@ public class TabletSchedulerTest {
 
         // This should not throw NullPointerException even though ctx.getTablet() returns null
         TabletScheduler.resetDecommStatForSingleReplicaTabletUnlocked(tabletId, replicas);
+    }
+
+    @Test
+    public void testOnStoppedPropagatesResourceReleaseFailure() {
+        TabletScheduler scheduler = new TabletScheduler(new TabletSchedulerStat());
+        TabletSchedCtx broken = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                1L, 2L, 3L, 4L, 100L, System.currentTimeMillis(), systemInfoService) {
+            @Override
+            public void releaseResource(TabletScheduler owner) {
+                throw new IllegalStateException("simulated release failure");
+            }
+        };
+        Map<Long, TabletSchedCtx> running = Deencapsulation.getField(scheduler, "runningTablets");
+        running.put(100L, broken);
+        IllegalStateException failure = Assertions.assertThrows(IllegalStateException.class,
+                () -> Deencapsulation.invoke(scheduler, "onStopped"));
+        Assertions.assertTrue(failure.getMessage().contains("100"));
+        Assertions.assertTrue(running.containsKey(100L), "failed cleanup must not discard its evidence");
     }
 
     @Test

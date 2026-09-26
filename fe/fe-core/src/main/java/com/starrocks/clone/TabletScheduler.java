@@ -336,21 +336,20 @@ public class TabletScheduler extends LeaderDaemon {
         // p.first: added or not, p.second: total sleep time in ms
         Pair<Boolean, Long> result = new Pair<>(false, 0L);
         try {
-            AddResult res;
-            while ((res = addTablet(tabletSchedCtx, forceAdd /* force or not */)) == AddResult.LIMIT_EXCEED) {
+            while (!shouldStop()) {
+                AddResult res = addTablet(tabletSchedCtx, forceAdd /* force or not */);
+                if (res != AddResult.LIMIT_EXCEED) {
+                    result.first = (res == AddResult.ADDED);
+                    break;
+                }
                 // It's ok to sleep a relative long time here so that the scheduler will spare more
                 // slots after the sleep and the following adding won't block.
                 heldLock.sleepUnlocked(BLOCKING_ADD_SLEEP_DURATION_MS);
                 result.second += BLOCKING_ADD_SLEEP_DURATION_MS;
             }
-            result.first = (res == AddResult.ADDED);
         } catch (InterruptedException e) {
             // heldLock has already been re-acquired by sleepUnlocked().
-            // Re-assert the interrupt so the caller (e.g. TabletChecker / ColocateTableBalancer
-            // leader daemon being stopped on demotion) unwinds its cycle promptly instead of
-            // silently swallowing the cancel.
-            Thread.currentThread().interrupt();
-            LOG.warn("Interrupted while executing blockingAddTabletCtxToScheduler", e);
+            LOG.warn("Failed to execute blockingAddTabletCtxToScheduler", e);
         }
 
         return result;
@@ -501,20 +500,20 @@ public class TabletScheduler extends LeaderDaemon {
         // never-journaled CLONE replica to the LocalTablet / inverted index, which a restarted FE
         // would not have (it only becomes durable when the clone finishes and journals). Clearing
         // without releasing leaked those phantom replicas in this node's memory on every demotion.
-        // releaseResource also frees the path slots and removes the CLONE agent task; per-ctx
-        // best-effort so one bad ctx cannot wedge the demotion drain.
+        // releaseResource also frees path slots and removes the CLONE agent task. Failure must reach
+        // the fatal onStopped handler; an incomplete release must not appear quiesced.
         for (TabletSchedCtx ctx : runningTablets.values()) {
             try {
                 ctx.releaseResource(this);
             } catch (Throwable t) {
-                LOG.warn("failed to release running tablet ctx {} on demotion", ctx.getTabletId(), t);
+                throw new IllegalStateException("Failed to release running tablet " + ctx.getTabletId(), t);
             }
         }
         for (TabletSchedCtx ctx : pendingTablets) {
             try {
                 ctx.releaseResource(this);
             } catch (Throwable t) {
-                LOG.warn("failed to release pending tablet ctx {} on demotion", ctx.getTabletId(), t);
+                throw new IllegalStateException("Failed to release pending tablet " + ctx.getTabletId(), t);
             }
         }
         pendingTablets.clear();

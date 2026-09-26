@@ -100,18 +100,57 @@ public class LeaderHandoffResetTest {
     }
 
     @Test
-    public void testOnlineOptimizeCancelsStaleInsertFuture() {
+    public void testOnlineOptimizeWaitsForActualInsertCompletion() throws Exception {
         OnlineOptimizeJobV2 job = new OnlineOptimizeJobV2(1L, 2L, 3L, "tbl", 100000L);
         job.setJobState(JobState.RUNNING);
-        CompletableFuture<Constants.TaskRunState> staleFuture = new CompletableFuture<>();
-        job.future = staleFuture;
-
-        job.resetToLastDurableState();
-
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.FutureTask<Constants.TaskRunState> task = new java.util.concurrent.FutureTask<>(() -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+            }
+            return Constants.TaskRunState.SUCCESS;
+        });
+        job.future = task;
+        Thread insert = new Thread(task);
+        insert.setDaemon(true);
+        insert.start();
+        Assertions.assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+        java.util.concurrent.CountDownLatch resetDone = new java.util.concurrent.CountDownLatch(1);
+        Thread reset = new Thread(() -> {
+            job.resetToLastDurableState();
+            resetDone.countDown();
+        });
+        reset.setDaemon(true);
+        reset.start();
+        try {
+            Assertions.assertFalse(resetDone.await(200, java.util.concurrent.TimeUnit.MILLISECONDS));
+            Assertions.assertFalse(task.isCancelled());
+            Assertions.assertFalse(interrupted.get());
+            Assertions.assertEquals(JobState.RUNNING, job.getJobState());
+        } finally {
+            release.countDown();
+            insert.join(5000L);
+            reset.join(5000L);
+        }
+        Assertions.assertEquals(0L, resetDone.getCount());
+        Assertions.assertNull(job.future);
         Assertions.assertEquals(JobState.WAITING_TXN, job.getJobState());
-        Assertions.assertNull(job.future,
-                "a stale INSERT future would be consumed by a NEW task whose INSERT never ran");
-        Assertions.assertTrue(staleFuture.isCancelled());
+        Assertions.assertFalse(interrupted.get());
+    }
+
+    @Test
+    public void testFinalOnlineOptimizeJobAlsoSettlesInsertBeforeCleanup() {
+        OnlineOptimizeJobV2 job = new OnlineOptimizeJobV2(1L, 2L, 3L, "tbl", 100000L);
+        job.setJobState(JobState.CANCELLED);
+        job.future = CompletableFuture.completedFuture(Constants.TaskRunState.FAILED);
+        job.resetToLastDurableState();
+        Assertions.assertNull(job.future);
+        Assertions.assertEquals(JobState.CANCELLED, job.getJobState());
     }
 
     @Test

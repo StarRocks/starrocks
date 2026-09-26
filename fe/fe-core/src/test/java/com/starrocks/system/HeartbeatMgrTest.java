@@ -251,14 +251,15 @@ public class HeartbeatMgrTest {
 
     @Test
     public void testOnStoppedShutsDownAndAwaitsExecutorTermination() {
+        keepWorkerWaitingForReadiness();
         HeartbeatMgr mgr = new HeartbeatMgr(false);
         // start() lazy-inits the executor.
         mgr.start();
         ExecutorService before = mgr.executor;
         Assertions.assertNotNull(before, "executor must be initialized after start()");
 
-        // protected onStopped() is visible from the same package.
-        mgr.onStopped();
+        mgr.stopBestEffort();
+        com.starrocks.common.util.LeaderDaemon.awaitQuiesced(java.util.List.of(mgr), 3000L);
 
         Assertions.assertTrue(before.isShutdown(), "previous executor must be shut down");
         Assertions.assertTrue(before.isTerminated(),
@@ -270,10 +271,12 @@ public class HeartbeatMgrTest {
 
     @Test
     public void testStartRebuildsExecutorAfterOnStopped() {
+        keepWorkerWaitingForReadiness();
         HeartbeatMgr mgr = new HeartbeatMgr(false);
         mgr.start();
         ExecutorService originalExecutor = mgr.executor;
-        mgr.onStopped();
+        mgr.stopBestEffort();
+        com.starrocks.common.util.LeaderDaemon.awaitQuiesced(java.util.List.of(mgr), 3000L);
         Assertions.assertTrue(originalExecutor.isTerminated());
 
         mgr.start();
@@ -284,7 +287,54 @@ public class HeartbeatMgrTest {
                     "rebuilt executor must accept new heartbeats");
         } finally {
             mgr.setStop();
+            com.starrocks.common.util.LeaderDaemon.awaitQuiesced(java.util.List.of(mgr), 3000L);
         }
+    }
+
+    private void keepWorkerWaitingForReadiness() {
+        new Expectations() {
+            {
+                globalStateMgr.isReady();
+                result = false;
+                minTimes = 0;
+            }
+        };
+    }
+
+    @Test
+    public void testDemotionDoesNotInterruptActiveHeartbeat() throws Exception {
+        HeartbeatMgr mgr = new HeartbeatMgr(false);
+        mgr.executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        ExecutorService pool = mgr.executor;
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.Future<?> heartbeat = pool.submit(() -> {
+            entered.countDown();
+            try {
+                release.await();
+            } catch (InterruptedException e) {
+                interrupted.set(true);
+            }
+        });
+        Assertions.assertTrue(entered.await(3, java.util.concurrent.TimeUnit.SECONDS));
+        Thread cleanup = new Thread(mgr::onStopped);
+        cleanup.setDaemon(true);
+        cleanup.start();
+        try {
+            org.awaitility.Awaitility.await().atMost(3, java.util.concurrent.TimeUnit.SECONDS).until(pool::isShutdown);
+            Assertions.assertTrue(cleanup.isAlive());
+            Assertions.assertFalse(heartbeat.isDone());
+            Assertions.assertFalse(interrupted.get());
+            Assertions.assertSame(pool, mgr.executor, "a draining pool must remain tracked");
+        } finally {
+            release.countDown();
+            cleanup.join(5000L);
+        }
+        Assertions.assertFalse(cleanup.isAlive());
+        Assertions.assertTrue(pool.isTerminated());
+        Assertions.assertFalse(interrupted.get());
+        Assertions.assertNull(mgr.executor);
     }
 
 }

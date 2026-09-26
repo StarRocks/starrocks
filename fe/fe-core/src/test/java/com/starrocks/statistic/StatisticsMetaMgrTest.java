@@ -90,6 +90,33 @@ public class StatisticsMetaMgrTest extends PlanTestBase  {
         Assertions.assertTrue(m.isStopRequested());
     }
 
+    @Test
+    public void testStopWakesLongRetryDelayWithoutInterrupt() throws Exception {
+        StatisticsMetaManager manager = new StatisticsMetaManager();
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread waiter = new Thread(() -> {
+            try {
+                Deencapsulation.invoke(manager, "trySleep", java.util.concurrent.TimeUnit.HOURS.toMillis(1));
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        });
+        waiter.setDaemon(true);
+        waiter.start();
+        try {
+            org.awaitility.Awaitility.await().atMost(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .until(() -> waiter.getState() == Thread.State.TIMED_WAITING);
+            manager.stopBestEffort();
+            waiter.join(3000L);
+            Assertions.assertFalse(waiter.isAlive());
+            Assertions.assertFalse(waiter.isInterrupted());
+            Assertions.assertNull(failure.get());
+        } finally {
+            manager.stopBestEffort();
+            waiter.join(3000L);
+        }
+    }
+
     private TableRef createTableRef(TableName tableName) {
         java.util.List<String> parts = Lists.newArrayList();
         if (tableName.getCatalog() != null) {

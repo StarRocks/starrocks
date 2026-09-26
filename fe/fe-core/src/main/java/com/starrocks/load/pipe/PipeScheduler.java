@@ -74,7 +74,7 @@ public class PipeScheduler extends LeaderDaemon {
             try {
                 pipe.resetForLeaderHandoff();
             } catch (Throwable e) {
-                LOG.warn("Failed to reset pipe {} for leader handoff", pipe, e);
+                throw new IllegalStateException("Failed to reset pipe for leader handoff: " + pipe, e);
             }
         }
     }

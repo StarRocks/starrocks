@@ -99,6 +99,28 @@ public class CoordinatorTest extends PlanTestBase {
     }
 
     @Test
+    public void testJoinDoesNotTreatInterruptAsLeaderDemotion() {
+        AtomicInteger waits = new AtomicInteger();
+        new mockit.MockUp<com.starrocks.qe.scheduler.QueryRuntimeProfile>() {
+            @mockit.Mock
+            public boolean waitForProfileFinished(long timeout, TimeUnit unit) {
+                if (waits.incrementAndGet() == 1) {
+                    Thread.currentThread().interrupt();
+                    return false;
+                }
+                Thread.interrupted();
+                return true;
+            }
+        };
+        try {
+            Assertions.assertTrue(coordinator.join(10));
+            Assertions.assertEquals(2, waits.get());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
     public void testAuditStatisticsSnapshotsAreDetached() {
         Assertions.assertNull(coordinator.getAuditStatistics());
         coordinator.updateAuditStatistics(aiAuditReport(1));
