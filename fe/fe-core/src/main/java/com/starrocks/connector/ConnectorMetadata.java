@@ -32,6 +32,7 @@ import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -131,6 +132,11 @@ public interface ConnectorMetadata {
      */
     default Table getTable(ConnectContext context, String dbName, String tblName) {
         return null;
+    }
+
+    /** Returns connector-neutral index capabilities exposed for the table. */
+    default ConnectorIndexMetadata getIndexMetadata(Table table) {
+        return ConnectorIndexMetadata.empty();
     }
 
     /**
