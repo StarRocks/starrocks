@@ -46,7 +46,7 @@ class TestDataTypeParser:
             ("bigint", datatype.BIGINT),
             ("largeint", datatype.LARGEINT),
             ("decimal(10, 2)", datatype.DECIMAL(10, 2)),
-            ("double", datatype.DOUBLE),
+            ("double", datatype.DOUBLE(asdecimal=False)),
             ("float", datatype.FLOAT),
             ("char(10)", datatype.CHAR(10)),
             ("varchar(100)", datatype.VARCHAR(100)),
