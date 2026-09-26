@@ -16,6 +16,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
@@ -32,6 +33,7 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+import java.util.Map;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -1298,5 +1300,74 @@ public class PartitionPruneTest extends PlanTestBase {
         starRocksAssert.dropTable("t4_expr_range_minmax");
         FeConstants.runningUnitTest = true;
 
+    }
+    @Test
+    public void testListPartitionPruneMixedSingleAndAutoPartitions() throws Exception {
+        UtFrameUtils.mockDML();
+        starRocksAssert.withTable("CREATE TABLE `t_list_mixed` (\n" +
+                "    `k` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "    `v` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k`)\n" +
+                "PARTITION BY (`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`)\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        // explicit ADD PARTITION produces a single-item list partition
+        starRocksAssert.ddl("ALTER TABLE t_list_mixed ADD PARTITION p111 VALUES IN ('111')");
+        // automatic partition creation emits MultiItemListPartitionDesc even for a single
+        // partition column; the nested value list is that same descriptor via DDL
+        starRocksAssert.ddl("ALTER TABLE t_list_mixed ADD PARTITION p555 VALUES IN (('555'))");
+        starRocksAssert.getCtx().executeSql("insert into t_list_mixed values(111, 1), (555, 5)");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_list_mixed");
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        // the two representations really are both populated; this is the precondition
+        Assertions.assertFalse(listPartitionInfo.getLiteralExprValues().isEmpty(),
+                "expected a single-item list partition");
+        Assertions.assertFalse(listPartitionInfo.getMultiLiteralExprValues().isEmpty(),
+                "expected a multi-item list partition");
+
+        FeConstants.runningUnitTest = false;
+        try {
+            starRocksAssert.query("select * from t_list_mixed where k = 111")
+                    .explainContains("partitions=1/");
+            starRocksAssert.query("select * from t_list_mixed where k = 555")
+                    .explainContains("partitions=1/");
+        } finally {
+            FeConstants.runningUnitTest = true;
+        }
+    }
+
+    @Test
+    public void testAddListPartitionDetectsDuplicateAcrossRepresentations() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_list_mixed_dup` (\n" +
+                "    `k` bigint(20) NOT NULL COMMENT \"\",\n" +
+                "    `v` int(11) NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k`)\n" +
+                "PARTITION BY (`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`)\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+        starRocksAssert.ddl("ALTER TABLE t_list_mixed_dup ADD PARTITION p111 VALUES IN ('111')");
+        starRocksAssert.ddl("ALTER TABLE t_list_mixed_dup ADD PARTITION p555 VALUES IN (('555'))");
+
+        OlapTable table = (OlapTable) starRocksAssert.getTable("test", "t_list_mixed_dup");
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        Assertions.assertFalse(listPartitionInfo.getLiteralExprValues().isEmpty(),
+                "expected a single-item list partition");
+        Assertions.assertFalse(listPartitionInfo.getMultiLiteralExprValues().isEmpty(),
+                "expected a multi-item list partition");
+
+        // the value recorded as a one-element tuple
+        Exception onMulti = Assertions.assertThrows(Exception.class, () ->
+                starRocksAssert.ddl("ALTER TABLE t_list_mixed_dup ADD PARTITION d555 VALUES IN ('555')"));
+        Assertions.assertTrue(onMulti.getMessage().contains("Duplicate partition values exist"),
+                () -> "expected duplicate partition values validation failure, got: " + onMulti.getMessage());
+
+        // the value recorded as a plain single item
+        Exception onSingle = Assertions.assertThrows(Exception.class, () ->
+                starRocksAssert.ddl("ALTER TABLE t_list_mixed_dup ADD PARTITION d111 VALUES IN ('111')"));
+        Assertions.assertTrue(onSingle.getMessage().contains("Duplicate partition values exist"),
+                () -> "expected duplicate partition values validation failure, got: " + onSingle.getMessage());
     }
 }

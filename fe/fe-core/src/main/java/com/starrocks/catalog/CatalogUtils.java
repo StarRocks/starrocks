@@ -356,7 +356,8 @@ public class CatalogUtils {
             }
 
             if (partitionDesc instanceof SingleItemListPartitionDesc) {
-                Set<LiteralExpr> existingValues = listPartitionInfo.getValuesSet(partitionIds);
+                Set<LiteralExpr> existingValues =
+                        singleColumnValuesSet(listPartitionInfo, partitionIds);
                 SingleItemListPartitionDesc singleItemListPartitionDesc = (SingleItemListPartitionDesc) partitionDesc;
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     if (existingValues.contains(item)) {
@@ -366,6 +367,15 @@ public class CatalogUtils {
             } else if (partitionDesc instanceof MultiItemListPartitionDesc) {
                 int partitionColSize = listPartitionInfo.getPartitionColumnsSize();
                 MultiItemListPartitionDesc multiItemListPartitionDesc = (MultiItemListPartitionDesc) partitionDesc;
+                if (partitionColSize == 1) {
+                    Set<LiteralExpr> existingValues =
+                            singleColumnValuesSet(listPartitionInfo, partitionIds);
+                    for (List<LiteralExpr> item : multiItemListPartitionDesc.getMultiLiteralExprValues()) {
+                        if (item.size() == 1 && existingValues.contains(item.get(0))) {
+                            return true;
+                        }
+                    }
+                }
                 return isItemValuesExist(partitionColSize, partitionIds, listPartitionInfo.getMultiLiteralExprValues(),
                         multiItemListPartitionDesc);
             }
@@ -399,6 +409,31 @@ public class CatalogUtils {
         }
         // Return prefix including the underscore, e.g., "txn12345_"
         return partitionName.substring(0, underscoreIndex + 1);
+    }
+
+    /**
+     * Values of a single partition column, taken from both list-partition representations.
+     * One partition column is recorded either as a plain value or as a one-element tuple,
+     * so a value is a duplicate of an existing partition under either form.
+     */
+    private static Set<LiteralExpr> singleColumnValuesSet(ListPartitionInfo listPartitionInfo,
+                                                          Set<Long> partitionIds) {
+        Set<LiteralExpr> values = Sets.newHashSet(listPartitionInfo.getValuesSet(partitionIds));
+        if (listPartitionInfo.getPartitionColumnsSize() != 1) {
+            return values;
+        }
+        for (Map.Entry<Long, List<List<LiteralExpr>>> entry
+                : listPartitionInfo.getMultiLiteralExprValues().entrySet()) {
+            if (!partitionIds.contains(entry.getKey())) {
+                continue;
+            }
+            for (List<LiteralExpr> item : entry.getValue()) {
+                if (item.size() == 1) {
+                    values.add(item.get(0));
+                }
+            }
+        }
+        return values;
     }
 
     /**

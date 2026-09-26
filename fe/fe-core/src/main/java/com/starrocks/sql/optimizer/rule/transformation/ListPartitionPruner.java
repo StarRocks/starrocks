@@ -946,8 +946,17 @@ public class ListPartitionPruner implements PartitionPruner {
                 }
                 Column column = partitionColumns.get(i);
                 ColumnRefOperator columnRefOperator = columnRefOperatorMap.get(column);
-                columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
-                columnToNullPartitions.put(columnRefOperator, nullPartitionIds);
+                // A table can hold both single-item and multi-item list partitions on the same
+                // column, so the multi-item values join the column's existing value index.
+                ConcurrentNavigableMap<LiteralExpr, Set<Long>> columnValues =
+                        columnToPartitionValuesMap.computeIfAbsent(columnRefOperator,
+                                ignored -> new ConcurrentSkipListMap<>());
+                for (Map.Entry<LiteralExpr, Set<Long>> valueEntry : partitionValueToIds.entrySet()) {
+                    columnValues.computeIfAbsent(valueEntry.getKey(), ignored -> Sets.newHashSet())
+                            .addAll(valueEntry.getValue());
+                }
+                columnToNullPartitions.computeIfAbsent(columnRefOperator, ignored -> new HashSet<>())
+                        .addAll(nullPartitionIds);
             }
         }
     }
