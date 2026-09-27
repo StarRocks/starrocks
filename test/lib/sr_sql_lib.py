@@ -3687,6 +3687,75 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             ),
         )
 
+    def assert_table_distribution(self, table_name, distribute_type, distribute_key=None, bucket_num=None):
+        """
+        Assert how a table is distributed.
+
+        Reads information_schema.tables_config rather than matching text out of SHOW
+        CREATE TABLE. The DDL text is not portable: shared-data emits storage_volume,
+        datacache.enable and file_bundling where shared-nothing emits replicated_storage
+        and fast_schema_evolution, and replication_num follows the BE count. A case that
+        asserts the whole DDL therefore has to be tagged @native and stops running in
+        half of CI, even when the thing it cares about -- the distribution -- is
+        identical in both. tables_config exposes the distribution as its own columns, so
+        the assertion says what it means and survives both modes.
+
+        :param table_name:      table to check, in the session's current database
+        :param distribute_type: "HASH" or "RANDOM", case-insensitive
+        :param distribute_key:  distribution columns, e.g. "k" or "k, k1". Backticks,
+                                spacing and case are normalised, so "k,k1", "`k`, `k1`"
+                                and "K, K1" are all equal -- column identifiers are
+                                case-insensitive, and the catalog stores them folded,
+                                so comparing them literally would fail on DDL that
+                                spelled the column differently. Omit for RANDOM.
+        :param bucket_num:      expected bucket count. Omit when the table was created
+                                with `distributed by hash(k)` and no bucket count: the
+                                number is assigned dynamically, tables_config reports 0,
+                                and asserting it would pin an implementation detail.
+        """
+
+        def _normalise_key(key):
+            if key is None:
+                return None
+            return ", ".join(part.strip().strip("`").lower() for part in str(key).split(",") if part.strip())
+
+        sql = (
+            "select DISTRIBUTE_TYPE, DISTRIBUTE_KEY, DISTRIBUTE_BUCKET "
+            "from information_schema.tables_config "
+            "where TABLE_SCHEMA = database() and TABLE_NAME = '%s'" % table_name
+        )
+        res = self.execute_sql(sql, True)
+        tools.assert_true(res["status"], "query tables_config failed: %s" % res.get("msg"))
+        tools.assert_equal(
+            1,
+            len(res["result"]),
+            "expect exactly one row in tables_config for table '%s' in the current "
+            "database, got %s -- is the table missing, or is no database selected?"
+            % (table_name, len(res["result"])),
+        )
+
+        actual_type, actual_key, actual_bucket = res["result"][0]
+
+        tools.assert_equal(
+            str(distribute_type).upper(),
+            str(actual_type).upper(),
+            "table '%s' distribute type mismatch" % table_name,
+        )
+
+        if distribute_key is not None:
+            tools.assert_equal(
+                _normalise_key(distribute_key),
+                _normalise_key(actual_key),
+                "table '%s' distribute key mismatch" % table_name,
+            )
+
+        if bucket_num is not None:
+            tools.assert_equal(
+                int(bucket_num),
+                int(actual_bucket),
+                "table '%s' bucket num mismatch" % table_name,
+            )
+
     def assert_query_error_contains(self, query, *expects):
         """
         assert error message contains expect string

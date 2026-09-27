@@ -1,0 +1,76 @@
+-- name: test_framework_table_distribution
+create database test_db_${uuid0};
+-- result:
+-- !result
+use test_db_${uuid0};
+-- result:
+-- !result
+create table t_hash (k int, k1 date) distributed by hash(k) buckets 4 properties('replication_num' = '1');
+-- result:
+-- !result
+function: assert_table_distribution("t_hash", "HASH", "k", 4)
+-- result:
+None
+-- !result
+create table t_multi (k int, k1 date) distributed by hash(k, k1) buckets 3 properties('replication_num' = '1');
+-- result:
+-- !result
+function: assert_table_distribution("t_multi", "HASH", "k, k1", 3)
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_multi", "HASH", "k,k1", 3)
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_multi", "HASH", "`k`, `k1`", 3)
+-- result:
+None
+-- !result
+create table t_dynamic (k int, k1 date) distributed by hash(k) properties('replication_num' = '1');
+-- result:
+-- !result
+function: assert_table_distribution("t_dynamic", "HASH", "k")
+-- result:
+None
+-- !result
+create table t_random (k int, k1 date) distributed by random properties('replication_num' = '1');
+-- result:
+-- !result
+function: assert_table_distribution("t_random", "RANDOM")
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_random", "random")
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_hash", "hash", "K", 4)
+-- result:
+None
+-- !result
+alter table t_hash distributed by hash(k1) buckets 2;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_hash", "HASH", "k1", 2)
+-- result:
+None
+-- !result
+alter table t_hash distributed by random;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+function: assert_table_distribution("t_hash", "RANDOM")
+-- result:
+None
+-- !result
+drop database test_db_${uuid0};
+-- result:
+-- !result
