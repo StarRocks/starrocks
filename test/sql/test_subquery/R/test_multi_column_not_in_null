@@ -1,0 +1,83 @@
+-- name: test_multi_column_not_in_null
+CREATE TABLE o2 (a INT, b INT) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE o3 (a INT, b INT, c INT) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE i_null (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE i_null3 (x INT, y INT, z INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE i_nonull (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE i_allnull (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE i_empty (x INT, y INT) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE nn0 (a INT NOT NULL, b INT NOT NULL) DUPLICATE KEY(a) DISTRIBUTED BY HASH(a) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+CREATE TABLE nn1 (x INT NOT NULL, y INT NOT NULL) DUPLICATE KEY(x) DISTRIBUTED BY HASH(x) BUCKETS 1 PROPERTIES("replication_num"="1");
+-- result:
+-- !result
+INSERT INTO o2 VALUES (1,1),(2,2);
+-- result:
+-- !result
+INSERT INTO o3 VALUES (1,1,1),(2,2,2);
+-- result:
+-- !result
+INSERT INTO i_null VALUES (1,NULL);
+-- result:
+-- !result
+INSERT INTO i_null3 VALUES (1,NULL,1);
+-- result:
+-- !result
+INSERT INTO i_nonull VALUES (1,1);
+-- result:
+-- !result
+INSERT INTO i_allnull VALUES (NULL,NULL);
+-- result:
+-- !result
+select a,b from o2 where (a,b) not in (select x,y from i_null) order by a,b;
+-- result:
+2	2
+-- !result
+select a,b,c from o3 where (a,b,c) not in (select x,y,z from i_null3) order by a,b,c;
+-- result:
+2	2	2
+-- !result
+select a,b from o2 where (a,b) not in (select x,y from i_nonull) order by a,b;
+-- result:
+2	2
+-- !result
+select a,b from o2 where (a,b) not in (select x,y from i_allnull) order by a,b;
+-- result:
+-- !result
+select a,b from o2 where (a,b) not in (select x,y from i_empty) order by a,b;
+-- result:
+1	1
+2	2
+-- !result
+select a,b from o2 where (a,b) in (select x,y from i_null) order by a,b;
+-- result:
+-- !result
+select a,b from o2 where (a,b) in (select x,y from i_nonull) order by a,b;
+-- result:
+1	1
+-- !result
+INSERT INTO nn0 VALUES (1,1),(2,2),(3,3);
+-- result:
+-- !result
+INSERT INTO nn1 VALUES (1,1),(2,2);
+-- result:
+-- !result
+select a,b from nn0 where (a,b) not in (select x,y from nn1) order by a,b;
+-- result:
+3	3
+-- !result
