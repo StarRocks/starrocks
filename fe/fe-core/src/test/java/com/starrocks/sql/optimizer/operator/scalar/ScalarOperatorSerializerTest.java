@@ -81,5 +81,14 @@ public class ScalarOperatorSerializerTest {
         Assertions.assertEquals("array<float>", column.get(ScalarOperatorSerializer.TYPE));
         Assertions.assertEquals("float", array.get(ScalarOperatorSerializer.ITEM_TYPE));
         Assertions.assertEquals(2, ((List<?>) array.get(ScalarOperatorSerializer.CHILDREN)).size());
+
+        Map<String, Object> arrayCast = ScalarOperatorSerializer.toJson(
+                new CastOperator(new ArrayType(FloatType.DOUBLE), query));
+        Assertions.assertEquals("double", arrayCast.get(ScalarOperatorSerializer.ITEM_TYPE));
+        Assertions.assertFalse(arrayCast.containsKey(ScalarOperatorSerializer.TYPE));
+
+        Map<String, Object> scalarCast = ScalarOperatorSerializer.toJson(
+                new CastOperator(IntegerType.BIGINT, ConstantOperator.createInt(7)));
+        Assertions.assertEquals("bigint", scalarCast.get(ScalarOperatorSerializer.TYPE));
     }
 }

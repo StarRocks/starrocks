@@ -180,6 +180,11 @@ public class PaimonGlobalIndexServiceTest {
 
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class, service::evaluate);
         Assertions.assertTrue(exception.getMessage().contains("row id or score"));
+
+        PaimonGlobalIndexService malformedService = new PaimonGlobalIndexService(
+                table, condition, 10L, (sql, timeout) -> List.of(scoredBatch("[7]")));
+        exception = Assertions.assertThrows(IllegalStateException.class, malformedService::evaluate);
+        Assertions.assertTrue(exception.getMessage().contains("Malformed"));
     }
 
     private static GlobalIndexResult result(long... rowIds) {

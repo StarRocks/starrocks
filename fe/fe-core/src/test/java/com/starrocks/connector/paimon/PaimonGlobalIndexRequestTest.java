@@ -50,6 +50,8 @@ public class PaimonGlobalIndexRequestTest {
         Assertions.assertEquals(PaimonGlobalIndexRequest.PREDICATE_VERSION, fromJson.getVersion());
         Assertions.assertFalse(fromJson.isTopN());
         Assertions.assertEquals(Map.of("k", ConnectorIndexType.RANGE), fromJson.getRequiredIndexes());
+        Assertions.assertThrows(IllegalStateException.class, fromJson::getLocalLimit);
+        Assertions.assertThrows(IllegalStateException.class, fromJson::isAscending);
         Assertions.assertEquals(42L, fromTransport.getSnapshotId());
         Assertions.assertEquals(Map.of("k", ConnectorIndexType.RANGE), fromTransport.getRequiredIndexes());
         Assertions.assertEquals(request.toJson(), fromJson.toJson());
@@ -68,6 +70,14 @@ public class PaimonGlobalIndexRequestTest {
                 List.of(query, vector));
         TopNIndexCondition condition = new TopNIndexCondition(null, score,
                 Map.of(vector.getName(), ConnectorIndexType.VECTOR), 10, 2, false);
+
+        BinaryPredicateOperator predicate = new BinaryPredicateOperator(
+                BinaryType.EQ, new ColumnRefOperator(3, IntegerType.INT, "id", false),
+                ConstantOperator.createInt(7));
+        TopNIndexCondition filtered = new TopNIndexCondition(predicate, score,
+                Map.of(vector.getName(), ConnectorIndexType.VECTOR), 10, 2, false);
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.create(43L, filtered));
 
         PaimonGlobalIndexRequest request = PaimonGlobalIndexRequest.parse(
                 PaimonGlobalIndexRequest.create(43L, condition).toJson());
@@ -101,6 +111,16 @@ public class PaimonGlobalIndexRequestTest {
                 () -> PaimonGlobalIndexRequest.parse(
                         "{\"version\":1,\"snapshotId\":1,\"kind\":\"top_n\",\"predicate\":{},"
                                 + "\"indexes\":{\"k\":\"range\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":3,\"snapshotId\":1,\"predicate\":{},"
+                                + "\"indexes\":{\"k\":\"range\"}}"));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> PaimonGlobalIndexRequest.parse(
+                        "{\"version\":2,\"snapshotId\":1,\"kind\":\"top_n\","
+                                + "\"scoreExpression\":{\"o\":\"ca\",\"f\":\"approx_l2_distance\","
+                                + "\"a\":[{}]},\"localLimit\":1,\"ascending\":true,"
+                                + "\"indexes\":{\"embedding\":\"vector\"}}"));
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> PaimonGlobalIndexRequest.parse(
                         "{\"version\":2,\"snapshotId\":1,\"kind\":\"top_n\","

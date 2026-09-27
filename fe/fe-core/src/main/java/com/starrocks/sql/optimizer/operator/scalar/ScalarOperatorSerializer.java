@@ -85,13 +85,6 @@ public final class ScalarOperatorSerializer {
             result.put(CHILDREN, serializeChildren(array.getChildren()));
             return result;
         }
-        if (operator instanceof CallOperator) {
-            CallOperator call = (CallOperator) operator;
-            Map<String, Object> result = node("ca");
-            result.put(FN_NAME, call.getFnName());
-            result.put(ARGUMENTS, serializeChildren(normalizeAnnArguments(call)));
-            return result;
-        }
         if (operator instanceof CastOperator) {
             Map<String, Object> result = new LinkedHashMap<>(toJson(operator.getChild(0)));
             if (operator.getType() instanceof ArrayType) {
@@ -99,6 +92,14 @@ public final class ScalarOperatorSerializer {
             } else {
                 result.put(TYPE, operator.getType().toTypeString());
             }
+            return result;
+        }
+        // CastOperator extends CallOperator, so it must be handled before the generic call branch.
+        if (operator instanceof CallOperator) {
+            CallOperator call = (CallOperator) operator;
+            Map<String, Object> result = node("ca");
+            result.put(FN_NAME, call.getFnName());
+            result.put(ARGUMENTS, serializeChildren(normalizeAnnArguments(call)));
             return result;
         }
         if (operator instanceof ConstantOperator) {

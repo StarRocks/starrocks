@@ -129,6 +129,15 @@ public class ApplyConnectorIndexRuleTest {
                 fullTextCondition.getRequiredIndexes());
         Assertions.assertThrows(IllegalArgumentException.class,
                 () -> new TopNIndexCondition(null, scoreExpression, Map.of(), 10, 2, false));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TopNIndexCondition(null, scoreExpression,
+                        Map.of(vectorColumn.getName(), ConnectorIndexType.VECTOR), 0, 0, true));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TopNIndexCondition(null, scoreExpression,
+                        Map.of(vectorColumn.getName(), ConnectorIndexType.VECTOR), 10, -1, true));
+        Assertions.assertThrows(IllegalArgumentException.class,
+                () -> new TopNIndexCondition(null, scoreExpression,
+                        Map.of(vectorColumn.getName(), ConnectorIndexType.VECTOR), Integer.MAX_VALUE, 1, true));
 
         ColumnRefOperator doubleScoreColumn = new ColumnRefOperator(5, FloatType.DOUBLE, "double_score", true);
         CastOperator castedScore = new CastOperator(FloatType.DOUBLE, scoreExpression);
@@ -186,6 +195,14 @@ public class ApplyConnectorIndexRuleTest {
                 nullsLast, OptExpression.create(createScan(null, nullableProjection, nullableVector)));
         Assertions.assertTrue(nullableRule.check(nullableNullsLast, null));
         Assertions.assertTrue(nullableRule.transform(nullableNullsLast, null).isEmpty());
+
+        CallOperator unsupportedScore = new CallOperator("unsupported_distance", FloatType.FLOAT,
+                List.of(vectorColumn, queryVector));
+        Projection unsupportedProjection = new Projection(Map.of(scoreColumn, unsupportedScore));
+        OptExpression unsupportedInput = OptExpression.create(
+                nullsLast, OptExpression.create(createScan(null, unsupportedProjection)));
+        Assertions.assertTrue(rule.check(unsupportedInput, null));
+        Assertions.assertTrue(rule.transform(unsupportedInput, null).isEmpty());
     }
 
     private LogicalPaimonScanOperator createScan(ScalarOperator predicate, Projection projection) {
