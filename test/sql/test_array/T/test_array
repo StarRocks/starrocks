@@ -13,7 +13,7 @@ insert into array_exprr SELECT generate_series, generate_series FROM TABLE(gener
 
 select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is null, c2 ,0)] is null) from array_exprr;
 
---name: testArrayNE
+-- name: testArrayNE
 CREATE TABLE `t2` (
   `pk` bigint(20) NOT NULL COMMENT "",
   `aas_1` array<array<array<varchar(65533)>>> NULL COMMENT "",
