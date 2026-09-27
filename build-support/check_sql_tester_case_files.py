@@ -225,7 +225,14 @@ def changed_files(base):
     # Deletions are kept here, unlike the paths handed to the check: a deleted R file
     # cannot be read, but the T file it leaves stranded can. expand_selection drops the
     # unreadable path and keeps the counterpart.
-    out = git("diff", "--name-only", merge_base, "HEAD").split()
+    #
+    # --no-renames is what makes that hold for a rename, which is a deletion as far as
+    # this is concerned. Rename detection reports `git mv R/a R/b` as the one path R/b,
+    # and then R/a -- the only route to T/a -- is never in the list. A PR that renames an
+    # R file and changes the case name in it would leave T/a recorded nowhere and still
+    # pass. Asking for the deletion and the addition separately costs one extra path per
+    # rename on a read-only scan.
+    out = git("diff", "--no-renames", "--name-only", merge_base, "HEAD").split()
     return expand_selection([f for f in out if f.startswith(CASE_DIR + os.sep)])
 
 

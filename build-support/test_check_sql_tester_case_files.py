@@ -583,6 +583,52 @@ class MainTest(unittest.TestCase):
         self.assertNotIn("no case files to check", out)
         self.assertIn("git", err.lower())
 
+    def test_a_renamed_r_file_still_reaches_its_t_file(self):
+        """A rename is a deletion on the source path, and rule 1 needs that path.
+
+        `git mv R/file_a R/file_b` plus a new case name in the moved file leaves test_a
+        recorded nowhere. Rename detection reports only R/file_b, so R/file_a -- the only
+        route expand_selection has to T/file_a -- never reaches the check and the whole
+        thing goes green. The asserted precondition below is the collapsing itself.
+        """
+        original = os.getcwd()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / MODULE.CASE_DIR / "suite"
+            (root / "T").mkdir(parents=True, exist_ok=True)
+            (root / "R").mkdir(parents=True, exist_ok=True)
+            (root / "T" / "file_a").write_text(
+                "-- name: test_a\nselect 1;\n", encoding="utf-8")
+            (root / "R" / "file_a").write_text(
+                "-- name: test_a\nselect 1;\n-- result:\n1\n-- !result\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", tmpdir], check=True)
+            os.chdir(tmpdir)
+            try:
+                def run(*args):
+                    return subprocess.run(
+                        ["git", "-c", "user.email=a@b", "-c", "user.name=c"] + list(args),
+                        check=True, capture_output=True, text=True)
+
+                run("add", "-A")
+                run("commit", "-qm", "init")
+                run("mv", str(Path(MODULE.CASE_DIR) / "suite" / "R" / "file_a"),
+                    str(Path(MODULE.CASE_DIR) / "suite" / "R" / "file_b"))
+                (root / "R" / "file_b").write_text(
+                    "-- name: test_b\nselect 1;\n-- result:\n1\n-- !result\n",
+                    encoding="utf-8")
+                run("add", "-A")
+                run("commit", "-qm", "rename and rename the case")
+
+                collapsed = run("diff", "--name-only", "HEAD~1", "HEAD").stdout.split()
+                self.assertNotIn(
+                    str(Path(MODULE.CASE_DIR) / "suite" / "R" / "file_a"), collapsed,
+                    "precondition: rename detection hides the source path")
+
+                code, _, err = self.run_main(["--base", "HEAD~1"])
+            finally:
+                os.chdir(original)
+        self.assertEqual(code, 1, "the orphaned T case has to be reported")
+        self.assertIn("test_a", err)
+
     def test_run_from_the_wrong_directory_exits_two(self):
         original = os.getcwd()
         with tempfile.TemporaryDirectory() as tmpdir:
