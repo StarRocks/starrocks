@@ -979,12 +979,61 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentConstantPreparation) {
     verify(true, constant_polar_polygon, polar_points, {true, false}, {true, false});
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoContainmentUsesPrepareCloseLifecycle) {
+    const auto verify = [](bool spherical) {
+        const auto geo_type = spherical ? geography_type() : geometry_type();
+        auto polygon_data = spherical ? geography({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"})
+                                      : geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
+        auto constant_polygon = ConstColumn::create(polygon_data, 2);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns({constant_polygon, nullptr});
+
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        const auto* prepared_state = context->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+        ASSERT_NE(nullptr, prepared_state);
+
+        auto first_points =
+                spherical ? geography({"POINT (1 1)", "POINT (20 20)"}) : geometry({"POINT (1 1)", "POINT (20 20)"});
+        auto first_result =
+                spherical ? GeoFunctions::st_geography_contains(context.get(), {constant_polygon, first_points})
+                          : GeoFunctions::st_geometry_contains(context.get(), {constant_polygon, first_points});
+        ASSERT_TRUE(first_result.ok()) << first_result.status();
+        ColumnViewer<TYPE_BOOLEAN> first(*first_result);
+        EXPECT_TRUE(first.value(0));
+        EXPECT_FALSE(first.value(1));
+
+        auto second_points =
+                spherical ? geography({"POINT (0 5)", "POINT (5 5)"}) : geometry({"POINT (0 5)", "POINT (5 5)"});
+        auto second_result =
+                spherical ? GeoFunctions::st_geography_covers(context.get(), {constant_polygon, second_points})
+                          : GeoFunctions::st_geometry_covers(context.get(), {constant_polygon, second_points});
+        ASSERT_TRUE(second_result.ok()) << second_result.status();
+        EXPECT_EQ(prepared_state, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        ColumnViewer<TYPE_BOOLEAN> second(*second_result);
+        EXPECT_TRUE(second.value(0));
+        EXPECT_TRUE(second.value(1));
+
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    };
+
+    verify(false);
+    verify(true);
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesSphericalComponentsLazily) {
     constexpr const char* invalid_second_component =
             "MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 20 20, 20 20, 20 20)))";
     auto boundary_and_null = geography({"POINT (0 5)", nullptr});
     auto constant_polygon = ConstColumn::create(geography({invalid_second_component}), boundary_and_null->size());
-    auto early_result = GeoFunctions::st_geography_covers(nullptr, {constant_polygon, boundary_and_null});
+    const auto geography_type_descriptor = geography_type();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context(
+            {geography_type_descriptor, geography_type_descriptor}, TypeDescriptor(TYPE_BOOLEAN)));
+    context->set_constant_columns({constant_polygon, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    auto early_result = GeoFunctions::st_geography_covers(context.get(), {constant_polygon, boundary_and_null});
     ASSERT_TRUE(early_result.ok()) << early_result.status();
     ColumnViewer<TYPE_BOOLEAN> early(*early_result);
     EXPECT_TRUE(early.value(0));
@@ -992,9 +1041,10 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesSphericalComponentsLa
 
     auto outside = geography({"POINT (40 40)"});
     auto one_constant_polygon = ConstColumn::create(geography({invalid_second_component}), 1);
-    auto invalid_topology = GeoFunctions::st_geography_covers(nullptr, {one_constant_polygon, outside});
+    auto invalid_topology = GeoFunctions::st_geography_covers(context.get(), {one_constant_polygon, outside});
     ASSERT_FALSE(invalid_topology.ok());
     EXPECT_TRUE(invalid_topology.status().is_invalid_argument());
+    ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
     auto valid_polygon = ConstColumn::create(geography({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"}), 1);
     auto fresh_batch = GeoFunctions::st_geography_contains(nullptr, {valid_polygon, geography({"POINT (1 1)"})});
@@ -1078,6 +1128,10 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
         EXPECT_EQ(function.arg_types.size(), descriptor->args_nums);
         for (size_t i = 0; i < function.arg_types.size(); ++i) {
             EXPECT_STREQ(function.arg_types[i], descriptor->arg_types[i]);
+        }
+        if (function.id >= 120190) {
+            EXPECT_TRUE(static_cast<bool>(descriptor->prepare_function));
+            EXPECT_TRUE(static_cast<bool>(descriptor->close_function));
         }
     }
 }
