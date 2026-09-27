@@ -108,7 +108,6 @@ show create table t;
 alter table t partitions(p202006,p202008) distributed by random;
 show create table t;
 
-<<<<<<< HEAD
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -125,11 +124,7 @@ ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 function: wait_optimize_table_finish()
 
 
--- name: test_online_optimize_table_basic @sequential
-=======
 -- name: test_online_optimize_table_basic @sequential @slow @native
-admin set frontend config ('enable_online_optimize_table'='true');
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
@@ -201,12 +196,7 @@ show create table tpk;
 select count(*) from tpk;
 select * from tpk order by k;
 
-<<<<<<< HEAD
--- name: test_online_optimize_table_stream_load @sequential @native
-=======
 -- name: test_online_optimize_table_stream_load @sequential @native @slow
-admin set frontend config ('enable_online_optimize_table'='true');
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
