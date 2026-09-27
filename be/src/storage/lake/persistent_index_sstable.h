@@ -43,6 +43,10 @@ namespace lake {
 using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 class PersistentIndexBlockCache;
 
+// Drop the local cache copy of `path` so subsequent reads go to remote storage.
+// Gated by config::lake_clear_corrupted_cache_data; no-op outside shared-data mode.
+Status drop_corrupted_sstable_cache(const std::string& path);
+
 class PersistentIndexSstable {
 public:
     PersistentIndexSstable() = default;
@@ -54,6 +58,14 @@ public:
 
     static Status build_sstable(const phmap::btree_map<std::string, IndexValueWithVer, std::less<>>& map,
                                 WritableFile* wf, uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
+
+    // Build an sstable that contains only tombstone entries (NullIndexValue) for the given keys, all at
+    // |version|. Used to apply a large pure-delete without accumulating tombstones in the memtable and
+    // triggering additional flushes. |keys| MUST be sorted ascending (bytewise) and deduplicated, as required
+    // by TableBuilder. Each entry is encoded exactly like a memtable-flushed tombstone
+    // (rssid == rowid == UINT32_MAX), so reads and compaction treat it identically.
+    static Status build_tombstone_sstable(const Slice* sorted_keys, size_t n, int64_t version, WritableFile* wf,
+                                          uint64_t* filesz, PersistentIndexSstableRangePB* range_pb);
 
     // multi_get can get multi keys at onces
     // |keys| : Address point to first element of key array.
@@ -68,10 +80,21 @@ public:
 
     const PersistentIndexSstablePB& sstable_pb() const { return _sstable_pb; }
 
+    // Full path of the underlying sstable file. Only valid after a successful init().
+    std::string filename() const { return _rf->filename(); }
+
     size_t memory_usage() const;
 
     // Sample keys from the table for parallel compaction task splitting.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
+
+    // Sample at most |max_samples| actual data keys taken from [seek_key, stop_key), rather than
+    // index-block separator keys. Separators may be shortened by FindShortestSeparator and are suitable
+    // as opaque seek boundaries, but are not guaranteed to decode as complete primary keys. Tablet split
+    // uses this API because its boundaries must be persisted as PK tuples, and it samples within the
+    // splitting tablet's own range because an SST is shared by every tablet an earlier split produced.
+    Status sample_data_keys(std::vector<std::string>* keys, const Slice& seek_key, const Slice& stop_key,
+                            size_t max_samples) const;
 
     // `_delvec` should only be modified in `init()` via publish version thread
     // which is thread-safe. And after that, it should be immutable.

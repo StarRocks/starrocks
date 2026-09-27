@@ -23,7 +23,6 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "types/logical_type.h"
-#include "udf/java/java_function_fwd.h"
 
 namespace starrocks {
 
@@ -54,12 +53,21 @@ struct GeneralFuncMapHash {
 };
 
 class AggregateFuncResolver {
-    DECLARE_SINGLETON(AggregateFuncResolver);
-
 public:
+    static AggregateFuncResolver* instance() {
+        static AggregateFuncResolver s_instance;
+        return &s_instance;
+    }
+
     void register_avg();
+    void register_sum_map1();
+    void register_sum_map2();
+    void register_sum_map3();
     void register_bitmap();
     void register_minmaxany();
+    void register_maxminby1();
+    void register_maxminby2();
+    void register_maxminby3();
     void register_sumcount();
     void register_distinct();
     void register_variance();
@@ -293,7 +301,12 @@ public:
         return func;
     }
 
+protected:
+    AggregateFuncResolver();
+
 private:
+    ~AggregateFuncResolver();
+
     std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
     std::unordered_map<GeneralFuncKey, AggregateFunctionPtr, GeneralFuncMapHash> _general_mapping;
     std::unordered_set<AggregateFunctionPtr> _functions;

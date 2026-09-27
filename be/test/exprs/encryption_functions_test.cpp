@@ -2653,4 +2653,113 @@ TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_type_markers) {
     }
 }
 
+// A constant argument arrives as a ConstColumn whose inner data column holds a SINGLE row, while
+// the function still has to emit `chunk_size` digests. Reading the inner column with the loop's row
+// index walks off the end of it. Encoding a const argument must be identical to encoding the same
+// value materialised once per row.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_arg_matches_materialized) {
+    constexpr size_t kNumRows = 4;
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                        TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const std::string const_str = "starrocks";
+    constexpr int64_t const_bigint = 1234567890123LL;
+
+    auto make_varying = []() {
+        auto col = Int32Column::create();
+        for (size_t i = 0; i < kNumRows; i++) {
+            col->append(static_cast<int32_t>(i));
+        }
+        return col;
+    };
+
+    // Reference: every argument materialised for all rows.
+    Columns materialized;
+    materialized.emplace_back(make_varying());
+    {
+        auto str_col = BinaryColumn::create();
+        auto big_col = Int64Column::create();
+        for (size_t i = 0; i < kNumRows; i++) {
+            str_col->append(const_str);
+            big_col->append(const_bigint);
+        }
+        materialized.emplace_back(std::move(str_col));
+        materialized.emplace_back(std::move(big_col));
+    }
+    ColumnPtr expected = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), materialized).value();
+    ASSERT_EQ(kNumRows, expected->size());
+
+    // Same values, but the last two arguments are constants (what a SQL literal produces).
+    Columns with_consts;
+    with_consts.emplace_back(make_varying());
+    with_consts.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(const_str), kNumRows));
+    with_consts.emplace_back(ColumnHelper::create_const_column<TYPE_BIGINT>(const_bigint, kNumRows));
+
+    ColumnPtr actual = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), with_consts).value();
+    ASSERT_EQ(kNumRows, actual->size());
+
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(expected->get(row).get_slice(), actual->get(row).get_slice()) << "row " << row;
+    }
+}
+
+// All arguments constant over a multi-row chunk: every row must get the same, correct digest.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_all_const_args) {
+    constexpr size_t kNumRows = 8;
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    const std::string const_str = "starrocks";
+
+    // Single-row reference value.
+    Columns one_row;
+    {
+        auto col = BinaryColumn::create();
+        col->append(const_str);
+        one_row.emplace_back(std::move(col));
+    }
+    ColumnPtr expected = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), one_row).value();
+
+    Columns const_cols;
+    const_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice(const_str), kNumRows));
+    ColumnPtr actual = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), const_cols).value();
+    ASSERT_EQ(kNumRows, actual->size());
+
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(expected->get(0).get_slice(), actual->get(row).get_slice()) << "row " << row;
+    }
+}
+
+// A const NULL argument mixed with a const non-null argument over a multi-row chunk.
+TEST_F(EncryptionFunctionsTest, encode_fingerprint_sha256_const_null_and_const_value) {
+    constexpr size_t kNumRows = 4;
+    auto return_type = TypeDescriptor::from_logical_type(TYPE_VARBINARY);
+    std::vector<FunctionContext::TypeDesc> arg_types = {TypeDescriptor::from_logical_type(TYPE_INT),
+                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR),
+                                                        TypeDescriptor::from_logical_type(TYPE_VARCHAR)};
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context(std::move(arg_types), return_type));
+
+    auto varying = Int32Column::create();
+    for (size_t i = 0; i < kNumRows; i++) {
+        varying->append(static_cast<int32_t>(i));
+    }
+
+    Columns columns;
+    columns.emplace_back(std::move(varying));
+    columns.emplace_back(ColumnHelper::create_const_null_column(kNumRows));
+    columns.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("abc"), kNumRows));
+
+    ColumnPtr result = EncryptionFunctions::encode_fingerprint_sha256(ctx.get(), columns).value();
+    ASSERT_EQ(kNumRows, result->size());
+    for (size_t row = 0; row < kNumRows; row++) {
+        EXPECT_EQ(32, result->get(row).get_slice().size);
+    }
+    // The varying first argument must still differentiate the rows.
+    EXPECT_NE(result->get(0).get_slice(), result->get(1).get_slice());
+}
+
 } // namespace starrocks

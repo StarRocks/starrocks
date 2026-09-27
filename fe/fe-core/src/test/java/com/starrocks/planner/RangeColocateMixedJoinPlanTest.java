@@ -208,6 +208,46 @@ public class RangeColocateMixedJoinPlanTest {
                 "INNER JOIN (PARTITIONED)");
     }
 
+    // ---------- Range × range colocate: right-family / full-outer join types ----------
+
+    /** T13: range×range RIGHT OUTER on the colocate key must remain colocate. */
+    @Test
+    public void t13_rangeRightOuterRangeStillColocate() throws Exception {
+        String fragmentPlan = plan("select count(*) from cd a right outer join cd2 b on a.k1 = b.k1");
+        Assertions.assertTrue(fragmentPlan.contains("colocate: true"),
+                () -> "range×range RIGHT OUTER on colocate key must remain colocate, plan was:\n" + fragmentPlan);
+    }
+
+    /** T14: range×range FULL OUTER on the colocate key must remain colocate. */
+    @Test
+    public void t14_rangeFullOuterRangeStillColocate() throws Exception {
+        String fragmentPlan = plan("select count(*) from cd a full outer join cd2 b on a.k1 = b.k1");
+        Assertions.assertTrue(fragmentPlan.contains("colocate: true"),
+                () -> "range×range FULL OUTER on colocate key must remain colocate, plan was:\n" + fragmentPlan);
+    }
+
+    /** T15: [shuffle] hint defeats range×range RIGHT OUTER colocate. */
+    @Test
+    public void t15_rangeRightOuterRangeShuffleHint() throws Exception {
+        String fragmentPlan = plan("select count(*) from cd a right outer join [shuffle] cd2 b on a.k1 = b.k1");
+        Assertions.assertFalse(fragmentPlan.contains("colocate: true"),
+                () -> "shuffle hint must defeat range×range RIGHT OUTER colocate, plan was:\n" + fragmentPlan);
+    }
+
+    /** T16: disable_colocate_join defeats range×range FULL OUTER colocate. */
+    @Test
+    public void t16_rangeFullOuterRangeDisableColocate() throws Exception {
+        Deencapsulation.setField(connectContext.getSessionVariable(), "disableColocateJoin", true);
+        try {
+            String fragmentPlan = plan("select count(*) from cd a full outer join cd2 b on a.k1 = b.k1");
+            Assertions.assertFalse(fragmentPlan.contains("colocate: true"),
+                    () -> "disable_colocate_join must defeat range×range FULL OUTER colocate, plan was:\n"
+                            + fragmentPlan);
+        } finally {
+            Deencapsulation.setField(connectContext.getSessionVariable(), "disableColocateJoin", false);
+        }
+    }
+
     // ---------- Optimizer-level invariant ----------
 
     /**

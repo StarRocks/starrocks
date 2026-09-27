@@ -18,7 +18,10 @@ package com.starrocks.staros;
 import com.staros.exception.StarException;
 import com.staros.manager.StarManagerServer;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.leader.CheckpointController;
+import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.concurrent.Executor;
 
 public class StarMgrServerTest {
     @Mocked
@@ -88,5 +92,67 @@ public class StarMgrServerTest {
             }
         };
         server.replayAndGenerateImage(tempFolder.getPath(), 1L);
+    }
+
+    @Test
+    public void testStarMgrShardConfigWiring() throws Exception {
+        boolean oldJournalConf = Config.lake_enable_incremental_shard_replica_journal;
+        boolean oldReverseIndexConf = Config.lake_enable_worker_shard_reverse_index;
+        boolean oldJournal = com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL;
+        boolean oldReverseIndex = com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX;
+        try {
+            // Mock the overload initializeImpl() actually calls: testStarMgrServer lets the real one
+            // bind cloud_native_meta_port and never shuts it down, so a second real start in the same
+            // JVM would fail on the address already being in use.
+            new MockUp<StarManagerServer>() {
+                @Mock
+                public void start(String host, int port, Executor executor) throws IOException {
+                }
+            };
+
+            Config.lake_enable_incremental_shard_replica_journal = true;
+            Config.lake_enable_worker_shard_reverse_index = true;
+
+            StarMgrServer server = new StarMgrServer();
+            server.initialize(environment, tempFolder.getPath());
+
+            Assertions.assertTrue(com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL);
+            Assertions.assertTrue(com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX);
+
+            // The journal flag is read per call, so the refresh daemon carries a later change through.
+            // The reverse index is seeded while the image loads and cannot be built afterwards, so the
+            // same change must not reach StarMgr behind an index that was already decided.
+            Config.lake_enable_incremental_shard_replica_journal = false;
+            Config.lake_enable_worker_shard_reverse_index = false;
+            Deencapsulation.invoke(GlobalStateMgr.getCurrentState().getConfigRefreshDaemon(), "runAfterCatalogReady");
+
+            Assertions.assertFalse(com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL);
+            Assertions.assertTrue(com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX);
+        } finally {
+            Config.lake_enable_incremental_shard_replica_journal = oldJournalConf;
+            Config.lake_enable_worker_shard_reverse_index = oldReverseIndexConf;
+            com.staros.util.Config.ENABLE_INCREMENTAL_SHARD_REPLICA_JOURNAL = oldJournal;
+            com.staros.util.Config.ENABLE_SHARDMANAGER_WORKER_SHARD_REVERSE_INDEX = oldReverseIndex;
+        }
+    }
+
+    @Test
+    public void testStopCheckpointControllerNullSafe() {
+        // stopCheckpointController must be a no-op when startCheckpointController has not run.
+        StarMgrServer server = new StarMgrServer();
+        Assertions.assertNull(server.checkpointController);
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
+    }
+
+    @Test
+    public void testStopCheckpointControllerStopsExistingController() {
+        // stopCheckpointController must forward the fire-and-forget stopBestEffort() to the owned
+        // controller (demotion no longer joins). With a freshly constructed (never started) controller
+        // this just requests stop without side effects, so it exercises the not-null branch.
+        StarMgrServer server = new StarMgrServer();
+        server.checkpointController = new CheckpointController(
+                "star_os_checkpoint_controller_test", new com.starrocks.utframe.MockJournal(), "");
+
+        Assertions.assertDoesNotThrow(() -> server.stopCheckpointController());
     }
 }

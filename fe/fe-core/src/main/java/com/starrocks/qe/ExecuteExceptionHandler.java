@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -29,10 +30,12 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.connector.statistics.ConnectorTableColumnKey;
+import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
@@ -57,6 +60,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 
 public class ExecuteExceptionHandler {
@@ -74,6 +78,8 @@ public class ExecuteExceptionHandler {
             handleUserException((StarRocksException) e, context);
         } else if (e instanceof GlobalDictNotMatchException) {
             handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
+        } else if (e instanceof LakeMetaVersionNotFoundException) {
+            handleLakeMetaVersionNotFound((LakeMetaVersionNotFoundException) e, context);
         } else {
             throw e;
         }
@@ -205,7 +211,8 @@ public class ExecuteExceptionHandler {
     public static boolean isRetryableStatus(TStatusCode statusCode) {
         return statusCode == TStatusCode.REMOTE_FILE_NOT_FOUND
                 || statusCode == TStatusCode.THRIFT_RPC_ERROR
-                || statusCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
+                || statusCode == TStatusCode.GLOBAL_DICT_NOT_MATCH
+                || statusCode == TStatusCode.LAKE_META_VERSION_NOT_FOUND;
     }
 
     // If modifications are made to the partition files of a Hive table by user,
@@ -284,6 +291,69 @@ public class ExecuteExceptionHandler {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
         rebuildExecPlan(e, context);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(true);
+    }
+
+    /**
+     * A BE could not read the lake tablet metadata object for the version one of its scan ranges carries.
+     * That version is the partition version this query captured while planning, and it is not -- and in
+     * the batch-publish case never will be -- materialized in object storage. Redelivering the existing
+     * fragments is pointless because their scan ranges still name that version, so the statement goes
+     * through the full planning flow again and picks up the partition's current visible version.
+     *
+     * <p>Whether the retry actually happens is still StmtExecutor's call: it only retries while nothing
+     * has been sent to the client yet, which is the safety gate every query retry already honours.
+     */
+    private static void handleLakeMetaVersionNotFound(LakeMetaVersionNotFoundException e, RetryContext context)
+            throws Exception {
+        OptionalLong partitionId = e.getPartitionId();
+
+        rebuildExecPlan(e, context);
+
+        // The version the fresh plan picked for the same physical partition: with the failing version
+        // gone, this is what the retry will read, so logging both ends makes a retry that keeps landing
+        // on an unreadable version distinguishable from one that moved forward.
+        OptionalLong replannedScanVersion = partitionId.isPresent()
+                ? findScanVersion(context.execPlan, partitionId.getAsLong())
+                : OptionalLong.empty();
+        // Reports the replan, which has certainly happened by this point -- not the retry, which is
+        // StmtExecutor's call afterwards and may still be refused because results are already on the
+        // wire or the statement was cancelled. Whether a retry actually followed is visible from
+        // StmtExecutor's own "retry N times" line for the same query id.
+        LOG.warn("Lake metadata version not found, replanned. status={}, queryId={}, tabletId={}, " +
+                        "partitionId={}, scanVersion={}, replannedScanVersion={}, attempt={}, error={}",
+                TStatusCode.LAKE_META_VERSION_NOT_FOUND,
+                DebugUtil.printId(context.connectContext.getExecutionId()),
+                describe(e.getTabletId()), describe(partitionId), describe(e.getScanVersion()),
+                describe(replannedScanVersion), context.retryTime + 1, e.getMessage());
+        Tracers.record(Tracers.Module.SCHEDULER, "LakeMetaVersion.REPLAN",
+                String.format("attempt=%d, partitionId=%s, scanVersion=%s, replannedScanVersion=%s",
+                        context.retryTime + 1, describe(partitionId), describe(e.getScanVersion()),
+                        describe(replannedScanVersion)));
+    }
+
+    /**
+     * Returns the version {@code execPlan} assigned to {@code physicalPartitionId}, or empty when no
+     * OlapScanNode in the plan scans that partition (it may have been pruned by the fresh plan).
+     */
+    @VisibleForTesting // package-private, not private: this JMockit version cannot fake private methods
+    static OptionalLong findScanVersion(ExecPlan execPlan, long physicalPartitionId) {
+        if (execPlan == null) {
+            return OptionalLong.empty();
+        }
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (!(scanNode instanceof OlapScanNode)) {
+                continue;
+            }
+            Long version = ((OlapScanNode) scanNode).getScanPartitionVersions().get(physicalPartitionId);
+            if (version != null) {
+                return OptionalLong.of(version);
+            }
+        }
+        return OptionalLong.empty();
+    }
+
+    private static String describe(OptionalLong value) {
+        return value.isPresent() ? String.valueOf(value.getAsLong()) : "unknown";
     }
 
     private static void handleRpcException(RpcException e, RetryContext context) throws Exception {

@@ -23,15 +23,23 @@
 #include "storage/column_predicate_inverted_index_fallback.h"
 #include "storage/index/inverted/inverted_index_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/primitive/column_expr_predicate.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/predicate_tree/predicate_tree.h"
+#include "storage_primitive/column_expr_predicate.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
 
 // Walks an OR subtree of a predicate tree and replaces every MATCH-style
 // ColumnExprPredicate it finds with an InvertedIndexFallbackPredicate that
 // carries the segment-local rowid bitmap pre-loaded from the inverted index.
+//
+// The bitmap is built through the same ColumnExprPredicate::seek_inverted_index
+// path the normal AND filtering uses, so it already is the set of rows for
+// which the predicate evaluates TRUE. In particular the negated case
+// (NOT (col MATCH x)) has both the matching rows and the NULL rows removed,
+// matching SQL three-valued logic (NOT (NULL MATCH x) = NULL, not TRUE). The
+// fallback predicate can therefore select rows by plain bitmap membership
+// without re-applying the negation.
 //
 // Lives in a header (rather than as a function-local class) for two reasons:
 //   1. C++ forbids member function templates inside function-local classes,
@@ -48,6 +56,7 @@ struct OrMatchFallbackVisitor {
     ObjectPool& pool;
     const std::vector<rowid_t>* rowid_buffer;
     bool* has_fallback_predicates;
+    uint32_t num_rows; // segment row count; the universe seek_inverted_index filters down from
 
     Status operator()(PredicateColumnNode& node) const {
         const auto* pred = node.col_pred();
@@ -62,11 +71,14 @@ struct OrMatchFallbackVisitor {
         if (iter == nullptr) {
             return Status::OK();
         }
-        ASSIGN_OR_RETURN(auto bitmap_opt, expr_pred->read_inverted_index(expr_pred->slot_desc()->col_name(), iter));
-        if (!bitmap_opt.has_value()) {
-            bitmap_opt.emplace(); // empty bitmap => no matches in this segment
-        }
-        auto* wrapper = pool.add(new InvertedIndexFallbackPredicate(expr_pred, std::move(*bitmap_opt), rowid_buffer));
+        // Seed with the whole segment and let seek_inverted_index narrow it to the
+        // rows where the predicate is TRUE (intersecting matches for a plain MATCH,
+        // subtracting both matches and NULLs for a negated MATCH).
+        roaring::Roaring bitmap;
+        bitmap.addRange(0, num_rows);
+        std::string col_name(expr_pred->slot_desc()->col_name());
+        RETURN_IF_ERROR(expr_pred->seek_inverted_index(col_name, iter, &bitmap));
+        auto* wrapper = pool.add(new InvertedIndexFallbackPredicate(expr_pred, std::move(bitmap), rowid_buffer));
         node.set_col_pred(wrapper);
         *has_fallback_predicates = true;
         return Status::OK();

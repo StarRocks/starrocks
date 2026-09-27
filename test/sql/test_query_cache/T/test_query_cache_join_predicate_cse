@@ -1,0 +1,115 @@
+-- name: test_query_cache_join_predicate_cse
+-- A join predicate's common sub-expressions are factored out into JoinNode.commonSlotMap,
+-- and the join conjuncts then reference them by slot id alone. When those definitions are
+-- missing from the digest, two joins whose predicates differ only inside a factored-out
+-- subexpression share a cache key -- and a join below the cache interpolation point is
+-- inside the digested subtree, so it decides which rows the cached per-tablet aggregate is
+-- computed from. Whichever query runs first populates the entries and the second silently
+-- inherits its answer.
+--
+-- Three things must line up, and getting any one wrong hides the bug rather than removing it:
+--   1. the join sits BELOW the aggregation (above it, it is outside the digested subtree);
+--   2. both bounds reference the other side of the join -- with literal bounds the whole
+--      predicate is pushed into the right scan and never becomes a join predicate at all;
+--   3. the subexpression appears twice, or it is never factored out into commonSlotMap.
+CREATE TABLE n1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj_${uuid0}");
+
+CREATE TABLE n2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj_${uuid0}");
+
+-- ts = 0 and v1 = 100, so the join condition reduces to 0 < (n2.ts % M) < 100 and matches
+-- whenever the modulus is non-zero: 54 of 63 rows for %7, 56 of 63 for %9.
+INSERT INTO n1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 0, 100
+FROM TABLE(generate_series(1, 620));
+
+INSERT INTO n2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 63));
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- Ground truth: the two moduli give genuinely different answers.
+set enable_query_cache = false;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+
+-- Cache on, %7 first: it populates the per-tablet entries, then %9 must NOT inherit them.
+set enable_query_cache = true;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+
+-- The same in the other direction, on tables whose entries are still cold, so the failure
+-- cannot hide behind whichever order happened to run first.
+CREATE TABLE n3 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj3_${uuid0}");
+
+CREATE TABLE n4 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg_nlj3_${uuid0}");
+
+INSERT INTO n3
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 0, 100
+FROM TABLE(generate_series(1, 620));
+
+INSERT INTO n4
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 63));
+
+set enable_query_cache = true;
+select sum(s) from (select n3.c1, sum(n3.v1) s from n3 join n4
+  on (n4.ts % 9) > n3.ts and (n4.ts % 9) < n3.v1 group by n3.c1) x;
+select sum(s) from (select n3.c1, sum(n3.v1) s from n3 join n4
+  on (n4.ts % 7) > n3.ts and (n4.ts % 7) < n3.v1 group by n3.c1) x;
+
+-- A HashJoin reaches the digested subtree too, under narrower conditions: an equi conjunct
+-- plus a colocate distribution keeps isTransformJoin() satisfied.
+set enable_query_cache = true;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 7) > n1.ts and (n2.ts % 7) < n1.v1 group by n1.c1) x;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;
+set enable_query_cache = false;
+select sum(s) from (select n1.c1, sum(n1.v1) s from n1 join n2
+  on n1.c1 = n2.c1 and (n2.ts % 9) > n1.ts and (n2.ts % 9) < n1.v1 group by n1.c1) x;

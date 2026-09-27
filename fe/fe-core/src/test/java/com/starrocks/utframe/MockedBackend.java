@@ -176,6 +176,10 @@ public class MockedBackend {
     private static final AtomicInteger BASE_PORT = new AtomicInteger(8000);
     private static final long PATH_HASH = 123456;
 
+    // Most-recently-created instance; allows tests to access the active MockLakeService
+    // without needing a direct reference to the MockedBackend.
+    private static volatile MockedBackend lastCreated;
+
     private final int backendId;
     private final String host;
     private final int brpcPort;
@@ -212,6 +216,7 @@ public class MockedBackend {
         pbService = new MockPBackendService();
 
         lakeService = new MockLakeService();
+        lastCreated = this;
 
         ((MockGenericPool<?>) ThriftConnectionPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ThriftConnectionPool.backendPool).register(this);
@@ -228,6 +233,14 @@ public class MockedBackend {
             }
         };
 
+    }
+
+    public MockLakeService getMockLakeService() {
+        return lakeService;
+    }
+
+    public static MockedBackend getLastCreated() {
+        return lastCreated;
     }
 
     public void setBackendService(PBackendService backendService) {
@@ -619,9 +632,21 @@ public class MockedBackend {
         private final ConcurrentLinkedQueue<PublishLogVersionBatchRequest> publishLogVersionBatchRequests =
                 new ConcurrentLinkedQueue<>();
 
+        private final ConcurrentLinkedQueue<PublishVersionRequest> publishVersionRequests =
+                new ConcurrentLinkedQueue<>();
+
         @Override
         public Future<PublishVersionResponse> publishVersion(PublishVersionRequest request) {
+            publishVersionRequests.add(request);
             return CompletableFuture.completedFuture(null);
+        }
+
+        public ConcurrentLinkedQueue<PublishVersionRequest> getPublishVersionRequests() {
+            return publishVersionRequests;
+        }
+
+        public void clearPublishVersionRequests() {
+            publishVersionRequests.clear();
         }
 
         @Override
@@ -744,5 +769,6 @@ public class MockedBackend {
             response.status = pStatus;
             return CompletableFuture.completedFuture(response);
         }
+
     }
 }

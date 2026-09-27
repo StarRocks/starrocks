@@ -77,6 +77,7 @@ public class MetadataParser {
     });
 
     public MetadataParser(Table table,
+                          String schemaString,
                           Map<Integer, String> specStringCache,
                           Map<Integer, ResidualEvaluator> residualCache,
                           ExecutorService executorService,
@@ -91,7 +92,9 @@ public class MetadataParser {
         this.isPartitionedTable = table.spec().isPartitioned();
         this.specStringCache = specStringCache;
         this.residualCache = residualCache;
-        this.schemaString = SchemaParser.toJson(table.schema());
+        // Use the scan's read schema (the targeted snapshot's schema for a time-travel read), not the
+        // current table schema, so remote-planned tasks carry the same schema as locally-planned ones.
+        this.schemaString = schemaString;
         this.executorService = executorService;
         this.liveFilesCount = liveFilesCount;
     }

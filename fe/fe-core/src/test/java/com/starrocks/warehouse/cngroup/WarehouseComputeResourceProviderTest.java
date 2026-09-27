@@ -45,7 +45,7 @@ public class WarehouseComputeResourceProviderTest extends WarehouseTestBase {
     public void testProviderAcquireComputeResourceBad() {
         CRAcquireContext cnAcquireContext = CRAcquireContext.of(1);
         try {
-            Optional<ComputeResource> result = provider.acquireComputeResource(null, cnAcquireContext);
+            provider.acquireComputeResource(null, cnAcquireContext);
             Assertions.fail();
         } catch (ErrorReportException e) {
             assertThat(e.getMessage()).contains("Warehouse id: 1 not exist");

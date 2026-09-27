@@ -626,11 +626,10 @@ public class AnalyzeSingleTest {
     public void testSetVar() {
         StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
                 "current_timestamp() AS time");
-        SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
+        ((QueryStatement) statementBase).getQueryRelation();
         Assertions.assertEquals("Asia/Shanghai", statementBase.getAllQueryScopeHints().get(0).getValue().get("time_zone"));
 
         statementBase = analyzeSuccess("select /*+ SET_VAR(broadcast_row_limit=1) */ * from t0");
-        selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assertions.assertEquals("1", statementBase.getAllQueryScopeHints().get(0).getValue().get("broadcast_row_limit"));
 
         SubmitTaskStmt stmt = (SubmitTaskStmt) analyzeSuccess("submit /*+ SET_VAR(broadcast_row_limit=1) */ task as " +

@@ -1,0 +1,5 @@
+extends: script
+message: "Duplicate frontmatter key. Each key may appear only once; a repeated key (e.g. two 'description:' lines) breaks the Docusaurus build with 'duplicated mapping key'."
+level: error
+scope: raw
+script: FrontmatterDuplicateKey.tengo

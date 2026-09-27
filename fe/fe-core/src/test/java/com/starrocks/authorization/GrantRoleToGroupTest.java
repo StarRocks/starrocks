@@ -18,7 +18,6 @@ import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.MockedLocalMetaStore;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
-import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.UpdateGroupToRoleLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -42,24 +41,33 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.transaction.MockedMetadataMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Set;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyShort;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.spy;
 
 public class GrantRoleToGroupTest {
 
+    @BeforeEach
+    public void setUpPersistJournal() throws Exception {
+        // Real EditLog on an auto-committing pseudo journal (shields BDB): journal writes complete so the
+        // WALApplier.apply() inside logJsonObject() still runs and the DDL takes effect in memory. Per-test
+        // (not @BeforeAll) so testPersist()'s replayNextJournal sees only its own ops on a freshly cleared queue.
+        UtFrameUtils.setUpForPersistTest();
+    }
+
+    @AfterEach
+    public void tearDownPersistJournal() {
+        UtFrameUtils.tearDownForPersisTest();
+    }
+
+
     @Test
     public void testAlterAndDrop() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -117,11 +125,60 @@ public class GrantRoleToGroupTest {
         Assertions.assertEquals(0, roleIds.size());
     }
 
+    /**
+     * A GRANT written with a different case than the directory returns must still match: an LDAP `cn`
+     * is case-insensitive in the directory, so requiring an exact match made such a grant silently
+     * ineffective. Only the lookup is relaxed - the stored key keeps the case it was granted with.
+     */
+    @Test
+    public void testGroupNameLookupIsCaseInsensitive() throws Exception {
+        ConnectContext ctx = new ConnectContext();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+
+        AuthorizationMgr authorizationMgr = new AuthorizationMgr(new DefaultAuthorizationProvider());
+        GlobalStateMgr.getCurrentState().setAuthorizationMgr(authorizationMgr);
+        GlobalStateMgr.getCurrentState().setAuthenticationMgr(new AuthenticationMgr());
+
+        for (int i = 1; i <= 2; i++) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role cr" + i, ctx), ctx);
+        }
+        Long r1Id = authorizationMgr.getRoleIdByNameAllowNull("cr1");
+        Long r2Id = authorizationMgr.getRoleIdByNameAllowNull("cr2");
+
+        // Granted with the lower-case spelling.
+        GrantRoleStmt grantRoleStmt =
+                new GrantRoleStmt(List.of("cr1"), "sr analysts", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(grantRoleStmt, ctx);
+        authorizationMgr.grantRole(grantRoleStmt);
+
+        // The directory hands us the group in its own case, and it still matches.
+        Assertions.assertEquals(Set.of(r1Id), authorizationMgr.getRoleIdListByGroup("SR Analysts"));
+        Assertions.assertEquals(Set.of(r1Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+        // A different group name still does not match.
+        Assertions.assertTrue(authorizationMgr.getRoleIdListByGroup("sr analyst").isEmpty());
+
+        // A second grant that spells the same group differently must land in the existing entry instead of
+        // creating a second one, otherwise the directory group would be split over two records that no single
+        // REVOKE can reach.
+        GrantRoleStmt otherCase =
+                new GrantRoleStmt(List.of("cr2"), "SR Analysts", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(otherCase, ctx);
+        authorizationMgr.grantRole(otherCase);
+
+        // One entry holding both roles, reachable under either spelling.
+        Assertions.assertEquals(Set.of(r1Id, r2Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+        Assertions.assertEquals(Set.of(r1Id, r2Id), authorizationMgr.getRoleIdListByGroup("SR Analysts"));
+
+        // And a revoke spelled a third way still reaches it.
+        RevokeRoleStmt revokeOtherCase =
+                new RevokeRoleStmt(List.of("cr1"), "SR ANALYSTS", GrantType.GROUP, NodePosition.ZERO);
+        Analyzer.analyze(revokeOtherCase, ctx);
+        authorizationMgr.revokeRole(revokeOtherCase);
+        Assertions.assertEquals(Set.of(r2Id), authorizationMgr.getRoleIdListByGroup("sr analysts"));
+    }
+
     @Test
     public void testSerDer() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -166,8 +223,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testPersist() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
-
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
@@ -226,15 +281,10 @@ public class GrantRoleToGroupTest {
         Assertions.assertTrue(roleIds.contains(r1Id));
         roleIds = newObject.getRoleIdListByGroup("g3");
         Assertions.assertEquals(0, roleIds.size());
-
-        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testShowGrants() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -273,9 +323,6 @@ public class GrantRoleToGroupTest {
     @Test
     public void testPrivilege() throws Exception {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setThreadLocalInfo();
@@ -333,10 +380,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsPrivilege() throws Exception {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
         ConnectContext ctx = new ConnectContext();
 
         String createUserSql = "create user u_grant";
@@ -354,9 +397,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testShowGrantsForExternalGroup() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -442,9 +482,6 @@ public class GrantRoleToGroupTest {
 
     @Test
     public void testGrantAndRevokeExternalGroup() throws Exception {
-        EditLog editLog = spy(new EditLog(null));
-        doNothing().when(editLog).logEdit(anyShort(), any());
-        GlobalStateMgr.getCurrentState().setEditLog(editLog);
 
         ConnectContext ctx = new ConnectContext();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

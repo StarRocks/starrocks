@@ -36,7 +36,7 @@
 
 #include "common/statusor.h"
 #include "compute_env/data_stream/data_stream_recvr.h"
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 #include "exprs/sort_exec_exprs.h"
 
 namespace starrocks {
@@ -90,7 +90,7 @@ private:
     std::shared_ptr<DataStreamRecvr> _stream_recvr;
 
     // our input rows are a prefix of the rows we produce
-    RowDescriptor _input_row_desc;
+    RecordDescriptor _input_record_desc;
 
     ChunkUniquePtr _input_chunk;
     bool _is_finished = false;

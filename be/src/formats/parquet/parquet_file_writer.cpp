@@ -72,8 +72,8 @@ Status ParquetFileWriter::write(Chunk* chunk) {
     return Status::OK();
 }
 
-FileWriter::CommitResult ParquetFileWriter::close() {
-    CommitResult result{
+FileCommitResult ParquetFileWriter::close() {
+    FileCommitResult result{
             .io_status = Status::OK(), .format = PARQUET, .location = _location, .rollback_action = _rollback_action};
     try {
         if (_writer != nullptr) {
@@ -162,9 +162,9 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-FileWriter::FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
+FileStatistics ParquetFileWriter::_statistics(const ::parquet::FileMetaData* meta_data, bool has_field_id) {
     DCHECK(meta_data != nullptr);
-    FileWriter::FileStatistics file_statistics;
+    FileStatistics file_statistics;
     file_statistics.record_count = meta_data->num_rows();
 
     if (!has_field_id) {

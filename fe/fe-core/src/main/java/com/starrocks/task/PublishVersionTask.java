@@ -36,6 +36,7 @@ package com.starrocks.task;
 
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
@@ -43,9 +44,11 @@ import com.starrocks.common.TraceManager;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.estimate.IgnoreMemoryTrack;
+import com.starrocks.proto.TabletStatPB;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
+import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.TransactionState;
@@ -55,8 +58,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -75,6 +81,14 @@ public class PublishVersionTask extends AgentTask {
     private TransactionType txnType;
     private final long globalTransactionId;
     private boolean isVersionOverwrite = false;
+
+    // Per-tablet stats this BE reported for partitions being loaded for the first time, keyed by
+    // physical partition id then tablet id. Filled by the thrift finishTask handler thread and read
+    // by the thread that finishes the transaction, so it is guarded by the task monitor exactly like
+    // errorTablets/errorReplicas. The handler must NOT write these straight into the transaction's
+    // PartitionCommitInfos: that races with the publish daemon snapshotting the transaction state
+    // and used to throw ConcurrentModificationException out of the daemon (issue #77595).
+    private Map<Long, Map<Long, TabletStatPB>> firstLoadTabletStats = Collections.emptyMap();
 
     public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
@@ -140,6 +154,54 @@ public class PublishVersionTask extends AgentTask {
 
     public synchronized Set<Long> getErrorReplicas() {
         return errorReplicas;
+    }
+
+    /**
+     * Record the per-tablet stats this BE reported for partitions being loaded for the first time.
+     * <p>
+     * Called from the thrift finishTask handler thread. It deliberately reads nothing but this task's
+     * own immutable partitionVersionInfos, so the handler never touches state the publish daemon owns;
+     * {@link TransactionState#applyPublishTaskTabletStats()} merges the result into the commit infos
+     * on the thread that finishes the transaction.
+     */
+    public void collectFirstLoadTabletStats(List<TTabletInfo> finishTabletInfos) {
+        if (finishTabletInfos == null || finishTabletInfos.isEmpty() || txnState == null ||
+                txnState.getSourceType() != TransactionState.LoadJobSourceType.INSERT_STREAMING) {
+            return;
+        }
+        // partitionVersionInfos carries the same versions as the PartitionCommitInfos this task was
+        // built from, so filtering here is equivalent to checking the commit info's version, and it
+        // keeps us from retaining stats for anything but a first load.
+        Set<Long> firstLoadPartitionIds = new HashSet<>();
+        for (TPartitionVersionInfo versionInfo : partitionVersionInfos) {
+            if (versionInfo.getVersion() == Partition.PARTITION_INIT_VERSION + 1) {
+                firstLoadPartitionIds.add(versionInfo.getPartition_id());
+            }
+        }
+        if (firstLoadPartitionIds.isEmpty()) {
+            return;
+        }
+
+        Map<Long, Map<Long, TabletStatPB>> stats = new HashMap<>();
+        for (TTabletInfo tabletInfo : finishTabletInfos) {
+            long partitionId = tabletInfo.getPartition_id();
+            if (!firstLoadPartitionIds.contains(partitionId)) {
+                continue;
+            }
+            TabletStatPB stat = new TabletStatPB();
+            stat.numRows = tabletInfo.getRow_count();
+            stat.dataSize = tabletInfo.getData_size();
+            stats.computeIfAbsent(partitionId, k -> new HashMap<>()).put(tabletInfo.getTablet_id(), stat);
+        }
+        setFirstLoadTabletStats(stats);
+    }
+
+    private synchronized void setFirstLoadTabletStats(Map<Long, Map<Long, TabletStatPB>> stats) {
+        this.firstLoadTabletStats = stats;
+    }
+
+    public synchronized Map<Long, Map<Long, TabletStatPB>> getFirstLoadTabletStats() {
+        return firstLoadTabletStats;
     }
 
     public synchronized void setErrorTablets(List<Long> errorTablets) {

@@ -46,23 +46,23 @@ SELECT * FROM t1 WHERE [NOT] EXISTS (SELECT a FROM t2 WHERE t1.y = t2.b);
 1. 具有 = 符号的非相关标量量化查询。例如，输出工资最高的人的信息。
 
     ```sql
-    SELECT name FROM table WHERE salary = (SELECT MAX(salary) FROM table);
+    SELECT name FROM employees WHERE salary = (SELECT MAX(salary) FROM employees);
     ```
 
 2. 具有谓词 `>`, `<` 等的不相关标量量化查询。例如，输出关于工资高于平均水平的人员的信息。
 
     ```sql
-    SELECT name FROM table WHERE salary > (SELECT AVG(salary) FROM table);
+    SELECT name FROM employees WHERE salary > (SELECT AVG(salary) FROM employees);
     ```
 
 3. 相关的标量量子查询。例如，输出每个部门的最高工资信息。
 
     ```sql
-    SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
+    SELECT name FROM employees a WHERE salary = (SELECT MAX(salary) FROM employees b WHERE b.Department= a.Department);
     ```
 
 4. 标量量子查询用作普通函数的参数。
 
     ```sql
-    SELECT name FROM table WHERE salary = abs((SELECT MAX(salary) FROM table));
+    SELECT name FROM employees WHERE salary = abs((SELECT MAX(salary) FROM employees));
     ```

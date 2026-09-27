@@ -97,10 +97,27 @@ public class SkewJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testSkewJoinWithRightSideHint() throws Exception {
+    public void testSkewJoinLeftOuterWithRightSideHintIsNotRewritten() throws Exception {
+        // The salting rewrite replicates the NON-skewed child once per salt value. Naming the skew
+        // column on t1 here puts the skewed child on the right, so the child being replicated is t0 --
+        // the preserved side of the left outer join. Every replica that matches nothing emits its own
+        // null-padded row, so a single t0 row comes back up to skew_join_rand_range + 1 times and the
+        // row count moves with rand() between runs. Verified on a cluster before this guard existed:
+        // `t2 left join [skew|t1.c_string(..)] t1 on t1.c_string = t2.c_string` returned ten different
+        // counts in ten runs (66559..67555) where the correct answer was 59040.
         String sql = "select * from t0 left join [skew|t1.v4(100)] t1 on t0.v1 = t1.v4";
         String sqlPlan = getFragmentPlan(sql);
-        assertCContains(sqlPlan, "equal join conjunct: 14: rand_col = 7: rand_col");
+        assertNotContains(sqlPlan, "rand_col");
+        assertCContains(sqlPlan, "equal join conjunct: 1: v1 = 4: v4");
+    }
+
+    @Test
+    public void testSkewJoinInnerWithRightSideHintStillRewritten() throws Exception {
+        // Same orientation, inner join: nothing is preserved, so a replica that matches nothing just
+        // drops out and the rewrite stays sound. The guard above must not reach this.
+        String sql = "select * from t0 join [skew|t1.v4(100)] t1 on t0.v1 = t1.v4";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "rand_col");
         assertCContains(sqlPlan, "equal join conjunct: 1: v1 = 4: v4");
     }
 

@@ -70,7 +70,12 @@ public class VectorIndexParams {
         },
 
         // Threshold of row number to build index file
-        INDEX_BUILD_THRESHOLD,
+        INDEX_BUILD_THRESHOLD {
+            @Override
+            public void check(String value) {
+                validateInteger(value, "INDEX_BUILD_THRESHOLD", 1);
+            }
+        },
 
         // Index build mode: "sync" (default, build during write) or "async" (build asynchronously by scheduler)
         INDEX_BUILD_MODE {
@@ -93,6 +98,7 @@ public class VectorIndexParams {
 
     public enum MetricsType {
         COSINE_SIMILARITY,
+        INNER_PRODUCT,
         L2_DISTANCE,
     }
 

@@ -59,6 +59,13 @@ public:
     // Loading the index block, one key is sampled for every sample_interval_bytes worth of data.
     Status sample_keys(std::vector<std::string>* keys, size_t sample_interval_bytes) const;
 
+    // Sample at most |max_samples| keys that fall in [seek_key, stop_key); an empty seek_key or
+    // stop_key means unbounded on that side. The samples are spread evenly over the index entries
+    // INSIDE that range rather than over the whole table, so a caller that owns only a slice of a
+    // shared table still receives the number of keys it asked for.
+    Status sample_keys_in_range(std::vector<std::string>* keys, const Slice& seek_key, const Slice& stop_key,
+                                size_t max_samples) const;
+
 private:
     struct Rep;
 

@@ -23,8 +23,8 @@ import com.starrocks.load.loadv2.LoadsHistorySyncer;
 import com.starrocks.load.rejected.RejectedRecordsTable;
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.statistic.columns.ExternalPredicateColumnsStorage;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
-import jdk.jshell.spi.ExecutionControl;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -93,7 +93,7 @@ public class TableKeeper {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
     }
 
-    public void createTable() throws ExecutionControl.UserException {
+    public void createTable() {
         SimpleExecutor.getRepoExecutor().executeDDL(createTableSql);
     }
 
@@ -204,6 +204,7 @@ public class TableKeeper {
             keeperList.add(LoadsHistorySyncer.createKeeper());
             keeperList.add(com.starrocks.lake.TabletWriteLogHistorySyncer.createKeeper());
             keeperList.add(PredicateColumnsStorage.createKeeper());
+            keeperList.add(ExternalPredicateColumnsStorage.createKeeper());
             keeperList.add(RejectedRecordsTable.createKeeper());
             // TODO: add FileListPipeRepo
             // TODO: add statistic table

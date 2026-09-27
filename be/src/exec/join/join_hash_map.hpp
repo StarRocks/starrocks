@@ -1959,4 +1959,9 @@ void JoinHashMap<LT, CT, MT>::_build_index_output(ChunkPtr* chunk) {
     (*chunk)->append_column(_probe_state->build_index_column, Chunk::HASH_JOIN_BUILD_INDEX_SLOT_ID);
 }
 
+template <LogicalType LT, JoinKeyConstructorType CT, JoinHashMapMethodType MT>
+std::unique_ptr<JoinHashMapBase> make_join_hash_map(JoinHashTableItems* table_items, HashTableProbeState* probe_state) {
+    return std::make_unique<JoinHashMap<LT, CT, MT>>(table_items, probe_state);
+}
+
 } // namespace starrocks

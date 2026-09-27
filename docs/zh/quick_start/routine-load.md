@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: Kafka Routine Load 使用存算分离存储
 displayed_sidebar: docs
 ---
@@ -738,7 +739,7 @@ Kafka 的代理连接信息。格式为 `<kafka_broker_name_or_ip>:<broker_ port
 
 [StarRocks 架构](../introduction/Architecture.md)
 
-本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/RoutineLoad.md)。
+本实验使用的示例非常简单。Routine Load 具有更多选项和功能。[了解更多](../loading/kafka/RoutineLoad.md)。
 
 [JSONPath](https://goessner.net/articles/JsonPath/)
 ```

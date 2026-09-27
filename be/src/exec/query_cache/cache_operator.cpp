@@ -22,11 +22,11 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "runtime/runtime_state.h"
-#include "runtime/service_contexts.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/storage_engine.h"
+#include "storage/storage_env.h"
 #include "storage/tablet_manager.h"
 
 namespace starrocks::query_cache {
@@ -171,10 +171,7 @@ static inline Chunks remap_chunks(const Chunks& chunks, const SlotRemapping& slo
 Status CacheOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     if (_cache_param.is_lake) {
-        const auto* query_execution_services = state->query_execution_services();
-        _lake_tablet_manager = query_execution_services != nullptr && query_execution_services->lake != nullptr
-                                       ? query_execution_services->lake->lake_tablet_manager
-                                       : nullptr;
+        _lake_tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         RETURN_IF(_lake_tablet_manager == nullptr, Status::InternalError("lake tablet manager is not initialized"));
     }
     _push_chunk_num_counter = ADD_COUNTER(_unique_metrics, "PushChunkNum", TUnit::UNIT);

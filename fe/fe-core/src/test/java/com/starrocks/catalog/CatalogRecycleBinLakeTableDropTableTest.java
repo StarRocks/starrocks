@@ -245,8 +245,6 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         Assertions.assertTrue(table.isCloudNativeTable());
-        Partition p1 = table.getPartition("p1");
-        Partition p2 = table.getPartition("p2");
 
         // Force drop the table
         dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));
@@ -573,7 +571,6 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -951,7 +948,7 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
 
         // Create a table with 2 partitions
-        Table table = createTable(connectContext, String.format(
+        createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
                         "(" +
                         "  k1 DATE," +
@@ -1210,7 +1207,6 @@ public class CatalogRecycleBinLakeTableDropTableTest extends CatalogRecycleBinLa
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         Assertions.assertTrue(table.isCloudNativeTable());
-        Partition p1 = table.getPartition("p1");
 
         // Force drop the table
         dropTable(connectContext, String.format("DROP TABLE %s.t1 FORCE", dbName));

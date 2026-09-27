@@ -26,7 +26,7 @@
 
 #include "common/thread/cpu_util.h"
 #include "common/thread/thread.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gutil/macros.h"
 
 namespace starrocks::pipeline {

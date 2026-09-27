@@ -16,6 +16,8 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableList;
+import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
@@ -87,5 +89,36 @@ public class IcebergGlueCatalogTest {
         icebergGlueCatalog.renameTable(connectContext, "db", "tb1", "tb2");
         boolean exists = icebergGlueCatalog.tableExists(connectContext, "db", "tbl2");
         Assertions.assertTrue(exists);
+    }
+
+    @Test
+    public void testCreateDBWithInvalidLocationURI(@Mocked GlueCatalog glueCatalog) {
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+
+        // An unsupported scheme causes FileSystem.get() to throw, which should surface via fromExternalException
+        Map<String, String> dbProperties = new HashMap<>();
+        dbProperties.put("location", "unsupportedscheme://bucket/path");
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Invalid location URI: unsupportedscheme://bucket/path",
+                () -> icebergGlueCatalog.createDB(connectContext, "testdb", dbProperties));
+    }
+
+    @Test
+    public void testDropDBWhenGetDBThrows(@Mocked GlueCatalog glueCatalog) {
+        new Expectations() {
+            {
+                glueCatalog.loadNamespaceMetadata((Namespace) any);
+                result = new RuntimeException("Glue access denied");
+            }
+        };
+        Map<String, String> icebergProperties = new HashMap<>();
+        IcebergGlueCatalog icebergGlueCatalog = new IcebergGlueCatalog(
+                "glue_native_catalog", new Configuration(), icebergProperties);
+
+        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
+                "Failed to access database testdb",
+                () -> icebergGlueCatalog.dropDB(connectContext, "testdb"));
     }
 }

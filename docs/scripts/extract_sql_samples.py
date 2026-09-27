@@ -15,11 +15,15 @@
 # limitations under the License.
 
 """
-Audit SQL code samples in the StarRocks English documentation.
+Audit SQL code samples in the StarRocks documentation.
 
-Walks docs/en/, finds all ```sql fenced blocks, extracts each sample with its
+Walks a docs tree, finds all ```sql fenced blocks, extracts each sample with its
 source file and line number, categorizes by SQL statement type, and flags
 whether the sample looks runnable (no placeholder patterns) or illustrative.
+
+Language-agnostic: point --docs-root at docs/en, docs/zh or docs/ja. Each sample
+carries two hashes — `fingerprint` (verbatim) and `skeleton` (comments stripped),
+the latter pairing the same example across languages despite translated comments.
 
 Usage:
   python3 docs/scripts/extract_sql_samples.py
@@ -34,6 +38,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import io
 import json
 import re
@@ -43,6 +48,59 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DOCS_ROOT = REPO_ROOT / "docs/en"
+
+
+def derive_repo_root(docs_root: Path) -> Path:
+    """Repo root used to compute display paths, derived from docs_root rather than
+    the script location — so the tool can audit a *different* checkout's docs
+    (e.g. a release-branch checkout). Walk up to the first ancestor containing
+    docs/en; fall back to the script-anchored REPO_ROOT."""
+    docs_root = Path(docs_root).resolve()
+    for parent in (docs_root, *docs_root.parents):
+        if (parent / "docs" / "en").is_dir():
+            return parent
+    return REPO_ROOT
+
+
+def sample_fingerprint(body: str) -> str:
+    """Stable content hash of a SQL sample, used to suppress known / won't-fix
+    examples by *content* rather than by line number (which shifts whenever a
+    block moves). Normalization tolerates trivial reformatting — trailing
+    whitespace and runs of spaces/tabs are collapsed — but keeps line breaks and
+    case (case matters inside string literals). So reindenting an example keeps
+    the same fingerprint, while changing a token changes it, and a meaningfully
+    edited example re-surfaces for re-review."""
+    lines = [re.sub(r"[ \t]+", " ", ln.strip()) for ln in body.strip().splitlines()]
+    normalized = "\n".join(lines)
+    return "sha256:" + hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+# Optimizer hints (/*+ … */) are part of the statement's meaning — SELECT_CTE.md's
+# `/*+ SET_VAR(enable_recursive_cte=true) */` IS the example — so they survive
+# skeleton normalization. Only genuine prose comments are stripped.
+_BLOCK_COMMENT = re.compile(r"/\*(?!\+).*?\*/", re.S)
+_LINE_COMMENT = re.compile(r"(?m)--[^\n]*")
+_HASH_COMMENT = re.compile(r"(?m)^\s*#[^\n]*")
+
+
+def skeleton_fingerprint(body: str) -> str:
+    """Language-independent hash of a SQL sample: the same statement carrying a
+    translated `-- comment` in docs/en, docs/zh and docs/ja collapses to ONE key.
+
+    `sample_fingerprint` hashes the sample verbatim, so a translated comment makes
+    the Chinese copy of an identical example a different sample — meaning a single
+    illustrative example would need one suppression entry per language. This hash
+    strips prose comments (but NOT `/*+ hints */`), collapses all whitespace and
+    lowercases, so one entry covers every language.
+
+    Deliberately lossier than `sample_fingerprint`: use it for *suppression
+    matching* and cross-language pairing, never as the sole identity of an example
+    being edited. Both keys are accepted by the suppression matcher."""
+    b = _BLOCK_COMMENT.sub(" ", body)
+    b = _LINE_COMMENT.sub(" ", b)
+    b = _HASH_COMMENT.sub(" ", b)
+    b = re.sub(r"\s+", " ", b).strip().lower()
+    return "skel256:" + hashlib.sha256(b.encode("utf-8")).hexdigest()
 
 # ── SQL category detection ───────────────────────────────────────────────────
 
@@ -96,6 +154,10 @@ class SqlSample:
     category: str     # DDL | DML | SHOW_ADMIN | SET | SELECT | OTHER
     runnable: bool    # True if no placeholder patterns detected
     body: str         # raw SQL text
+    fingerprint: str = ""   # content hash (sample_fingerprint); stable suppression key
+    skeleton: str = ""      # comment-stripped hash (skeleton_fingerprint); pairs
+                            # the en/zh/ja copies of one example and lets a single
+                            # suppression entry cover all three languages
 
 
 # ── Extraction ───────────────────────────────────────────────────────────────
@@ -104,10 +166,16 @@ _FENCE_OPEN_RE = re.compile(r"^```\s*sql\s*$", re.IGNORECASE)
 _FENCE_CLOSE_RE = re.compile(r"^```\s*$")
 
 
-def extract_samples(docs_root: Path) -> list[SqlSample]:
+def extract_samples(docs_root: Path, repo_root: Path | None = None) -> list[SqlSample]:
+    docs_root = Path(docs_root).resolve()
+    repo_root = (Path(repo_root).resolve() if repo_root is not None
+                 else derive_repo_root(docs_root))
     samples: list[SqlSample] = []
     for path in sorted(docs_root.rglob("*.md")) + sorted(docs_root.rglob("*.mdx")):
-        rel = str(path.relative_to(REPO_ROOT))
+        try:
+            rel = str(path.resolve().relative_to(repo_root))
+        except ValueError:
+            rel = str(path)          # foreign/oddly-nested path — never crash
         lines = path.read_text(errors="replace").splitlines()
         n = len(lines)
         i = 0
@@ -128,6 +196,8 @@ def extract_samples(docs_root: Path) -> list[SqlSample]:
                             category=_categorize(body),
                             runnable=_is_runnable(body),
                             body=body,
+                            fingerprint=sample_fingerprint(body),
+                            skeleton=skeleton_fingerprint(body),
                         )
                     )
             i += 1
@@ -204,7 +274,8 @@ def _fmt_csv(samples: list[SqlSample]) -> str:
     buf = io.StringIO()
     writer = csv.DictWriter(
         buf,
-        fieldnames=["file", "line_start", "category", "runnable", "body"],
+        fieldnames=["file", "line_start", "category", "runnable", "body",
+                    "fingerprint", "skeleton"],
         lineterminator="\n",
     )
     writer.writeheader()

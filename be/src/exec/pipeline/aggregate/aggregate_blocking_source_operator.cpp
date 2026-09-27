@@ -16,7 +16,7 @@
 
 #include <variant>
 
-#include "exec/exec_node.h"
+#include "exec_primitive/exec_node.h"
 
 namespace starrocks::pipeline {
 

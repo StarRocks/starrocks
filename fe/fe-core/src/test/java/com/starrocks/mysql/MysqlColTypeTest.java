@@ -17,10 +17,35 @@
 
 package com.starrocks.mysql;
 
+import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.VarbinaryType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
+
 public class MysqlColTypeTest {
+
+    @Test
+    public void testGeographyUsesVarbinaryMetadata() {
+        GeoTypeDescriptor descriptor = new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                "OGC:CRS84", null);
+        ScalarType geography = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY, descriptor);
+        Assertions.assertEquals(MysqlColType.MYSQL_TYPE_BLOB, MysqlCodec.toMysqlType(PrimitiveType.GEOGRAPHY));
+        Assertions.assertEquals(MysqlCodec.CHARSET_BINARY, MysqlCodec.getMysqlResultSetFieldCharsetIndex(geography));
+        ByteArrayOutputStream expected = new ByteArrayOutputStream();
+        ByteArrayOutputStream actual = new ByteArrayOutputStream();
+        MysqlCodec.writeField(expected, "db", "table", "value", VarbinaryType.VARBINARY, false, null);
+        MysqlCodec.writeField(actual, "db", "table", "value", geography, false, null);
+        Assertions.assertArrayEquals(expected.toByteArray(), actual.toByteArray());
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, geography.getPrimitiveType());
+        // This output change does not enable GEOMETRY or change ordinary string metadata.
+        Assertions.assertEquals(MysqlColType.MYSQL_TYPE_STRING, MysqlCodec.toMysqlType(PrimitiveType.GEOMETRY));
+        Assertions.assertEquals(MysqlColType.MYSQL_TYPE_VAR_STRING, MysqlCodec.toMysqlType(PrimitiveType.VARCHAR));
+    }
 
     @Test
     public void testGetCode() {

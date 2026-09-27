@@ -12,17 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/primary_key_encoder.h"
+#include "storage_primitive/primary_key_encoder.h"
 
 #include <gtest/gtest.h>
 
 #include <limits>
 #include <memory>
 
+#include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
+#include "column/fixed_length_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
+#include "common/config_local_io_fwd.h"
 #include "gutil/stringprintf.h"
 #include "storage/chunk_helper.h"
 #include "types/date_value.h"
@@ -45,6 +49,19 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
         sort_key_idxes[i] = i;
     }
     return std::make_unique<Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
+}
+
+static BinaryColumn::MutablePtr make_unrepresentable_binary_column() {
+    const bool old_zero_copy = config::enable_zero_copy_from_page_cache;
+    config::enable_zero_copy_from_page_cache = true;
+    DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
+
+    auto owner = std::make_shared<std::string>("x");
+    ContainerResource resource(owner, owner->data(), Column::MAX_CAPACITY_LIMIT);
+    BinaryColumn::Offsets offsets;
+    offsets.emplace_back(0);
+    offsets.emplace_back(Column::MAX_CAPACITY_LIMIT);
+    return BinaryColumn::create(std::move(resource), std::move(offsets));
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
@@ -135,6 +152,62 @@ TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
         ASSERT_EQ(pchunk->get_column_by_index(3)->get(i).get<uint8>(),
                   dchunk->get_column_by_index(3)->get(i).get<uint8>());
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeCompositeWithFastFlag) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT});
+    MutableColumnPtr dest;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = ChunkFactory::new_chunk(*sc, 1);
+    Datum tmp;
+    tmp.set_int32(42);
+    pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_slice("plain-string");
+    pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_int16(7);
+    pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
+
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, 1, dest.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+
+    std::vector<uint8_t> value_encode_flags(1, PRIMARY_KEY_DECODE_FAST);
+    auto dchunk = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, 1, dchunk.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                          &value_encode_flags)
+                        .ok());
+
+    ASSERT_EQ(1, dchunk->num_rows());
+    ASSERT_EQ(42, dchunk->get_column_by_index(0)->get(0).get_int32());
+    ASSERT_EQ(Slice("plain-string"), dchunk->get_column_by_index(1)->get(0).get_slice());
+    ASSERT_EQ(7, dchunk->get_column_by_index(2)->get(0).get_int16());
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeCompositeWithSkipFlag) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT});
+    MutableColumnPtr dest;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+
+    auto pchunk = ChunkFactory::new_chunk(*sc, 1);
+    Datum tmp;
+    tmp.set_int32(42);
+    pchunk->columns()[0]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_slice("plain-string");
+    pchunk->columns()[1]->as_mutable_ptr()->append_datum(tmp);
+    tmp.set_int16(7);
+    pchunk->columns()[2]->as_mutable_ptr()->append_datum(tmp);
+
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, 1, dest.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+
+    std::vector<uint8_t> value_encode_flags(1, PRIMARY_KEY_DECODE_SKIP);
+    auto dchunk = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest, 0, 1, dchunk.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1,
+                                          &value_encode_flags)
+                        .ok());
+
+    ASSERT_EQ(1, dchunk->num_rows());
+    ASSERT_EQ(0, dchunk->get_column_by_index(0)->get(0).get_int32());
+    ASSERT_EQ(0, dchunk->get_column_by_index(1)->get(0).get_slice().size);
+    ASSERT_EQ(0, dchunk->get_column_by_index(2)->get(0).get_int16());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeCompositeLimit) {
@@ -239,6 +312,46 @@ TEST(PrimaryKeyEncoderTest, testSingleIntV2EncodingRoundTripAndColumnType) {
         ASSERT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
                   decoded->get_column_by_index(0)->get(i).get_int32());
     }
+}
+
+TEST(PrimaryKeyEncoderTest, testDeleteFileBinaryColumnSizeCheck) {
+    std::vector<Slice> strings{{"a"}, {"bb"}, {"ccc"}};
+
+    auto binary = BinaryColumn::create();
+    binary->append_strings(strings.data(), strings.size());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*binary).ok());
+
+    auto sticky_large = BinaryColumn::create();
+    sticky_large->append_strings(strings.data(), strings.size());
+    AdaptiveOffsets::Large large_offsets;
+    large_offsets.resize(sticky_large->get_offset().size());
+    for (size_t i = 0; i < sticky_large->get_offset().size(); ++i) {
+        large_offsets[i] = sticky_large->get_offset()[i];
+    }
+    sticky_large->get_offset().set_large_buffer(std::move(large_offsets));
+    ASSERT_TRUE(sticky_large->get_offset().is_large());
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*sticky_large).ok());
+
+    auto nullable_data = BinaryColumn::create();
+    nullable_data->append_strings(strings.data(), strings.size());
+    auto nullable = NullableColumn::create(std::move(nullable_data), NullColumn::create(strings.size(), 0));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*nullable).ok());
+
+    auto large_binary = LargeBinaryColumn::create();
+    large_binary->append_strings(strings.data(), strings.size());
+    ASSERT_FALSE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*large_binary).ok());
+
+    auto overlimit_binary = make_unrepresentable_binary_column();
+    ASSERT_FALSE(overlimit_binary->is_payload_size_representable().ok());
+    auto overlimit_status = PrimaryKeyEncoder::check_delete_file_binary_column_size(*overlimit_binary);
+    ASSERT_FALSE(overlimit_status.ok());
+    ASSERT_TRUE(overlimit_status.is_capacity_limit_exceeded()) << overlimit_status;
+    ASSERT_NE(std::string::npos, std::string(overlimit_status.message()).find("byte payload size")) << overlimit_status;
+
+    auto fixed = Int32Column::create();
+    int32_t value = 1;
+    fixed->append_numbers(&value, sizeof(value));
+    ASSERT_TRUE(PrimaryKeyEncoder::check_delete_file_binary_column_size(*fixed).ok());
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodedTypeAndFixedSizeByEncodingType) {
@@ -603,6 +716,328 @@ TEST(PrimaryKeyEncoderTest, testV2EncodeExceedLimitForComposite) {
                                                         PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
     EXPECT_TRUE(PrimaryKeyEncoder::encode_exceed_limit(*sc, *pchunk, 0, n, 10,
                                                        PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2));
+}
+
+TEST(PrimaryKeyEncoderTest, testSimdSliceEncodingBoundaries) {
+    const std::vector<size_t> test_lengths = {0,  1,  2,  7,  8,  9,  15,  16,  17,  23,  24,  31, 32,
+                                              33, 47, 48, 63, 64, 65, 127, 128, 129, 255, 256, 512};
+    for (size_t len : test_lengths) {
+        std::string original(len, 'a');
+        for (size_t i = 0; i < len; ++i) {
+            original[i] = static_cast<char>('a' + (i % 26));
+        }
+        Slice src(original);
+
+        // Test is_last = false (exercises SIMD 16-byte and 8-byte chunk loop + rollback + terminator)
+        std::string encoded;
+        encoding_utils::encode_slice(src, &encoded, false);
+        EXPECT_GE(encoded.size(), len + 2);
+        EXPECT_EQ(encoded[encoded.size() - 2], '\0');
+        EXPECT_EQ(encoded[encoded.size() - 1], '\0');
+
+        // Test normal decode (exercises memchr fast path)
+        Slice enc_slice(encoded);
+        std::string decoded;
+        Status st = encoding_utils::decode_slice(&enc_slice, &decoded, nullptr, false, false);
+        ASSERT_TRUE(st.ok()) << "Failed for length " << len;
+        EXPECT_EQ(decoded, original) << "Mismatch for length " << len;
+        EXPECT_EQ(enc_slice.size, 0);
+
+        // Test fast decode
+        Slice enc_slice_fast(encoded);
+        Slice decoded_fast;
+        st = encoding_utils::decode_slice(&enc_slice_fast, nullptr, &decoded_fast, false, true);
+        ASSERT_TRUE(st.ok()) << "Fast decode failed for length " << len;
+        EXPECT_EQ(decoded_fast.to_string(), original) << "Fast decode mismatch for length " << len;
+        EXPECT_EQ(enc_slice_fast.size, 0);
+
+        // Test is_last = true (terminal column: no escaping, no delimiter appended)
+        // Encoding is a plain byte copy; decoding consumes all of src.
+        std::string encoded_last;
+        encoding_utils::encode_slice(src, &encoded_last, true);
+        EXPECT_EQ(encoded_last.size(), len) << "is_last=true encode size mismatch at len=" << len;
+        EXPECT_EQ(encoded_last, original) << "is_last=true encode content mismatch at len=" << len;
+
+        // Normal decode for is_last = true
+        Slice enc_last_slice(encoded_last);
+        std::string decoded_last;
+        Status st_last = encoding_utils::decode_slice(&enc_last_slice, &decoded_last, nullptr, true, false);
+        ASSERT_TRUE(st_last.ok()) << "is_last=true decode failed at len=" << len;
+        EXPECT_EQ(decoded_last, original) << "is_last=true decode mismatch at len=" << len;
+        EXPECT_EQ(enc_last_slice.size, 0) << "is_last=true: src not fully consumed at len=" << len;
+
+        // Fast decode for is_last = true
+        Slice enc_last_fast(encoded_last);
+        Slice decoded_last_fast;
+        Status st_last_fast = encoding_utils::decode_slice(&enc_last_fast, nullptr, &decoded_last_fast, true, true);
+        ASSERT_TRUE(st_last_fast.ok()) << "is_last=true fast decode failed at len=" << len;
+        EXPECT_EQ(decoded_last_fast.to_string(), original) << "is_last=true fast decode mismatch at len=" << len;
+        EXPECT_EQ(enc_last_fast.size, 0) << "is_last=true fast: src not fully consumed at len=" << len;
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testSimdSliceEncodingNullEscapes) {
+    // Test various positions of '\0' across SIMD 8-byte and 16-byte chunk boundaries
+    const size_t base_len = 64;
+    const std::vector<std::vector<size_t>> null_positions_list = {
+            {0},                       // at first byte
+            {3},                       // middle of first 8 bytes
+            {7},                       // 8-byte boundary
+            {8},                       // start of second 8 bytes
+            {15},                      // 16-byte boundary
+            {16},                      // start of second 16-byte chunk
+            {31},                      // 32-byte boundary
+            {63},                      // last byte
+            {0, 7, 8, 15, 16, 31, 63}, // multiple boundaries
+            {10, 11, 12},              // consecutive nulls
+    };
+
+    for (const auto& null_positions : null_positions_list) {
+        std::string original(base_len, 'x');
+        for (size_t pos : null_positions) {
+            original[pos] = '\0';
+        }
+        Slice src(original);
+
+        std::string encoded;
+        encoding_utils::encode_slice(src, &encoded, false);
+
+        // Decoding with nulls exercises the escaped scalar fallback in decode_slice
+        Slice enc_slice(encoded);
+        std::string decoded;
+        Status st = encoding_utils::decode_slice(&enc_slice, &decoded, nullptr, false, false);
+        ASSERT_TRUE(st.ok());
+        EXPECT_EQ(decoded, original);
+        EXPECT_EQ(enc_slice.size, 0);
+    }
+
+    // Fundamental Invariant: the encoding MUST preserve lexicographical sort order.
+    // For any pair of raw strings key_a < key_b, their encoded forms must satisfy
+    // encoded(key_a) < encoded(key_b) — otherwise the primary-key index returns
+    // wrong results for range scans.
+
+    // Case 1: embedded null < next byte value.
+    // Raw: "abc\0def" < "abc\1def"  =>  encoded forms must preserve this order.
+    {
+        const std::string key_a = {'a', 'b', 'c', '\0', 'd', 'e', 'f'};
+        const std::string key_b = {'a', 'b', 'c', '\1', 'd', 'e', 'f'};
+        ASSERT_LT(key_a, key_b) << "precondition: raw ordering";
+        std::string enc_a, enc_b;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_b), &enc_b, false);
+        EXPECT_LT(enc_a, enc_b) << "sort order violated: null vs \\x01";
+    }
+
+    // Case 2: null-escaped key < higher ASCII value.
+    {
+        const std::string key_a = {'a', 'b', 'c', '\0', 'd', 'e', 'f'};
+        const std::string key_c = {'a', 'b', 'c', '\x02', 'd', 'e', 'f'};
+        ASSERT_LT(key_a, key_c) << "precondition: raw ordering";
+        std::string enc_a, enc_c;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_c), &enc_c, false);
+        EXPECT_LT(enc_a, enc_c) << "sort order violated: null vs \\x02";
+    }
+
+    // Case 3: shared prefix, shorter < longer.
+    {
+        const std::string key_a = "abcdef";
+        const std::string key_b = "abcdefg";
+        ASSERT_LT(key_a, key_b) << "precondition: raw ordering";
+        std::string enc_a, enc_b;
+        encoding_utils::encode_slice(Slice(key_a), &enc_a, false);
+        encoding_utils::encode_slice(Slice(key_b), &enc_b, false);
+        EXPECT_LT(enc_a, enc_b) << "sort order violated: prefix ordering";
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeSliceMissingSeparatorReturnsError) {
+    // Regression: DCHECK(separator) was fatal in ASAN before the fix.
+    // Verify decode_slice returns Status::InvalidArgument for corrupt/truncated
+    // inputs instead of aborting, so callers like tablet_splitter can fall back.
+
+    // fast_decode=false path uses memmem searching for "\0\0".
+    // Fails (returns InvalidArgument) when no "\0\0" exists in the input.
+
+    // Case A: clean ASCII, no null bytes at all — no "\0\0", no "\0"
+    {
+        std::string corrupt = "hello_no_terminator";
+        Slice s(corrupt);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0\\0 separator (fast_decode=false, no nulls)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case B: single \0 but no \0\0 — memmem still finds no "\0\0"
+    {
+        const std::string corrupt = {'h', 'e', 'l', '\0', 'l', 'o'};
+        Slice s(corrupt);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0\\0 separator (fast_decode=false, single null)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // fast_decode=true path uses memchr searching for a single '\0'.
+    // Fails (returns InvalidArgument) only when there is no '\0' at all.
+
+    // Case C: no null bytes — memchr finds nothing
+    {
+        std::string corrupt = "hello_no_terminator";
+        Slice s(corrupt);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_FALSE(st.ok()) << "Expected error for missing \\0 separator (fast_decode=true, no nulls)";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case D: single '\0' followed by non-null character — fast_decode=true must fail
+    // because the required '\0\0' delimiter is missing.
+    {
+        const std::string invalid_for_fast = {'h', 'e', 'l', '\0', 'l', 'o'};
+        Slice s(invalid_for_fast);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_FALSE(st.ok()) << "fast_decode=true must fail when second \\0 is missing";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case E: truncated slice ending with a single '\0' — fast_decode=true must return
+    // InvalidArgument without calling remove_prefix(len + 2) which would assert/underflow.
+    {
+        const std::string truncated = {'h', 'e', 'l', '\0'};
+        Slice s(truncated);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_FALSE(st.ok()) << "fast_decode=true must fail on truncated single \\0";
+        EXPECT_TRUE(st.is_invalid_argument()) << st.to_string();
+    }
+
+    // Case F: valid '\0\0' delimiter with trailing bytes — fast_decode=true succeeds,
+    // points dest_fast to payload, and advances src past the delimiter.
+    {
+        const std::string valid = {'h', 'e', 'l', '\0', '\0', 'm', 'o', 'r', 'e'};
+        Slice s(valid);
+        Slice dest_fast;
+        Status st = encoding_utils::decode_slice(&s, nullptr, &dest_fast, /*is_last=*/false, /*fast_decode=*/true);
+        EXPECT_TRUE(st.ok()) << "fast_decode=true should succeed with \\0\\0: " << st.to_string();
+        EXPECT_EQ(dest_fast.to_string(), "hel");
+        EXPECT_EQ(s.to_string(), "more");
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testDecodeSliceEmbeddedNullUnescapeCorrectness) {
+    // Verify decode_slice correctly unescapes embedded \0\1 sequences
+    // in the non-fast-decode path. This exercises the scalar unescape loop
+    // which is the target of the reserve() optimization.
+
+    // Case A: Single embedded null (\0\1) in middle of string
+    {
+        // Encoded: "he" + \0\1 + "lo" + \0\0 (delimiter)
+        const std::string encoded = {'h', 'e', '\0', '\1', 'l', 'o', '\0', '\0'};
+        Slice s(encoded);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Unescaped: "he" + \0 + "lo" (5 bytes)
+        const std::string expected = {'h', 'e', '\0', 'l', 'o'};
+        EXPECT_EQ(dest, expected);
+        EXPECT_TRUE(s.empty()) << "src should be fully consumed past delimiter";
+    }
+
+    // Case B: Multiple embedded nulls
+    {
+        // Encoded: \0\1 + "a" + \0\1 + "b" + \0\1 + \0\0 (delimiter)
+        const std::string encoded = {'\0', '\1', 'a', '\0', '\1', 'b', '\0', '\1', '\0', '\0'};
+        Slice s(encoded);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Unescaped: \0 + "a" + \0 + "b" + \0 (5 bytes)
+        const std::string expected = {'\0', 'a', '\0', 'b', '\0'};
+        EXPECT_EQ(dest, expected);
+    }
+
+    // Case C: Large string with many embedded nulls (exceeds SSO threshold)
+    // 30 pairs of \0\1 = 60 encoded bytes + \0\0 delimiter
+    {
+        std::string encoded;
+        for (int i = 0; i < 30; i++) {
+            encoded.push_back('\0');
+            encoded.push_back('\1');
+        }
+        encoded.push_back('\0');
+        encoded.push_back('\0');
+        Slice s(encoded);
+        std::string dest;
+        Status st = encoding_utils::decode_slice(&s, &dest, nullptr, /*is_last=*/false, /*fast_decode=*/false);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+        // Unescaped: 30 null bytes
+        std::string expected(30, '\0');
+        EXPECT_EQ(dest, expected);
+        EXPECT_EQ(dest.size(), 30);
+    }
+}
+
+TEST(PrimaryKeyEncoderTest, testCompositeWithMiddleVarcharBatch) {
+    auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_BIGINT});
+    MutableColumnPtr dest_v1;
+    MutableColumnPtr dest_v2;
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest_v1, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1).ok());
+    ASSERT_TRUE(PrimaryKeyEncoder::create_column(*sc, &dest_v2, PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2).ok());
+
+    const int num_rows = 128;
+    auto pchunk = ChunkFactory::new_chunk(*sc, num_rows);
+
+    for (int i = 0; i < num_rows; ++i) {
+        Datum d0;
+        d0.set_int32(i * 100);
+        pchunk->columns()[0]->as_mutable_ptr()->append_datum(d0);
+
+        // Generate strings of varying lengths spanning 0 to 64 bytes
+        std::string str(i % 65, 'A' + (i % 26));
+        if (i % 7 == 0 && !str.empty()) {
+            str[str.size() / 2] = '\0'; // insert null byte
+        }
+        Datum d1;
+        d1.set_slice(Slice(str));
+        pchunk->columns()[1]->as_mutable_ptr()->append_datum(d1);
+
+        Datum d2;
+        d2.set_int64(i * 1000000LL);
+        pchunk->columns()[2]->as_mutable_ptr()->append_datum(d2);
+    }
+
+    // Test V1 composite encoding
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, num_rows, dest_v1.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1);
+    auto decoded_v1 = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest_v1, 0, num_rows, decoded_v1.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V1)
+                        .ok());
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
+                  decoded_v1->get_column_by_index(0)->get(i).get_int32());
+        EXPECT_EQ(pchunk->get_column_by_index(1)->get(i).get_slice(),
+                  decoded_v1->get_column_by_index(1)->get(i).get_slice());
+        EXPECT_EQ(pchunk->get_column_by_index(2)->get(i).get_int64(),
+                  decoded_v1->get_column_by_index(2)->get(i).get_int64());
+    }
+
+    // Test V2 composite encoding
+    PrimaryKeyEncoder::encode(*sc, *pchunk, 0, num_rows, dest_v2.get(), PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2);
+    auto decoded_v2 = pchunk->clone_empty_with_schema();
+    ASSERT_TRUE(PrimaryKeyEncoder::decode(*sc, *dest_v2, 0, num_rows, decoded_v2.get(),
+                                          PrimaryKeyEncodingType::PK_ENCODING_TYPE_V2)
+                        .ok());
+    for (int i = 0; i < num_rows; ++i) {
+        EXPECT_EQ(pchunk->get_column_by_index(0)->get(i).get_int32(),
+                  decoded_v2->get_column_by_index(0)->get(i).get_int32());
+        EXPECT_EQ(pchunk->get_column_by_index(1)->get(i).get_slice(),
+                  decoded_v2->get_column_by_index(1)->get(i).get_slice());
+        EXPECT_EQ(pchunk->get_column_by_index(2)->get(i).get_int64(),
+                  decoded_v2->get_column_by_index(2)->get(i).get_int64());
+    }
 }
 
 } // namespace starrocks

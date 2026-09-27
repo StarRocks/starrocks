@@ -1,0 +1,7 @@
+position: 20
+label: 'BE Configuration'
+collapsible: true
+collapsed: true
+link:
+  id: BE_parameters
+  type: doc

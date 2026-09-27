@@ -1,0 +1,65 @@
+-- name: test_query_cache_topn_filter_stale_entry
+CREATE TABLE days (d int) DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE ks (k int) DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO days SELECT generate_series FROM TABLE(generate_series(0, 30));
+-- result:
+-- !result
+INSERT INTO ks SELECT generate_series FROM TABLE(generate_series(1, 40));
+-- result:
+-- !result
+CREATE TABLE t1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 SELECT date_add('2022-01-01', interval d day), if(d < 5, k, k + 99), 1 FROM days, ks;
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;
+-- result:
+10	50	5	5
+-- !result
+alter table t1 drop partition p20220101;
+-- result:
+-- !result
+alter table t1 drop partition p20220102;
+-- result:
+-- !result
+alter table t1 drop partition p20220103;
+-- result:
+-- !result
+alter table t1 drop partition p20220104;
+-- result:
+-- !result
+alter table t1 drop partition p20220105;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;
+-- result:
+10	260	26	26
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 order by c1 limit 10) x;
+-- result:
+10	260	26	26
+-- !result

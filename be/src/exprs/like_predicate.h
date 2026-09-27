@@ -17,13 +17,17 @@
 #include <hs/hs.h>
 #include <re2/re2.h>
 
+#include <atomic>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 #include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "exprs/builtin_functions.h"
+#include "exprs/function_context.h"
 #include "exprs/function_helper.h"
 
 namespace starrocks {
@@ -149,7 +153,7 @@ private:
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
     template <bool fullMatch>
-    static std::string convert_like_pattern(FunctionContext* context, const Slice& pattern);
+    static std::string convert_like_pattern(FunctionContext* context, const Slice& pattern, char escape_char);
 
     static void remove_escape_character(std::string* search_string);
 
@@ -163,11 +167,34 @@ private:
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     struct LikePredicateState;
-    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, FunctionContext*,
-                                             const Slice& slice);
+    // Compile the (constant) pattern into a shared Hyperscan database on `state`. Returns
+    // false (falling back to RE2) if compilation fails or no scratch can be allocated for it.
+    static bool hs_compile_database(const std::string&, LikePredicateState*, FunctionContext*, const Slice& slice);
+    // Analyze the constant pattern and populate the compile-once artifacts on `state` (function
+    // selection, search string, or a compiled Hyperscan/RE2 pattern). Shared by the
+    // FRAGMENT_LOCAL prepare path.
+    static Status setup_like_state(FunctionContext* context, LikePredicateState* state);
+    static Status setup_regex_state(FunctionContext* context, LikePredicateState* state);
+    // The compile-once LIKE/regex state read by eval: the shared FRAGMENT_LOCAL state, with a
+    // fallback to the THREAD_LOCAL state for unit tests that prepare only a single scope (the
+    // normal open flow always prepares FRAGMENT_LOCAL).
+    static LikePredicateState* shared_state(FunctionContext* context);
     template <bool full_match>
     static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
                                                 FunctionContext* context, const Slice& slice);
+    // Per-execution-thread Hyperscan scratch, obtained from the shared FunctionContext via
+    // get_or_create_thread_state(). hs_scan requires one scratch per concurrent caller; the
+    // compiled database is shared (LikePredicateState::database) while each worker owns its own
+    // scratch, so no per-thread FunctionContext clone is needed to hold it.
+    struct LikeThreadState : FunctionThreadState {
+        hs_scratch_t* scratch = nullptr;
+        ~LikeThreadState() override {
+            if (scratch != nullptr) {
+                hs_free_scratch(scratch);
+            }
+        }
+    };
+
     struct LikePredicateState {
         char escape_char{'\\'};
 
@@ -192,25 +219,17 @@ private:
 
         ColumnPtr _search_string_column;
 
-        // a pointer to the generated database that responsible for parsed expression.
-        hs_database_t* database = nullptr;
+        // The Hyperscan database compiled once from the (constant) pattern in the FRAGMENT_LOCAL
+        // prepare and shared across all worker threads (shared_ptr with hs_free_database as the
+        // deleter). Per-thread scratch is held separately via FunctionContext thread-state
+        // (LikeThreadState), so a pattern is compiled once per fragment, not once per thread.
+        std::shared_ptr<hs_database_t> database;
         // a type containing error details that is returned by the compile calls on failure.
         hs_compile_error_t* compile_err = nullptr;
-        // A Hyperscan scratch space, Used to call hs_scan,
-        // one scratch space per thread, or concurrent caller, is required
-        hs_scratch_t* scratch = nullptr;
 
         LikePredicateState() = default;
-
-        ~LikePredicateState() {
-            if (scratch != nullptr) {
-                hs_free_scratch(scratch);
-            }
-
-            if (database != nullptr) {
-                hs_free_database(database);
-            }
-        }
+        // No custom destructor needed: `database` is released by its shared_ptr deleter
+        // (hs_free_database) and every other member is self-owning.
 
         void set_search_string(const std::string& search_string_arg) {
             search_string = search_string_arg;

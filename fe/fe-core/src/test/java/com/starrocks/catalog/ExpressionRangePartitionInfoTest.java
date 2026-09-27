@@ -701,9 +701,8 @@ public class ExpressionRangePartitionInfoTest {
                 ColumnIdExpr.create(new FunctionCallExpr("abc", Lists.newArrayList(new SlotRef(
                         new TableName("test", "game_log2"), "cloud_id"))))));
         // serialize
-        String json = GsonUtils.GSON.toJson(olapTable);
+        GsonUtils.GSON.toJson(olapTable);
         // deserialize
-        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
     }
 
     @Test

@@ -165,7 +165,7 @@ Querying organizational hierarchy is one of the most common use cases for Recurs
         FROM employees e
         INNER JOIN org_hierarchy oh ON e.manager_id = oh.employee_id
     )
-    SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+    SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=10) */
         employee_id,
         name,
         title,
@@ -210,7 +210,7 @@ cte2 AS (
     UNION ALL
     SELECT n + 1 FROM cte2 WHERE n < 15
 )
-SELECT /*+ SET_VAR(enable_recursive_cte=true) */
+SELECT /*+ SET_VAR(enable_recursive_cte=true, recursive_cte_max_depth=10) */
     'cte1' AS source,
     n
 FROM cte1

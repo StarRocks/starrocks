@@ -17,7 +17,7 @@
 #include <cstdint>
 
 #include "common/status.h"
-#include "storage/olap_define.h"
+#include "common/storage_define.h"
 
 namespace starrocks {
 

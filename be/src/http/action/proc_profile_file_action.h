@@ -17,7 +17,7 @@
 #include <string>
 
 #include "common/status.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 

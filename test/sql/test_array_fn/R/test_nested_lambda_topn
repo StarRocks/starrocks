@@ -1,0 +1,36 @@
+-- name: test_nested_lambda_topn
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 limit 1;
+-- result:
+[[3,4]]
+-- !result
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) desc limit 7, 100;
+-- result:
+-- !result
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 asc limit 100 offset 7;
+-- result:
+-- !result
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]);
+-- result:
+[[3,4]]
+-- !result
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1;
+-- result:
+[[3,4]]
+-- !result
+select array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) limit 1;
+-- result:
+[[3,4]]
+-- !result
+select array_map(a -> array_map(b -> b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) order by 1 limit 1;
+-- result:
+[[1,2]]
+-- !result
+select array_map(a -> a + 1, ARRAY<TINYINT>[1,2]) order by 1 limit 1;
+-- result:
+[2,3]
+-- !result
+select x, array_map(a -> array_map(b -> array_length(a) + b, a), ARRAY<ARRAY<TINYINT>>[ARRAY<TINYINT>[1,2]]) from (select 3 as x union all select 1 union all select 2) t order by x desc limit 2;
+-- result:
+3	[[3,4]]
+2	[[3,4]]
+-- !result

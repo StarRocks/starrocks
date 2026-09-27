@@ -724,11 +724,11 @@ public class LoadPlannerTest {
         columns.add(new Column("v1", IntegerType.INT, false, null, false, null, ""));
         columns.add(new Column("v2", TypeFactory.createVarcharType(50), false, null, true, null, ""));
 
-        Function f1 = new Function(new FunctionName("casttobigint"), new Type[] {VarcharType.VARCHAR},
+        new Function(new FunctionName("casttobigint"), new Type[] {VarcharType.VARCHAR},
                 IntegerType.BIGINT, true);
-        Function f2 = new Function(new FunctionName("casttoint"), new Type[] {VarcharType.VARCHAR},
+        new Function(new FunctionName("casttoint"), new Type[] {VarcharType.VARCHAR},
                 IntegerType.INT, true);
-        Function f3 = new Function(new FunctionName("casttotinyint"), new Type[] {VarcharType.VARCHAR},
+        new Function(new FunctionName("casttotinyint"), new Type[] {VarcharType.VARCHAR},
                 IntegerType.TINYINT, true);
 
         new Expectations() {
@@ -1242,7 +1242,6 @@ public class LoadPlannerTest {
         planner.plan();
         Assertions.assertEquals(1, planner.getScanNodes().size());
         FileScanNode scanNode = (FileScanNode) planner.getScanNodes().get(0);
-        List<TScanRangeLocations> locationsList = scanNode.getScanRangeLocations(0);
         Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
         Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
 
@@ -1253,7 +1252,7 @@ public class LoadPlannerTest {
                 brokerDesc, fileGroups, fileStatusesList, 2);
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
-        locationsList = scanNode.getScanRangeLocations(0);
+        scanNode.getScanRangeLocations(0);
         Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
         Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
 
@@ -1267,7 +1266,7 @@ public class LoadPlannerTest {
 
         planner.plan();
         scanNode = (FileScanNode) planner.getScanNodes().get(0);
-        locationsList = scanNode.getScanRangeLocations(0);
+        scanNode.getScanRangeLocations(0);
         Assertions.assertEquals(1, planner.getFragments().get(0).getPipelineDop());
         Assertions.assertEquals(1, planner.getFragments().get(0).getParallelExecNum());
 

@@ -14,15 +14,23 @@
 
 #include "io/compressed_input_stream.h"
 
+#include <fcntl.h>
 #include <gtest/gtest.h>
 #include <lz4/lz4frame.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
+#include <cerrno>
+#include <cstring>
+#include <iostream>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/compression/block_compression.h"
 #include "base/compression/stream_decompressor.h"
 #include "base/testutil/assert.h"
-#include "fs/fs_posix.h"
+#include "io/fd_input_stream.h"
 #include "io/string_input_stream.h"
 #include "io_test_base.h"
 namespace starrocks::io {
@@ -73,17 +81,17 @@ protected:
     }
 
     void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out, const ReadContext& ctx) {
-        auto fs = new_fs_posix();
-        auto st = fs->new_random_access_file(path);
-        ASSERT_TRUE(st.ok()) << st.status().message();
-        auto file = std::move(st.value());
+        int fd = ::open(path, O_RDONLY);
+        ASSERT_GE(fd, 0) << path << ": " << std::strerror(errno);
+        auto file = std::make_shared<FdInputStream>(fd);
+        file->set_close_on_delete(true);
 
         using DecompressorPtr = std::shared_ptr<StreamDecompressor>;
         auto dec = StreamDecompressor::create_decompressor(type);
         ASSERT_TRUE(dec.ok());
 
         auto compressed_input_stream = std::make_shared<io::CompressedInputStream>(
-                file->stream(), DecompressorPtr(std::move(dec).value().release()), ctx.decompressor_buffer_size);
+                file, DecompressorPtr(std::move(dec).value().release()), ctx.decompressor_buffer_size);
 
         std::vector<char> vec_buf(ctx.read_buffer_size + 1);
         char* buf = vec_buf.data();
@@ -187,52 +195,6 @@ TEST_F(CompressedInputStreamTest, test_LZ4F) {
 
     for (const auto& t : cases) {
         test_lz4f_cases(t);
-    }
-}
-
-TEST_F(CompressedInputStreamTest, test_LZO0) {
-    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test0.csv.lzo";
-    std::string out;
-    read_compressed_file(CompressionTypePB::LZO, path, out);
-    std::string expected = R"(Alice,1
-Bob,2
-CharlieX,3
-)";
-    std::cout << out << "\n";
-    ASSERT_EQ(out, expected);
-}
-
-TEST_F(CompressedInputStreamTest, test_LZO1) {
-    const char* path = "be/test/exec/test_data/csv_scanner/decompress_test1.csv.lzo";
-
-    std::string head = R"(0,1
-1,2
-2,3
-3,4
-4,5
-5,6
-6,)";
-
-    std::string tail = R"(9998
-99998,99999
-99999,100000
-)";
-
-    std::vector<size_t> decompressor_buffer_sizes = {
-            1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    std::vector<size_t> read_buffer_sizes = {
-            32, 1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    for (size_t decompressor_buffer_size : decompressor_buffer_sizes) {
-        for (size_t read_buffer_size : read_buffer_sizes) {
-            std::cout << "test lzo1: read_buffer_size: " << read_buffer_size
-                      << ", decompressor_buffer_size: " << decompressor_buffer_size << std::endl;
-            std::string out;
-            ReadContext ctx{.read_buffer_size = read_buffer_size, .decompressor_buffer_size = decompressor_buffer_size};
-            read_compressed_file_ctx(CompressionTypePB::LZO, path, out, ctx);
-            ASSERT_EQ(out.size(), 1177785);
-            ASSERT_EQ(out.substr(0, head.size()), head);
-            ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
-        }
     }
 }
 

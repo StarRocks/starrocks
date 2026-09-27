@@ -237,4 +237,44 @@ public class ReservoirSamplerTest {
 
         Assertions.assertEquals(fullInput, result.getEstimates());
     }
+
+    @Test
+    public void testCountsSecondaryTupleBytes() throws Exception {
+        // Each cell's string value is 1 char wide. Row bytes = sortKey(1) + secondary(1) = 2.
+        // With byteLimit=3: row 0 is always admitted (2 bytes, accumulated=2); row 1 would push
+        // accumulated to 4 > 3, so only 1 row survives -- proving the secondary cell counted
+        // against the limit (without it, each row would be 1 byte and both would fit).
+        SecondaryIndexSpec secondarySpec = new SecondaryIndexSpec(7L, List.of(bigintColumn("r")));
+        SampleSubqueryExecutor executor = request -> {
+            List<SampleRow> rows = List.of(
+                    new SampleRow(bigintRow(0), List.of(), List.of(new IndexTuple(7L, bigintRow(1)))),
+                    new SampleRow(bigintRow(2), List.of(), List.of(new IndexTuple(7L, bigintRow(3)))));
+            return new SampleSubqueryExecutor.SampleExecution(rows.iterator(), new Estimates(1024L, 2L));
+        };
+        Sampler sampler = new ReservoirSampler(executor);
+        SampleRequest request = new SampleRequest(
+                DUMMY_CONTEXT, List.of(bigintColumn("k")), List.of(secondarySpec), List.of(), 3L, 0L);
+
+        SampleSet result = sampler.sample(request);
+
+        Assertions.assertEquals(1, result.getTuples().size(),
+                "secondary tuple bytes must count against the byte limit, stopping before the 2nd row");
+    }
+
+    @Test
+    public void testZeroRowsWithSecondarySpecsPreservesMetaIds() throws Exception {
+        SecondaryIndexSpec secondarySpec = new SecondaryIndexSpec(7L, List.of(bigintColumn("r")));
+        Sampler sampler = new ReservoirSampler(new FakeExecutor(Collections.emptyList(), Estimates.ZERO));
+        SampleRequest request = new SampleRequest(
+                DUMMY_CONTEXT, List.of(bigintColumn("k")), List.of(secondarySpec), List.of(), 1024L, 0L);
+
+        SampleSet result = sampler.sample(request);
+
+        Assertions.assertNotSame(SampleSet.EMPTY, result,
+                "zero-row sample WITH secondary specs must not collapse to the bare EMPTY constant "
+                        + "(it would drop the authoritative id set)");
+        Assertions.assertTrue(result.isEmpty());
+        Assertions.assertEquals(List.of(7L), result.getSecondaryIndexMetaIds());
+        Assertions.assertTrue(result.getSecondaryIndexTuples().isEmpty());
+    }
 }

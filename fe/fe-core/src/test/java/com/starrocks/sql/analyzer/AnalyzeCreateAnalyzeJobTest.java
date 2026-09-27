@@ -15,10 +15,13 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
@@ -26,9 +29,15 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.StatisticAutoCollector;
+import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatisticsCollectJob;
+import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.thrift.TStatisticData;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -62,6 +71,14 @@ public class AnalyzeCreateAnalyzeJobTest {
                 "properties('replication_num'='1') ");
         starRocksAssert.ddl("alter table db.tbl1 add partition p1 values in ('1')");
         starRocksAssert.ddl("alter table db.tbl1 add partition p2 values in ('2')");
+        starRocksAssert.withTable("create table db.tbl_histo("
+                + "k1 int, "
+                + "c_array array<int>, "
+                + "c_struct struct<a int>, "
+                + "c_map map<int, int>, "
+                + "c_json json, "
+                + "c_varbinary varbinary) "
+                + "DUPLICATE KEY(k1) distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
     }
 
     @Test
@@ -117,7 +134,19 @@ public class AnalyzeCreateAnalyzeJobTest {
 
     @Test
     public void testCreateHistogram() throws Exception {
-        // mock execution
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+                TStatisticData data = new TStatisticData();
+                if (sql.toLowerCase().contains("group by")) {
+                    data.columnName = "1";
+                    data.histogram = "10";
+                } else {
+                    data.histogram = "[[\"1\",\"2\",\"3\",\"4\"]]";
+                }
+                return Lists.newArrayList(data);
+            }
+        };
         UtFrameUtils.mockQueryExecute(() -> {
         });
         UtFrameUtils.mockDML();
@@ -137,7 +166,7 @@ public class AnalyzeCreateAnalyzeJobTest {
         Assertions.assertEquals(
                 List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
                         "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
-                        "histogram_bucket_num=128}"),
+                                "histogram_bucket_num=128}"),
                 jobDesc.subList(1, jobDesc.size() - 3));
 
         // trigger the job
@@ -149,14 +178,31 @@ public class AnalyzeCreateAnalyzeJobTest {
             jobId = jobDesc.get(0);
             Assertions.assertEquals(
                     List.of("default_catalog", "db", "tbl1", "c1,c2", "HISTOGRAM", "SCHEDULE",
-                            "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, histogram_mcv_size=100, " +
-                            "histogram_bucket_num=128}",
+                            "{histogram_sample_ratio=1, histogram_collect_bucket_ndv_mode=none, " +
+                                    "histogram_mcv_size=100, histogram_bucket_num=128}",
                             "FINISH"),
                     jobDesc.subList(1, jobDesc.size() - 2));
         }
 
         // drop analyze
         starRocksAssert.ddl("drop analyze " + jobId);
+
+    }
+
+    @Test
+    public void testCreateHistogramAllColumnsStaysAdaptiveAndFiltersUnsupported() {
+        CreateAnalyzeJobStmt analyzeStmt = (CreateAnalyzeJobStmt) analyzeSuccess(
+                "create analyze table db.tbl_histo update histogram on all columns");
+        Assertions.assertTrue(analyzeStmt.getColumnNames().isEmpty());
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "tbl_histo");
+        StatisticsCollectJob collectJob = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                db, table, null, Lists.newArrayList(), Lists.newArrayList(),
+                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(), List.of(), List.of(), false);
+        Assertions.assertEquals(List.of("k1"), collectJob.getColumnNames());
     }
 
     @Test

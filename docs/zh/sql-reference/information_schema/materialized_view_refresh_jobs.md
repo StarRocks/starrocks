@@ -28,10 +28,10 @@ description: "materialized_view_refresh_jobs 提供物化视图刷新的作业�
 | FINISH_TIME                        | 作业完成的时间。如果作业尚未完成，则为 `NULL`。             |
 | DURATION_TIME                      | 作业的墙钟耗时，单位为秒（最后一个 task run 的完成时间减去第一个 task run 的处理开始时间）。如果作业尚未完成，则为 `NULL`。 |
 | REFRESH_TRIGGER                    | 本作业的触发方式。手动执行 `REFRESH MATERIALIZED VIEW` 时为 `MANUAL`（即使物化视图的刷新方案为周期性或自动）；否则为物化视图所配置的刷新方案。有效值：`MANUAL`、`SCHEDULED`、`ON_BASE_TABLE_CHANGE` 和 `NONE`。如果物化视图已被删除且该作业并非手动触发，则为 `UNKNOWN`。 |
-| REFRESH_MODE                       | 物化视图所配置的刷新模式。有效值：`AUTO`、`PCT` 和 `INCREMENTAL`。如果物化视图已被删除，则为 `NULL`。 |
-| IMV_SOURCE_VERSION_RANGE           | 增量刷新所消费的源版本范围的 JSON。对于非增量（PCT）刷新或未消费任何源范围时，返回 `NULL`。 |
-| IMV_SOURCE_TIMESTAMP_RANGE         | 增量刷新所消费的源时间戳范围的 JSON。对于非增量（PCT）刷新或未消费任何源范围时，返回 `NULL`。 |
-| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | 固定的源快照 ID 的 JSON。其 JSON 键为 connector 表标识符（对于 Iceberg 为 `<table>:<uuid>`），与 IMV_SOURCE_VERSION_RANGE 和 IMV_SOURCE_TIMESTAMP_RANGE 所用的 `<catalog>.<db>.<table>` 键不同。在 baseline/PCT 路径刷新时填充；对于纯增量刷新或未固定任何快照时，返回 `NULL`。 |
+| REFRESH_MODE                       | 物化视图所配置的刷新模式。有效值：`PCT` 和 `INCREMENTAL`。如果物化视图已被删除，则为 `NULL`。注意这是**配置值**，不是某次刷新实际采用的模式：bootstrap 首刷以及 INCREMENTAL 规划失败回退 PCT 时，实际模式与本列不同。某次刷新实际采用的模式请查询 `information_schema.task_runs` 的 `get_json_string(EXTRA_MESSAGE, '$.refreshMode')`。 |
+| IMV_SOURCE_VERSION_RANGE           | 增量刷新所依据的源版本范围的 JSON，每个基表一个条目。某个范围的 `start` 等于 `end` 表示该基表没有变更，因此「因无变更而跳过」的刷新会为每个基表都报出这样的范围。对于非增量（PCT）刷新，返回 `NULL`。 |
+| IMV_SOURCE_TIMESTAMP_RANGE         | 与 IMV_SOURCE_VERSION_RANGE 相同的两个端点所对应的提交时间的 JSON。对于非增量（PCT）刷新返回 `NULL`；增量刷新若端点的提交时间无法解析，同样返回 `NULL`。 |
+| IMV_SOURCE_PINNED_SNAPSHOT_ID_MAP  | 固定的源快照 ID 的 JSON，键为基表的 `<catalog>.<db>.<table>` 名称 —— 与 IMV_SOURCE_VERSION_RANGE、IMV_SOURCE_TIMESTAMP_RANGE 所用的键相同，因此三列可按基表关联。在 baseline/PCT 路径刷新时填充；对于纯增量刷新或未固定任何快照时，返回 `NULL`。 |
 | FAILED_TASK_RUN_ID                 | 作业中失败 task run 的 ID。如果没有 task run 失败，则为 `NULL`。如需下钻到 `task_runs`，请通过 `FAILED_QUERY_ID = task_runs.QUERY_ID`（或通过 `JOB_ID`）进行 join；`task_runs` 不提供 task-run-id 列。 |
 | FAILED_QUERY_ID                    | 失败 task run 的查询 ID。如果没有 task run 失败，则为 `NULL`。 |
 | ERROR_CODE                         | 失败 task run 的错误代码。如果没有 task run 失败，则为 `NULL`。 |

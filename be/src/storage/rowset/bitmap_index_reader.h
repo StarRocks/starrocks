@@ -41,10 +41,10 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/primitive/bitmap_index_iterator.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/indexed_column_reader.h"
+#include "storage_primitive/bitmap_index_iterator.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 

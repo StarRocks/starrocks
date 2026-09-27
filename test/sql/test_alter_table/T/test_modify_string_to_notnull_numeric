@@ -1,0 +1,16 @@
+-- name: test_modify_string_to_notnull_numeric
+create database test_sc_notnull_${uuid0};
+use test_sc_notnull_${uuid0};
+-- Regression test for the schema-change crash (std::bad_variant_access): converting a NOT NULL
+-- VARCHAR column to a NOT NULL numeric type when the data contains unparseable or out-of-range
+-- values used to append a NULL Datum to a non-nullable column in TypeConverter::convert_column,
+-- throwing std::bad_variant_access. The alter_tablet threadpool caught it and retried forever,
+-- leaving the schema change stuck in RUNNING. The conversion must now fail cleanly (CANCELLED),
+-- leaving the column type and data unchanged.
+create table t (k int NOT NULL, v varchar(32) NOT NULL) duplicate key(k) distributed by hash(k) buckets 1 properties("replication_num"="1");
+insert into t values (1, '100'), (2, 'abc'), (3, '99999999999999');
+alter table t modify column v int NOT NULL;
+function: wait_table_schema_change_finish("test_sc_notnull_${uuid0}", "t", "CANCELLED")
+desc t;
+select * from t order by k;
+drop database test_sc_notnull_${uuid0};

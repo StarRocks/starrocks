@@ -71,7 +71,8 @@ public class MVActiveChecker extends LeaderDaemon {
     private static final Set<String> MV_NO_AUTOMATIC_ACTIVE_REASONS = ImmutableSet.of(
             MV_BACKUP_INACTIVE_REASON,
             MaterializedViewExceptions.INACTIVE_REASON_FOR_BASE_TABLE_OPTIMIZED,
-            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES,
+            MaterializedViewExceptions.INACTIVE_REASON_FOR_INCREMENTAL_BREAKING
     );
 
     @Override
@@ -128,17 +129,22 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     /**
+     * Whether this inactive reason never self-heals via retry (manual inactivation, or one of the
+     * automatic reasons above); callers that would otherwise keep retrying should skip instead.
+     */
+    public static boolean isNonAutoActivatableReason(String reason) {
+        String r = Optional.ofNullable(reason).orElse("");
+        return AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(r)
+                || MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(r::contains);
+    }
+
+    /**
      * @param mv
      * @param checkGracePeriod whether check the grace period, usually background active would check it, but foreground
      *                         job doesn't
      */
     public static void tryToActivate(MaterializedView mv, boolean checkGracePeriod) {
-        // if the mv is set to inactive manually, we don't activate it
-        String reason = Optional.ofNullable(mv.getInactiveReason()).orElse("");
-        if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
-            return;
-        }
-        if (MV_NO_AUTOMATIC_ACTIVE_REASONS.stream().anyMatch(reason::contains)) {
+        if (mv.isActive() || isNonAutoActivatableReason(mv.getInactiveReason())) {
             return;
         }
 
@@ -159,7 +165,8 @@ public class MVActiveChecker extends LeaderDaemon {
         String mvFullName =
                 new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(), mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
-        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}", mvFullName, reason);
+        LOG.info("[MVActiveChecker] Start to activate MV {} because of its inactive reason: {}",
+                mvFullName, mv.getInactiveReason());
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setStatisticsContext(false);

@@ -51,8 +51,8 @@ public class ConnectorAnalyzeTaskQueue {
         wLock.lock();
         try {
             if (pendingTasks.size() >= Config.connector_table_query_trigger_analyze_max_pending_task_num) {
-                LOG.warn("Connector Analyze TaskQueue pending task num reach limit: {}, current: {}",
-                        Config.connector_table_query_trigger_analyze_max_pending_task_num, pendingTasks.size());
+                LOG.warn("[ExternalStats] trigger drop | table_uuid={} reason=pending_queue_full queue_size={}",
+                        tableUUID, pendingTasks.size());
                 return false;
             }
 
@@ -61,7 +61,7 @@ public class ConnectorAnalyzeTaskQueue {
                 // there is a running task for this table, remove columns which are already in running task
                 task.removeColumns(runningTask.getColumns());
                 if (task.getColumns().isEmpty()) {
-                    LOG.info("Table {} has a running task, skip this task", tableUUID);
+                    LOG.info("[ExternalStats] trigger skip | table_uuid={} reason=running_task", tableUUID);
                     return true;
                 }
             }
@@ -94,8 +94,8 @@ public class ConnectorAnalyzeTaskQueue {
     public void schedulePendingTask() {
         // do not dispatch task if max running concurrency reached or no pending task
         if (isMaxRunningConcurrencyReached()) {
-            LOG.info("Connector Analyze TaskQueue running task num reach limit: {}, current: {}",
-                    Config.connector_table_query_trigger_analyze_max_running_task_num, runningTasks.size());
+            LOG.info("[ExternalStats] running limit | running={} limit={}",
+                    runningTasks.size(), Config.connector_table_query_trigger_analyze_max_running_task_num);
             return;
         }
 
@@ -111,7 +111,7 @@ public class ConnectorAnalyzeTaskQueue {
                 runningTasks.put(entry.getKey(), task);
                 CompletableFuture.supplyAsync(task::run, taskRunPool).whenComplete((result, e) -> {
                     if (e != null) {
-                        LOG.warn("Table {} analyze task failed", entry.getKey(), e);
+                        LOG.warn("[ExternalStats] trigger fail | table_uuid={} error={}", entry.getKey(), e.getMessage(), e);
                     }
                     runningTasks.remove(entry.getKey());
                 });

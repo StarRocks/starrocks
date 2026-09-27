@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 displayed_sidebar: docs
 description: "Frequently asked questions about StarRocks table design: troubleshooting table creation, schema changes, partitioning, bucketing, and index configuration."
 ---

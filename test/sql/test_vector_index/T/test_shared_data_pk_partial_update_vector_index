@@ -1,5 +1,4 @@
 -- name: test_sd_pk_partial_update_vector_index_sync @cloud
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 create database db_sd_pk_pu_vidx_sync_${uuid0};
 use db_sd_pk_pu_vidx_sync_${uuid0};
 CREATE TABLE t (
@@ -26,7 +25,6 @@ select id, val from t order by approx_l2_distance([0,1,0,0], v) limit 1;
 drop database db_sd_pk_pu_vidx_sync_${uuid0} force;
 
 -- name: test_sd_pk_partial_update_vector_index_async @cloud
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 create database db_sd_pk_pu_vidx_async_${uuid0};
 use db_sd_pk_pu_vidx_async_${uuid0};
 CREATE TABLE t (

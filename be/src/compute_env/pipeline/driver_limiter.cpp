@@ -14,9 +14,35 @@
 
 #include "compute_env/pipeline/driver_limiter.h"
 
+#include "base/metrics.h"
+#include "gutil/macros.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::pipeline {
+
+namespace {
+const char* const kPipeDriversMetricName = "pipe_drivers";
+} // namespace
+
+DriverLimiter::~DriverLimiter() {
+    if (_metrics != nullptr) {
+        _metrics->deregister_hook(kPipeDriversMetricName);
+    }
+}
+
+void DriverLimiter::init(MetricRegistry* metrics) {
+    if (metrics == nullptr) {
+        return;
+    }
+    if (_metrics != nullptr) {
+        DCHECK_EQ(_metrics, metrics);
+        return;
+    }
+    _metrics = metrics;
+
+    metrics->register_metric(kPipeDriversMetricName, &_pipe_drivers);
+    metrics->register_hook(kPipeDriversMetricName, [this] { _pipe_drivers.set_value(num_total_drivers()); });
+}
 
 StatusOr<DriverLimiter::TokenPtr> DriverLimiter::try_acquire(int num_drivers) {
     int prev_num_total_drivers = _num_total_drivers.fetch_add(num_drivers);

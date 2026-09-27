@@ -27,9 +27,9 @@
 #include "gen_cpp/data.pb.h"
 #include "platform/platform_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/env/global_env.h"
 #include "runtime/load_fail_point.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/delta_writer.h"
 
 namespace starrocks {
@@ -100,7 +100,7 @@ Status ReplicateChannel::_init() {
         return Status::InternalError(msg);
     }
     _mem_tracker = std::make_unique<MemTracker>(-1, "replicate: " + UniqueId(_opt->load_id).to_string(),
-                                                GlobalEnv::GetInstance()->load_mem_tracker());
+                                                RuntimeEnv::GetInstance()->load_mem_tracker());
     if (!_mem_tracker) {
         auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
         LOG(WARNING) << msg;

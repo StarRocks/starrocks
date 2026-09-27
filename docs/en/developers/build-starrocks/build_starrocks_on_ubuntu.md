@@ -7,6 +7,12 @@ description: "How to compile StarRocks from source on Ubuntu."
 
 This topic describes how to compile StarRocks on the Ubuntu operating system. StarRocks supports compilation on both x86_64 and AArch64 architectures.
 
+:::note
+
+Build StarRocks v4.1 and earlier on Ubuntu 22.04, and StarRocks v4.2 and later on Ubuntu 24.04.
+
+:::
+
 ## Prerequisites
 
 ### Install Dependencies

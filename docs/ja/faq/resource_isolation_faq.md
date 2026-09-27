@@ -1,4 +1,5 @@
 ---
+sidebar_position: 80
 displayed_sidebar: docs
 description: "StarRocks のリソース分離機能における CPU/メモリ制限設定とリソースグループの設定方法を説明します。"
 ---
@@ -240,7 +241,7 @@ A: いずれかのインスタンスが2 GB（`exec_mem_limit`）以上のメモ
 
 クエリキューは、すべてのクエリに対してBEレベルの制限を使用します。
 
-`concurrency_limit` と `max_cpu_cores` は、リソースグループレベルのクエリキューが有効な場合に両方適用されます。
+`concurrency_limit`、`max_cpu_cores`、`mem_used_pct_limit` は、リソースグループレベルのクエリキューが有効な場合にすべて適用されます。`mem_used_pct_limit` はさらに `enable_query_queue_v2` が `false` である必要があります。
 
 ### `pipeline_dop`、`exec_mem_limit`、リソースグループの同時実行制限の違いは何ですか？
 

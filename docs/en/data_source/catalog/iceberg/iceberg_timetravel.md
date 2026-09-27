@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "How to query historical Iceberg table snapshots in StarRocks using time travel with the AS OF clause."
 ---

@@ -1,0 +1,69 @@
+-- name: test_fold_constants_after_project_merge
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t0 (
+    group_key int,
+    join_key int,
+    input_value int
+)
+duplicate key(group_key)
+distributed by hash(group_key) buckets 1
+properties ("replication_num" = "1");
+-- result:
+-- !result
+insert into t0 values
+    (1, 10, 0),
+    (2, 20, 1),
+    (3, 30, 2);
+-- result:
+-- !result
+select group_key,
+       case
+           when joined_value = 'foo' and input_value <> 0 then joined_number
+           else cast(0.0 as double)
+       end = 0.0 as is_zero
+from (
+    select source.group_key,
+           source.input_value,
+           empty_side.joined_value,
+           empty_side.joined_number
+    from t0 source
+    left outer join (
+        select join_key,
+               'foo' as joined_value,
+               cast(input_value as double) as joined_number
+        from t0
+        where 1 = 0
+    ) empty_side on empty_side.join_key = source.join_key
+) projected
+order by group_key;
+-- result:
+1	1
+2	1
+3	1
+-- !result
+select input_value, defaulted_value = input_value as is_default
+from (
+    select source.input_value,
+           coalesce(empty_side.joined_value, 1) as defaulted_value
+    from t0 source
+    left outer join (
+        select input_value as joined_value,
+               join_key
+        from t0
+        where 1 = 0
+    ) empty_side on empty_side.join_key = source.join_key
+) projected
+order by input_value;
+-- result:
+0	0
+1	1
+2	0
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

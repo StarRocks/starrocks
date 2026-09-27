@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -62,9 +63,6 @@ public class EliminateSortColumnWithEqualityPredicateRule extends Transformation
         }
 
         if (reservedOrdering.isEmpty()) {
-            if (topn.hasLimit()) {
-                scan.setLimit(topn.getLimit());
-            }
             // if topn has projection, we should merge topn's projection into scan's projection
             if (topn.getProjection() != null) {
                 if (scan.getProjection() == null) {
@@ -80,6 +78,16 @@ public class EliminateSortColumnWithEqualityPredicateRule extends Transformation
                 }
             }
 
+            if (topn.hasLimit()) {
+                // Eliminating the sort removes the only operator that would force a global merge.
+                // This rule runs after the limit split/merge rules, so emitting an init-phase limit
+                // would never be split and would fail in the implementation phase. Emit a GLOBAL
+                // limit instead, which is enforced after the gather. Without it the bound would be
+                // applied independently per tablet and inflate downstream aggregates such as count(*).
+                scan.setLimit(topn.getLimit() + topn.getOffset());
+                LogicalLimitOperator global = LogicalLimitOperator.global(topn.getLimit(), topn.getOffset());
+                return Lists.newArrayList(OptExpression.create(global, input.getInputs()));
+            }
             return input.getInputs();
         } else {
             LogicalTopNOperator newTopn = LogicalTopNOperator.builder().withOperator(topn)

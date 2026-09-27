@@ -214,7 +214,6 @@ public class PredicateColumnsStorage {
     private void persistDiff(List<ColumnUsage> diff) {
         StringBuilder insert = new StringBuilder(ADD_RECORD);
         boolean first = true;
-        LocalMetastore meta = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (ColumnUsage usage : diff) {
             StringWriter sw = new StringWriter();
 

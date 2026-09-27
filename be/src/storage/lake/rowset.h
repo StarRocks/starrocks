@@ -14,24 +14,128 @@
 
 #pragma once
 
+#include <atomic>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <unordered_set>
+#include <vector>
 
+#include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/types_fwd.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/base_rowset.h"
 #include "storage/seek_range.h"
+#include "storage_primitive/range.h"
+
+namespace starrocks {
+class DisjunctivePredicates;
+class RowsetReadOptions;
+class SegmentReadOptions;
+} // namespace starrocks
 
 namespace starrocks::lake {
+
+class CompactionDelvecHolder;
 
 class MetaFileBuilder;
 class TabletManager;
 class TabletWriter;
+
+struct PreparedSegmentReadState {
+    // The seed folds every page filter (zonemap, bloom filter) into pruned_scan_range, so reusing
+    // children apply it directly without re-running any page filter.
+    SparseRangePtr pruned_scan_range;
+    std::atomic<bool> pruned_scan_range_cache_disabled{false};
+    std::atomic<bool> pruned_scan_range_ready{false};
+
+    bool has_pruned_scan_range() const {
+        return !pruned_scan_range_cache_disabled.load(std::memory_order_acquire) &&
+               pruned_scan_range_ready.load(std::memory_order_acquire) && pruned_scan_range != nullptr;
+    }
+
+    void publish_pruned_scan_range(SparseRangePtr range) {
+        pruned_scan_range = std::move(range);
+        pruned_scan_range_ready.store(true, std::memory_order_release);
+    }
+
+    void clear_pruned_scan_range() {
+        pruned_scan_range_ready.store(false, std::memory_order_release);
+        pruned_scan_range.reset();
+    }
+
+    void disable_pruned_scan_range_cache() {
+        // Flag only; must not clear the cache here (sibling split readers read it lock-free).
+        pruned_scan_range_cache_disabled.store(true, std::memory_order_release);
+    }
+
+    // Rowid equivalents of RowsetReadOptions::ranges and the rowset's tablet range
+    // (SegmentReadOptions::tablet_range derived from get_seek_range()).
+    // Children reuse them to avoid repeating short-key index lookups.
+    std::vector<std::optional<Range<rowid_t>>> seek_ranges_rowid_bounds;
+    std::optional<Range<rowid_t>> tablet_range_rowid_bounds;
+    std::atomic<bool> rowid_bounds_cache_disabled{false};
+    std::atomic<bool> rowid_bounds_cache_ready{false};
+
+    bool has_rowid_bounds_cache() const {
+        return !rowid_bounds_cache_disabled.load(std::memory_order_acquire) &&
+               rowid_bounds_cache_ready.load(std::memory_order_acquire);
+    }
+
+    void publish_rowid_bounds_cache(std::vector<std::optional<Range<rowid_t>>>&& seek_range_bounds,
+                                    std::optional<Range<rowid_t>> tablet_range_bound) {
+        seek_ranges_rowid_bounds = std::move(seek_range_bounds);
+        tablet_range_rowid_bounds = std::move(tablet_range_bound);
+        rowid_bounds_cache_ready.store(true, std::memory_order_release);
+    }
+
+    void clear_rowid_bounds_cache() {
+        rowid_bounds_cache_ready.store(false, std::memory_order_release);
+        seek_ranges_rowid_bounds.clear();
+        tablet_range_rowid_bounds.reset();
+    }
+
+    void disable_rowid_bounds_cache() {
+        // Flag only; see disable_pruned_scan_range_cache.
+        rowid_bounds_cache_disabled.store(true, std::memory_order_release);
+    }
+
+    void disable_runtime_filter_dependent_cache() {
+        disable_pruned_scan_range_cache();
+        disable_rowid_bounds_cache();
+    }
+
+    // State shared by coarse rowid range tasks and refined rowid range tasks.
+    // Coarse range issuing fields are protected by |coarse_range_lock|.
+    std::mutex coarse_range_lock;
+    SparseRange<> coarse_scan_range;
+    SparseRangeIterator<> coarse_scan_range_iter;
+    SparseRange<> allocated_coarse_ranges;
+    bool coarse_split_allocation_closed = false;
+};
+
+struct PreparedTabletReadState {
+    std::vector<RowsetPtr> rowsets;
+    std::vector<std::vector<SegmentPtr>> rowset_segments;
+    std::vector<std::vector<PreparedSegmentReadStatePtr>> rowset_prepared_states;
+
+    void disable_runtime_filter_dependent_cache() {
+        for (const auto& prepared_states : rowset_prepared_states) {
+            for (const auto& segment_state : prepared_states) {
+                if (segment_state != nullptr) {
+                    segment_state->disable_runtime_filter_dependent_cache();
+                }
+            }
+        }
+    }
+};
 
 class Rowset : public BaseRowset {
 public:
@@ -69,6 +173,20 @@ public:
     DISALLOW_COPY_AND_MOVE(Rowset);
 
     StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options);
+    StatusOr<std::vector<ChunkIteratorPtr>> read(const Schema& schema, const RowsetReadOptions& options,
+                                                 const std::vector<SegmentPtr>& prepared_segments);
+    StatusOr<std::vector<ChunkIteratorPtr>> read_prepared_segment(
+            const Schema& schema, const RowsetReadOptions& options, const std::vector<SegmentPtr>& prepared_segments,
+            size_t segment_idx, const PreparedSegmentReadStatePtr& prepared_segment_state,
+            std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr);
+    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    Status init_segment_read_options(const RowsetReadOptions& options, const LakeIOOptions& lake_io_opts,
+                                     const DisjunctivePredicates& delete_predicates, OlapReaderStatistics* stats,
+                                     SegmentReadOptions* segment_options) const;
+    Status set_segment_tablet_range(size_t segment_idx, const std::optional<SeekRange>& shared_segment_range,
+                                    SegmentReadOptions* segment_options) const;
+    Schema build_segment_schema(const Schema& schema, const RowsetReadOptions& options,
+                                const DisjunctivePredicates& delete_predicates) const;
 
     StatusOr<size_t> get_read_iterator_num();
 
@@ -121,6 +239,29 @@ public:
     // Check if this rowset uses segment range mode (for large rowset split compaction)
     [[nodiscard]] bool is_segment_range_mode() const { return _segment_range_end > 0; }
 
+    // Whether LakeIOOptions::hold_segments can be honoured for this rowset. Holding only pays off
+    // when read() can feed the held set through the prepared-segments path, and that path indexes
+    // segments by metadata position: partial-compaction trims the head of the loaded vector and
+    // segment-range mode starts it at _segment_range_start, so neither can be indexed that way.
+    // Those rowsets keep the original load-per-read path (and therefore the metadata cache).
+    [[nodiscard]] bool can_hold_segments() const { return !partial_segments_compaction() && !is_segment_range_mode(); }
+
+    // Drop the held input segments and the task-scoped delvec store, so a compaction task that
+    // decided its input set does not fit the per-worker memory budget stops pinning them (see
+    // CompactionTask::chunk_size_with_held_segments). Callers already holding a set returned by
+    // segments() keep their own references, so this is safe while a read is in flight.
+    void release_held_segments();
+
+    // Refresh the resident segment size and its gauge before sizing a column group. This includes
+    // lazily loaded indexes and any segments kept by the JSON memo after holding is disabled.
+    int64_t held_segments_bytes() const;
+
+    // Shared by every range-split subtask; once disabled, neither segments nor delvecs may be held again.
+    bool hold_disabled() const {
+        std::lock_guard<std::mutex> l(_held_segments_mutex);
+        return _hold_disabled;
+    }
+
     // Get segment range [start, end), only valid when is_segment_range_mode() returns true
     [[nodiscard]] int32_t segment_range_start() const { return _segment_range_start; }
     [[nodiscard]] int32_t segment_range_end() const { return _segment_range_end; }
@@ -146,17 +287,33 @@ public:
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] std::vector<SegmentSharedPtr> get_segments() override;
+    [[nodiscard]] StatusOr<std::vector<SegmentSharedPtr>> get_segments_checked() override;
 
     StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(const LakeIOOptions& lake_io_opts);
 
+    // Pairs a loaded segment with its position in _metadata->segment_metas(). load_segments() does not
+    // keep its result index-aligned with segment_metas -- segment-range start and partial-compaction
+    // trim shift/drop entries -- so an element's index there is NOT its metadata position; consult
+    // per-segment metadata (e.g. shared()) via `segment_meta_pos`, the segment_metas() array position,
+    // not Segment::id()/segment_idx. A lost segment (experimental_lake_ignore_lost_segment) is the
+    // exception: it is kept in place as a nullptr placeholder to preserve alignment. As a result the
+    // `segment` here -- and the SegmentPtr entries from segments()/get_segments() -- can be null, so
+    // every consumer must treat a null segment as "skip this one".
+    struct LoadedSegment {
+        SegmentPtr segment;           // nullptr if the segment was skipped, filtered out, or lost
+        int32_t segment_meta_pos = 0; // position in _metadata->segment_metas()
+    };
+
     // `fill_cache` controls `fill_data_cache` and `fill_meta_cache`
     Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache, int64_t buffer_size = -1);
+    Status load_segments(std::vector<LoadedSegment>* segments, bool fill_cache, int64_t buffer_size = -1);
 
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, SegmentReadOptions& seg_options,
-                                       std::pair<std::vector<SegmentPtr>, std::vector<SegmentPtr>>* not_used_segments,
-                                       const std::unordered_set<int>* skip_segment_idxs = nullptr);
+    [[nodiscard]] Status load_segments(
+            std::vector<LoadedSegment>* segments, SegmentReadOptions& seg_options,
+            std::pair<std::vector<LoadedSegment>, std::vector<LoadedSegment>>* not_used_segments,
+            const std::unordered_set<int>* skip_segment_idxs = nullptr);
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -171,7 +328,18 @@ public:
     int64_t end_version() const override { return 0; }
 
 private:
-    StatusOr<std::optional<SeekRange>> get_seek_range() const;
+    struct ReadContext {
+        const std::vector<SegmentPtr>* prepared_segments = nullptr;
+        std::optional<size_t> target_segment_idx = std::nullopt;
+        const PreparedSegmentReadState* prepared_segment_state = nullptr;
+        std::vector<ChunkIteratorPtr>* reusable_segment_iterators = nullptr;
+    };
+
+    StatusOr<std::vector<ChunkIteratorPtr>> do_read(const Schema& schema, const RowsetReadOptions& options,
+                                                    const ReadContext& context);
+
+    // Requires _held_segments_mutex. Updates the gauge by the difference from its last sample.
+    int64_t refresh_held_segments_bytes_locked() const;
 
     TabletManager* _tablet_mgr;
     int64_t _tablet_id;
@@ -180,11 +348,37 @@ private:
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
     std::vector<SegmentSharedPtr> _segments;
+    // Set once get_segments_checked() materializes _segments. Keyed on an explicit flag (not
+    // _segments.empty()) so a zero-segment rowset loads once, and stays false on a transient
+    // failure so a retry re-attempts it (issue #75203).
+    bool _segments_loaded = false;
     bool _parallel_load;
     // only takes effect when rowset is overlapped, tells how many segments will be used in compaction,
     // default is 0 means every segment will be used.
     // only used for compaction
     size_t _compaction_segment_limit;
+    // Guards _held_segments: the column-group pass loop is single-threaded, but range-split
+    // parallel compaction may share one Rowset instance across subtasks.
+    mutable std::mutex _held_segments_mutex;
+    // Segments held by segments() when LakeIOOptions::hold_segments is set; lives as long as this
+    // Rowset instance, which for compaction is the whole task.
+    std::vector<SegmentPtr> _held_segments;
+    // Last sampled resident size, also this Rowset's contribution to the gauge. Refreshed as later
+    // column groups load indexes; the destructor removes this same contribution.
+    mutable int64_t _held_segments_bytes = 0;
+    // Single-flight election for the held-segment load: true while one caller is loading outside
+    // the lock. Range-split subtasks that miss together must not each load the full input set;
+    // waiters block on _held_segments_cv, and a failed (or unheld) load clears the flag before
+    // notifying so a waiter takes over and retry semantics survive.
+    bool _held_segments_loading = false;
+    std::condition_variable _held_segments_cv;
+    // Sticky: once a task gives up holding for this rowset, no caller may start holding it again.
+    // See hold_disabled().
+    bool _hold_disabled = false;
+    // Delvec store shared by every pass's delvec loader, same lifetime and guard rules as
+    // _held_segments; created lazily on the primary-key compaction read path.
+    // mutable: lazily created inside const init_segment_read_options.
+    mutable std::shared_ptr<CompactionDelvecHolder> _held_delvecs;
     // Segment range for large rowset split compaction.
     // When _segment_range_end > 0, only segments in [_segment_range_start, _segment_range_end) are used.
     // Default is 0, meaning all segments are used.

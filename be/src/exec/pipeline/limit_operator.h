@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "exec/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/operator_factory.h"
 
 namespace starrocks::pipeline {
 class LimitOperator final : public Operator {

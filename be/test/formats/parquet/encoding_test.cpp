@@ -1130,4 +1130,27 @@ TEST_F(ParquetEncodingTest, ByteStreamSplitFLBA) {
     f(31, 255);
 }
 
+// A DELTA_BINARY_PACKED page header is entirely file-controlled, so a corrupt one must come back
+// as a Status. Throwing here escapes the scan worker thread, which has no handler in any build
+// type, and aborts the BE process.
+TEST_F(ParquetEncodingTest, DeltaBinaryPackedCorruptHeader) {
+    // The header fields are ULEB128: values_per_block, mini_blocks_per_block, total_value_count
+    // and zigzag(first_value). Here values_per_block is 128 in both cases.
+    // 128 / 1000 == 0, i.e. more miniblocks than values.
+    const std::vector<uint8_t> zero_values_per_mini_block = {0x80, 0x01, 0xe8, 0x07, 0x00, 0x00};
+    // 128 / 3 == 42, which is not a multiple of 32.
+    const std::vector<uint8_t> unaligned_mini_block = {0x80, 0x01, 0x03, 0x00, 0x00};
+
+    const EncodingInfo* encoding = nullptr;
+    (void)EncodingInfo::get(tparquet::Type::INT32, tparquet::Encoding::DELTA_BINARY_PACKED, &encoding);
+    ASSERT_TRUE(encoding != nullptr);
+
+    for (const auto& header : {zero_values_per_mini_block, unaligned_mini_block}) {
+        std::unique_ptr<Decoder> decoder;
+        ASSERT_TRUE(encoding->create_decoder(&decoder).ok());
+        Status st = decoder->set_data(Slice(reinterpret_cast<const char*>(header.data()), header.size()));
+        ASSERT_TRUE(st.is_corruption()) << st;
+    }
+}
+
 } // namespace starrocks::parquet

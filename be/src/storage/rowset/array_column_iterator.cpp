@@ -14,6 +14,7 @@
 
 #include "storage/rowset/array_column_iterator.h"
 
+#include "base/testutil/sync_point.h"
 #include "column/array_column.h"
 #include "column/column_access_path.h"
 #include "column/const_column.h"
@@ -93,6 +94,7 @@ Status ArrayColumnIterator::next_batch_null_offsets(size_t* n, UInt32Column* off
 }
 
 Status ArrayColumnIterator::next_batch(size_t* n, Column* dst) {
+    TEST_SYNC_POINT_CALLBACK("ArrayColumnIterator::next_batch:size", n);
     auto [array_column, nulls] = unpack_array_column(dst);
     size_t num_to_read = 0;
     RETURN_IF_ERROR(next_batch_null_offsets(n, array_column->offsets_column_raw_ptr(), nulls, &num_to_read));
@@ -166,6 +168,7 @@ Status ArrayColumnIterator::next_batch_null_offsets(const SparseRange<>& range, 
 }
 
 Status ArrayColumnIterator::next_batch(const SparseRange<>& range, Column* dst) {
+    TEST_SYNC_POINT_CALLBACK("ArrayColumnIterator::next_batch:sparse", const_cast<SparseRange<>*>(&range));
     auto [array_column, null_column] = unpack_array_column(dst);
     CHECK((_null_iterator == nullptr && null_column == nullptr) ||
           (_null_iterator != nullptr && null_column != nullptr));
@@ -236,9 +239,6 @@ Status ArrayColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t 
 
         size_t size_to_read = 0;
         for (size_t i = 0; i < size; ++i) {
-            RETURN_IF_ERROR(_array_size_iterator->seek_to_ordinal_and_calc_element_ordinal(rowids[i]));
-            size_t element_ordinal = _array_size_iterator->element_ordinal();
-            RETURN_IF_ERROR(_element_iterator->seek_to_ordinal(element_ordinal));
             size_to_read += array_size.get_data()[i];
         }
 

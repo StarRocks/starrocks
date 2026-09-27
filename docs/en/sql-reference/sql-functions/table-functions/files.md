@@ -111,7 +111,10 @@ Wildcards can also be used to specify intermediate paths.
 
   :::note
 
-  To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+  To access NFS(NAS) via the `file://` protocol, mount the same NAS device as NFS under the same directory on the nodes that need to access the path:
+
+  - For read/write operations, mount it on each FE node and each BE or CN node. FE nodes list the files and infer the file schema, and BE/CN nodes read the data.
+  - For write only operations, mount it on each BE or CN node.
 
   :::
 
@@ -386,7 +389,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | `aws.s3.access_key`           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | `aws.s3.secret_key`           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ###### AWS STS Regional endpoints
 

@@ -122,9 +122,9 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 | 权限    | 用途                                                         |
 | ------- | ------------------------------------------------------------ |
-| ALTER | 更改存储卷的认证属性、注释或状态（enabled）。      |
+| ALTER | 更改存储卷的认证属性、注释或状态（enabled），以及设置指定存储卷为默认存储卷。      |
 | DROP  | 删除指定存储卷。                 |
-| USAGE | 查看指定存储卷的信息，设置指定存储卷为默认存储卷。   |
+| USAGE | 查看指定存储卷的信息。   |
 | ALL   | 拥有对该存储卷的上述所有权限。 |
 
 <PrivWarehouse />

@@ -27,11 +27,42 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
-    private final ExecutorService taskRunPool = ThreadPoolManager
+    // Not final: leader demotion shuts the pool down (shutdownNow interrupts in-flight task runs so
+    // their INSERTs abort instead of racing the next leader's re-driven run of the same task) and
+    // TaskManager.start() rebuilds it on re-election.
+    private volatile ExecutorService taskRunPool = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
+
+    /** Demotion: stop accepting task runs and interrupt in-flight ones (their transactions abort). */
+    public void shutdownNow() {
+        taskRunPool.shutdownNow();
+    }
+
+    /**
+     * Straggler predicate for the re-activation cleanliness gate: shut down by a previous demotion
+     * but a task-run thread is still running. A fresh/running pool is not shut down, so it never trips.
+     */
+    public boolean stoppedButNotTerminated() {
+        ExecutorService pool = taskRunPool;
+        return pool.isShutdown() && !pool.isTerminated();
+    }
+
+    public boolean awaitTermination(long timeoutMs) throws InterruptedException {
+        return taskRunPool.awaitTermination(timeoutMs, TimeUnit.MILLISECONDS);
+    }
+
+    /** Rebuild the pool on re-election after a demotion shut it down. Called from TaskManager.start(). */
+    public void rebuildIfShutdown() {
+        ExecutorService pool = taskRunPool;
+        if (pool.isShutdown()) {
+            taskRunPool = ThreadPoolManager.newDaemonCacheThreadPool(
+                    Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
+        }
+    }
 
     /**
      * Async execute a task-run, use the return value to indicate submit success or not
@@ -50,6 +81,13 @@ public class TaskRunExecutor {
         if (status.getState() != Constants.TaskRunState.PENDING) {
             LOG.warn("TaskRun {}/{} is in {} state, avoid execute it again", status.getTaskName(),
                     status.getQueryId(), status.getState());
+            return false;
+        }
+
+        if (taskRunPool.isShutdown()) {
+            // Leader demotion already stopped the pool; do not journal a PENDING -> RUNNING transition
+            // for a run that can never start here. The re-elected leader re-drives it from PENDING.
+            LOG.warn("taskRunPool is shut down (leader demoting), refuse task run {}", status.getTaskName());
             return false;
         }
 

@@ -1,0 +1,27 @@
+-- name: test_set_operation_with_non_nullable_json
+-- A set operation rebuilds its output rows by deserializing the serialized hash-set keys into
+-- freshly created destination columns. The destination is a bare JsonColumn only when the key
+-- expression is non-nullable, which is why the existing json coverage (a `json null` column) never
+-- reached this path.
+--
+-- Two properties of this case are load-bearing, so do not "simplify" them away:
+--   * `j` must be NOT NULL. A nullable key routes through
+--     ColumnFactory::deserialize_and_append_batch_nullable(), which was always correct.
+--   * `j` must not be the first output column. Chunk::num_rows() reports the first column's size,
+--     so a chunk holding only the (empty) JSON column reports zero rows and nothing overruns.
+create table t1 (
+  `k` int not null,
+  `j` json not null
+) duplicate key(`k`)
+distributed by hash(`k`) buckets 1
+properties('replication_num'='1');
+create table t2 (
+  `k` int not null,
+  `j` json not null
+) duplicate key(`k`)
+distributed by hash(`k`) buckets 1
+properties('replication_num'='1');
+insert into t1 values (1, parse_json('{"a": 1}')), (2, parse_json('{"b": 2}')), (3, parse_json('[1, 2, 3]'));
+insert into t2 values (1, parse_json('{"a": 1}')), (2, parse_json('{"c": 3}')), (3, parse_json('[1, 2, 3]'));
+select k, j from t1 intersect select k, j from t2 order by k;
+select k, j from t1 except select k, j from t2 order by k;

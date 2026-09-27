@@ -38,6 +38,12 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::INT);
         engine = JITEngine::get_instance();
         engine->init();
+        // Other suites in this binary may have compiled the same expressions already;
+        // the test asserts on cache misses, so start from an empty callable cache.
+        auto* cache = engine->get_callable_cache();
+        auto capacity = cache->get_capacity();
+        cache->set_capacity(0);
+        cache->set_capacity(capacity);
     }
 
 public:

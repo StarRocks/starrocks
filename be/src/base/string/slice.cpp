@@ -34,9 +34,14 @@
 
 #include "base/string/slice.h"
 
+#include <cstddef>
+
 #include "base/string/faststring.h"
 
 namespace starrocks {
+
+static_assert(sizeof(Slice) == 16, "Slice size mismatch");
+static_assert(offsetof(Slice, size) == 8, "Slice.size offset mismatch");
 
 static const uint16_t _SLICE_MAX_LENGTH = 65535;
 static char _slice_max_value_data[_SLICE_MAX_LENGTH];

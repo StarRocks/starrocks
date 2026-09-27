@@ -16,8 +16,11 @@ package com.starrocks.connector.delta;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -213,8 +216,7 @@ public class DeltaLakeMetadataTest {
             public DeltaLakeTable convertDeltaSnapshotToSRTable(String catalog, DeltaLakeSnapshot snapshot) {
                 return new DeltaLakeTable(1, "delta0", "db1", "table1", Lists.newArrayList(),
                         Lists.newArrayList("col1"), null, null,
-                        new MetastoreTable("db1", "table1", "path/to/table",
-                        123));
+                        new MetastoreTable("db1", "table1", "path/to/table", 123));
             }
         };
         DeltaLakeTable deltaTable = (DeltaLakeTable) deltaLakeMetadata.getTable(new ConnectContext(), "db1", "table1");
@@ -239,7 +241,7 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_sem", "tbl_sem"));
-        Assertions.assertTrue(ex.getMessage().contains("semantic detail message"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("semantic detail message"));
     }
 
     @Test
@@ -257,8 +259,25 @@ public class DeltaLakeMetadataTest {
 
         StarRocksConnectorException ex = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> metadata.getTable(null, "db_io", "tbl_io"));
-        String expectedPrefix = "Failed to get deltalake table delta0.db_io.tbl_io";
+        String expectedPrefix = "Failed to get Delta Lake table delta0.db_io.tbl_io";
         Assertions.assertTrue(ex.getMessage().contains(expectedPrefix));
-        Assertions.assertTrue(ex.getMessage().contains("io failure"));
+        Assertions.assertTrue(LogUtil.getUnwoundExceptionMessage(ex).contains("io failure"));
+    }
+
+    @Test
+    public void testIdentityStringPartitionColumns() {
+        // Only string-typed partition columns are identity string partition columns: a non-string partition column
+        // and a string non-partition column are both excluded. (Delta partitioning is always identity.)
+        List<Column> schema = Lists.newArrayList(
+                new Column("c1", com.starrocks.type.IntegerType.INT, true),      // non-partition int
+                new Column("c2", com.starrocks.type.StringType.STRING, true),    // partition string -> kept
+                new Column("c3", com.starrocks.type.IntegerType.INT, true),      // partition int -> excluded
+                new Column("c4", com.starrocks.type.StringType.STRING, true));   // non-partition string -> excluded
+        DeltaLakeTable table = new DeltaLakeTable(1, "delta0", "db1", "table1", schema,
+                Lists.newArrayList("c2", "c3"), null, null,
+                new MetastoreTable("db1", "table1", "path/to/table", 123));
+
+        Assertions.assertEquals(Sets.newHashSet("c2"),
+                DeltaLakeMetadata.identityStringPartitionColumns(table, Sets.newHashSet("c2", "c3")));
     }
 }

@@ -42,11 +42,24 @@ description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker
     ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...]
     ```
 
+- 将 Leader 角色优雅切换到另一个 Follower FE（原地交接，不重启进程）。
+
+    ```SQL
+    ALTER SYSTEM TRANSFER LEADER TO "host:edit_log_port" [FORCE]
+    ```
+
+    目标必须是存活的 Follower FE。该语句在当前 Leader FE 上执行，将 Leader 角色交接给目标 Follower，原 Leader 随后原地降级为 Follower（而非重启）。可通过 `SHOW PROC '/frontends'\G` 确认新的 Leader。指定 `FORCE` 时会抢占一个 BDBJE 层已在进行中的 Leader 切换；不指定 `FORCE` 时，若存在此类切换则该语句失败。并发执行的 `TRANSFER LEADER` 语句在 Leader 上串行执行：排队中的语句会等待前一条完成，轮到执行时若当前 FE 已不再是 Leader，则直接报错（不会触发第二次切换）。
+
+    失败语义：若切换本身失败（例如目标在内部 30 秒窗口内未能追平日志，或其集群成员资格尚未完全确认），语句报错且当前 Leader 保持不变——这是安全结果，重试即可。若切换成功但原 Leader 未能在 `leader_demotion_drain_timeout_sec` 内排空在途工作，原 Leader 进程会退出并以 Follower 身份重启，新 Leader 不受影响。
+
+    存算分离集群不支持该语句（执行将报错）；如需在存算分离模式下切换 Leader，请重启当前 Leader FE 以触发选举。
+
      参数说明如下：
 
     | **参数**           | **必选** | **说明**                                                     |
     | ------------------ | -------- | ------------------------------------------------------------ |
     | host:edit_log_port | 是       | <ul><li>`host`：FE 机器的 FQDN 或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`edit_log_port`：FE 上的 BDBJE 通信端口，默认为 `9010`。</li></ul> |
+    | FORCE              | 否       | 抢占一个 BDBJE 层已在进行中的 Leader 切换。不指定时，若存在此类切换则语句失败。并发的 `TRANSFER LEADER` 语句本身串行执行，无需 `FORCE`。 |
 
 - 创建 image。
 
@@ -110,7 +123,7 @@ description: "ALTER SYSTEM 管理 StarRocks 集群中的 FE、BE、CN 和 Broker
 
 ### Broker
 
-- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../../loading/hdfs_load.md)或[从云存储导入](../../../../loading/objectstorage.mdx)。
+- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 导入](../../../../loading/hdfs_load.md)或[从云存储导入](../../../../loading/objectstorage/objectstorage.mdx)。
 
     ```SQL
     ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...]
@@ -191,4 +204,10 @@ ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
 
 ```SQL
 ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
+
+示例九：将 Leader 角色切换到指定的 Follower FE。
+
+```SQL
+ALTER SYSTEM TRANSFER LEADER TO "x.x.x.x:9010";
 ```

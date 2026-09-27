@@ -146,6 +146,8 @@ public class LoadPlanner {
 
     // Only valid for stream load
     private boolean enableBatchWrite = false;
+    private boolean syncStreamLoad = false;
+    private long syncStreamLoadBackendId = -1;
     private int batchWriteIntervalMs;
     private ImmutableMap<String, String> batchWriteParameters;
     private Set<Long> batchWriteBackendIds;
@@ -268,6 +270,17 @@ public class LoadPlanner {
         this.batchWriteBackendIds = new HashSet<>(batchWriteBackendIds);
     }
 
+    // Mark this plan as the classic BE-local synchronous stream load (see
+    // FrontendServiceImpl.streamLoadPutImpl): keep the real load id and skip channel_id so the
+    // receiving BE reads the HTTP action's LoadStreamMgr pipe.
+    public void setSyncStreamLoad(boolean syncStreamLoad) {
+        this.syncStreamLoad = syncStreamLoad;
+    }
+
+    public void setSyncStreamLoadBackendId(long syncStreamLoadBackendId) {
+        this.syncStreamLoadBackendId = syncStreamLoadBackendId;
+    }
+
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
     }
@@ -331,7 +344,7 @@ public class LoadPlanner {
         boolean needShufflePlan = false;
         boolean forceReplicatedStorage = false;
         if (Config.enable_shuffle_load && needShufflePlan()) {
-            if (!Config.eliminate_shuffle_load_by_replicated_storage) {
+            if (!Config.eliminate_shuffle_load_by_replicated_storage && !syncStreamLoad) {
                 // scan fragment
                 PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
                 scanFragment.setParallelExecNum(parallelInstanceNum);
@@ -447,6 +460,8 @@ public class LoadPlanner {
             StreamLoadScanNode streamScanNode = new StreamLoadScanNode(loadId, new PlanNodeId(0), tupleDesc,
                     destTable, streamLoadInfo, dbName, label, parallelInstanceNum, txnId, computeResource);
             streamScanNode.setNeedAssignBE(true);
+            streamScanNode.setSyncStreamLoad(syncStreamLoad);
+            streamScanNode.setSyncStreamLoadBackendId(syncStreamLoadBackendId);
             if (enableBatchWrite) {
                 streamScanNode.setBatchWrite(batchWriteIntervalMs, batchWriteParameters, batchWriteBackendIds);
             }
@@ -513,6 +528,11 @@ public class LoadPlanner {
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
+                ((OlapTableSink) dataSink).setEstimatedWriteBytes(totalSourceFileBytes());
+                // The knobs as the session that SUBMITTED this load had them, not as whatever session
+                // plans it now -- see MultiNodeWriteSettings.fromPersisted.
+                ((OlapTableSink) dataSink).setMultiNodeWriteSettings(
+                        OlapTableSink.MultiNodeWriteSettings.fromPersisted(sessionVariables));
                 ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -702,4 +722,31 @@ public class LoadPlanner {
     public Map<String, String> getSessionVariables() {
         return sessionVariables;
     }
+
+    // Bytes of source this load will read, summed from the file list the job already resolved.
+    //
+    // Unlike the INSERT path this is measured, not estimated -- but it is measured on the SOURCE, so a
+    // compressed or columnar input understates what actually gets written. That direction is the safe
+    // one here: it can only narrow the write set, never widen it past the node bound.
+    //
+    // Returns -1 when there is no file list (a streaming ingest reaches this planner too), which the
+    // sink reads as "no estimate" and leaves the node count to the bound alone.
+    private long totalSourceFileBytes() {
+        if (fileStatusesList == null) {
+            return -1;
+        }
+        long total = 0;
+        for (List<TBrokerFileStatus> group : fileStatusesList) {
+            if (group == null) {
+                continue;
+            }
+            for (TBrokerFileStatus file : group) {
+                if (file != null && file.size > 0) {
+                    total += file.size;
+                }
+            }
+        }
+        return total > 0 ? total : -1;
+    }
+
 }

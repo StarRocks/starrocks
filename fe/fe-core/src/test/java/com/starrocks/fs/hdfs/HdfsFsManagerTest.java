@@ -23,12 +23,14 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.thrift.THdfsProperties;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
 import java.io.File;
@@ -37,6 +39,7 @@ import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.net.URI;
 import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.Map;
@@ -227,42 +230,50 @@ public class HdfsFsManagerTest {
 
     @Test
     public void testAzureFileSystemCache() throws StarRocksException, IOException {
-        // Test ADLS Gen2 schemes (abfs/abfss) with ADLS2 credentials
-        Map<String, String> adlsProperties = new HashMap<>();
-        adlsProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, "c2hhcmVkS2V5");  // base64 encoded
+        // Initializing a real ABFS FileSystem probes account.dfs.core.windows.net for the account's namespace
+        // type; the fake account cannot answer, and hadoop-azure retries the failure until the test times out.
+        // Only the HdfsFsManager cache is under test here, so keep Hadoop from creating real FileSystems.
+        try (MockedStatic<FileSystem> fileSystemStatic = Mockito.mockStatic(FileSystem.class)) {
+            fileSystemStatic.when(() -> FileSystem.get(Mockito.any(URI.class), Mockito.any(Configuration.class)))
+                    .thenAnswer(invocation -> Mockito.mock(FileSystem.class));
 
-        // Test abfss:// scheme (Azure Data Lake Storage Gen2 with SSL)
-        String abfssPath1 = "abfss://container1@account.dfs.core.windows.net/path1/file.parquet";
-        String abfssPath2 = "abfss://container1@account.dfs.core.windows.net/path2/file.parquet";
-        String abfssPath3 = "abfss://container2@account.dfs.core.windows.net/path1/file.parquet";
-        String abfssPath4 = "abfss://container3@account.dfs.core.windows.net/path1/file.parquet";
-        testFileSystemCache(adlsProperties, Pair.create(abfssPath1, abfssPath2), Pair.create(abfssPath3, abfssPath4));
+            // Test ADLS Gen2 schemes (abfs/abfss) with ADLS2 credentials
+            Map<String, String> adlsProperties = new HashMap<>();
+            adlsProperties.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, "c2hhcmVkS2V5");  // base64 encoded
 
-        // Test abfs:// scheme (Azure Data Lake Storage Gen2 without SSL)
-        String abfsPath1 = "abfs://container1@account.dfs.core.windows.net/path1/file.parquet";
-        String abfsPath2 = "abfs://container1@account.dfs.core.windows.net/path2/file.parquet";
-        String abfsPath3 = "abfs://container2@account.dfs.core.windows.net/path1/file.parquet";
-        String abfsPath4 = "abfs://container3@account.dfs.core.windows.net/path1/file.parquet";
-        testFileSystemCache(adlsProperties, Pair.create(abfsPath1, abfsPath2), Pair.create(abfsPath3, abfsPath4));
+            // Test abfss:// scheme (Azure Data Lake Storage Gen2 with SSL)
+            String abfssPath1 = "abfss://container1@account.dfs.core.windows.net/path1/file.parquet";
+            String abfssPath2 = "abfss://container1@account.dfs.core.windows.net/path2/file.parquet";
+            String abfssPath3 = "abfss://container2@account.dfs.core.windows.net/path1/file.parquet";
+            String abfssPath4 = "abfss://container3@account.dfs.core.windows.net/path1/file.parquet";
+            testFileSystemCache(adlsProperties, Pair.create(abfssPath1, abfssPath2), Pair.create(abfssPath3, abfssPath4));
 
-        // Test Azure Blob Storage schemes (wasb/wasbs) with Blob credentials
-        Map<String, String> blobProperties = new HashMap<>();
-        blobProperties.put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "account");
-        blobProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "c2hhcmVkS2V5");  // base64 encoded
+            // Test abfs:// scheme (Azure Data Lake Storage Gen2 without SSL)
+            String abfsPath1 = "abfs://container1@account.dfs.core.windows.net/path1/file.parquet";
+            String abfsPath2 = "abfs://container1@account.dfs.core.windows.net/path2/file.parquet";
+            String abfsPath3 = "abfs://container2@account.dfs.core.windows.net/path1/file.parquet";
+            String abfsPath4 = "abfs://container3@account.dfs.core.windows.net/path1/file.parquet";
+            testFileSystemCache(adlsProperties, Pair.create(abfsPath1, abfsPath2), Pair.create(abfsPath3, abfsPath4));
 
-        // Test wasb:// scheme (Azure Blob Storage without SSL)
-        String wasbPath1 = "wasb://container1@account.blob.core.windows.net/path1/file.parquet";
-        String wasbPath2 = "wasb://container1@account.blob.core.windows.net/path2/file.parquet";
-        String wasbPath3 = "wasb://container2@account.blob.core.windows.net/path1/file.parquet";
-        String wasbPath4 = "wasb://container3@account.blob.core.windows.net/path1/file.parquet";
-        testFileSystemCache(blobProperties, Pair.create(wasbPath1, wasbPath2), Pair.create(wasbPath3, wasbPath4));
+            // Test Azure Blob Storage schemes (wasb/wasbs) with Blob credentials
+            Map<String, String> blobProperties = new HashMap<>();
+            blobProperties.put(CloudConfigurationConstants.AZURE_BLOB_STORAGE_ACCOUNT, "account");
+            blobProperties.put(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, "c2hhcmVkS2V5");  // base64 encoded
 
-        // Test wasbs:// scheme (Azure Blob Storage with SSL)
-        String wasbsPath1 = "wasbs://container1@account.blob.core.windows.net/path1/file.parquet";
-        String wasbsPath2 = "wasbs://container1@account.blob.core.windows.net/path2/file.parquet";
-        String wasbsPath3 = "wasbs://container2@account.blob.core.windows.net/path1/file.parquet";
-        String wasbsPath4 = "wasbs://container3@account.blob.core.windows.net/path1/file.parquet";
-        testFileSystemCache(blobProperties, Pair.create(wasbsPath1, wasbsPath2), Pair.create(wasbsPath3, wasbsPath4));
+            // Test wasb:// scheme (Azure Blob Storage without SSL)
+            String wasbPath1 = "wasb://container1@account.blob.core.windows.net/path1/file.parquet";
+            String wasbPath2 = "wasb://container1@account.blob.core.windows.net/path2/file.parquet";
+            String wasbPath3 = "wasb://container2@account.blob.core.windows.net/path1/file.parquet";
+            String wasbPath4 = "wasb://container3@account.blob.core.windows.net/path1/file.parquet";
+            testFileSystemCache(blobProperties, Pair.create(wasbPath1, wasbPath2), Pair.create(wasbPath3, wasbPath4));
+
+            // Test wasbs:// scheme (Azure Blob Storage with SSL)
+            String wasbsPath1 = "wasbs://container1@account.blob.core.windows.net/path1/file.parquet";
+            String wasbsPath2 = "wasbs://container1@account.blob.core.windows.net/path2/file.parquet";
+            String wasbsPath3 = "wasbs://container2@account.blob.core.windows.net/path1/file.parquet";
+            String wasbsPath4 = "wasbs://container3@account.blob.core.windows.net/path1/file.parquet";
+            testFileSystemCache(blobProperties, Pair.create(wasbsPath1, wasbsPath2), Pair.create(wasbsPath3, wasbsPath4));
+        }
     }
 
     /**

@@ -18,7 +18,9 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -84,5 +86,17 @@ public class RemoveAggTest extends PlanTestBase {
     @AfterAll
     public static void afterClass() {
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    void removeAggCarriesLimitToScan() throws Exception {
+        // The aggregation this rule deletes is the operator carrying the limit. On an aggregate-keys
+        // table whose group by covers every key column the scan already yields one row per group, so
+        // the limit must land on the scan -- otherwise the BE reads the whole table and only an
+        // exchange above truncates.
+        String plan = getFragmentPlan("select k1, k2, k3, sum(v3) from test_agg group by k1, k2, k3 limit 5");
+        assertNotContains(plan, "AGGREGATE");
+        String scanPart = plan.substring(plan.indexOf("OlapScanNode"));
+        Assertions.assertTrue(scanPart.contains("limit: 5"), "limit must reach the scan:\n" + plan);
     }
 }

@@ -450,7 +450,17 @@ bool HyperLogLog::is_valid(const Slice& slice) {
             return false;
         }
         uint32_t num_registers = decode_fixed32_le(ptr);
-        ptr += 4 + 3 * num_registers;
+        ptr += 4;
+        if (ptr + 3 * static_cast<size_t>(num_registers) > end) {
+            return false;
+        }
+        for (uint32_t i = 0; i < num_registers; ++i) {
+            // each entry: 2-byte register index + 1-byte value; the index must be in range
+            if (decode_fixed16_le(ptr) >= HLL_REGISTERS_COUNT) {
+                return false;
+            }
+            ptr += 3;
+        }
         break;
     }
     case HLL_DATA_FULL: {
@@ -516,6 +526,12 @@ bool HyperLogLog::deserialize(const Slice& slice) {
             // 1 byte: register value
             uint16_t register_idx = decode_fixed16_le(ptr);
             ptr += 2;
+            // register_idx is an attacker-controlled uint16 (0..65535) but _registers.data
+            // only holds HLL_REGISTERS_COUNT (16384) bytes. Reject out-of-range indices to
+            // avoid an out-of-bounds heap write from a malformed SPARSE payload.
+            if (register_idx >= HLL_REGISTERS_COUNT) {
+                return false;
+            }
             _registers.data[register_idx] = *ptr++;
         }
         break;

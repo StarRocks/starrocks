@@ -133,7 +133,6 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         ScalarOperator eqChild = eqContext.getEquivalent();
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
-        boolean isRollup = shuttleContext.isRollup();
         if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() && aggFunc.getChildren().size() == 1) ||
                 aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
             SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();

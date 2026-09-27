@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "base/metrics.h"
+#include "common/metrics/thread_pool_metric_group.h"
 
 namespace starrocks {
 
@@ -47,7 +48,8 @@ public:
     void install_disk_path_metrics(MetricRegistry* registry, const std::vector<std::string>& paths);
     void set_disk_metrics(const std::string& path, int64_t total_capacity, int64_t available_capacity,
                           int64_t data_used_capacity, int64_t state);
-    void register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                      ThreadPool* threadpool);
 
     METRIC_DEFINE_INT_COUNTER(report_all_tablets_requests_failed, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(report_tablet_requests_failed, MetricUnit::REQUESTS);
@@ -103,10 +105,12 @@ public:
 private:
     struct PendingThreadPoolMetrics {
         std::string name;
+        ThreadPoolMetricGroup* metric_group;
         ThreadPool* threadpool;
     };
 
-    void _register_thread_pool_metrics(const std::string& name, ThreadPool* threadpool);
+    void _register_thread_pool_metrics(const std::string& name, ThreadPoolMetricGroup* metric_group,
+                                       ThreadPool* threadpool);
 
     MetricRegistry* _registry = nullptr;
     std::vector<PendingThreadPoolMetrics> _pending_thread_pool_metrics;
@@ -118,3 +122,9 @@ private:
 };
 
 } // namespace starrocks
+
+#define REGISTER_AGENT_THREAD_POOL_METRICS(agent_metrics, metric_name, threadpool)                          \
+    do {                                                                                                    \
+        auto* metric_owner = (agent_metrics);                                                               \
+        metric_owner->register_thread_pool_metrics(#metric_name, &metric_owner->metric_name, (threadpool)); \
+    } while (false)

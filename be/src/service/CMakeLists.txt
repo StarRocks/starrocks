@@ -34,9 +34,11 @@ ADD_BE_LIB(Service
         ${EXEC_FILES}
 )
 
-target_link_libraries(Service PRIVATE Runtime Cache AgentServer ComputeEnv ExecRuntime Platform)
+target_link_libraries(Service PRIVATE Script Runtime DataWorkflows Orchestration Cache AgentServer ComputeEnv ExecRuntime
+                                      Platform ConnectorFile ColumnCore)
 target_link_libraries(ServiceBE PUBLIC Service)
-target_link_libraries(ServiceBE PRIVATE AgentServer ConnectorBootstrap)
+target_link_libraries(ServiceBE PRIVATE AgentServer ModuleBootstrap DataWorkflows Orchestration SchemaScannerBuiltin
+                                        Storage)
 
 # only build starrocks_be when TEST is off
 if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
@@ -45,6 +47,22 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
     )
     if (APPLE)
         list(APPEND STARROCKS_BE_MAIN_FILES macos_link_stubs.cpp)
+    endif()
+    if (WITH_GLIBC_COMPAT AND NOT APPLE)
+        # The shim pins symbol versions that only exist on these ABIs.
+        if (NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64|aarch64|arm64)$")
+            message(FATAL_ERROR "WITH_GLIBC_COMPAT is only supported on x86-64 and aarch64, "
+                    "not ${CMAKE_SYSTEM_PROCESSOR}. Add its glibc version nodes to "
+                    "be/src/common/glibc_compat.c first.")
+        endif()
+        # Opt-in via build.sh --with-glibc-compat: keeps the binary loadable on hosts
+        # whose glibc is older than the build image's. See be/src/common/glibc_compat.c
+        # and build-support/check_glibc_abi.sh. Built as C11 on purpose - under
+        # -std=gnu++23 glibc redirects strtoul() and friends to the very __isoc23_*
+        # symbols the file replaces.
+        list(APPEND STARROCKS_BE_MAIN_FILES ${SRC_DIR}/common/glibc_compat.c)
+        set_source_files_properties(${SRC_DIR}/common/glibc_compat.c
+                PROPERTIES LANGUAGE C COMPILE_OPTIONS "-std=gnu11")
     endif()
 
     add_executable(starrocks_be
@@ -59,7 +77,7 @@ if ((NOT ${MAKE_TEST} STREQUAL "ON") AND (NOT BUILD_FORMAT_LIB))
         Service
         ${STARROCKS_LINK_LIBS}
         )
-    STARROCKS_FORCE_LOAD_LIBS(starrocks_be Exprs ExprCore)
+    STARROCKS_FORCE_LOAD_LIBS(starrocks_be ${EXPR_FORCE_LOAD_LIBS})
     install(DIRECTORY DESTINATION ${OUTPUT_DIR}/lib/)
 
     install(TARGETS starrocks_be

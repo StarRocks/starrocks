@@ -76,7 +76,7 @@ public:
 
     Status write(Chunk* chunk) override;
 
-    CommitResult close() override;
+    FileCommitResult close() override;
 
 private:
     static StatusOr<orc::CompressionKind> _convert_compression_type(TCompressionType::type type);

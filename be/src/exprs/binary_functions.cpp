@@ -27,7 +27,7 @@ namespace starrocks {
 
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
@@ -44,7 +44,10 @@ StatusOr<ColumnPtr> BinaryFunctions::to_binary(FunctionContext* context, const C
 
 // to_binary_prepare
 Status BinaryFunctions::to_binary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    // BinaryFormatState is an immutable format choice derived from a constant arg; it is
+    // read-only at eval time, so build it once in FRAGMENT_LOCAL and share it across threads
+    // instead of keeping a per-thread copy.
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
     auto* state = new BinaryFormatState();
@@ -63,8 +66,9 @@ Status BinaryFunctions::to_binary_prepare(FunctionContext* context, FunctionCont
 }
 
 Status BinaryFunctions::to_binary_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state =
+                reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -72,7 +76,7 @@ Status BinaryFunctions::to_binary_close(FunctionContext* context, FunctionContex
 
 // to_binary
 StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     auto to_binary_type = state->to_binary_type;
     switch (to_binary_type) {
     case BinaryFormatType::UTF8: {
@@ -89,7 +93,8 @@ StatusOr<ColumnPtr> BinaryFunctions::from_binary(FunctionContext* context, const
 
 // to_binary_prepare
 Status BinaryFunctions::from_binary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
+    // See to_binary_prepare: read-only format choice, shared FRAGMENT_LOCAL rather than per-thread.
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
     auto* state = new BinaryFormatState();
@@ -108,8 +113,9 @@ Status BinaryFunctions::from_binary_prepare(FunctionContext* context, FunctionCo
 }
 
 Status BinaryFunctions::from_binary_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* state = reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state =
+                reinterpret_cast<BinaryFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         delete state;
     }
     return Status::OK();

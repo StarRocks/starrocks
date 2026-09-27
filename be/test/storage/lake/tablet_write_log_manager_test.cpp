@@ -21,7 +21,6 @@
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/lake_persistent_index.h"
-#include "storage/lake/lake_primary_index.h"
 
 namespace starrocks::lake {
 
@@ -554,40 +553,6 @@ TEST_F(ComputeSstStatsTest, test_txn_log_with_all_sst_sources) {
     EXPECT_EQ(10000 + 20000 + 30000, stats.input_bytes);
     EXPECT_EQ(2 + 1 + 1, stats.output_files); // 2 writer + 1 output_sstables + 1 output_sstable
     EXPECT_EQ(1000 + 2000 + 5000 + 7000, stats.output_bytes);
-}
-
-// ============================================================
-// Tests for LakePrimaryIndex publish SST stats accessors
-// ============================================================
-
-class LakePrimaryIndexSstStatsTest : public testing::Test {};
-
-TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_disabled) {
-    LakePrimaryIndex index;
-    // persistent index is disabled by default
-    index.set_enable_persistent_index(false);
-
-    EXPECT_EQ(0, index.publish_sst_flush_count());
-    EXPECT_EQ(0, index.publish_sst_flush_bytes());
-
-    // reset should not crash when disabled
-    index.reset_publish_sst_stats();
-    EXPECT_EQ(0, index.publish_sst_flush_count());
-    EXPECT_EQ(0, index.publish_sst_flush_bytes());
-}
-
-TEST_F(LakePrimaryIndexSstStatsTest, test_publish_sst_stats_enabled_no_persistent_index) {
-    LakePrimaryIndex index;
-    // Enable persistent index but don't actually create one
-    // (the internal _persistent_index will be nullptr or not a LakePersistentIndex)
-    index.set_enable_persistent_index(true);
-
-    // Should return 0 when persistent_index is not LakePersistentIndex
-    EXPECT_EQ(0, index.publish_sst_flush_count());
-    EXPECT_EQ(0, index.publish_sst_flush_bytes());
-
-    // reset should not crash
-    index.reset_publish_sst_stats();
 }
 
 // ============================================================

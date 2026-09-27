@@ -1,0 +1,64 @@
+-- name: test_query_cache_empty_build_side_hang
+-- MultilaneOperator drives one lane per tablet. Its non-passthrough need_input() used to ask only
+-- `last_chunk_received || processor->need_input()`, while the passthrough branch above it also
+-- accepted a finished lane. That asymmetry deadlocks when a lane's processor finishes before its
+-- last chunk arrives: NLJoinProbeOperator with an empty build side has _skip_probe() true, so its
+-- need_input() is false forever, and last_chunk_received can only be set by push_chunk() -- which
+-- the driver never calls, because need_input() is false. Meanwhile is_finished() waits on
+-- _input_finished, which the upstream can never deliver. The query hung until its timeout.
+--
+-- The join must be BELOW the aggregation so it sits inside a cached lane, and its build side must
+-- come out empty at run time (a constant-false predicate would be folded into an EmptySetNode,
+-- which is not cacheable, so the emptiness has to be data-driven).
+CREATE TABLE eb1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE eb2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO eb1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+-- every ts is >= 1, so `ts < 0` is empty at run time but not constant-foldable
+INSERT INTO eb2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, generate_series, 1
+FROM TABLE(generate_series(1, 2000));
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- Empty build side. Before the fix this hung until query_timeout with the cache on.
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 0) b on eb1.ts > b.k group by eb1.c1) x;
+set enable_query_cache = false;
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 0) b on eb1.ts > b.k group by eb1.c1) x;
+
+-- A non-empty build side must keep returning the same answer either way, so the fix cannot be
+-- passing merely by making the lane produce nothing.
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 3) b on eb1.ts > b.k group by eb1.c1) x;
+set enable_query_cache = false;
+select ifnull(sum(s),0) from (select eb1.c1, sum(eb1.v1) s from eb1
+  join (select c1 as k from eb2 where ts < 3) b on eb1.ts > b.k group by eb1.c1) x;

@@ -14,9 +14,9 @@
 
 #include "exec/pipeline/scan/morsel_queue_factory.h"
 
-#include "exec/pipeline/scan/bucket_sequence_morsel_queue.h"
-#include "exec/pipeline/scan/olap_dynamic_morsel_queue.h"
 #include "gutil/casts.h"
+#include "storage/query/bucket_sequence_morsel_queue.h"
+#include "storage/query/olap_dynamic_morsel_queue.h"
 
 namespace starrocks::pipeline {
 
@@ -112,6 +112,16 @@ StatusOr<int> IndividualMorselQueueFactory::next_driver_seq() {
     }
     int seq = _random_cursor.fetch_add(1, std::memory_order_relaxed);
     return seq % size;
+}
+
+void IndividualMorselQueueFactory::add_split_source_morsels(int64_t count) {
+    if (!_enable_random_append_split_morsel || count <= 0) {
+        return;
+    }
+    _remaining_split_source_morsels.fetch_add(count, std::memory_order_relaxed);
+    for (auto& q : _queue_per_driver_seq) {
+        q->set_has_more_from_split(true);
+    }
 }
 
 void IndividualMorselQueueFactory::set_has_more_scan_ranges(bool v) {

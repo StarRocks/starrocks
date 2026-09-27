@@ -32,8 +32,10 @@ Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
     _stream_aggregator->close(state);
-    DCHECK(is_finished());
-    DCHECK(!has_output());
+    // On cancellation the operator is closed without having finished; only assert the
+    // normal-completion invariants when the query is still running.
+    DCHECK(state->is_cancelled() || is_finished());
+    DCHECK(state->is_cancelled() || !has_output());
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {

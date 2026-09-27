@@ -214,7 +214,7 @@ public abstract class Type implements Cloneable {
     public boolean canApplyToNumeric() {
         // TODO(mofei) support sum, avg for JSON
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isArrayType() && !isVariantType();
+                !isMapType() && !isArrayType() && !isVariantType() && !isFileType();
     }
 
     public boolean canJoinOn() {
@@ -234,7 +234,7 @@ public abstract class Type implements Cloneable {
         }
 
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType();
+                !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canGroupBy() {
@@ -253,7 +253,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isVariantType();
+                !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canOrderBy() {
@@ -272,7 +272,7 @@ public abstract class Type implements Cloneable {
             return true;
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canPartitionBy() {
@@ -281,7 +281,7 @@ public abstract class Type implements Cloneable {
             return ((ArrayType) this).getItemType().canPartitionBy();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canDistinct() {
@@ -296,25 +296,67 @@ public abstract class Type implements Cloneable {
             return ((MapType) this).getKeyType().canDistinct() && ((MapType) this).getValueType().canDistinct();
         }
         return !isOnlyMetricType() && !isJsonType() && !isFunctionType() && !isBinaryType() && !isStructType() &&
-                !isMapType() && !isVariantType();
+                !isMapType() && !isVariantType() && !isFileType() && !isGeoType();
     }
 
     public boolean canStatistic() {
         // TODO(mofei) support statistic by for JSON
         return !isOnlyMetricType() && !isJsonType() && !isStructType() && !isFunctionType()
-                && !isBinaryType() && !isVariantType();
+                && !isBinaryType() && !isVariantType() && !isFileType() && !isGeoType();
+    }
+
+    // Returns true if this type is VARIANT or transitively contains a VARIANT inside an
+    // ARRAY/MAP/STRUCT. VARIANT has no native storage write path: an OLAP column (or generated MV
+    // column) containing it aborts the BE on write (the storage LogicalType dispatch hits its
+    // default LOG(FATAL) for TYPE_VARIANT), so native schemas must reject any contained VARIANT.
+    public boolean containsVariant() {
+        if (isVariantType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsVariant();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsVariant() || ((MapType) this).getValueType().containsVariant();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsVariant());
+        }
+        return false;
+    }
+
+    // Returns true if this type is FILE or transitively contains a FILE inside an ARRAY/MAP/STRUCT.
+    // FILE is a read-only external reference with no native storage write path.
+    public boolean containsFile() {
+        if (isFileType()) {
+            return true;
+        }
+        if (isArrayType()) {
+            return ((ArrayType) this).getItemType().containsFile();
+        }
+        if (isMapType()) {
+            return ((MapType) this).getKeyType().containsFile() || ((MapType) this).getValueType().containsFile();
+        }
+        if (isStructType()) {
+            return ((StructType) this).getFields().stream().anyMatch(sf -> sf.getType().containsFile());
+        }
+        return false;
     }
 
     public boolean canDistributedBy() {
         // TODO(mofei) support distributed by for JSON
-        // Allow VARBINARY as distribution key
+        // Allow VARBINARY as distribution key.
+        // A distribution / key / sort-key column is encoded on the BE via an order-preserving
+        // KeyCoder, so its type must have a registered key coder. TIME has none (it is a compute-only
+        // double, not a storable/encodable column type) and would crash the BE short-key encoder, so
+        // exclude it here alongside the other non-encodable types.
         return !isComplexType() && !isFloatingPointType() && !isOnlyMetricType() && !isJsonType()
-                && !isFunctionType() && !isVariantType();
+                && !isFunctionType() && !isVariantType() && !isFileType() && !isTime() && !isGeoType();
     }
 
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
-                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType());
+                || isPseudoType() || isFunctionType() || isBinaryType() || isVariantType() || isFileType());
     }
 
     /**
@@ -359,6 +401,14 @@ public abstract class Type implements Cloneable {
 
     public boolean isVariantType() {
         return isScalarType(PrimitiveType.VARIANT);
+    }
+
+    public boolean isFileType() {
+        return isScalarType(PrimitiveType.FILE);
+    }
+
+    public boolean isGeoType() {
+        return isScalarType(PrimitiveType.GEOGRAPHY) || isScalarType(PrimitiveType.GEOMETRY);
     }
 
     public boolean isPercentile() {

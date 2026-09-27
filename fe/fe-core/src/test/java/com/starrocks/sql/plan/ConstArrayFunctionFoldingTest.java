@@ -152,7 +152,9 @@ public class ConstArrayFunctionFoldingTest extends PlanTestBase {
                 "SELECT 'distinct_map_keys' as func_name, distinct_map_keys(NULL) as result;",
                 "SELECT 'cardinality' as func_name, cardinality(NULL) as result;",
                 "SELECT 'tokenize' as func_name, tokenize(NULL, ' ') as result;",
-                "SELECT 'tokenize' as func_name, tokenize('hello world', NULL) as result;"};
+                // The tokenizer name must now name a tokenizer the BE implements; what this case
+                // covers is the NULL content folding to NULL, so use a real tokenizer for it.
+                "SELECT 'tokenize' as func_name, tokenize('english', NULL) as result;"};
         for (String q : queryList) {
             System.out.println(q);
             String plan = getFragmentPlan(q);

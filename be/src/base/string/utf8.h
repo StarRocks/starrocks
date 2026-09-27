@@ -97,10 +97,12 @@ static inline Slice truncate_utf8(const Slice& str, const size_t max_size) {
 template <bool use_skipped_chars>
 static inline const char* skip_leading_utf8(const char* p, const char* end, size_t n,
                                             [[maybe_unused]] size_t* skipped_chars) {
-    int char_size = 0;
+    size_t char_size = 0;
     size_t i = 0;
     for (; i < n && p < end; ++i, p += char_size) {
-        char_size = UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*p)];
+        // A truncated/invalid UTF-8 lead byte at the tail can claim more bytes than remain;
+        // clamp to the rest of the string so the returned pointer stays within the input.
+        char_size = std::min<size_t>(UTF8_BYTE_LENGTH_TABLE[static_cast<uint8_t>(*p)], static_cast<size_t>(end - p));
     }
     if constexpr (use_skipped_chars) {
         *skipped_chars = i;
@@ -179,6 +181,15 @@ static inline size_t incomplete_trailing_utf8_len(const char* data, size_t len) 
         return i < width ? i : 0;
     }
     return 0;
+}
+
+// UTF-8 aware tolower using ICU
+// DCHECKs on ICU failure - ICU should always be available
+void utf8_tolower(const char* src, size_t src_len, std::string& dst);
+
+// Convenience overload for std::string
+static inline void utf8_tolower(const std::string& src, std::string& dst) {
+    utf8_tolower(src.data(), src.size(), dst);
 }
 
 } // namespace starrocks

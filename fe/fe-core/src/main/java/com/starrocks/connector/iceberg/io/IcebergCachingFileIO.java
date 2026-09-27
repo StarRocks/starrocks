@@ -87,6 +87,7 @@ import java.io.UncheckedIOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -215,6 +216,7 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
     public Configuration buildConfFromProperties(Map<String, String> properties, String path) throws StarRocksException {
         // build Hadoop configuration from properties for HadoopFileIO
         Configuration copied = new Configuration(conf.get());
+        disableSharedFileSystemCache(copied, path);
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             if (entry.getKey().startsWith(ADLS_SAS_TOKEN) && entry.getKey().endsWith(ADLS_ENDPOINT)) {
                 // Handle Azure ADLS SAS token
@@ -233,7 +235,15 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return copied;
             } else if (entry.getKey().equals(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN)) {
                 // Handle GCS access token
-                copied.set("fs.gs.auth.access.token.provider.impl", GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                        GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+                copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                copied.set(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                        GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_IMPL);
+                // The base conf may carry catalog-level impersonation, which gcs-connector would apply
+                // on top of the vended token; vended tokens typically lack IAM impersonation permission.
+                copied.unset(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY);
                 copied.set(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, entry.getValue());
                 copied.set(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY,
                         properties.getOrDefault(GCPCloudConfigurationProvider.GCS_ACCESS_TOKEN_EXPIRES_AT,
@@ -241,7 +251,27 @@ public class IcebergCachingFileIO implements FileIO, HadoopConfigurable {
                 return copied;
             }
         }
-        return conf.get();
+        return copied;
+    }
+
+    // GCSFileIO/ADLSFileIO are absent from the FE classpath, so ResolvingFileIO falls back to
+    // HadoopFileIO, whose FileSystem cache key is (scheme, authority, ugi) and excludes the
+    // Configuration holding the credential — one shared instance would serve every catalog on a bucket
+    // with whichever credential created it first. Kept to Azure and GCS deliberately: bypassing the
+    // cache leaks an unclosed FileSystem per call, so other schemes wait for a credential-keyed cache.
+    private static final Set<String> SCHEMES_REQUIRING_FS_ISOLATION =
+            Set.of("gs", "abfs", "abfss", "wasb", "wasbs", "adl");
+
+    private static void disableSharedFileSystemCache(Configuration conf, String path) {
+        String scheme = new Path(path).toUri().getScheme();
+        if (scheme == null) {
+            // FileSystem.get() resolves a scheme-less path through fs.defaultFS and only then consults
+            // the flag, so the flag has to be keyed on the default scheme rather than skipped.
+            scheme = FileSystem.getDefaultUri(conf).getScheme();
+        }
+        if (scheme != null && SCHEMES_REQUIRING_FS_ISOLATION.contains(scheme)) {
+            conf.setBoolean(String.format("fs.%s.impl.disable.cache", scheme), true);
+        }
     }
 
     private static class CacheEntry {

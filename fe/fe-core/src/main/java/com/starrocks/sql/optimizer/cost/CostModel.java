@@ -17,7 +17,6 @@ package com.starrocks.sql.optimizer.cost;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
@@ -41,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -57,9 +57,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.skew.DataSkew;
 import com.starrocks.sql.optimizer.skew.DataSkewInfo;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -196,6 +194,14 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
+            Statistics statistics = context.getStatistics();
+            Preconditions.checkNotNull(statistics);
+
+            return CostEstimate.ofCpu(statistics.getComputeSize());
+        }
+
+        @Override
+        public CostEstimate visitPhysicalAIProject(PhysicalAIProjectOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
 
@@ -653,20 +659,10 @@ public class CostModel {
                     // Don't limited to multi-stage aggregate node, refs: invalidOneStageAggCost
                     // split aggregate node lose distinct flag, check the group's origin
                     // aggregate
-                    LogicalAggregationOperator originAgg = group.getFirstLogicalExpression().getOp().cast();
-                    for (CallOperator callOperator : originAgg.getAggregations().values()) {
-                        if (callOperator.isDistinct()) {
-                            String fnName = callOperator.getFnName();
-                            List<ScalarOperator> children = callOperator.getChildren();
-                            if (children.size() > 1 || children.stream().anyMatch(c -> c.getType().isComplexType())
-                                    || FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)
-                                    || FunctionSet.AVG.equalsIgnoreCase(fnName)) {
-                                return Optional.empty();
-                            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName) && (children.size() > 1
-                                    || children.get(0).getType().isDecimalOfAnyVersion())) {
-                                return Optional.empty();
-                            }
-                        }
+                    GroupExpression firstLogicalExpression = group.getFirstLogicalExpression();
+                    if (Utils.mustGenerateMultiStageAggregate(firstLogicalExpression.getOp(),
+                            firstLogicalExpression.inputAt(0).getFirstLogicalExpression().getOp())) {
+                        return Optional.empty();
                     }
                     return Optional.of(CostEstimate.infinite());
                 }

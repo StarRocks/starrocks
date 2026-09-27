@@ -1,0 +1,85 @@
+-- name: test_multi_unnest_chunk_boundary
+-- Multi-array UNNEST(a, b) zips its arguments and pads every array to the per-row maximum length, so
+-- its expansion exists in no source column and has to be built. MultiUnnest now builds it a chunk at
+-- a time, which means one input row can be split across several process() calls. The split has to be
+-- invisible: every query below must give the same answer at every chunk_size, including sizes far
+-- smaller than a single row's expansion.
+CREATE TABLE mu_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `a` ARRAY<int> NULL COMMENT "",
+    `b` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- Shapes by id % 5: a longer than b, b longer than a, equal lengths, a NULL, both empty. id % 7 = 0
+-- additionally carries a 20-element array, so at chunk_size 3 that one row's expansion alone spans
+-- seven calls and every chunk boundary falls inside a row.
+INSERT INTO mu_${uuid0}
+SELECT g,
+       CASE WHEN g % 7 = 0 THEN [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+            WHEN g % 5 = 0 THEN [g, g + 1, g + 2]
+            WHEN g % 5 = 1 THEN [g]
+            WHEN g % 5 = 2 THEN [g, g + 1]
+            WHEN g % 5 = 3 THEN NULL
+            ELSE [] END,
+       CASE WHEN g % 5 = 0 THEN [g]
+            WHEN g % 5 = 1 THEN [g, g + 1, g + 2]
+            WHEN g % 5 = 2 THEN [g, g + 1]
+            WHEN g % 5 = 3 THEN [g]
+            ELSE [] END
+FROM TABLE(generate_series(1, 2000)) t(g);
+
+SET pipeline_dop = 1;
+
+-- Inner join: identical aggregates at every chunk size.
+SET chunk_size = 3;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+SET chunk_size = 7;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+SET chunk_size = 13;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+SET chunk_size = 4096;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+
+-- LEFT JOIN: a row that is empty or NULL in both arguments survives as one all-NULL row.
+SET chunk_size = 3;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+SET chunk_size = 13;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+SET chunk_size = 4096;
+SELECT count(1), count(v1), count(v2), sum(v1), sum(v2) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+
+-- Nothing reads the expanded values, so only the copy-count column is built. The row count still has
+-- to match the shape above.
+SET chunk_size = 3;
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+SET chunk_size = 4096;
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+SET chunk_size = 3;
+SELECT count(1) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+SET chunk_size = 4096;
+SELECT count(1) FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+
+-- The failure mode of a wrong cursor is not a crash but an expanded value paired with the wrong
+-- outer row, which aggregates alone would not catch. Every expanded value must come from its own
+-- row's array: both counts must be 0 at every chunk size.
+SET chunk_size = 3;
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2)
+WHERE (v1 IS NOT NULL AND NOT array_contains(a, v1)) OR (v2 IS NOT NULL AND NOT array_contains(b, v2));
+SET chunk_size = 4096;
+SELECT count(1) FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2)
+WHERE (v1 IS NOT NULL AND NOT array_contains(a, v1)) OR (v2 IS NOT NULL AND NOT array_contains(b, v2));
+
+-- Row-level: the 20-element row is split across seven chunks and must keep its own id, in order.
+SET chunk_size = 3;
+SELECT id, v1, v2 FROM mu_${uuid0}, UNNEST(a, b) AS u(v1, v2) WHERE id = 7 ORDER BY v1, v2;
+
+-- Row-level over all five shapes, including the padding NULLs and the LEFT JOIN row.
+SET chunk_size = 2;
+SELECT id, a, b, v1, v2 FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE WHERE id <= 5 ORDER BY id, v1, v2;
+SET chunk_size = 4096;
+SELECT id, a, b, v1, v2 FROM mu_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE WHERE id <= 5 ORDER BY id, v1, v2;
+
+DROP TABLE mu_${uuid0};

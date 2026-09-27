@@ -25,10 +25,10 @@
 #include "common/system/mem_info.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/connector_scan_node.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors_ext.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 

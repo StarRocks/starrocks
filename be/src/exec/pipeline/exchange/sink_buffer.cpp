@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 #include <fmt/std.h>
 
+#include <cerrno>
 #include <cstddef>
 #include <mutex>
 #include <string_view>
@@ -27,11 +28,11 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
 #include "fmt/core.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::pipeline {
 
@@ -85,7 +86,7 @@ DeferOp<std::function<void()>> SinkBuffer::defer_notify() {
     return DeferOp<std::function<void()>>([this]() {
         _observable.notify_sink_observers();
         if (bthread_self()) {
-            CHECK(tls_thread_status.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+            CHECK(tls_thread_status.mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
         }
     });
 }
@@ -192,6 +193,8 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     RuntimeProfile::Counter* rpc_avg_timer = ADD_TIMER(profile, "RpcAvgTime");
     RuntimeProfile::Counter* network_timer = ADD_TIMER(profile, "NetworkTime");
     RuntimeProfile::Counter* wait_timer = ADD_TIMER(profile, "WaitTime");
+    RuntimeProfile::Counter* buffer_full_timer = ADD_CHILD_TIMER(profile, "BufferFullTime", "WaitTime");
+    RuntimeProfile::Counter* pending_finish_timer = ADD_CHILD_TIMER(profile, "PendingFinishTime", "WaitTime");
     RuntimeProfile::Counter* overall_timer = ADD_TIMER(profile, "OverallTime");
 
     COUNTER_SET(rpc_count, _rpc_count.load());
@@ -200,11 +203,11 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
-    // WaitTime consists two parts
-    // 1. buffer full time
-    // 2. pending finish time
-    COUNTER_SET(wait_timer, _full_time.load());
-    COUNTER_UPDATE(wait_timer, MonotonicNanos() - _pending_timestamp);
+    const int64_t buffer_full_time = _full_time.load();
+    const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
+    COUNTER_SET(buffer_full_timer, buffer_full_time);
+    COUNTER_SET(pending_finish_timer, pending_finish_time);
+    COUNTER_SET(wait_timer, buffer_full_time + pending_finish_time);
 
     RuntimeProfile::Counter* bytes_sent_counter = ADD_COUNTER(profile, "BytesSent", TUnit::BYTES);
     RuntimeProfile::Counter* request_sent_counter = ADD_COUNTER(profile, "RequestSent", TUnit::UNIT);
@@ -248,6 +251,20 @@ int64_t SinkBuffer::_network_time() {
 void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     auto notify = this->defer_notify();
     _is_finishing = true;
+    // Cancel all in-flight RPCs. Without this, a cancelled fragment keeps waiting until these RPCs drain.
+    // bthread_id_list_reset() may call on_error() callback of valid call ids, which may lead to deadlock if the thread
+    // is still holding the lock. So the lock-and-swap idiom is used. See bRPC comments (id.h) for more details.
+    for (auto& [_, sink_context] : _sink_ctxs) {
+        bthread_id_list_t tmplist;
+        bthread_id_list_init(&tmplist, 0, 0);
+        {
+            std::lock_guard cids_guard(sink_context->in_flight_rpc_cids_mutex);
+            bthread_id_list_swap(&tmplist, &sink_context->in_flight_rpc_cids);
+        }
+        bthread_id_list_reset(&tmplist, ECANCELED);
+        bthread_id_list_destroy(&tmplist);
+    }
+
     if (state != nullptr && state->query_runtime_state() && state->query_runtime_state()->is_query_expired()) {
         // check how many cancel operations are issued, and show the state of that time.
         VLOG_OPERATOR << fmt::format(
@@ -417,7 +434,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             const auto& dest_addr = context.dest_addrs;
             std::string err_msg =
@@ -440,7 +457,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             ++context.num_finished_rpcs;
             --context.num_in_flight_rpcs;
             _buffered_mem_usage->release(request_byte_size);
-            GlobalEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
+            RuntimeEnv::GetInstance()->brpc_iobuf_mem_tracker()->set(butil::IOBuf::block_memory());
 
             if (!status.ok()) {
                 _is_finishing = true;
@@ -471,6 +488,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
         set_ignore_overcrowded_for_query(closure->cntl);
+
+        // The call id must be obtained before launching the RPC, as per bRPC doc.
+        const auto call_id = closure->cntl.call_id();
+        {
+            std::lock_guard cids_guard(context.in_flight_rpc_cids_mutex);
+            // Do not cancel eos request, because eos request is the last request to be sent, and it must be sent to the destination.
+            if (!request.params->eos()) {
+                bthread_id_list_add(&context.in_flight_rpc_cids, call_id);
+            }
+        }
 
         return _send_rpc(closure, request);
     }

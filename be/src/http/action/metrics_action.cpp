@@ -30,9 +30,9 @@
 #include "common/config_metrics_fwd.h"
 #include "common/metrics/process_metrics_registry.h"
 #include "common/tracer.h"
-#include "http/http_channel.h"
-#include "http/http_headers.h"
-#include "http/http_request.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_headers.h"
+#include "platform/http/http_request.h"
 
 #ifdef USE_STAROS
 #include "metrics/metrics.h"
@@ -161,6 +161,16 @@ void PrometheusMetricsVisitor::_visit_simple_metric(const std::string& name, con
     _ss << " " << metric->to_string() << "\n";
 }
 
+// bRPC method error bvars is a counter type, instead of a gauge one.
+// https://github.com/apache/brpc/blob/1.9.0/src/brpc/details/method_status.h#L108
+// TODO: refactor and ensure all counter-typed bvars are correctly reported, including those exposed by StarRocks
+static const char* bvar_metric_type(const butil::StringPiece& name) {
+    if (name.starts_with("rpc_server_") && name.ends_with("_error")) {
+        return "counter";
+    }
+    return "gauge";
+}
+
 bool PrometheusMetricsVisitor::dump(const std::string& name, const butil::StringPiece& desc) {
     if (!desc.empty() && desc[0] == '"') {
         // there is no necessary to monitor string in prometheus
@@ -171,7 +181,9 @@ bool PrometheusMetricsVisitor::dump(const std::string& name, const butil::String
         // Leave it to _dump_latency_recorder_suffix to output Summary.
         return true;
     }
-    _ss << "# HELP " << name << '\n' << "# TYPE " << name << " gauge" << '\n' << name << " " << desc << '\n';
+    _ss << "# HELP " << name << '\n'
+        << "# TYPE " << name << " " << bvar_metric_type(name) << '\n'
+        << name << " " << desc << '\n';
     return true;
 }
 
@@ -319,6 +331,10 @@ void JsonMetricsVisitor::visit(const std::string& prefix, const std::string& nam
     default:
         break;
     }
+}
+
+bool MetricsAction::need_auth() const {
+    return true;
 }
 
 void MetricsAction::handle(HttpRequest* req) {

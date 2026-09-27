@@ -84,12 +84,20 @@ public class GCPCloudCredential implements CloudCredential {
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key.id", serviceAccountPrivateKeyId);
             hadoopConfiguration.put("fs.gs.auth.service.account.private.key", serviceAccountPrivateKey);
         }
-        if (!impersonationServiceAccount.isEmpty()) {
-            hadoopConfiguration.put("fs.gs.auth.impersonation.service.account", impersonationServiceAccount);
+        // Skip impersonation when a vended access token is present: gcs-connector would apply
+        // impersonation on top of the token, and vended tokens lack IAM impersonation permission.
+        if (!impersonationServiceAccount.isEmpty() && !hasAccessToken()) {
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.IMPERSONATION_SERVICE_ACCOUNT_KEY,
+                    impersonationServiceAccount);
         }
         if (hasAccessToken()) {
-            hadoopConfiguration.put("fs.gs.auth.access.token.provider.impl",
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.AUTH_TYPE_KEY,
+                    GCPCloudConfigurationProvider.AUTH_TYPE_ACCESS_TOKEN_PROVIDER);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_PROVIDER_KEY,
                     ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.LEGACY_ACCESS_TOKEN_PROVIDER_IMPL_KEY,
+                    ACCESS_TOKEN_PROVIDER_IMPL);
+            hadoopConfiguration.put(GCPCloudConfigurationProvider.DISABLE_FS_CACHE_KEY, "true");
             hadoopConfiguration.put(GCPCloudConfigurationProvider.ACCESS_TOKEN_KEY, accessToken);
             hadoopConfiguration.put(GCPCloudConfigurationProvider.TOKEN_EXPIRATION_KEY, accessTokenExpiresAt);
         }

@@ -287,7 +287,6 @@ public class MvRefreshAndRewriteJDBCTest extends MVTestBase {
                     ") " +
                     " as select a, b, d, cnt" +
                     " from jdbc_table_view");
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
 
         {

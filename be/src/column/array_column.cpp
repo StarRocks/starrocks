@@ -175,6 +175,20 @@ void ArrayColumn::fill_default(const Filter& filter) {
     update_rows(*default_column, indexes.data());
 }
 
+bool ArrayColumn::null_rows_are_empty(const uint8_t* nulls, size_t num_rows) const {
+    const auto& offs = offsets().immutable_data();
+    if (offs.size() != num_rows + 1) {
+        // Not a 1:1 row mapping; be conservative.
+        return false;
+    }
+    for (size_t i = 0; i < num_rows; ++i) {
+        if (nulls[i] != 0 && offs[i + 1] != offs[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void ArrayColumn::update_rows(const Column& src, const uint32_t* indexes) {
     const auto& array_column = down_cast<const ArrayColumn&>(src);
 

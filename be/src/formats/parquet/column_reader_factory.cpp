@@ -28,6 +28,23 @@ DEFINE_FAIL_POINT(parquet_reader_returns_global_dict_not_match_status);
 
 namespace {
 
+Status validate_native_iceberg_geography(const ParquetField& field, const TypeDescriptor& col_type,
+                                         const TIcebergSchemaField& lake_field) {
+    if (!lake_field.__isset.geo_metadata || !col_type.geo_type) {
+        return Status::NotSupported("Native Iceberg GEOGRAPHY requires GEO metadata: " + field.name);
+    }
+    const auto& source = lake_field.geo_metadata;
+    const auto& planned = *col_type.geo_type;
+    constexpr std::string_view edge_prefix = "GEO_EDGE_ALGORITHM_";
+    const std::string edge = GeoEdgeAlgorithmPB_Name(planned.edge_algorithm);
+    if (source.kind != TIcebergGeoKind::GEOGRAPHY || planned.logical_type != GEO_LOGICAL_TYPE_GEOGRAPHY ||
+        source.crs != planned.crs || edge.compare(0, edge_prefix.size(), edge_prefix) != 0 ||
+        source.edge_algorithm != edge.substr(edge_prefix.size())) {
+        return Status::InvalidArgument("Iceberg/plan geo schema mismatch: " + field.name);
+    }
+    return Status::OK();
+}
+
 struct VariantNodeFields {
     const ParquetField* metadata = nullptr;
     const ParquetField* value = nullptr;
@@ -400,6 +417,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
             return nullptr;
         }
     } else {
+        if (col_type.type == TYPE_GEOGRAPHY) {
+            return Status::NotSupported("Native GEOGRAPHY reads require Iceberg field IDs and semantic metadata");
+        }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
     }
@@ -415,6 +435,13 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
                                     column_type_to_string(field->type), logical_type_to_string(col_type.type)));
     }
     DCHECK(lake_schema_field != nullptr);
+    if (col_type.is_complex_type()) {
+        for (const auto& child : col_type.children) {
+            if (child.type == TYPE_GEOGRAPHY) {
+                return Status::NotSupported("Nested GEOGRAPHY is not supported");
+            }
+        }
+    }
     if (field->type == ColumnType::ARRAY) {
         const TIcebergSchemaField* element_schema = &lake_schema_field->children[0];
         ASSIGN_OR_RETURN(ColumnReaderPtr child_reader,
@@ -477,6 +504,9 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(const ColumnReaderOptions&
             return nullptr;
         }
     } else {
+        if (col_type.type == TYPE_GEOGRAPHY) {
+            RETURN_IF_ERROR(validate_native_iceberg_geography(*field, col_type, *lake_schema_field));
+        }
         return std::make_unique<ScalarColumnReader>(field, &opts.row_group_meta->columns[field->physical_column_index],
                                                     &col_type, opts);
     }

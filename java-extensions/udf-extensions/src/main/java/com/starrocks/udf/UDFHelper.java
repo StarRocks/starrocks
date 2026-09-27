@@ -1345,17 +1345,70 @@ public class UDFHelper {
         }
     }
 
-    public static Object[] batchCreateDirectBuffer(long data, int[] offsets, int size) throws Exception {
-        Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
-        Constructor<?> constructor = directByteBufferClass.getDeclaredConstructor(long.class, int.class);
-        constructor.setAccessible(true);
+    static final class DirectByteBufferFactory {
+        private final Constructor<?> constructor;
+        private final boolean longCapacity;
 
+        // Makes it executable on any JDK
+        DirectByteBufferFactory(Constructor<?> constructor, boolean longCapacity) {
+            this.constructor = constructor;
+            this.longCapacity = longCapacity;
+        }
+
+        // Resolve the DirectByteBuffer constructor, probing the legacy (long, int) signature
+        // first and falling back to the JDK 21+ (long, long) signature (JDK-8303083). The
+        // capacity type of the resolved constructor determines how newBuffer boxes it.
+        static DirectByteBufferFactory resolve() {
+            Class<?> directByteBufferClass;
+            try {
+                directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
+            } catch (ClassNotFoundException e) {
+                throw new ExceptionInInitializerError(e);
+            }
+            Constructor<?> constructor = getConstructorOrNull(directByteBufferClass, int.class);
+            boolean longCapacity = constructor == null;
+            if (longCapacity) {
+                // JDK 21+
+                constructor = getConstructorOrNull(directByteBufferClass, long.class);
+            }
+            if (constructor == null) {
+                throw new ExceptionInInitializerError("no compatible java.nio.DirectByteBuffer constructor");
+            }
+            constructor.setAccessible(true);
+            return new DirectByteBufferFactory(constructor, longCapacity);
+        }
+
+        static Constructor<?> getConstructorOrNull(Class<?> clazz, Class<?> capacityType) {
+            try {
+                return clazz.getDeclaredConstructor(long.class, capacityType);
+            } catch (NoSuchMethodException e) {
+                return null;
+            }
+        }
+
+        boolean usesLongCapacity() {
+            return longCapacity;
+        }
+
+        Object newBuffer(long address, int capacity) throws ReflectiveOperationException {
+            // Box the capacity to match the resolved constructor's second parameter type.
+            Object capacityArg = longCapacity ? (Object) (long) capacity : (Object) capacity;
+            return constructor.newInstance(address, capacityArg);
+        }
+    }
+
+    // Lazy load
+    private static final class DirectByteBufferFactoryHolder {
+        static final DirectByteBufferFactory INSTANCE = DirectByteBufferFactory.resolve();
+    }
+
+    public static Object[] batchCreateDirectBuffer(long data, int[] offsets, int size) throws Exception {
+        DirectByteBufferFactory factory = DirectByteBufferFactoryHolder.INSTANCE;
         Object[] res = new Object[size];
-        int nums = 0;
         for (int i = 0; i < size; i++) {
             long address = data + offsets[i];
             int length = offsets[i + 1] - offsets[i];
-            res[nums++] = constructor.newInstance(address, length);
+            res[i] = factory.newBuffer(address, length);
         }
         return res;
     }

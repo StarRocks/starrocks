@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 description: "StarRocks コミュニティ提供のクロスクラスターデータ移行ツールを使用して異なるクラスター間のデータ移行を実施。"
 ---
@@ -159,6 +160,60 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
    - ソースストレージボリュームには一時的な認証情報（アクセスキー / シークレットキー）を使用することを推奨します。移行完了後に失効させることができます。
    :::
 
+#### Range 分散テーブルの移行
+
+Range 分散テーブルの移行は、共有データクラスター間でのみサポートされます。移行ツールはソーステーブルの定義から、存在しないターゲットテーブルを自動的に作成します。ターゲットテーブルを手動で作成しないでください。
+
+次の FE 設定の元の値を記録してください。動的設定ごとに、FE の再起動によって移行時の条件が変わらないよう、該当するすべての FE の **fe.conf** に対応する永続設定も追加します。
+
+1. ソースクラスターとターゲットクラスターの両方で Tablet のマージを無効にし、Range 分散を有効にしたままにします。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_enable_tablet_merge" = "false");
+   ADMIN SET FRONTEND CONFIG ("enable_range_distribution" = "true");
+   ```
+
+2. `enable_execute_script_on_frontend` は静的設定です。ソースとターゲットのすべての FE の **fe.conf** で `true` に設定し、移行期間の開始前に FE を再起動します。
+
+   ```Properties
+   enable_execute_script_on_frontend = true
+   ```
+
+3. ターゲットクラスターでは、目標サイズを非常に大きな値に設定して、サイズによってトリガーされる Tablet の自動分割を抑止します。
+
+   ```SQL
+   ADMIN SET FRONTEND CONFIG ("tablet_reshard_target_size" = "9223372036854775807");
+   ```
+
+4. ツールを起動する前に、ソースクラスターとターゲットクラスターで次のクエリを個別に実行します。
+
+   ```SQL
+   SELECT JOB_ID, DB_NAME, TABLE_NAME, JOB_TYPE, JOB_STATE
+   FROM information_schema.tablet_reshard_jobs
+   WHERE JOB_TYPE = 'MERGE_TABLET'
+     AND JOB_STATE NOT IN ('FINISHED', 'ABORTED');
+   ```
+
+   どちらのクラスターでも関連する行が返されない場合にのみ、移行を開始します。この条件は、`PENDING`、`PREPARING`、`RUNNING`、`CLEANING`、`ABORTING` を含む、すべての未完了のマージ状態がなくなるまで待機します。ソースのトポロジーが変化できるように、ソースクラスターの自動分割は有効のままにします。移行中は、ターゲットクラスターでトポロジーを変更する独立した書き込みや事前分割を実行しないでください。
+
+ツールは Leader のみで実行できる `ADMIN EXECUTE ON FRONTEND` 呼び出しを使用して、ソースとターゲットの実際のトポロジーを読み取ります。各 Tablet の完全な Range 値には、`lowerBound`、`lowerIncluded`、`upperBound`、`upperIncluded` が含まれます。null のエンドポイントは負または正の無限大を表します。有限の複数列エンドポイントリストでは、null セルは SQL NULL を表し、それ以外のセルは正規化された文字列値です。この表現は両端の包含フラグを保持し、リテラル文字列 `NULL` と SQL NULL を区別します。このブリッジは将来の拡張のために完全な表現を保持しますが、現在の FE から BE への分割パスが受け付ける子 Range は半開区間 `[lower, upper)` のみです。
+
+`ADMIN EXECUTE ON FRONTEND` は別の FE に転送されません。ツールは各クラスターの Leader FE を検出して直接接続する必要があり、移行ユーザーには SYSTEM レベルの `OPERATE` 権限が必要です。FE スクリプトは特権コードです。専用の信頼できるアカウントを使用して認証情報を保護し、生成したスクリプトパラメーターを適切にエスケープした JSON として 1 つの SQL 文字列内に渡してください。DDL エグゼキューターは ADMIN ステートメント全体を送信し、セミコロンで分割してはいけません。移行後は、以下の説明に従って記録した静的なスクリプト実行設定を復元してください。
+
+Range 分散テーブルごとに、ツールは新しく読み取ったソースとターゲットのトポロジーを比較します。異なる場合、そのテーブルの新しいレプリケーションジョブの生成を停止しますが、キュー内、送信中、およびターゲットで実行中のジョブは完了させます。これらのジョブとレプリケーショントランザクションがすべて排出された後、既存の DDL キューを介して正確な境界の Tablet 分割を送信します。新しいトポロジー読み取りでソースとターゲットの Range が構造的に等しいことを確認した後にのみ、レプリケーションを再開します。
+
+Range 分散によって、共有データのバージョン同期セマンティクスは変わりません。各レプリケーションでは、ソース物理パーティションの `visibleVersion` を引き続き使用して完全なメタデータとファイルセットを比較し、ターゲットにすでに存在するファイルをスキップします。
+
+共有データクラスター間の移行で透過的データ暗号化 (TDE) を使用する場合、新たにコピーされるプライベートかつスタンドアロンの物理ファイルは、ソースの暗号化メタデータを使用して読み込まれ、ターゲットポリシーに従って再暗号化されます。ソース鍵階層をアンラップできない場合、ターゲットへの公開前に移行は失敗します。ソースファイルが暗号化されている場合、またはターゲットで TDE が有効な場合、新たにコピーされる共有またはバンドル済みの物理ファイルはサポートされません。ターゲットにすでに存在するオブジェクトは直接再利用され、ターゲットの暗号化メタデータが保持されます。共有なしソースから共有データターゲットへの移行では、ソースの Rowset または DCG ファイルが暗号化されている場合、安全側に停止します。このパスでは、これらのファイルを復号してターゲットポリシーで再暗号化することはサポートされません。
+
+:::warning
+
+このワークフローは分割による収束のみをサポートします。ソースでのマージ、ターゲットのみに存在する境界、交差する Range、またはソースより細かいターゲットトポロジーなど、収束にターゲットでのマージが必要な場合は安全側に停止します。Range Colocate レイアウトもサポートされません。
+
+:::
+
+移行後は、まずツール、レプリケーションジョブとトランザクション、および Tablet Reshard ジョブがすべて排出されるまで待機します。ソースとターゲットのマージ設定およびターゲットの Tablet サイズなどの動的設定は、`ADMIN SET FRONTEND CONFIG` で復元し、**fe.conf** でも記録した値に戻します。自動 Reshard の動作は、移行前に有効だった場合にのみ復元し、それ以外の場合は無効のままにします。静的設定の `enable_execute_script_on_frontend` は、すべての FE の **fe.conf** で記録した値に戻して FE を再起動します。記録した値が `false` だった場合、または移行後に意図的により厳格なセキュリティポリシーを選択する場合にのみ、スクリプト実行を無効にしてください。
+
 </TabItem>
 </Tabs>
 
@@ -208,7 +263,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### FE パラメーター
 
-以下の FE パラメーターは動的設定項目です。変更方法については、[FE 動的パラメーターの設定](../administration/management/FE_configuration.md#configure-fe-dynamic-parameters)を参照してください。
+以下の FE パラメーターは動的設定項目です。変更方法については、[FE 動的パラメーターの設定](./configuration/FE_parameters/FE_parameters.md#configure-fe-dynamic-parameters)を参照してください。
 
 | **パラメーター**                              | **デフォルト** | **単位** | **説明**                                                     |
 | --------------------------------------------- | -------------- | -------- | ------------------------------------------------------------ |
@@ -219,7 +274,7 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 #### BE パラメーター
 
-以下の BE パラメーターは動的設定項目です。変更方法については、[BE 動的パラメーターの設定](../administration/management/BE_configuration.md)を参照してください。
+以下の BE パラメーターは動的設定項目です。変更方法については、[BE 動的パラメーターの設定](./configuration/BE_parameters/BE_parameters.md)を参照してください。
 
 | **パラメーター**    | **デフォルト** | **単位** | **説明**                                                     |
 | ------------------- | -------------- | -------- | ------------------------------------------------------------ |
@@ -322,6 +377,15 @@ replication_job_batch_size=10
 report_interval_seconds=300
 
 enable_table_property_sync=false
+
+# privilege config
+enable_privilege_sync=false
+ddl_job_allow_drop_user_target_only=false
+ddl_job_allow_drop_role_target_only=false
+ddl_job_allow_drop_inconsistent_user=true
+ddl_job_allow_revoke_grant_target_only=false
+privilege_sync_exclude_users=
+privilege_sync_exclude_roles=
 ```
 
 パラメーターの説明は以下の通りです。
@@ -372,6 +436,13 @@ enable_table_property_sync=false
 | ddl_job_allow_drop_inconsistent_view                      | ソースクラスターとターゲットクラスター間で一致しないビューを移行ツールが削除することを許可するかどうか。デフォルトは `true`（削除する）。この項目にはデフォルト値を使用できます。移行ツールは移行中に削除されたビューを自動的に同期します。 |
 | ddl_job_allow_drop_view_target_only                       | ソースクラスターで削除されたビューをターゲットクラスターでも削除してビューの整合性を保つことを移行ツールに許可するかどうか。デフォルトは `true`（削除する）。この項目にはデフォルト値を使用できます。 |
 | enable_table_property_sync                                | テーブルプロパティの同期を有効にするかどうか。               |
+| enable_privilege_sync                                     | ユーザー、ロール、およびそれらの権限の同期を有効にするかどうか。デフォルトは `false`（アカウントメタデータを同期しない）。 |
+| ddl_job_allow_drop_user_target_only                       | ソースクラスターに存在せず、ターゲットクラスターにのみ存在するユーザーを移行ツールが削除することを許可するかどうか。デフォルトは `false`（削除しない）。 |
+| ddl_job_allow_drop_role_target_only                       | ソースクラスターに存在せず、ターゲットクラスターにのみ存在するロールを移行ツールが削除することを許可するかどうか。デフォルトは `false`（削除しない）。 |
+| ddl_job_allow_drop_inconsistent_user                      | ソースクラスターとターゲットクラスター間で定義が一致しないユーザーを移行ツールが再作成（削除してから作成）することを許可するかどうか。デフォルトは `true`。ユーザーが再作成されるのは、同じサイクルでそのユーザーの権限が読み取られている場合のみで、再作成後ただちに権限を再付与できるようにするためです。 |
+| ddl_job_allow_revoke_grant_target_only                    | ソースクラスターでは付与されておらず、ターゲットクラスターにのみ付与されている権限を移行ツールが取り消すことを許可するかどうか。デフォルトは `false`（取り消さない）。 |
+| privilege_sync_exclude_users                              | 移行ツールが変更しないユーザー。複数のユーザーはカンマ（`,`）で区切ります。ユーザーはユーザー名（`jack`）でも、完全なユーザー識別子（`'jack'@'%'`）でも指定できます。`root` と `target_cluster_user` に指定されたユーザーは常に除外されます。 |
+| privilege_sync_exclude_roles                              | 移行ツールが変更しないロール。複数のロールはカンマ（`,`）で区切ります。 |
 
 <Tabs groupId="migrationPath">
 <TabItem value="sourceNothing" label="共有なしからの移行" default>
@@ -508,6 +579,26 @@ TARGET_frontend-0.frontend.mynamespace.svc.cluster.local=10.1.2.1;9030:19030
 </TabItem>
 </Tabs>
 
+### ユーザー、ロール、権限の同期（オプション）
+
+デフォルトでは、移行ツールはアカウントメタデータを同期しません。`enable_privilege_sync` を `true` に設定すると、ソースクラスターのユーザー、ロール、およびそれらの権限もターゲットクラスターに同期されます。
+
+移行ツールはメタデータを取得するたびに、両クラスターのユーザー、ロール、権限を読み取って比較し、ターゲットクラスターをソースクラスターと一致させるために必要な DDL ステートメントを実行します。ユーザー定義は `SHOW CREATE USER` で取得され、このステートメントはパスワードを暗号文で返すため、移行中に平文のパスワードが扱われることはありません。
+
+以下のオブジェクトは移行ツールによって変更されることはありません。
+
+- `root` および `target_cluster_user` に指定されたユーザー。ターゲットクラスターの `root` のパスワードを上書きするとその運用者がログインできなくなり、ツールが接続に使用しているアカウントを削除するとツール自身の接続が切断されるためです。
+- 変更不可能な組み込みロール `root`、`db_admin`、`cluster_admin`、`user_admin`、`security_admin`。`public` は組み込みロールですが変更可能であるため、その権限は同期され、ロール自体は変更されません。
+- `privilege_sync_exclude_users` に指定されたユーザーおよび `privilege_sync_exclude_roles` に指定されたロール。
+
+:::note
+
+- 両クラスターの FE が `SHOW CREATE USER` をサポートしている必要があります。いずれかのクラスターの FE がこのステートメントをサポートしていない場合、ユーザーとその権限はスキップされ、ロールとロール権限のみが同期されます。
+- 権限同期の進捗は、`Sync privilege progress` というプレフィックスでログファイル **log/sync.INFO.log** に出力され、ロール、ロール権限、ユーザー、ユーザー権限の 4 つの単位それぞれの状態が示されます。
+- 一回限りの同期モード（`one_time_run_mode=true`）では、権限も一致した後にのみツールは正常終了します。いずれかのクラスターが `SHOW CREATE USER` をサポートしていない場合、または 3 回連続した比較で権限が一致しないままの場合、ツールは異常終了します。
+
+:::
+
 ## ステップ 3：移行ツールの起動
 
 ツールの設定が完了したら、移行ツールを起動してデータ移行プロセスを開始します。
@@ -635,6 +726,7 @@ ORDER BY TABLE_NAME;
 - 内部テーブルとそのデータ
 - マテリアライズドビューのスキーマおよびそのビルドステートメント（マテリアライズドビューのデータは同期されません。また、マテリアライズドビューのベーステーブルがターゲットクラスターに同期されていない場合、マテリアライズドビューのバックグラウンド更新タスクはエラーを報告します。）
 - 論理ビュー
+- ユーザー、ロール、およびそれらの権限（デフォルトでは同期されません。`enable_privilege_sync` で有効化します）
 
 共有データクラスター間の移行の場合：
 

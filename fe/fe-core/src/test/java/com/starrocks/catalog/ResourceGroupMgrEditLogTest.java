@@ -172,14 +172,6 @@ public class ResourceGroupMgrEditLogTest {
         // Verify initial state
         ResourceGroup resourceGroup = masterResourceGroupMgr.getResourceGroup(resourceGroupName);
         Assertions.assertNotNull(resourceGroup);
-        Integer initialCpuWeight = resourceGroup.getNormalizedCpuWeight();
-        Double initialMemLimit = resourceGroup.getMemLimit();
-        Integer initialConcurrencyLimit = resourceGroup.getConcurrencyLimit();
-        Integer initialMaxCpuCores = resourceGroup.getMaxCpuCores();
-        Long initialBigQueryMemLimit = resourceGroup.getBigQueryMemLimit();
-        Long initialBigQueryScanRowsLimit = resourceGroup.getBigQueryScanRowsLimit();
-        Long initialBigQueryCpuSecondLimit = resourceGroup.getBigQueryCpuSecondLimit();
-        Double initialSpillMemLimitThreshold = resourceGroup.getSpillMemLimitThreshold();
         long initialVersion = resourceGroup.getVersion();
 
         // 2. Prepare AlterResourceGroupStmt with AlterProperties - test all modifiable properties

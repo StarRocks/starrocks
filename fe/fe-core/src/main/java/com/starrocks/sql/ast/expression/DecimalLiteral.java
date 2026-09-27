@@ -346,6 +346,29 @@ public class DecimalLiteral extends LiteralExpr {
                 }
                 break;
             }
+            case DECIMAL256: {
+                // Must match the BE, which crc32-hashes the raw 32-byte little-endian int256
+                // representation of the scaled value (see DecimalV3Column<int256_t> in
+                // be/src/column/column_hash/column_hash.cpp). Hashing anything else sends
+                // point lookups on a decimal256 distribution key to the wrong bucket.
+                checkType(type);
+                int scale = ((ScalarType) type).getScalarScale();
+                BigDecimal scaledValue = value.multiply(SCALE_FACTOR[scale]);
+                buffer = ByteBuffer.allocate(type.getTypeSize());
+                buffer.order(ByteOrder.LITTLE_ENDIAN);
+                // BigInteger::toByteArray returns a big-endian byte[], so copy in reverse order one by one byte.
+                byte[] bytes = scaledValue.toBigInteger().toByteArray();
+                for (int i = bytes.length - 1; i >= 0; --i) {
+                    buffer.put(bytes[i]);
+                }
+                // pad with sign bits
+                byte prefixByte = scaledValue.signum() >= 0 ? (byte) 0 : (byte) 0xff;
+                int numPaddingBytes = type.getTypeSize() - bytes.length;
+                for (int i = 0; i < numPaddingBytes; ++i) {
+                    buffer.put(prefixByte);
+                }
+                break;
+            }
             default:
                 return super.getHashValue(type);
         }

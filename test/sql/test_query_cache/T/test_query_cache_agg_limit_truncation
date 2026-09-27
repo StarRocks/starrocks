@@ -1,0 +1,63 @@
+-- name: test_query_cache_agg_limit_truncation
+-- An aggregation that carries a LIMIT truncates its hash map once the shared limit
+-- countdown (Aggregator::_build_hash_map_with_shared_limit) is exhausted: rows whose
+-- group key is not already in the hash map are dropped. Without the query cache that
+-- is safe, because every key belongs to exactly one hash map. The query cache splits
+-- the very same aggregation into one lane per tablet, so the countdown is consumed
+-- once per (lane, key) instead of once per key, keys survive in some tablets and are
+-- dropped in others, and those truncated per-tablet results are populated into the
+-- cache as if they were the complete aggregate of the tablet.
+CREATE TABLE t1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg1_${uuid0}");
+
+-- 4 distinct keys x 31 daily partitions x 1 row each: every key's true sum is 31,
+-- and every key lives in 31 different tablets (one per partition).
+INSERT INTO t1
+SELECT date_add('2022-01-01', interval (generate_series % 31) day), generate_series % 4 + 1, 1
+FROM TABLE(generate_series(1, 124));
+
+-- A colocate table keeps the LIMIT-carrying aggregation in the scan fragment, and
+-- pipeline_dop=1 keeps the BE from interpolating a local shuffle in front of it,
+-- which is what allows the cache operator to be interpolated on top of it.
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- LIMIT 10 is larger than the 4 groups that exist, so LIMIT may not drop anything
+-- and the result is fully deterministic: 4 groups, every sum 31.
+set enable_query_cache = false;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+set enable_query_cache = true;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t1 group by c1 limit 10) x;
+
+-- The entries populated above outlive the query: the partition-range predicate is
+-- stripped from the cache digest and encoded per tablet, so a query over a narrower
+-- range reuses them. On a cold cache the narrow query below is exact (5 partitions x
+-- 4 keys = 20 insertions, well under LIMIT 40), so anything but 4/20/5/5 is the
+-- poisoned entries left behind by the wide query talking.
+CREATE TABLE t2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1", "colocate_with" = "cg2_${uuid0}");
+
+INSERT INTO t2
+SELECT date_add('2022-01-01', interval (generate_series % 31) day), generate_series % 4 + 1, 1
+FROM TABLE(generate_series(1, 124));
+
+set enable_query_cache = true;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-01' group by c1 limit 40) x;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-27' group by c1 limit 40) x;
+set enable_query_cache = false;
+select count(*), sum(s), min(s), max(s) from (select c1, sum(v1) s from t2 where dt >= '2022-01-27' group by c1 limit 40) x;

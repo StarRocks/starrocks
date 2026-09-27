@@ -14,12 +14,14 @@
 
 #include "column/type_converter.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <string>
 
 #include "base/hash/unaligned_access.h"
+#include "base/string/string_parser.hpp"
 #include "column/type_converter_detail.h"
 #include "gutil/strings/substitute.h"
 #include "types/datetime_value.h"
@@ -59,6 +61,17 @@ Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, Type
         Datum old_datum = src.get(i);
         Datum new_datum;
         RETURN_IF_ERROR(convert_datum(src_type, old_datum, dst_type, &new_datum, allocator));
+        // convert_datum() produces a null Datum for a value that cannot be represented in the
+        // target type (e.g. an unparseable or out-of-range string->number conversion). Appending
+        // a null Datum to a non-nullable column would read the wrong std::variant alternative and
+        // throw std::bad_variant_access, which the alter_tablet threadpool catches and retries
+        // forever (schema change stuck in RUNNING). Fail the conversion with a clear error instead.
+        if (new_datum.is_null() && !dst->is_nullable()) {
+            return Status::InternalError(strings::Substitute(
+                    "schema change failed: value at row $0 cannot be converted to the target type "
+                    "(unparseable or out of range) and would become NULL, but the target column is NOT NULL",
+                    i));
+        }
         dst->append_datum(new_datum);
     }
     return Status::OK();
@@ -565,12 +578,37 @@ public:
             dst->set_null();
             return Status::OK();
         }
-        std::string source = src.get_slice().to_string();
-
-        CppType value;
-        RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
-        dst->set(value);
-        return Status::OK();
+        Slice slice = src.get_slice();
+        // Match query-time CAST semantics for lossy string->number schema changes: a value that
+        // overflows the target width or is not parseable must become NULL, not a silently wrapped
+        // value ('99999999999'->INT -> 1215752191) or a 0 sentinel ('abc'->INT). TypeInfo::from_string
+        // is lenient and would store those wrong non-NULL values (Bug 15 / numeric part of Bug 22).
+        if constexpr (Type == TYPE_TINYINT || Type == TYPE_SMALLINT || Type == TYPE_INT || Type == TYPE_BIGINT ||
+                      Type == TYPE_LARGEINT) {
+            StringParser::ParseResult presult;
+            CppType value = StringParser::string_to_int<CppType>(slice.data, slice.size, &presult);
+            if (presult != StringParser::PARSE_SUCCESS) {
+                dst->set_null();
+                return Status::OK();
+            }
+            dst->set(value);
+            return Status::OK();
+        } else if constexpr (Type == TYPE_FLOAT || Type == TYPE_DOUBLE) {
+            StringParser::ParseResult presult;
+            CppType value = StringParser::string_to_float<CppType>(slice.data, slice.size, &presult);
+            if (presult != StringParser::PARSE_SUCCESS || std::isnan(value) || std::isinf(value)) {
+                dst->set_null();
+                return Status::OK();
+            }
+            dst->set(value);
+            return Status::OK();
+        } else {
+            std::string source = slice.to_string();
+            CppType value;
+            RETURN_IF_ERROR(dst_typeinfo->from_string(&value, source));
+            dst->set(value);
+            return Status::OK();
+        }
     }
 };
 

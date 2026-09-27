@@ -1,0 +1,27 @@
+--- src/jemalloc.c
++++ src/jemalloc.c
+@@ -4074,7 +4074,23 @@
+ je_malloc_usable_size_impl(JEMALLOC_USABLE_SIZE_CONST void *ptr) {
+ 	assert(malloc_initialized() || IS_INITIALIZER);
+ 
+-	tsdn_t *tsdn = tsdn_fetch();
++	/*
++	 * Use a minimal TSD fetch, same rationale as free_default(): this can
++	 * run during thread teardown -- an allocator hook querying the size
++	 * before free(), reached from glibc's _dl_deallocate_tls() -- that is,
++	 * after the TSD destructors have already run.  A full init there builds
++	 * a tcache that is never destructed, leaving a dangling tcache_slow_t
++	 * (it lives in the dying thread's TLS) linked into arena->tcache_ql,
++	 * which later faults in another thread's tcache_arena_associate().
++	 * The size lookup itself needs no TSD.
++	 */
++	tsdn_t *tsdn;
++	if (unlikely(!tsd_booted_get())) {
++		tsdn = TSDN_NULL;
++	} else {
++		tsd_t *tsd = tsd_fetch_min();
++		tsdn = tsd_tsdn(tsd);
++	}
+ 	check_entry_exit_locking(tsdn);
+ 
+ 	size_t ret;

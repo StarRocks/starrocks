@@ -15,7 +15,7 @@ description: "StarRocks provides the MySQL-based loading method Broker Load."
 import InsertPrivNote from '../../../_assets/commonMarkdown/insertPrivNote.mdx'
 import LoadWarehouse from '../../../_assets/commonMarkdown/load_warehouse.mdx'
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/Loading_intro.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [loading overview](../../../loading/loading_introduction/loading_introduction.mdx).
 
 <InsertPrivNote />
 
@@ -227,7 +227,7 @@ Two examples are as follows:
   >
   > If the columns of the data file are mapped in sequence onto the columns of the StarRocks table, you do not need to specify `column_list`.
 
-  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [loading overview](../../../loading/Loading_intro.md).
+  If you want to skip a specific column of the data file, you only need to temporarily name that column as different from any of the StarRocks table columns. For more information, see [loading overview](../../../loading/loading_introduction/loading_introduction.mdx).
 
 - `COLUMNS FROM PATH AS`
 
@@ -375,7 +375,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 
-For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 #### Google GCS
 
@@ -663,7 +663,7 @@ The following parameters are supported:
 
 - `strict_mode`
 
-  Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
+  Specifies whether to enable the [strict mode](../../../loading/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
 
 - `timezone`
 

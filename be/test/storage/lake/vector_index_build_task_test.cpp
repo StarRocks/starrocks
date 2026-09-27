@@ -113,7 +113,7 @@ protected:
         opts.defer_vector_index_build = true;
 
         // Fill vector_index_file_paths so metadata is populated
-        std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+        std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
         std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
         opts.vector_index_file_paths[kIndexId] = vi_path;
 
@@ -164,6 +164,7 @@ protected:
             auto* segment_meta = rowset->add_segment_metas();
             segment_meta->set_filename(seg_name);
             segment_meta->add_vector_index_ids(kIndexId);
+            segment_meta->set_segment_vector_index_uid(kTabletId);
         }
 
         if (built_version > 0) {
@@ -185,7 +186,7 @@ TEST_F(VectorIndexBuildTaskTest, test_basic_build) {
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
     // Verify .vi does NOT exist before build
-    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
     std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
     ASSERT_FALSE(fs::path_exist(vi_path));
 
@@ -224,8 +225,8 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_built_rowsets) {
     ASSERT_EQ(response.new_built_version(), 3);
 
     // Only seg2's .vi should be built, seg1 was skipped
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
     ASSERT_FALSE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
 }
@@ -253,15 +254,92 @@ TEST_F(VectorIndexBuildTaskTest, test_batch_limit) {
     // Should have processed rowsets at version 2 and 3 (sorted by version, first 2)
     ASSERT_EQ(response.new_built_version(), 3);
 
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
-    std::string vi3 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg3, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
+    std::string vi3 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg3, kTabletId, kIndexId));
     ASSERT_TRUE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
     ASSERT_FALSE(fs::path_exist(vi3)); // Not processed yet
 }
 
+// Merge can place several rowsets at the SAME version on one tablet (distinct
+// sibling-exclusive rowsets copied verbatim keep their source version). The build
+// task must (a) build every one of them across cycles even when a version has more
+// rowsets than the batch limit, and (b) never advance the watermark past a version
+// whose rowsets are not all built (which would permanently exclude the unbuilt ones).
+// 3 rowsets at version 2 + 1 at version 3, batch_limit=2 forces multiple cycles: the
+// old code advanced the watermark to 2 after cycle 1 and left the 3rd v2 .vi forever
+// unbuilt while still reaching the target version.
+TEST_F(VectorIndexBuildTaskTest, test_duplicate_versions_build_all_and_advance_watermark) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto segA, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto segB, write_segment(tablet_schema, 1002, 10));
+    ASSIGN_OR_ABORT(auto segC, write_segment(tablet_schema, 1003, 10));
+    ASSIGN_OR_ABORT(auto segD, write_segment(tablet_schema, 1004, 10));
+
+    create_metadata(schema_pb, 4, {{2, segA}, {2, segB}, {2, segC}, {3, segD}}, /*built_version=*/0);
+
+    int64_t bv = 0;
+    for (int cycle = 0; cycle < 6; ++cycle) { // must converge in a few cycles, not loop forever
+        BuildVectorIndexRequest request;
+        request.set_tablet_id(kTabletId);
+        request.set_version(4);
+        request.set_built_version(bv);
+        request.set_max_rowsets_per_batch(2);
+        BuildVectorIndexResponse response;
+
+        VectorIndexBuildTask task(_tablet_mgr.get());
+        ASSERT_OK(task.execute(request, &response));
+        int64_t next = response.new_built_version();
+        ASSERT_GE(next, bv); // never regress
+        bv = next;
+    }
+
+    ASSERT_EQ(bv, 4); // reached _target_version once every version group is fully built
+    for (const auto& seg : {segA, segB, segC, segD}) {
+        std::string vi = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg, kTabletId, kIndexId));
+        EXPECT_TRUE(fs::path_exist(vi)) << seg;
+    }
+}
+
 // Test that FE-provided built_version in request skips already-built rowsets
+// A single version group with MORE rowsets than the batch limit must be built entirely in ONE
+// cycle. The built-version watermark can advance only once the whole group is done, so splitting
+// the group across cycles would make no progress and re-probe its already-built members with an
+// fs::path_exist (object-store HEAD) every cycle -- an O(k^2/batch) amplification. Group-atomic
+// budgeting builds the whole group and advances past it at once. 4 rowsets at version 2 with
+// batch_limit=2: one execute() must build all 4 and reach built_version 2.
+TEST_F(VectorIndexBuildTaskTest, test_oversized_version_group_builds_in_one_cycle) {
+    auto schema_pb = create_schema_pb();
+    auto tablet_schema = TabletSchema::create(schema_pb);
+
+    ASSIGN_OR_ABORT(auto segA, write_segment(tablet_schema, 1001, 10));
+    ASSIGN_OR_ABORT(auto segB, write_segment(tablet_schema, 1002, 10));
+    ASSIGN_OR_ABORT(auto segC, write_segment(tablet_schema, 1003, 10));
+    ASSIGN_OR_ABORT(auto segD, write_segment(tablet_schema, 1004, 10));
+
+    create_metadata(schema_pb, 2, {{2, segA}, {2, segB}, {2, segC}, {2, segD}}, /*built_version=*/0);
+
+    BuildVectorIndexRequest request;
+    request.set_tablet_id(kTabletId);
+    request.set_version(2);
+    request.set_built_version(0);
+    request.set_max_rowsets_per_batch(2); // group (4) is twice the batch limit
+    BuildVectorIndexResponse response;
+
+    VectorIndexBuildTask task(_tablet_mgr.get());
+    ASSERT_OK(task.execute(request, &response));
+
+    // One cycle builds the entire oversized group and advances the watermark past it.
+    ASSERT_EQ(response.new_built_version(), 2);
+    for (const auto& seg : {segA, segB, segC, segD}) {
+        std::string vi = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg, kTabletId, kIndexId));
+        EXPECT_TRUE(fs::path_exist(vi)) << seg;
+    }
+}
+
 TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
     auto schema_pb = create_schema_pb();
     auto tablet_schema = TabletSchema::create(schema_pb);
@@ -283,8 +361,8 @@ TEST_F(VectorIndexBuildTaskTest, test_request_built_version) {
     ASSERT_EQ(response.new_built_version(), 3);
 
     // Only seg2 should be built; seg1 skipped via request built_version
-    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kIndexId));
-    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kIndexId));
+    std::string vi1 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg1, kTabletId, kIndexId));
+    std::string vi2 = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg2, kTabletId, kIndexId));
     ASSERT_FALSE(fs::path_exist(vi1));
     ASSERT_TRUE(fs::path_exist(vi2));
 }
@@ -299,7 +377,7 @@ TEST_F(VectorIndexBuildTaskTest, test_skip_existing_vi_files) {
     create_metadata(schema_pb, 2, {{2, seg_name}});
 
     // Pre-create .vi file to simulate a previous partial build success
-    std::string vi_name = gen_vector_index_filename(seg_name, kIndexId);
+    std::string vi_name = gen_vector_index_filename(seg_name, kTabletId, kIndexId);
     std::string vi_path = _tablet_mgr->segment_location(kTabletId, vi_name);
     ASSIGN_OR_ABORT(auto wf, fs::new_writable_file(vi_path));
     ASSERT_OK(wf->append("dummy"));
@@ -439,6 +517,7 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
         auto* segment_meta = rs->add_segment_metas();
         segment_meta->set_filename(seg_ok);
         segment_meta->add_vector_index_ids(kIndexId);
+        segment_meta->set_segment_vector_index_uid(kTabletId);
     }
     {
         auto* rs = metadata->add_rowsets();
@@ -449,6 +528,7 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
         auto* segment_meta = rs->add_segment_metas();
         segment_meta->set_filename(seg_bad);
         segment_meta->add_vector_index_ids(kIndexId);
+        segment_meta->set_segment_vector_index_uid(kTabletId);
     }
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
@@ -464,9 +544,10 @@ TEST_F(VectorIndexBuildTaskTest, test_partial_failure_watermark_stops_at_failed_
     EXPECT_EQ(2, response.new_built_version()) << "watermark should advance through v=2 and pause at v=3";
 
     // v=2's .vi was actually built; v=3's was not.
-    EXPECT_TRUE(fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kIndexId))));
-    EXPECT_FALSE(
-            fs::path_exist(_tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kIndexId))));
+    EXPECT_TRUE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_ok, kTabletId, kIndexId))));
+    EXPECT_FALSE(fs::path_exist(
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_bad, kTabletId, kIndexId))));
 }
 
 // Persist segment_size and segment_encryption_metas on the rowset and verify they
@@ -491,6 +572,7 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     segment_meta->set_size(2048);          // exercises has_size branch
     segment_meta->set_encryption_meta(""); // exercises has_encryption_meta branch (empty meta is fine)
     segment_meta->add_vector_index_ids(kIndexId);
+    segment_meta->set_segment_vector_index_uid(kTabletId);
     CHECK_OK(_tablet_mgr->put_tablet_metadata(metadata));
 
     BuildVectorIndexRequest request;
@@ -501,7 +583,8 @@ TEST_F(VectorIndexBuildTaskTest, test_prepare_carries_segment_size_and_encryptio
     ASSERT_OK(task.execute(request, &response));
     ASSERT_EQ(response.new_built_version(), 2);
 
-    std::string vi_path = _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kIndexId));
+    std::string vi_path =
+            _tablet_mgr->segment_location(kTabletId, gen_vector_index_filename(seg_name, kTabletId, kIndexId));
     EXPECT_TRUE(fs::path_exist(vi_path));
 }
 

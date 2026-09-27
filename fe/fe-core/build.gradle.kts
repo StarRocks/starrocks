@@ -237,11 +237,20 @@ dependencies {
     implementation("org.apache.parquet:parquet-column")
     implementation("org.apache.parquet:parquet-common")
     implementation("org.apache.parquet:parquet-hadoop")
+    implementation("org.apache.ranger:ranger-audit-dest-solr") {
+        exclude(group = "org.elasticsearch", module = "*")
+        exclude(group = "org.elasticsearch.client", module = "*")
+        // jetty-client resolves to the banned 9.4.58 (ban-vulnerable-dependencies); Solr audit
+        // uses the Apache HttpClient path, not the Jetty HTTP/2 client, so this is runtime-safe.
+        exclude(group = "org.eclipse.jetty", module = "*")
+    }
     implementation("org.apache.ranger:ranger-plugins-common") {
         exclude(group = "org.elasticsearch", module = "*")
         exclude(group = "org.elasticsearch.client", module = "*")
         exclude(group = "com.nimbusds", module = "nimbus-jose-jwt")
         exclude(group = "com.sun.jersey", module = "jersey-bundle")
+        // Ranger 2.9.0 declares jsr311-api (JAX-RS 1.1) directly; it shadows jakarta.ws.rs-api 2.1.6
+        exclude(group = "javax.ws.rs", module = "jsr311-api")
     }
     compileOnly("org.apache.spark:spark-catalyst_2.12")
     implementation("org.apache.spark:spark-core_2.12") {
@@ -293,6 +302,9 @@ dependencies {
     }
     implementation("org.slf4j:slf4j-api")
     implementation("org.threeten:threeten-extra:1.7.2")
+    // xz used to reach fe/lib only via the excluded avro-ipc; keep it for the
+    // jars that still reference it (commons-compress, clickhouse-jdbc, ...)
+    implementation("org.tukaani:xz")
     implementation("org.xerial.snappy:snappy-java")
     implementation("software.amazon.awssdk:glue")
     implementation("software.amazon.awssdk:dynamodb")

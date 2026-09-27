@@ -1,0 +1,65 @@
+-- name: test_join_predicate_reuse_feedback
+CREATE TABLE `repro_la` (
+  `id` int(11) NULL COMMENT "",
+  `x` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `repro_lb` (
+  `id` int(11) NULL COMMENT "",
+  `v` int(11) NULL COMMENT "",
+  `k` varchar(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into repro_la select generate_series, generate_series from TABLE(generate_series(1, 8));
+-- result:
+-- !result
+insert into repro_lb select generate_series, generate_series * 10, cast(generate_series as varchar) from TABLE(generate_series(1, 8));
+-- result:
+-- !result
+analyze table repro_la;
+analyze table repro_lb;
+set enable_plan_advisor_blacklist = false;
+-- result:
+-- !result
+set broadcast_row_limit = 0;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;
+-- result:
+-- !result
+function: assert_query_contains("alter plan advisor add SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20", "Add query into plan advisor in FE")
+-- result:
+None
+-- !result
+function: assert_explain_contains("SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20", "RightChildEstimationErrorTuningGuide", "common sub expr")
+-- result:
+None
+-- !result
+SELECT a.id, b.v FROM (SELECT * FROM repro_la WHERE x > 0) a LEFT JOIN (SELECT id, v FROM repro_lb WHERE lower(k) = 'zznotexist') b ON abs(a.id) = abs(b.id) WHERE abs(a.id + b.v) = 10 OR abs(a.id + b.v) = 20;
+-- result:
+-- !result
+set broadcast_row_limit = 15000000;
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = true;
+-- result:
+-- !result
+set enable_plan_advisor_blacklist = true;
+-- result:
+-- !result
+function: assert_query_contains("truncate plan advisor", "Clear all plan advisor in FE")
+-- result:
+None
+-- !result

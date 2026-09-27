@@ -497,4 +497,123 @@ TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_level_multiple_
     EXPECT_EQ(result.candidate_filesets.size(), 2);
 }
 
+// Test 21: The highest-scoring level holds a single fileset, a lower-scoring level holds two.
+//
+// Regression test for the index compactor declining to compact anything at all in this layout.
+// The level bonus rewards small levels by up to pk_index_size_tiered_max_level, so a single small
+// fileset can outscore an older level of two large filesets and, because only the top level was
+// considered, that round produced no index compaction at all while the flush side kept adding
+// sstables.
+//
+// NOTE: the scores below are computed with THIS FIXTURE's config (SetUp overrides
+// pk_index_size_tiered_level_multiplier to 5 and pk_index_size_tiered_max_level to 7), not with the
+// shipped defaults of 10 and 5. At the shipped defaults the 200KB level scores 6, below the
+// two-fileset level's 7, so this exact layout is not starved on a real cluster.
+// test_falls_back_at_product_default_config below covers a layout that is.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_falls_back_when_top_level_has_one_fileset) {
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // fileset 1: 100MB  -- base, level {1,2}, score 3*2-2+3 = 7
+            {2, 104857600, 200}, // fileset 2: 100MB
+            {3, 204800, 300},    // fileset 3: 200KB  -- own level, alone, score 3*1-2+7 = 8
+            {4, 500000, 400},    // active, never a candidate
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    // The single-fileset level cannot be compacted, so the two-fileset level must be taken instead.
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(200, result.max_max_rss_rowid);
+}
+
+// Test 22: Every level holds exactly one fileset -- the fallback must still decline.
+// Guards the other direction of test 21: falling back may not lower the two-fileset minimum.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_no_fallback_when_every_level_has_one_fileset) {
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // 100MB
+            {2, 4194304, 200},   // 4MB   -- 25x smaller, own level
+            {3, 204800, 300},    // 200KB -- 20x smaller, own level
+            {4, 500000, 400},    // active
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    EXPECT_EQ(0, result.candidate_filesets.size());
+    EXPECT_FALSE(result.merge_base_level);
+}
+
+// Test 23: the same starvation, reached at the SHIPPED config rather than this fixture's.
+//
+// The defaults are pk_index_size_tiered_min_level_size = 131072, _level_multiplier = 10 and
+// _max_level = 5, so max_level_size = 131072 * 10^5. There the level bonus tops out at 6 and a
+// single small fileset can only *tie* a two-fileset level, never outscore it:
+//
+//   two 100MB filesets   -> level_bonus 3, score 3*2-2+3 = 7
+//   one 200KB fileset    -> level_bonus 5, score 3*1-2+5 = 6   (not starved)
+//   one fileset < 131072 -> level_bonus 6, score 3*1-2+6 = 7   (ties)
+//
+// A tie is enough, because LevelComparator breaks it on `fileset_indexes[0] >` and filesets are
+// ordered oldest-first, so the newest single-fileset level sorts ahead of the compactable one and
+// *priority_levels.begin() lands on the level that cannot be compacted. The boundary is exact:
+// 131071 bytes reproduces it, 131072 does not.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_falls_back_at_product_default_config) {
+    config::pk_index_size_tiered_level_multiplier = 10;
+    config::pk_index_size_tiered_max_level = 5;
+    // min_level_size is already the shipped 131072; TearDown restores all three.
+
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // fileset 1: 100MB   -- base, level {1,2}, score 7
+            {2, 104857600, 200}, // fileset 2: 100MB
+            {3, 131071, 300},    // fileset 3: one byte under min_level_size -- own level, score 7
+            {4, 500000, 400},    // active, never a candidate
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+    EXPECT_TRUE(result.merge_base_level);
+    EXPECT_EQ(200, result.max_max_rss_rowid);
+}
+
+// Test 24: the other side of test 23's boundary. At the shipped config a fileset of exactly
+// min_level_size scores 6, strictly below the two-fileset level's 7, so the pre-existing code
+// already selected the compactable level and the fallback changes nothing here.
+TEST_F(LakePersistentIndexSizeTieredCompactionStrategyTest, test_no_starvation_at_min_level_size_boundary) {
+    config::pk_index_size_tiered_level_multiplier = 10;
+    config::pk_index_size_tiered_max_level = 5;
+
+    std::vector<std::tuple<int64_t, int64_t, uint64_t>> sstables_info = {
+            {1, 104857600, 100}, // 100MB -- level {1,2}, score 7
+            {2, 104857600, 200}, // 100MB
+            {3, 131072, 300},    // exactly min_level_size -- own level, score 6
+            {4, 500000, 400},    // active
+    };
+
+    auto metadata = create_tablet_metadata_with_sstables(sstables_info);
+
+    ASSIGN_OR_ABORT(
+            CompactionCandidateResult result,
+            LakePersistentIndexSizeTieredCompactionStrategy::pick_compaction_candidates(metadata->sstable_meta()));
+
+    ASSERT_EQ(2, result.candidate_filesets.size());
+    EXPECT_EQ(1, result.candidate_filesets[0][0].fileset_id().hi());
+    EXPECT_EQ(2, result.candidate_filesets[1][0].fileset_id().hi());
+}
+
 } // namespace starrocks::lake

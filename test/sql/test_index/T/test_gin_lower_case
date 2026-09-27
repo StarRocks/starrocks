@@ -1,0 +1,74 @@
+-- name: test_gin_lower_case_${uuid0}
+CREATE DATABASE test_gin_lower_case_${uuid0};
+USE test_gin_lower_case_${uuid0};
+
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+
+-- case-sensitive: lower_case=false
+CREATE TABLE t_gin_lc_cs (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="false") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+
+-- case-insensitive (default behavior): lower_case=true
+CREATE TABLE t_gin_lc_ci (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="true") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+
+INSERT INTO t_gin_lc_cs VALUES (1,'Hello World'),(2,'hello world'),(3,'Hello WORLD'),(4,'Foo Bar'),(5,'apple Banana');
+INSERT INTO t_gin_lc_ci VALUES (1,'Hello World'),(2,'hello world'),(3,'Hello WORLD'),(4,'Foo Bar'),(5,'apple Banana');
+
+-- ===== plain MATCH (EQUAL_QUERY): case decided by stored tokens =====
+-- case-sensitive table
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'Hello' ORDER BY k;
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'hello' ORDER BY k;
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'WORLD' ORDER BY k;
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH 'banana' ORDER BY k;
+-- case-insensitive table (regression: must keep old behavior)
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'hello' ORDER BY k;
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'Hello' ORDER BY k;
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH 'banana' ORDER BY k;
+
+-- ===== MATCH_ANY / MATCH_ALL (tokenized query path: uses the query analyzer) =====
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ANY 'Hello Foo' ORDER BY k;
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ANY 'hello world' ORDER BY k;
+SELECT k FROM t_gin_lc_cs WHERE msg MATCH_ALL 'Hello World' ORDER BY k;
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH_ANY 'Hello Foo' ORDER BY k;
+SELECT k FROM t_gin_lc_ci WHERE msg MATCH_ALL 'Hello World' ORDER BY k;
+
+-- ===== default value: omit lower_case -> behaves as true -> case-insensitive =====
+CREATE TABLE t_gin_lc_default (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+INSERT INTO t_gin_lc_default VALUES (1,'Hello World');
+SELECT k FROM t_gin_lc_default WHERE msg MATCH 'hello' ORDER BY k;
+SELECT k FROM t_gin_lc_default WHERE msg MATCH 'Hello' ORDER BY k;
+
+-- ===== case-insensitive property KEY: upper-case LOWER_CASE must still take effect =====
+CREATE TABLE t_gin_lc_upperkey (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","LOWER_CASE"="false") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+INSERT INTO t_gin_lc_upperkey VALUES (1,'Hello World');
+SELECT k FROM t_gin_lc_upperkey WHERE msg MATCH 'Hello' ORDER BY k;
+SELECT k FROM t_gin_lc_upperkey WHERE msg MATCH 'hello' ORDER BY k;
+
+-- ===== invalid value: must be rejected =====
+CREATE TABLE t_gin_lc_bad (
+  k bigint(20) NULL COMMENT "",
+  msg varchar(100) NULL COMMENT "",
+  INDEX idx_msg (msg) USING GIN("imp_lib"="builtin","parser"="english","lower_case"="abc") COMMENT ''
+) ENGINE=OLAP DUPLICATE KEY(k) DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num"="1");
+
+DROP DATABASE IF EXISTS test_gin_lower_case_${uuid0};

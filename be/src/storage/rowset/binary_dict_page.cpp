@@ -49,10 +49,10 @@
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h" // for Substitute
 #include "storage/chunk_helper.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/range.h"
 #include "storage/rowset/bitshuffle_page.h"
 #include "storage/rowset/common.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/range.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -301,10 +301,22 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
         auto temp_data_column = temp_nullable_column->data_column_raw_ptr();
         auto& temp_null_column = temp_nullable_column->null_column_ref();
 
-        // Read data column and null column
-        ContainerResource container(_page_handle, null_data, num_rows);
-        int n = temp_null_column.append_numbers(container);
-        DCHECK_EQ(n, num_rows);
+        // Read data column and null column. null_data is indexed by the in-page ordinal (see
+        // PageDecoder::next_batch_with_filter): a contiguous range can alias the page's null flags directly, a sparse
+        // range has to pick the flags of each sub-range, otherwise the rows after the first gap would take the
+        // null flags of the skipped rows.
+        if (range.size() == 1) {
+            ContainerResource container(_page_handle, null_data + range.begin(), num_rows);
+            int n = temp_null_column.append_numbers(container);
+            DCHECK_EQ(n, num_rows);
+        } else {
+            temp_null_column.reserve(num_rows);
+            SparseRangeIterator<> iter = range.new_iterator();
+            while (iter.has_more()) {
+                Range<> r = iter.next(num_rows);
+                temp_null_column.append_numbers(null_data + r.begin(), r.span_size());
+            }
+        }
         RETURN_IF_ERROR(next_batch(range, temp_data_column));
         DCHECK(temp_null_column.size() == num_rows);
         DCHECK(temp_data_column->size() == num_rows);
@@ -338,6 +350,12 @@ Status BinaryDictPageDecoder<Type>::next_batch_with_filter(
                                                              &dict_selected_count));
     if (dict_selected_count == 0) {
         memset(selection, 0, num_rows);
+        // The predicate rejects every dictionary entry, so no row of `range` is selected. Even though nothing is
+        // appended, the data page decoder must still be advanced past `range`: the caller (ParsedPageV2::read_with_filter)
+        // unconditionally moves _offset_in_page to range.end(), and the next chunk of the same page asserts
+        // _offset_in_page == _data_decoder->current_index(). Returning here without advancing leaves the decoder at the
+        // range's start and trips that DCHECK (crashing ASan/Debug builds) on the following read.
+        RETURN_IF_ERROR(_data_page_decoder->seek_to_position_in_page(range.end()));
         return Status::OK();
     }
     if (dict_selected_count == dict_size) {

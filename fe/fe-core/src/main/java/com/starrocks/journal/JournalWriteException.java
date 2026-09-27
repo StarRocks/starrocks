@@ -22,9 +22,7 @@ public class JournalWriteException extends Exception {
         // even if the FE type has not fully switched yet.
         ADMISSION_CLOSED,
         // The task was accepted before, but the writer aborted it while sealing or closing.
-        WRITER_ABORTED,
-        // Waiting for a journal task exceeded the caller-provided timeout.
-        TIMEOUT
+        WRITER_ABORTED
     }
 
     private final Reason reason;

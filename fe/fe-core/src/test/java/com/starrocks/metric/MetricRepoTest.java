@@ -14,16 +14,23 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.alter.AlterMetricRegistry;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.UserIdentity;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.common.Config;
+import com.starrocks.common.Version;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.http.rest.MetricsAction;
+import com.starrocks.journal.JournalType;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang3.StringUtils;
@@ -36,6 +43,15 @@ import java.util.List;
 import java.util.Set;
 
 public class MetricRepoTest extends PlanTestBase {
+
+    private ConnectContext createConnectContextForUser(String qualifiedUser, int connectionId) {
+        ConnectContext context = new ConnectContext();
+        context.setQualifiedUser(qualifiedUser);
+        context.setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setConnectionId(connectionId);
+        return context;
+    }
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -79,7 +95,76 @@ public class MetricRepoTest extends PlanTestBase {
     }
 
     @Test
+    public void testConnectionTotalUsesLiveMapSize() {
+        ExecuteEnv.setup();
+        ConnectScheduler scheduler = ExecuteEnv.getInstance().getScheduler();
+        ConnectContext original = createConnectContextForUser("metric_user_1", 10001);
+        ConnectContext collision = createConnectContextForUser("metric_user_2", 10001);
+        try {
+            Assertions.assertTrue(scheduler.registerConnection(original).first);
+            Assertions.assertFalse(scheduler.registerConnection(collision).first);
 
+            SimpleCoreMetricVisitor visitor = new SimpleCoreMetricVisitor("starrocks_fe");
+            MetricsAction.RequestParams params = new MetricsAction.RequestParams(false, false, false, false, false);
+            String output = MetricRepo.getMetric(visitor, params);
+            Assertions.assertEquals(1, scheduler.getCurrentConnectionMap().size());
+            Assertions.assertEquals(1, scheduler.getConnectionNum());
+            Assertions.assertTrue(output.contains("starrocks_fe_connection_total LONG 1"), output);
+        } finally {
+            scheduler.unregisterConnection(collision);
+            scheduler.unregisterConnection(original);
+        }
+    }
+
+    @Test
+    public void testRetainedJournalMetrics() {
+        MetricRepo.initializeEditLogRetained(JournalType.FE_META, 1L, 10L);
+        MetricRepo.recordEditLogBatch(JournalType.FE_META, 11L, 1L, 100L);
+        MetricRepo.initializeEditLogRetained(JournalType.STAR_MGR, 21L, 25L);
+        MetricRepo.recordEditLogBatch(JournalType.STAR_MGR, 26L, 1L, 200L);
+
+        MetricRepo.updateEditLogRetainedMinJournalId(JournalType.FE_META, 6L);
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.FE_META));
+        Assertions.assertEquals(600L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.FE_META));
+        Assertions.assertEquals(6L, MetricRepo.getEditLogRetainedCount(JournalType.STAR_MGR));
+        Assertions.assertEquals(1200L, MetricRepo.getEditLogRetainedBytesEstimate(JournalType.STAR_MGR));
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricRepo.getMetricsByName("edit_log_retained").forEach(visitor::visit);
+        MetricRepo.getMetricsByName("edit_log_retained_bytes_estimate").forEach(visitor::visit);
+        String output = visitor.build();
+        Assertions.assertTrue(output.contains("journal=\"fe_meta\""), output);
+        Assertions.assertTrue(output.contains("journal=\"star_mgr\""), output);
+    }
+
+    @Test
+    public void testBuildInfoMetric() {
+        List<Metric> metrics = MetricRepo.getMetricsByName("build_info");
+        Assertions.assertEquals(1, metrics.size());
+
+        Metric metric = metrics.get(0);
+        Assertions.assertEquals(1L, metric.getValue());
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("starrocks_fe");
+        visitor.visit(metric);
+        String output = visitor.build();
+
+        Assertions.assertTrue(
+                output.contains("# HELP starrocks_fe_build_info StarRocks FE build information"), output);
+        Assertions.assertTrue(output.contains("# TYPE starrocks_fe_build_info gauge"), output);
+
+        String buildInfoLine = output.lines()
+                .filter(line -> line.startsWith("starrocks_fe_build_info{"))
+                .findFirst()
+                .orElseThrow();
+        Assertions.assertTrue(
+                buildInfoLine.contains("version=\"" + Version.STARROCKS_VERSION + "\""), buildInfoLine);
+        Assertions.assertTrue(
+                buildInfoLine.contains("commit_hash=\"" + Version.STARROCKS_COMMIT_HASH + "\""), buildInfoLine);
+        Assertions.assertTrue(buildInfoLine.endsWith("} 1"), buildInfoLine);
+    }
+
+    @Test
     public void testSPMMetricsExposure() {
         MetricRepo.COUNTER_SPM_REWRITE_TOTAL.getMetric("hit").increase(1L);
         MetricRepo.COUNTER_SPM_CAPTURE_CANDIDATE_TOTAL.getMetric("captured").increase(1L);
@@ -94,6 +179,36 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertTrue(output.contains("spm_capture_candidate_total"));
         Assertions.assertTrue(output.contains("result=\"hit\""));
         Assertions.assertTrue(output.contains("result=\"captured\""));
+    }
+
+    @Test
+    public void testMaxJournalReplayLagMetricsExposure() {
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        // registered by MetricRepo.init(), and leader-aware so it always carries the is_leader label
+        Assertions.assertTrue(output.contains("max_journal_replay_lag"), output);
+        Assertions.assertTrue(output.contains("max_journal_replay_lag{is_leader="), output);
+    }
+
+    @Test
+    public void testAlterColumnMetricsExposure() {
+        // Record one series of each metric, then drive the real MetricRepo.getMetric() path to guard the
+        // AlterMetricRegistry.getInstance().report(visitor) wiring (removing it would silently drop both metrics).
+        AlterMetricRegistry registry = AlterMetricRegistry.getInstance();
+        registry.updateAlterOperation(AlterMetricRegistry.AlterOperationType.ADD_COLUMN);
+        registry.updateAlterDuration(AlterMetricRegistry.AlterExecutionMode.FAST_SCHEMA_EVOLUTION, 5L);
+
+        MetricVisitor visitor = new PrometheusMetricVisitor("");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("alter_operation_total{"), output);
+        Assertions.assertTrue(output.contains("alter_duration_ms"), output);
+        Assertions.assertTrue(output.contains("execution_mode=\"fse\""), output);
     }
   
     public void testPlanAdvisorMetricsExposure() {
@@ -666,5 +781,24 @@ public class MetricRepoTest extends PlanTestBase {
         Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("ctas"));
         Assertions.assertEquals("ctas", ConnectorMetricsMgr.normalizeWriteType("CTAS"));
         Assertions.assertEquals("unknown", ConnectorMetricsMgr.normalizeWriteType(null));
+    }
+
+    @Test
+    public void testDictCacheMemoryMetric() {
+        // The gauge must be registered and expose a non-negative byte value on read.
+        Assertions.assertNotNull(MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES);
+        Long value = MetricRepo.GAUGE_LOW_CARDINALITY_DICT_CACHE_BYTES.getValue();
+        Assertions.assertNotNull(value);
+        Assertions.assertTrue(value >= 0L, "dict cache memory must be non-negative, got " + value);
+
+        PrometheusMetricVisitor visitor = new PrometheusMetricVisitor("ut");
+        MetricsAction.RequestParams params = new MetricsAction.RequestParams(true, true, true, true, true);
+        MetricRepo.getMetric(visitor, params);
+        String output = visitor.build();
+
+        Assertions.assertTrue(output.contains("ut_low_cardinality_dict_cache_bytes"),
+                "low_cardinality_dict_cache_bytes should be exposed");
+        Assertions.assertTrue(output.contains("# TYPE ut_low_cardinality_dict_cache_bytes gauge"),
+                "low_cardinality_dict_cache_bytes should be declared as a gauge");
     }
 }

@@ -15,6 +15,7 @@
 from functools import wraps
 import logging
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+import uuid
 import warnings
 
 from alembic.autogenerate import comparators
@@ -24,7 +25,7 @@ from alembic.operations.ops import AlterColumnOp, AlterTableOp, UpgradeOps
 from sqlalchemy import Column
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import ArgumentError
-from sqlalchemy.sql import schema as sa_schema, sqltypes, quoted_name
+from sqlalchemy.sql import quoted_name, schema as sa_schema, sqltypes
 from sqlalchemy.sql.schema import Table
 from sqlalchemy.util import OrderedSet
 
@@ -38,7 +39,7 @@ from starrocks.alembic.ops import (
     DropMaterializedViewOp,
     DropViewOp,
 )
-from starrocks.common import utils
+from starrocks.common import sql_canonical, utils
 from starrocks.common.defaults import ReflectionMVDefaults, ReflectionTableDefaults, ReflectionViewDefaults
 from starrocks.common.params import (
     AlterMVEnablement,
@@ -68,6 +69,10 @@ logger = logging.getLogger(__name__)
 
 
 INTEGER_VISIT_NAMES_WITH_DISPLAY_WIDTH = {"TINYINT", "SMALLINT", "INTEGER", "BIGINT", "LARGEINT"}
+
+# ``context.configure()`` option: schema to host the transient view/MV canonicalization
+# view. When unset, it is created in the compared object's own schema (the prior default).
+TEMP_VIEW_SCHEMA_OPT = "starrocks_temp_view_schema"
 
 
 def _is_integer_with_display_width(type_obj: sqltypes.TypeEngine) -> bool:
@@ -503,8 +508,13 @@ def compare_view(
 
     # Compare each view attribute using dedicated functions
     # Order: definition+columns -> comment -> security
+    resolved_schema = schema or autogen_context.dialect.default_schema_name
+    temp_view_schema = _configured_temp_view_schema(autogen_context) or resolved_schema
     definition_changed = _compare_view_definition_and_columns(
-        alter_view_op, view_fqn, conn_view, metadata_view
+        alter_view_op, view_fqn, conn_view, metadata_view,
+        conn=autogen_context.connection,
+        schema=resolved_schema,
+        temp_view_schema=temp_view_schema,
     )
     comment_changed = _compare_view_comment(
         alter_view_op, view_fqn, conn_view, metadata_view
@@ -529,11 +539,77 @@ def compare_view(
 
         logger.debug(f"Detected changed view attributes ({', '.join(changed_attrs)}) on {view_fqn!r}")
 
+def _configured_temp_view_schema(autogen_context) -> Optional[str]:
+    """Return the schema configured by user, or ``None`` when it is not set"""
+    migration_context = getattr(autogen_context, "migration_context", None)
+    opts = getattr(migration_context, "opts", None) or {}
+    return opts.get(TEMP_VIEW_SCHEMA_OPT) or None
+
+
+def _get_canonical_sql_via_temp_view(conn, schema: str, sql: str) -> Optional[str]:
+    """Canonicalize SQL by round-tripping it through a temporary VIEW.
+
+    Returns the reflected canonical SQL, or ``None`` if the temp VIEW could not be
+    created (e.g. a referenced table does not exist yet in this migration, or the
+    migration user lacks ``CREATE VIEW`` on ``schema``), in which case the caller falls
+    back to the regex-based normalizer.
+    """
+    temp_name = f"_alembic_cmp_{uuid.uuid4().hex[:12]}"
+    quoted = f"`{schema}`.`{temp_name}`"
+    try:
+        conn.exec_driver_sql(f"CREATE OR REPLACE VIEW {quoted} AS {sql}")
+        row = conn.exec_driver_sql(
+            "SELECT view_definition FROM information_schema.views "
+            "WHERE table_schema = %s AND table_name = %s",
+            (schema, temp_name),
+        ).fetchone()
+        return row[0] if row else None
+    except Exception as e:
+        # Expected when the migration user lacks privileges on ``schema`` (or a referenced
+        # object is missing); logged so the fallback is diagnosable rather than silent. The
+        # round-trip needs create + read-back + drop, so all three privileges are required.
+        logger.debug(
+            "Temp-view canonicalization could not create %s (falling back to AST/regex "
+            "normalization). Grant the migration user privileges on schema %r with "
+            "`GRANT CREATE VIEW ON DATABASE %s; GRANT SELECT, DROP ON ALL VIEWS IN DATABASE %s;`, "
+            "or set %s to a schema it can already write to. Error: %s",
+            quoted, schema, schema, schema, TEMP_VIEW_SCHEMA_OPT, e,
+        )
+        return None
+    finally:
+        try:
+            conn.exec_driver_sql(f"DROP VIEW IF EXISTS {quoted}")
+        except Exception as e:
+            logger.warning(
+                "Failed to drop temp canonicalization view %s; it may need to be dropped manually: %s",
+                quoted, e,
+            )
+
+
+def _normalize_definitions_for_compare(conn_sql: str, meta_sql: str) -> Tuple[Optional[str], Optional[str]]:
+    """Canonicalize a (connection, metadata) definition pair when the temp-view path is
+    unavailable (no CREATE VIEW privilege, referenced object missing, or no connection).
+    """
+    conn_canonical = sql_canonical.canonicalize_sql(conn_sql, remove_qualifiers=True)
+    meta_canonical = sql_canonical.canonicalize_sql(meta_sql, remove_qualifiers=True)
+    if conn_canonical is not None and meta_canonical is not None:
+        logger.debug("Definition comparison via sqlglot AST canonicalization.")
+        return conn_canonical, meta_canonical
+    logger.debug("sqlglot canonicalization unavailable for the pair; using plain string normalization.")
+    return (
+        TableAttributeNormalizer.normalize_sql(conn_sql, remove_qualifiers=True),
+        TableAttributeNormalizer.normalize_sql(meta_sql, remove_qualifiers=True),
+    )
+
+
 def _compare_view_definition_and_columns(
     alter_view_op: AlterViewOp,
     view_fqn: str,
     conn_view: View,
     metadata_view: View,
+    conn=None,
+    schema: Optional[str] = None,
+    temp_view_schema: Optional[str] = None,
 ) -> bool:
     """
     Compare view definition and columns, and update AlterViewOp if changed.
@@ -558,8 +634,18 @@ def _compare_view_definition_and_columns(
     meta_definition = metadata_view.info.get(TableObjectInfoKey.DEFINITION, "")
     logger.debug("Compare view definition: conn_definition=%s, meta_definition=%s", conn_definition, meta_definition)
 
-    conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition, remove_qualifiers=True)
-    meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_definition, remove_qualifiers=True)
+    if conn is not None and schema is not None:
+        host_schema = temp_view_schema or schema
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, host_schema, meta_definition)
+        if canonical_meta is not None:
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_definition)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
+            logger.debug("View definition comparison via temp-view canonicalization (temp schema %r).", host_schema)
+        else:
+            logger.debug("Temp-view canonicalization failed for %r; falling back to AST/regex normalizer.", view_fqn)
+            conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_definition, meta_definition)
+    else:
+        conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_definition, meta_definition)
     definition_changed = conn_def_norm != meta_def_norm
 
     # Compare columns (if metadata specifies columns explicitly)
@@ -967,7 +1053,9 @@ def _compare_mv_definition(
     schema: Optional[str],
     mv_name: str,
     conn_mv: Union[MaterializedView, Table],
-    metadata_mv: Union[MaterializedView, Table]
+    metadata_mv: Union[MaterializedView, Table],
+    conn=None,
+    temp_view_schema: Optional[str] = None,
 ) -> None:
     """
     Compare MV definition and raise error if changed.
@@ -980,9 +1068,21 @@ def _compare_mv_definition(
     meta_def_raw = getattr(metadata_mv, "definition", None) or metadata_mv.info.get(TableObjectInfoKey.DEFINITION, "")
     logger.debug("Compare mv definition: conn_def_raw=%s, meta_def_raw=%s", conn_def_raw, meta_def_raw)
 
-    # Normalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
-    conn_def_norm = TableAttributeNormalizer.normalize_sql(conn_def_raw, remove_qualifiers=True)
-    meta_def_norm = TableAttributeNormalizer.normalize_sql(meta_def_raw, remove_qualifiers=True)
+    # Preferred path: canonicalize both sides through temporary VIEWs.
+    if conn is not None and schema is not None:  # schema is already resolved by _compare_mv
+        host_schema = temp_view_schema or schema
+        canonical_conn = _get_canonical_sql_via_temp_view(conn, host_schema, conn_def_raw)
+        canonical_meta = _get_canonical_sql_via_temp_view(conn, host_schema, meta_def_raw)
+        if canonical_conn is not None and canonical_meta is not None:
+            conn_def_norm = TableAttributeNormalizer.normalize_sql(canonical_conn)
+            meta_def_norm = TableAttributeNormalizer.normalize_sql(canonical_meta)
+            logger.debug("MV definition comparison via temp-view canonicalization.")
+        else:
+            logger.debug("Temp-view canonicalization failed for MV %r; falling back to AST/regex normalizer.", mv_name)
+            conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_def_raw, meta_def_raw)
+    else:
+        # Canonicalize and remove qualifiers (schema/table) to avoid false diffs on equivalent SQL
+        conn_def_norm, meta_def_norm = _normalize_definitions_for_compare(conn_def_raw, meta_def_raw)
 
     if conn_def_norm != meta_def_norm:
         check_similar_string_and_warn(
@@ -1045,7 +1145,19 @@ def _compare_mv_refresh(
         if val is None:
             return None
         # Collapse whitespace and compare case-insensitively
-        return " ".join(str(val).split()).upper()
+        normalized = " ".join(str(val).split()).upper()
+        # IMMEDIATE is not rendered in SHOW CREATE, so drop
+        if normalized.startswith("IMMEDIATE "):
+            normalized = normalized[len("IMMEDIATE "):]
+        # SCHEDULE keyword replaced ASYNC 4.1.1, replace with ASYNC for backwards compatibility 
+        for moment_prefix in ("", "DEFERRED "):
+            keyword = moment_prefix + "SCHEDULE"
+            if normalized.startswith(keyword):
+                normalized = moment_prefix + "ASYNC" + normalized[len(keyword):]
+                break
+        # Normalize START("...") (SHOW CREATE) vs START('...') (metadata) quote styles.
+        normalized = normalized.replace('"', "'")
+        return normalized
 
     conn_refresh_raw = conn_mv_attributes.get(TableInfoKey.REFRESH)
     meta_refresh_raw = meta_mv_attributes.get(TableInfoKey.REFRESH)
@@ -1156,7 +1268,10 @@ def _compare_mv(
     # Compare each MV attribute using dedicated functions
     # Order: immutable attributes first (will raise error if changed), then mutable attributes
     # Immutable attributes (will raise NotImplementedError if changed):
-    _compare_mv_definition(upgrade_ops.ops, schema, mv_name, conn_mv, metadata_mv)
+    resolved_schema = schema or autogen_context.dialect.default_schema_name
+    temp_view_schema = _configured_temp_view_schema(autogen_context) or resolved_schema
+    _compare_mv_definition(upgrade_ops.ops, resolved_schema, mv_name, conn_mv, metadata_mv,
+                           conn=autogen_context.connection, temp_view_schema=temp_view_schema)
     _compare_table_partition(
         upgrade_ops.ops,
         schema,
@@ -1178,6 +1293,7 @@ def _compare_mv(
         support_change_override=AlterMVEnablement.DISTRIBUTED_BY,
         ddl_object="MATERIALIZED VIEW",
         object_label="Materialized view",
+        skip_when_meta_unset=True,
     )
     _compare_table_order_by(
         upgrade_ops.ops,
@@ -1621,6 +1737,7 @@ def _compare_table_distribution(
     support_change_override: Optional[bool] = None,
     ddl_object: str = "TABLE",
     object_label: str = "Table",
+    skip_when_meta_unset: bool = False,
 ) -> None:
     """Compare distribution changes and add AlterTableDistributionOp if needed."""
     conn_distribution = conn_table_attributes.get(TableInfoKey.DISTRIBUTED_BY)
@@ -1635,6 +1752,11 @@ def _compare_table_distribution(
                 DeprecationWarning,
             )
             meta_distribution = starrocks_distribution
+
+    # For materialized views, if the distribution is undefined, it is auto-assigned, but appears in SHOW CREATE
+    # Should be skipped because the auto-assign is not managed by user
+    if meta_distribution is None and skip_when_meta_unset:
+        return
 
     if isinstance(conn_distribution, str):
         conn_distribution = StarRocksTableDefinitionParser.parse_distribution(conn_distribution)
@@ -1797,6 +1919,16 @@ def _compare_table_properties_impl(
 
         logger.debug("Property changes. key: %s, effective_conn_str: %s, effective_meta_str: %s", key, effective_conn_str, effective_meta_str)
         if meta_value is None:
+            if key in default_cls.skip_implicit_reset_properties():
+                # This property must not be implicitly reset to its default when it is absent
+                # from the metadata. Leave the database value untouched. See
+                # ReflectionTableDefaults._SKIP_IMPLICIT_RESET_PROPERTIES.
+                logger.debug(
+                    "Property %r is not specified in metadata for %r; leaving the database "
+                    "value %r unchanged (implicit reset is disabled for this property).",
+                    key, full_name, conn_value,
+                )
+                continue
             if default_value is None:
                 # Scenario 1: Implicit deletion of a property with no default.
                 if conn_value is not None:

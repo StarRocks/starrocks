@@ -59,7 +59,8 @@ INSERT INTO t2 SELECT id, dt,
   ds_hll_accumulate(province, 10), 
   ds_hll_accumulate(age, 20, "HLL_6"), 
   ds_hll_accumulate(dt, 10, "HLL_8") 
-FROM t1;
+FROM t1
+GROUP BY id, dt;
 
 -- Estimate distinct counts grouped by date
 SELECT dt, 

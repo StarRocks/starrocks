@@ -190,6 +190,12 @@ public class InsertAnalyzer {
 
             PartitionRef targetPartitionNames = insertStmt.getTargetPartitionNames();
             List<String> tablePartitionColumnNames = table.getPartitionColumnNames();
+            // Always validate a static partition clause so a clause naming a non-partition or
+            // non-existent column is rejected instead of being silently ignored (issue #11350).
+            // This is independent of the target-list invariant below, so both run when both apply.
+            if (insertStmt.isStaticKeyPartitionInsert()) {
+                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
+            }
             if (insertStmt.getTargetColumnNames() != null) {
                 for (String partitionColName : tablePartitionColumnNames) {
                     // case-insensitive match. refer to AstBuilder#getColumnNames
@@ -197,8 +203,6 @@ public class InsertAnalyzer {
                         throw new SemanticException("Must include partition column %s", partitionColName);
                     }
                 }
-            } else if (insertStmt.isStaticKeyPartitionInsert()) {
-                checkStaticKeyPartitionInsert(insertStmt, table, targetPartitionNames);
             }
             if (!table.isIcebergTable()) {
                 List<Column> partitionColumns = tablePartitionColumnNames.stream()
@@ -305,7 +309,12 @@ public class InsertAnalyzer {
             }
         }
 
-        if (!insertStmt.usePartialUpdate()) {
+        // An internal shadow-rewrite INSERT writes only the target rollup index with a column-subset
+        // target list, so a base required column that the rollup does not carry must not be required
+        // here. This branch only fires for the internal rewrite (no user INSERT sets isShadowRewrite).
+        boolean shadowRewriteSubsetWrite =
+                insertStmt.isShadowRewrite() && insertStmt.getTargetWriteIndexId() != null;
+        if (!insertStmt.usePartialUpdate() && !shadowRewriteSubsetWrite) {
             for (Column column : table.getBaseSchema()) {
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
                 if (defaultValueType == Column.DefaultValueType.NULL &&
@@ -335,7 +344,6 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
                     query.getRelationFields().size());
         }
-
         // check default value expr
         if (query instanceof ValuesRelation) {
             ValuesRelation valuesRelation = (ValuesRelation) query;
@@ -404,6 +412,13 @@ public class InsertAnalyzer {
                 if (properties.containsKey(property)) {
                     tableFunctionProperties.put(property, properties.get(property));
                 }
+            }
+            // The relation may already carry a FILES() table resolved outside the meta lock, before
+            // this push-down ran -- StatementPlanner's lock-free pre-analysis, or the tablet
+            // pre-split hook. QueryAnalyzer#resolveTableRef reuses that instance rather than
+            // rebuilding it from the map above, so the pushed-down keys would never reach it.
+            if (relation.getTable() instanceof TableFunctionTable preResolved) {
+                preResolved.applyPushedDownLoadProperties(tableFunctionProperties);
             }
         }
     }
@@ -826,12 +841,18 @@ public class InsertAnalyzer {
 
         MetaUtils.checkCatalogExistAndReport(catalogName);
 
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
-        if (database == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
         TableName tableNameObj = new TableName(catalogName, dbName, tableName, tableRef.getPos());
-        Table table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        // An external target was resolved before the lock was taken, because the lock covers nothing about
+        // it; see PreResolvedWriteTargets. A miss -- an internal target, or a pre-resolve that did not
+        // succeed -- falls through to the resolve this has always done.
+        Table table = session.getPreResolvedWriteTargets().take(tableNameObj);
+        if (table == null) {
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(session, catalogName, dbName);
+            if (database == null) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+            }
+            table = MetaUtils.getSessionAwareTable(session, database, tableNameObj);
+        }
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName);
         }

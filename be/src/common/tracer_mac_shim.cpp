@@ -72,6 +72,10 @@ Tracer& Tracer::Instance() {
 
 void Tracer::release_instance() {}
 
+#ifdef BE_TEST
+void Tracer::reinitialize_for_test() {}
+#endif
+
 void Tracer::init(const std::string&) {}
 
 void Tracer::shutdown() {}

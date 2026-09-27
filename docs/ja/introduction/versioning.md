@@ -1,3 +1,9 @@
+---
+displayed_sidebar: docs
+sidebar_position: 50
+description: "StarRocks のバージョン命名規則。MAJOR.MINOR.PATCH 形式、プレリリースの表記、バージョン番号の読み方を説明します。"
+---
+
 # バージョン命名
 
 目的: StarRocks ソフトウェアパッケージの現在の命名規則について、統一された明確な説明を提供すること。

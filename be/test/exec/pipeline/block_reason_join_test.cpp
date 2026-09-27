@@ -34,8 +34,8 @@
 #include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/hashjoin/spillable_hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/spillable_hash_join_probe_operator.h"
-#include "exec/pipeline/primitives/block_reason.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

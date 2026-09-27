@@ -115,7 +115,13 @@ StatusOr<llvm::Value*> IRHelper::load_ir_number(llvm::IRBuilder<>& b, const Logi
         return b.getInt64(reinterpret_cast<const int64_t*>(value)[0]);
     case TYPE_LARGEINT:
     case TYPE_DECIMAL128: {
-        llvm::APInt value_128(128, reinterpret_cast<const int128_t*>(value)[0], true);
+        // The APInt(numBits, uint64_t, isSigned) overload would narrow the int128 to 64 bits and
+        // drop the high half (zeroing/wrapping any literal >= 2^64). Build it from both 64-bit
+        // words (little-endian: low word first) so the full 128-bit literal is preserved.
+        const int128_t raw = reinterpret_cast<const int128_t*>(value)[0];
+        const uint64_t words[2] = {static_cast<uint64_t>(static_cast<__uint128_t>(raw)),
+                                   static_cast<uint64_t>(static_cast<__uint128_t>(raw) >> 64)};
+        llvm::APInt value_128(128, llvm::ArrayRef<uint64_t>(words, 2));
         return llvm::ConstantInt::get(b.getContext(), value_128);
     }
     case TYPE_FLOAT:

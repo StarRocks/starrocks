@@ -353,7 +353,7 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
     public void testRemoveInternalNoLockNormalCase() throws Exception {
         // 1. Create a storage volume first
         String svName = "test_remove_sv";
-        String storageVolumeId = masterStorageVolumeMgr.createStorageVolume(
+        masterStorageVolumeMgr.createStorageVolume(
                 svName, "S3", Arrays.asList("s3://test-bucket"),
                 createTestParams(), Optional.of(true), "test storage volume");
 
@@ -397,7 +397,7 @@ public class SharedNothingStorageVolumeMgrEditLogTest {
     public void testRemoveInternalNoLockEditLogException() throws Exception {
         // 1. Create a storage volume first
         String svName = "exception_remove_sv";
-        String storageVolumeId = masterStorageVolumeMgr.createStorageVolume(
+        masterStorageVolumeMgr.createStorageVolume(
                 svName, "S3", Arrays.asList("s3://test-bucket"),
                 createTestParams(), Optional.of(true), "test storage volume");
 

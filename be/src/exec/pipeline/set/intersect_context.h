@@ -24,7 +24,7 @@
 #include "common/statusor.h"
 #include "exec/intersect_hash_set.h"
 #include "exec/pipeline/context_with_dependency.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exprs/expr_context.h"
 #include "gutil/casts.h"
 #include "runtime/descriptors_fwd.h"

@@ -19,6 +19,8 @@ import com.starrocks.common.Range;
 import com.starrocks.proto.TabletRangePB;
 import com.starrocks.thrift.TTabletRange;
 
+import java.util.Objects;
+
 public class TabletRange {
 
     @SerializedName(value = "range")
@@ -81,6 +83,23 @@ public class TabletRange {
         boolean lowerIncluded = tabletRangePB.lowerBoundIncluded != null ? tabletRangePB.lowerBoundIncluded : false;
         boolean upperIncluded = tabletRangePB.upperBoundIncluded != null ? tabletRangePB.upperBoundIncluded : false;
         return new TabletRange(Range.of(lowerBound, upperBound, lowerIncluded, upperIncluded));
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        TabletRange other = (TabletRange) o;
+        return Objects.equals(range, other.range);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(range);
     }
 
 }

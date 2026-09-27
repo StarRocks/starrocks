@@ -331,29 +331,164 @@ column statistics:
   },
   "column_statistics": {
     "test.nation": {
-      "N_NAME": "[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE",
-      "N_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE"
+      "N_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "25.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "N_NATIONKEY": {
+        "version": 1,
+        "min": "0.0",
+        "max": "24.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.partsupp": {
-      "PS_SUPPKEY": "[1.0, 1000000.0, 0.0, 8.0, 1000000.0] ESTIMATE",
-      "PS_AVAILQTY": "[1.0, 9999.0, 0.0, 4.0, 9999.0] ESTIMATE",
-      "PS_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE"
+      "PS_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "PS_AVAILQTY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "9999.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "9999.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "PS_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.lineitem": {
-      "L_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
-      "L_SHIPDATE": "[6.942816E8, 9.124416E8, 0.0, 4.0, 2526.0] ESTIMATE",
-      "L_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE",
-      "L_QUANTITY": "[1.0, 50.0, 0.0, 8.0, 50.0] ESTIMATE"
+      "L_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_SHIPDATE": {
+        "version": 1,
+        "min": "6.942816E8",
+        "max": "9.124416E8",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "2526.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "L_QUANTITY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "50.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "50.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.supplier": {
-      "S_NATIONKEY": "[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE",
-      "S_NAME": "[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE",
-      "S_ADDRESS": "[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE",
-      "S_SUPPKEY": "[1.0, 1000000.0, 0.0, 4.0, 1000000.0] ESTIMATE"
+      "S_NATIONKEY": {
+        "version": 1,
+        "min": "0.0",
+        "max": "24.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "25.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "25.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_ADDRESS": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "40.0",
+        "distinctValuesCount": "10000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "S_SUPPKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "1000000.0",
+        "nullsFraction": "0.0",
+        "averageRowSize": "4.0",
+        "distinctValuesCount": "1000000.0",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     },
     "test.part": {
-      "P_PARTKEY": "[1.0, 2.0E7, 0.0, 8.0, 2.0E7] ESTIMATE",
-      "P_NAME": "[-Infinity, Infinity, 0.0, 55.0, 1.99997E7] ESTIMATE"
+      "P_PARTKEY": {
+        "version": 1,
+        "min": "1.0",
+        "max": "2.0E7",
+        "nullsFraction": "0.0",
+        "averageRowSize": "8.0",
+        "distinctValuesCount": "2.0E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      },
+      "P_NAME": {
+        "version": 1,
+        "min": "-Infinity",
+        "max": "Infinity",
+        "nullsFraction": "0.0",
+        "averageRowSize": "55.0",
+        "distinctValuesCount": "1.99997E7",
+        "collectionSize": "-1.0",
+        "type": "ESTIMATE"
+      }
     }
   },
   "be_number": 3,

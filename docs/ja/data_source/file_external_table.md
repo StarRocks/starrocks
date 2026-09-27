@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "ファイル外部テーブルでメタストアなしに、HDFS、S3 の Parquet、ORC ファイルをクエリ。"
 ---
@@ -18,13 +19,13 @@ description: "ファイル外部テーブルでメタストアなしに、HDFS�
 
 ## 制限事項
 
-- ファイル外部テーブルは、[default_catalog](../data_source/catalog/default_catalog.md) 内のデータベースに作成する必要があります。クラスター内で作成された catalog をクエリするには、[SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) を実行します。
+- ファイル外部テーブルは、[default_catalog](./catalog/default_catalog.md) 内のデータベースに作成する必要があります。クラスター内で作成された catalog をクエリするには、[SHOW CATALOGS](../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) を実行します。
 - Parquet、ORC、Avro、RCFile、および SequenceFile データファイルのみがサポートされています。
 - ファイル外部テーブルを使用して、ターゲットデータファイル内のデータをクエリすることのみが可能です。INSERT、DELETE、DROP などのデータ書き込み操作はサポートされていません。
 
 ## 前提条件
 
-ファイル外部テーブルを作成する前に、ターゲットデータファイルが保存されている外部ストレージシステムに StarRocks がアクセスできるように、StarRocks クラスターを構成する必要があります。ファイル外部テーブルに必要な構成は、Hive catalog に必要な構成と同じですが、メタストアを構成する必要はありません。構成の詳細については、[Hive catalog - 統合準備](../data_source/catalog/hive_catalog.md#integration-preparations) を参照してください。
+ファイル外部テーブルを作成する前に、ターゲットデータファイルが保存されている外部ストレージシステムに StarRocks がアクセスできるように、StarRocks クラスターを構成する必要があります。ファイル外部テーブルに必要な構成は、Hive catalog に必要な構成と同じですが、メタストアを構成する必要はありません。構成の詳細については、[Hive catalog - 統合準備](./catalog/hive_catalog.md#integration-preparations) を参照してください。
 
 ## データベースの作成 (オプション)
 
@@ -131,7 +132,7 @@ AWS S3 に保存されたデータファイルにアクセスする必要があ�
 | aws.s3.access_key           | No       | IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | No       | IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。|
 
-AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法と AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3) を参照してください。
 
 ##### S3 互換ストレージ
 

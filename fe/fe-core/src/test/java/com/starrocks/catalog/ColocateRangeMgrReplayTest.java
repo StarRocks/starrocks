@@ -96,7 +96,7 @@ public class ColocateRangeMgrReplayTest {
 
     @Test
     public void testRemoveTableLastTableLeavesClearsRangeMgrInMemory() {
-        GroupId groupId = installRangeColocateGroup(DB_ID, "test_range_group", TABLE_ID);
+        installRangeColocateGroup(DB_ID, "test_range_group", TABLE_ID);
         colocateTableIndex.getColocateRangeMgr().setColocateRanges(COLOCATE_GROUP_ID,
                 Collections.singletonList(new ColocateRange(Range.all(), 5050L)));
 

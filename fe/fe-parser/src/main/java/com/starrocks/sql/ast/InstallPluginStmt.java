@@ -23,15 +23,21 @@ public class InstallPluginStmt extends DdlStmt {
 
     private final String pluginPath;
     private final Map<String, String> properties;
+    private final boolean ifNotExists;
 
     public InstallPluginStmt(String pluginPath, Map<String, String> properties) {
         this(pluginPath, properties, NodePosition.ZERO);
     }
 
     public InstallPluginStmt(String pluginPath, Map<String, String> properties, NodePosition pos) {
+        this(pluginPath, properties, false, pos);
+    }
+
+    public InstallPluginStmt(String pluginPath, Map<String, String> properties, boolean ifNotExists, NodePosition pos) {
         super(pos);
         this.pluginPath = pluginPath;
         this.properties = properties;
+        this.ifNotExists = ifNotExists;
     }
 
     public String getPluginPath() {
@@ -40,6 +46,10 @@ public class InstallPluginStmt extends DdlStmt {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public boolean isIfNotExists() {
+        return ifNotExists;
     }
 
     @Override

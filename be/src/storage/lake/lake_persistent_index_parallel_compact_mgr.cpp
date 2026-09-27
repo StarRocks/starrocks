@@ -27,10 +27,11 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/system/cpu_info.h"
 #include "fs/fs_util.h"
-#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_persistent_index_key_value_merger.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_range_helper.h"
@@ -59,9 +60,30 @@ size_t LakePersistentIndexParallelCompactTask::input_sstable_file_cnt() const {
 void LakePersistentIndexParallelCompactTask::run() {
     DCHECK(_cb != nullptr);
     Status status = do_run();
+    if (status.is_corruption()) {
+        // Corrupted bytes usually come from the local cache copy of an input sstable.
+        // Drop those cache entries so the next compaction round re-reads from remote
+        // storage, instead of hitting the same bad blocks and failing forever.
+        StorageMetrics::instance()->pk_index_sst_read_error_total.increment(1);
+        LOG(WARNING) << "PK index sst parallel compaction hit corruption, dropping local cache of "
+                     << input_sstable_file_cnt() << " input sstables, tablet_id=" << _metadata->id()
+                     << ", error: " << status;
+        drop_input_sstable_cache();
+    }
     _cb->update_status(status);
     if (status.ok()) {
         _cb->add_result(_output_sstables);
+    }
+}
+
+void LakePersistentIndexParallelCompactTask::drop_input_sstable_cache() {
+    if (_tablet_mgr == nullptr || _metadata == nullptr) {
+        return;
+    }
+    for (const auto& fileset : _input_sstables) {
+        for (const auto& sstable_pb : fileset) {
+            (void)drop_corrupted_sstable_cache(_tablet_mgr->sst_location(_metadata->id(), sstable_pb.filename()));
+        }
     }
 }
 
@@ -95,6 +117,9 @@ Status LakePersistentIndexParallelCompactTask::do_run() {
 
     sstable::ReadOptions read_options;
     read_options.fill_cache = false;
+    // Catch corrupted data blocks as Corruption instead of merging garbage into the
+    // compaction output.
+    read_options.verify_checksums = config::lake_pk_index_sst_verify_checksum;
 
     bool contain_shared_sstables = false;
     // Open each sstable and create iterator
@@ -287,7 +312,8 @@ Status LakePersistentIndexParallelCompactMgr::init() {
     builder.set_max_queue_size(config::pk_index_parallel_compaction_threadpool_size);
     auto st = builder.build(&_thread_pool);
     if (st.ok()) {
-        StorageMetrics::instance()->register_thread_pool_metrics("cloud_native_pk_index_compact", _thread_pool.get());
+        REGISTER_STORAGE_THREAD_POOL_METRICS(StorageMetrics::instance(), cloud_native_pk_index_compact,
+                                             _thread_pool.get());
     }
     return st;
 }

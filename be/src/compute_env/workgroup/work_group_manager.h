@@ -33,7 +33,7 @@
 #include "compute_env/workgroup/pipeline_executor_set_manager.h"
 #include "compute_env/workgroup/work_group.h"
 #include "compute_env/workgroup/work_group_schedule_policy.h"
-#include "exec/pipeline/primitives/driver_queue.h"
+#include "exec_primitive/pipeline/primitives/driver_queue.h"
 
 namespace starrocks {
 
@@ -89,9 +89,13 @@ public:
     void set_workgroup_expiration_time(std::chrono::seconds value);
 
 private:
+    friend class DefaultWorkGroupInitialization;
+
     using MutexType = std::shared_mutex;
     using UniqueLockType = std::unique_lock<MutexType>;
     using SharedLockType = std::shared_lock<MutexType>;
+
+    void publish_default_workgroup(const WorkGroupPtr& wg);
 
     // {create, alter,delete}_workgroup_unlocked is used to replay WorkGroupOps.
     // WorkGroupManager::_mutex is held when invoking these method.
@@ -102,6 +106,7 @@ private:
     void update_metrics_unlocked();
     void for_each_executors_unlocked(const ExecutorsManager::ExecutorsConsumer& consumer) const;
     WorkGroupPtr get_default_workgroup_unlocked();
+    void unregister_default_workgroup_unlocked();
 
 private:
     mutable std::shared_mutex _mutex;
@@ -115,6 +120,7 @@ private:
     std::unordered_map<int64_t, int64_t> _workgroup_versions;
     std::list<int128_t> _workgroup_expired_versions;
     std::chrono::seconds _workgroup_expiration_time{120};
+    std::weak_ptr<WorkGroup> _previous_default_workgroup;
 
     std::atomic<size_t> _sum_cpu_weight = 0;
     MetricRegistry* _metrics = nullptr;

@@ -21,7 +21,6 @@ import com.sleepycat.je.LockMode;
 import com.sleepycat.je.dbi.DbConfigManager;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.RollbackException;
-import com.sleepycat.je.rep.impl.RepGroupImpl;
 import com.sleepycat.je.rep.impl.RepImpl;
 import com.sleepycat.je.rep.stream.MatchpointSearchResults;
 import com.sleepycat.je.utilint.DatabaseUtil;
@@ -245,10 +244,11 @@ public class BDBEnvironmentTest {
                 leaderNodeHostPort,
                 leaderNodeHostPort,
                 true);
-        Assertions.assertTrue(true);
         try {
             maserEnvironment.setup(true);
         } catch (JournalException e) {
+            // Per the javadoc above, either outcome is acceptable. What must not happen is a raw
+            // RollbackException (or any other type) escaping: that would fail this test.
             LOG.warn("got Rollback Exception, as expect, ", e);
         }
         System.out.println("testRollbackExceptionOnSetupCluster cost " + (System.currentTimeMillis() - startMs) / 1000 + " s");
@@ -297,7 +297,6 @@ public class BDBEnvironmentTest {
     private void printHAStatus() {
         LOG.info("---------------------");
         LOG.info("{}", leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl().toString());
-        RepGroupImpl imp = leaderEnvironment.getReplicatedEnvironment().getGroup().getRepGroupImpl();
         LOG.info("---------------------");
     }
 

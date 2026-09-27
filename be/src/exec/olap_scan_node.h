@@ -23,11 +23,11 @@
 #include "column/chunk.h"
 #include "column/column_access_path.h"
 #include "common/statusor.h"
-#include "exec/olap_common.h"
-#include "exec/olap_scan_prepare.h"
+#include "compute_env/query/scan_conjuncts_manager.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_scanner.h"
 #include "exprs/expr_context.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 class DescriptorTbl;
@@ -260,7 +260,16 @@ private:
     RuntimeProfile::Counter* _gin_ngram_dict_filtered_counter = nullptr;
     RuntimeProfile::Counter* _gin_predicate_dict_filtered_counter = nullptr;
 
+    RuntimeProfile::Counter* _vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_load_timer = nullptr;
     RuntimeProfile::Counter* _get_row_ranges_by_vector_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_lookup_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_file_open_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_read_file_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_init_index_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_searcher_init_timer = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_hit_counter = nullptr;
+    RuntimeProfile::Counter* _vector_index_cache_miss_counter = nullptr;
     RuntimeProfile::Counter* _vector_search_timer = nullptr;
     RuntimeProfile::Counter* _vector_index_filtered_counter = nullptr;
     RuntimeProfile::Counter* _process_vector_distance_and_id_timer = nullptr;

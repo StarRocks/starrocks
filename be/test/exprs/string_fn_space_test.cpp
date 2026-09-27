@@ -14,8 +14,8 @@
 
 #include <gtest/gtest.h>
 
+#include "common/storage_define.h"
 #include "exprs/string_functions.h"
-#include "storage/olap_define.h"
 
 namespace starrocks {
 

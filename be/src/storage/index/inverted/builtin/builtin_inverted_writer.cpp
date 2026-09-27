@@ -45,6 +45,7 @@ public:
         _parser_type = get_inverted_index_parser_type_from_string(
                 get_parser_string_from_properties(inverted_index->index_properties()));
         DCHECK(_parser_type != InvertedIndexParserType::PARSER_UNKNOWN);
+        _lower_case = get_lower_case_from_properties(inverted_index->index_properties());
     }
 
     Status init() override;
@@ -65,6 +66,7 @@ private:
     std::unique_ptr<SimpleAnalyzer> _builtin_analyzer{};
 
     InvertedIndexParserType _parser_type;
+    bool _lower_case = true;
 };
 
 template <LogicalType field_type>
@@ -74,7 +76,7 @@ Status BuiltinInvertedWriterImpl<field_type>::init() {
     if (_parser_type == InvertedIndexParserType::PARSER_STANDARD) {
         _analyzer = std::make_unique<lucene::analysis::standard::StandardAnalyzer>();
     } else if (_parser_type == InvertedIndexParserType::PARSER_ENGLISH) {
-        _builtin_analyzer = std::make_unique<SimpleAnalyzer>();
+        _builtin_analyzer = std::make_unique<SimpleAnalyzer>(_lower_case);
     } else if (_parser_type == InvertedIndexParserType::PARSER_CHINESE) {
         auto chinese_analyzer = _CLNEW lucene::analysis::LanguageBasedAnalyzer();
         chinese_analyzer->setLanguage(L"cjk");

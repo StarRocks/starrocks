@@ -16,6 +16,8 @@
 
 #include <gtest/gtest.h>
 
+#include <vector>
+
 namespace starrocks {
 class DeltaDecodeTest : public testing::Test {
 public:
@@ -23,65 +25,88 @@ public:
     void TearDown() override {}
 };
 
+// The ISA-specific kernels now live in their own translation units and are always compiled (with
+// per-file -m flags), so the guards below are *runtime* __builtin_cpu_supports checks rather than
+// compile-time #ifdefs: this exercises the AVX-512 kernel on a capable CPU even when the binary was
+// built with USE_AVX512=OFF, which is exactly the property the split is meant to provide. The
+// AVX-512 kernels are skipped under ASan (known zmm-spill redzone trap), matching the dispatcher.
+
 TEST_F(DeltaDecodeTest, test_int32) {
     std::vector<int32_t> values(233);
-    for (int i = 0; i < values.size(); i++) {
+    for (size_t i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    [[maybe_unused]] std::vector<int32_t> avx2_values(values);
-    [[maybe_unused]] std::vector<int32_t> avx2x_values(values);
-    [[maybe_unused]] std::vector<int32_t> avx512_values(values);
 
+    // scalar reference
+    std::vector<int32_t> expected(values);
+    int32_t expected_last = 10;
+    delta_decode_chain_scalar_prefetch<int32_t>(expected.data(), expected.size(), 10, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    // public dispatcher must match on any CPU
     {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_scalar_prefetch<int32_t>(values.data(), values.size(), 10, last_value);
-        ASSERT_EQ(values.back(), last_value);
+        delta_decode_chain_int32(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
-#ifdef __AVX2__
-    {
+
+#if defined(__x86_64__)
+    if (__builtin_cpu_supports("avx2")) {
+        std::vector<int32_t> v(values);
         int32_t last_value = 10;
-        delta_decode_chain_int32_avx2(avx2_values.data(), avx2_values.size(), 10, last_value);
-        ASSERT_EQ(avx2_values.back(), last_value);
-        ASSERT_EQ(avx2_values, values);
+        delta_decode_chain_int32_avx2(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+#if !defined(ADDRESS_SANITIZER)
+    if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512vl")) {
+        std::vector<int32_t> v(values);
+        int32_t last_value = 10;
+        delta_decode_chain_int32_avx2x(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
+    }
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int32_t> v(values);
+        int32_t last_value = 10;
+        delta_decode_chain_int32_avx512(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
 #endif
-
-#if defined(__AVX512F__) && defined(__AVX512VL__)
-    {
-        int32_t last_value = 10;
-        delta_decode_chain_int32_avx2x(avx2x_values.data(), avx2x_values.size(), 10, last_value);
-        ASSERT_EQ(avx2x_values.back(), last_value);
-        ASSERT_EQ(avx2x_values, values);
-    }
-#endif
-
-#ifdef __AVX512F__
-    {
-        int32_t last_value = 10;
-        delta_decode_chain_int32_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
-        ASSERT_EQ(avx512_values.back(), last_value);
-        ASSERT_EQ(avx512_values, values);
-    }
 #endif
 }
 
 TEST_F(DeltaDecodeTest, test_int64) {
     std::vector<int64_t> values(223);
-    for (int i = 0; i < values.size(); i++) {
+    for (size_t i = 0; i < values.size(); i++) {
         values[i] = 1;
     }
-    [[maybe_unused]] std::vector<int64_t> avx512_values(values);
+
+    // scalar reference
+    std::vector<int64_t> expected(values);
+    int64_t expected_last = 10;
+    delta_decode_chain_scalar_prefetch<int64_t>(expected.data(), expected.size(), 10, expected_last);
+    ASSERT_EQ(expected.back(), expected_last);
+
+    // public dispatcher must match on any CPU
     {
+        std::vector<int64_t> v(values);
         int64_t last_value = 10;
-        delta_decode_chain_scalar_prefetch<int64_t>(values.data(), values.size(), 10, last_value);
-        ASSERT_EQ(values.back(), last_value);
+        delta_decode_chain_int64(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
-#ifdef __AVX512F__
-    {
+
+#if defined(__x86_64__) && !defined(ADDRESS_SANITIZER)
+    if (__builtin_cpu_supports("avx512f")) {
+        std::vector<int64_t> v(values);
         int64_t last_value = 10;
-        delta_decode_chain_int64_avx512(avx512_values.data(), avx512_values.size(), 10, last_value);
-        ASSERT_EQ(avx512_values.back(), last_value);
-        ASSERT_EQ(avx512_values, values);
+        delta_decode_chain_int64_avx512(v.data(), v.size(), 10, last_value);
+        ASSERT_EQ(v, expected);
+        ASSERT_EQ(v.back(), last_value);
     }
 #endif
 }

@@ -1,0 +1,46 @@
+-- name: test_ivm_sort_key
+create external catalog ivm_ice_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ivm_ice_${uuid0};
+create database ivm_ice_db_${uuid0};
+use ivm_ice_db_${uuid0};
+create table base (region string, dt date, amount int);
+insert into base values ('CN', '2024-01-01', 10), ('US', '2024-01-02', 20);
+set catalog default_catalog;
+create database db_${uuid0};
+use db_${uuid0};
+CREATE MATERIALIZED VIEW mv_sort_key
+DISTRIBUTED BY HASH(region) BUCKETS 1
+ORDER BY (region, dt)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, dt, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+-- An incremental mv is keyed by its internal row id, so ORDER BY is a sort key of its own rather than
+-- part of the primary key: the two must differ, and the tablet must be created with that sort key.
+SELECT PRIMARY_KEY = SORT_KEY AS pk_eq_sort,
+       instr(PRIMARY_KEY, '__ROW_ID__') > 0 AS pk_is_row_id,
+       instr(SORT_KEY, 'region') > 0 AS sort_has_region
+FROM information_schema.tables_config
+WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'mv_sort_key';
+[UC]REFRESH MATERIALIZED VIEW mv_sort_key WITH SYNC MODE;
+SELECT region, dt, amount FROM mv_sort_key ORDER BY region;
+insert into ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base values ('JP', '2024-01-03', 30);
+[UC]REFRESH MATERIALIZED VIEW mv_sort_key WITH SYNC MODE;
+SELECT region, dt, amount FROM mv_sort_key ORDER BY region;
+set enable_range_distribution = true;
+CREATE MATERIALIZED VIEW mv_sort_key_range
+ORDER BY (region)
+REFRESH DEFERRED MANUAL
+PROPERTIES ("refresh_mode" = "INCREMENTAL")
+AS SELECT region, dt, amount FROM ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+set enable_range_distribution = false;
+drop materialized view mv_sort_key;
+drop table ivm_ice_${uuid0}.ivm_ice_db_${uuid0}.base;
+drop database ivm_ice_${uuid0}.ivm_ice_db_${uuid0};
+drop catalog ivm_ice_${uuid0};
+drop database db_${uuid0};

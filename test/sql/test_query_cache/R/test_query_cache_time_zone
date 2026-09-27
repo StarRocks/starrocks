@@ -1,0 +1,55 @@
+-- name: test_query_cache_time_zone
+CREATE TABLE days (d int) DUPLICATE KEY(d) DISTRIBUTED BY HASH(d) BUCKETS 1
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO days SELECT generate_series FROM TABLE(generate_series(0, 30));
+-- result:
+-- !result
+CREATE TABLE t1 (
+  dt date NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, ts)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(ts) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t1 SELECT date_add('2022-01-01', interval d day), 1640995200 + d * 3600, 1 FROM days;
+-- result:
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+set query_cache_hot_partition_num = 100;
+-- result:
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select from_unixtime(ts, '%Y-%m-%d %H') h, count(*) from t1 group by h order by h limit 3;
+-- result:
+2022-01-01 08	1
+2022-01-01 09	1
+2022-01-01 10	1
+-- !result
+set time_zone = 'UTC';
+-- result:
+-- !result
+select from_unixtime(ts, '%Y-%m-%d %H') h, count(*) from t1 group by h order by h limit 3;
+-- result:
+2022-01-01 00	1
+2022-01-01 01	1
+2022-01-01 02	1
+-- !result
+set time_zone = 'Asia/Shanghai';
+-- result:
+-- !result
+select from_unixtime(ts, '%Y-%m-%d %H') h, count(*) from t1 group by h order by h limit 3;
+-- result:
+2022-01-01 08	1
+2022-01-01 09	1
+2022-01-01 10	1
+-- !result

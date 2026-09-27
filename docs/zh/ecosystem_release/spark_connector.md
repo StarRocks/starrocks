@@ -26,14 +26,38 @@ description: "StarRocks Connector for Apache Spark 的发布说明和更新日�
 
 **版本要求：**
 
-| Connector | Spark         | StarRocks  | Java | Scala |
-| --------- | ------------- | ---------- | ---- | ----- |
-| 1.1.1     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
-| 1.1.0     | 3.2, 3.3, 3.4 | 2.5 及以上 | 8    | 2.12  |
+| Spark connector | Spark              | StarRocks     | Java | Scala |
+| --------------- | ------------------ | ------------- | ---- | ----- |
+| 1.1.4           | 4.0, 4.1           | 2.5 及以上     | 17   | 2.13  |
+| 1.1.4           | 3.3, 3.4, 3.5      | 2.5 及以上     | 8    | 2.12  |
+| 1.1.3           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.2           | 3.2, 3.3, 3.4, 3.5 | 2.5 及以上     | 8    | 2.12  |
+| 1.1.1           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
+| 1.1.0           | 3.2, 3.3, or 3.4   | 2.5 及以上     | 8    | 2.12  |
 
 ## 发布记录
 
 ### 1.1
+
+#### 1.1.4
+
+该版本主要包含一些新特性和改进。
+
+**新增特性**
+
+- 新增对 StarRocks catalog 的支持。[#109](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/109)
+- 新增对 `bitmap_hash64` 的支持。[#130](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/130)
+- 支持嵌套字段（Struct、Array 和 Map）。[#152](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/152)
+- 支持通过 Spark catalog 进行数据读写。[#140](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/140)
+- 支持 Spark 4.0 和 Scala 2.13。[#154](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/154)
+
+**功能优化**
+
+- 新增安全策略。[#139](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/139)
+
+**问题修复**
+
+- 修复 DataSource V2 中的过滤器下推错误。[#141](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/141)
 
 #### 1.1.3
 

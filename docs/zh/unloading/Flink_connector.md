@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks provides a self-developed connector for Apache Flink to read data in bulk from a StarRocks cluster using SQL or DataStream."
 ---
@@ -33,10 +34,10 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 | Connector | Flink                         | StarRocks     | Java | Scala     |
 |-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 及以上     | 8    | 2.11,2.12 |
 | 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 及以上     | 8    | 2.11,2.12 |
-| 1.2.10    | 1.15,1.16,1.17,1.18,1.19      | 2.1 及以上     | 8    | 2.11,2.12 |
 
 ## 前提条件
 
@@ -83,7 +84,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
    Starting taskexecutor daemon on host.
    ```
 
-您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-1.13/docs/try-flink/local_installation/) 完成部署。
+您也可以参考 [Flink 官方文档](https://nightlies.apache.org/flink/flink-docs-release-2.3/docs/getting-started/local_installation/#option-b-local-installation) 完成部署。
 
 ## 准备工作
 
@@ -103,7 +104,7 @@ Flink Connector 支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 
 ### 网络设置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/management/BE_configuration.md#be_port) 端口（默认 `9060`）。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_port) 端口（默认 `9060`）。
 
 ## 参数说明
 

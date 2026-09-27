@@ -14,11 +14,19 @@
 
 #include "storage/lake/persistent_index_memtable.h"
 
+#include <chrono>
+#include <mutex>
+#include <utility>
+
 #include "base/debug/trace.h"
 #include "base/string/string_util.h"
+#include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
-#include "fs/key_cache.h"
+#include "fs/fs_util.h"
+#include "gutil/strings/substitute.h"
+#include "platform/key_cache.h"
 #include "storage/lake/persistent_index_sstable.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -92,7 +100,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
 }
 
 Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds,
-                                      size_t* num_found, int64_t version, uint32_t rowset_id) {
+                                      size_t* num_found, int64_t version, uint32_t del_rssid) {
     TRACE_COUNTER_SCOPE_LATENCY_US("pindex_memtable_erase_us");
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
@@ -109,14 +117,15 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
             update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
         }
     }
-    // Delete is after upsert, so using UINT32_MAX as it's rowid
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     *num_found = nfound;
     return Status::OK();
 }
 
 Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter,
-                                                  int64_t version, uint32_t rowset_id) {
+                                                  int64_t version, uint32_t del_rssid) {
     for (size_t i = 0; i < n; ++i) {
         if (filter[i]) {
             // skip
@@ -130,8 +139,9 @@ Status PersistentIndexMemtable::erase_with_filter(size_t n, const Slice* keys, c
             update_index_value(&old_index_value_ver, version, IndexValue(NullIndexValue));
         }
     }
-    // Delete is after upsert, so using UINT32_MAX as it's rowid
-    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)rowset_id) << 32 | (uint64_t)UINT32_MAX);
+    // A delete sorts after the segment at its rssid (del_rssid = rowset_id + op_offset), hence the
+    // UINT32_MAX rowid.
+    _max_rss_rowid = std::max(_max_rss_rowid, ((uint64_t)del_rssid) << 32 | (uint64_t)UINT32_MAX);
     return Status::OK();
 }
 
@@ -212,6 +222,7 @@ Status PersistentIndexMemtable::flush() {
     }
     auto filename = gen_sst_filename();
     auto location = _tablet_mgr->sst_location(_tablet_id, filename);
+    CancelableDefer cleanup_output([&] { (void)fs::delete_file(location); });
     WritableFileOptions wopts;
     std::string encryption_meta;
     if (config::enable_transparent_data_encryption) {
@@ -220,6 +231,10 @@ Status PersistentIndexMemtable::flush() {
         encryption_meta.swap(pair.encryption_meta);
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
+    Status injected_status;
+    std::pair<const std::string*, Status*> hook_arg{&location, &injected_status};
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::flush:after_create", &hook_arg);
+    RETURN_IF_ERROR(injected_status);
     uint64_t filesize = 0;
     PersistentIndexSstableRangePB range_pb;
     RETURN_IF_ERROR(flush(wf.get(), &filesize, &range_pb));
@@ -240,7 +255,15 @@ Status PersistentIndexMemtable::flush() {
     RETURN_IF_ERROR(sstable->init(std::move(rf), sstable_pb, block_cache->cache()));
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _sstable = std::move(sstable);
+    cleanup_output.cancel();
     return Status::OK();
+}
+
+void PersistentIndexMemtable::advance_max_rss_rowid(uint64_t max_rss_rowid) {
+    DCHECK(empty());
+    std::lock_guard<std::mutex> lg(_flush_mutex);
+    DCHECK(_sstable == nullptr);
+    _max_rss_rowid = std::max(_max_rss_rowid, max_rss_rowid);
 }
 
 void PersistentIndexMemtable::clear() {
@@ -252,14 +275,22 @@ void PersistentIndexMemtable::run() {
     auto st = flush();
     if (!st.ok()) {
         LOG(ERROR) << "PersistentIndexMemtable flush failed for tablet " << _tablet_id << ": " << st;
+    }
+    {
         std::lock_guard<std::mutex> lg(_flush_mutex);
         _flush_status = st;
+    }
+    TEST_SYNC_POINT_CALLBACK("PersistentIndexMemtable::run:after_flush", &_flush_status);
+    {
+        std::lock_guard<std::mutex> lg(_flush_mutex);
+        _flush_cv.notify_all();
     }
 }
 
 void PersistentIndexMemtable::cancel() {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     _flush_status = Status::Cancelled("PersistentIndexMemtable flush cancelled");
+    _flush_cv.notify_all();
 }
 
 std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable() {
@@ -270,6 +301,24 @@ std::unique_ptr<PersistentIndexSstable> PersistentIndexMemtable::release_sstable
 Status PersistentIndexMemtable::flush_status() const {
     std::lock_guard<std::mutex> lg(_flush_mutex);
     return _flush_status;
+}
+
+Status PersistentIndexMemtable::wait_for_flush(int64_t timeout_us) {
+    std::unique_lock<std::mutex> lk(_flush_mutex);
+    auto finished = [this]() { return _sstable != nullptr || !_flush_status.ok(); };
+    if (!finished()) {
+        if (timeout_us <= 0) {
+            return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+        }
+        _flush_cv.wait_for(lk, std::chrono::microseconds(timeout_us), finished);
+    }
+    if (!_flush_status.ok()) {
+        return _flush_status;
+    }
+    if (_sstable == nullptr) {
+        return Status::TimedOut(strings::Substitute("wait memtable flush timeout for tablet $0", _tablet_id));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks::lake

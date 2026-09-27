@@ -177,7 +177,13 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
                         && entry.getValue() instanceof DictMappingOperator mappingOperator) {
                     ColumnRefOperator column = mappingOperator.getDictColumn();
                     if (isNumericOrDate(column) && globalDicts.containsKey(column.getId())) {
-                        infos.put(entry.getKey().getId(), dictMinMax(globalDicts.get(column.getId())));
+                        // A dict-mapping expression maps each input code, including the dict's NULL
+                        // slot, to at most one output value, so the derived result dict can hold up
+                        // to base dict size + 1 codes (a value-adding expression such as
+                        // `case when x is null then '-' ...` grows it by one). Reserve that extra
+                        // code for the compressed group-by key range, otherwise it overflows the
+                        // packed key width and decode fails with "Dict can't take cover all key".
+                        infos.put(entry.getKey().getId(), dictMinMaxForMapping(globalDicts.get(column.getId())));
                     }
                 }
             }
@@ -193,6 +199,11 @@ public class ApplyMinMaxStatisticRule implements TreeRewriteRule {
     private static Pair<ConstantOperator, ConstantOperator> dictMinMax(ColumnDict dict) {
         return new Pair<>(ConstantOperator.createVarchar("0"),
                 ConstantOperator.createVarchar("" + dict.getDictSize()));
+    }
+
+    private static Pair<ConstantOperator, ConstantOperator> dictMinMaxForMapping(ColumnDict dict) {
+        return new Pair<>(ConstantOperator.createVarchar("0"),
+                ConstantOperator.createVarchar("" + (dict.getDictSize() + 1)));
     }
 
     private static void putStatsMgrMinMax(ColumnRefOperator column,

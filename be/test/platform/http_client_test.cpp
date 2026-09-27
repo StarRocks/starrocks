@@ -1,0 +1,353 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+#include "platform/http/http_client.h"
+
+#include <gtest/gtest.h>
+
+#include "base/testutil/assert.h"
+#include "boost/algorithm/string.hpp"
+#include "common/config_ingest_fwd.h"
+#include "common/logging.h"
+#include "platform/http/ev_http_server.h"
+#include "platform/http/http_auth.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_handler.h"
+#include "platform/http/http_request.h"
+
+namespace starrocks {
+
+class HttpClientTestSimpleGetHandler : public HttpHandler {
+public:
+    void handle(HttpRequest* req) override {
+        std::string user;
+        std::string passwd;
+        if (!parse_basic_auth(*req, &user, &passwd) || user != "test1") {
+            HttpChannel::send_basic_challenge(req, "abc");
+            return;
+        }
+        req->add_output_header(HttpHeaders::CONTENT_TYPE, "text/plain; version=0.0.4");
+        if (req->method() == HttpMethod::HEAD) {
+            req->add_output_header(HttpHeaders::CONTENT_LENGTH, std::to_string(5).c_str());
+            HttpChannel::send_reply(req);
+        } else {
+            std::string response = "test1";
+            HttpChannel::send_reply(req, response);
+        }
+    }
+};
+
+class HttpClientTestSimplePostHandler : public HttpHandler {
+public:
+    void handle(HttpRequest* req) override {
+        std::string user;
+        std::string passwd;
+        if (!parse_basic_auth(*req, &user, &passwd) || user != "test1") {
+            HttpChannel::send_basic_challenge(req, "abc");
+            return;
+        }
+        if (req->method() == HttpMethod::POST) {
+            std::string post_body = req->get_request_body();
+            if (!post_body.empty()) {
+                HttpChannel::send_reply(req, post_body);
+            } else {
+                HttpChannel::send_reply(req, "empty");
+            }
+        }
+    }
+};
+
+class HttpClientTestNotFoundHandler : public HttpHandler {
+public:
+    void handle(HttpRequest* req) override { HttpChannel::send_reply(req, HttpStatus::NOT_FOUND, "Not Found"); }
+};
+
+class HttpClientTestHeaderHandler : public HttpHandler {
+public:
+    void handle(HttpRequest* req) override {
+        // Check the custom test header set by client
+        const auto& test_header = req->header("X-Custom-Header");
+        if (!test_header.empty()) {
+            HttpChannel::send_reply(req, test_header);
+            return;
+        }
+
+        // Check authentication header type
+        const auto& auth_header = req->header(HttpHeaders::AUTHORIZATION);
+        HttpChannel::send_reply(req, auth_header);
+    }
+};
+
+class HttpClientTestMultiHeaderHandler : public HttpHandler {
+public:
+    void handle(HttpRequest* req) override {
+        std::string response;
+        response += "H1:" + req->header("H1") + ";";
+        response += "H2:" + req->header("H2") + ";";
+        response += "H3:" + req->header("H3");
+        HttpChannel::send_reply(req, response);
+    }
+};
+
+static HttpClientTestSimpleGetHandler s_simple_get_handler = HttpClientTestSimpleGetHandler();
+static HttpClientTestSimplePostHandler s_simple_post_handler = HttpClientTestSimplePostHandler();
+static HttpClientTestNotFoundHandler s_not_found_handler = HttpClientTestNotFoundHandler();
+static HttpClientTestHeaderHandler s_header_handler = HttpClientTestHeaderHandler();
+static HttpClientTestMultiHeaderHandler s_multi_header_handler = HttpClientTestMultiHeaderHandler();
+
+static EvHttpServer* s_server = nullptr;
+static int real_port = 0;
+static std::string hostname = "";
+
+class HttpClientTest : public testing::Test {
+public:
+    HttpClientTest() = default;
+    ~HttpClientTest() override = default;
+
+    static void SetUpTestCase() {
+        config::streaming_load_max_mb = 102400;
+        s_server = new EvHttpServer(0);
+        s_server->register_handler(GET, "/simple_get", &s_simple_get_handler);
+        s_server->register_handler(HEAD, "/simple_get", &s_simple_get_handler);
+        s_server->register_handler(POST, "/simple_post", &s_simple_post_handler);
+        s_server->register_handler(POST, "/simple_post_failed", &s_not_found_handler);
+        s_server->register_handler(GET, "/header_test", &s_header_handler);
+        s_server->register_handler(GET, "/multi_header_test", &s_multi_header_handler);
+        ASSERT_OK(s_server->start());
+        real_port = s_server->get_real_port();
+        ASSERT_NE(0, real_port);
+        hostname = "http://127.0.0.1:" + std::to_string(real_port);
+    }
+
+    static void TearDownTestCase() {
+        s_server->stop();
+        s_server->join();
+        delete s_server;
+    }
+};
+
+TEST_F(HttpClientTest, get_normal) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+
+    // for head
+    st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(HEAD);
+    client.set_basic_auth("test1", "");
+    st = client.execute();
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(5, client.get_content_length());
+}
+
+TEST_F(HttpClientTest, set_single_header) {
+    HttpClient client;
+    auto st = client.init(hostname + "/header_test");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+
+    // Set custom header
+    client.set_header("X-Custom-Header", "test_value");
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test_value", response);
+}
+
+TEST_F(HttpClientTest, set_bearer_token) {
+    HttpClient client;
+    auto st = client.init(hostname + "/header_test");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+
+    // Set Bearer token
+    client.set_bearer_token("test_token_123");
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("Bearer test_token_123", response);
+}
+
+TEST_F(HttpClientTest, set_multiple_headers) {
+    HttpClient client;
+    auto st = client.init(hostname + "/multi_header_test");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+
+    // Set multiple headers at once
+    std::unordered_map<std::string, std::string> headers = {{"H1", "value1"}, {"H2", "value2"}, {"H3", "value3"}};
+    client.set_headers(headers);
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("H1:value1;H2:value2;H3:value3", response);
+}
+
+TEST_F(HttpClientTest, clear_headers) {
+    HttpClient client;
+    auto st = client.init(hostname + "/header_test");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+
+    // First set some headers
+    client.set_header("X-Custom-Header", "test_value");
+    client.set_bearer_token("test_token");
+
+    // Then clear all headers
+    client.clear_headers();
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    // Verify header list is empty
+    ASSERT_EQ("", response);
+}
+
+TEST_F(HttpClientTest, header_override) {
+    HttpClient client;
+    auto st = client.init(hostname + "/multi_header_test");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+
+    // Set initial headers
+    client.set_header("H1", "initial");
+    client.set_header("H2", "initial");
+
+    // Override one header
+    client.set_header("H1", "overridden");
+
+    // Add new header
+    client.set_header("H3", "new_value");
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("H1:overridden;H2:initial;H3:new_value", response);
+}
+
+TEST_F(HttpClientTest, download_to_memory) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_basic_auth("test1", "");
+    std::string value;
+    st = client.download(
+            [&](const void* data, size_t length) {
+                value.append((const char*)data, length);
+                return Status::OK();
+            },
+            50, 300, 50000);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test1", value);
+}
+
+TEST_F(HttpClientTest, get_failed) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_FALSE(!st.ok());
+}
+
+TEST_F(HttpClientTest, post_normal) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_post");
+    ASSERT_TRUE(st.ok());
+    client.set_method(POST);
+    client.set_basic_auth("test1", "");
+    std::string response;
+    std::string request_body = "simple post body query";
+    st = client.execute_post_request(request_body, &response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(response.length(), request_body.length());
+    ASSERT_STREQ(response.c_str(), request_body.c_str());
+}
+
+TEST_F(HttpClientTest, post_failed) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_post_failed");
+    ASSERT_TRUE(st.ok());
+    client.set_method(POST);
+    client.set_basic_auth("test1", "");
+    std::string response;
+    std::string request_body = "simple post body query";
+    st = client.execute_post_request(request_body, &response);
+    ASSERT_FALSE(st.ok());
+    std::string not_found = "404";
+    ASSERT_TRUE(boost::algorithm::contains(st.message(), not_found));
+}
+
+TEST_F(HttpClientTest, set_resolve_host) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+
+    // Set DNS pinning - this forces curl to resolve the hostname to a specific IP
+    // Format: "hostname:port:ip_address"
+    // Here we pin 127.0.0.1 to itself, which should work fine
+    client.set_resolve_host("127.0.0.1:" + std::to_string(real_port) + ":127.0.0.1");
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+}
+
+TEST_F(HttpClientTest, set_fail_on_error) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_method(GET);
+    client.set_basic_auth("test1", "");
+
+    // Test set_fail_on_error with true - HTTP 4xx/5xx will cause curl failure
+    client.set_fail_on_error(true);
+
+    std::string response;
+    st = client.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+
+    // Test set_fail_on_error with false - HTTP errors won't cause curl failure
+    HttpClient client2;
+    st = client2.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client2.set_method(GET);
+    client2.set_basic_auth("test1", "");
+    client2.set_fail_on_error(false);
+
+    response.clear();
+    st = client2.execute(&response);
+    ASSERT_TRUE(st.ok());
+    ASSERT_STREQ("test1", response.c_str());
+}
+
+} // namespace starrocks

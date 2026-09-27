@@ -44,13 +44,14 @@
 #include "common/status.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
-#include "storage/primitive/rowid_types.h"
 #include "storage/rowset/index_page.h"
 #include "storage/rowset/options.h"
 #include "storage/rowset/page_pointer.h"
+#include "storage_primitive/rowid_types.h"
 
 namespace starrocks {
 
+class ColumnMetaPB;
 class FileSystem;
 class WritableFile;
 
@@ -73,6 +74,21 @@ public:
 private:
     std::unique_ptr<IndexPageBuilder> _page_builder;
     PagePointer _last_pp;
+};
+
+// An ordinal index whose write was deferred to the segment's tail region: the builder that owns it,
+// and the ColumnMetaPB it must record its page pointer into. The file is not carried here -- the
+// segment writer passes its own.
+//
+// `meta` points into the writer's SegmentFooterPB, handed out by add_columns() when the column
+// writer was created and used later by finish() to append this index's PagePointer. Holding it
+// across the rest of the segment is safe for the reason the column writers already rely on:
+// RepeatedPtrField grows its array of pointers, never moving the messages they point at. What
+// would break it is replacing the footer wholesale rather than appending to it -- the only path
+// that does, a partial-update rewrite, never produces a deferred index at all.
+struct DeferredOrdinalIndex {
+    std::unique_ptr<OrdinalIndexWriter> builder;
+    ColumnMetaPB* meta = nullptr;
 };
 
 class OrdinalPageIndexIterator;
@@ -145,7 +161,10 @@ public:
     OrdinalPageIndexIterator() = default;
     explicit OrdinalPageIndexIterator(OrdinalIndexReader* index) : _index(index), _cur_idx(0) {}
     OrdinalPageIndexIterator(OrdinalIndexReader* index, int cur_idx) : _index(index), _cur_idx(cur_idx) {}
-    bool valid() const { return _cur_idx < _index->_num_pages; }
+    // A default-constructed iterator (no index bound yet) is never valid.
+    bool valid() const { return _index != nullptr && _cur_idx < _index->_num_pages; }
+    // REQUIRES: valid(). Callers that may re-enter after exhaustion must test
+    // valid() first instead of relying on next() to saturate at the end.
     void next() {
         DCHECK_LT(_cur_idx, _index->_num_pages);
         _cur_idx++;

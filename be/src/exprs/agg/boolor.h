@@ -18,6 +18,7 @@
 #include <type_traits>
 
 #include "base/container/raw_container.h"
+#include "base/simd/simd.h"
 #include "column/fixed_length_column.h"
 #include "column/runtime_type_traits.h"
 #include "exprs/agg/aggregate.h"
@@ -101,13 +102,10 @@ public:
             }
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-
-            for (size_t i = 0; i < chunk_size; ++i) {
-                bool value = column.immutable_data()[i];
-                if (value) {
-                    this->data(state).result = true;
-                    break;
-                }
+            const auto* data = column.immutable_data().data();
+            // SIMD optimization: use contains_nonzero_bit to quickly check for any true value
+            if (SIMD::contains_nonzero_bit(data, chunk_size)) {
+                this->data(state).result = true;
             }
         }
     }
@@ -115,7 +113,7 @@ public:
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                               int64_t frame_end) const override {
-        if (this->data(state).result) {
+        if (this->data(state).result || frame_start >= frame_end) {
             return;
         }
 
@@ -135,13 +133,10 @@ public:
             }
         } else {
             const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-
-            for (size_t i = frame_start; i < frame_end; ++i) {
-                bool value = column.immutable_data()[i];
-                if (value) {
-                    this->data(state).result = true;
-                    break;
-                }
+            const auto* data = column.immutable_data().data();
+            // SIMD optimization: use contains_nonzero_bit to quickly check for any true value in frame
+            if (SIMD::contains_nonzero_bit(data + frame_start, frame_end - frame_start)) {
+                this->data(state).result = true;
             }
         }
     }

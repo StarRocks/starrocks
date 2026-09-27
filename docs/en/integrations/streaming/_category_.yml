@@ -1,0 +1,8 @@
+position: 30
+label: 'Streaming Data'
+description: 'Stream with Kafka, Flink, and StarRocks tools'
+collapsible: true
+collapsed: true
+link:
+  id: streaming
+  type: doc

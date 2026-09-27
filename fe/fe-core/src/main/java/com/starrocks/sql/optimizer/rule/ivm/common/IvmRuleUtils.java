@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.ivm.common;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.thrift.TOpType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 
@@ -24,6 +25,11 @@ import java.util.Arrays;
 public class IvmRuleUtils {
     public static final String ACTION_COLUMN_NAME = "__ACTION__";
     public static final Type ACTION_COLUMN_TYPE = IntegerType.TINYINT;
+
+    // __ACTION__ shares __op's value domain (TOpType): inserted row = UPSERT, removed row = DELETE.
+    // Single source of truth for these values across the IVM rewrite rules.
+    public static final byte INSERT_ACTION = (byte) TOpType.UPSERT.getValue();
+    public static final byte DELETE_ACTION = (byte) TOpType.DELETE.getValue();
 
     private IvmRuleUtils() {
     }

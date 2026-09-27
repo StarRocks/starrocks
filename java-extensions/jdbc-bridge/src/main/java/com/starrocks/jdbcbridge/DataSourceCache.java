@@ -44,7 +44,7 @@ public class DataSourceCache {
     private static final DataSourceCache INSTANCE = new DataSourceCache();
 
     // presumed existing private constructor
-    private DataSourceCache(){}
+    private DataSourceCache() {}
 
     public static DataSourceCache getInstance() {
         return INSTANCE;

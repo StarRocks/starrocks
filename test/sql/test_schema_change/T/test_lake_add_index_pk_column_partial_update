@@ -1,0 +1,80 @@
+-- name: test_lake_add_index_pk_column_partial_update @cloud
+create database lake_idx_pu_${uuid0};
+use lake_idx_pu_${uuid0};
+
+-- Regression for: column-mode partial update of a column carrying a fast-path
+-- (IDG) index returned WRONG query results. The column-mode update writes new
+-- values into a Delta Column Group (.cols) without rebuilding the index; the
+-- read path still probed the stale base-segment .idx for the DCG-overlaid
+-- column and pruned rows against values the column no longer held.
+--
+-- Two flavors are covered, matching the two read sites of the fix:
+--   * BITMAP  -> _apply_bitmap_index                (bitmap-index pruning gate)
+--   * BLOOM   -> _init_column_iterator_by_cid       (scalar bloom/ngram probe)
+-- t_noidx (no index) is the correctness baseline; the indexed tables must
+-- return identical results after a column-mode update.
+
+-- ============ BITMAP: fast-path ADD INDEX ============
+CREATE TABLE t_noidx (
+    k1 int,
+    v1 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+CREATE TABLE t_fast (
+    k1 int,
+    v1 int
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t_noidx values (1,10),(2,20),(3,30),(4,20),(5,20);
+insert into t_fast  values (1,10),(2,20),(3,30),(4,20),(5,20);
+
+-- fast-path ADD INDEX: builds the IDG .idx bitmap over the pre-update values
+ALTER TABLE t_fast ADD INDEX idx_v1(v1) USING BITMAP;
+function: wait_alter_table_finish()
+
+-- column-mode partial update v1 -> 777, a value the index never saw, for k1<=2
+SET partial_update_mode = 'column';
+update t_noidx set v1 = 777 where k1 <= 2;
+update t_fast  set v1 = 777 where k1 <= 2;
+
+-- After update: v1=777 -> 2 rows (k1=1,2); v1=20 -> 2 rows (k1=4,5); v1=10 -> 0.
+-- Before the fix, t_fast returned v1=777 -> 0 (stale bitmap prunes the new value)
+-- and v1=20 -> 3 (stale bitmap still maps k1=2 to its old value 20).
+select count(*) from t_noidx where v1 = 777;
+select count(*) from t_fast  where v1 = 777;
+select count(*) from t_noidx where v1 = 20;
+select count(*) from t_fast  where v1 = 20;
+select count(*) from t_noidx where v1 = 10;
+select count(*) from t_fast  where v1 = 10;
+select * from t_fast order by k1;
+
+-- ============ BLOOM: fast-path bloom_filter_columns ============
+CREATE TABLE t_bf (
+    k1 int,
+    s1 varchar(32)
+) PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into t_bf values (1,'aa'),(2,'bb'),(3,'cc'),(4,'bb'),(5,'bb');
+
+-- fast-path bloom filter: builds the IDG .idx bloom over the pre-update values
+ALTER TABLE t_bf SET ("bloom_filter_columns" = "s1");
+function: wait_alter_table_finish()
+
+-- column-mode partial update s1 -> 'zz', a value the bloom never saw, for k1<=2
+update t_bf set s1 = 'zz' where k1 <= 2;
+
+-- After update: s1='zz' -> 2 (k1=1,2); s1='bb' -> 2 (k1=4,5); s1='cc' -> 1.
+-- Before the fix, t_bf returned s1='zz' -> 0: the stale bloom (built over
+-- {aa,bb,cc}) reports 'zz' as definitely-absent and prunes the updated rows.
+select count(*) from t_bf where s1 = 'zz';
+select count(*) from t_bf where s1 = 'bb';
+select count(*) from t_bf where s1 = 'cc';
+select * from t_bf order by k1;
+
+drop database lake_idx_pu_${uuid0};

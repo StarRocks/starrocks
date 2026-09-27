@@ -24,12 +24,12 @@
 #include "column/column_helper.h"
 #include "column/runtime_type_traits.h"
 #include "common/statusor.h"
-#include "exec/olap_common.h"
 #include "exec/pipeline_node.h"
 #include "exprs/expr_context.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "storage_primitive/olap_scan_keys.h"
 
 namespace starrocks {
 

@@ -14,9 +14,13 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.dump.DumpInfo;
+import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
@@ -24,19 +28,33 @@ public class LowCardinalityRewriteRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        SessionVariable session = taskContext.getOptimizerContext().getSessionVariable();
-        boolean isQuery = taskContext.getOptimizerContext().getConnectContext().getState().isQuery();
+        OptimizerContext optimizerContext = taskContext.getOptimizerContext();
+        SessionVariable session = optimizerContext.getSessionVariable();
+        ConnectContext connectContext = optimizerContext.getConnectContext();
+        boolean isQuery = connectContext.getState().isQuery();
         if (!session.isEnableLowCardinalityOptimize() || !session.isUseLowCardinalityOptimizeV2()) {
             return root;
         }
 
-        ColumnRefFactory factory = taskContext.getOptimizerContext().getColumnRefFactory();
+        // Capture the accepted global dicts into the query dump so offline replay reproduces the Decode.
+        // Capturing here (not during scan statistics) makes the captured dict exactly the one the rewrite
+        // selects, avoiding the stats-vs-rewrite race. Gate on a real QueryDumpInfo rather than
+        // shouldDumpQuery(): that also covers the failure/virtual dump (ExecuteExceptionHandler#buildVirtualDump
+        // installs a QueryDumpInfo and replans without setting the dump session flags), while staying inert for
+        // normal queries (no DumpInfo) and unit tests (the harness installs a no-op MockDumpInfo).
+        boolean captureForDump = connectContext.getDumpInfo() instanceof QueryDumpInfo;
+
+        ColumnRefFactory factory = optimizerContext.getColumnRefFactory();
         DecodeContext context = new DecodeContext(factory);
-        {
-            DecodeCollector collector = new DecodeCollector(session, isQuery);
-            collector.collect(root, context);
-            if (!collector.isValidMatchChildren()) {
-                return root;
+        DecodeCollector collector = new DecodeCollector(session, isQuery, captureForDump);
+        collector.collect(root, context);
+        if (!collector.isValidMatchChildren()) {
+            return root;
+        }
+        if (captureForDump) {
+            DumpInfo dumpInfo = connectContext.getDumpInfo();
+            for (DecodeCollector.CapturedGlobalDict captured : collector.getCapturedGlobalDicts()) {
+                dumpInfo.addTableGlobalDict(captured.table, captured.columnName, captured.dict);
             }
         }
         DecodeRewriter rewriter = new DecodeRewriter(factory, context, session);

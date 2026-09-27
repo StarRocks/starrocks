@@ -1,0 +1,55 @@
+-- name: test_push_down_distinct_below_window_join
+DROP TABLE if exists pdw_t0;
+DROP TABLE if exists pdw_t1;
+DROP TABLE if exists pdw_t2;
+CREATE TABLE pdw_t0 (v1 bigint, v2 bigint, v3 bigint)
+DUPLICATE KEY(v1)
+DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+CREATE TABLE pdw_t1 (v4 bigint, v5 bigint, v6 bigint)
+DUPLICATE KEY(v4)
+DISTRIBUTED BY HASH(v4) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+CREATE TABLE pdw_t2 (v7 bigint, v8 bigint, v9 bigint)
+DUPLICATE KEY(v7)
+DISTRIBUTED BY HASH(v7) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+INSERT INTO pdw_t0 VALUES (1,10,100),(1,10,200),(2,20,300),(3,30,400);
+INSERT INTO pdw_t1 VALUES (1,11,111),(2,22,222),(4,44,444);
+INSERT INTO pdw_t2 VALUES (1,1,1),(2,2,2),(3,3,3);
+set cbo_push_down_distinct_below_window = true;
+set cbo_push_down_aggregate_mode = 0;
+set cbo_push_down_aggregate_on_broadcast_join = true;
+-- SELECT DISTINCT over a window function is rewritten into an aggregation on top of the scan
+-- that pre-aggregates the window argument, so that argument column is no longer produced below
+-- the window. The projections the rewrite touches must stop reading it: a projection that reads
+-- a column its child does not produce breaks statistics derivation, and with a join in the query
+-- that derivation runs inside join reordering, where the failure is not swallowed and the query
+-- cannot be planned at all -- it fails with "missing statistic of col".
+select count(*) from (select distinct v1, sum(v3) over () as s from pdw_t0) x join pdw_t1 on x.v1 = pdw_t1.v4 join pdw_t2 on pdw_t1.v4 = pdw_t2.v7;
+select x.v1, x.s from (select distinct v1, sum(v3) over () as s from pdw_t0) x join pdw_t1 on x.v1 = pdw_t1.v4 order by 1,2;
+-- Only the window function is selected, so the projection that reads the dropped column sits
+-- below the window and no window function is visible in it at all.
+select count(*) from (select distinct sum(v1) over (partition by v3) as s from pdw_t0) x join pdw_t1 on x.s = pdw_t1.v4;
+-- The same with a PARTITION BY, whose key stays available while the argument does not.
+select count(*) from (select distinct v1, sum(v3) over (partition by v2) as s from pdw_t0) x join pdw_t1 on x.v1 = pdw_t1.v4 join pdw_t2 on pdw_t1.v4 = pdw_t2.v7;
+select x.v1, x.s from (select distinct v1, sum(v3) over (partition by v2) as s from pdw_t0) x join pdw_t1 on x.v1 = pdw_t1.v4 join pdw_t2 on pdw_t1.v4 = pdw_t2.v7 order by 1,2;
+-- The window argument is selected here as well, so it is a grouping key of the pushed-down
+-- aggregation and does stay available: the projection must keep emitting it.
+select x.v1, x.v3, x.s from (select distinct v1, v3, sum(v3) over () as s from pdw_t0) x join pdw_t1 on x.v1 = pdw_t1.v4 order by 1,2;
+-- A DISTINCT output that is an expression over the window argument makes that argument a grouping key
+-- of the pushed-down aggregation, so the child still produces it and the expression must go on reading
+-- it. Reading the partial aggregate instead yields an aggregate over the whole group rather than the
+-- column's own value, which silently changes the DISTINCT values -- and only when a grouping key covers
+-- more than one row, hence the duplicated row below.
+DROP TABLE if exists pdw_t3;
+CREATE TABLE pdw_t3 (v1 bigint, v2 bigint, v3 bigint)
+DUPLICATE KEY(v1)
+DISTRIBUTED BY HASH(v1) BUCKETS 3
+PROPERTIES("replication_num" = "1");
+INSERT INTO pdw_t3 VALUES (1,10,1),(1,10,1),(2,20,2);
+select e, s from (select distinct v3 + 1 as e, sum(v3) over () as s from pdw_t3) t order by 1,2;
+select e, v1, s from (select distinct v3 * 2 as e, v1, sum(v3) over () as s from pdw_t3) t order by 1,2;
+select e, s from (select distinct abs(v3) as e, sum(v3) over (partition by v1) as s from pdw_t3) t order by 1,2;
+select e, s from (select distinct v1 + v3 as e, sum(v3) over () as s from pdw_t3) t order by 1,2;
+select v3, e, s from (select distinct v3, v3 + 1 as e, sum(v3) over () as s from pdw_t3) t order by 1,2;

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "storage_primitive/olap_scan_keys.h"
+
 #include <gtest/gtest.h>
 
 #include "base/testutil/assert.h"
 #include "column/runtime_type_traits.h"
-#include "exec/olap_common.h"
 #include "types/logical_type.h"
 
 namespace starrocks {

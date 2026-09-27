@@ -42,9 +42,9 @@
 #include "common/status.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
-#include "storage/primitive/predicate_tree/predicate_tree_fwd.h"
-#include "storage/primitive/range.h"
-#include "storage/primitive/rowid_types.h"
+#include "storage_primitive/predicate_tree/predicate_tree_fwd.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/rowid_types.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -56,6 +56,7 @@ class IndexDeltaGroupLoader;
 class Column;
 class ColumnAccessPath;
 class ColumnPredicate;
+class Datum;
 
 class ColumnReader;
 class RandomAccessFile;
@@ -207,6 +208,11 @@ public:
     // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
     virtual int dict_lookup(const Slice& word) { return -1; }
 
+    // Batch variant of dict_lookup: for each word in |words|, append its dictionary code to
+    // |codes| if found. Codes for missing words are silently omitted.
+    // NOTE: this method can be invoked only if `all_page_dict_encoded` returns true.
+    virtual void dict_lookup_batch(const std::vector<Datum>& words, std::vector<int>* codes) {}
+
     // like `next_batch` but instead of return a batch of column values, this method returns a
     // batch of dictionary codes for dictionary encoded values.
     // this method can be invoked only if `all_page_dict_encoded` returns true.
@@ -271,6 +277,9 @@ public:
         return next_batch(range, dst);
     }
 
+    // Fills in the subfields that were left unmaterialized in an already-populated column, so an
+    // iterator without subfields of its own has nothing to do. Do NOT use it to read a column from
+    // scratch: see fetch_values_by_rowid_for_predicate_evaluate.
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
     virtual Status null_count(size_t* count) { return Status::OK(); };

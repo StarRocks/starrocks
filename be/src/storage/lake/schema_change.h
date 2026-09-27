@@ -20,6 +20,7 @@
 #include "storage/schema_change_utils.h"
 
 namespace starrocks {
+class ExecEnv;
 class ThreadPool;
 class TxnLogPB_OpSchemaChange;
 } // namespace starrocks
@@ -32,8 +33,9 @@ struct SchemaChangeParams;
 
 class SchemaChangeHandler {
 public:
-    explicit SchemaChangeHandler(TabletManager* tablet_manager, ThreadPool* lake_schema_change_pool = nullptr)
-            : _tablet_manager(tablet_manager), _lake_schema_change_pool(lake_schema_change_pool) {}
+    explicit SchemaChangeHandler(TabletManager* tablet_manager, ThreadPool* lake_schema_change_pool = nullptr,
+                                 ExecEnv* exec_env = nullptr)
+            : _tablet_manager(tablet_manager), _lake_schema_change_pool(lake_schema_change_pool), _exec_env(exec_env) {}
     ~SchemaChangeHandler() = default;
 
     Status process_alter_tablet(const TAlterTabletReqV2& request);
@@ -62,6 +64,7 @@ private:
 
     TabletManager* _tablet_manager;
     ThreadPool* _lake_schema_change_pool;
+    ExecEnv* _exec_env = nullptr;
 };
 
 } // namespace starrocks::lake

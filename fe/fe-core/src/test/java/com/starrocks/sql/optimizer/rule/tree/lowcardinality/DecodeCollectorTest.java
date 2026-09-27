@@ -18,6 +18,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AggregateType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -93,6 +94,55 @@ public class DecodeCollectorTest {
         Assertions.assertFalse(valid,
                 "checkComplexTypeInvalid should return false for renamed complex column when matching by ColumnId");
     }
+
+    /**
+     * An AGG_STATE_UNION column stores a serialized aggregate state rather than the values its
+     * type describes. The BE reads it through the agg state descriptor and never looks at the
+     * column type, so if it were dictionary encoded the reader would decode the dictionary codes
+     * as if they were still the original values and crash on the resulting wild pointers.
+     */
+    @Test
+    public void testAggStateColumnIsNotADictCandidate() throws Exception {
+        SessionVariable session = new SessionVariable();
+        DecodeCollector collector = new DecodeCollector(session, true);
+
+        ColumnRefOperator aggStateRef =
+                new ColumnRefOperator(1, TypeFactory.createVarcharType(100), "v_state", true);
+        Column aggStateCol = new Column("v_state", TypeFactory.createVarcharType(100), true, "");
+        aggStateCol.setAggregationType(AggregateType.AGG_STATE_UNION, false);
+
+        ColumnRefOperator plainRef =
+                new ColumnRefOperator(2, TypeFactory.createVarcharType(100), "v_plain", true);
+        Column plainCol = new Column("v_plain", TypeFactory.createVarcharType(100), true, "");
+
+        Table table = new Table(Table.TableType.OLAP) { };
+        table.setId(1L);
+        table.setName("t");
+
+        PhysicalOlapScanOperator scan = new PhysicalOlapScanOperator(
+                table,
+                Map.of(aggStateRef, aggStateCol, plainRef, plainCol),
+                null,
+                Operator.DEFAULT_LIMIT,
+                null,
+                0L,
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                null,
+                false,
+                null);
+
+        Method method = DecodeCollector.class.getDeclaredMethod(
+                "isAggStateColumn",
+                com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator.class,
+                ColumnRefOperator.class);
+        method.setAccessible(true);
+
+        Assertions.assertTrue((boolean) method.invoke(collector, scan, aggStateRef),
+                "an AGG_STATE_UNION column must never be offered as a global dictionary candidate");
+        Assertions.assertFalse((boolean) method.invoke(collector, scan, plainRef),
+                "an ordinary string column should still be a global dictionary candidate");
+    }
 }
-
-

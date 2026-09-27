@@ -33,6 +33,9 @@ public class MaterializedViewExceptions {
 
     public static final String INACTIVE_REASON_FOR_CONSECUTIVE_FAILURES = "mv consecutive failures: ";
 
+    public static final String INACTIVE_REASON_FOR_INCREMENTAL_BREAKING =
+            "incremental refresh broken by non-append-only base change: ";
+
     /**
      * Create the inactive reason when base table not exists
      */
@@ -65,6 +68,29 @@ public class MaterializedViewExceptions {
 
     public static String inactiveReasonForBaseTableReorderColumns(String tableName) {
         return INACTIVE_REASON_FOR_BASE_TABLE_REORDER_COLUMNS + tableName;
+    }
+
+    public static String inactiveReasonForIncrementalBreaking(String mvName) {
+        return INACTIVE_REASON_FOR_INCREMENTAL_BREAKING + mvName;
+    }
+
+    // Canonical marker for a permanently-breaking (non-append-only) base change. MVIVMRefreshProcessor builds
+    // its message from this constant and isIncrementalBreakingFailure matches it, so wording and detection can't drift.
+    public static final String FE_NON_APPEND_ONLY_MARKER = "do not support non-append-only base changes";
+
+    /**
+     * Whether an MV refresh failure is a non-append-only breakage that permanently disables incremental
+     * refresh (vs. a transient error), so a single caller can inactivate the MV. Walks the cause chain
+     * since the marker may be wrapped by the refresh pipeline.
+     */
+    public static boolean isIncrementalBreakingFailure(Throwable e) {
+        for (Throwable t = e; t != null && t != t.getCause(); t = t.getCause()) {
+            String msg = t.getMessage();
+            if (msg != null && msg.contains(FE_NON_APPEND_ONLY_MARKER)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public static String inactiveReasonForMetadataTableRestoreCorrupted(String tableName) {

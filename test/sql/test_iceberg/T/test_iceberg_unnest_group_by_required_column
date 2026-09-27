@@ -1,0 +1,72 @@
+-- name: test_iceberg_unnest_group_by_required_column
+-- Regression test for the Iceberg + UNNEST nullability bug introduced by #69525
+-- ("Support Iceberg v3 default value feature").
+--
+-- A required (NOT NULL) Iceberg column is now declared NOT NULL in the plan, but
+-- the external scan still produces a nullable runtime column. UNNEST rebuilds its
+-- outer columns straight from the (stale, not-null) column ref, so a GROUP BY on
+-- the required column -- or on an expression derived from it -- hit the aggregator
+-- nullability check and failed with "error nullablel column".
+--
+-- Cases 1-4 are the FIX TARGETS: they errored before the fix and must succeed now.
+-- Case 4 (a not-null-preserving expression such as id+1) is the derived-column
+-- variant that a scan-only widening cannot reach; it needs the table-function outer
+-- slot to follow the child slot's nullability.
+-- Cases 5-9 plus the optional-column contrast are REGRESSION PROTECTION: they
+-- always worked (UNION / ROLLUP / TopN / plain aggregates have their own
+-- nullability fallbacks or re-materialize the tuple) and must keep working.
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+create table t_required (
+  id bigint not null,
+  arr array<int>,
+  opt_id bigint
+) properties ("format-version" = "2");
+-- the required column must really be NOT NULL, otherwise the test premise is void
+function: assert_query_contains("show create table t_required", "NOT NULL")
+insert into t_required values (1, [10, 20], 100), (2, [30, 40], 200), (3, [50], 300);
+-- fix target 1: UNNEST an array column + GROUP BY the required column
+select id from t_required, unnest(arr) group by id order by id;
+-- fix target 2: UNNEST a constant array + GROUP BY the required column
+select id from t_required, unnest([1, 2]) group by id order by id;
+-- fix target 3: COUNT(DISTINCT required column) with UNNEST
+select count(distinct id) from t_required, unnest([1, 2]);
+-- fix target 4: a not-null-preserving expression (id + 1) on the required column,
+-- materialized below the UNNEST, then GROUP BY the derived column
+select k from (select id + 1 as k from t_required) v, unnest([1, 2]) group by k order by k;
+-- regression 5: GROUP BY the required column without UNNEST
+select id from t_required group by id order by id;
+-- regression 6: UNION ALL feeding an outer GROUP BY on the required column
+select id from ((select id from t_required) union all (select id from t_required)) v group by id order by id;
+-- regression 7: GROUP BY ROLLUP on the required column
+select id from t_required group by rollup(id) order by id;
+-- regression 8: TopN subquery feeding an outer GROUP BY on the required column
+select id from (select id from t_required order by id limit 2) v group by id order by id;
+-- regression 9: required column as a plain aggregate argument
+select max(id), min(id) from t_required;
+-- contrast: an optional (nullable) column with UNNEST + GROUP BY was never affected
+select opt_id from t_required, unnest(arr) group by opt_id order by opt_id;
+drop table t_required force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+set catalog default_catalog;
+drop catalog iceberg_sql_test_${uuid0};
+
+-- name: test_olap_unnest_group_by_not_null_column
+-- Contrast case (regression protection): the same query shape on a native OLAP
+-- table with a NOT NULL column always worked, because the OLAP scan keeps the
+-- slot and the column ref consistently not-null. Guards against a fix that would
+-- wrongly widen internal-table nullability.
+create database db_${uuid0};
+use db_${uuid0};
+create table t_required (
+  id bigint not null,
+  arr array<int>,
+  opt_id bigint
+) duplicate key(id) distributed by hash(id) buckets 1 properties ("replication_num" = "1");
+insert into t_required values (1, [10, 20], 100), (2, [30, 40], 200), (3, [50], 300);
+select id from t_required, unnest(arr) group by id order by id;
+select id from t_required, unnest([1, 2]) group by id order by id;
+select count(distinct id) from t_required, unnest([1, 2]);
+drop database db_${uuid0};

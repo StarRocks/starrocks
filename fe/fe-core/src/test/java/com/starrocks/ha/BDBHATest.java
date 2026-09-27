@@ -87,4 +87,19 @@ public class BDBHATest {
             }
         }
     }
+
+    @Test
+    public void testTransferToLeaderWrapsJeFailureAndKeepsLeader() {
+        BDBHA ha = (BDBHA) GlobalStateMgr.getCurrentState().getHaProtocol();
+        // An unknown candidate surfaces an unchecked JE exception (MemberNotFoundException family);
+        // the wrap must log-and-rephrase it instead of leaking raw JE text, and the current leader
+        // must be unchanged (a failed transfer is a safe, retriable outcome).
+        RuntimeException e = Assertions.assertThrows(RuntimeException.class,
+                () -> ha.transferToLeader("no_such_node", 1000, false));
+        Assertions.assertTrue(e.getMessage().contains("failed to transfer leader to no_such_node"),
+                "wrapped message expected, got: " + e.getMessage());
+        Assertions.assertTrue(e.getMessage().contains("the current leader should be unchanged"),
+                "retry guidance expected, got: " + e.getMessage());
+        Assertions.assertNotNull(ha.getLeaderNodeName());
+    }
 }

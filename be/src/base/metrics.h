@@ -90,6 +90,7 @@ public:
     MetricType type() const { return _type; }
     MetricUnit unit() const { return _unit; }
     void hide();
+    MetricRegistry* registry() const { return _registry; }
     virtual void write_value(rj::Value& metric_obj, rj::Document::AllocatorType& allocator) = 0;
 
 private:
@@ -446,12 +447,3 @@ using IntCoreLocalGuage = CoreLocalGauge<int64_t>;
 
 #define METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(metric_name, unit) \
     starrocks::IntCoreLocalGuage metric_name { unit }
-
-#define METRICS_DEFINE_THREAD_POOL(threadpool_name)                                             \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_threadpool_size, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_executed_tasks_total, MetricUnit::NOUNIT);       \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_pending_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_execute_time_ns_total, MetricUnit::NANOSECONDS); \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_queue_count, MetricUnit::NOUNIT);                \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_running_threads, MetricUnit::NOUNIT);            \
-    METRIC_DEFINE_UINT_GAUGE(threadpool_name##_active_threads, MetricUnit::NOUNIT)

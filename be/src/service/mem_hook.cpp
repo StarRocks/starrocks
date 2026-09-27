@@ -28,7 +28,7 @@
 #include "runtime/memory/counting_allocator.h"
 
 #ifndef BE_TEST
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #endif
 
 #endif
@@ -106,7 +106,7 @@ int64_t set_large_memory_alloc_failure_threshold(int64_t val) {
         }                                                                                   \
     } while (0)
 #define SET_EXCEED_MEM_TRACKER() \
-    starrocks::tls_exceed_mem_tracker = starrocks::GlobalEnv::GetInstance()->process_mem_tracker()
+    starrocks::tls_exceed_mem_tracker = starrocks::RuntimeEnv::GetInstance()->process_mem_tracker()
 #define IS_BAD_ALLOC_CATCHED() starrocks::tls_is_catched
 #else
 std::atomic<int64_t> g_mem_usage(0);
@@ -119,10 +119,12 @@ std::atomic<int64_t> g_mem_usage(0);
 #define IS_BAD_ALLOC_CATCHED() false
 #endif
 
-const size_t large_memory_alloc_report_threshold = 1073741824;
 inline thread_local bool skip_report = false;
 inline void report_large_memory_alloc(size_t size) {
-    if (size > large_memory_alloc_report_threshold && !skip_report) {
+    // Read the config once: it is a plain int64_t global, so this is a load from a cache line that
+    // every allocation touches, and the comparison below stays a single predictable branch.
+    const int64_t threshold = starrocks::config::large_memory_alloc_report_threshold;
+    if (UNLIKELY(starrocks::should_report_large_memory_alloc(size, threshold)) && !skip_report) {
         skip_report = true; // to avoid recursive output log
         try {
             auto qid = starrocks::CurrentThread::current().query_id();

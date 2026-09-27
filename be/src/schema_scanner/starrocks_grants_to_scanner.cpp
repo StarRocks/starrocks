@@ -1,0 +1,172 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "schema_scanner/starrocks_grants_to_scanner.h"
+
+#include "runtime/runtime_state.h"
+#include "schema_scanner/schema_helper.h"
+#include "types/logical_type.h"
+
+namespace starrocks {
+
+SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
+        //   name,       type,          size
+        {"GRANTEE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"PRIVILEGE_TYPE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+        {"IS_GRANTABLE", TypeDescriptor::create_varchar_type(sizeof(Slice)), sizeof(Slice), true},
+};
+
+StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)
+        : SchemaScanner(_s_grants_to_columns, sizeof(_s_grants_to_columns) / sizeof(SchemaScanner::ColumnDesc)),
+          _type(type) {}
+
+StarrocksGrantsToScanner::~StarrocksGrantsToScanner() = default;
+
+Status StarrocksGrantsToScanner::start(RuntimeState* state) {
+    if (!_is_init) {
+        return Status::InternalError("used before initialized.");
+    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+
+    TGetGrantsToRolesOrUserRequest grants_to_params;
+    grants_to_params.__set_type(_type);
+    RETURN_IF_ERROR(SchemaHelper::get_grants_to(_ss_state, grants_to_params, &_grants_to_result));
+    return Status::OK();
+}
+
+Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
+    const TGetGrantsToRolesOrUserItem& grants_to_item = _grants_to_result.grants_to[_grants_to_index];
+
+    const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+    for (const auto& [slot_id, index] : slot_id_to_index_map) {
+        switch (slot_id) {
+        case 1: {
+            // GRANTEE
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(1);
+                const std::string* str = &grants_to_item.grantee;
+                Slice value(str->c_str(), str->length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            }
+            break;
+        }
+        case 2: {
+            // OBJECT_CATALOG
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(2);
+                if (grants_to_item.__isset.object_catalog) {
+                    const std::string* str = &grants_to_item.object_catalog;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 3: {
+            // OBJECT_DATABASE
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(3);
+                if (grants_to_item.__isset.object_database) {
+                    const std::string* str = &grants_to_item.object_database;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 4: {
+            // OBJECT_NAME
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(4);
+                if (grants_to_item.__isset.object_name) {
+                    const std::string* str = &grants_to_item.object_name;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 5: {
+            // OBJECT_TYPE
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(5);
+                if (grants_to_item.__isset.object_type) {
+                    const std::string* str = &grants_to_item.object_type;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 6: {
+            // PRIVILEGE_TYPE
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(6);
+                if (grants_to_item.__isset.privilege_type) {
+                    const std::string* str = &grants_to_item.privilege_type;
+                    Slice value(str->c_str(), str->length());
+                    fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+                } else {
+                    fill_data_column_with_null(column);
+                }
+            }
+            break;
+        }
+        case 7: {
+            // IS_GRANTABLEA
+            {
+                auto* column = (*chunk)->get_column_raw_ptr_by_slot_id(7);
+                const std::string str = grants_to_item.is_grantable ? "YES" : "NO";
+                Slice value(str.c_str(), str.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column, (void*)&value);
+            }
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    _grants_to_index++;
+    return Status::OK();
+}
+
+Status StarrocksGrantsToScanner::get_next(ChunkPtr* chunk, bool* eos) {
+    if (!_is_init) {
+        return Status::InternalError("call this before initial.");
+    }
+    if (_grants_to_index >= _grants_to_result.grants_to.size()) {
+        *eos = true;
+        return Status::OK();
+    }
+    if (nullptr == chunk || nullptr == eos) {
+        return Status::InternalError("invalid parameter.");
+    }
+    *eos = false;
+    return fill_chunk(chunk);
+}
+
+} // namespace starrocks

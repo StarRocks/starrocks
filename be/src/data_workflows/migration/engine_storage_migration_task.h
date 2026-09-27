@@ -34,9 +34,9 @@
 
 #pragma once
 
+#include "common/storage_define.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/Types_constants.h"
-#include "storage/olap_define.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "storage/task/engine_task.h"

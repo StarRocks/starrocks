@@ -16,7 +16,7 @@
 
 #include "exec/meta_scan_node.h"
 #include "exec/pipeline/scan/meta_scan_context.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks::pipeline {
 class MetaScanPrepareOperator : public SourceOperator {

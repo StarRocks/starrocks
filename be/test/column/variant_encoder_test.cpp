@@ -16,17 +16,62 @@
 
 #include <gtest/gtest.h>
 
+#include <initializer_list>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <vector>
 
+#include "base/string/slice.h"
 #include "base/testutil/parallel_test.h"
+#include "column/array_column.h"
+#include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "column/variant_column.h"
 #include "gutil/casts.h"
 #include "types/type_descriptor.h"
 #include "types/variant.h"
 
 namespace starrocks {
+
+static ColumnPtr make_nullable_variant_column(const std::vector<std::optional<std::string>>& json_values) {
+    auto data = VariantColumn::create();
+    auto nulls = NullColumn::create();
+    for (const auto& json : json_values) {
+        if (!json.has_value()) {
+            data->append_default();
+            nulls->append(DATUM_NULL);
+            continue;
+        }
+        auto encoded = VariantEncoder::encode_json_text_to_variant(*json);
+        CHECK(encoded.ok()) << encoded.status().to_string();
+        data->append(encoded.value());
+        nulls->append(DATUM_NOT_NULL);
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+static UInt32Column::Ptr make_offsets(std::initializer_list<uint32_t> offsets) {
+    auto column = UInt32Column::create();
+    for (uint32_t offset : offsets) {
+        column->append(offset);
+    }
+    return column;
+}
+
+static void expect_typed_column_variant_json(const ColumnPtr& column, size_t row, const TypeDescriptor& type,
+                                             std::string_view expected_json) {
+    auto encoded = VariantColumn::encode_typed_row_as_variant(column.get(), row, type);
+    ASSERT_TRUE(encoded.ok()) << encoded.status().to_string();
+    ASSERT_EQ(VariantColumn::EncodedVariantState::kValue, encoded->state);
+    auto json = encoded->value.to_json();
+    ASSERT_TRUE(json.ok()) << json.status().to_string();
+    EXPECT_EQ(expected_json, json.value());
+}
 
 // Verifies plain non-JSON text falls back to VARIANT string encoding.
 PARALLEL_TEST(VariantEncoderTest, encode_plain_text_fallback_to_string) {
@@ -77,6 +122,66 @@ PARALLEL_TEST(VariantEncoderTest, encode_int_column) {
     ASSERT_TRUE(json1.ok());
     ASSERT_EQ("7", json0.value());
     ASSERT_EQ("42", json1.value());
+}
+
+PARALLEL_TEST(VariantEncoderTest, encode_array_with_variant_children) {
+    auto elements = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
+    auto array = ArrayColumn::create(elements, make_offsets({0, 3}));
+    TypeDescriptor type = TypeDescriptor::create_array_type(TypeDescriptor(TYPE_VARIANT));
+
+    expect_typed_column_variant_json(array, 0, type, R"([{"a":1},{"b":2},null])");
+}
+
+PARALLEL_TEST(VariantEncoderTest, encode_map_with_variant_values_and_empty_row) {
+    auto key_data = BinaryColumn::create();
+    key_data->append_datum(Datum(Slice("left")));
+    key_data->append_datum(Datum(Slice("right")));
+    key_data->append_datum(Datum(Slice("null_child")));
+    auto key_nulls = NullColumn::create(3, DATUM_NOT_NULL);
+    auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
+    auto values = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})"), std::nullopt});
+    auto map = MapColumn::create(keys, values, make_offsets({0, 3, 3}));
+    TypeDescriptor type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARIANT));
+
+    expect_typed_column_variant_json(map, 0, type, R"({"left":{"a":1},"null_child":null,"right":{"b":2}})");
+    expect_typed_column_variant_json(map, 1, type, R"({})");
+}
+
+PARALLEL_TEST(VariantEncoderTest, encode_map_with_varbinary_keys_and_variant_values) {
+    auto key_data = BinaryColumn::create();
+    key_data->append_datum(Datum(Slice("left")));
+    key_data->append_datum(Datum(Slice("right")));
+    auto key_nulls = NullColumn::create(2, DATUM_NOT_NULL);
+    auto keys = NullableColumn::create(std::move(key_data), std::move(key_nulls));
+    auto values = make_nullable_variant_column({std::string("1"), std::string("2")});
+    auto map = MapColumn::create(keys, values, make_offsets({0, 2}));
+    TypeDescriptor type = TypeDescriptor::create_map_type(TypeDescriptor(TYPE_VARBINARY), TypeDescriptor(TYPE_VARIANT));
+
+    expect_typed_column_variant_json(map, 0, type, R"({"left":1,"right":2})");
+}
+
+PARALLEL_TEST(VariantEncoderTest, encode_struct_with_variant_fields) {
+    auto left = make_nullable_variant_column({std::string(R"({"a":1})"), std::string(R"({"b":2})")});
+    auto right = make_nullable_variant_column({std::nullopt, std::string(R"([1,{"deep":3}])")});
+    auto structure = StructColumn::create(Columns{left, right}, {"left", "right"});
+    TypeDescriptor type = TypeDescriptor::create_struct_type(
+            {"left", "right"}, {TypeDescriptor(TYPE_VARIANT), TypeDescriptor(TYPE_VARIANT)});
+
+    expect_typed_column_variant_json(structure, 0, type, R"({"left":{"a":1},"right":null})");
+    expect_typed_column_variant_json(structure, 1, type, R"({"left":{"b":2},"right":[1,{"deep":3}]})");
+}
+
+PARALLEL_TEST(VariantEncoderTest, encode_deep_array_struct_variant) {
+    auto payload = make_nullable_variant_column({std::string(R"({"outer":{"x":1}})"), std::string(R"([2,{"y":3}])")});
+    auto structures = StructColumn::create(Columns{payload}, {"payload"});
+    auto struct_nulls = NullColumn::create(2, DATUM_NOT_NULL);
+    auto nullable_structures = NullableColumn::create(std::move(structures), std::move(struct_nulls));
+    auto array = ArrayColumn::create(nullable_structures, make_offsets({0, 2}));
+    TypeDescriptor struct_type = TypeDescriptor::create_struct_type({"payload"}, {TypeDescriptor(TYPE_VARIANT)});
+    TypeDescriptor array_type = TypeDescriptor::create_array_type(struct_type);
+
+    expect_typed_column_variant_json(array, 0, array_type,
+                                     R"([{"payload":{"outer":{"x":1}}},{"payload":[2,{"y":3}]}])");
 }
 
 PARALLEL_TEST(VariantEncoderTest, encode_deep_nested_json_roundtrip) {

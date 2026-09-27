@@ -24,6 +24,13 @@ namespace starrocks {
 
 static const int MAX_WARNINGS = 1000;
 
+int current_worker_id() {
+    static std::atomic<int> s_next_worker_id{0};
+    // Assigned once per OS thread on first use and stable thereafter.
+    thread_local int tls_worker_id = s_next_worker_id.fetch_add(1, std::memory_order_relaxed);
+    return tls_worker_id;
+}
+
 FunctionContext* FunctionContext::create_context(RuntimeState* state, MemPool* pool,
                                                  const FunctionContext::TypeDesc& return_type,
                                                  const std::vector<FunctionContext::TypeDesc>& arg_types) {
@@ -67,8 +74,8 @@ FunctionContext* FunctionContext::create_test_context(std::vector<TypeDesc>&& ar
 FunctionContext::FunctionContext() = default;
 FunctionContext::~FunctionContext() = default;
 
-FunctionContext* FunctionContext::clone(MemPool* pool) {
-    FunctionContext* new_context = create_context(_state, pool, _return_type, _arg_types);
+FunctionContext* FunctionContext::clone() {
+    FunctionContext* new_context = create_context(_state, nullptr, _return_type, _arg_types);
 
     new_context->_constant_columns = _constant_columns;
     new_context->_fragment_local_fn_state = _fragment_local_fn_state;
@@ -114,8 +121,6 @@ const FunctionContext::TypeDesc& FunctionContext::get_return_type() const {
 
 void* FunctionContext::get_function_state(FunctionStateScope scope) const {
     switch (scope) {
-    case THREAD_LOCAL:
-        return _thread_local_fn_state;
     case FRAGMENT_LOCAL:
         return _fragment_local_fn_state;
     default:
@@ -160,9 +165,6 @@ bool FunctionContext::allow_throw_exception() const {
 
 void FunctionContext::set_function_state(FunctionStateScope scope, void* ptr) {
     switch (scope) {
-    case THREAD_LOCAL:
-        _thread_local_fn_state = ptr;
-        break;
     case FRAGMENT_LOCAL:
         _fragment_local_fn_state = ptr;
         break;

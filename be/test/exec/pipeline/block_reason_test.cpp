@@ -21,7 +21,7 @@
 // this test runs the exact decision logic the driver core evaluates against a lightweight stub operator,
 // and drives the real SpillMetrics counter that the release-path fail-soft increments.
 
-#include "exec/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
 
 #include <gtest/gtest.h>
 

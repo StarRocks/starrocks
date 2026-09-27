@@ -18,7 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "connector/connector.h"
+#include "connector_primitive/connector.h"
 
 namespace starrocks::connector {
 

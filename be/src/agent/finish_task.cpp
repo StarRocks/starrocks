@@ -19,7 +19,7 @@
 #include "agent/utils.h"
 #include "base/testutil/sync_point.h"
 #include "common/logging.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 
 namespace starrocks {
 

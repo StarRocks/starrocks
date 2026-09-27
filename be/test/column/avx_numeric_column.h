@@ -41,7 +41,7 @@ public:
 
         int result_pos = 0;
         for (int i = 0; i < loop; ++i) {
-            __m256i f = _mm256_load_si256(reinterpret_cast<const __m256i*>(f_data + i * batch_nums));
+            __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + i * batch_nums));
 
             __m256i re = _mm256_cmpgt_epi8(f, all0);
             int mask = _mm256_movemask_epi8(re);

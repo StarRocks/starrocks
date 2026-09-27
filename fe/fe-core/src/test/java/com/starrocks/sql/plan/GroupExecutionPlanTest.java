@@ -250,4 +250,36 @@ public class GroupExecutionPlanTest extends PlanTestBase {
         }
     }
 
+    // A colocate Set operator must never be put into a colocate exec group: on the BE its branches
+    // keep a plain LocalExchangeSink instead of a GroupedExecutionSink, so nothing ever advances
+    // ColocateExecutionGroup past its first wave of bucket groups and the query hangs forever
+    // (reproduces as soon as bucket groups >= 2 * physical dop).
+    @Test
+    public void colocateSetOperatorIsNotGroupExecution() throws Exception {
+        FeConstants.runningUnitTest = true;
+        Config.show_execution_groups = true;
+        boolean enableGroupExecution = connectContext.getSessionVariable().isEnableGroupExecution();
+        connectContext.getSessionVariable().setEnableGroupExecution(true);
+        try {
+            List<String> querys = Lists.newArrayList();
+            // union/intersect/except on the full bucket key => colocate set operator, no exchange branch
+            querys.add("select k1,k2 from colocate1 l union select k1,k2 from colocate2 r");
+            querys.add("select k1,k2 from colocate1 l intersect select k1,k2 from colocate2 r");
+            querys.add("select k1,k2 from colocate1 l except select k1,k2 from colocate2 r");
+
+            for (String sql : querys) {
+                String thriftPlan = getThriftPlan(sql);
+                // guard: these really are the colocate flavour of the Set operator, which is the
+                // shape that used to turn the colocate exec group on
+                assertContains(thriftPlan, "local_partition_by_exprs");
+                assertNotContains(thriftPlan, "build_from_group_execution:true");
+
+                assertNotContains(getFragmentPlan(sql), "colocate exec groups:");
+            }
+        } finally {
+            FeConstants.runningUnitTest = false;
+            connectContext.getSessionVariable().setEnableGroupExecution(enableGroupExecution);
+        }
+    }
+
 }

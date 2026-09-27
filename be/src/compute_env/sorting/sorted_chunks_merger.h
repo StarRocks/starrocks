@@ -20,11 +20,11 @@
 #include <vector>
 
 #include "column/chunk_slice.h"
+#include "column/sorting/sorting.h"
 #include "common/runtime_profile.h"
 #include "compute_env/sorting/chunk_cursor.h"
 #include "compute_env/sorting/merge.h"
 #include "compute_env/sorting/sort_cursor.h"
-#include "compute_env/sorting/sorting.h"
 
 namespace starrocks {
 

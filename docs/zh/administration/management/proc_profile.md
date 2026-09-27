@@ -1,3 +1,9 @@
+---
+displayed_sidebar: docs
+sidebar_position: 20
+description: "收集并可视化 StarRocks FE 和 BE 进程的 CPU 与内存火焰图，用于诊断性能瓶颈和运行时问题。"
+---
+
 # 进程分析 (Proc Profile)
 
 **进程分析** (Proc Profile) 功能提供了一种内置机制，用于收集和可视化 StarRocks 前端 (FE) 和后端 (BE) 进程的性能分析数据。通过生成 CPU、内存分配的火焰图，它帮助开发人员和管理员直接通过 Web UI 诊断性能瓶颈、高资源利用率和复杂的运行时问题。

@@ -114,8 +114,9 @@ public class HiveMetastoreApiConverter {
     private static final Set<String> STATS_PROPERTIES = ImmutableSet.of(ROW_COUNT, TOTAL_SIZE, NUM_FILES);
     private static final ImmutableList<String> SERDE_PROPERTY_KEYS = ImmutableList.of(
             serdeConstants.FIELD_DELIM, serdeConstants.LINE_DELIM,
-            serdeConstants.COLLECTION_DELIM, serdeConstants.MAPKEY_DELIM,
-            OpenCSVSerde.SEPARATORCHAR, serdeConstants.HEADER_COUNT,
+            serdeConstants.COLLECTION_DELIM, serdeConstants.MAPKEY_DELIM, serdeConstants.ESCAPE_CHAR,
+            OpenCSVSerde.SEPARATORCHAR, OpenCSVSerde.QUOTECHAR, OpenCSVSerde.ESCAPECHAR,
+            serdeConstants.HEADER_COUNT,
             serdeConstants.SERIALIZATION_FORMAT, HIVE2_COLLECTION_DELIM);
 
     private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
@@ -379,7 +380,7 @@ public class HiveMetastoreApiConverter {
                 .setParams(params)
                 .setFullPath(sd.getLocation())
                 .setInputFormat(toRemoteFileInputFormat(sd.getInputFormat()))
-                .setTextFileFormatDesc(toTextFileFormatDesc(textFileParameters))
+                .setTextFileFormatDesc(toTextFileFormatDesc(textFileParameters, sd.getSerdeInfo().getSerializationLib()))
                 .setSplittable(RemoteFileInputFormat.isSplittable(sd.getInputFormat()));
 
         return partitionBuilder.build();
@@ -599,6 +600,10 @@ public class HiveMetastoreApiConverter {
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters) {
+        return toTextFileFormatDesc(parameters, null);
+    }
+
+    public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> parameters, String serdeLib) {
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -632,7 +637,46 @@ public class HiveMetastoreApiConverter {
         collectionDelim = collectionDelim.isEmpty() ? null : collectionDelim;
         mapkeyDelim = mapkeyDelim.isEmpty() ? null : mapkeyDelim;
 
-        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, skipHeaderLineCount);
+        int enclose = 0;
+        int escape = 0;
+        // LazySimpleSerDe escape (DDL: ROW FORMAT DELIMITED ... ESCAPED BY 'c'), stored as
+        // serde property 'escape.delim'. Hive enables escaping only when the property is
+        // present and, like the delimiters, uses only its first character. The BE needs it
+        // to keep an escaped separator (e.g. "a\,b") inside the field instead of splitting
+        // on it.
+        String escapeDelim = parameters.getOrDefault(serdeConstants.ESCAPE_CHAR, "");
+        if (!escapeDelim.isEmpty()) {
+            escape = escapeDelim.charAt(0);
+        }
+
+        // OpenCSVSerde is a quote-aware CSV parser. It applies separator/quote/escape
+        // defaults (',' '"' '\') even when they are not explicitly set in
+        // SERDEPROPERTIES, so we must detect the SerDe by its class name (the params
+        // map alone is not enough) and pass enclose/escape down to the BE.
+        // https://cwiki.apache.org/confluence/display/hive/csv+serde
+        if (OpenCSVSerde.class.getName().equals(serdeLib)) {
+            // OpenCSVSerde ignores LazySimpleSerDe's 'escape.delim'; only its own
+            // escapeChar property (with its '\' default) applies.
+            escape = 0;
+            if (fieldDelim == null) {
+                fieldDelim = ",";
+            }
+            // quote/escape are single characters: the underlying opencsv parser takes
+            // char arguments, and Hive's OpenCSVSerde itself keeps only the first
+            // character of these properties (String.charAt(0)). Mirror that here so we
+            // stay byte-for-byte compatible with Hive's read behavior.
+            String quote = parameters.getOrDefault(OpenCSVSerde.QUOTECHAR, "\"");
+            String esc = parameters.getOrDefault(OpenCSVSerde.ESCAPECHAR, "\\");
+            if (!quote.isEmpty()) {
+                enclose = quote.charAt(0);
+            }
+            if (!esc.isEmpty()) {
+                escape = esc.charAt(0);
+            }
+        }
+
+        return new TextFileFormatDesc(fieldDelim, lineDelim, collectionDelim, mapkeyDelim, skipHeaderLineCount,
+                enclose, escape);
     }
 
     public static HiveCommonStats toHiveCommonStats(Map<String, String> params) {

@@ -41,7 +41,7 @@ public:
 
         _query_context = std::make_shared<QueryContext>();
         _query_context->set_query_execution_services(&_exec_env->query_execution_services());
-        _query_context->init_mem_tracker(-1, GlobalEnv::GetInstance()->process_mem_tracker());
+        _query_context->init_mem_tracker(-1, RuntimeEnv::GetInstance()->process_mem_tracker());
 
         TQueryOptions query_options;
         TQueryGlobals query_globals;
@@ -130,8 +130,8 @@ TEST_F(ExchangeBucketAwareTest, test_exchange_bucket_aware) {
             /*output_columns*/ std::vector<int32_t>(), bucket_properies);
     _exchange_sink_factory->set_runtime_state(_runtime_state.get());
 
-    RowDescriptor input_row_desc;
-    _recvr = _exec_env->stream_mgr()->create_recvr(_runtime_state.get(), input_row_desc, _fragment_id, 0, 3,
+    RecordDescriptor input_record_desc;
+    _recvr = _exec_env->stream_mgr()->create_recvr(_runtime_state.get(), input_record_desc, _fragment_id, 0, 3,
                                                    config::exchg_node_buffer_size_bytes, _dest_node_id,
                                                    std::make_shared<QueryStatisticsRecvr>(),
                                                    /*is_pipeline*/ true, 2, /*keep_order*/ false);

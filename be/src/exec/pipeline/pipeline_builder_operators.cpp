@@ -31,8 +31,6 @@
 #include "exec/pipeline/group_execution/group_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "exec/pipeline/primitives/event.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/spill_process_operator.h"
 #include "exec/pipeline/wait_operator.h"
@@ -42,6 +40,8 @@
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/group_execution/execution_group_fwd.h"
 #include "exec/runtime/pipeline_builder_context.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/primitives/event.h"
 #include "runtime/service_contexts.h"
 
 namespace starrocks::pipeline::builder {
@@ -263,9 +263,52 @@ OpFactories maybe_interpolate_local_shuffle_exchange(PipelineBuilderContext* con
                                                            source_op->get_bucket_properties());
     }
 
+    // Self-keys branch: the source declared no stable partition_exprs, so we partition on this
+    // operator's own keys (e.g. the join equi-keys or the group-by keys).
+    //
+    // The source may still carry bucket_properties (a lake bucket(K, N) scan reports its bucket
+    // transform there instead of in partition_exprs). We may reuse them ONLY when the self keys line
+    // up 1:1 with the bucket columns -- i.e. same count. That is the genuine bucket-shuffle case
+    // (e.g. a [BUCKET] join or a GROUP BY exactly on the bucket columns): hashing each self key by
+    // its murmur3 bucket transform keeps the local exchange aligned with the physical bucket layout.
+    //
+    // When the self keys are a strict SUPERSET of the bucket columns (e.g. COUNT(DISTINCT K) over
+    // GROUP BY K, other), reusing bucket_properties is wrong on two counts: (1) the murmur3 path in
+    // ShufflePartitioner indexes bucket_properties by the partition-column count, which is now larger
+    // than the bucket-column count -> out-of-bounds; and (2) it stamps could_local_shuffle=false on
+    // the output (see do_maybe_interpolate_local_shuffle_exchange), falsely telling a downstream
+    // DISTINCT(K) that the data is already partitioned by K when the superset [K, other] has actually
+    // scattered K across drivers -> the DISTINCT skips its own local exchange and over-counts.
+    // Drop bucket_properties in that case; the rows are then hashed by the self keys via the
+    // partition type's normal shuffle hash (CRC32 for BUCKET_SHUFFLE_HASH_PARTITIONED, fnv/xxh3 for
+    // HASH_PARTITIONED -- see ShufflePartitioner::shuffle_channel_ids), matching the native OLAP path
+    // whose source has empty bucket_properties.
+    const auto self_partition_exprs = self_partition_exprs_generator();
+    const auto& bucket_properties = source_op->get_bucket_properties();
+    const bool self_keys_match_buckets = self_partition_exprs.size() == bucket_properties.size();
+    return do_maybe_interpolate_local_shuffle_exchange(
+            context, state, plan_node_id, pred_operators, self_partition_exprs, source_op->partition_type(),
+            self_keys_match_buckets ? bucket_properties : std::vector<TBucketProperty>{});
+}
+
+OpFactories interpolate_local_forced_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
+                                                      int32_t plan_node_id, OpFactories& pred_operators,
+                                                      const std::vector<ExprContext*>& partition_expr_ctxs,
+                                                      TPartitionType::type part_type,
+                                                      const std::vector<TBucketProperty>& bucket_properties) {
+    // ShufflePartitioner indexes bucket_properties by partition-column position, so a scheme settled
+    // on one child is only usable on another when the two line up 1:1; otherwise fall back to the
+    // plain hash of this child's own keys, which every child can produce. (maybe_interpolate_local_
+    // shuffle_exchange makes the same size check for its self-keys branch.)
+    if (!bucket_properties.empty() && bucket_properties.size() != partition_expr_ctxs.size()) {
+        return do_maybe_interpolate_local_shuffle_exchange(context, state, plan_node_id, pred_operators,
+                                                           partition_expr_ctxs, TPartitionType::HASH_PARTITIONED, {});
+    }
+    // No could_local_shuffle() early-out and no reading of THIS source's partition type or bucket
+    // properties on purpose -- see the header; the caller passes the first child's scheme for all of
+    // them. do_maybe_... still skips at DOP 1, which is safe because every child runs at the same DOP.
     return do_maybe_interpolate_local_shuffle_exchange(context, state, plan_node_id, pred_operators,
-                                                       self_partition_exprs_generator(), source_op->partition_type(),
-                                                       source_op->get_bucket_properties());
+                                                       partition_expr_ctxs, part_type, bucket_properties);
 }
 
 OpFactories maybe_interpolate_local_bucket_shuffle_exchange(PipelineBuilderContext* context, RuntimeState* state,
@@ -465,6 +508,9 @@ OpFactories maybe_interpolate_collect_stats(PipelineBuilderContext* context, Run
     for (const auto& pipeline : context->dependent_pipelines()) {
         downstream_source_op->add_group_dependent_pipeline(pipeline);
     }
+    // A node that builds a subtree outside its own push_dependent_pipeline() scope binds itself to
+    // these afterwards -- see PipelineBuilderContext::bind_dependent_pipeline_between().
+    context->record_group_dependent_source(downstream_source_op.get());
 
     return {std::move(downstream_source_op)};
 }

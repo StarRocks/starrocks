@@ -21,7 +21,7 @@
 
 #include "base/testutil/assert.h"
 #include "column/fixed_length_column.h"
-#include "runtime/exec_env.h"
+#include "exec/exec_env.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

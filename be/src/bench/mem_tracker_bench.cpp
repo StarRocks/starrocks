@@ -15,21 +15,21 @@
 #include <benchmark/benchmark.h>
 #include <glog/logging.h>
 
+#include "exec/exec_env.h"
 #include "runtime/current_thread.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
 static MemTracker* process_mem_tracker_provider() {
-    return GlobalEnv::GetInstance()->process_mem_tracker();
+    return RuntimeEnv::GetInstance()->process_mem_tracker();
 }
 
-void ensure_global_env() {
-    if (!GlobalEnv::is_init()) {
-        auto env = GlobalEnv::GetInstance();
+void ensure_runtime_env() {
+    if (!RuntimeEnv::is_init()) {
+        auto env = RuntimeEnv::GetInstance();
         env->_process_mem_tracker = std::make_shared<MemTracker>(-1, "allocator_bench_root");
-        CurrentThread::set_mem_tracker_source(&GlobalEnv::is_init, process_mem_tracker_provider);
+        CurrentThread::set_mem_tracker_source(&RuntimeEnv::is_init, process_mem_tracker_provider);
         env->_is_init = true;
     }
 }
@@ -113,7 +113,7 @@ static void BM_memtracker_try_consume_unlimited(benchmark::State& state) {
 static void BM_current_thread_try_mem_consume_with_cache(benchmark::State& state) {
     for (auto _ : state) {
         CurrentThread& current = CurrentThread::current();
-        CHECK(current.mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        CHECK(current.mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
         for (int i = 0; i < kOpsPerIteration; ++i) {
             bool ok = current.try_mem_consume(kBytesPerOp);
             DCHECK(ok);
@@ -131,7 +131,7 @@ static void BM_current_thread_try_mem_consume_with_cache(benchmark::State& state
 
 static void BM_current_thread_try_mem_consume_without_cache(benchmark::State& state) {
     for (auto _ : state) {
-        CHECK(CurrentThread::mem_tracker() == GlobalEnv::GetInstance()->process_mem_tracker());
+        CHECK(CurrentThread::mem_tracker() == RuntimeEnv::GetInstance()->process_mem_tracker());
         for (int i = 0; i < kOpsPerIteration; ++i) {
             bool ok = CurrentThread::try_mem_consume_without_cache(kBytesPerOp);
             DCHECK(ok);
@@ -289,7 +289,7 @@ BENCHMARK(BM_memtracker_consume_peak_stable)->Apply(process_args);
 
 } // namespace starrocks
 int main(int argc, char** argv) {
-    starrocks::ensure_global_env();
+    starrocks::ensure_runtime_env();
     benchmark::Initialize(&argc, argv);
     if (benchmark::ReportUnrecognizedArguments(argc, argv)) {
         return 1;

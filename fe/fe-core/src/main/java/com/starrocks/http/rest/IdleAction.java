@@ -49,10 +49,12 @@ public class IdleAction extends RestBaseAction {
         controller.registerHandler(HttpMethod.GET, "/api/idle_status", new IdleAction(controller));
     }
 
-    // K8s idle probe; intentionally unauthenticated.
+    // K8s idle probe. Historically anonymous; gated for backward compatibility so it
+    // requires Basic auth (AuthN-only, no privilege check) only when the operator opts
+    // in via `enable_http_auth`.
     @Override
     public boolean needAuth() {
-        return false;
+        return Config.enable_http_auth;
     }
 
     @Override
