@@ -82,7 +82,11 @@ select * from t1_primary where value match 'hello%';
 select * from t1_primary where value match 'starrocks%';
 
 
---name: add_GIN_index
+drop database test_gin_index;
+
+-- name: test_add_gin_index @native
+create database test_gin_add_${uuid0};
+use test_gin_add_${uuid0};
 -- DUPLICATE KEY table without GIN index, then add GIN index after data load
 CREATE TABLE t2_dup (
     id1 bigint(20) NOT NULL COMMENT "",
@@ -124,7 +128,7 @@ ALTER TABLE t2_primary ADD INDEX gin_english(value) USING GIN ("parser" = "engli
 function: wait_alter_table_finish()
 show create table t2_primary;
 
-drop database test_gin_index;
+drop database test_gin_add_${uuid0};
 
 -- name: test_gin_not_match_excludes_null @native
 create database test_gin_null_${uuid0};
