@@ -239,26 +239,18 @@ jobs:
     steps:
       # Mergify commits unresolved conflict markers into backport PRs, and none of
       # the build/UT jobs parse files outside their module (e.g. java-extensions/pom.xml),
-      # so such PRs can pass CI and get merged. Check the added lines of the PR diff
-      # via the API, without checking out the PR code.
+      # so such PRs can pass CI and get merged. Under pull_request_target, checkout uses
+      # the base branch: only the trusted checker is checked out, and it reads the PR
+      # diff via the API, so the PR code is never checked out or run.
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: build-support/check_conflict_markers.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
       - name: check unresolved conflict markers
         run: |
-          gh api --paginate "repos/${REPO}/pulls/${PR_NUMBER}/files?per_page=100" \
-            --jq '.[] | if .patch then "#FILE# \(.filename)", .patch elif .changes > 0 then "#NOPATCH# \(.filename)" else empty end' |
-          awk '
-            /^#FILE# /    { file = substr($0, 8); next }
-            /^#NOPATCH# / { printf "::warning file=%s::Diff is too large to check for conflict markers\n", substr($0, 11); next }
-            /^@@ /        { match($0, /\+[0-9]+/); line = substr($0, RSTART + 1, RLENGTH - 1); next }
-            /^[-\\]/      { next }
-            /^\+/ {
-              if ($0 ~ /^\+(<<<<<<<|>>>>>>>)( |$)/) {
-                printf "::error file=%s,line=%d::Unresolved conflict marker: %s\n", file, line, substr($0, 2)
-                bad = 1
-              }
-            }
-            { line++ }
-            END { exit bad }
-          '
+          python3 build-support/check_conflict_markers.py --repo "${REPO}" --pr "${PR_NUMBER}"
 
   automerge-check:
     runs-on: ubuntu-latest
@@ -269,7 +261,7 @@ jobs:
       needs.backport-check.result != 'failure' &&
       github.base_ref != 'main' &&
       startsWith(github.head_ref, 'mergify/') &&
-      (contains(github.event.pull_request.title, 'cherry-pick') ||
+      (contains(github.event.pull_request.title, 'cherry-pick') || 
       contains(github.event.pull_request.title, 'backport'))
     steps:
       # automerge-check is a required check on release branches: fail it instead of

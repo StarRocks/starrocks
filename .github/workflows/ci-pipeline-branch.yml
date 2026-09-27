@@ -152,6 +152,31 @@ jobs:
         run: |
           python3 build-support/check_repo_handbook.py
 
+  conflict-marker-checker:
+    runs-on: ubuntu-latest
+    needs: basic-checker
+    name: Conflict Marker Checker
+    if: needs.basic-checker.outputs.PASS == 'true'
+    steps:
+      - uses: dorny/paths-filter@v3
+        id: path-filter
+        with:
+          filters: |
+            checker:
+              - '.github/workflows/pr-checker.yml'
+              - 'build-support/check_conflict_markers.py'
+              - 'build-support/test_check_conflict_markers.py'
+
+      - uses: actions/checkout@v6
+        if: steps.path-filter.outputs.checker == 'true'
+
+      # The checker runs in pr-checker.yml under pull_request_target, which always uses
+      # the version on the base branch, so test changes to it here.
+      - name: Conflict Marker Checker Tests
+        if: steps.path-filter.outputs.checker == 'true'
+        run: |
+          python3 -m unittest build-support/test_check_conflict_markers.py
+
   schema-compatibility:
     runs-on: ubuntu-latest
     needs: basic-checker
