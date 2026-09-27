@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 -- name: test_disable_random
 create table t(k int);
 -- result:
@@ -8,7 +7,6 @@ alter table t distributed by random buckets 10;
 E: (5064, 'Getting analyzing error. Detail message: Random distribution table already supports automatic scaling and does not require optimization.')
 -- !result
 
-=======
 -- name: test_optimize_table
 create table t(k int) distributed by hash(k) buckets 10;
 -- result:
@@ -43,7 +41,6 @@ function: print_query_columns("show partitions from t", "PartitionName", "Bucket
 -- result:
 t	1
 -- !result
-
 
 -- name: test_optimize_table_by_partition_name
 CREATE TABLE `duplicate_table_with_null_partition` (
@@ -83,8 +80,6 @@ function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-
-
 
 -- name: test_change_no_partition_distribution @native
 create table t(k int) distributed by hash(k) buckets 10;
@@ -153,8 +148,6 @@ select * from t;
 2
 3
 -- !result
-
-
 
 -- name: test_change_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
@@ -297,9 +290,6 @@ select * from t;
 1	2020-06-01
 -- !result
 
-
-
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 -- name: test_change_partial_partition_distribution @native
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -391,7 +381,6 @@ PROPERTIES (
 );
 -- !result
 
-<<<<<<< HEAD
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -407,9 +396,10 @@ PROPERTIES('replication_num'='1');
 ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 -- result:
 -- !result
-=======
-
-
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
 
 -- name: test_online_optimize_table_basic @sequential @slow @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -654,13 +644,10 @@ select * from t;
 18	2020-07-01
 20	2020-07-01
 -- !result
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-<<<<<<< HEAD
-=======
 show create table t;
 -- result:
 t	CREATE TABLE `t` (
@@ -755,7 +742,6 @@ select * from t;
 CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 
 -- name: test_online_optimize_table_pk @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -982,9 +968,6 @@ select * from tpk;
 CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
-
-
-
 
 -- name: test_online_optimize_table_stream_load @sequential @native @slow
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -1380,9 +1363,6 @@ CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
 
-
-
-
 -- name: test_online_optimize_table_expr_partition @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
@@ -1585,7 +1565,6 @@ CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
 } END CLEANUP
 
-<<<<<<< HEAD
 -- name: test_cancel_optimize
 create table t(k int) distributed by hash(k) buckets 10;
 -- result:
@@ -1600,10 +1579,6 @@ function: wait_optimize_table_finish(expect_status="CANCELLED")
 -- result:
 None
 -- !result
-=======
-
-
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
 
 -- name: test_online_optimize_table_batch @sequential @native
 admin set frontend config ('enable_online_optimize_table'='true');
@@ -2270,7 +2245,6 @@ select count(*) from t;
 -- !result
 CLEANUP {
     admin set frontend config ('enable_online_optimize_table'='false');
-<<<<<<< HEAD
 } END CLEANUP
 
 -- name: test_optimize_duplicate_partitions
@@ -2342,6 +2316,3 @@ alter table t drop all temporary partitions;
 show temporary partitions from t;
 -- result:
 -- !result
-=======
-} END CLEANUP
->>>>>>> bef656e ([UT] SQL-Tester: run test_optimize_table's five never-executed cases (#79810))
