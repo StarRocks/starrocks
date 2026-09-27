@@ -1,0 +1,99 @@
+-- name: test_query_cache_vector_search
+-- RewriteToVectorPlanRule replaces the distance function in the scan's projection with an opaque
+-- __vector_* column ref and moves the query vector, the folded distance-range bound and the
+-- ordering into TVectorSearchOptions. None of them survive anywhere else in the plan, so unless
+-- that struct is part of the digest two ANN scans differing only in the query vector share a
+-- query cache key.
+--
+-- Reachability is the subtle part. On the leftmost path the rule's own shape blocks caching: it
+-- matches strictly LOGICAL_TOPN -> LOGICAL_OLAP_SCAN, and isAllowedInLeftMostPath() does not
+-- accept a SortNode, so the bottom-up walk breaks before it finds an aggregation. But that gate
+-- only guards the leftmost path -- normalizeSubTree() recurses into every child and only
+-- isCacheable() filters there, which lets a SortNode through. So an ANN scan in a join's BUILD
+-- SIDE is inside the digested subtree, and a NestLoopJoin below the aggregation is a transform
+-- join unconditionally, keeping the fragment cacheable.
+CREATE TABLE w1 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+CREATE TABLE wvec (
+  c0 INT,
+  vec ARRAY<FLOAT> NOT NULL,
+  INDEX idx_vec (vec) USING VECTOR ('metric_type' = 'l2_distance',
+    'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5')
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+
+-- w1.ts = 50, so a build-side key below 50 matches every row and one above it matches none.
+INSERT INTO w1
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+-- Two well-separated clusters: ids 1..10 near [1,1,1,1,1], ids 101..110 near [9,9,9,9,9].
+-- A query vector near one cluster returns that cluster's ids, so the two vectors below select
+-- disjoint build-side rows -- and since the ids straddle 50, the two answers differ.
+INSERT INTO wvec VALUES
+ (1,[1,1,1,1,1]),(2,[1,1,1,1,2]),(3,[1,1,1,2,1]),(4,[1,1,2,1,1]),(5,[1,2,1,1,1]),
+ (6,[2,1,1,1,1]),(7,[1,1,1,2,2]),(8,[1,1,2,2,1]),(9,[1,2,2,1,1]),(10,[2,2,1,1,1]),
+ (101,[9,9,9,9,9]),(102,[9,9,9,9,8]),(103,[9,9,9,8,9]),(104,[9,9,8,9,9]),(105,[9,8,9,9,9]),
+ (106,[8,9,9,9,9]),(107,[9,9,9,8,8]),(108,[9,9,8,8,9]),(109,[9,8,8,9,9]),(110,[8,8,9,9,9]);
+
+set pipeline_dop = 1;
+set query_cache_hot_partition_num = 100;
+
+-- The two query vectors really do select disjoint id sets.
+select group_concat(cast(c0 as string) order by c0) from
+ (select c0 from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) t;
+select group_concat(cast(c0 as string) order by c0) from
+ (select c0 from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) t;
+
+-- Ground truth.
+set enable_query_cache = false;
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+
+-- Cache on, vector A first: it populates the per-tablet entries, then B must NOT inherit them.
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+select ifnull(sum(s),0) from (select w1.c1, sum(w1.v1) s from w1
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w1.ts > b.k group by w1.c1) x;
+
+-- The other direction, on a table whose entries are cold.
+CREATE TABLE w2 (
+  dt date NOT NULL,
+  c1 int NOT NULL,
+  ts bigint NOT NULL,
+  v1 bigint NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(dt, c1)
+PARTITION BY RANGE(dt) (START ("2022-01-01") END ("2022-02-01") EVERY (INTERVAL 1 day))
+DISTRIBUTED BY HASH(c1) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+
+INSERT INTO w2
+SELECT date_add('2022-01-01', INTERVAL (generate_series % 31) DAY),
+       generate_series % 8 + 1, 50, 1
+FROM TABLE(generate_series(1, 620));
+
+set enable_query_cache = true;
+select ifnull(sum(s),0) from (select w2.c1, sum(w2.v1) s from w2
+  join (select c0 as k from wvec order by approx_l2_distance([9,9,9,9,9], vec) limit 5) b
+  on w2.ts > b.k group by w2.c1) x;
+select ifnull(sum(s),0) from (select w2.c1, sum(w2.v1) s from w2
+  join (select c0 as k from wvec order by approx_l2_distance([1,1,1,1,1], vec) limit 5) b
+  on w2.ts > b.k group by w2.c1) x;

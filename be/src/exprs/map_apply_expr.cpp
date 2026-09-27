@@ -22,12 +22,13 @@
 #include "column/fixed_length_column.h"
 #include "column/map_column.h"
 #include "column/vectorized_fwd.h"
+#include "common/constexpr.h"
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
 #include "exprs/map_expr.h"
 #include "glog/logging.h"
-#include "storage/chunk_helper.h"
+#include "runtime/chunk_accumulator.h"
 
 namespace starrocks {
 

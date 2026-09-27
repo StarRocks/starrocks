@@ -16,6 +16,12 @@ package com.starrocks.hive.reader;
 
 import com.starrocks.jni.connector.OffHeapTable;
 import com.starrocks.utils.Platform;
+import org.apache.avro.file.CodecFactory;
+import org.apache.avro.file.DataFileReader;
+import org.apache.avro.file.DataFileWriter;
+import org.apache.avro.generic.GenericDatumReader;
+import org.apache.avro.generic.GenericDatumWriter;
+import org.apache.avro.generic.GenericRecord;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -167,6 +173,32 @@ public class TestHiveScanner {
     public void c1DoScanTestOnPrimitiveType() throws IOException {
         Map<String, String> params = createScanTestParams();
         runScanOnParams(params);
+    }
+
+    @Test
+    public void scanXzCompressedAvroFile() throws IOException {
+        Map<String, String> params = createScanTestParams();
+        File sourceFile = new File(params.get("data_file_path"));
+        File xzFile = File.createTempFile("starrocks-hive-reader-", ".avro");
+        try {
+            writeXzCompressedAvroFile(sourceFile, xzFile);
+            params.put("data_file_path", xzFile.getPath());
+            params.put("block_length", String.valueOf(xzFile.length()));
+            runScanOnParams(params);
+        } finally {
+            Assertions.assertTrue(xzFile.delete(), "Failed to delete temporary Avro file");
+        }
+    }
+
+    private void writeXzCompressedAvroFile(File sourceFile, File targetFile) throws IOException {
+        try (DataFileReader<GenericRecord> reader = new DataFileReader<>(sourceFile, new GenericDatumReader<>());
+                DataFileWriter<GenericRecord> writer = new DataFileWriter<>(new GenericDatumWriter<>())) {
+            writer.setCodec(CodecFactory.xzCodec(6));
+            writer.create(reader.getSchema(), targetFile);
+            while (reader.hasNext()) {
+                writer.append(reader.next());
+            }
+        }
     }
 
     @Test

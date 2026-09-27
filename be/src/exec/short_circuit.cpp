@@ -26,15 +26,15 @@
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "compute_env/result/result_buffer_mgr.h"
-#include "connector/connector.h"
-#include "exec/data_sinks/memory_scratch_sink.h"
-#include "exec/data_sinks/result_sink.h"
+#include "connector_primitive/connector.h"
+#include "data_sink/result/memory_scratch_sink.h"
+#include "data_sink/result/result_sink.h"
+#include "exec/exec_env.h"
 #include "exec/exec_factory.h"
 #include "exec/scan_node.h"
 #include "exec/short_circuit_hybrid.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -178,7 +178,7 @@ Status ShortCircuitExecutor::prepare(TExecShortCircuitParams& common_request) {
         // sink is not mysql result sink
         TPlanFragmentExecParams t_params;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state(), _common_request->data_sink, output_exprs, t_params,
-                                                   0, _source->row_desc(), &_sink));
+                                                   0, _source->record_desc(), &_sink));
     } else {
         bool is_binary_format = _common_request->is_binary_row;
         _sink = std::make_unique<MysqlResultMemorySink>(output_exprs, is_binary_format, _results);

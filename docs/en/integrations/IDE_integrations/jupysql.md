@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "Jupyter notebooks with StarRocks"
 ---

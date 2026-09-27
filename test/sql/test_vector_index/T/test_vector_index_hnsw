@@ -1,6 +1,5 @@
 -- name: test_vector_index_hnsw @sequential @native
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
 
 
 
@@ -180,7 +179,6 @@ with w1 as (
 select * from w1 
 order by dis, id limit 10;
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
 
 -- basic queries.
 
@@ -246,4 +244,3 @@ with w1 as (
 ) select * from w2 order by dis, id;
 
 
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");

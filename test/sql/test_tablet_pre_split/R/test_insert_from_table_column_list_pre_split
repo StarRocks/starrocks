@@ -1,0 +1,90 @@
+-- name: test_insert_from_table_column_list_pre_split @cloud @sequential
+admin set frontend config ("tablet_pre_split_target_size" = "1048576");
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table src (k int, v bigint) properties('replication_num' = '1');
+-- result:
+-- !result
+insert into src select x, x * 10 from table(generate_series(1, 100000)) as g(x);
+-- result:
+-- !result
+select count(*), sum(k), sum(v) from src;
+-- result:
+100000	5000050000	50000500000
+-- !result
+set enable_range_distribution = true;
+-- result:
+-- !result
+create table dst_partial (k int, v bigint, extra varchar(16) null) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+create table dst_reordered (k int, v bigint) order by (k) properties('replication_num' = '1');
+-- result:
+-- !result
+set enable_range_distribution = false;
+-- result:
+-- !result
+SELECT TABLE_NAME, BUCKETS FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME IN ('dst_partial', 'dst_reordered') AND IS_TEMP = false
+ORDER BY TABLE_NAME;
+-- result:
+dst_partial	1
+dst_reordered	1
+-- !result
+insert into dst_partial (k, v) select k, v from src;
+-- result:
+-- !result
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_partial' AND IS_TEMP = false;
+-- result:
+1
+-- !result
+select count(*), count(distinct k), sum(k), sum(v), min(k), max(k), count(extra) from dst_partial;
+-- result:
+100000	100000	5000050000	50000500000	1	100000	0
+-- !result
+insert into dst_reordered (v, k) select k, v from src;
+-- result:
+-- !result
+SELECT BUCKETS > 1 AS pre_split_widened_the_partition
+FROM information_schema.partitions_meta
+WHERE DB_NAME = 'db_${uuid0}' AND TABLE_NAME = 'dst_reordered' AND IS_TEMP = false;
+-- result:
+1
+-- !result
+select count(*), count(distinct k), sum(k), sum(v), min(k), max(k), min(v), max(v) from dst_reordered;
+-- result:
+100000	100000	50000500000	5000050000	10	1000000	1	100000
+-- !result
+select count(*) from dst_reordered where k != v * 10;
+-- result:
+0
+-- !result
+SELECT max(t.NUM_ROW) * 10 < sum(t.NUM_ROW) * 8 AS no_tablet_holds_80_percent
+FROM information_schema.be_tablets t, information_schema.tables_config c
+WHERE t.TABLE_ID = c.TABLE_ID AND c.TABLE_SCHEMA = 'db_${uuid0}' AND c.TABLE_NAME = 'dst_reordered';
+-- result:
+1
+-- !result
+admin set frontend config ("tablet_pre_split_target_size" = "0");
+-- result:
+-- !result
+drop table dst_reordered;
+-- result:
+-- !result
+drop table dst_partial;
+-- result:
+-- !result
+drop table src;
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

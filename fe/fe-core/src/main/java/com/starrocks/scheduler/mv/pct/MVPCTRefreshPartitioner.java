@@ -16,6 +16,7 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
+import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -45,12 +46,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.common.PCellWithName;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -61,6 +64,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.hasDeletedPartitions;
@@ -73,6 +77,38 @@ import static com.starrocks.sql.optimizer.rule.transformation.partition.Partitio
  */
 public abstract class MVPCTRefreshPartitioner {
     protected  static final int CREATE_PARTITION_BATCH_SIZE = 64;
+
+    /**
+     * Add partitions one batch at a time, waiting {@link Config#mv_create_partition_batch_interval_ms}
+     * BETWEEN batches so that a first refresh with hundreds of partitions to create does not push them
+     * all at the FE and BEs at once (#41256).
+     *
+     * <p>The wait is skipped after the final batch: there is nothing left to space out, and with a batch
+     * size of {@value #CREATE_PARTITION_BATCH_SIZE} most refreshes have exactly one batch, so a trailing
+     * wait would be pure latency on the synchronous REFRESH path.
+     *
+     * <p>Range and list partitioners share this so the wait policy cannot drift between them; each one
+     * supplies only how to turn a batch of descriptors into an AddPartitionClause.
+     */
+    protected void addPartitionsInBatches(List<PartitionDesc> partitionDescs,
+                                          Consumer<List<PartitionDesc>> addBatch) {
+        addPartitionsInBatches(partitionDescs, addBatch,
+                () -> Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms,
+                        TimeUnit.MILLISECONDS));
+    }
+
+    @VisibleForTesting
+    static void addPartitionsInBatches(List<PartitionDesc> partitionDescs,
+                                       Consumer<List<PartitionDesc>> addBatch,
+                                       Runnable waitBetweenBatches) {
+        List<List<PartitionDesc>> batches = ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE);
+        for (int i = 0; i < batches.size(); i++) {
+            addBatch.accept(batches.get(i));
+            if (i < batches.size() - 1) {
+                waitBetweenBatches.run();
+            }
+        }
+    }
 
     // Set of table types that support adaptive materialized view (MV) refresh.
     //

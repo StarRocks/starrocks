@@ -1,0 +1,163 @@
+-- name: test_runtime_filter_placement
+DROP DATABASE IF EXISTS test_runtime_filter_placement;
+-- result:
+-- !result
+CREATE DATABASE test_runtime_filter_placement;
+-- result:
+-- !result
+USE test_runtime_filter_placement;
+-- result:
+-- !result
+CREATE TABLE big (
+  d date,
+  k1 varchar(50),
+  k2 varchar(50),
+  p  varchar(50),
+  v  int
+) ENGINE=OLAP DUPLICATE KEY(d, k1, k2, p)
+DISTRIBUTED BY HASH(d, k1, k2, p) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE small (
+  d date,
+  k1 varchar(50),
+  k2 varchar(50),
+  p  varchar(50),
+  v  int
+) ENGINE=OLAP DUPLICATE KEY(d, k1, k2, p)
+DISTRIBUTED BY HASH(d, k1, k2, p) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE narrow (
+  a int,
+  b bigint,
+  c smallint
+) ENGINE=OLAP DUPLICATE KEY(a)
+DISTRIBUTED BY HASH(a) BUCKETS 4
+PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO big
+SELECT date_add('2024-01-01', interval (generate_series % 7) day),
+       concat('u', generate_series % 200),
+       concat('d', generate_series % 20),
+       concat('p', generate_series % 5),
+       generate_series
+FROM table(generate_series(1, 4000));
+-- result:
+-- !result
+INSERT INTO small
+SELECT date_add('2024-01-01', interval (generate_series % 7) day),
+       concat('u', generate_series % 10),
+       concat('d', generate_series % 5),
+       concat('p', generate_series % 5),
+       generate_series
+FROM table(generate_series(1, 40));
+-- result:
+-- !result
+INSERT INTO narrow
+SELECT generate_series, generate_series, generate_series % 100
+FROM table(generate_series(1, 500));
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET global_runtime_filter_build_min_size = 0;
+-- result:
+-- !result
+SET global_runtime_filter_probe_min_size = 0;
+-- result:
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+function: assert_explain_verbose_contains("SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1", "remote = true")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1", "remote = false")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT a AS k FROM narrow) x JOIN [shuffle] narrow c ON x.k = c.b", "probe_expr = (CAST(")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "remote = true")
+-- result:
+None
+-- !result
+SET enable_multicolumn_global_runtime_filter = false;
+-- result:
+-- !result
+function: assert_explain_verbose_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "3:ANALYTIC")
+-- result:
+None
+-- !result
+function: assert_explain_verbose_not_contains("SELECT count(*) FROM (SELECT * FROM (SELECT k1, k2, first_value(k1) OVER (PARTITION BY k1, k2 ORDER BY k2) AS rz FROM big) t WHERE rz = 'u1') a JOIN [shuffle] small ON a.k1 = small.k1 AND a.k2 = small.k2", "2:SORT\n  |  order by: [2, VARCHAR(50), true] ASC, [3, VARCHAR(50), true] ASC\n  |  analytic partition by: [2: k1, VARCHAR(50), true], [3: k2, VARCHAR(50), true]\n  |  offset: 0\n  |  cardinality: 1\n  |  probe runtime filters:")
+-- result:
+None
+-- !result
+SET enable_multicolumn_global_runtime_filter = true;
+-- result:
+-- !result
+SELECT count(*) FROM big JOIN [broadcast] small ON big.k1 = small.k1;
+-- result:
+800
+-- !result
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+-- result:
+yes
+-- !result
+SELECT count(*) FROM (SELECT k1, k2 FROM big GROUP BY GROUPING SETS ((k1), (k1, k2))) a JOIN [broadcast] small ON a.k1 = small.k1;
+-- result:
+80
+-- !result
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+-- result:
+yes
+-- !result
+SELECT count(*) FROM big JOIN [broadcast] small ON big.v > small.v AND big.k1 = small.k1;
+-- result:
+764
+-- !result
+SELECT if(count(1) > 0, "yes", "no") AS local_in_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeInFilterNum: %"
+  AND cast(regexp_extract(trim(line), "- RuntimeInFilterNum: ([0-9]+)", 1) AS int) > 0;
+-- result:
+yes
+-- !result
+SELECT count(*) FROM big JOIN [shuffle] small ON big.k1 = small.k1;
+-- result:
+800
+-- !result
+SELECT if(count(1) > 0, "yes", "no") AS bloom_filter_delivered FROM (
+  SELECT unnest AS line FROM (values(1))t(v)
+  JOIN unnest(split(get_query_profile(last_query_id()), "\n"))
+) p
+WHERE trim(line) LIKE "- RuntimeFilterDesc: %";
+-- result:
+yes
+-- !result
+DROP DATABASE test_runtime_filter_placement;
+-- result:
+-- !result

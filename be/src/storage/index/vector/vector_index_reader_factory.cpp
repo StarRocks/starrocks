@@ -15,73 +15,91 @@
 #ifdef WITH_TENANN
 #include "storage/index/vector/vector_index_reader_factory.h"
 
+#include <boost/algorithm/string/predicate.hpp>
+
+#include "common/config_vector_index_fwd.h"
+#include "common/runtime_profile.h"
 #include "fs/fs.h"
-#include "storage/index/vector/empty_index_reader.h"
+#include "fs/fs_util.h"
+#include "storage/index/index_descriptor.h"
+#include "storage/index/vector/tenann/tenann_index_utils.h"
 #include "storage/index/vector/tenann_index_reader.h"
+#include "storage/index/vector/vector_index_cache.h"
 #include "storage/index/vector/vector_index_reader.h"
-#include "tenann/index/index_cache.h"
+#include "storage_primitive/storage_stats.h"
 
 namespace starrocks {
 
-static Status create_from_file_impl(const std::string& index_path,
-                                    const std::shared_ptr<tenann::IndexMeta>& /*index_meta*/,
-                                    std::shared_ptr<VectorIndexReader>* vector_index_reader, FileSystem* fs) {
-    // Warm path: an entry in the cache means the .vi file exists and is not
-    // an empty-mark placeholder, so we can skip the OSS/S3 HEAD round-trips
-    // (path_exist + new_random_access_file + get_size) that the cold path runs.
-    auto* cache = tenann::GetGlobalIndexCache();
-    if (cache != nullptr) {
-        tenann::IndexCacheHandle probe;
-        if (cache->Lookup(tenann::CacheKey(index_path), &probe)) {
-            (*vector_index_reader) = std::make_shared<TenANNReader>();
-            return Status::OK();
-        }
+StatusOr<VectorIndexReaderCreateResult> VectorIndexReaderFactory::create_and_init(
+        FileInfo vi_file, const std::shared_ptr<TabletIndex>& tablet_index,
+        const std::map<std::string, std::string>& query_params, VectorIndexReaderInitOptions options) {
+    ASSIGN_OR_RETURN(auto meta, get_vector_meta(tablet_index, query_params));
+
+    const std::string& index_path = vi_file.path;
+    const bool async_load_on_miss = config::enable_vector_index_cache_async_load_on_miss &&
+                                    _vector_index_cache.capacity() > 0 && !options.refine_distance;
+
+    VectorIndexCacheProbeResult probe;
+    {
+        SCOPED_RAW_TIMER(&options.stats.vector_index_cache_lookup_ns);
+        probe = _vector_index_cache.ProbeForQuery(tenann::CacheKey(index_path), !async_load_on_miss);
+    }
+    if (probe.state == VectorIndexCacheProbeState::kLoading ||
+        probe.state == VectorIndexCacheProbeState::kWaitTimeout) {
+        ++options.stats.vector_index_cache_miss_count;
+        return VectorIndexReaderCreateResult{};
     }
 
-    std::unique_ptr<RandomAccessFile> index_file;
-    if (fs != nullptr) {
-        // Remote FS: let new_random_access_file() be the single source of truth for
-        // NotFound. Doing a separate path_exists() here would cost an extra round-trip.
-        auto file_or = fs->new_random_access_file(index_path);
-        if (!file_or.ok()) {
-            if (file_or.status().is_not_found()) {
-                return Status::NotFound(fmt::format("index path {} not found", index_path));
+    if (probe.state == VectorIndexCacheProbeState::kMiss) {
+        std::unique_ptr<RandomAccessFile> index_file;
+        uint64_t file_size = 0;
+        {
+            SCOPED_RAW_TIMER(&options.stats.vector_index_file_open_ns);
+            if (vi_file.fs != nullptr) {
+                auto file_or = vi_file.fs->new_random_access_file(index_path);
+                if (!file_or.ok()) {
+                    if (file_or.status().is_not_found()) {
+                        return VectorIndexReaderCreateResult{};
+                    }
+                    return file_or.status();
+                }
+                index_file = std::move(file_or).value();
+            } else {
+                if (!fs::path_exist(index_path)) {
+                    return VectorIndexReaderCreateResult{};
+                }
+                ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
             }
-            return file_or.status();
+            ASSIGN_OR_RETURN(file_size, index_file->get_size());
         }
-        index_file = std::move(file_or).value();
-    } else {
-        if (!fs::path_exist(index_path)) {
-            return Status::NotFound(fmt::format("index path {} not found", index_path));
-        }
-        ASSIGN_OR_RETURN(index_file, fs::new_random_access_file(index_path));
-    }
-    ASSIGN_OR_RETURN(auto file_size, index_file->get_size());
+        vi_file.size = file_size;
 
-    if (file_size == IndexDescriptor::mark_word_len) {
-        auto buf = std::make_unique<unsigned char[]>(file_size);
-        RETURN_IF_ERROR(index_file->read_fully(buf.get(), file_size));
-        std::string_view buf_str = std::string_view(reinterpret_cast<char*>(buf.get()), file_size);
-        if (buf_str == IndexDescriptor::mark_word) {
-            (*vector_index_reader) = std::make_shared<EmptyIndexReader>();
-            return Status::OK();
+        if (file_size == IndexDescriptor::mark_word_len) {
+            auto buf = std::make_unique<unsigned char[]>(file_size);
+            RETURN_IF_ERROR(index_file->read_fully(buf.get(), file_size));
+            std::string_view buf_str = std::string_view(reinterpret_cast<char*>(buf.get()), file_size);
+            if (buf_str == IndexDescriptor::mark_word) {
+                return VectorIndexReaderCreateResult{};
+            }
         }
     }
-    (*vector_index_reader) = std::make_shared<TenANNReader>();
-    return Status::OK();
-}
 
-Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
-                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader) {
-    return create_from_file_impl(index_path, index_meta, vector_index_reader, nullptr);
-}
+    bool user_set_ef = false;
+    for (const auto& entry : query_params) {
+        if (boost::iequals(entry.first, index::vector::EF_SEARCH)) {
+            user_set_ef = true;
+            break;
+        }
+    }
+    apply_adaptive_ef_search(&meta, options.segment_num_rows, options.query_k, user_set_ef);
 
-Status VectorIndexReaderFactory::create_from_file(const std::string& index_path,
-                                                  const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                                  std::shared_ptr<VectorIndexReader>* vector_index_reader,
-                                                  FileSystem* fs) {
-    return create_from_file_impl(index_path, index_meta, vector_index_reader, fs);
+    std::shared_ptr<VectorIndexReader> reader =
+            std::make_shared<TenANNReader>(_vector_index_cache, async_load_on_miss, std::move(probe.handle));
+    ASSIGN_OR_RETURN(auto state, reader->init_searcher(std::move(meta), vi_file, options.stats));
+    if (state == VectorIndexReaderInitResult::kFallback) {
+        return VectorIndexReaderCreateResult{};
+    }
+    return VectorIndexReaderCreateResult{.state = state, .reader = std::move(reader)};
 }
 
 } // namespace starrocks

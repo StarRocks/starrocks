@@ -506,7 +506,6 @@ public class CatalogRecycleBinLakeTableTest {
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -673,7 +672,6 @@ public class CatalogRecycleBinLakeTableTest {
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -937,7 +935,6 @@ public class CatalogRecycleBinLakeTableTest {
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         // Create a range partitioned cloud native table (datacache.enable defaults to true)
         Table table = createTable(connectContext, String.format(
@@ -1016,7 +1013,6 @@ public class CatalogRecycleBinLakeTableTest {
             throws Exception {
         LOG.warn("Start test: {}, lakeService={}", currentCaseName, lakeService);
         final String dbName = "replay_recover_datacache_sync_test";
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // Create database
@@ -1104,7 +1100,6 @@ public class CatalogRecycleBinLakeTableTest {
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         // Create table with datacache enabled (default)
         Table table = createTable(connectContext, String.format(

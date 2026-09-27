@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "RisingWave 分布式流数据库提供 Sink 功能，支持将流数据实时导入 StarRocks 表。"
 ---

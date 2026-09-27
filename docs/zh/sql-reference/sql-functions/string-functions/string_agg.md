@@ -19,7 +19,7 @@ VARCHAR STRING_AGG([DISTINCT] expr, delimiter
 
 ## 参数说明
 
-- `expr`: 待拼接的值，支持的数据类型为 VARCHAR。可以指定 DISTINCT 关键字在连接之前移除分组中的重复值。如果想直接连接多个值，可以使用 [concat](../string-functions/concat.md) 和 [concat_ws](../string-functions/concat_ws.md) 来指定连接的方式。
+- `expr`: 待拼接的值，支持的数据类型为 VARCHAR。可以指定 DISTINCT 关键字在连接之前移除分组中的重复值。如果想直接连接多个值，可以使用 [concat](./concat.md) 和 [concat_ws](./concat_ws.md) 来指定连接的方式。
 - `delimiter`：字符串之间的分隔符，**必需参数**。该参数必须是 VARCHAR 类型。如果要使用空字符来连接，可以使用 `''`。
 - ORDER BY 后可以跟 unsigned_integer (从 1 开始)、列名、或普通表达式。ORDER BY 用于指定按升序或降序对要连接的值进行排序。默认按升序排序。如果要按降序排序，需要指定 DESC。
 

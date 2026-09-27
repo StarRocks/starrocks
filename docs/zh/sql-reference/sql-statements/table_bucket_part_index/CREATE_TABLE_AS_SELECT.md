@@ -85,21 +85,21 @@ CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原�
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT * FROM order;
+AS SELECT * FROM `order`;
 ```
 
 示例二：同步查询原表 `order`中的 `k1`、`k2` 和 `k3` 列并根据查询结果创建新表 `order_new`，然后将查询结果插入到新表中，并指定新表中列的名称为 `a`、`b` 和 `c`。
 
 ```SQL
 CREATE TABLE order_new (a, b, c)
-AS SELECT k1, k2, k3 FROM order;
+AS SELECT k1, k2, k3 FROM `order`;
 ```
 
 或
 
 ```SQL
 CREATE TABLE order_new
-AS SELECT k1 AS a, k2 AS b, k3 AS c FROM order;
+AS SELECT k1 AS a, k2 AS b, k3 AS c FROM `order`;
 ```
 
 示例三：同步查询原表 `employee`中 `salary` 列的最大值并根据查询结果创建新表 `employee_new` ，然后将查询结果插入到新表中，并指定新表中列名为 `salary_new`。

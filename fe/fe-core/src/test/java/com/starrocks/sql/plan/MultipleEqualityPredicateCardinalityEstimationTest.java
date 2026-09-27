@@ -160,7 +160,7 @@ public class MultipleEqualityPredicateCardinalityEstimationTest extends PlanWith
                 "   OR (t1a > 5000 AND id_decimal < 50.5)\n" +
                 "   OR (id_date > '1998-01-01' AND t1c < 20)";
         plan = getCostExplain(sql);
-        assertContains(plan, "cardinality: 1517112");
+        assertContains(plan, "cardinality: 1520402");
 
         sql = "SELECT * FROM test_all_type \n" +
                 "WHERE t1c = 33 \n" +

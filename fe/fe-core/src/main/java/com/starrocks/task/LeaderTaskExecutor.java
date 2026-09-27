@@ -51,26 +51,47 @@ import java.util.concurrent.TimeUnit;
 public class LeaderTaskExecutor {
     private static final Logger LOG = LogManager.getLogger(LeaderTaskExecutor.class);
 
-    private ThreadPoolExecutor executor;
+    // Not final: close() shuts down both pools and start() rebuilds them so a singleton
+    // executor instance can survive a leader demote / re-elect cycle.
+    // Package-private so same-package tests can swap in a stuck pool to exercise the
+    // restart guard without reflection.
+    ThreadPoolExecutor executor;
     private Map<Long, Future<?>> runningTasks;
     public ScheduledThreadPoolExecutor scheduledThreadPool;
 
+    // Saved for rebuild on restart - see start().
+    private final String name;
+    private final int threadNum;
+    private final int queueSize;
+    private final boolean needRegisterMetric;
+
     public LeaderTaskExecutor(String name, int threadNum, boolean needRegisterMetric) {
-        executor = ThreadPoolManager
-                .newDaemonFixedThreadPool(threadNum, threadNum * 2, name + "_pool", needRegisterMetric);
-        runningTasks = Maps.newHashMap();
-        scheduledThreadPool =
-                ThreadPoolManager.newDaemonScheduledThreadPool(1, name + "_scheduler_thread_pool", needRegisterMetric);
+        this(name, threadNum, threadNum * 2, needRegisterMetric);
     }
 
     public LeaderTaskExecutor(String name, int threadNum, int queueSize, boolean needRegisterMetric) {
-        executor = ThreadPoolManager.newDaemonFixedThreadPool(threadNum, queueSize, name + "_pool", needRegisterMetric);
+        this.name = name;
+        this.threadNum = threadNum;
+        this.queueSize = queueSize;
+        this.needRegisterMetric = needRegisterMetric;
         runningTasks = Maps.newHashMap();
+        buildPools();
+    }
+
+    private void buildPools() {
+        executor = ThreadPoolManager.newDaemonFixedThreadPool(threadNum, queueSize, name + "_pool", needRegisterMetric);
         scheduledThreadPool =
                 ThreadPoolManager.newDaemonScheduledThreadPool(1, name + "_scheduler_thread_pool", needRegisterMetric);
     }
 
-    public void start() {
+    public synchronized void start() {
+        // The re-activation cleanliness gate (GlobalStateMgr.assertLeaderSessionQuiescedOrExit) has already
+        // verified this pool terminated before start() runs, so there is no restart guard here - just
+        // rebuild the pools if a previous demotion shut them down, so submissions do not raise
+        // RejectedExecutionException on the new leader session.
+        if (executor.isShutdown()) {
+            buildPools();
+        }
         scheduledThreadPool.scheduleAtFixedRate(new TaskChecker(), 0L, 1000L, TimeUnit.MILLISECONDS);
     }
 
@@ -103,9 +124,60 @@ public class LeaderTaskExecutor {
     }
 
     public void close() {
+        close(0L);
+    }
+
+    /** Whether the work pool has been shut down (a previous demotion called close()). */
+    public boolean isShutdown() {
+        return executor.isShutdown();
+    }
+
+    /**
+     * Whether both internal pools have fully terminated after a {@link #close()}. Combined with
+     * {@link #isShutdown()} by the re-activation cleanliness gate: a pool that is shut down but not yet
+     * terminated is a straggler from the previous leader session (a fresh/running pool is not shut down).
+     */
+    public boolean isTerminated() {
+        return executor.isTerminated() && scheduledThreadPool.isTerminated();
+    }
+
+    /**
+     * Coordinated stop for leader demotion. Uses shutdownNow() on the work executor so in-flight
+     * tasks are interrupted and cancelled fast instead of waiting out their bounded awaits. Tasks
+     * on this pool (e.g. ExportExportingTask) treat the interrupt as a shutdown signal - they
+     * unwind and leave a healthy job for the next leader to reschedule, rather than mapping it to
+     * a business TIMEOUT cancel. The scheduled TaskChecker pool is shut down gracefully (bookkeeping).
+     *
+     * If {@code awaitMillis > 0}, also blocks up to that budget waiting for both internal
+     * pools to actually terminate. This is required on the leader demotion drain path so a
+     * re-elected leader does not race the old leader's still-running tasks.
+     *
+     * @param awaitMillis maximum time to wait for both pools to drain, in milliseconds. Zero
+     *                    or negative means do not wait (legacy behaviour). The budget is
+     *                    split across the two internal pools.
+     */
+    public void close(long awaitMillis) {
         scheduledThreadPool.shutdown();
-        executor.shutdown();
-        runningTasks.clear();
+        executor.shutdownNow();
+        if (awaitMillis > 0L) {
+            long deadline = System.currentTimeMillis() + awaitMillis;
+            try {
+                long remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!scheduledThreadPool.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("LeaderTaskExecutor scheduledThreadPool did not terminate within drain timeout");
+                }
+                remaining = Math.max(1L, deadline - System.currentTimeMillis());
+                if (!executor.awaitTermination(remaining, TimeUnit.MILLISECONDS)) {
+                    LOG.warn("LeaderTaskExecutor executor did not terminate within drain timeout");
+                }
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                LOG.warn("Interrupted while waiting for LeaderTaskExecutor to terminate");
+            }
+        }
+        synchronized (runningTasks) {
+            runningTasks.clear();
+        }
     }
 
     public int getTaskNum() {

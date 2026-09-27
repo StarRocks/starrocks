@@ -1,0 +1,83 @@
+-- name: test_stream_load_pipeline
+CREATE DATABASE test_stream_load_pipeline;
+-- result:
+-- !result
+USE test_stream_load_pipeline;
+-- result:
+-- !result
+CREATE TABLE t_pipe (id INT, name VARCHAR(32), v DOUBLE) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_legacy (id INT, name VARCHAR(32), v DOUBLE) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+CREATE TABLE t_json (id INT, name VARCHAR(32), v DOUBLE) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_pipeline_stream_load" = "true");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H expect:100-continue -T ${root_path}/lib/../common/data/stream_load/sr_pipeline_load.csv -XPUT -H label:test_slp_pipe_csv -H column_separator:, -H columns:"id,name,v" ${url}/api/test_stream_load_pipeline/t_pipe/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_pipe ORDER BY id;
+-- result:
+1	alice	1.5
+2	bob	2.5
+3	carol	3.5
+-- !result
+shell: curl --location-trusted -u root: -H expect:100-continue -T ${root_path}/lib/../common/data/stream_load/sr_pipeline_load.json -XPUT -H format:json -H strip_outer_array:true -H jsonpaths:"[\"$.id\",\"$.name\",\"$.v\"]" -H label:test_slp_pipe_json -H columns:"id,name,v" ${url}/api/test_stream_load_pipeline/t_json/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_json ORDER BY id;
+-- result:
+10	x	10.5
+11	y	11.5
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_pipeline_stream_load" = "false");
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H expect:100-continue -T ${root_path}/lib/../common/data/stream_load/sr_pipeline_load.csv -XPUT -H label:test_slp_legacy_csv -H column_separator:, -H columns:"id,name,v" ${url}/api/test_stream_load_pipeline/t_legacy/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+SELECT * FROM t_legacy ORDER BY id;
+-- result:
+1	alice	1.5
+2	bob	2.5
+3	carol	3.5
+-- !result
+SELECT (SELECT count(*) FROM (SELECT * FROM t_pipe EXCEPT SELECT * FROM t_legacy) a) AS pipe_minus_legacy, (SELECT count(*) FROM (SELECT * FROM t_legacy EXCEPT SELECT * FROM t_pipe) b) AS legacy_minus_pipe;
+-- result:
+0	0
+-- !result
+DROP DATABASE test_stream_load_pipeline;
+-- result:
+-- !result
+-- reset config to default
+ADMIN SET FRONTEND CONFIG ("enable_pipeline_stream_load" = "false");
+-- result:
+-- !result

@@ -30,6 +30,10 @@ SELECT id, my_json_col FROM test_json_config ORDER BY id;
 ALTER TABLE test_json_config SET ("flat_json.null.factor" = "0.2");
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO test_json_config VALUES
 (4, parse_json('{"key1": "value4", "key2": 400, "key5": "new"}')),
 (5, parse_json('{"key1": "value5", "key2": 500}'));
@@ -53,6 +57,10 @@ SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
 -- !result
 ALTER TABLE test_json_config SET ("flat_json.sparsity.factor" = "0.9");
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO test_json_config VALUES
 (6, parse_json('{"key1": "value6", "key2": 600, "key6": "sparsity"}')),
@@ -81,6 +89,10 @@ SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
 -- !result
 ALTER TABLE test_json_config SET ("flat_json.column.max" = "100");
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO test_json_config VALUES
 (8, parse_json('{"key1": "value8", "key2": 800, "key3": false, "key7": "max"}')),
@@ -113,6 +125,10 @@ SELECT id, my_json_col->'$.key3' FROM test_json_config ORDER BY id;
 -- !result
 ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO test_json_config VALUES
 (10, parse_json('{"key1": "value10", "key2": 1000, "key8": "disabled"}')),
@@ -154,6 +170,10 @@ SELECT COUNT(*) FROM test_json_config;
 ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
 -- result:
 -- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
 INSERT INTO test_json_config VALUES
 (12, parse_json('{"key1": "value12", "key2": 1200, "key9": "reenabled"}')),
 (13, parse_json('{"key1": "value13", "key2": 1300}'));
@@ -193,6 +213,10 @@ SELECT id, my_json_col->'$.key2' FROM test_json_config ORDER BY id;
 -- !result
 ALTER TABLE test_json_config SET ("flat_json.enable" = "false");
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO test_json_config VALUES
 (14, parse_json('{"key1": "value14", "key2": 1400, "key10": "disabled2"}')),
@@ -259,6 +283,10 @@ SELECT id, my_json_col->'$.key1' FROM test_json_config ORDER BY id;
 -- !result
 ALTER TABLE test_json_config SET ("flat_json.enable" = "true");
 -- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
 -- !result
 INSERT INTO test_json_config VALUES
 (16, parse_json('{"key1": "value16", "key2": 1600, "key11": "final"}')),

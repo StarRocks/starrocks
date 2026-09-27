@@ -22,7 +22,11 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TPCDSPlanTest extends TPCDSPlanTestBase {
     Map<String, Long> tpcdsStats = null;
@@ -41,6 +45,40 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     @AfterEach
     public void tearDown() {
         setTPCDSTableStats(tpcdsStats);
+    }
+
+    /**
+     * Q05 joins web_site onto a column that reaches it from the nullable side of a LEFT OUTER
+     * JOIN, so the resulting runtime filter fits in neither child of that join: the left side
+     * does not have the column, and filtering the right side would change which left rows get
+     * NULL-extended. The join itself is the only place it can sit -- and a hash-join build
+     * operator does consume a local runtime in-filter, so the placement does real work.
+     *
+     * This is the shape that makes JoinNode.canEvaluateRuntimeFilter() matter: declaring a join
+     * unable to use a runtime filter would silently drop this one, which no result-comparing
+     * test would notice because the query would still return the same rows, just more slowly.
+     */
+    @Test
+    public void testRuntimeFilterStaysOnOuterJoinWhenProbeColumnIsNullable() throws Exception {
+        String plan = getVerboseExplain(Q05);
+        Assertions.assertTrue(nodeTypesHoldingRuntimeFilter(plan).contains("HASH JOIN"),
+                "expected a probe runtime filter recorded on a join node, plan was:\n" + plan);
+    }
+
+    private static Set<String> nodeTypesHoldingRuntimeFilter(String verbosePlan) {
+        Pattern nodeHeader = Pattern.compile("^\\s*\\|?-*\\s*\\d+:([A-Za-z][\\w -]*)");
+        Set<String> holders = new HashSet<>();
+        String current = "<none>";
+        for (String line : verbosePlan.split("\n")) {
+            Matcher m = nodeHeader.matcher(line);
+            if (m.find()) {
+                current = m.group(1).trim();
+            }
+            if (line.contains("probe runtime filters")) {
+                holders.add(current);
+            }
+        }
+        return holders;
     }
 
     @Test

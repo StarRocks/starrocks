@@ -1,4 +1,5 @@
 ---
+sidebar_position: 130
 displayed_sidebar: docs
 description: "StarRocks v3.3 以降、ノード再起動やローリングアップグレード中の実行中クエリへの影響を最小化する Graceful Exit メカニズム。"
 ---

@@ -18,7 +18,7 @@
 #include <shared_mutex>
 #include <vector>
 
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {

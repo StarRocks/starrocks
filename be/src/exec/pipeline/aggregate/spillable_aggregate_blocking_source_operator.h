@@ -20,7 +20,7 @@
 #include "common/config_exec_flow_fwd.h"
 #include "exec/aggregator_fwd.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
-#include "exec/pipeline/primitives/spillable_simple_source_mixin.h"
+#include "exec_primitive/pipeline/primitives/spillable_simple_source_mixin.h"
 #include "runtime/runtime_state_fwd.h"
 #include "storage/chunk_helper.h"
 

@@ -37,7 +37,6 @@ import org.apache.arrow.flight.FlightRuntimeException;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
-import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
 public class ArrowFlightSqlSessionManager {
@@ -72,8 +71,8 @@ public class ArrowFlightSqlSessionManager {
         ctx.setRemoteIP(remoteIP);
 
         try {
-            AuthenticationHandler.authenticate(
-                    ctx, username, remoteIP, password.getBytes(StandardCharsets.UTF_8));
+            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)
@@ -82,7 +81,6 @@ public class ArrowFlightSqlSessionManager {
         }
 
         ArrowFlightSqlTokenInfo tokenInfo = new ArrowFlightSqlTokenInfo(ctx.getCurrentUserIdentity(), token);
-        tokenCache.put(token, tokenInfo);
 
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setQueryId(UUIDUtil.genUUID());
@@ -90,18 +88,28 @@ public class ArrowFlightSqlSessionManager {
 
         // Assign connection ID
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        try {
+            ctx.setConnectionId(connectScheduler.getNextConnectionId());
+        } catch (ConnectScheduler.ConnectionIdExhaustedException e) {
+            ctx.kill(true, "failed to allocate connection ID");
+            throw CallStatus.RESOURCE_EXHAUSTED
+                    .withDescription("failed to allocate connection ID: " + e.getMessage())
+                    .withCause(e)
+                    .toRuntimeException();
+        }
         ctx.resetConnectionStartTime();
 
         Pair<Boolean, String> isSuccessAndErrorMsg = connectScheduler.registerConnection(ctx);
         if (!isSuccessAndErrorMsg.first) {
             String errorMsg = isSuccessAndErrorMsg.second;
             ctx.getState().setError(errorMsg);
+            ctx.kill(true, "failed to register connection: " + errorMsg);
             throw CallStatus.RESOURCE_EXHAUSTED
                     .withDescription("failed to register connection: " + errorMsg)
                     .toRuntimeException();
         }
 
+        tokenCache.put(token, tokenInfo);
         return token;
     }
 

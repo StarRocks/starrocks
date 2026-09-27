@@ -19,10 +19,20 @@ This topic describes the rules and limits that apply when you use StarRocks.
     - Username cannot exceed 128 characters.
   - Column name (column alias), partition name, and index name are **not** case-sensitive. Other names are **case-sensitive**.
 
-- The FE configuration item `enable_table_name_case_insensitive` (supported from v4.0 onwards) allows you to control whether data directory names, database names, table names, view names, and asynchronous materialized view names are case-insensitive. Currently, table names are case-sensitive by default.
-  - After enabling this feature, all related names will be stored in lowercase, and all SQL commands containing these names will automatically convert them to lowercase.
-  - You can enable this feature only when creating a cluster. **After the cluster is started, the value of this configuration cannot be modified by any means**. Any attempt to modify it will result in an error. FE will fail to start when it detects that the value of this configuration item is inconsistent with that when the cluster was first started.
-  - Currently, this feature does not support JDBC catalog and table names. Do not enable this feature if you want to perform case-insensitive processing on JDBC or ODBC data sources.
+- The FE configuration item `enable_table_name_case_insensitive` (supported from v4.0 onwards) controls whether catalog names, database names, table names, view names, and asynchronous materialized view names are case-insensitive. This feature is **disabled by default** (these names are case-sensitive), and it can be enabled only when creating a cluster.
+
+  :::warning
+
+  **We strongly recommend that you keep this feature disabled unless you have a specific, well-understood reason to enable it.**
+
+  When enabled, StarRocks stores the affected names in lowercase and forcibly converts every catalog, database, table, view, and materialized view name to lowercase during **both query and write (DDL/DML) processing**. This has the following consequences:
+
+  - **It can make external tables and external catalogs unusable.** Different external catalog services follow different naming and case-sensitivity conventions. If an external schema, database, or table name is not already in lowercase, StarRocks lowercases the name in your SQL before passing it to the connector and then looks up a name that does not exist in the source, so the query fails with a "not found" error.
+  - **It cannot be changed after the cluster is created.** After the cluster is started, the value of this configuration cannot be modified by any means. Any attempt to modify it results in an error, and FE fails to start when it detects that the value is inconsistent with the value used when the cluster was first started.
+
+  Only enable this feature on a new cluster where you are certain that **all** object names — including those in every external data source you plan to access — are already in lowercase.
+
+  :::
 
 - Naming conventions for labels:
   You can specify the label of a job when you load data. The label name can consist of digits (0-9), letters (a-z or A-Z), and underscores (`_`), and cannot exceed 128 characters in length. Label names can start with a letter or an underscore (`_`).

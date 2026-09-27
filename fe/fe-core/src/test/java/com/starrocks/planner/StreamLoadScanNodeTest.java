@@ -828,7 +828,7 @@ public class StreamLoadScanNodeTest {
             List<ImportColumnDesc> columnExprs = Lists.newArrayList();
             columnExprs.add(new ImportColumnDesc("c3", new FunctionCallExpr("func", Lists.newArrayList())));
             Load.initColumns(table, columnExprs, null, null, null, null, null, null, true, false, Lists.newArrayList(),
-                    false, false);
+                    false, false, null);
         });
     }
 }

@@ -15,7 +15,3 @@ admin set table t partition(t) version to 1;
 select * from t;
 -- result:
 -- !result
--- name: test_show_recovery_info
-show proc '/meta_recovery';
--- result:
--- !result

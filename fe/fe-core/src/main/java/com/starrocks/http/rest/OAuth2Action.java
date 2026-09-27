@@ -117,7 +117,6 @@ public class OAuth2Action extends RestBaseAction {
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(oAuth2Context.jwksUrl());
 
             JSONObject authResponse = new JSONObject(oidcToken);
-            String accessToken = authResponse.getString("access_token");
             String idToken = authResponse.getString("id_token");
 
             OpenIdConnectVerifier.verify(idToken, context.getQualifiedUser(), jwkSet,

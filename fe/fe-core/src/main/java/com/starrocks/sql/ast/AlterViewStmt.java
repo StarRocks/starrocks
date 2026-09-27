@@ -50,6 +50,9 @@ public class AlterViewStmt extends DdlStmt {
         alterViewClause.setOriginalViewDefineSql(stmt.getOriginalViewDefineSql());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
+        // CREATE OR REPLACE redefines the view, including its SQL SECURITY characteristic; carry the resolved value
+        // (non-null) so it is persisted atomically with the new definition in AlterJobMgr.alterView.
+        alterViewClause.setSecurity(stmt.isSecurity());
         return new AlterViewStmt(stmt.getTableRef(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
                 alterViewClause, NodePosition.ZERO);
     }

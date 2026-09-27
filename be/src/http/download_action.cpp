@@ -34,27 +34,25 @@
 
 #include "http/download_action.h"
 
-#include <sstream>
 #include <string>
 
 #include "base/path/filesystem_util.h"
 #include "base/path/path_util.h"
 #include "base/time/time.h"
 #include "common/config_http_fwd.h"
+#include "common/system/master_info.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
-#include "http/http_channel.h"
-#include "http/http_request.h"
 #include "http/utils.h"
-#include "runtime/exec_env.h"
+#include "platform/http/http_channel.h"
+#include "platform/http/http_request.h"
 
 namespace starrocks {
 
 const std::string FILE_PARAMETER = "file";
 const std::string TOKEN_PARAMETER = "token";
 
-DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>& allow_dirs)
-        : _exec_env(exec_env), _download_type(NORMAL) {
+DownloadAction::DownloadAction(const std::vector<std::string>& allow_dirs) : _download_type(NORMAL) {
     for (auto& dir : allow_dirs) {
         std::string p;
         WARN_IF_ERROR(fs::canonicalize(dir, &p), "canonicalize path " + dir + " failed");
@@ -62,8 +60,7 @@ DownloadAction::DownloadAction(ExecEnv* exec_env, const std::vector<std::string>
     }
 }
 
-DownloadAction::DownloadAction(ExecEnv* exec_env, const std::string& error_log_root_dir)
-        : _exec_env(exec_env), _download_type(ERROR_LOG) {
+DownloadAction::DownloadAction(const std::string& error_log_root_dir) : _download_type(ERROR_LOG) {
     WARN_IF_ERROR(fs::canonicalize(error_log_root_dir, &_error_log_root_dir),
                   "canonicalize path " + error_log_root_dir + " failed");
 }
@@ -151,7 +148,7 @@ Status DownloadAction::check_token(HttpRequest* req) {
         return Status::InternalError("token is not specified.");
     }
 
-    if (token_str != _exec_env->token()) {
+    if (token_str != get_master_token()) {
         return Status::InternalError("invalid token.");
     }
 

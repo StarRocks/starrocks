@@ -394,8 +394,8 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
                                                       : data_col[i]._timestamp;
 
         if constexpr (use_int96_timestamp_encoding) {
-            auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
-            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
+            auto date = reinterpret_cast<int32_t*>(&values[i].value[2]);
+            auto nanosecond = reinterpret_cast<int64_t*>(&values[i].value[0]);
             *date = timestamp::to_julian(timestamp);
             *nanosecond = timestamp::to_time(timestamp) * 1000;
         } else {
@@ -435,10 +435,13 @@ Status LevelBuilder::_write_byte_array_column_chunk(const LevelBuilderContext& c
     auto values = new ::parquet::ByteArray[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    for (size_t i = 0; i < col->size(); i++) {
-        values[i].len = static_cast<uint32_t>(vo[i + 1] - vo[i]);
-        values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[i]);
-    }
+    vo.visit_storage([&](const auto& offsets_buf) {
+        const auto* __restrict offsets = offsets_buf.data();
+        for (size_t i = 0; i < col->size(); i++) {
+            values[i].len = static_cast<uint32_t>(offsets[i + 1] - offsets[i]);
+            values[i].ptr = reinterpret_cast<const uint8_t*>(vb.data() + offsets[i]);
+        }
+    });
 
     write_leaf_callback(LevelBuilderResult{
             .num_levels = ctx._num_levels,

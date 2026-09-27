@@ -339,8 +339,8 @@ struct HashTableParam {
     long column_view_concat_bytes_limit = -1L;
 
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
-    const RowDescriptor* build_row_desc = nullptr;
-    const RowDescriptor* probe_row_desc = nullptr;
+    const RecordDescriptor* build_record_desc = nullptr;
+    const RecordDescriptor* probe_record_desc = nullptr;
     std::set<SlotId> build_output_slots;
     std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;

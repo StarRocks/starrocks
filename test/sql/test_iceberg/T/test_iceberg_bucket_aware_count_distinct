@@ -1,0 +1,72 @@
+-- name: test_iceberg_bucket_aware_count_distinct
+
+-- Regression for the bucket-aware-execution-on-lake COUNT(DISTINCT) over-count bug.
+--
+-- Plan background (FE), same as the native OLAP path: for an Iceberg table partitioned by
+-- bucket(K, N), the scan output is reported as LOCAL hash-distributed on K
+-- (OutputPropertyDeriver.visitPhysicalIcebergScan). For COUNT(DISTINCT K) over a GROUP BY that is
+-- a *superset* of K (K plus other columns), the optimizer keeps the property as LOCAL(K) through
+-- the inner group-by and drops the reshuffle before the outer DISTINCT(K) (no HASH_PARTITIONED(K)
+-- exchange). This is legitimate on its own -- the native OLAP path produces the same plan.
+--
+-- Root cause (BE): at execution the inner group-by parallelizes with a local shuffle keyed on the
+-- FULL group-by columns (K, grp), which physically SCATTERS K across the pipeline drivers (whenever
+-- a K value has more than one distinct combination of the other group-by columns). On the lake path
+-- the group-by's local exchange carried the scan's bucket_properties, which wrongly marked its
+-- output could_local_shuffle=false, so the outer DISTINCT(K) skipped its own local exchange and
+-- counted each K once per driver it landed on -> COUNT(DISTINCT K) over-counts by roughly the
+-- parallelism. (The native OLAP path is correct only because its scan has empty bucket_properties,
+-- so could_local_shuffle stays true and the DISTINCT interpolates its local exchange on K.)
+--
+-- Fix (BE): in the self-keys local-shuffle branch, pipeline_builder_operators.cpp only reuses the
+-- source's bucket_properties when the self keys line up 1:1 with the bucket columns (the genuine
+-- bucket-shuffle case, e.g. a [BUCKET] join or GROUP BY exactly on the bucket columns). When the
+-- self keys are a strict SUPERSET of the bucket columns (this case: (K, grp) vs bucket column K) it
+-- drops them, so the DISTINCT interpolates a local exchange on K (as the native OLAP path does) and
+-- each K is regrouped onto one driver. The fix is not visible in EXPLAIN (no network exchange
+-- added), so this is a result assertion.
+--
+-- This reproduces on conforming data on a single BE: below, each id has 200 distinct grp
+-- values, true COUNT(DISTINCT id) = 1000, but before the fix bucket-aware ON returns ~pipeline_dop * 1000.
+-- (An earlier version of this case used grp = id % 5, a hidden functional dependency that
+-- collapsed (id,grp) back to id and masked the bug -- keep grp INDEPENDENT of id.)
+
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+
+create table t1 (
+  id int,
+  grp int
+)
+partition by bucket(id, 8)
+properties ("file_format"="parquet");
+
+-- cartesian product: each id gets 200 distinct grp values (grp independent of id),
+-- so the inner group-by(id,grp) scatters each id across many drivers. true distinct id = 1000.
+insert into t1
+select a.generate_series, b.generate_series
+from table(generate_series(1, 1000)) a, table(generate_series(1, 200)) b;
+
+set pipeline_dop = 8;
+
+-- ############### bucket-aware ON: must return the correct distinct count (1000), not dop*1000 ###############
+set enable_bucket_aware_execution_on_lake = true;
+
+-- end-to-end result: over-counts to ~pipeline_dop*1000 before the fix, 1000 after.
+-- The fix is a BE-side local exchange interpolated before the DISTINCT (not visible in EXPLAIN),
+-- so this is a result assertion rather than a plan assertion.
+select count(distinct id) from (select id, grp, count(*) c from t1 group by id, grp) t;
+
+-- ############### bucket-aware OFF: ground-truth reference ###############
+set enable_bucket_aware_execution_on_lake = false;
+select count(distinct id) from (select id, grp, count(*) c from t1 group by id, grp) t;
+
+-- restore session state so it does not leak into subsequent statements/tests.
+set pipeline_dop = 0;
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.t1 force;
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+drop catalog iceberg_sql_test_${uuid0};

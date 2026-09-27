@@ -1,4 +1,5 @@
 ---
+sidebar_position: 10
 displayed_sidebar: docs
 description: "StarRocks 从 v2.3 起支持 catalog 功能，用于统一管理内部和外部数据源的查询。"
 ---
@@ -20,18 +21,19 @@ StarRocks 从 v2.3 版本开始支持 catalog 功能。通过 catalog，您可�
 
 ![figure1](../../_assets/3.8.1.png)
 
-- **内部 catalog** 管理 StarRocks 的内部数据。例如，如果您执行 CREATE DATABASE 或 CREATE TABLE 语句来创建数据库或表，则数据库或表将存储在内部 catalog 中。每个 StarRocks 集群只有一个内部 catalog，名为 [default_catalog](../catalog/default_catalog.md)。
+- **内部 catalog** 管理 StarRocks 的内部数据。例如，如果您执行 CREATE DATABASE 或 CREATE TABLE 语句来创建数据库或表，则数据库或表将存储在内部 catalog 中。每个 StarRocks 集群只有一个内部 catalog，名为 [default_catalog](./default_catalog.md)。
 
 - **外部 catalog** 类似于指向外部管理的元数据存储的链接，这使得 StarRocks 可以直接访问外部数据源。您可以直接查询外部数据，而无需进行数据导入或迁移。目前，StarRocks 支持以下类型的外部 catalog：
-  - [Hive catalog](../catalog/hive_catalog.md)：用于查询 Hive 中的数据。
-  - [Iceberg catalog](./iceberg/iceberg_catalog.md)：用于查询 Iceberg 中的数据。
-  - [Hudi catalog](../catalog/hudi_catalog.md)：用于查询 Hudi 中的数据。
-  - [Delta Lake catalog](../catalog/deltalake_catalog.md)：用于查询 Delta Lake 中的数据。
-  - [JDBC catalog](../catalog/jdbc_catalog.md)：用于查询 JDBC 兼容的数据源中的数据。
-  - [Benchmark catalog](../catalog/benchmark_catalog.md)：用于查询 TPC-H、TPC-DS 和 SSB schema 的实时生成数据集。
-  - [Elasticsearch catalog](../catalog/elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。StarRocks 从 v3.1 开始支持 Elasticsearch catalog。
-  - [Paimon catalog](../catalog/paimon_catalog.md)：用于查询 Paimon 中的数据。StarRocks 从 v3.1 开始支持 Paimon catalog。
-  - [Unified catalog](../catalog/unified_catalog.md)：用于将来自 Hive、Iceberg、Hudi 和 Delta Lake 数据源的数据作为统一数据源进行查询。StarRocks 从 v3.2 开始支持 Unified catalog。
+  - [Hive catalog](./hive_catalog.md)：用于查询 Hive 中的数据。
+  - [Iceberg catalog](./iceberg/iceberg.md)：用于查询 Iceberg 中的数据。
+  - [Hudi catalog](./hudi_catalog.md)：用于查询 Hudi 中的数据。
+  - [Delta Lake catalog](./deltalake_catalog.md)：用于查询 Delta Lake 中的数据。
+  - [JDBC catalog](./jdbc_catalog.md)：用于查询 JDBC 兼容的数据源中的数据。
+  - [Benchmark catalog](./benchmark_catalog.md)：用于查询 TPC-H、TPC-DS 和 SSB schema 的实时生成数据集。
+  - [Elasticsearch catalog](./elasticsearch_catalog.md)：用于查询 Elasticsearch 中的数据。StarRocks 从 v3.1 开始支持 Elasticsearch catalog。
+  - [Paimon catalog](./paimon_catalog.md)：用于查询 Paimon 中的数据。StarRocks 从 v3.1 开始支持 Paimon catalog。
+  - [Fluss catalog](./fluss_catalog.md)：用于查询 Fluss 中的数据。
+  - [Unified catalog](./unified_catalog.md)：用于将来自 Hive、Iceberg、Hudi 和 Delta Lake 数据源的数据作为统一数据源进行查询。StarRocks 从 v3.2 开始支持 Unified catalog。
 
   当您查询外部数据时，StarRocks 与外部数据源的以下两个组件进行交互：
 
@@ -46,11 +48,11 @@ StarRocks 从 v2.3 版本开始支持 catalog 功能。通过 catalog，您可�
 
 ### 查询内部数据
 
-要查询 StarRocks 中的数据，请参见 [Default catalog](../catalog/default_catalog.md)。
+要查询 StarRocks 中的数据，请参见 [Default catalog](./default_catalog.md)。
 
 ### 查询外部数据
 
-要查询外部数据源中的数据，请参见 [Query external data](../catalog/query_external_data.md)。
+要查询外部数据源中的数据，请参见 [Query external data](./query_external_data.md)。
 
 ### 跨 catalog 查询
 

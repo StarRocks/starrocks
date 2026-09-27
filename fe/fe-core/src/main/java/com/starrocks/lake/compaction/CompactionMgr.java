@@ -100,6 +100,27 @@ public class CompactionMgr implements MemoryTrackable {
         this.compactionScheduler = compactionScheduler;
     }
 
+    public int getRunningCompactionCount() {
+        if (compactionScheduler == null) {
+            return 0;
+        }
+        return compactionScheduler.getRunningCompactions().size();
+    }
+
+    public boolean isPartitionCompacting(PartitionIdentifier partition) {
+        return compactionScheduler != null && compactionScheduler.getRunningCompactions().containsKey(partition);
+    }
+
+    // Total running tablet-level compaction tasks across all running jobs (one task == one tablet
+    // still being compacted), the same unit bounded by Config.lake_compaction_max_tasks. This is
+    // finer-grained than getRunningCompactionCount(), which counts jobs (one per partition).
+    public int getRunningCompactionTaskCount() {
+        if (compactionScheduler == null) {
+            return 0;
+        }
+        return compactionScheduler.getRunningTabletCompactionTaskCount();
+    }
+
     public void start() {
         if (compactionScheduler == null) {
             compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
@@ -140,7 +161,7 @@ public class CompactionMgr implements MemoryTrackable {
     public void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime,
                                       Quantiles compactionScore) {
         PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
-        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+        partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
                 v = new PartitionStatistics(partition);
             }
@@ -148,15 +169,12 @@ public class CompactionMgr implements MemoryTrackable {
             v.setCompactionScore(compactionScore);
             return v;
         });
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Finished loading: {}", statistics);
-        }
     }
 
     public void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
                                          Quantiles compactionScore, long txnId, boolean isPartialSuccess) {
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
-        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+        partitionStatisticsHashMap.compute(partition, (k, v) -> {
             if (v == null) {
                 v = new PartitionStatistics(partition);
             }
@@ -165,8 +183,8 @@ public class CompactionMgr implements MemoryTrackable {
             v.setCompactionScoreAndAdjustPunishFactor(compactionScore, isPartialSuccess);
             return v;
         });
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Finished compaction: {}", statistics);
+        if (compactionScheduler != null) {
+            compactionScheduler.setScoreAfter(partition, compactionScore);
         }
     }
 
@@ -208,6 +226,18 @@ public class CompactionMgr implements MemoryTrackable {
                 .mapToDouble(stat -> stat.getCompactionScore().getMax()).max().orElse(0);
     }
 
+    /**
+     * Drop a partition's compaction priority back to DEFAULT. Needed when a priority-carrying request is
+     * abandoned before it starts: the scheduler's own reset only covers partitions that reached
+     * runningCompactions, and ScoreSelector admits a non-DEFAULT priority unconditionally.
+     */
+    void resetPriority(PartitionIdentifier partition) {
+        partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
+            v.resetPriority();
+            return v;
+        });
+    }
+
     void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfPresent(partition, (k, v) -> {
             // FE's follower nodes may have a different timestamp with the leader node.
@@ -239,6 +269,11 @@ public class CompactionMgr implements MemoryTrackable {
 
     public void cancelCompaction(long txnId) {
         compactionScheduler.cancelCompaction(txnId);
+    }
+
+    public Set<Long> cancelPreviousCompactions(long endTransactionId, long dbId, long tableId,
+                                               Set<Long> includePartitionIds) {
+        return compactionScheduler.cancelPreviousCompactions(endTransactionId, dbId, tableId, includePartitionIds);
     }
 
     public boolean existCompaction(long txnId) {
@@ -279,6 +314,23 @@ public class CompactionMgr implements MemoryTrackable {
             return v;
         });
         LOG.info("Trigger manual compaction, {}", statistics);
+        return statistics;
+    }
+
+    public PartitionStatistics triggerUnshareCompaction(PartitionIdentifier partition) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.compute(partition, (k, v) -> {
+            if (v == null) {
+                v = new PartitionStatistics(partition);
+            }
+            if (v.getCompactionScore() == null) {
+                // Score-based selectors discard null scores even for an explicit priority. A
+                // synthetic zero score lets UNSHARE run for an empty/new partition as well.
+                v.setCompactionScore(new Quantiles(0, 0, 0));
+            }
+            v.setPriority(PartitionStatistics.CompactionPriority.UNSHARE);
+            return v;
+        });
+        LOG.info("Trigger UNSHARE compaction, {}", statistics);
         return statistics;
     }
 

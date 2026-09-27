@@ -20,7 +20,7 @@
 #include "common/status.h"
 #include "common/system/backend_options.h"
 #include "common/thread/threadpool.h"
-#include "exec/pipeline/pipeline_fwd.h"
+#include "exec_primitive/pipeline/pipeline_fwd.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "gen_cpp/Types_types.h"
 

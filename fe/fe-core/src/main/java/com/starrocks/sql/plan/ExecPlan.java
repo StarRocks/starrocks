@@ -16,9 +16,11 @@ package com.starrocks.sql.plan;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.ExecGroup;
 import com.starrocks.planner.HashJoinNode;
@@ -27,23 +29,33 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SlotId;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.FunctionCallExpr;
+import com.starrocks.sql.common.AIModelConfigs;
+import com.starrocks.sql.common.AIModelConfigs.SystemChatConfig;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TExplainLevel;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public class ExecPlan {
@@ -82,6 +94,12 @@ public class ExecPlan {
 
     private long useBaseline = -1;
 
+    private Set<Long> duplicatedLakeScanTableIds;
+    // Captured lazily only for plans containing an AIProject.
+    private SystemChatConfig systemChatConfig;
+    private Map<String, AIModelConfigs.ModelConfig> aiModelConfigs;
+    private Map<String, String> aiProviderConfigIds;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -117,6 +135,98 @@ public class ExecPlan {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    SystemChatConfig getOrCreateSystemChatConfig() {
+        if (systemChatConfig == null) {
+            systemChatConfig = AIModelConfigs.systemChatSnapshot(
+                    AIModelConfigs.DefaultModelRequirement.OPTIONAL);
+        }
+        return systemChatConfig;
+    }
+
+    // Bind only physical AIProject calls. Rebuilt plans independently capture the current metadata.
+    Map<String, AIModelConfigs.ModelConfig> bindAIModelConfigs(Map<SlotId, Expr> projectMap) {
+        if (aiModelConfigs == null) {
+            aiModelConfigs = new HashMap<>();
+        }
+        Map<String, AIModelConfigs.ModelConfig> usedConfigs = new HashMap<>();
+        for (Map.Entry<SlotId, Expr> entry : projectMap.entrySet()) {
+            if (!(entry.getValue() instanceof FunctionCallExpr call)
+                    || call.getFn() == null || !call.getFn().isAi()) {
+                continue;
+            }
+            String id;
+            AIModelConfigs.ModelConfig config;
+            if (call.getFn().getAiModelSource() == TAIModelSource.PROVIDER) {
+                String name = AIModelConfigs.providerName(call.getChild(AIModelConfigs.getProviderArgument(call.getFn())));
+                id = aiProviderConfigIds == null ? null : aiProviderConfigIds.get(name);
+                if (id == null) {
+                    AIProvider provider = GlobalStateMgr.getCurrentState().getAIProviderMgr().getProvider(name);
+                    if (provider == null) {
+                        throw new SemanticException("AI provider '" + name + "' does not exist", call.getPos());
+                    }
+                    config = AIModelConfigs.fromProvider(provider);
+                } else {
+                    config = aiModelConfigs.get(id);
+                }
+                boolean embedding = AIModelConfigs.isTextEmbedding(call.getFn());
+                if (!(embedding ? "TEXT_EMBEDDING" : "CHAT").equals(config.capability())) {
+                    throw new SemanticException("AI provider '" + name + "' requires type "
+                            + (embedding ? "EMBEDDING" : "CHAT"), call.getPos());
+                }
+                if (id == null) {
+                    if (aiProviderConfigIds == null) {
+                        aiProviderConfigIds = new HashMap<>();
+                    }
+                    // The wire only needs a plan-local correlation key, never a name or registry identity.
+                    id = "provider:" + aiProviderConfigIds.size();
+                    aiProviderConfigIds.put(name, id);
+                    aiModelConfigs.put(id, config);
+                }
+                entry.setValue(call.withAiModelConfigId(id));
+            } else {
+                id = AIModelConfigs.systemConfigId(call.getFn());
+                config = aiModelConfigs.computeIfAbsent(id, key -> AIModelConfigs.SYSTEM_CHAT_CONFIG_ID.equals(key)
+                        ? AIModelConfigs.fromSystemChat(getOrCreateSystemChatConfig())
+                        : AIModelConfigs.systemEmbeddingSnapshot(AIModelConfigs.DefaultModelRequirement.OPTIONAL));
+            }
+            usedConfigs.put(id, config);
+        }
+        return Map.copyOf(usedConfigs);
+    }
+
+    // Lake (cloud-native) table ids scanned by >=2 scan operators in this plan (self-join / multi-scan of one
+    // table). Derived lazily from the physical plan and consulted per scan to gate the prepared physical split
+    // scan, whose per-scan reuse of a shared prepared read state is unsafe when the same table feeds two scans.
+    public Set<Long> getDuplicatedLakeScanTableIds() {
+        if (duplicatedLakeScanTableIds == null) {
+            Map<Long, Integer> counts = new HashMap<>();
+            countLakeScanTableIds(physicalPlan, counts);
+            Set<Long> duplicated = new HashSet<>();
+            counts.forEach((tableId, count) -> {
+                if (count >= 2) {
+                    duplicated.add(tableId);
+                }
+            });
+            duplicatedLakeScanTableIds = duplicated;
+        }
+        return duplicatedLakeScanTableIds;
+    }
+
+    private static void countLakeScanTableIds(OptExpression optExpression, Map<Long, Integer> counts) {
+        if (optExpression == null) {
+            return;
+        }
+        if (optExpression.getOp() instanceof PhysicalOlapScanOperator) {
+            Table table = ((PhysicalOlapScanOperator) optExpression.getOp()).getTable();
+            if (table != null && table.isCloudNativeTableOrMaterializedView()) {
+                counts.merge(table.getId(), 1, Integer::sum);
+            }
+        }
+        for (OptExpression child : optExpression.getInputs()) {
+            countLakeScanTableIds(child, counts);
+        }
     }
 
     public List<Expr> getOutputExprs() {

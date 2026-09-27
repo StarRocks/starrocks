@@ -1,7 +1,4 @@
 -- name: test_vector_index_ivfpq @sequential @native
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
--- result:
--- !result
 SET enable_vector_index_refine = true;
 -- result:
 -- !result
@@ -361,9 +358,6 @@ order by dis, id limit 10;
 29	[9,9,9,9]	[9,9,9,9]	29	256.0
 30	[10,10,10,10]	[10,10,10,10]	30	324.0
 -- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
--- result:
--- !result
 with w1 as (
     select *, approx_l2_distance(v1, [1, 1, 1, 1]) as dis from t1
 )
@@ -507,7 +501,4 @@ with w1 as (
 18	[10000,10001,10002,10003]	[10000,10001,10002,10003]	18	0.0
 19	[10000,10001,10002,10003]	[10000,10001,10002,10003]	19	0.0
 20	[10000,10001,10002,10003]	[10000,10001,10002,10003]	20	0.0
--- !result
-ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
--- result:
 -- !result

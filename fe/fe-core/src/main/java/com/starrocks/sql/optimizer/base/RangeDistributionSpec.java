@@ -187,10 +187,10 @@ public final class RangeDistributionSpec extends DistributionSpec {
     }
 
     /**
-     * Null-relaxed variant for symmetry with {@code HashDistributionSpec}.
-     * Not invoked by the P2 join planner because full-outer range colocate
-     * is rejected by the join-type allowlist; retained for parallelism and
-     * future phases.
+     * Null-relaxed variant (colocate columns rebuilt with {@code nullStrict=false}),
+     * mirroring {@code HashDistributionSpec.getNullRelaxSpec}. Used to derive the
+     * output distribution of a full-outer range-colocate join, where either side
+     * may be NULL-padded.
      */
     public RangeDistributionSpec getNullRelaxSpec(EquivalentDescriptor descriptor) {
         List<DistributionCol> relaxed = colocateColumns.stream()

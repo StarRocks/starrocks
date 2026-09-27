@@ -128,3 +128,32 @@ scrape_configs:
 
 - Type: Counter
 - Description: クエリによってマテリアライズドビューが使用された回数。ラベル `usage_type`（`REWRITE` はクエリがマテリアライズドビューを使用するように書き換えられた場合、`DIRECT` はマテリアライズドビューを直接クエリする場合）と `refresh_mode` を持ちます。
+### mv_global_refresh_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたるリフレッシュジョブの総数。ラベル `warehouse_name` を持つ。`mv_refresh_jobs` のフリート全体の集計で、各ジョブはその終端 Task Run で 1 回カウントされ、`MERGED` run は除外される。マテリアライズドビューごとのメトリクス権限に関係なく常に出力される。
+
+### mv_global_refresh_success_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたる成功したリフレッシュジョブの総数。`warehouse_name` で集計。
+
+### mv_global_refresh_failed_jobs_total
+
+- Type: Counter
+- Description: 全マテリアライズドビューにわたる失敗したリフレッシュジョブの総数。`warehouse_name` で集計。
+
+### mv_global_refresh_duration
+
+- Type: Histogram
+- Description: マテリアライズドビューのリフレッシュジョブのジョブ単位の実時間（ミリ秒）。`warehouse_name` で集計。
+
+### mv_global_refresh_pending_jobs
+
+- Type: Gauge
+- Description: 全マテリアライズドビューにわたる現在保留中のリフレッシュジョブ数。`warehouse_name` で集計。
+
+### mv_global_refresh_running_jobs
+
+- Type: Gauge
+- Description: 全マテリアライズドビューにわたる現在実行中のリフレッシュジョブ数。`warehouse_name` で集計。

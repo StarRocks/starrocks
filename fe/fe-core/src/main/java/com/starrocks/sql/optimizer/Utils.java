@@ -21,8 +21,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
@@ -99,6 +103,11 @@ import static java.util.function.Function.identity;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
+
+    // The bounds of the DATETIME domain, in epoch seconds, used to reject a statistic bound that
+    // cannot be converted back into a datetime.
+    private static final double MIN_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MIN_DATETIME);
+    private static final double MAX_DATETIME_EPOCH_SECOND = getLongFromDateTime(ConstantOperator.MAX_DATETIME);
 
     public static List<ScalarOperator> extractConjuncts(ScalarOperator root) {
         LinkedList<ScalarOperator> list = new LinkedList<>();
@@ -469,6 +478,26 @@ public class Utils {
         return LocalDateTime.ofInstant(Instant.ofEpochSecond(dateTime), ZoneId.systemDefault());
     }
 
+    /**
+     * Converts a column statistic's min/max bound, which is a plain double of epoch seconds, into a
+     * datetime.
+     *
+     * <p>Nothing keeps such a bound inside the DATETIME domain. It can come from a derived expression
+     * statistic, or from a non-date column that an implicit cast dragged into a date context, and then
+     * {@code (long) bound} saturates to {@code Long.MAX_VALUE} and {@link Instant#ofEpochSecond} throws
+     * {@link java.time.DateTimeException}. That exception escapes statistics derivation and fails the
+     * whole query, so a caller converting a statistic bound must use this and treat an empty result as
+     * "no usable bound" rather than calling {@link #getDatetimeFromLong} directly.
+     */
+    public static Optional<LocalDateTime> getDatetimeFromStatistic(double epochSecond) {
+        if (!Double.isFinite(epochSecond)
+                || epochSecond < MIN_DATETIME_EPOCH_SECOND
+                || epochSecond > MAX_DATETIME_EPOCH_SECOND) {
+            return Optional.empty();
+        }
+        return Optional.of(getDatetimeFromLong((long) epochSecond));
+    }
+
     public static long convertBitSetToLong(BitSet bitSet, int length) {
         long gid = 0;
         for (int b = 0; b < length; ++b) {
@@ -758,6 +787,39 @@ public class Utils {
         }
 
         return true;
+    }
+
+    // Gate for the one-tablet optimization (one-phase aggregation, single-tablet gather output): even when a
+    // scan is pruned to a single tablet, that tablet may be huge, and running the whole scan+aggregation on a
+    // single node/instance serializes it. Return true when the single selected tablet's row count exceeds
+    // maxTabletRows so callers can disable the optimization. maxTabletRows < 0 disables the gate (preserving
+    // current behavior). Uses getFuzzyRowCount(), which is lock-free on both LocalTablet and LakeTablet; an
+    // unresolved or not-yet-collected (0) row count is treated as "not too large" so the opt stays on.
+    public static boolean isSelectedSingleTabletTooLarge(Table table, long selectedIndexMetaId,
+                                                         List<Long> selectedPartitionIds,
+                                                         List<Long> selectedTabletIds, long maxTabletRows) {
+        if (maxTabletRows < 0 || !(table instanceof OlapTable olapTable) || selectedPartitionIds == null
+                || selectedTabletIds == null || selectedTabletIds.size() != 1) {
+            return false;
+        }
+        long tabletId = selectedTabletIds.get(0);
+        for (Long partitionId : selectedPartitionIds) {
+            Partition partition = olapTable.getPartition(partitionId);
+            if (partition == null) {
+                continue;
+            }
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                MaterializedIndex index = subPartition.getQueryableIndex(selectedIndexMetaId);
+                if (index == null) {
+                    continue;
+                }
+                Tablet tablet = index.getTablet(tabletId);
+                if (tablet != null) {
+                    return tablet.getFuzzyRowCount() > maxTabletRows;
+                }
+            }
+        }
+        return false;
     }
 
     public static boolean mustGenerateMultiStageAggregate(Operator inputOp, Operator childOp) {

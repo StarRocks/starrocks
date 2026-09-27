@@ -47,7 +47,7 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | PartitionKey             | 分区键，由一个或多个分区列组成。                                                     |
 | Range                    | Range 分区的范围，为左闭右开区间。                           |
 | DistributionKey          | 分区中数据进行哈希分桶时的分桶键。                           |
-| Buckets                  | 分区中的分桶数量。                                           |
+| Buckets                  | 分区中的分桶数量。对于使用 Range 分布的表，该值为分区中 Base Index 的实际 Tablet 数量，会随 Tablet 的分裂与合并而变化。同一分区中的 Rollup Index 可能拥有不同的 Tablet 数量。 |
 | ReplicationNum           | 分区中每个 Tablet 的副本数量。                                |
 | StorageMedium            | 数据存储介质。返回值为 `HDD` 表示机械硬盘，返回值为 `SSD` 表示固态硬盘。           |
 | CooldownTime             | 数据降冷时间。如果一开始数据的存储介质为 SSD ，在该时间点之后，数据存储介质会从 SSD 切换为 HDD。 格式："yyyy-MM-dd HH:mm:ss"。|
@@ -64,6 +64,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
 | DataVersion              | 导入事务的版本号。不包括 Compaction 操作。 |
 | VersionEpoch             | 分区的纪元号。系统会在创建分区时赋值纪元，并在每次分区被 SWAP 时更改版本纪元。 |
 | VersionTxnType           | 生成当前数据版本的事务类型。有效值：`NORMAL`（正常事务）和 `REPLICATION`（数据复制）。 |
+| LastUpdateTime           | 分区最近一次被用户写入（导入 / INSERT / DELETE / UPDATE）修改的时间。 |
+| LastAccessTime           | 分区最近一次被用户语句读取的时间，包括查询、`INSERT ... SELECT`、`INSERT OVERWRITE`、CTAS、主键表的 `UPDATE`/`DELETE`、物化视图刷新以及 `EXPORT`；内部统计信息采集发起的读取不计入。当前仅保存在 FE 内存中（不持久化），查询时跨 FE 聚合结果。 |
 
 ## 示例
 
@@ -89,6 +91,8 @@ SHOW [TEMPORARY] PARTITIONS FROM [db_name.]table_name [WHERE] [ORDER BY] [LIMIT]
                     DataSize:  4KB   
                 IsInMemory: false
                     RowCount: 3 
+            LastUpdateTime: 2023-08-08 15:45:13
+            LastAccessTime: 2023-08-09 10:00:00
     1 row in set (0.00 sec)
     ```
 

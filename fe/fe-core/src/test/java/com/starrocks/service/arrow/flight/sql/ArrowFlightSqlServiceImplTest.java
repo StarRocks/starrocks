@@ -55,6 +55,7 @@ import org.apache.arrow.flight.SetSessionOptionsRequest;
 import org.apache.arrow.flight.SetSessionOptionsResult;
 import org.apache.arrow.flight.Ticket;
 import org.apache.arrow.flight.sql.FlightSqlProducer;
+import org.apache.arrow.flight.sql.FlightSqlUtils;
 import org.apache.arrow.flight.sql.impl.FlightSql;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.ReadChannel;
@@ -1049,7 +1050,13 @@ public class ArrowFlightSqlServiceImplTest {
             testService.createPreparedStatement(createReq, callContext, listener);
             Thread.sleep(500);
 
-            verify(mockFeClient).doAction(any(org.apache.arrow.flight.Action.class), any());
+            // The forwarded action must carry the Flight SQL action-type string ("CreatePreparedStatement"),
+            // not the protobuf message name, otherwise the remote FE rejects it as "Unrecognized request".
+            ArgumentCaptor<org.apache.arrow.flight.Action> actionCaptor =
+                    ArgumentCaptor.forClass(org.apache.arrow.flight.Action.class);
+            verify(mockFeClient).doAction(actionCaptor.capture(), any());
+            assertEquals(FlightSqlUtils.FLIGHT_SQL_CREATE_PREPARED_STATEMENT.getType(),
+                    actionCaptor.getValue().getType());
             verify(listener).onNext(mockResult);
             verify(listener).onCompleted();
         }
@@ -1088,7 +1095,13 @@ public class ArrowFlightSqlServiceImplTest {
             testService.closePreparedStatement(closeReq, callContext, listener);
             Thread.sleep(500);
 
-            verify(mockFeClient).doAction(any(org.apache.arrow.flight.Action.class), any());
+            // The forwarded action must carry the Flight SQL action-type string ("ClosePreparedStatement"),
+            // not the protobuf message name, otherwise the remote FE rejects it as "Unrecognized request".
+            ArgumentCaptor<org.apache.arrow.flight.Action> actionCaptor =
+                    ArgumentCaptor.forClass(org.apache.arrow.flight.Action.class);
+            verify(mockFeClient).doAction(actionCaptor.capture(), any());
+            assertEquals(FlightSqlUtils.FLIGHT_SQL_CLOSE_PREPARED_STATEMENT.getType(),
+                    actionCaptor.getValue().getType());
             verify(listener).onCompleted();
         }
     }

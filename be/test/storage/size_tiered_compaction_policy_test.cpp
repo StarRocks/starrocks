@@ -27,9 +27,10 @@
 #include "column/chunk_factory.h"
 #include "common/config_compaction_fwd.h"
 #include "common/config_primary_key_fwd.h"
+#include "common/config_rowset_fwd.h"
 #include "common/config_storage_fwd.h"
+#include "exec/exec_env.h"
 #include "fs/fs_util.h"
-#include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
@@ -285,6 +286,18 @@ public:
     }
 
     void SetUp() override {
+        // The test binary shares one process and gtest runs all value-parameterized suites after the
+        // TEST_F ones, so anything left here reaches them. A leaked size_tiered_min_level_size=10240
+        // in particular changes how PrimaryCompactionPolicy groups rowsets into levels.
+        _saved_tablet_max_versions = config::tablet_max_versions;
+        _saved_min_cumulative_deltas = config::min_cumulative_compaction_num_singleton_deltas;
+        _saved_max_cumulative_deltas = config::max_cumulative_compaction_num_singleton_deltas;
+        _saved_max_compaction_concurrency = config::max_compaction_concurrency;
+        _saved_min_base_deltas = config::min_base_compaction_num_singleton_deltas;
+        _saved_base_compaction_interval = config::base_compaction_interval_seconds_since_last_operation;
+        _saved_size_tiered_min_level_size = config::size_tiered_min_level_size;
+        _saved_binary_plain_delta_offset = config::enable_binary_plain_delta_offset;
+
         config::tablet_max_versions = 1000;
         config::min_cumulative_compaction_num_singleton_deltas = 2;
         config::max_cumulative_compaction_num_singleton_deltas = 5;
@@ -292,6 +305,12 @@ public:
         config::min_base_compaction_num_singleton_deltas = 10;
         config::base_compaction_interval_seconds_since_last_operation = 86400;
         config::size_tiered_min_level_size = 10240;
+        // Cases below assert how the policy tiers rowsets, which is driven by their absolute
+        // on-disk size against size_tiered_min_level_size and max_segment_file_size. The
+        // high-cardinality varchar column these fixtures write is exactly what
+        // enable_binary_plain_delta_offset shrinks, so pin the write-side encoding rather than
+        // let its default move a fixture across one of those thresholds.
+        config::enable_binary_plain_delta_offset = false;
         Compaction::init(config::max_compaction_concurrency);
 
         _default_storage_root_path = config::storage_root_path;
@@ -329,9 +348,28 @@ public:
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
         config::storage_root_path = _default_storage_root_path;
+
+        config::tablet_max_versions = _saved_tablet_max_versions;
+        config::min_cumulative_compaction_num_singleton_deltas = _saved_min_cumulative_deltas;
+        config::max_cumulative_compaction_num_singleton_deltas = _saved_max_cumulative_deltas;
+        config::max_compaction_concurrency = _saved_max_compaction_concurrency;
+        config::min_base_compaction_num_singleton_deltas = _saved_min_base_deltas;
+        config::base_compaction_interval_seconds_since_last_operation = _saved_base_compaction_interval;
+        config::size_tiered_min_level_size = _saved_size_tiered_min_level_size;
+        config::enable_binary_plain_delta_offset = _saved_binary_plain_delta_offset;
     }
 
 protected:
+    // Captured in SetUp, put back in TearDown.
+    int16_t _saved_tablet_max_versions = 0;
+    int64_t _saved_min_cumulative_deltas = 0;
+    int64_t _saved_max_cumulative_deltas = 0;
+    int32_t _saved_max_compaction_concurrency = 0;
+    int64_t _saved_min_base_deltas = 0;
+    int64_t _saved_base_compaction_interval = 0;
+    int64_t _saved_size_tiered_min_level_size = 0;
+    bool _saved_binary_plain_delta_offset = false;
+
     StorageEngine* _engine = nullptr;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::string _schema_hash_path;

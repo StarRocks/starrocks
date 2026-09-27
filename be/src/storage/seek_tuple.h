@@ -18,7 +18,7 @@
 
 #include "column/schema.h"
 #include "storage/base/short_key_index.h"
-#include "storage/primitive/key_coder.h"
+#include "storage_primitive/key_coder.h"
 #include "types/datum.h"
 
 namespace starrocks {

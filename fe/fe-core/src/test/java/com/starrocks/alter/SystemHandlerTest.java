@@ -27,6 +27,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -38,11 +39,14 @@ import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.DropComputeNodeClause;
 import com.starrocks.sql.ast.ModifyBackendClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
+import com.starrocks.sql.ast.TransferLeaderClause;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.warehouse.Warehouse;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +75,43 @@ public class SystemHandlerTest {
         globalStateMgr.getWarehouseMgr().initDefaultWarehouse();
         FakeGlobalStateMgr.setGlobalStateMgr(globalStateMgr);
         systemHandler = new SystemHandler();
+    }
+
+    @Test
+    public void testTransferLeaderRejectedInSharedDataMode() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+        // The guard runs before the host/port are even read, so an un-analyzed clause suffices.
+        TransferLeaderClause clause = new TransferLeaderClause("127.0.0.1:9010", false);
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> systemHandler.process(clauses, null, null));
+        assertThat(e.getMessage(), containsString("not supported in shared-data mode"));
+        assertThat(e.getMessage(), containsString("restart the current leader FE"));
+    }
+
+    @Test
+    public void testTransferLeaderRejectedWhenNoLongerLeader() {
+        // A queued TRANSFER LEADER dequeues from process()'s monitor only after a concurrent transfer
+        // finished - possibly having already moved leadership away. It must fail here instead of
+        // driving a second transfer through the JE admin from a non-leader node.
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public boolean isLeader() {
+                return false;
+            }
+        };
+        TransferLeaderClause clause = new TransferLeaderClause("127.0.0.1:9010", false);
+        List<AlterClause> clauses = new ArrayList<>();
+        clauses.add(clause);
+        RuntimeException e = assertThrows(RuntimeException.class,
+                () -> systemHandler.process(clauses, null, null));
+        assertThat(e.getMessage(), containsString("no longer the leader"));
     }
 
     @Test

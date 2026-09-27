@@ -1,0 +1,54 @@
+-- name: test_skew_join_v1_outer
+
+CREATE TABLE sj_probe (
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+
+CREATE TABLE sj_build (
+    c_key INT NOT NULL,
+    c_val INT
+)
+DUPLICATE KEY(c_key)
+DISTRIBUTED BY HASH(c_key) BUCKETS 1
+PROPERTIES (
+    "replication_num"="1"
+);
+
+insert into sj_probe values (1, 7), (2, 7), (3, 7), (4, 9), (5, null);
+insert into sj_build values (10, 7), (11, 9);
+
+-- test_skew_join and test_skew_join_v2 both switch V1 off, so the salting rewrite that runs by
+-- default had plan coverage but no coverage of the rows it returns. These cases compare its answer
+-- against the same join without the hint: a hint may change the plan, never the result.
+set enable_optimize_skew_join_v1 = true;
+set enable_optimize_skew_join_v2 = false;
+
+-- Reference: no hint, so no rewrite.
+select count(*) from sj_probe left join sj_build on sj_build.c_val = sj_probe.c_val;
+
+-- The rewrite salts the skewed child and replicates the OTHER child once per salt value. Naming the
+-- skew column on sj_build puts the skewed child on the right, so the child being replicated is
+-- sj_probe -- the preserved side of the left outer join. Every replica that matches nothing emits
+-- its own null-padded row, so each skew-valued probe row used to come back up to
+-- skew_join_rand_range + 1 times and the count moved with rand() between runs.
+select count(*) from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val order by 1, 2;
+function: assert_explain_not_contains('select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')
+
+-- An inner join preserves nothing, so a replica that matches nothing just drops out and the rewrite
+-- stays sound. It must keep firing.
+select count(*) from sj_probe join sj_build on sj_build.c_val = sj_probe.c_val;
+select count(*) from sj_probe join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+function: assert_explain_contains('select sj_probe.c_key, sj_build.c_key from sj_probe join [skew|sj_build.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')
+
+-- Naming the skew column on the preserved side replicates the null-supplying side instead, which is
+-- the documented shape. It must keep firing too.
+select count(*) from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val;
+select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val order by 1, 2;
+function: assert_explain_contains('select sj_probe.c_key, sj_build.c_key from sj_probe left join [skew|sj_probe.c_val(7)] sj_build on sj_build.c_val = sj_probe.c_val', 'rand_col')

@@ -1,0 +1,40 @@
+-- name: test_spill_hash_join_build_cancelled @sequential
+
+CREATE TABLE `t0` (
+  `c0` largeint(40) NULL COMMENT "",
+  `c1` largeint(40) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 4096000));
+
+admin enable failpoint 'spill_hash_join_build_set_finishing_sleep';
+
+[UC]submit task etl_${uuid0}
+PROPERTIES (
+    "session.pipeline_dop"= "1",
+    "session.enable_spill"="true",
+    "session.spill_mode"="force",
+    "session.spill_operator_min_bytes"="1024",
+    "session.spill_mem_table_size"="1024"
+)
+as CREATE table tmp as select sum(l.c0), sum(r.c1) from t0 l join t0 r on l.c0 = r.c0;
+
+shell: sleep 1
+
+drop task etl_${uuid0};
+
+function: wait_util_no_queries()
+
+admin disable failpoint 'spill_hash_join_build_set_finishing_sleep';
+
+select "cluster still alive" as status;
+
+CLEANUP {
+  admin disable failpoint 'spill_hash_join_build_set_finishing_sleep';
+} END CLEANUP

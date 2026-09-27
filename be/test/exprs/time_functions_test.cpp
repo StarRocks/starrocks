@@ -18,10 +18,14 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cstring>
+#include <random>
 #include <utility>
 #include <vector>
 
+#include "base/testutil/assert.h"
+#include "base/time/timezone_utils.h"
 #include "base/utility/defer_op.h"
 #include "column/binary_column.h"
 #include "column/column_builder.h"
@@ -816,6 +820,40 @@ TEST_F(TimeFunctionsTest, yearsDiffTest) {
             ASSERT_EQ(-1, v->get_data()[k]);
         }
     }
+
+    {
+        // timestamps that share a year are less than one year apart in either direction
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 12, 31, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        // a partial year is still truncated toward zero
+        tc1->append(TimestampValue::create(2023, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 3, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2023, 1, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::years_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
+        ASSERT_EQ(0, v->get_data()[2]);
+        ASSERT_EQ(0, v->get_data()[3]);
+        ASSERT_EQ(1, v->get_data()[4]);
+        ASSERT_EQ(-1, v->get_data()[5]);
+    }
 }
 
 TEST_F(TimeFunctionsTest, monthsDiffTest) {
@@ -863,6 +901,40 @@ TEST_F(TimeFunctionsTest, monthsDiffTest) {
         for (int k = 0; k < 20; ++k) {
             ASSERT_EQ(13, v->get_data()[k]);
         }
+    }
+
+    {
+        // timestamps that share a month are less than one month apart in either direction
+        Columns columns;
+
+        auto tc1 = TimestampColumn::create();
+        auto tc2 = TimestampColumn::create();
+        tc1->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 2, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 2, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 1, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        tc1->append(TimestampValue::create(2021, 1, 31, 23, 59, 59));
+        tc2->append(TimestampValue::create(2021, 1, 31, 0, 0, 0));
+        // a partial month is still truncated toward zero
+        tc1->append(TimestampValue::create(2021, 3, 1, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 1, 15, 0, 0, 0));
+        tc1->append(TimestampValue::create(2021, 1, 15, 0, 0, 0));
+        tc2->append(TimestampValue::create(2021, 3, 1, 0, 0, 0));
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        ColumnPtr result = TimeFunctions::months_diff(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_BIGINT>(result);
+        ASSERT_EQ(0, v->get_data()[0]);
+        ASSERT_EQ(0, v->get_data()[1]);
+        ASSERT_EQ(0, v->get_data()[2]);
+        ASSERT_EQ(0, v->get_data()[3]);
+        ASSERT_EQ(1, v->get_data()[4]);
+        ASSERT_EQ(-1, v->get_data()[5]);
     }
 }
 
@@ -1551,6 +1623,47 @@ TEST_F(TimeFunctionsTest, str_to_date_of_dateformat) {
         ASSERT_EQ(TimestampValue::create(2020, 3, 12, 0, 0, 0), nullable_col->get(4).get_timestamp());
         ASSERT_TRUE(nullable_col->is_null(5));
     }
+}
+
+TEST_F(TimeFunctionsTest, yearweek_invalid_str_to_date) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    const char* fmt = "%Y-%m-%d";
+    const char* invalid_date = "0000-01-00";
+
+    Columns const_cols;
+    const_cols.emplace_back(nullptr);
+    const_cols.emplace_back(ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1));
+    ctx->set_constant_columns(std::move(const_cols));
+    ASSERT_OK(TimeFunctions::str_to_date_prepare(ctx, FunctionContext::FRAGMENT_LOCAL));
+    DeferOp defer_close([&] { (void)TimeFunctions::str_to_date_close(ctx, FunctionContext::FRAGMENT_LOCAL); });
+
+    auto str_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(invalid_date, 1);
+    auto fmt_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(fmt, 1);
+    Columns columns;
+    columns.emplace_back(str_col);
+    columns.emplace_back(fmt_col);
+
+    ColumnPtr date_result = TimeFunctions::str_to_date(ctx, columns).value();
+    if (date_result->is_constant()) {
+        date_result = ColumnHelper::as_column<ConstColumn>(date_result)->data_column();
+    }
+    ASSERT_TRUE(date_result->is_nullable());
+    auto nullable_date = ColumnHelper::as_column<NullableColumn>(date_result);
+    ASSERT_EQ(1, nullable_date->size());
+    ASSERT_TRUE(nullable_date->is_null(0));
+
+    Columns yearweek_columns;
+    yearweek_columns.emplace_back(nullable_date);
+    ColumnPtr yearweek_result = TimeFunctions::year_week_with_default_mode(ctx, yearweek_columns).value();
+    if (yearweek_result->is_constant()) {
+        yearweek_result = ColumnHelper::as_column<ConstColumn>(yearweek_result)->data_column();
+    }
+    ASSERT_TRUE(yearweek_result->is_nullable());
+    auto nullable_yearweek = ColumnHelper::as_column<NullableColumn>(yearweek_result);
+    ASSERT_EQ(1, nullable_yearweek->size());
+    ASSERT_TRUE(nullable_yearweek->is_null(0));
 }
 
 TEST_F(TimeFunctionsTest, str_to_date_of_datetimeformat) {
@@ -2502,6 +2615,225 @@ TEST_F(TimeFunctionsTest, convertTzConstTest) {
     ASSERT_TRUE(
             TimeFunctions::convert_tz_close(_utils->get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                     .ok());
+}
+
+// Regression test for the thread-local DST-offset-window cache in convert_tz_const (see
+// TzOffsetCache in base/time/tz_offset_cache.h). Rows are deliberately ordered out of
+// chronological order (jumping between years and across both a spring-forward gap and a
+// fall-back repeat) so a buggy cache window would surface as a wrong value on whichever row
+// lands just after a stale window is (incorrectly) reused, not just as a slow path.
+TEST_F(TimeFunctionsTest, convertTzConstDstBoundaryTest) {
+    {
+        // UTC -> America/Los_Angeles: exercises the absolute-time (`to`) window cache.
+        auto tc = TimestampColumn::create();
+        tc->append(TimestampValue::create(2021, 7, 4, 12, 0, 0));   // ordinary summer (PDT)
+        tc->append(TimestampValue::create(2021, 11, 7, 9, 0, 0));   // exactly at fall-back instant
+        tc->append(TimestampValue::create(2021, 3, 14, 9, 59, 59)); // 1s before spring-forward
+        tc->append(TimestampValue::create(2021, 1, 4, 12, 0, 0));   // ordinary winter (PST)
+        tc->append(TimestampValue::create(2021, 3, 14, 10, 0, 0));  // exactly at spring-forward instant
+        tc->append(TimestampValue::create(2021, 11, 7, 8, 59, 59)); // 1s before fall-back
+        tc->append(TimestampValue::create(2021, 7, 4, 12, 0, 0));   // ordinary summer again
+
+        auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>("UTC", 1);
+        auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>("America/Los_Angeles", 1);
+
+        TimestampValue res[] = {
+                TimestampValue::create(2021, 7, 4, 5, 0, 0),    TimestampValue::create(2021, 11, 7, 1, 0, 0),
+                TimestampValue::create(2021, 3, 14, 1, 59, 59), TimestampValue::create(2021, 1, 4, 4, 0, 0),
+                TimestampValue::create(2021, 3, 14, 3, 0, 0),   TimestampValue::create(2021, 11, 7, 1, 59, 59),
+                TimestampValue::create(2021, 7, 4, 5, 0, 0),
+        };
+        Columns columns{tc, tc_from, tc_to};
+
+        FunctionUtils utils;
+        utils.get_fn_ctx()->set_constant_columns(columns);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_DATETIME);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+
+        ASSERT_TRUE(TimeFunctions::convert_tz_prepare(utils.get_fn_ctx(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::convert_tz(utils.get_fn_ctx(), columns).value();
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        for (int i = 0; i < std::size(res); ++i) ASSERT_EQ(res[i], data->get_data()[i]) << "row " << i;
+        ASSERT_TRUE(
+                TimeFunctions::convert_tz_close(utils.get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    }
+    {
+        // America/Los_Angeles -> UTC: exercises the civil-time (`from`) window cache, including
+        // a SKIPPED (nonexistent) civil time and a REPEATED (ambiguous) one -- cctz::convert()'s
+        // documented tie-break is: SKIPPED -> the transition instant, REPEATED -> the earlier
+        // ("pre") instant. Both must match exactly, cache or no cache.
+        auto tc = TimestampColumn::create();
+        tc->append(TimestampValue::create(2021, 7, 4, 12, 0, 0));   // ordinary summer (local)
+        tc->append(TimestampValue::create(2021, 11, 7, 1, 30, 0));  // REPEATED civil time (pre)
+        tc->append(TimestampValue::create(2021, 3, 14, 1, 59, 59)); // 1s before spring-forward
+        tc->append(TimestampValue::create(2021, 3, 14, 2, 30, 0));  // SKIPPED civil time
+        tc->append(TimestampValue::create(2021, 11, 7, 2, 0, 0));   // just after the repeated hour, unique
+        tc->append(TimestampValue::create(2021, 3, 14, 3, 0, 0));   // just after spring-forward, unique
+        tc->append(TimestampValue::create(2021, 11, 7, 1, 59, 59)); // last second of the repeated hour (pre)
+        tc->append(TimestampValue::create(2021, 1, 4, 12, 0, 0));   // ordinary winter (local)
+        tc->append(TimestampValue::create(2021, 7, 4, 12, 0, 0));   // ordinary summer again
+
+        auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>("America/Los_Angeles", 1);
+        auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>("UTC", 1);
+
+        TimestampValue res[] = {
+                TimestampValue::create(2021, 7, 4, 19, 0, 0),   TimestampValue::create(2021, 11, 7, 8, 30, 0),
+                TimestampValue::create(2021, 3, 14, 9, 59, 59), TimestampValue::create(2021, 3, 14, 10, 0, 0),
+                TimestampValue::create(2021, 11, 7, 10, 0, 0),  TimestampValue::create(2021, 3, 14, 10, 0, 0),
+                TimestampValue::create(2021, 11, 7, 8, 59, 59), TimestampValue::create(2021, 1, 4, 20, 0, 0),
+                TimestampValue::create(2021, 7, 4, 19, 0, 0),
+        };
+        Columns columns{tc, tc_from, tc_to};
+
+        FunctionUtils utils;
+        utils.get_fn_ctx()->set_constant_columns(columns);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_DATETIME);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+
+        ASSERT_TRUE(TimeFunctions::convert_tz_prepare(utils.get_fn_ctx(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::convert_tz(utils.get_fn_ctx(), columns).value();
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        for (int i = 0; i < std::size(res); ++i) ASSERT_EQ(res[i], data->get_data()[i]) << "row " << i;
+        ASSERT_TRUE(
+                TimeFunctions::convert_tz_close(utils.get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    }
+}
+
+// convert_tz_const computes "civil fields <-> literal-UTC seconds" via
+// TimestampValue::to_unix_second()/from_unix_second() (StarRocks' own Julian-day arithmetic)
+// instead of cctz::civil_second, specifically to avoid cctz::detail::impl::n_min -- the civil_time
+// normalization routine that a `perf` profile of this exact code showed dominating runtime,
+// unrelated to DST vs fixed-offset. That swap is only correct if StarRocks' calendar arithmetic
+// and cctz's agree on every date; this cross-checks exactly that; across ~2000 random dates per
+// zone pair (spanning 1902-2098) against an independent, pure-cctz reference computation, rather
+// than assuming the two implementations of the Gregorian calendar never disagree.
+TEST_F(TimeFunctionsTest, convertTzConstMatchesCctzAcrossRandomDates) {
+    struct Pair {
+        std::string from, to;
+    };
+    std::vector<Pair> pairs = {
+            {"UTC", "America/Los_Angeles"},
+            {"America/Los_Angeles", "UTC"},
+            {"+00:00", "-05:00"},
+            {"-05:00", "+00:00"},
+    };
+
+    std::mt19937_64 rng(2024);
+    std::uniform_int_distribution<int> yd(1902, 2098), md(1, 12), dd(1, 28), hd(0, 23), mnd(0, 59), sd(0, 59);
+    constexpr int kSamples = 2000;
+
+    for (auto& p : pairs) {
+        cctz::time_zone from_tz, to_tz;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(p.from, from_tz)) << p.from;
+        ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone(p.to, to_tz)) << p.to;
+
+        auto tc = TimestampColumn::create();
+        std::vector<TimestampValue> expected;
+        for (int i = 0; i < kSamples; ++i) {
+            int year = yd(rng), month = md(rng), day = dd(rng), hour = hd(rng), minute = mnd(rng), second = sd(rng);
+            tc->append(TimestampValue::create(year, month, day, hour, minute, second));
+
+            cctz::civil_second cs(year, month, day, hour, minute, second);
+            cctz::time_point<cctz::seconds> abs_tp = cctz::convert(cs, from_tz);
+            cctz::time_zone::absolute_lookup al = to_tz.lookup(abs_tp);
+            expected.push_back(TimestampValue::create(al.cs.year(), al.cs.month(), al.cs.day(), al.cs.hour(),
+                                                      al.cs.minute(), al.cs.second()));
+        }
+
+        auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>(p.from, 1);
+        auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>(p.to, 1);
+        Columns columns{tc, tc_from, tc_to};
+
+        FunctionUtils utils;
+        utils.get_fn_ctx()->set_constant_columns(columns);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_DATETIME);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+
+        ASSERT_TRUE(TimeFunctions::convert_tz_prepare(utils.get_fn_ctx(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::convert_tz(utils.get_fn_ctx(), columns).value();
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        for (int i = 0; i < kSamples; ++i) {
+            ASSERT_EQ(expected[i], data->get_data()[i]) << p.from << "->" << p.to << " row " << i;
+        }
+        ASSERT_TRUE(
+                TimeFunctions::convert_tz_close(utils.get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    }
+}
+
+// Regression test for a real bug (see TzOffsetCacheTest.offset_for_unix_past_explicit_table_does_not_poison_cache
+// in tz_offset_cache_test.cpp for the underlying mechanism): converting a date past the zone's
+// explicit transition table (~year 2437 in this build) used to cache an unbounded offset window,
+// silently reusing whichever DST season was computed first for any later far-future date --
+// including one in the opposite season. Exercised end-to-end through convert_tz here, in both
+// row orderings, since the bug depended on which row happened to populate the cache first.
+TEST_F(TimeFunctionsTest, convertTzConstPastExplicitTableDoesNotPoisonCache) {
+    // Both are far beyond the explicit table and in opposite DST seasons for America/Los_Angeles;
+    // same UTC wall-clock time so the 1-hour PDT/PST offset difference shows up directly in the
+    // converted local hour instead of being masked by also varying the UTC time-of-day.
+    TimestampValue summer_utc = TimestampValue::create(5468, 8, 10, 12, 0, 0);
+    TimestampValue winter_utc = TimestampValue::create(5469, 1, 15, 12, 0, 0);
+
+    cctz::time_zone la;
+    ASSERT_TRUE(TimezoneUtils::find_cctz_time_zone("America/Los_Angeles", la));
+    auto want = [&](const TimestampValue& utc_ts) {
+        int year, month, day, hour, minute, second, usec;
+        utc_ts.to_timestamp(&year, &month, &day, &hour, &minute, &second, &usec);
+        cctz::civil_second cs(year, month, day, hour, minute, second);
+        cctz::time_zone::absolute_lookup al = la.lookup(cctz::convert(cs, cctz::utc_time_zone()));
+        return TimestampValue::create(al.cs.year(), al.cs.month(), al.cs.day(), al.cs.hour(), al.cs.minute(),
+                                      al.cs.second());
+    };
+    TimestampValue want_summer = want(summer_utc);
+    TimestampValue want_winter = want(winter_utc);
+    ASSERT_NE(want_summer.to_string().substr(11, 2), want_winter.to_string().substr(11, 2))
+            << "test fixture assumption broken: these two instants must land on different local hours";
+
+    for (bool summer_row_first : {true, false}) {
+        auto tc = TimestampColumn::create();
+        std::vector<TimestampValue> expected;
+        if (summer_row_first) {
+            tc->append(summer_utc);
+            tc->append(winter_utc);
+            expected = {want_summer, want_winter};
+        } else {
+            tc->append(winter_utc);
+            tc->append(summer_utc);
+            expected = {want_winter, want_summer};
+        }
+
+        auto tc_from = ColumnHelper::create_const_column<TYPE_VARCHAR>("UTC", 1);
+        auto tc_to = ColumnHelper::create_const_column<TYPE_VARCHAR>("America/Los_Angeles", 1);
+        Columns columns{tc, tc_from, tc_to};
+
+        FunctionUtils utils;
+        utils.get_fn_ctx()->set_constant_columns(columns);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_DATETIME);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+        utils.get_fn_ctx()->_arg_types.emplace_back(TYPE_VARCHAR);
+
+        ASSERT_TRUE(TimeFunctions::convert_tz_prepare(utils.get_fn_ctx(),
+                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+        ColumnPtr result = TimeFunctions::convert_tz(utils.get_fn_ctx(), columns).value();
+        auto data = ColumnHelper::cast_to<TYPE_DATETIME>(result);
+        ASSERT_EQ(expected[0], data->get_data()[0]) << "summer_row_first=" << summer_row_first << " row 0";
+        ASSERT_EQ(expected[1], data->get_data()[1]) << "summer_row_first=" << summer_row_first << " row 1";
+        ASSERT_TRUE(
+                TimeFunctions::convert_tz_close(utils.get_fn_ctx(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+    }
 }
 
 TEST_F(TimeFunctionsTest, utctimestampTest) {
@@ -4493,12 +4825,12 @@ TEST_F(TimeFunctionsTest, unixtimeToDatetimeNonFragmentLocalScope) {
 
         auto* fn_ctx = FunctionContext::create_context(state.get(), nullptr, return_type, arg_types);
 
-        Status prepare_status =
-                TimeFunctions::unixtime_to_datetime_prepare(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+        Status prepare_status = TimeFunctions::unixtime_to_datetime_prepare(
+                fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(prepare_status.ok());
 
         Status close_status =
-                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::THREAD_LOCAL);
+                TimeFunctions::unixtime_to_datetime_close(fn_ctx, FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
         ASSERT_TRUE(close_status.ok());
 
         delete fn_ctx;

@@ -1,0 +1,210 @@
+-- name: test_lake_prepared_physical_split_scan @cloud @sequential
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '2000')
+-- result:
+None
+-- !result
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '2000')
+-- result:
+None
+-- !result
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.0')
+-- result:
+None
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k bigint,
+    k2 int,
+    v bigint,
+    s varchar(64)
+) duplicate key(k)
+distributed by hash(k) buckets 1
+properties('replication_num' = '1');
+-- result:
+-- !result
+create table ds8 (
+    id int
+) duplicate key(id)
+distributed by hash(id) buckets 1
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(1, 40000));
+-- result:
+-- !result
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(40001, 80000));
+-- result:
+-- !result
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(80001, 120000));
+-- result:
+-- !result
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(120001, 160000));
+-- result:
+-- !result
+insert into t select generate_series, generate_series % 8, generate_series, concat('v', cast(generate_series % 100 as string)) from table(generate_series(160001, 200000));
+-- result:
+-- !result
+insert into ds8 select generate_series from table(generate_series(0, 7));
+-- result:
+-- !result
+set enable_lake_prepared_physical_split_scan = true;
+-- result:
+-- !result
+set enable_lake_tablet_internal_parallel = true;
+-- result:
+-- !result
+set tablet_internal_parallel_mode = "force_split";
+-- result:
+-- !result
+set pipeline_dop = 4;
+-- result:
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+function: assert_explain_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+-- result:
+None
+-- !result
+set enable_profile = true;
+-- result:
+-- !result
+set enable_async_profile = false;
+-- result:
+-- !result
+[UC]select count(*), min(k), max(k), sum(v) from t;
+create table profile_scan properties("replication_num"="1") as
+    select line from table(unnest(split(get_query_profile(last_query_id()), "\n"))) t(line);
+-- result:
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- InitialCoarseMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- InitialCoarseMorsels:%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- RefinedMorsels: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- RefinedMorsels:%';
+-- result:
+1
+-- !result
+select assert_true(max(cast(coalesce(nullif(regexp_extract(line, '.*- ReusableSegmentIterReused: ([0-9.]+).*', 1), ''), '0') as double)) > 0)
+    from profile_scan where line like '%- ReusableSegmentIterReused:%';
+-- result:
+1
+-- !result
+[UC]select count(*) from t join ds8 on t.k2 = ds8.id;
+select count(*), min(k), max(k), sum(v) from t;
+-- result:
+200000	1	200000	20000100000
+-- !result
+select count(*) from t where k between 50000 and 100000;
+-- result:
+50001
+-- !result
+select count(*) from t where k % 7 = 0;
+-- result:
+28571
+-- !result
+select count(*) from t where s = 'v50';
+-- result:
+2000
+-- !result
+select k2, count(*) from t group by k2 order by k2;
+-- result:
+0	25000
+1	25000
+2	25000
+3	25000
+4	25000
+5	25000
+6	25000
+7	25000
+-- !result
+select k, k2 from t order by k limit 5;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+select count(*) from t join ds8 on t.k2 = ds8.id;
+-- result:
+200000
+-- !result
+set enable_query_cache = true;
+-- result:
+-- !result
+function: assert_explain_not_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+-- result:
+None
+-- !result
+set enable_query_cache = false;
+-- result:
+-- !result
+set enable_lake_prepared_physical_split_scan = false;
+-- result:
+-- !result
+function: assert_explain_not_contains('select k, v from t where k > 100', 'Prepared Physical Split Scan: true')
+-- result:
+None
+-- !result
+select count(*), min(k), max(k), sum(v) from t;
+-- result:
+200000	1	200000	20000100000
+-- !result
+select count(*) from t where k between 50000 and 100000;
+-- result:
+50001
+-- !result
+select count(*) from t where k % 7 = 0;
+-- result:
+28571
+-- !result
+select count(*) from t where s = 'v50';
+-- result:
+2000
+-- !result
+select k2, count(*) from t group by k2 order by k2;
+-- result:
+0	25000
+1	25000
+2	25000
+3	25000
+4	25000
+5	25000
+6	25000
+7	25000
+-- !result
+select k, k2 from t order by k limit 5;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+select count(*) from t join ds8 on t.k2 = ds8.id;
+-- result:
+200000
+-- !result
+function: update_be_config('tablet_internal_parallel_min_splitted_scan_rows', '16384')
+-- result:
+None
+-- !result
+function: update_be_config('tablet_internal_parallel_max_splitted_scan_rows', '1048576')
+-- result:
+None
+-- !result
+function: update_be_config('lake_tablet_rows_splitted_ratio', '1.5')
+-- result:
+None
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

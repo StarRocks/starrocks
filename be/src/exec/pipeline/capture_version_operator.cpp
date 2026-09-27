@@ -17,8 +17,8 @@
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/scan/olap_morsel_queue.h"
 #include "runtime/runtime_state.h"
+#include "storage/query/olap_morsel_queue.h"
 #include "storage/rowset/rowset.h"
 
 namespace starrocks::pipeline {

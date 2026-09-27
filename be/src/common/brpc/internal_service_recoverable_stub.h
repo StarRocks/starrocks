@@ -25,7 +25,8 @@ class PInternalService_RecoverableStub : public PInternalService_Stub,
 public:
     using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
 
-    PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "");
+    PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "",
+                                     int64_t connection_group_seed = 0);
     ~PInternalService_RecoverableStub() override;
 
     Status reset_channel(int64_t next_connection_group = 0);
@@ -41,6 +42,8 @@ private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
     const butil::EndPoint _endpoint;
     std::atomic<int64_t> _connection_group = 0;
+    // Distinguishes stubs that share the same endpoint.
+    const int64_t _connection_group_seed = 0;
     mutable std::shared_mutex _mutex;
     std::string _protocol;
 

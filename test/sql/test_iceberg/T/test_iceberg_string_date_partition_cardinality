@@ -1,0 +1,54 @@
+-- name: test_iceberg_string_date_partition_cardinality
+-- description: PR2 — a STRING date partition column compared with a temporal value coerces to
+-- CAST(c2 AS DATETIME) = <ts>. On the manifest-level cardinality path (Path C, column stats off),
+-- the old code pushed the cast to Iceberg's string-domain manifest evaluator, which pruned every
+-- manifest and returned rowCount=1 (a severe under-estimate that produces bad CBO/join plans).
+-- PR2 keeps such a cast-on-string-partition conjunct as a StarRocks-side residual and prunes
+-- manifests by DATETIME-domain partition range, so a matching partition's manifest is counted in
+-- full instead of collapsing to 1.
+--
+-- NOTE: single-table queries are short-circuited to default statistics by
+-- disable_table_stats_from_metadata_for_single_table (default true, #64443), so the connector
+-- metadata path is never reached. We turn it off here to exercise the path; column statistics stay
+-- off so we stay on the manifest path (Path C); query-trigger-analyze is off so cached column
+-- statistics do not flip the estimate to ESTIMATE mid-run.
+
+create external catalog ice_cat_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}");
+create database ice_cat_${uuid0}.ice_db_${uuid0};
+set catalog ice_cat_${uuid0};
+use ice_cat_${uuid0}.ice_db_${uuid0};
+
+create table t_card (
+    c1 int,
+    c2 string
+) partition by (c2);
+
+-- One INSERT per partition => one manifest per partition with a tight partition range, so
+-- range-overlap pruning keeps exactly the matching partition's manifest (deterministic row count).
+insert into t_card select generate_series, '2020-06-14' from table(generate_series(1, 17));
+insert into t_card select generate_series, '2020-06-22' from table(generate_series(1, 23));
+insert into t_card select generate_series, '2020-01-02' from table(generate_series(1, 5));
+
+set enable_iceberg_column_statistics = false;
+set disable_table_stats_from_metadata_for_single_table = false;
+set enable_query_trigger_analyze = false;
+
+-- Clear any internal column statistics so MetadataMgr falls through to the connector metadata path
+-- (with known internal stats it would return those instead, bypassing the manifest path entirely).
+-- Safe here: query-trigger-analyze is off above, and a fresh external table has no analyze job, so
+-- nothing repopulates them. This is table-scoped; do NOT disable the global enable_statistic_collect
+-- FE config in a shared SQLTester run — it would leak into concurrent cases.
+drop stats t_card;
+
+-- cast/interval form: pre-PR2 this collapsed to cardinality=1; PR2 keeps the 2020-06-14 manifest (17 rows).
+function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-15' as date) - interval 1 day", "cardinality=17")
+-- a different partition value keeps a different manifest (23 rows), proving range pruning selects per value.
+function: assert_explain_costs_contains("select * from t_card where c2 = cast('2020-06-21' as date) + interval 1 day", "cardinality=23")
+-- date_sub builtin form must agree with the operator form.
+function: assert_explain_costs_contains("select * from t_card where c2 = date_sub(cast('2020-06-15' as date), interval 1 day)", "cardinality=17")
+-- control: bare 'yyyy-MM-dd' literal (no cast, always worked) must agree with the cast forms.
+function: assert_explain_costs_contains("select * from t_card where c2 = '2020-06-14'", "cardinality=17")
+
+drop table t_card force;
+drop database ice_cat_${uuid0}.ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};

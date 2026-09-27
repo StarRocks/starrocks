@@ -28,6 +28,7 @@ import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.partitiontraits.BenchmarkPartitionTraits;
 import com.starrocks.connector.partitiontraits.CachedPartitionTraits;
 import com.starrocks.connector.partitiontraits.DeltaLakePartitionTraits;
+import com.starrocks.connector.partitiontraits.FlussPartitionTraits;
 import com.starrocks.connector.partitiontraits.HivePartitionTraits;
 import com.starrocks.connector.partitiontraits.HudiPartitionTraits;
 import com.starrocks.connector.partitiontraits.IcebergPartitionTraits;
@@ -44,6 +45,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,6 +76,7 @@ public abstract class ConnectorPartitionTraits {
                     .put(Table.TableType.KUDU, KuduPartitionTraits::new)
                     .put(Table.TableType.JDBC, JDBCPartitionTraits::new)
                     .put(Table.TableType.DELTALAKE, DeltaLakePartitionTraits::new)
+                    .put(Table.TableType.FLUSS, FlussPartitionTraits::new)
                     .put(Table.TableType.BENCHMARK, BenchmarkPartitionTraits::new)
                     .build();
 
@@ -213,7 +216,21 @@ public abstract class ConnectorPartitionTraits {
     }
 
     /**
-     * The max of refresh ts for all partitions
+     * Total row count per partition, when the connector can supply it cheaply from metadata (e.g. the Iceberg
+     * PARTITIONS metadata table). Used by bounded-cost external statistics collection to extrapolate a
+     * budget-truncated sample back to the full partition. Default: empty - the connector does not expose it,
+     * so statistics are stored as raw sample values.
+     */
+    public Map<String, Long> getPartitionRowCounts(List<String> names) {
+        return Collections.emptyMap();
+    }
+
+    /**
+     * The max refresh/modified timestamp over the table's partitions, in EPOCH MILLISECONDS.
+     * Implementations must convert the connector's native modified-time unit (see
+     * {@link com.starrocks.connector.PartitionInfo#getModifiedTimeUnit()}) to milliseconds, because
+     * callers compare this value against wall-clock-millis baselines (e.g. the MV rewrite staleness
+     * check against lastFreshnessConfirmedAt).
      */
     public abstract Optional<Long> maxPartitionRefreshTs();
 

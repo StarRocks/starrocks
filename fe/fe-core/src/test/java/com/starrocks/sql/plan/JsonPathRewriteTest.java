@@ -410,5 +410,50 @@ public class JsonPathRewriteTest extends PlanTestBase {
         }
     }
 
+    /**
+     * JSON object keys are case-sensitive, so get_json_string(j,'Campaign') and
+     * get_json_string(j,'campaign') address two distinct fields. But an extended column's name is the
+     * subfield path, and Table.nameToColumn (plus every downstream name-keyed lookup) is
+     * case-insensitive, so materializing both would collapse them -> a scan chunk with mismatched
+     * column row counts (BE crash) or a wrong global-dict mapping ("Dict Decode failed"). When such a
+     * case-collision is present, JsonPathRewriteRule must skip the pushdown for that scan and read the
+     * JSON column whole. A non-colliding query in the same shape must still be pushed down.
+     */
+    @Test
+    public void testCaseCollidingJsonSubfieldsFallBack() throws Exception {
+        connectContext.getSessionVariable().setEnableJSONV2Rewrite(true);
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
+
+        starRocksAssert.withTable(
+                "create table json_case_collision (\n" +
+                        "  id int,\n" +
+                        "  j json\n" +
+                        ") properties('replication_num'='1')");
+        try {
+            // Colliding pair 'Campaign' vs 'campaign' -> fall back: no ExtendedColumnAccessPath and the
+            // get_json_string calls are left unrewritten (read the whole JSON column).
+            String collidingSql =
+                    "select get_json_string(j, 'Campaign') a, get_json_string(j, 'campaign') b from json_case_collision";
+            String collidingPlan = getVerboseExplain(collidingSql);
+            assertNotContains(collidingPlan, "ExtendedColumnAccessPath");
+            assertContains(collidingPlan, "get_json_string");
+
+            // Collision only among a subset still aborts the whole scan (a pushed-down subfield path
+            // would prune the JSON column and starve the un-rewritten sibling).
+            String mixedSql = "select get_json_string(j, 'Campaign') a, get_json_string(j, 'campaign') b, "
+                    + "get_json_string(j, 'title') c from json_case_collision";
+            assertNotContains(getVerboseExplain(mixedSql), "ExtendedColumnAccessPath");
+
+            // Control: a non-colliding query in the same shape is still pushed down.
+            String okSql =
+                    "select get_json_string(j, 'Campaign') a, get_json_string(j, 'title') b from json_case_collision";
+            String okPlan = getVerboseExplain(okSql);
+            assertContains(okPlan, "ExtendedColumnAccessPath: [/j(varchar)/Campaign(varchar), /j(varchar)/title(varchar)]");
+        } finally {
+            starRocksAssert.dropTable("json_case_collision");
+        }
+    }
+
 }
 

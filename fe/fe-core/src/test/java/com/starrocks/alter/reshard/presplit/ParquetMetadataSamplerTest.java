@@ -27,10 +27,12 @@ import org.junit.jupiter.api.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.DUMMY_CONTEXT;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.compositeTuple;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.varcharColumn;
 
 public class ParquetMetadataSamplerTest {
@@ -54,6 +56,17 @@ public class ParquetMetadataSamplerTest {
     private static RowGroupStatistics rowGroupAllNull(long rowCount) {
         Tuple nullTuple = new Tuple(List.of((Variant) new NullVariant(IntegerType.BIGINT)));
         return new RowGroupStatistics(nullTuple, nullTuple, rowCount, false);
+    }
+
+    private static SampleRequest compositeRequest() {
+        return new SampleRequest(
+                DUMMY_CONTEXT, List.of(varcharColumn("tenant"), bigintColumn("position")), 1024L, 0L);
+    }
+
+    private static RowGroupStatistics compositeRowGroup(
+            String minTenant, long minPos, String maxTenant, long maxPos, long rowCount) {
+        return new RowGroupStatistics(
+                compositeTuple(minTenant, minPos), compositeTuple(maxTenant, maxPos), rowCount, false);
     }
 
     /**
@@ -90,6 +103,26 @@ public class ParquetMetadataSamplerTest {
         Assertions.assertEquals(bigintTuple(200), result.getBoundaries().get(0));
         Assertions.assertEquals(bigintTuple(400), result.getBoundaries().get(1));
         Assertions.assertEquals(bigintTuple(600), result.getBoundaries().get(2));
+    }
+
+    @Test
+    public void testProfileSeparatesStatisticsFetchFromBoundaryPlanning() throws Exception {
+        List<RowGroupStatistics> statistics = List.of(
+                rowGroup(0, 99, 100), rowGroup(100, 199, 100),
+                rowGroup(200, 299, 100), rowGroup(300, 399, 100));
+        ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(statistics));
+        AtomicLong nowNs = new AtomicLong();
+        PreSplitProfile profile = new PreSplitProfile(() -> nowNs.getAndAdd(10L));
+
+        try (PreSplitProfile.Scope ignored =
+                     PreSplitProfile.startAttempt(profile, LoadKind.INSERT_FROM_FILES)) {
+            sampler.tryPlan(singleColumnRequest(), 2);
+        }
+
+        Assertions.assertEquals(10L,
+                profile.toRuntimeProfile().getCounter(PreSplitProfile.SOURCE_SAMPLING_TIME).getValue());
+        Assertions.assertEquals(10L, profile.toRuntimeProfile()
+                .getCounter(PreSplitProfile.PARTITION_AND_BOUNDARY_PLANNING_TIME).getValue());
     }
 
     @Test
@@ -193,16 +226,38 @@ public class ParquetMetadataSamplerTest {
     }
 
     @Test
-    public void testCompositeSortKeyFallback() {
-        ParquetMetadataSampler sampler = new ParquetMetadataSampler(
-                new FakeProvider(List.of(rowGroup(0, 99, 100))));
-        SampleRequest request = new SampleRequest(
-                DUMMY_CONTEXT, List.of(bigintColumn("k"), varcharColumn("g")), 1024L, 0L);
+    public void placesCompositeQuantileBoundariesOnLeadingColumnSeparatedBands() throws Exception {
+        // 3 leading-column-disjoint bands ("a" < "b" < "c"), 100 rows each. tabletCount=3 ->
+        // boundaries at the minTuple of band b and band c.
+        List<RowGroupStatistics> rowGroups = List.of(
+                compositeRowGroup("a", 0, "a", 99, 100),
+                compositeRowGroup("b", 0, "b", 99, 100),
+                compositeRowGroup("c", 0, "c", 99, 100));
+        ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(rowGroups));
+
+        BoundaryPlannerResult result = sampler.tryPlan(compositeRequest(), 3);
+
+        Assertions.assertFalse(result.isNoSplit());
+        List<Tuple> boundaries = result.getBoundaries();
+        Assertions.assertEquals(2, boundaries.size());
+        Assertions.assertEquals(compositeTuple("b", 0), boundaries.get(0));
+        Assertions.assertEquals(compositeTuple("c", 0), boundaries.get(1));
+    }
+
+    @Test
+    public void compositeFalseOverlapFromBoxInflationFallsBack() {
+        // A leading tenant value ("m") straddles the boundary and each group's position range is
+        // wide, so the per-column boxes overlap (box_B.min=("m",10) < box_A.max=("m",999)) even
+        // though the true lex-ranges are disjoint. overlapFraction=1.0 > 0.3 -> data-tier fallback.
+        List<RowGroupStatistics> rowGroups = List.of(
+                compositeRowGroup("a", 5, "m", 999, 100),
+                compositeRowGroup("m", 10, "z", 900, 100));
+        ParquetMetadataSampler sampler = new ParquetMetadataSampler(new FakeProvider(rowGroups));
 
         MetaTierUnavailableException exception = Assertions.assertThrows(MetaTierUnavailableException.class,
-                () -> sampler.tryPlan(request, 4));
-        Assertions.assertTrue(exception.getMessage().contains("composite sort key"),
-                "expected composite-key error, got: " + exception.getMessage());
+                () -> sampler.tryPlan(compositeRequest(), 4));
+        Assertions.assertTrue(exception.getMessage().contains("overlap"),
+                "expected overlap fallback, got: " + exception.getMessage());
     }
 
     @Test

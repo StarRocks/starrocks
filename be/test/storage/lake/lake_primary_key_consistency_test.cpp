@@ -60,7 +60,8 @@ enum PICT_OP {
     PARTIAL_UPDATE_ROW = 6,
     PARTIAL_UPDATE_COLUMN = 7,
     CONDITION_UPDATE = 8,
-    MAX = 9,
+    MIXED_UPSERT_DELETE = 9,
+    MAX = 10,
 };
 
 static const std::string kTestGroupPath = "./test_lake_primary_key_consistency";
@@ -218,7 +219,8 @@ private:
 class LakePrimaryKeyConsistencyTest : public TestBase, testing::WithParamInterface<PrimaryKeyParam> {
 public:
     LakePrimaryKeyConsistencyTest() : TestBase(kTestGroupPath) {
-        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS);
+        const bool separate_sort_key = GetParam().separate_sort_key;
+        _tablet_metadata = generate_tablet_metadata(PRIMARY_KEYS, separate_sort_key);
         _tablet_metadata->set_enable_persistent_index(true);
         _tablet_metadata->set_persistent_index_type(GetParam().persistent_index_type);
 
@@ -252,9 +254,17 @@ public:
         items.emplace_back(PICT_OP::COMPACT, 10);
         items.emplace_back(PICT_OP::RELOAD, 10);
         items.emplace_back(PICT_OP::UPSERT_WITH_BATCH_PUB, 17);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
-        items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        if (!separate_sort_key) {
+            // Partial updates are not supported on a separate-sort-key table when the partial columns
+            // ({c0, c1}) do not cover the sort key (ROW mode) or touch a sort-key column (COLUMN mode),
+            // and they never take the load-spill / unsort-SST path under test anyway
+            // (should_enable_load_spill disables spilling for partial updates). Skip them for the
+            // ORDER BY != PK variant; the remaining ops fully drive the separate-sort-key write path.
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_ROW, 5);
+            items.emplace_back(PICT_OP::PARTIAL_UPDATE_COLUMN, 5);
+        }
         items.emplace_back(PICT_OP::CONDITION_UPDATE, 5);
+        items.emplace_back(PICT_OP::MIXED_UPSERT_DELETE, 17);
         _random_op_selector = std::make_unique<WeightedRandomOpSelector<int, PICT_OP>>(_random_generator.get(), items);
         _io_failure_generator =
                 std::make_unique<IOFailureGenerator<int, PICT_OP>>(_random_generator.get(), io_failure_percent);
@@ -283,9 +293,15 @@ public:
         _old_pk_index_parallel_compaction_task_split_threshold_bytes =
                 config::pk_index_parallel_compaction_task_split_threshold_bytes;
         config::pk_index_parallel_compaction_task_split_threshold_bytes = 4 * 1024 * 1024;
+        // Preserve in-transaction upsert/delete order so the Replayer (which replays ops in write order)
+        // matches the tablet -- required for the interleaved mixed_upsert_delete_op (delete-then-upsert).
+        // Both the serial (non-spill) and op-aware spill merge paths honor it.
+        _old_lake_enable_pk_preserve_txn_delete_order = config::lake_enable_pk_preserve_txn_delete_order;
+        config::lake_enable_pk_preserve_txn_delete_order = true;
     }
 
     void TearDown() override {
+        config::lake_enable_pk_preserve_txn_delete_order = _old_lake_enable_pk_preserve_txn_delete_order;
         (void)fs::remove_all(kTestGroupPath);
         config::l0_max_mem_usage = _old_l0_size;
         config::write_buffer_size = _old_memtable_size;
@@ -296,18 +312,18 @@ public:
                 _old_pk_index_parallel_compaction_task_split_threshold_bytes;
     }
 
-    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type) {
+    std::shared_ptr<TabletMetadataPB> generate_tablet_metadata(KeysType keys_type, bool separate_sort_key = false) {
         auto metadata = std::make_shared<TabletMetadata>();
         metadata->set_id(next_id());
         metadata->set_version(1);
         metadata->set_cumulative_point(0);
         metadata->set_next_rowset_id(1);
         //
-        //  | column | type | KEY | NULL |
-        //  +--------+------+-----+------+
-        //  |   c0   |  STRING | YES |  NO  |
-        //  |   c1   |  INT | NO  |  NO  |
-        //  |   c2   |  INT | NO  |  NO  |
+        //  | column | type | KEY | NULL | SORTKEY(when separate) |
+        //  +--------+------+-----+------+------------------------+
+        //  |   c0   |  STRING | YES |  NO  |          NO          |
+        //  |   c1   |  INT | NO  |  NO  |          YES         |
+        //  |   c2   |  INT | NO  |  NO  |          YES         |
         auto schema = metadata->mutable_schema();
         schema->set_keys_type(keys_type);
         schema->set_id(next_id());
@@ -339,6 +355,12 @@ public:
             c2->set_is_key(false);
             c2->set_is_nullable(false);
             c2->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+        if (separate_sort_key) {
+            // ORDER BY (c1, c2) while the primary key is c0, so the sort key differs from the primary
+            // key. num_short_key_columns stays 1 (the short key is the c1 prefix of the sort key).
+            schema->add_sort_key_idxes(1);
+            schema->add_sort_key_idxes(2);
         }
         return metadata;
     }
@@ -410,18 +432,6 @@ public:
         return force_flush_guard;
     }
 
-    // 20% chance to enable eager PK index build
-    std::unique_ptr<ConfigResetGuard<bool>> random_pk_index_eager_build() {
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard;
-        uint32_t r = _random_generator->random() % 100;
-        if (r < 20) {
-            // 20% chance to enable eager PK index build
-            pk_index_eager_build_guard =
-                    std::make_unique<ConfigResetGuard<bool>>(&config::enable_pk_index_eager_build, true);
-        }
-        return pk_index_eager_build_guard;
-    }
-
     ChunkPtr read(int64_t tablet_id, int64_t version) {
         ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
         auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
@@ -442,7 +452,6 @@ public:
 
     Status upsert_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -477,9 +486,102 @@ public:
         return Status::OK();
     }
 
+    // Build a delete chunk that reuses the first `count` keys of `src` (an upsert chunk), so a delete
+    // targets keys that were just upserted in the same transaction.
+    std::pair<ChunkPtr, std::vector<uint32_t>> gen_delete_from(const ChunkPtr& src, size_t count) {
+        count = std::min<size_t>(count, static_cast<size_t>(src->num_rows()));
+        std::vector<std::string> key_strs;
+        std::vector<Slice> key_col;
+        std::vector<int> c1v(count);
+        std::vector<int> c2v(count);
+        std::vector<uint8_t> ops(count, TOpType::DELETE);
+        key_strs.reserve(count);
+        for (size_t i = 0; i < count; i++) {
+            key_strs.emplace_back(src->columns()[0]->get(i).get_slice().to_string());
+            c1v[i] = src->columns()[1]->get(i).get_int32();
+            c2v[i] = src->columns()[2]->get(i).get_int32();
+        }
+        for (const auto& s : key_strs) {
+            key_col.emplace_back(s);
+        }
+        auto c0 = BinaryColumn::create();
+        auto c1 = Int32Column::create();
+        auto c2 = Int32Column::create();
+        auto c3 = Int8Column::create();
+        c0->append_strings(key_col.data(), key_col.size());
+        c1->append_numbers(c1v.data(), c1v.size() * sizeof(int));
+        c2->append_numbers(c2v.data(), c2v.size() * sizeof(int));
+        c3->append_numbers(ops.data(), ops.size() * sizeof(uint8_t));
+        auto indexes = std::vector<uint32_t>(count);
+        for (uint32_t i = 0; i < count; i++) {
+            indexes[i] = i;
+        }
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3)},
+                                        _slot_cid_map),
+                std::move(indexes)};
+    }
+
+    // Apply a random INTERLEAVED sequence of upserts and deletes over a small pool of key sets within one
+    // transaction, so a given key may be upserted, deleted, and re-upserted in any order. This exercises
+    // in-transaction order preservation in both directions: a delete followed by a re-upsert of the same
+    // key must keep the row, and an upsert followed by a delete must drop it. With
+    // lake_enable_pk_preserve_txn_delete_order on (set in SetUp) and load spill on by default, this runs
+    // through the op-aware spill merge. The Replayer replays the ops in write order, so any path that
+    // resolves them out of order is caught.
+    Status mixed_upsert_delete_op() {
+        std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(_tablet_metadata->id())
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
+                                                   .build());
+        RETURN_IF_ERROR(delta_writer->open());
+        // A pool of fresh key sets to interleave over; reusing them forces upserts and deletes to hit the
+        // same keys, so their in-transaction order actually matters.
+        size_t pool_size = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxUpsert), 1);
+        std::vector<ChunkPtr> key_pool;
+        for (size_t i = 0; i < pool_size; i++) {
+            key_pool.emplace_back(gen_upsert_data(true).first);
+        }
+        // At least 2 steps so an interleaving actually occurs.
+        size_t steps = std::max<size_t>(static_cast<size_t>(_random_generator->random() % (MaxUpsert * 2)), 2);
+        for (size_t s = 0; s < steps; s++) {
+            const auto& base = key_pool[_random_generator->random() % key_pool.size()];
+            if (base->num_rows() == 0) {
+                continue;
+            }
+            if ((_random_generator->random() % 2) == 0) {
+                // Upsert the pool chunk's keys.
+                std::vector<uint32_t> indexes(base->num_rows());
+                for (uint32_t i = 0; i < base->num_rows(); i++) {
+                    indexes[i] = i;
+                }
+                RETURN_IF_ERROR(delta_writer->write(*base, indexes.data(), indexes.size()));
+                _replayer->upsert(base);
+            } else {
+                // Delete the pool chunk's keys.
+                auto chunk_index = gen_delete_from(base, base->num_rows());
+                RETURN_IF_ERROR(delta_writer->write(*(chunk_index.first), chunk_index.second.data(),
+                                                    chunk_index.second.size()));
+                _replayer->erase(chunk_index.first);
+            }
+        }
+        RETURN_IF_ERROR(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
+        _version++;
+        return Status::OK();
+    }
+
     Status partial_update_op(PartialUpdateMode mode) {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_mgr.get())
@@ -516,7 +618,6 @@ public:
 
     Status condition_update() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         // c2 as merge_condition
         std::string merge_condition = "c2";
@@ -549,7 +650,6 @@ public:
 
     Status upsert_with_batch_pub_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         size_t batch_cnt = std::max<size_t>(static_cast<size_t>(_random_generator->random() % MaxBatchCnt), 1);
         std::vector<int64_t> txn_ids;
         for (int i = 0; i < batch_cnt; i++) {
@@ -592,7 +692,6 @@ public:
 
     Status delete_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto chunk_index = gen_upsert_data(false);
         auto txn_id = next_id();
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -619,7 +718,6 @@ public:
 
     Status compact_op() {
         std::unique_ptr<ConfigResetGuard<int64_t>> force_index_mem_flush_guard = random_force_index_mem_flush();
-        std::unique_ptr<ConfigResetGuard<bool>> pk_index_eager_build_guard = random_pk_index_eager_build();
         auto txn_id = next_id();
         auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
                                                                     false, nullptr);
@@ -679,6 +777,9 @@ public:
             case CONDITION_UPDATE:
                 st = condition_update();
                 break;
+            case MIXED_UPSERT_DELETE:
+                st = mixed_upsert_delete_op();
+                break;
             default:
                 break;
             }
@@ -731,11 +832,12 @@ protected:
     int64_t _old_pk_index_eager_build_threshold_bytes = 0;
     int64_t _old_pk_index_parallel_execution_min_rows = 0;
     int64_t _old_pk_index_parallel_compaction_task_split_threshold_bytes = 0;
+    bool _old_lake_enable_pk_preserve_txn_delete_order = false;
 };
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
     _seed = 1719499276; // seed
-    _run_second = 100;  // 100 second
+    _run_second = 50;   // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -745,7 +847,7 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_local_pk_consistency) {
 
 TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     _seed = time(nullptr); // use current ts as seed
-    _run_second = 100;     // 100 second
+    _run_second = 50;      // 50 second
     LOG(INFO) << "LakePrimaryKeyConsistencyTest begin, seed : " << _seed;
     auto st = run_random_tests();
     if (!st.ok()) {
@@ -753,8 +855,12 @@ TEST_P(LakePrimaryKeyConsistencyTest, test_random_seed_pk_consistency) {
     }
 }
 
-INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
-                         ::testing::Values(PrimaryKeyParam{
-                                 .persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE}));
+INSTANTIATE_TEST_SUITE_P(
+        LakePrimaryKeyConsistencyTest, LakePrimaryKeyConsistencyTest,
+        ::testing::Values(PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE},
+                          // ORDER BY != PK: separate sort key (c1, c2) exercises the
+                          // load-spill + unsort-SST-writer + op-aware merge path.
+                          PrimaryKeyParam{.persistent_index_type = PersistentIndexTypePB::CLOUD_NATIVE,
+                                          .separate_sort_key = true}));
 
 } // namespace starrocks::lake

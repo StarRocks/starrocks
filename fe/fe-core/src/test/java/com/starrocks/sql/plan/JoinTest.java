@@ -22,6 +22,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -512,6 +513,70 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
+    public void testFullOuterJoinUsingAliasedColumns() throws Exception {
+        // A relation may expose a USING column under an alias, so the column's own name
+        // ("max" here) says nothing about which USING column it belongs to. Every USING
+        // column must still be coalesced with its own counterpart.
+        String sql = "select v1, b, c from " +
+                "  (select v1, max(v2) as b, max(v3) as c from t0 group by v1) x " +
+                "  full outer join " +
+                "  (select v1, max(v2) as b, max(v3) as c from t0 group by v1) y " +
+                "  using(v1, b, c)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "coalesce(1: v1, 6: v1)");
+        assertContains(plan, "coalesce(4: max, 9: max)");
+        assertContains(plan, "coalesce(5: max, 10: max)");
+    }
+
+    @Test
+    public void testFullOuterJoinUsingKeepsNonUsingColumns() throws Exception {
+        // The non-USING columns are passed through by position, so an aliased USING
+        // column must not be mistaken for one of them.
+        String sql = "select v1, b, s1, s2 from " +
+                "  (select v1, max(v2) as b, sum(v3) as s1 from t0 group by v1) x " +
+                "  full outer join " +
+                "  (select v4 as v1, max(v5) as b, sum(v6) as s2 from t1 group by v4) y " +
+                "  using(v1, b)";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "coalesce(1: v1, 6: v4)");
+        assertContains(plan, "coalesce(4: max, 9: max)");
+        // the two sum() columns are not USING columns and must keep their own slots
+        assertContains(plan, "OUTPUT EXPRS:11: v1 | 12: b | 5: sum | 10: sum");
+    }
+
+    @Test
+    public void testFullOuterJoinUsingOrderByOrdinal() throws Exception {
+        // ORDER BY on an output ordinal indexes the order scope against the join's field
+        // mappings, so the projection must carry exactly one column per scope field.
+        String sql = "select v1, b from " +
+                "  (select v1, max(v2) as b from t0 group by v1) x " +
+                "  full outer join " +
+                "  (select v1, max(v2) as b from t0 group by v1) y " +
+                "  using(v1, b) order by 1, 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "coalesce(1: v1, 5: v1)");
+        assertContains(plan, "coalesce(4: max, 8: max)");
+    }
+
+    @Test
+    public void testFullOuterJoinUsingWidensWithinTypeFamily() throws Exception {
+        // Same primitive type and scale but different precision: matchesType() is true, so
+        // committing to one side would narrow the other, and ReduceCastRule keeps a narrowing
+        // decimal cast. The merged type must widen, whichever side is wider.
+        String sql = "select v from " +
+                "  (select cast(v1 as decimal(15,2)) as v from t0) a " +
+                "  full outer join " +
+                "  (select cast(v1 as decimal(18,2)) as v from t0) b using(v)";
+        assertContains(getFragmentPlan(sql), "coalesce(CAST(4: cast AS DECIMAL64(18,2)), 8: cast)");
+
+        String swapped = "select v from " +
+                "  (select cast(v1 as decimal(18,2)) as v from t0) a " +
+                "  full outer join " +
+                "  (select cast(v1 as decimal(15,2)) as v from t0) b using(v)";
+        assertContains(getFragmentPlan(swapped), "coalesce(4: cast, CAST(8: cast AS DECIMAL64(18,2)))");
+    }
+
+    @Test
     public void testJoinAssociativityConst() throws Exception {
         String sql = "SELECT x0.*\n" +
                 "FROM (\n" +
@@ -668,7 +733,7 @@ public class JoinTest extends PlanTestBase {
                 "        INNER JOIN test_all_type AS ref_2 ON (subq_0.c3 = ref_2.id_datetime)\n" +
                 "WHERE\n" +
                 "        ref_2.t1a >= ref_1.t1a";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
     }
 
     @Test
@@ -723,7 +788,7 @@ public class JoinTest extends PlanTestBase {
                 "    1.38432132E8, \"1969-12-20 10:26:22\"\n" +
                 "HAVING (COUNT(NULL))\n" +
                 "IN(- 1210205071)\n";
-        String plan = getFragmentPlan(sql);
+        getFragmentPlan(sql);
         // Just make sure we can get the final plan, and not crashed because of stats calculator error.
         System.out.println(sql);
     }
@@ -3593,9 +3658,12 @@ public class JoinTest extends PlanTestBase {
 
     @Test
     public void testAsofJoinConditionNormalizeWithSubqueries() {
+        // The subquery reads neither child of the join, so the condition does not relate the two sides.
+        // The analyzer rejects it before planning.
         String sql1 = "select t0.v1 from t0 asof join t1 on t0.v1 = t1.v4 and (SELECT MAX(v5) FROM t1) > t0.v2";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side",
                 () -> getFragmentPlan(sql1));
     }
 
@@ -3611,9 +3679,12 @@ public class JoinTest extends PlanTestBase {
                 "  |  asof join conjunct: 2: v2 <= 5: v5\n" +
                 "  |  other join predicates: 2: v2 = 3: v3 + 4: v4");
 
+        // `t0.v3 + t1.v4` reads both sides of the join, so the ON clause carries no temporal condition
+        // between the two tables. The analyzer rejects it before planning.
         String sql2 = "SELECT t0.v1 FROM t0 asof JOIN t1 ON t0.v1 = t1.v4 and t0.v2 < t0.v3 + t1.v4";
-        ExceptionChecker.expectThrowsWithMsg(IllegalStateException.class,
-                "ASOF JOIN requires exactly one temporal inequality condition",
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "ASOF JOIN temporal condition must compare a column from the left side of the join "
+                        + "with a column from the right side",
                 () -> getFragmentPlan(sql2));
 
         String sql3 = "select * from t0 asof join t1 on t0.v1 = t1.v4 and  t1.v5 <= t0.v2 where (v1 > 4 and v5 < 2)";

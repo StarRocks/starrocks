@@ -40,7 +40,7 @@ CONF_Int32(scanner_thread_pool_queue_size, "102400");
 CONF_Int32(udf_thread_pool_size, "1");
 
 // Number of threads for internal JVM calls that must run on pthreads.
-CONF_Int32(jvm_call_thread_pool_size, "1");
+CONF_Int32(jvm_call_thread_pool_size, "4");
 
 // The threadpool max thread num for pk index get in shared-data mode.
 CONF_mInt32(pk_index_parallel_execution_threadpool_max_threads, "0");
@@ -55,7 +55,7 @@ CONF_mInt32(pk_index_memtable_flush_threadpool_max_threads, "0");
 CONF_mInt32(pk_index_memtable_flush_threadpool_size, "2048");
 
 // Max threads for lake partial update segment-level parallelism.
-// <= 0 means use half of CPU core count. Runtime on/off is controlled by enable_pk_index_parallel_execution.
+// <= 0 means use half of CPU core count.
 CONF_mInt32(lake_partial_update_thread_pool_max_threads, "0");
 
 // Queue size for the lake partial update threadpool.

@@ -20,7 +20,7 @@
 
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "common/util/thrift_util.h"
-#include "exec/hdfs_scanner/hdfs_scanner.h"
+#include "connector/hive/scanner/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "fs/fs_memory.h"
 #include "gen_cpp/parquet_types.h"

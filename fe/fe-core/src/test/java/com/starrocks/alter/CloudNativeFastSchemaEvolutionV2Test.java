@@ -34,9 +34,17 @@ import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
+import com.starrocks.service.TableSchemaService;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.thrift.TGetTableSchemaRequest;
+import com.starrocks.thrift.TGetTableSchemaResponse;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableSchemaKey;
+import com.starrocks.thrift.TTableSchemaRequestSource;
+import com.starrocks.transaction.ExplicitTxnState;
+import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -302,4 +310,136 @@ public class CloudNativeFastSchemaEvolutionV2Test extends LakeFastSchemaChangeTe
         Assertions.assertEquals(expected.getStorageType(), actual.getStorageType());
         Assertions.assertEquals(expected.getColumns(), actual.getColumns());
     }
+    /**
+     * The seam StarRocksTest#12167 failed at. The in-place index / bloom-filter fast path re-stamps an
+     * index meta with a NEW schema id, so the previous id leaves the catalog. A load already bound to
+     * it resolves its schema from FE at publish time (TableSchemaService, source = LOAD), and before
+     * this fix that lookup fell through both the catalog and the history and returned INTERNAL_ERROR
+     * "schema for load not found which should not happen" -- which the publish retried forever.
+     *
+     * Asserted here rather than in a SQL test on purpose: BE resolves the schema from its own cache
+     * first (TableSchemaService::get_schema_for_load -> _get_local_schema), and in any self-contained
+     * run that cache is warm, so the FE RPC is never reached. Calling the service directly is what
+     * makes the coverage deterministic.
+     */
+    @Test
+    public void testFastPathRetiredSchemaStaysResolvableForBoundLoad() throws Exception {
+        LakeTable table = createTable(connectContext, """
+                CREATE TABLE t_fastpath_retired (
+                c0 INT,
+                c1 VARCHAR(64)
+                ) DUPLICATE KEY(c0)
+                DISTRIBUTED BY HASH(c0) BUCKETS 1
+                PROPERTIES('cloud_native_fast_schema_evolution_v2'='true');""");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+        long retiredSchemaId = baseMeta.getSchemaId();
+
+        // A load bound to the schema the flip is about to retire, still running when it happens.
+        TransactionState.TxnCoordinator coordinator =
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1");
+        long boundTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
+                db.getId(), List.of(table.getId()), UUIDUtil.genUUID().toString(), coordinator,
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING, 60000L);
+
+        // What the fast path's FINISHED flip does: snapshot the metas it is about to re-stamp, then
+        // re-stamp them. Both are the production calls, in the production order.
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
+                60000L, List.of(), List.of());
+        job.putNewSchema(baseIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),
+                baseMeta.getSchemaVersion() + 1);
+        job.historySchema = AlterJobV2.buildHistorySchema(table, List.of(baseIndexMetaId));
+        job.applyCatalogMutation(table);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().addAlterJobV2(job);
+
+        // The retired id really did leave the catalog...
+        Assertions.assertTrue(table.getIndexMetaIdToMeta().values().stream()
+                .noneMatch(meta -> meta.getSchemaId() == retiredSchemaId));
+
+        // ...and the publish-time lookup that used to fail now resolves it.
+        TTableSchemaKey schemaKey = new TTableSchemaKey();
+        schemaKey.setSchema_id(retiredSchemaId);
+        schemaKey.setDb_id(db.getId());
+        schemaKey.setTable_id(table.getId());
+        TGetTableSchemaRequest request = new TGetTableSchemaRequest();
+        request.setSchema_key(schemaKey);
+        request.setSource(TTableSchemaRequestSource.LOAD);
+        request.setTxn_id(boundTxnId);
+        TGetTableSchemaResponse response = TableSchemaService.getTableSchema(request);
+        Assertions.assertEquals(TStatusCode.OK, response.getStatus().getStatus_code());
+        Assertions.assertEquals(retiredSchemaId, response.getSchema().getId());
+
+        // Released once nothing can still be bound to it.
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .abortTransaction(db.getId(), boundTxnId, "done");
+        job.isExpire();
+        Assertions.assertTrue(job.getHistorySchema().orElseThrow().isExpired());
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
+    }
+
+    /**
+     * A multi-statement Stream Load binds its sub-task's sink to a schema id before the transaction is
+     * upserted into the DatabaseTransactionMgr (TransactionStmtExecutor.loadData(long, long, ...) upserts
+     * only after the sub-task produced its item), so isPreviousTransactionsFinished -- which scans only
+     * DatabaseTransactionMgr.idToRunningTransactionState -- cannot see it. Releasing the retired schema in
+     * that window strands the load's publish exactly like StarRocksTest#12167.
+     *
+     * <p>The sibling test above uses BACKEND_STREAMING, which is registered in the database transaction
+     * manager from the start and therefore never enters this window.
+     */
+    @Test
+    public void testFastPathRetiredSchemaSurvivesUnregisteredExplicitTransaction() throws Exception {
+        LakeTable table = createTable(connectContext, """
+                CREATE TABLE t_fastpath_explicit (
+                c0 INT,
+                c1 VARCHAR(64)
+                ) DUPLICATE KEY(c0)
+                DISTRIBUTED BY HASH(c0) BUCKETS 1
+                PROPERTIES('cloud_native_fast_schema_evolution_v2'='true');""");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        long baseIndexMetaId = table.getBaseIndexMetaId();
+        MaterializedIndexMeta baseMeta = table.getIndexMetaByMetaId(baseIndexMetaId);
+
+        // Exactly what TransactionStmtExecutor.beginStmt builds: no dbId, no table list, status PREPARE.
+        // Allocated before the snapshot so it sits below the history threshold.
+        long explicitTxnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionIDGenerator().getNextTransactionId();
+        TransactionState explicitTxn = new TransactionState(
+                explicitTxnId, UUIDUtil.genUUID().toString(), null,
+                TransactionState.LoadJobSourceType.MULTI_STATEMENT_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "127.0.0.1"), 60000L);
+        Assertions.assertEquals(0, explicitTxn.getDbId());
+        Assertions.assertTrue(explicitTxn.isRunning());
+        ExplicitTxnState explicitTxnState = new ExplicitTxnState();
+        explicitTxnState.setTransactionState(explicitTxn);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .addTransactionState(explicitTxnId, explicitTxnState);
+
+        LakeTableAddIndexJob job = new LakeTableAddIndexJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(), table.getName(),
+                60000L, List.of(), List.of());
+        job.putNewSchema(baseIndexMetaId, GlobalStateMgr.getCurrentState().getNextId(),
+                baseMeta.getSchemaVersion() + 1);
+        job.historySchema = AlterJobV2.buildHistorySchema(table, List.of(baseIndexMetaId));
+        job.applyCatalogMutation(table);
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().addAlterJobV2(job);
+
+        // The DatabaseTransactionMgr scan on its own reports "nothing running" -- this is the blind spot.
+        Assertions.assertTrue(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .isPreviousTransactionsFinished(job.getHistorySchema().orElseThrow().getHistoryTxnIdThreshold(),
+                        db.getId(), List.of(table.getId())));
+
+        // The payload must nevertheless be held: without the explicit-registry check this expires here.
+        job.isExpire();
+        Assertions.assertFalse(job.getHistorySchema().orElseThrow().isExpired());
+
+        // Once the transaction is gone, normal expiry resumes.
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().clearExplicitTxnState(explicitTxnId);
+        job.isExpire();
+        Assertions.assertTrue(job.getHistorySchema().orElseThrow().isExpired());
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler().clearJobs();
+    }
+
 }

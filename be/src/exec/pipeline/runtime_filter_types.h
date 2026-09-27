@@ -23,10 +23,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/statusor.h"
-#include "exec/pipeline/runtime_filter_core_types.h"
-#include "exec/pipeline/runtime_filter_hub.h"
-#include "exec/runtime_filter/runtime_filter_descriptor.h"
-#include "exec/runtime_filter/runtime_filter_probe.h"
+#include "exec_primitive/pipeline/runtime_filter_core_types.h"
+#include "exec_primitive/pipeline/runtime_filter_hub.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
+#include "exec_primitive/runtime_filter/runtime_filter_probe.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::pipeline {

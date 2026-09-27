@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "Unified catalog は Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu のデータを統一的にクエリ。"
 toc_max_heading_level: 5
@@ -32,7 +33,7 @@ Unified catalogは、StarRocks が v3.2 以降で提供する外部カタログ�
 
 ## 使用上の注意
 
-- サポートされているファイル形式とデータ型を理解するために、[Hive カタログ](../../data_source/catalog/hive_catalog.md)、[Iceberg カタログ](./iceberg/iceberg_catalog.md)、[Hudi カタログ](../../data_source/catalog/hudi_catalog.md)、[Delta Lake カタログ](../../data_source/catalog/deltalake_catalog.md)、[Paimon カタログ](../catalog/paimon_catalog.md)、および [Kudu カタログ](../../data_source/catalog/kudu_catalog.md) の「使用上の注意」セクションを参照してください。
+- サポートされているファイル形式とデータ型を理解するために、[Hive カタログ](./hive_catalog.md)、[Iceberg カタログ](./iceberg/iceberg.md)、[Hudi カタログ](./hudi_catalog.md)、[Delta Lake カタログ](./deltalake_catalog.md)、[Paimon カタログ](./paimon_catalog.md)、および [Kudu カタログ](./kudu_catalog.md) の「使用上の注意」セクションを参照してください。
 
 - 形式固有の操作は特定のテーブル形式にのみサポートされています。例えば、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) と [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) は Hive と Iceberg のみでサポートされており、[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) は Hive と Hudi のみでサポートされています。
 
@@ -44,7 +45,7 @@ Unified catalogを作成する前に、StarRocks クラスターが統合デー�
 
 ### AWS IAM
 
-ストレージとして AWS S3 を使用する場合、またはメタストアとして AWS Glue を使用する場合、適切な認証方法を選択し、StarRocks クラスターが関連する AWS クラウドリソースにアクセスできるように必要な準備を行ってください。詳細については、[AWS リソースへの認証 - 準備](../../integrations/authenticate_to_aws_resources.md#preparations)を参照してください。
+ストレージとして AWS S3 を使用する場合、またはメタストアとして AWS Glue を使用する場合、適切な認証方法を選択し、StarRocks クラスターが関連する AWS クラウドリソースにアクセスできるように必要な準備を行ってください。詳細については、[AWS リソースへの認証 - 準備](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparations)を参照してください。
 
 ### HDFS
 
@@ -167,7 +168,7 @@ StarRocks がメタストアと統合する方法に関する一連のパラメ�
 | aws.glue.access_key           | いいえ | AWS IAM ユーザーのアクセスキー。AWS Glue にアクセスするために IAM ユーザーベースの認証方法を使用する場合、このパラメータを指定する必要があります。 |
 | aws.glue.secret_key           | いいえ | AWS IAM ユーザーのシークレットキー。AWS Glue にアクセスするために IAM ユーザーベースの認証方法を使用する場合、このパラメータを指定する必要があります。 |
 
-AWS Glue にアクセスするための認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS Glue へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
+AWS Glue にアクセスするための認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS Glue へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)を参照してください。
 
 #### StorageCredentialParams
 
@@ -215,7 +216,7 @@ StarRocks がストレージシステムと統合する方法に関する一連�
 | aws.s3.access_key           | いいえ | IAM ユーザーのアクセスキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 | aws.s3.secret_key           | いいえ | IAM ユーザーのシークレットキー。IAM ユーザーベースの認証方法を使用して AWS S3 にアクセスする場合、このパラメータを指定する必要があります。 |
 
-AWS S3 にアクセスするための認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
+AWS S3 にアクセスするための認証方法の選択方法および AWS IAM コンソールでのアクセス制御ポリシーの構成方法については、[AWS S3 へのアクセスのための認証パラメータ](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)を参照してください。
 
 ##### S3 互換ストレージシステム
 
@@ -441,7 +442,7 @@ Google GCS をストレージとして選択した場合、次のいずれかの
 
 #### MetadataUpdateParams
 
-StarRocks が Hive、Hudi、および Delta Lake のキャッシュされたメタデータを更新する方法に関する一連のパラメータ。このパラメータセットはオプションです。Hive、Hudi、および Delta Lake からキャッシュされたメタデータを更新するポリシーの詳細については、[Hive カタログ](../../data_source/catalog/hive_catalog.md)、[Hudi カタログ](../../data_source/catalog/hudi_catalog.md)、および [Delta Lake カタログ](../../data_source/catalog/deltalake_catalog.md)を参照してください。
+StarRocks が Hive、Hudi、および Delta Lake のキャッシュされたメタデータを更新する方法に関する一連のパラメータ。このパラメータセットはオプションです。Hive、Hudi、および Delta Lake からキャッシュされたメタデータを更新するポリシーの詳細については、[Hive カタログ](./hive_catalog.md)、[Hudi カタログ](./hudi_catalog.md)、および [Delta Lake カタログ](./deltalake_catalog.md)を参照してください。
 
 ほとんどの場合、`MetadataUpdateParams` を無視し、その中のポリシーパラメータを調整する必要はありません。これらのパラメータのデフォルト値は、すぐに使用できるパフォーマンスを提供します。
 
@@ -958,7 +959,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-詳細については、[Hive テーブルの作成](../catalog/hive_catalog.md#create-a-hive-table)および [Iceberg テーブルの作成](./iceberg/iceberg_catalog.md#create-an-iceberg-table)を参照してください。
+詳細については、[Hive テーブルの作成](./hive_catalog.md#create-a-hive-table)および [Iceberg テーブルの作成](./iceberg/iceberg.md#create-an-iceberg-table)を参照してください。
 
 次の例では、`hive_table` という名前の Hive テーブルを作成します。このテーブルは、`action`、`id`、および `dt` の 3 つの列で構成されており、`id` と `dt` はパーティション列です。
 
@@ -996,7 +997,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-詳細については、[Hive テーブルへのデータシンク](../catalog/hive_catalog.md#sink-data-to-a-hive-table)および [Iceberg テーブルへのデータシンク](./iceberg/iceberg_catalog.md#sink-data-to-an-iceberg-table)を参照してください。
+詳細については、[Hive テーブルへのデータシンク](./hive_catalog.md#sink-data-to-a-hive-table)および [Iceberg テーブルへのデータシンク](./iceberg/iceberg.md#sink-data-to-an-iceberg-table)を参照してください。
 
 次の例では、`hive_table` という名前の Hive テーブルに 3 行のデータを挿入します：
 
@@ -1024,7 +1025,7 @@ StarRocks はUnified catalogから Hive および Iceberg テーブルの削除�
 DROP TABLE <table_name>
 ```
 
-詳細については、[Hive テーブルの削除](../catalog/hive_catalog.md#drop-a-hive-table)および [Iceberg テーブルの削除](./iceberg/iceberg_catalog.md#drop-an-iceberg-table)を参照してください。
+詳細については、[Hive テーブルの削除](./hive_catalog.md#drop-a-hive-table)および [Iceberg テーブルの削除](./iceberg/iceberg.md#drop-an-iceberg-table)を参照してください。
 
 次の例では、`hive_table` という名前の Hive テーブルを削除します：
 

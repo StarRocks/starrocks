@@ -1,2 +1,0 @@
--- name: test_fe_locks
-[UC] select count(*) > 1 from sys.fe_locks;

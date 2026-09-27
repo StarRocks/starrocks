@@ -78,7 +78,8 @@ public class ConnectorAnalyzeTask {
         // check table update time is after last analyzed time
         if (tableUpdateTime != null) {
             if (lastAnalyzedTime.isAfter(tableUpdateTime)) {
-                LOG.info("Table {}.{}.{} column {} last update time: {}, last analyzed time: {}, skip analyze",
+                LOG.info("[ExternalStats] trigger skip | catalog={} db={} table={} column={} reason=col_uptodate " +
+                                "table_update={} last_analyze={}",
                         catalogName, db.getFullName(), table.getName(), column, tableUpdateTime, lastAnalyzedTime);
                 return false;
             }
@@ -100,8 +101,8 @@ public class ConnectorAnalyzeTask {
             StatsConstants.ScheduleStatus lastScheduleStatus = lastAnalyzedStatus.get().getStatus();
             if (lastScheduleStatus == StatsConstants.ScheduleStatus.PENDING ||
                     lastScheduleStatus == StatsConstants.ScheduleStatus.RUNNING) {
-                LOG.info("Table {}.{}.{} analyze status is {}, skip it", catalogName, db.getFullName(),
-                        table.getName(), lastScheduleStatus);
+                LOG.info("[ExternalStats] trigger skip | catalog={} db={} table={} reason=analyzing status={}",
+                        catalogName, db.getFullName(), table.getName(), lastScheduleStatus);
                 return Optional.empty();
             }
         }
@@ -135,8 +136,8 @@ public class ConnectorAnalyzeTask {
         }
 
         if (columns.isEmpty()) {
-            LOG.info("Table {}.{}.{} columns {} are all up to date, skip analyze", catalogName, db.getFullName(),
-                    table.getName(), columns.stream().map(Object::toString).collect(Collectors.joining(",")));
+            LOG.info("[ExternalStats] trigger skip | catalog={} db={} table={} reason=all_uptodate",
+                    catalogName, db.getFullName(), table.getName());
             return Optional.empty();
         }
 

@@ -15,7 +15,7 @@
 #pragma once
 
 #include "exec/pipeline/scan/olap_scan_context.h"
-#include "exec/pipeline/source_operator.h"
+#include "exec_primitive/pipeline/source_operator.h"
 
 namespace starrocks {
 

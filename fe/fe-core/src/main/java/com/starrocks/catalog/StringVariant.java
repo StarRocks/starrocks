@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.util.StringUtils;
+import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.Type;
 
 /*
@@ -28,6 +29,17 @@ public class StringVariant extends Variant {
 
     public StringVariant(Type type, String value) {
         super(type);
+        // CHAR is defined only up to its first NUL in StarRocks: the BE strnlen-truncates a CHAR
+        // value on every storage read and when parsing a routing boundary (datum_from_string), so
+        // the bytes at/after the first '\0' are not part of the value. Canonicalize a CHAR variant
+        // the same way, so FE ordering and pre-split boundaries match what the BE stores and routes.
+        // VARCHAR/BINARY keep their raw bytes (the BE does not strnlen them).
+        if (value != null && type != null && type.getPrimitiveType() == PrimitiveType.CHAR) {
+            int nul = value.indexOf('\0');
+            if (nul >= 0) {
+                value = value.substring(0, nul);
+            }
+        }
         this.value = value;
     }
 

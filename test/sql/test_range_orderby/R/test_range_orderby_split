@@ -1,0 +1,89 @@
+-- name: test_range_orderby_split @cloud @sequential
+set enable_range_distribution = true;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t (
+    k1 int not null,
+    k2 int not null,
+    v1 int not null,
+    v2 varchar(256) not null
+)
+primary key(k1, k2)
+order by(v1, v2)
+properties('replication_num' = '1');
+-- result:
+-- !result
+insert into t
+select x, x % 7, 100000 - x, repeat(md5(cast(x as varchar)), 6)
+from table(generate_series(1, 20000)) as g(x);
+-- result:
+-- !result
+select count(*), sum(v1), min(v1), max(v1) from t;
+-- result:
+20000	1799990000	80000	99999
+-- !result
+[UC]alter table t split tablet properties('tablet_reshard_target_size' = '1024');
+shell: n=1; for i in $(seq 1 55); do n=$(${mysql_cmd} -Ne "select count(1) from information_schema.tablet_reshard_jobs where db_name='db_${uuid0}' and job_state not in ('FINISHED','ABORTED')" 2>/dev/null); [ "$n" = "0" ] && break; sleep 2; done; echo "pending=$n"
+-- result:
+0
+pending=0
+-- !result
+select buckets > 1 as did_split from information_schema.partitions_meta
+    where db_name = 'db_${uuid0}' and table_name = 't';
+-- result:
+1
+-- !result
+select count(*), sum(v1), min(v1), max(v1) from t;
+-- result:
+20000	1799990000	80000	99999
+-- !result
+select k1, k2, v1 from t where k1 = 12345 and k2 = 12345 % 7;
+-- result:
+12345	4	87655
+-- !result
+select count(*) from t where v1 > 99000;
+-- result:
+999
+-- !result
+select count(*) from t where v1 between 90000 and 90009;
+-- result:
+10
+-- !result
+insert into t values (999999, 1, 1, 'tail');
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+20001
+-- !result
+select k1, k2, v1, v2 from t where k1 = 999999;
+-- result:
+999999	1	1	tail
+-- !result
+insert into t values (12345, 12345 % 7, 42, 'moved');
+-- result:
+-- !result
+select k1, k2, v1, v2 from t where k1 = 12345;
+-- result:
+12345	4	42	moved
+-- !result
+delete from t where k1 = 999999;
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+20000
+-- !result
+select count(*) from t where v1 = 42;
+-- result:
+1
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result

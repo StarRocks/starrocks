@@ -13,6 +13,7 @@
 // limitations under the License.
 package com.starrocks.connector.delta;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
@@ -65,7 +66,8 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.partitionIdGenerator = partitionIdGenerator;
     }
 
-    private long addPartition(FileScanTask fileScanTask) throws AnalysisException {
+    @VisibleForTesting
+    public long addPartition(FileScanTask fileScanTask) throws AnalysisException {
         List<String> partitionValues = new ArrayList<>();
         table.getPartitionColumnNames().forEach(column -> {
             partitionValues.add(fileScanTask.getPartitionValues().get(column));
@@ -84,6 +86,7 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
                         filePath.getParent().toString());
         partitionKeys.put(partitionKey, partitionId);
         referencedPartitions.put(partitionId, referencedPartitionInfo);
+        checkPartitionNumLimit(table, partitionKeys.size());
         return partitionId;
     }
 

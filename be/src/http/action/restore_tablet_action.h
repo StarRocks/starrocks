@@ -39,7 +39,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
-#include "http/http_handler.h"
+#include "platform/http/http_handler.h"
 
 namespace starrocks {
 

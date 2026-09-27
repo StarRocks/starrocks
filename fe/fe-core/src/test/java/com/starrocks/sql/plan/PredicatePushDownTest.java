@@ -13,9 +13,36 @@
 // limitations under the License.
 package com.starrocks.sql.plan;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 public class PredicatePushDownTest extends PlanTestBase {
+
+    @Test
+    public void testRangeExtractEmptyRange() throws Exception {
+        // Reproduces: a contradictory range predicate (col > X AND col < X) yields an empty value
+        // set for the column. When the same column is referenced by a column-to-column relation
+        // predicate (e.g. v5 < v1) during join predicate range-relation derivation, the empty
+        // MultiValuesDescriptor.toRange() must not throw IllegalStateException.
+        {
+            // strict both sides: intersection of disconnected ranges -> empty MultiValuesDescriptor
+            String sql = "select * from t0 join t1 where (v1 > 3 and v1 < 3) and v5 < v1";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan != null && !plan.isEmpty());
+        }
+        {
+            // closed/open: intersection produces an empty range -> empty MultiValuesDescriptor
+            String sql = "select * from t0 join t1 where (v1 >= 3 and v1 < 3) and v5 < v1";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan != null && !plan.isEmpty());
+        }
+        {
+            // relation predicate referencing the empty-range column on the other side (v1 > v5)
+            String sql = "select * from t0 join t1 where (v1 > 3 and v1 < 3) and v1 > v5";
+            String plan = getFragmentPlan(sql);
+            Assertions.assertTrue(plan != null && !plan.isEmpty());
+        }
+    }
 
     @Test
     public void testCoalescePushDown() throws Exception {

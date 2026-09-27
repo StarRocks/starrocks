@@ -18,7 +18,7 @@
 #include "column/chunk_factory.h"
 #include "gtest/gtest.h"
 #include "runtime/runtime_filter.h"
-#include "storage/primitive/column_predicate_factory.h"
+#include "storage_primitive/column_predicate_factory.h"
 
 namespace starrocks {
 

@@ -23,9 +23,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -40,6 +42,7 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
                                    String joinHint,
                                    long limit,
                                    ScalarOperator predicate,
+                                   Map<ColumnRefOperator, ScalarOperator> predicateCommonOperators,
                                    Projection projection) {
         super(operatorType);
         this.joinType = joinType;
@@ -47,6 +50,12 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         this.joinHint = joinHint;
         this.limit = limit;
         this.predicate = predicate;
+        // predicateCommonOperators defines the common sub-expression columns that predicate may reference
+        // (produced by ScalarOperatorsReuseRule). It is coupled to predicate, so it is assigned right next to
+        // predicate here; every join subclass threads it through this constructor, which prevents a caller that
+        // rebuilds a join from keeping the predicate but silently dropping the columns it depends on (which
+        // would fail InputDependenciesChecker).
+        this.predicateCommonOperators = predicateCommonOperators;
         this.projection = projection;
     }
 

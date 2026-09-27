@@ -40,6 +40,10 @@ public class SlotSelectionStrategyV2Test {
     private static final int NUM_CORES = 16;
 
     private boolean prevEnableQueryQueueV2 = false;
+    private int prevQueryQueueV2ConcurrencyLevel = 0;
+    private String prevQueryQueueV2ScheduleStrategy;
+    private int prevMaxQueryQueueHistorySlotsNumber = 0;
+    private int prevQueryQueueConcurrencyLimit = -1;
 
     private SlotManager slotManager;
 
@@ -51,7 +55,15 @@ public class SlotSelectionStrategyV2Test {
     @BeforeEach
     public void before() {
         prevEnableQueryQueueV2 = Config.enable_query_queue_v2;
+        prevQueryQueueV2ConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        prevQueryQueueV2ScheduleStrategy = Config.query_queue_v2_schedule_strategy;
+        prevMaxQueryQueueHistorySlotsNumber = Config.max_query_queue_history_slots_number;
+        prevQueryQueueConcurrencyLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
         Config.enable_query_queue_v2 = true;
+        Config.query_queue_v2_concurrency_level = 0;
+        Config.query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.SWRR.name();
+        Config.max_query_queue_history_slots_number = 0;
+        GlobalVariable.setQueryQueueConcurrencyLimit(-1);
 
         ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
         slotManager = new SlotManager(resourceUsageMonitor);
@@ -62,8 +74,16 @@ public class SlotSelectionStrategyV2Test {
     @AfterEach
     public void after() {
         Config.enable_query_queue_v2 = prevEnableQueryQueueV2;
+        Config.query_queue_v2_concurrency_level = prevQueryQueueV2ConcurrencyLevel;
+        Config.query_queue_v2_schedule_strategy = prevQueryQueueV2ScheduleStrategy;
+        Config.max_query_queue_history_slots_number = prevMaxQueryQueueHistorySlotsNumber;
+        GlobalVariable.setQueryQueueConcurrencyLimit(prevQueryQueueConcurrencyLimit);
 
         BackendResourceStat.getInstance().reset();
+    }
+
+    private static void useWideFbeCapacityForSchedulingTests() {
+        Config.query_queue_v2_concurrency_level = NUM_CORES;
     }
 
     private SlotSelectionStrategyV2 createSlotSelectionStrategy() {
@@ -71,70 +91,67 @@ public class SlotSelectionStrategyV2Test {
     }
 
     @Test
-    public void testSmallSlot() {
+    public void testSmallSlotDoesNotUseExtraCapacityUnderFbe() {
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
-        LogicalSlot largeSlot = generateSlot(opts.v2().getTotalSlots() - 1);
-        List<LogicalSlot> smallSlots = IntStream.range(0, NUM_CORES + 2)
-                .mapToObj(i -> generateSlot(1))
-                .collect(Collectors.toList());
+        assertThat(opts.v2().getTotalSmallSlots()).isZero();
 
-        // 1. Require and allocate the large slot with `totalSlots - 1` slots.
+        LogicalSlot largeSlot = generateSlot(opts.v2().getTotalSlots() - 1);
+        LogicalSlot smallSlot1 = generateSlot(1);
+        LogicalSlot smallSlot2 = generateSlot(1);
+
         slotTracker.requireSlot(largeSlot);
-        List<LogicalSlot> peakSlots = strategy.peakSlotsToAllocate(slotTracker);
-        assertThat(peakSlots).containsExactly(largeSlot);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(largeSlot);
         slotTracker.allocateSlot(largeSlot);
 
-        // 2. Require `NUM_CORES + 2` small slots.
-        for (LogicalSlot smallSlot : smallSlots) {
-            slotTracker.requireSlot(smallSlot);
-        }
+        slotTracker.requireSlot(smallSlot1);
+        slotTracker.requireSlot(smallSlot2);
 
-        // 3. Could peak and allocate `NUM_CORES + 1` small slots:
-        // - `NUM_CORES` small slot are allocated as small slots.
-        // - 1 small slot is allocated as a non-small slot.
         List<LogicalSlot> peakSmallSlots = strategy.peakSlotsToAllocate(slotTracker);
-        assertThat(peakSmallSlots).hasSize(NUM_CORES + 1);
-        for (LogicalSlot peakSmallSlot : peakSmallSlots) {
-            slotTracker.allocateSlot(peakSmallSlot);
-        }
+        assertThat(peakSmallSlots).containsExactly(smallSlot1);
+        slotTracker.allocateSlot(smallSlot1);
 
-        // 4. Release the large slot and then the rest one small slot could be peaked.
-        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
-        assertThat(peakSlots).isEmpty();
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
 
         slotTracker.releaseSlot(largeSlot.getSlotId());
-        peakSlots = strategy.peakSlotsToAllocate(slotTracker);
-        assertThat(peakSlots).hasSize(1);
-        slotTracker.allocateSlot(peakSlots.get(0));
-        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(smallSlots.size());
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(smallSlot2);
+    }
 
-        // 5. Require `10+numAvailableSlots` small slots.
-        final int numAvailableSlots = opts.v2().getTotalSlots() + opts.v2().getTotalSmallSlots() - smallSlots.size();
-        List<LogicalSlot> smallSlots2 =
-                IntStream.range(0, 10 + numAvailableSlots)
-                        .mapToObj(i -> generateSlot(1))
-                        .collect(Collectors.toList());
-        smallSlots2.forEach(slotTracker::requireSlot);
+    @Test
+    public void testPointQueriesAreCappedByFbeTotalSlots() {
+        int oldConcurrencyLevel = Config.query_queue_v2_concurrency_level;
+        try {
+            Config.query_queue_v2_concurrency_level = 2;
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 2, NUM_CORES);
+            BackendResourceStat.getInstance().setNumCoresOfBe(DEFAULT_WAREHOUSE_ID, 3, NUM_CORES);
 
-        // 6. Could peak and allocate `numAvailableSlots` small slots.
-        peakSmallSlots = strategy.peakSlotsToAllocate(slotTracker);
-        peakSmallSlots.forEach(slotTracker::allocateSlot);
-        assertThat(peakSmallSlots).hasSize(numAvailableSlots);
-        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(opts.v2().getTotalSlots() + opts.v2().getTotalSmallSlots());
+            QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+            SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
 
-        // 7. Release 10 small slots and then the rest small slots could be peaked and allocated.
-        smallSlots.stream().limit(10).forEach(slot -> slotTracker.releaseSlot(slot.getSlotId()));
-        peakSmallSlots = strategy.peakSlotsToAllocate(slotTracker);
-        peakSmallSlots.forEach(slotTracker::allocateSlot);
-        assertThat(peakSmallSlots).hasSize(10);
-        assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(opts.v2().getTotalSlots() + opts.v2().getTotalSmallSlots());
+            assertThat(opts.v2().getNumWorkers()).isEqualTo(3);
+            assertThat(opts.v2().getTotalSlots()).isEqualTo(24);
+            assertThat(opts.v2().getTotalSmallSlots()).isZero();
+
+            List<LogicalSlot> pointSlots = IntStream.range(0, 25)
+                    .mapToObj(i -> generateSlot(1))
+                    .collect(Collectors.toList());
+            pointSlots.forEach(slotTracker::requireSlot);
+
+            List<LogicalSlot> peaked = strategy.peakSlotsToAllocate(slotTracker);
+            assertThat(peaked).hasSize(24);
+            peaked.forEach(slotTracker::allocateSlot);
+            assertThat(strategy.peakSlotsToAllocate(slotTracker)).isEmpty();
+        } finally {
+            Config.query_queue_v2_concurrency_level = oldConcurrencyLevel;
+        }
     }
 
     @Test
     public void testHeadLineBlocking1() {
+        useWideFbeCapacityForSchedulingTests();
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
@@ -182,6 +199,7 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHeadLineBlocking2() {
+        useWideFbeCapacityForSchedulingTests();
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));
@@ -349,6 +367,7 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testHistorySlotsQueue() {
+        useWideFbeCapacityForSchedulingTests();
         Config.max_query_queue_history_slots_number = 10;
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
@@ -414,6 +433,7 @@ public class SlotSelectionStrategyV2Test {
 
     @Test
     public void testConcurrencyLimit1() {
+        useWideFbeCapacityForSchedulingTests();
         QueryQueueOptions opts = QueryQueueOptions.createFromEnv(WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2(slotManager, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         SlotTracker slotTracker = new SlotTracker(slotManager, ImmutableList.of(strategy));

@@ -101,7 +101,7 @@ public class IcebergColumnMinMaxMgr implements IMinMaxStatsMgr, MemoryTrackable 
     }
 
     @Override
-    public void removeStats(ColumnIdentifier identifier, StatsVersion version) {
+    public void removeStats(ColumnIdentifier identifier) {
         throw new SemanticException("Iceberg column min/max stats unsupported the method");
     }
 

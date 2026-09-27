@@ -44,10 +44,15 @@ static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|(\\\\)|([^%_\\]))+)(?
 static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|(\\\\)|([^%_\\]))+))", re2::RE2::Quiet);
 static const char* PROMPT_INFO = " so we switch to use re2.";
 
-bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
-                                                 FunctionContext* context, const Slice& slice) {
+LikePredicate::LikePredicateState* LikePredicate::shared_state(FunctionContext* context) {
+    return reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+bool LikePredicate::hs_compile_database(const std::string& pattern, LikePredicateState* state, FunctionContext* context,
+                                        const Slice& slice) {
+    hs_database_t* database = nullptr;
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
-                   HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
+                   HS_MODE_BLOCK, nullptr, &database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
         auto chopped_size = std::min<size_t>(slice.size, 64);
         auto ellipsis = (chopped_size < slice.size) ? "..." : "";
@@ -58,21 +63,27 @@ bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, Lik
         return false;
     }
 
-    if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
+    // Validate that a scratch space can be allocated for this database; if not, fall back to
+    // RE2 (matching the previous behavior). The real per-thread scratch is allocated later, in
+    // the THREAD_LOCAL prepare. The probe scratch is freed immediately.
+    hs_scratch_t* probe_scratch = nullptr;
+    if (hs_alloc_scratch(database, &probe_scratch) != HS_SUCCESS) {
         std::stringstream error;
         error << "ERROR: Unable to allocate scratch space," << PROMPT_INFO;
         LOG(WARNING) << error.str().c_str();
-        hs_free_database(state->database);
+        hs_free_database(database);
         return false;
     }
+    hs_free_scratch(probe_scratch);
 
+    state->database = std::shared_ptr<hs_database_t>(database, [](hs_database_t* db) { hs_free_database(db); });
     return true;
 }
 
 template <bool full_match>
 Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
                                                     FunctionContext* context, const Slice& slice) {
-    if (!hs_compile_and_alloc_scratch(pattern, state, context, slice)) {
+    if (!hs_compile_database(pattern, state, context, slice)) {
         RE2::Options opts;
         opts.set_never_nl(false);
         opts.set_dot_nl(true);
@@ -100,17 +111,9 @@ Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, 
 // when pattern is a constant value except ((EQUALS | SUBSTRING | STARTS_WITH | ENDS_WITH) variable value)
 // we use hyperscan.
 
-// like predicate
-Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
-        return Status::OK();
-    }
-
-    // @todo: should replace to mem pool
-    auto state = new LikePredicateState();
+// Analyze the (constant) LIKE pattern and populate the compile-once artifacts on `state`.
+Status LikePredicate::setup_like_state(FunctionContext* context, LikePredicateState* state) {
     state->function = &like_fn;
-
-    context->set_function_state(scope, state);
 
     // go row regex
     if (!context->is_notnull_constant_column(1)) {
@@ -139,36 +142,40 @@ Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::Fu
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
     } else {
-        auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
+        auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern, state->escape_char);
         RETURN_IF_ERROR(compile_with_hyperscan_or_re2<true>(re_pattern, state, context, pattern));
     }
 
     return Status::OK();
 }
 
-Status LikePredicate::like_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        delete state;
+// like predicate
+//
+// The compile-once artifacts (function selection, constant search string, compiled Hyperscan
+// database / RE2) are built once in the shared FRAGMENT_LOCAL state and read directly by eval;
+// per-thread Hyperscan scratch is obtained lazily from the FunctionContext thread-state registry.
+Status LikePredicate::like_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
     }
+    auto* state = new LikePredicateState();
+    context->set_function_state(scope, state);
+    return setup_like_state(context, state);
+}
+
+Status LikePredicate::like_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(scope));
+    delete state;
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> LikePredicate::like(FunctionContext* context, const starrocks::Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
     return (state->function)(context, columns);
 }
 
-// regex predicate
-Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::THREAD_LOCAL) {
-        return Status::OK();
-    }
-
-    // @todo: should replace to mem pool
-    auto* state = new LikePredicateState();
-    context->set_function_state(scope, state);
-
+// Analyze the (constant) regex pattern and populate the compile-once artifacts on `state`.
+Status LikePredicate::setup_regex_state(FunctionContext* context, LikePredicateState* state) {
     state->function = &regex_fn;
 
     // go row regex
@@ -206,16 +213,24 @@ Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::F
     return Status::OK();
 }
 
-Status LikePredicate::regex_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        delete state;
+// regex predicate. Same fragment-shared / per-thread-scratch split as like_prepare().
+Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
     }
+    auto* state = new LikePredicateState();
+    context->set_function_state(scope, state);
+    return setup_regex_state(context, state);
+}
+
+Status LikePredicate::regex_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(scope));
+    delete state;
     return Status::OK();
 }
 
 StatusOr<ColumnPtr> LikePredicate::regex(FunctionContext* context, const Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
     return (state->function)(context, columns);
 }
 
@@ -241,7 +256,7 @@ StatusOr<ColumnPtr> LikePredicate::regex_fn_with_long_constant_pattern(FunctionC
 template <bool full_match>
 StatusOr<ColumnPtr> LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context,
                                                                        const Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
 
     const auto& value_column = VECTORIZED_FN_ARGS(0);
     auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
@@ -275,7 +290,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantEndsImpl, value, pattern) {
 }
 
 StatusOr<ColumnPtr> LikePredicate::constant_ends_with_fn(FunctionContext* context, const starrocks::Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
 
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
@@ -290,7 +305,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantStartsImpl, value, pattern) {
 
 StatusOr<ColumnPtr> LikePredicate::constant_starts_with_fn(FunctionContext* context,
                                                            const starrocks::Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
 
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
@@ -304,7 +319,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantEqualsImpl, value, pattern) {
 }
 
 StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, const starrocks::Columns& columns) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
 
     const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
@@ -314,7 +329,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_equals_fn(FunctionContext* context, 
 
 StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    auto state = shared_state(context);
 
     Slice needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(state->_search_string_column);
     auto res = RunTimeColumnType<TYPE_BOOLEAN>::create();
@@ -351,38 +366,40 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         size_t type_size = res->type_size();
         memset(res->mutable_raw_data(), 1, res->size() * type_size);
     } else {
-        const Buffer<uint32_t>& offsets = haystack->get_offset();
+        const auto& offsets = haystack->get_offset();
         res->resize(haystack->size());
 
         const char* begin = haystack->get_string_begin();
-        const char* pos = begin;
         const char* end = haystack->get_string_end();
 
-        /// Current index in the array of strings.
-        size_t i = 0;
+        offsets.visit_storage([&](const auto& offsets_buf) {
+            const auto* __restrict offset_data = offsets_buf.data();
+            const char* pos = begin;
 
-        auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
-        /// We will search for the next occurrence in all strings at once.
-        while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
-            /// Determine which index it refers to.
-            while (begin + offsets[i + 1] <= pos) {
-                res->get_data()[i] = false;
+            /// Current index in the array of strings.
+            size_t i = 0;
+
+            auto searcher = VolnitskyUTF8(needle.data, needle.size, end - pos);
+            /// We will search for the next occurrence in all strings at once.
+            while (pos < end && end != (pos = searcher.search(pos, end - pos))) {
+                /// Determine which index it refers to.
+                while (begin + offset_data[i + 1] <= pos) {
+                    res->get_data()[i] = false;
+                    ++i;
+                }
+                const char* row_end = begin + offset_data[i + 1];
+
+                /// We check that the entry does not pass through the boundaries of strings.
+                res->get_data()[i] = pos + needle.size <= row_end;
+                pos = row_end;
                 ++i;
             }
-            /// We check that the entry does not pass through the boundaries of strings.
-            if (pos + needle.size > begin + offsets[i + 1]) {
-                res->get_data()[i] = false;
-            } else {
-                res->get_data()[i] = true;
-            }
-            pos = begin + offsets[i + 1];
-            ++i;
-        }
 
-        if (i < res->size()) {
-            size_t type_size = res->type_size();
-            memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
-        }
+            if (i < res->size()) {
+                size_t type_size = res->type_size();
+                memset(res->mutable_raw_data() + i * type_size, 0, (res->size() - i) * type_size);
+            }
+        });
     }
 
     if (columns[0]->has_null()) {
@@ -406,22 +423,22 @@ StatusOr<ColumnPtr> LikePredicate::regex_match(FunctionContext* context, const s
 StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* context, ColumnBuilder<TYPE_BOOLEAN>* result,
                                                           const ColumnViewer<TYPE_VARCHAR>& value_viewer,
                                                           const ColumnPtr& value_column) {
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-
-    hs_scratch_t* scratch = nullptr;
-    hs_error_t status;
-    if ((status = hs_clone_scratch(state->scratch, &scratch)) != HS_SUCCESS) {
-        return Status::InternalError(fmt::format("unable to clone scratch space, status: {}", status));
-    }
-
-    DeferOp op([&] {
-        if (scratch != nullptr) {
-            hs_error_t st;
-            if ((st = hs_free_scratch(scratch)) != HS_SUCCESS) {
-                LOG(ERROR) << "free scratch space failure. status: " << st;
-            }
+    // The compiled Hyperscan database lives on the shared LIKE state. Each worker obtains its
+    // own scratch from the FunctionContext's per-worker thread-state registry, once per chunk
+    // (never per row): the scratch is owned by the (shared) FunctionContext and reused across
+    // chunks by the same worker, so no per-thread FunctionContext clone is needed to hold it.
+    auto* state = shared_state(context);
+    auto* ts = context->get_or_create_thread_state<LikeThreadState>([&]() {
+        auto s = std::make_unique<LikeThreadState>();
+        if (state->database != nullptr) {
+            (void)hs_alloc_scratch(state->database.get(), &s->scratch);
         }
+        return s;
     });
+    hs_scratch_t* scratch = ts->scratch;
+    if (scratch == nullptr) {
+        return Status::InternalError("unable to obtain hyperscan scratch space");
+    }
 
     for (int row = 0; row < value_viewer.size(); ++row) {
         if (value_viewer.is_null(row)) {
@@ -433,7 +450,7 @@ StatusOr<ColumnPtr> LikePredicate::_predicate_const_regex(FunctionContext* conte
         auto value_size = value_viewer.value(row).size;
         [[maybe_unused]] auto status = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
-                state->database, (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
+                state->database.get(), (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
                 value_size, 0, scratch,
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                    void* ctx) -> int {
@@ -573,7 +590,9 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_full(FunctionContext* context, co
             break;
         }
         case FastPathType::REGEX: {
-            auto re_pattern = LikePredicate::template convert_like_pattern<false>(context, pattern);
+            auto* like_state = shared_state(context);
+            auto re_pattern =
+                    LikePredicate::template convert_like_pattern<false>(context, pattern, like_state->escape_char);
 
             re2::RE2 re(re_pattern, opts);
             if (!re.ok()) {
@@ -638,11 +657,10 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
 }
 
 template <bool fullMatch>
-std::string LikePredicate::convert_like_pattern(FunctionContext* context, const Slice& pattern) {
+std::string LikePredicate::convert_like_pattern(FunctionContext* context, const Slice& pattern, char escape_char) {
     std::string re_pattern;
     re_pattern.clear();
 
-    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
     bool is_escaped = false;
 
     if constexpr (fullMatch) {
@@ -655,7 +673,7 @@ std::string LikePredicate::convert_like_pattern(FunctionContext* context, const 
         } else if (!is_escaped && pattern.data[i] == '_') {
             re_pattern.append(".");
             // check for escape char before checking for regex special chars, they might overlap
-        } else if (!is_escaped && pattern.data[i] == state->escape_char) {
+        } else if (!is_escaped && pattern.data[i] == escape_char) {
             is_escaped = true;
         } else if (pattern.data[i] == '.' || pattern.data[i] == '[' || pattern.data[i] == ']' ||
                    pattern.data[i] == '{' || pattern.data[i] == '}' || pattern.data[i] == '(' ||

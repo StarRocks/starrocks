@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 import com.starrocks.sql.optimizer.skew.DataSkew;
@@ -126,15 +127,21 @@ public class SplitWindowSkewToUnionRule extends TransformationRule {
             if (lwo.isOpRuleBitSet(OP_SPLIT_WINDOW_SKEW)) {
                 return false;
             }
+            OptExpression child = input.inputAt(0);
+            if (child.getOp().accept(new NonDeterministicVisitor(), child, null)) {
+                return false;
+            }
 
             List<ScalarOperator> partitionExprs = lwo.getPartitionExpressions();
 
             // Rule only applies if there is exactly one partition expression,
             // and that expression is a direct ColumnReference (not a function or expression).
+            // An explicit [merge_sort] hint picks the merge-sort strategy instead, so leave it alone.
             return partitionExprs != null
                     && partitionExprs.size() == 1
                     && lwo.getOrderByElements() != null
-                    && !lwo.getOrderByElements().isEmpty();
+                    && !lwo.getOrderByElements().isEmpty()
+                    && !lwo.isForceMergeSort();
         }
         return false;
     }

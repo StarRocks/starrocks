@@ -413,6 +413,14 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
 }
 
+GeoPointPolygonRelation GeoPolygon::point_relation(const GeoPoint& point) const {
+    constexpr double kBoundaryToleranceRadians = 1e-15;
+    if (_polygon->GetDistanceToBoundary(*point.point()).radians() <= kBoundaryToleranceRadians) {
+        return GeoPointPolygonRelation::BOUNDARY;
+    }
+    return _polygon->Contains(*point.point()) ? GeoPointPolygonRelation::INSIDE : GeoPointPolygonRelation::OUTSIDE;
+}
+
 GeoCircle::GeoCircle() = default;
 GeoCircle::~GeoCircle() = default;
 

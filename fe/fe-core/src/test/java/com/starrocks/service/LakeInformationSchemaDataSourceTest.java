@@ -14,26 +14,44 @@
 
 package com.starrocks.service;
 
+import com.google.common.collect.Lists;
 import com.google.gson.Gson;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.RangeDistributionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.vector.VectorIndexBuildScheduler;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TPartitionMetaInfo;
+import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableConfigInfo;
+import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
@@ -199,55 +217,49 @@ public class LakeInformationSchemaDataSourceTest {
      */
     @Test
     public void testGetLakePartitionsMetaAsyncVectorIndexBuiltVersion() throws Exception {
-        boolean prevEnableExperimentalVector = Config.enable_experimental_vector;
-        Config.enable_experimental_vector = true;
-        try {
-            starRocksAssert.withEnableMV().withDatabase("db_vi_meta").useDatabase("db_vi_meta");
+        starRocksAssert.withEnableMV().withDatabase("db_vi_meta").useDatabase("db_vi_meta");
 
-            String createTblStmtStr = "CREATE TABLE db_vi_meta.vi_table (" +
-                    " c0 INT," +
-                    " c1 array<float> NOT NULL," +
-                    " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
-                    "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
-                    "'index_build_mode' = 'async')) " +
-                    "DUPLICATE KEY(c0) " +
-                    "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
-                    "PROPERTIES ('replication_num' = '1');";
-            starRocksAssert.withTable(createTblStmtStr);
+        String createTblStmtStr = "CREATE TABLE db_vi_meta.vi_table (" +
+                " c0 INT," +
+                " c1 array<float> NOT NULL," +
+                " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                "'index_build_mode' = 'async')) " +
+                "DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
 
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable("db_vi_meta", "vi_table");
-            Assertions.assertTrue(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("db_vi_meta", "vi_table");
+        Assertions.assertTrue(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
 
-            // Stamp distinct built versions on the base-index tablets so the span becomes [3, 7].
-            long[] versions = {3L, 5L, 7L};
-            for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-                MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
-                int i = 0;
-                for (Tablet tablet : baseIndex.getTablets()) {
-                    ((LakeTablet) tablet).setVectorIndexBuiltVersion(versions[i % versions.length]);
-                    i++;
-                }
+        // Stamp distinct built versions on the base-index tablets so the span becomes [3, 7].
+        long[] versions = {3L, 5L, 7L};
+        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
+            MaterializedIndex baseIndex = partition.getIndex(table.getBaseIndexMetaId());
+            int i = 0;
+            for (Tablet tablet : baseIndex.getTablets()) {
+                ((LakeTablet) tablet).setVectorIndexBuiltVersion(versions[i % versions.length]);
+                i++;
             }
-
-            FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
-            TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
-            TAuthInfo authInfo = new TAuthInfo();
-            authInfo.setPattern("db_vi_meta");
-            authInfo.setUser("root");
-            authInfo.setUser_ip("%");
-            req.setAuth_info(authInfo);
-            TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
-
-            TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
-                    .filter(t -> t.getTable_name().equals("vi_table")).findFirst().orElse(null);
-            Assertions.assertNotNull(partitionMeta);
-            Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
-            Assertions.assertEquals(3L, partitionMeta.getMin_vi_built_version());
-            Assertions.assertEquals(7L, partitionMeta.getMax_vi_built_version());
-        } finally {
-            Config.enable_experimental_vector = prevEnableExperimentalVector;
         }
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_vi_meta");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("vi_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+        Assertions.assertEquals(3L, partitionMeta.getMin_vi_built_version());
+        Assertions.assertEquals(7L, partitionMeta.getMax_vi_built_version());
     }
 
     /**
@@ -256,46 +268,168 @@ public class LakeInformationSchemaDataSourceTest {
      */
     @Test
     public void testGetLakePartitionsMetaSyncVectorIndexBuiltVersion() throws Exception {
-        boolean prevEnableExperimentalVector = Config.enable_experimental_vector;
-        Config.enable_experimental_vector = true;
+        starRocksAssert.withEnableMV().withDatabase("db_vi_sync").useDatabase("db_vi_sync");
+
+        String createTblStmtStr = "CREATE TABLE db_vi_sync.vi_sync_table (" +
+                " c0 INT," +
+                " c1 array<float> NOT NULL," +
+                " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
+                "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
+                "'index_build_mode' = 'sync')) " +
+                "DUPLICATE KEY(c0) " +
+                "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("db_vi_sync", "vi_sync_table");
+        Assertions.assertFalse(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
+        Assertions.assertTrue(VectorIndexBuildScheduler.hasVectorIndex(table));
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_vi_sync");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("vi_sync_table")).findFirst().orElse(null);
+        Assertions.assertNotNull(partitionMeta);
+        Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
+        // Sync index is always current as of the visible version.
+        Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMin_vi_built_version());
+        Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMax_vi_built_version());
+    }
+
+    /**
+     * partitions_meta must report each physical partition's own bucket count, not the table-level
+     * default. Add a physical partition whose bucket count differs from the table default and assert
+     * BUCKETS is per-physical (the default physical keeps the table default; the added one reports its own).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsPerPhysicalBucketNum() throws Exception {
+        starRocksAssert.withDatabase("db_pp_buckets").useDatabase("db_pp_buckets");
+        starRocksAssert.withTable("CREATE TABLE db_pp_buckets.t (k1 INT, v1 BIGINT) " +
+                "DUPLICATE KEY(k1) DISTRIBUTED BY RANDOM BUCKETS 3 " +
+                "PROPERTIES ('replication_num' = '1');");
+
+        LocalMetastore metastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        // Add a physical partition whose bucket count (5) differs from the table default (3).
+        metastore.addPhysicalPartition("db_pp_buckets", "t", null, 5);
+
+        OlapTable table = (OlapTable) metastore.getTable("db_pp_buckets", "t");
+        Partition partition = table.getPartitions().iterator().next();
+        long defaultPhysicalId = partition.getDefaultPhysicalPartition().getId();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db_pp_buckets");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+
+        Map<Long, Integer> bucketsByPartitionId = new HashMap<>();
+        for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+            if (meta.getTable_name().equals("t")) {
+                bucketsByPartitionId.put(meta.getPartition_id(), meta.getBuckets());
+            }
+        }
+        Assertions.assertEquals(2, bucketsByPartitionId.size());
+        Assertions.assertEquals(Integer.valueOf(3), bucketsByPartitionId.get(defaultPhysicalId));
+        Assertions.assertTrue(bucketsByPartitionId.containsValue(5),
+                "expected an added physical partition reporting 5 buckets, got: " + bucketsByPartitionId);
+    }
+
+    /**
+     * partitions_meta must report a range-distribution partition's real tablet count. Base holds 3
+     * tablets while the rollups hold 2 and 4, so "base" (3) is distinguishable from the old fixed 1,
+     * from the minimum (2) and from the maximum (4).
+     */
+    @Test
+    public void testGetLakePartitionsMetaReportsRangeBaseIndexTabletNum() throws Exception {
+        starRocksAssert.withDatabase("db_range_buckets").useDatabase("db_range_buckets");
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db_range_buckets");
+
+        List<Column> columns = Lists.newArrayList(new Column("k1", IntegerType.INT, true));
+        long partitionId = 90025L;
+        long physicalPartitionId = 90035L;
+        SinglePartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(partitionId, (short) 1);
+        partitionInfo.setDataCacheInfo(partitionId, new DataCacheInfo(true, false));
+
+        LakeTable table = new LakeTable(90024L, "range_buckets_t", columns, KeysType.DUP_KEYS,
+                partitionInfo, new RangeDistributionInfo());
+        MaterializedIndex baseIndex = newRangeIndex(30000L, 3000L, 3);
+        table.setBaseIndexMetaId(baseIndex.getMetaId());
+        table.setIndexMeta(baseIndex.getMetaId(), "range_buckets_t", columns, 0, 0, (short) 1,
+                TStorageType.COLUMN, KeysType.DUP_KEYS);
+
+        // STORAGE_PATH is filled unconditionally for a cloud-native table:
+        // InformationSchemaDataSource.genPartitionMetaInfo does
+        // table.getPartitionFilePathInfo(id).getFullPath(), and OlapTable.getPartitionFilePathInfo is
+        // @Nullable, returning null when the table has no StorageInfo. Without this the request throws
+        // an NPE long before the bucket assertion.
+        S3FileStoreInfo.Builder s3FsBuilder = S3FileStoreInfo.newBuilder()
+                .setBucket("test-bucket")
+                .setRegion("test-region");
+        FileStoreInfo fsInfo = FileStoreInfo.newBuilder()
+                .setFsType(FileStoreType.S3)
+                .setFsKey("test-bucket")
+                .setS3FsInfo(s3FsBuilder.build())
+                .build();
+        FilePathInfo pathInfo = FilePathInfo.newBuilder()
+                .setFsInfo(fsInfo)
+                .setFullPath("s3://test-bucket/range_buckets_t")
+                .build();
+        table.setStorageInfo(pathInfo, new DataCacheInfo(true, false));
+
+        Partition partition = new Partition(partitionId, physicalPartitionId, "range_buckets_t",
+                baseIndex, new RangeDistributionInfo());
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        physicalPartition.createRollupIndex(newRangeIndex(10000L, 1000L, 2));
+        physicalPartition.createRollupIndex(newRangeIndex(20000L, 2000L, 4));
+        table.addPartition(partition);
+
+        db.registerTableUnlocked(table);
         try {
-            starRocksAssert.withEnableMV().withDatabase("db_vi_sync").useDatabase("db_vi_sync");
-
-            String createTblStmtStr = "CREATE TABLE db_vi_sync.vi_sync_table (" +
-                    " c0 INT," +
-                    " c1 array<float> NOT NULL," +
-                    " INDEX index_vector1 (c1) USING VECTOR ('metric_type' = 'cosine_similarity', " +
-                    "'is_vector_normed' = 'false', 'M' = '512', 'index_type' = 'hnsw', 'dim' = '5', " +
-                    "'index_build_mode' = 'sync')) " +
-                    "DUPLICATE KEY(c0) " +
-                    "DISTRIBUTED BY HASH(c0) BUCKETS 3 " +
-                    "PROPERTIES ('replication_num' = '1');";
-            starRocksAssert.withTable(createTblStmtStr);
-
-            OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable("db_vi_sync", "vi_sync_table");
-            Assertions.assertFalse(VectorIndexBuildScheduler.hasAsyncVectorIndex(table));
-            Assertions.assertTrue(VectorIndexBuildScheduler.hasVectorIndex(table));
+            Assertions.assertNotEquals(baseIndex.getId(),
+                    physicalPartition.getLatestMaterializedIndices(IndexExtState.ALL).get(0).getId(),
+                    "fixture no longer discriminates: adjust the meta ids so a rollup enumerates first");
 
             FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
             TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
             TAuthInfo authInfo = new TAuthInfo();
-            authInfo.setPattern("db_vi_sync");
+            authInfo.setPattern("db_range_buckets");
             authInfo.setUser("root");
             authInfo.setUser_ip("%");
             req.setAuth_info(authInfo);
             TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
 
-            TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
-                    .filter(t -> t.getTable_name().equals("vi_sync_table")).findFirst().orElse(null);
-            Assertions.assertNotNull(partitionMeta);
-            Assertions.assertTrue(partitionMeta.isSetMin_vi_built_version());
-            // Sync index is always current as of the visible version.
-            Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMin_vi_built_version());
-            Assertions.assertEquals(partitionMeta.getVisible_version(), partitionMeta.getMax_vi_built_version());
+            Integer buckets = null;
+            for (TPartitionMetaInfo meta : response.getPartitions_meta_infos()) {
+                if (meta.getTable_name().equals("range_buckets_t")) {
+                    buckets = meta.getBuckets();
+                }
+            }
+            Assertions.assertEquals(Integer.valueOf(3), buckets);
         } finally {
-            Config.enable_experimental_vector = prevEnableExperimentalVector;
+            db.dropTable(90024L);
         }
+    }
+
+    private static MaterializedIndex newRangeIndex(long indexId, long metaId, int tabletNum) {
+        MaterializedIndex index = new MaterializedIndex(indexId, metaId, IndexState.NORMAL,
+                PhysicalPartition.INVALID_SHARD_GROUP_ID);
+        for (int i = 0; i < tabletNum; i++) {
+            index.addTablet(new LakeTablet(indexId + i), null, false);
+        }
+        return index;
     }
 
     @Test

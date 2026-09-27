@@ -51,6 +51,8 @@
 
 namespace starrocks {
 
+static_assert(sizeof(DateTimeValue) == 16, "DateTimeValue size mismatch");
+
 const uint64_t log_10_int[] = {1,         10,         100,         1000,         10000UL,       100000UL,
                                1000000UL, 10000000UL, 100000000UL, 1000000000UL, 10000000000UL, 100000000000UL};
 
@@ -424,7 +426,7 @@ bool JodaFormat::prepare(std::string_view format) {
         }
         default: {
             _token_parsers.emplace_back([&, ch](JodaRuntimeState* state, const char* val_end) {
-                if (ch != **(state->valptr)) {
+                if (*(state->valptr) >= val_end || ch != **(state->valptr)) {
                     return false;
                 }
                 *(state->valptr) += 1;
@@ -2481,7 +2483,7 @@ bool TeradataFormat::prepare(std::string_view format) {
             //  - / , . ; :	Punctuation characters are ignored
             auto ignored_char = *ptr;
             _token_parsers.emplace_back([&, ignored_char](TeradataRuntimeState* state, const char* val_end) {
-                if (**(state->valptr) != ignored_char) {
+                if (*(state->valptr) >= val_end || **(state->valptr) != ignored_char) {
                     return false;
                 }
                 *(state->valptr) += 1;
@@ -2545,11 +2547,11 @@ bool TeradataFormat::prepare(std::string_view format) {
             next_ch_ptr++;
             ptr++;
             _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
-                if (**(state->valptr) != 'a') {
+                if (*(state->valptr) >= val_end || **(state->valptr) != 'a') {
                     return false;
                 }
                 *(state->valptr) += 1;
-                if (**(state->valptr) != 'm') {
+                if (*(state->valptr) >= val_end || **(state->valptr) != 'm') {
                     return false;
                 }
                 *(state->valptr) += 1;
@@ -2568,11 +2570,11 @@ bool TeradataFormat::prepare(std::string_view format) {
             next_ch_ptr++;
             ptr++;
             _token_parsers.emplace_back([&](TeradataRuntimeState* state, const char* val_end) {
-                if (**(state->valptr) != 'p') {
+                if (*(state->valptr) >= val_end || **(state->valptr) != 'p') {
                     return false;
                 }
                 *(state->valptr) += 1;
-                if (**(state->valptr) != 'm') {
+                if (*(state->valptr) >= val_end || **(state->valptr) != 'm') {
                     return false;
                 }
                 *(state->valptr) += 1;

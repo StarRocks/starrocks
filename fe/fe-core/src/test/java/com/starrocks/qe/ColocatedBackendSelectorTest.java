@@ -67,7 +67,7 @@ public class ColocatedBackendSelectorTest {
                 bucketSeqToBackends.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
 
         OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 3));
         WorkerProvider workerProvider = genWorkerProvider(backendIds);
 
         {
@@ -98,7 +98,7 @@ public class ColocatedBackendSelectorTest {
                 bucketSeqToBackends.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
 
         OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 3));
         WorkerProvider workerProvider = genWorkerProvider(backendIds);
 
         {
@@ -148,7 +148,7 @@ public class ColocatedBackendSelectorTest {
                 bucketSeqToBackends.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
 
         OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 3);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 3));
         WorkerProvider workerProvider = genWorkerProvider(backendIds);
 
         {
@@ -214,9 +214,9 @@ public class ColocatedBackendSelectorTest {
                 .flatMap(Collection::stream).collect(Collectors.toSet());
 
         OlapScanNode scanNode0 = genOlapScanNode(0, numBuckets);
-        scanNode0.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends0, 3);
+        scanNode0.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends0, 3));
         OlapScanNode scanNode1 = genOlapScanNode(1, numBuckets);
-        scanNode1.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends1, 4);
+        scanNode1.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends1, 4));
         List<OlapScanNode> scanNodes = ImmutableList.of(scanNode0, scanNode1);
 
         WorkerProvider workerProvider = genWorkerProvider(backendIds);
@@ -383,7 +383,7 @@ public class ColocatedBackendSelectorTest {
                 };
 
         OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 1);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 1));
 
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ColocatedBackendSelector.Assignment colocatedAssignment =
@@ -429,7 +429,7 @@ public class ColocatedBackendSelectorTest {
             }
         };
         OlapScanNode scanNode = genOlapScanNode(0, numBuckets);
-        scanNode.bucketSeq2locations = genBucketSeq2Locations(bucketSeqToBackends, 1);
+        scanNode.getBucketSeqToLocations().putAll(genBucketSeq2Locations(bucketSeqToBackends, 1));
 
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
         ColocatedBackendSelector.Assignment colocatedAssignment =

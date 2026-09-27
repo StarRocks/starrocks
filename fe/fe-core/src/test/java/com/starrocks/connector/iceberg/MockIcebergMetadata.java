@@ -241,13 +241,15 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 new Column("id", IntegerType.INT, true),
                 new Column("data", StringType.STRING, true),
                 new Column("geo_col", UnknownType.UNKNOWN_TYPE, true),
+                new Column("geography_col", UnknownType.UNKNOWN_TYPE, true),
                 new Column("ts_nano_col", UnknownType.UNKNOWN_TYPE, true));
         schemas = addMetaColumns(schemas);
 
         Schema schema = new Schema(
                 required(3, "id", Types.IntegerType.get()),
                 required(4, "data", Types.StringType.get()),
-                required(5, "geo_col", Types.StringType.get()),
+                required(5, "geo_col", Types.GeometryType.crs84()),
+                required(7, "geography_col", Types.GeographyType.crs84()),
                 required(6, "ts_nano_col", Types.StringType.get()));
         PartitionSpec spec = PartitionSpec.builderFor(schema).build();
         TestTables.TestTable baseTable = TestTables.create(
@@ -255,7 +257,8 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                         MOCKED_UNKNOWN_TYPE_TABLE_NAME), MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 schema, spec, 3);
 
-        MockIcebergTable mockIcebergTable = new MockIcebergTable(2, MOCKED_UNKNOWN_TYPE_TABLE_NAME,
+        MockIcebergTable mockIcebergTable = new MockIcebergTable(MOCKED_UNKNOWN_TYPE_TABLE_NAME.hashCode(),
+                MOCKED_UNKNOWN_TYPE_TABLE_NAME,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
                 MOCKED_UNKNOWN_TYPE_TABLE_NAME, schemas, baseTable, null, "");
 
@@ -802,6 +805,18 @@ public class MockIcebergMetadata implements ConnectorMetadata {
             return new IcebergView(1, MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
                     "SELECT 1 as id, 'data' as data, CAST('2024-01-01' as DATE) as date", MOCKED_ICEBERG_CATALOG_NAME, dbName,
                     "view_location", Maps.newHashMap());
+        }
+        // A pair of mutually-referencing views (cyc_a -> cyc_b -> cyc_a) used to verify cyclic
+        // connector-view detection. Each lookup mints a *fresh* id, mirroring
+        // IcebergApiConverter.toView (CONNECTOR_ID_GENERATOR.getNextId()), so the id can never be
+        // used to detect re-entry.
+        if (dbName.equalsIgnoreCase("view_db")
+                && (viewName.equalsIgnoreCase("cyc_a") || viewName.equalsIgnoreCase("cyc_b"))) {
+            List<Column> schema = Lists.newArrayList(new Column("id", IntegerType.INT));
+            String other = viewName.equalsIgnoreCase("cyc_a") ? "cyc_b" : "cyc_a";
+            String def = "SELECT id FROM " + MOCKED_ICEBERG_CATALOG_NAME + ".view_db." + other;
+            return new IcebergView(idGen.getAndIncrement(), MOCKED_ICEBERG_CATALOG_NAME, dbName, viewName, schema,
+                    def, MOCKED_ICEBERG_CATALOG_NAME, dbName, "view_location", Maps.newHashMap());
         }
         return null;
     }

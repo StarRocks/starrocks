@@ -1,0 +1,54 @@
+-- name: test_schema_change_string_to_num_null
+drop database if exists test_schema_change_string_to_num_null;
+-- result:
+-- !result
+create database test_schema_change_string_to_num_null;
+-- result:
+-- !result
+use test_schema_change_string_to_num_null;
+-- result:
+-- !result
+CREATE TABLE cc1 (k INT, v VARCHAR(32) NOT NULL) DUPLICATE KEY(k)
+  DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("fast_schema_evolution"="true","replication_num"="1");
+-- result:
+-- !result
+INSERT INTO cc1 VALUES (1,'100'),(2,'99999999999'),(3,'abc');
+-- result:
+-- !result
+ALTER TABLE cc1 MODIFY COLUMN v INT;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT k,v FROM cc1 ORDER BY k;
+-- result:
+1	100
+2	None
+3	None
+-- !result
+CREATE TABLE cc2 (k INT, v VARCHAR(32)) DUPLICATE KEY(k)
+  DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES("fast_schema_evolution"="true","replication_num"="1");
+-- result:
+-- !result
+INSERT INTO cc2 VALUES (1,'7'),(2,'1.5'),(3,'xyz'),(4,NULL);
+-- result:
+-- !result
+ALTER TABLE cc2 MODIFY COLUMN v DOUBLE;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SELECT k,v FROM cc2 ORDER BY k;
+-- result:
+1	7.0
+2	1.5
+3	None
+4	None
+-- !result
+drop database test_schema_change_string_to_num_null;
+-- result:
+-- !result

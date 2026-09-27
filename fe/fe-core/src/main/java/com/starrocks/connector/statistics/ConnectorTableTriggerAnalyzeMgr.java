@@ -99,7 +99,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
                     tableExist = true;
                     tableUUID = columnKey.tableUUID;
                 } catch (Exception e) {
-                    LOG.warn("Table {} is not existed", columnKey.tableUUID);
+                    LOG.warn("[ExternalStats] trigger skip | table_uuid={} reason=table_not_found", columnKey.tableUUID);
                     return;
                 }
             }
@@ -127,10 +127,7 @@ public class ConnectorTableTriggerAnalyzeMgr {
 
         if (!analyzeColumns.isEmpty()) {
             // need to execute analyze
-            if (!this.connectorAnalyzeTaskQueue.
-                    addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, analyzeColumns))) {
-                LOG.warn("Add analyze pending task {} failed.", tableUUID);
-            }
+            this.connectorAnalyzeTaskQueue.addPendingTask(tableUUID, new ConnectorAnalyzeTask(tableTriple, analyzeColumns));
         }
     }
 

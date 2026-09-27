@@ -17,13 +17,13 @@
 #include <memory>
 #include <unordered_map>
 
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/operator_factory.h"
-#include "exec/pipeline/source_operator.h"
 #include "exec/runtime/fragment_context.h"
 #include "exec/runtime/group_execution/execution_group.h"
 #include "exec/runtime/pipeline.h"
 #include "exec/runtime/pipeline_builder_context.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/operator_factory.h"
+#include "exec_primitive/pipeline/source_operator.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

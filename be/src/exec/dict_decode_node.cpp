@@ -55,11 +55,8 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _decode_column_cids.emplace_back(decode_id);
     }
 
-    auto& tuple_id = this->_tuple_ids[0];
     for (const auto& dict_id : _decode_column_cids) {
-        auto idx = this->row_desc().get_tuple_idx(tuple_id);
-        auto& tuple = this->row_desc().tuple_descriptors()[idx];
-        for (const auto& slot : tuple->slots()) {
+        for (const auto* slot : record_desc().slots()) {
             if (slot->id() == dict_id) {
                 _decode_column_types.emplace_back(&slot->type());
                 break;

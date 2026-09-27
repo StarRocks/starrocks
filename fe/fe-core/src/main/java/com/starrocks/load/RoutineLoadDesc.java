@@ -37,6 +37,7 @@ package com.starrocks.load;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportMetadataStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RowDelimiter;
@@ -55,6 +56,8 @@ public class RoutineLoadDesc {
     private ImportWhereStmt wherePredicate;
     // nullable
     private PartitionRef partitionNames;
+    // nullable; the INCLUDE METADATA (...) clause for routine load
+    private ImportMetadataStmt metadata;
 
     public RoutineLoadDesc() {
     }
@@ -109,6 +112,15 @@ public class RoutineLoadDesc {
         this.partitionNames = partitionNames;
     }
 
+    // nullable
+    public ImportMetadataStmt getMetadata() {
+        return metadata;
+    }
+
+    public void setMetadata(ImportMetadataStmt metadata) {
+        this.metadata = metadata;
+    }
+
     public String toSql() {
         List<String> subSQLs = new ArrayList<>();
         if (columnSeparator != null) {
@@ -116,6 +128,9 @@ public class RoutineLoadDesc {
         }
         if (rowDelimiter != null) {
             subSQLs.add("ROWS TERMINATED BY " + rowDelimiter.toSql());
+        }
+        if (metadata != null && metadata.getItems() != null && !metadata.getItems().isEmpty()) {
+            subSQLs.add(metadata.toSql());
         }
         if (columnsInfo != null) {
             String subSQL = "COLUMNS(" +

@@ -20,6 +20,7 @@
 #include "compute_env/result/buffer_control_block.h"
 #include "compute_env/result/result_buffer_mgr.h"
 #include "compute_env/workgroup/scan_executor.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_context_cancel.h"
 #include "exec/pipeline/query_context.h"
@@ -27,10 +28,8 @@
 #include "exprs/expr.h"
 #include "exprs/expr_executor.h"
 #include "exprs/expr_factory.h"
-#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
-#include "udf/java/utils.h"
 
 namespace starrocks::pipeline {
 
@@ -89,15 +88,7 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
     }
 
     if (_sender != nullptr) {
-        auto query_statistic = std::make_shared<QueryStatistics>();
-        QueryContext* query_ctx = state->query_ctx();
-        auto* query_runtime_state = state->query_runtime_state();
-        query_statistic->add_scan_stats(query_runtime_state->cur_scan_rows_num(),
-                                        query_runtime_state->get_scan_bytes());
-        query_statistic->add_cpu_costs(query_runtime_state->cpu_cost());
-        query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
-        query_statistic->set_returned_rows(num_written_rows);
-        _sender->set_query_statistics(query_statistic);
+        _sender->set_query_statistics(build_file_sink_query_statistic(state->query_ctx(), num_written_rows));
         Status final_status = _fragment_ctx->final_status();
         Status io_status = get_io_status();
         if (!io_status.ok() && final_status.ok()) {

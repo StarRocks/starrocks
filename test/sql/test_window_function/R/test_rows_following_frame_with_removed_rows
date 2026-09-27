@@ -1,0 +1,25 @@
+-- name: test_rows_following_frame_with_removed_rows
+CREATE TABLE `t0` (
+    `k` bigint(20) NOT NULL,
+    `v` bigint(20) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `t0` SELECT generate_series, generate_series % 1000 FROM TABLE(generate_series(1, 600000));
+-- result:
+-- !result
+SELECT count(wv), sum(wv) FROM (
+    SELECT sum(v) OVER (ORDER BY k ROWS BETWEEN 5000 FOLLOWING AND 15000 FOLLOWING) AS wv FROM `t0`) a;
+-- result:
+595000	2948173042500
+-- !result
+SELECT count(wv), sum(wv) FROM (
+    SELECT sum(v) OVER (ORDER BY k ROWS BETWEEN 15000 PRECEDING AND 5000 PRECEDING) AS wv FROM `t0`) a;
+-- result:
+595000	2946516367500
+-- !result

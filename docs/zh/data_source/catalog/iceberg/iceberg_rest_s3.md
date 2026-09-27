@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "在 StarRocks 创建 Iceberg REST Catalog 通过 AWS Glue 端点访问 S3 表。"
 ---

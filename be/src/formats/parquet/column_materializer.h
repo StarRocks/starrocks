@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "cache/scan/shared_buffered_input_stream.h"
+#include "column/chunk.h"
 #include "common/global_types.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -27,7 +28,7 @@
 #include "formats/parquet/column_read_order_ctx.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/group_reader.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks::parquet {
 

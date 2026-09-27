@@ -24,8 +24,12 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 
-namespace starrocks::query_cache {
+namespace starrocks {
+class MetricRegistry;
+
+namespace query_cache {
 class CacheManager;
+class QueryCacheMetrics;
 using CacheManagerRawPtr = CacheManager*;
 using CacheManagerPtr = std::shared_ptr<CacheManager>;
 
@@ -63,7 +67,8 @@ struct CacheValue {
 class CacheManager {
 public:
     explicit CacheManager(size_t capacity);
-    ~CacheManager() = default;
+    ~CacheManager();
+    Status install_metrics(MetricRegistry* registry);
     void populate(const std::string& key, const CacheValue& value);
     StatusOr<CacheValue> probe(const std::string& key);
     size_t memory_usage();
@@ -74,6 +79,11 @@ public:
     void invalidate_all();
 
 private:
+    void _update_metrics();
+
     ShardedLRUCache _cache;
+    std::unique_ptr<QueryCacheMetrics> _metrics;
+    MetricRegistry* _metrics_registry = nullptr;
 };
-} // namespace starrocks::query_cache
+} // namespace query_cache
+} // namespace starrocks

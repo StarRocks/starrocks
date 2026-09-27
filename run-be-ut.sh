@@ -64,6 +64,7 @@ Usage: $0 <options>
      --without-connector-benchmark  build without the benchgen-backed benchmark connector
      --without-connector-elasticsearch
                                     build without the Elasticsearch connector
+     --without-connector-jdbc       build without the JDBC connector
      --without-connector-mysql
                                     build without the MySQL connector
      --excluding-test-suit          don't run cases of specific suit
@@ -75,6 +76,7 @@ Usage: $0 <options>
      --without-debug-symbol-split   split debug symbol out of the test binary to accelerate the speed
                                     of loading binary into memory and start execution.
      --without-tenann               build without tenann (vector index library); default is ON on Linux
+     --without-paimon-cpp           build without paimon-cpp library; default is ON on Linux, not supported on macOS
      -j                             build parallel
 
   Eg.
@@ -121,16 +123,19 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-bench' \
   -l 'without-connector-benchmark' \
   -l 'without-connector-elasticsearch' \
+  -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
   -l 'build-target:' \
   -l 'without-starcache' \
-  -l 'without-java-ext' \
   -l 'without-debug-symbol-split' \
   -l 'without-java-ext' \
   -l 'without-tenann' \
+  -l 'without-paimon-cpp' \
+  -l 'without-arm-crc32' \
+  -l 'with-arm-crc32' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -154,6 +159,7 @@ USE_STAROS=OFF
 WITH_GCOV=OFF
 WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
+WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
@@ -168,52 +174,13 @@ if starrocks_is_darwin; then
 else
     WITH_TENANN=ON
 fi
+WITH_PAIMON_CPP=ON
 if [[ -z ${WITH_DYNAMIC} ]]; then
     WITH_DYNAMIC=OFF
 fi
 if [[ -z ${THIN_ARCHIVE} ]]; then
     THIN_ARCHIVE=$(starrocks_default_ut_thin_archive)
 fi
-while true; do
-    case "$1" in
-        --clean) CLEAN=1 ; shift ;;
-        --dry-run) DRY_RUN=1 ; shift ;;
-        --run) shift ;; # Option only for compatibility
-        --test) TEST_NAME=${2}* ; shift 2;;
-        --gtest_filter) TEST_NAME=$2 ; shift 2;;
-        --module) TEST_MODULE=$2; shift 2;;
-        --help) HELP=1 ; shift ;;
-        --with-aws) WITH_AWS=ON; shift ;;
-        --with-gcov) WITH_GCOV=ON; shift ;;
-        --with-dynamic) WITH_DYNAMIC=ON; shift ;;
-        --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
-        --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
-        --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
-        --without-starcache) WITH_STARCACHE=OFF; shift ;;
-        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
-        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
-        --build-target) BUILD_TARGET=$2; shift 2;;
-        --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
-        --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
-        --without-tenann) WITH_TENANN=OFF; shift ;;
-        -j) PARALLEL=$2; shift 2 ;;
-        --) shift ;  break ;;
-        *) echo "Internal error" ; exit 1 ;;
-    esac
-done
-
-if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
-    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
-    exit 1
-fi
-
-if [ ${HELP} -eq 1 ]; then
-    usage
-    exit 0
-fi
-
-CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
-CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
@@ -226,6 +193,9 @@ fi
 if [[ -z ${USE_AVX512} ]]; then
     # Disable it by default
     USE_AVX512=OFF
+fi
+if [[ -z ${USE_ARM_CRC32} ]]; then
+    USE_ARM_CRC32=ON
 fi
 if [ -e /proc/cpuinfo ] ; then
     # detect cpuinfo
@@ -241,7 +211,66 @@ if [ -e /proc/cpuinfo ] ; then
     if [[ -z $(grep -o 'bmi2' /proc/cpuinfo) ]]; then
         USE_BMI_2=OFF
     fi
+    if [[ "${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64" ]]; then
+        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
+        features_count=${features_count:-0}
+        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
+        crc_count=${crc_count:-0}
+        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
+            USE_ARM_CRC32=OFF
+        fi
+    fi
 fi
+
+while true; do
+    case "$1" in
+        --clean) CLEAN=1 ; shift ;;
+        --dry-run) DRY_RUN=1 ; shift ;;
+        --run) shift ;; # Option only for compatibility
+        --test) TEST_NAME=${2}* ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;;
+        --module) TEST_MODULE=$2; shift 2;;
+        --help) HELP=1 ; shift ;;
+        --with-aws) WITH_AWS=ON; shift ;;
+        --with-gcov) WITH_GCOV=ON; shift ;;
+        --with-dynamic) WITH_DYNAMIC=ON; shift ;;
+        --without-connector-benchmark) WITH_CONNECTOR_BENCHMARK=OFF; shift ;;
+        --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
+        --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
+        --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+        --without-starcache) WITH_STARCACHE=OFF; shift ;;
+        --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
+        --build-target) BUILD_TARGET=$2; shift 2;;
+        --without-debug-symbol-split) WITH_DEBUG_SYMBOL_SPLIT=OFF; shift ;;
+        --without-java-ext) BUILD_JAVA_EXT=OFF; shift ;;
+        --without-tenann) WITH_TENANN=OFF; shift ;;
+        --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
+        --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
+        --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
+        -j) PARALLEL=$2; shift 2 ;;
+        --) shift ;  break ;;
+        *) echo "Internal error" ; exit 1 ;;
+    esac
+done
+
+if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
+    echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
+    exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
+fi
+
+if [ ${HELP} -eq 1 ]; then
+    usage
+    exit 0
+fi
+
+CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
+CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
         ENABLE_JIT=OFF
@@ -309,15 +338,18 @@ ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
             -DSTARROCKS_HOME=${STARROCKS_HOME} \
             -DCMAKE_CXX_COMPILER_LAUNCHER=$CCACHE \
             -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2\
+            -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2 \
+            -DUSE_ARM_CRC32=$USE_ARM_CRC32 \
             -DUSE_STAROS=${USE_STAROS} \
             -DSTARLET_INSTALL_DIR=${STARLET_INSTALL_DIR}          \
             -DWITH_GCOV=${WITH_GCOV} \
             -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
             -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
+            -DWITH_CONNECTOR_JDBC=${WITH_CONNECTOR_JDBC} \
             -DWITH_CONNECTOR_MYSQL=${WITH_CONNECTOR_MYSQL} \
             -DWITH_STARCACHE=${WITH_STARCACHE} \
             -DWITH_TENANN=${WITH_TENANN} \
+            -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP} \
             -DSTARROCKS_JIT_ENABLE=${ENABLE_JIT} \
             -DWITH_RELATIVE_SRC_PATH=OFF \
             -DENABLE_MULTI_DYNAMIC_LIBS=${WITH_DYNAMIC} \
@@ -338,7 +370,7 @@ export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_BASE_DIR}/test
 split_debug_symbol() {
     local bin="$1"
     local symbol="${bin}.debuginfo"
-    echo -n "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
+    echo "[INFO] Split $(basename "$bin") debug symbol to $(basename "$symbol") ..."
     objcopy --only-keep-debug "$bin" "$symbol"
     strip --strip-debug "$bin"
     objcopy --add-gnu-debuglink="$symbol" "$bin"
@@ -378,6 +410,7 @@ append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/jemalloc/lib-shar
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/lib64"
 append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/llvm/lib"
+append_runtime_library_path "${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib"
 
 while IFS= read -r runtime_lib_dir; do
     append_runtime_library_path "${runtime_lib_dir}"

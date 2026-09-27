@@ -23,7 +23,6 @@
 #include "aggregate_streaming_sink_operator.cpp"
 #include "aggregate_streaming_source_operator.cpp"
 #include "exec/pipeline/fragment_context.h"
-#include "runtime/runtime_filter_worker.h"
 #include "sorted_aggregate_streaming_sink_operator.cpp"
 #include "sorted_aggregate_streaming_source_operator.cpp"
 #include "spillable_aggregate_blocking_sink_operator.cpp"

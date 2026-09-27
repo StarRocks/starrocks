@@ -37,7 +37,7 @@
 #include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
-#include "storage/primitive/column_expr_predicate.h"
+#include "storage_primitive/column_expr_predicate.h"
 #include "types/type_info.h"
 #include "types/variant_value.h"
 
@@ -2252,6 +2252,15 @@ bool VariantVirtualZoneMapReader::_prepare_delegate_predicates(
     if (*leaf_reader == nullptr || leaf_type == nullptr) {
         VLOG_FILE << "skip variant virtual typed_value pushdown for path=" << _leaf_path.to_shredded_path().value_or("")
                   << " because leaf reader/type is unavailable";
+        return false;
+    }
+    // ColumnPredicate::convert_to() converts only the literal; it does not derive the inverse
+    // predicate of CAST(leaf AS virtual_type). For a lossy cross-type projection, delegating
+    // the converted predicate to leaf statistics can incorrectly prune matching rows.
+    if (*leaf_type != _virtual_slot_type) {
+        VLOG_FILE << "skip cross-type variant virtual predicate pushdown for path="
+                  << _leaf_path.to_shredded_path().value_or("") << ", leaf type=" << leaf_type->debug_string()
+                  << ", virtual slot type=" << _virtual_slot_type.debug_string();
         return false;
     }
     // Variant shredding only permits data skipping on typed_value statistics when the paired

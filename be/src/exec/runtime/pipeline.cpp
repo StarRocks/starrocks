@@ -14,9 +14,9 @@
 
 #include "exec/runtime/pipeline.h"
 
-#include "exec/pipeline/operator.h"
-#include "exec/pipeline/primitives/event.h"
 #include "exec/runtime/pipeline_driver.h"
+#include "exec_primitive/pipeline/operator.h"
+#include "exec_primitive/pipeline/primitives/event.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

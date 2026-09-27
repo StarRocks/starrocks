@@ -119,13 +119,17 @@ bool DateValue::from_string(const char* date_str, size_t len) {
 }
 
 int DateValue::weekday() const {
-    //  @info: _julian < 0 is impossible
-    //    int w = (_julian + 1) % 7;
-    //
-    //    if (w < 0) {
-    //        w += 7;
-    //    }
-    return (_julian + 1) % 7;
+    // `_julian` is positive for every date in the supported range, but this method must also
+    // tolerate out-of-range values: the vectorized function framework evaluates the data column
+    // of a NullableColumn as a whole, so the payload sitting under a null flag reaches here too
+    // and may hold an arbitrary int32. Signed `%` truncates towards zero, so `(_julian + 1) % 7`
+    // would return a negative value there and blow up the callers that use the result as an array
+    // index (`trunc_to_week()`, `day_name()`, `TimeFunctions::datetime_trunc_week`).
+    // Doing the arithmetic unsigned keeps the result in [0, 6] for every input, and is identical
+    // to the signed form for the whole valid julian range. It also makes the wrap-around at
+    // INT32_MAX well defined, and is one instruction cheaper than the signed modulo, which needs
+    // an extra sign fixup.
+    return static_cast<int>((static_cast<uint32_t>(_julian) + 1u) % 7u);
 }
 
 void DateValue::trunc_to_day() {}

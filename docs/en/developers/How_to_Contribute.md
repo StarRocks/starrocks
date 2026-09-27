@@ -23,7 +23,7 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 
 ## Community resources
 
-The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://try.starrocks.com/join-starrocks-on-slack) For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
+The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://docs.starrocks.io/join/) For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
 
 You can also report issues and problems, or suggest new features, on [GitHub](https://github.com/StarRocks/starrocks/).
 
@@ -98,7 +98,7 @@ Events
 
 ### Contributor
 
-Everyone who contributes can become a StarRocks contributor. The members will provide mentorship and guidance when new contributors need assistance.
+Anyone who contributes to StarRocks can become a Contributor. 
 
 #### How to become a Contributor?
 
@@ -115,8 +115,6 @@ As a Contributor, we expect you to
 #### Privileges
 
 - Be listed as a StarRocks contributor.
-
-- Be awarded a StarRocks Contributor e-certificate.
 
 ### Active Contributor
 
@@ -142,9 +140,7 @@ Active contributors are contributors who have made outstanding contributions and
 
 ### Committer
 
-Committers are promoted from Active Contributors.
-
-They have the authority to merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
+Committers are contributors who have earned the ability to modify ("commit") source code, documentation, or other technical artifacts in a project’s repository.
 
 #### How to become a Committer?
 
@@ -152,27 +148,25 @@ They have the authority to merge PRs into master branches and are responsible fo
 
 - Have the ability to deal with various issues that arise in the project promptly.
 
-- Lead a major development, write and revise related documents.
+- Lead at least one major development, write and revise related documents
 
-- Receive at least two PMC nominations and pass voting.
+- A contributor may become a Committer by a minimum of two votes (excluding the nominator's vote) from the TSC members.
 
 #### Responsibilities and privileges
 
-- Mentor and guide other memberships in the community.
+- Mentor and guide other members in the community.
 
-- Ensure continued health of subproject.
+- Ensure continued health of the subproject.
 
 - Be granted write access to StarRocks repos (to be specified).
 
-- Be listed as a StarRocks Committer.
+- Be recognized as a StarRocks Committer.
 
-- Be awarded a StarRocks Committer e-certificate.
+### Maintainer
 
-### PMC
+Maintainers are a subset of Committers with additional responsibilities for driving a project’s release and serving on the TSC (optional).
 
-PMCs are promoted from Committers. They have the authority to merge merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
-
-#### How to become a PMC?
+#### How to become a Maintainer?
 
 - In-depth understanding of StarRocks principles and a clear understanding of StarRocks' future plans.
 
@@ -180,7 +174,7 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Lead project development and iterations, and steer the overall direction of the project.
 
-- Receive at least two PMC nominations and pass voting.
+- A Committer may become a Maintainer by a minimum of two votes (excluding the nominator's vote) from the TSC members.
 
 #### Responsibilities and privileges
 
@@ -192,11 +186,10 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Define milestones and releases.
 
-- Vote and promote new committers and PMCs.
+- Nominate new SIG committers to TSC.
 
-- Be listed as a StarRocks PMC.
+- Be recognized as a StarRocks Maintainer.
 
-- Be awarded a StarRocks PMC e-certificate.
 
 ## Contribution process
 
@@ -204,7 +197,7 @@ If you don't know how to get started, this is the process we suggest for contrib
 
 1. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/StarRocks/starrocks).
 
-2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://try.starrocks.com/join-starrocks-on-slack) unless the change is trivial).
+2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://docs.starrocks.io/join/) unless the change is trivial).
 
    Before getting your hands on codes, you should comment in the issue body, and inform the maintainer to assign you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
 

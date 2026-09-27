@@ -383,8 +383,7 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::vector<TExpr>& t_partition_exprs,
         bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
         const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit, std::string sort_keys,
-        const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
-        const std::vector<RuntimeFilterBuildDescriptor*>&)
+        bool has_outer_join_child, const std::vector<RuntimeFilterBuildDescriptor*>&)
         : _topn_type(topn_type),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),

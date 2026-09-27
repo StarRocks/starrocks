@@ -14,24 +14,50 @@
 
 #pragma once
 
-#include "fmt/format.h"
-#include "fs/fs_util.h"
-#include "storage/index/index_descriptor.h"
+#include <map>
+#include <memory>
+#include <string>
+
+#include "common/statusor.h"
+#include "fs/fs.h"
 #include "vector_index_reader.h"
 
 namespace starrocks {
 
-class FileSystem;
+struct OlapReaderStatistics;
+class TabletIndex;
+class VectorIndexCache;
 
-class VectorIndexReaderFactory {
 #ifdef WITH_TENANN
-public:
-    static Status create_from_file(const std::string& index_path, const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                   std::shared_ptr<VectorIndexReader>* vector_index_reader);
 
-    static Status create_from_file(const std::string& index_path, const std::shared_ptr<tenann::IndexMeta>& index_meta,
-                                   std::shared_ptr<VectorIndexReader>* vector_index_reader, FileSystem* fs);
-#endif
+struct VectorIndexReaderInitOptions {
+    size_t segment_num_rows = 0;
+    int query_k = 0;
+    bool refine_distance = false;
+    // Required. SegmentReadOptions rejects a null stats pointer before creating an iterator.
+    OlapReaderStatistics& stats;
 };
+
+struct VectorIndexReaderCreateResult {
+    VectorIndexReaderInitResult state = VectorIndexReaderInitResult::kFallback;
+    std::shared_ptr<VectorIndexReader> reader;
+};
+
+// Binds reader creation to the SR-owned cache. create_and_init returns either a
+// fully initialized reader (kReady) or a null reader with kFallback.
+class VectorIndexReaderFactory {
+public:
+    explicit VectorIndexReaderFactory(VectorIndexCache& vector_index_cache) : _vector_index_cache(vector_index_cache) {}
+
+    StatusOr<VectorIndexReaderCreateResult> create_and_init(FileInfo vi_file,
+                                                            const std::shared_ptr<TabletIndex>& tablet_index,
+                                                            const std::map<std::string, std::string>& query_params,
+                                                            VectorIndexReaderInitOptions options);
+
+private:
+    VectorIndexCache& _vector_index_cache;
+};
+
+#endif
 
 } // namespace starrocks

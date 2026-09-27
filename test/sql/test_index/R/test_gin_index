@@ -151,6 +151,19 @@ select * from t1_primary where value match 'starrocks%';
 -- result:
 4	starrocks database
 -- !result
+drop database test_gin_index;
+-- result:
+-- !result
+-- name: test_add_gin_index @native
+create database test_gin_add_${uuid0};
+-- result:
+-- !result
+use test_gin_add_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE t2_dup (
     id1 bigint(20) NOT NULL COMMENT "",
     value varchar(255) COMMENT ""
@@ -248,6 +261,63 @@ PROPERTIES (
 "replication_num" = "1"
 );
 -- !result
-drop database test_gin_index;
+drop database test_gin_add_${uuid0};
+-- result:
+-- !result
+-- name: test_gin_not_match_excludes_null @native
+create database test_gin_null_${uuid0};
+-- result:
+-- !result
+use test_gin_null_${uuid0};
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE t_null (
+    id int NOT NULL,
+    c  varchar(30) NULL,
+    INDEX idx_c (c) USING GIN ("parser" = "none")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_null values (1, 'hello'), (2, 'world'), (3, NULL), (4, 'hxllo');
+-- result:
+-- !result
+[ORDER] select id, c from t_null where c match 'hello';
+-- result:
+1	hello
+-- !result
+[ORDER] select id, c from t_null where c not match 'hello';
+-- result:
+2	world
+4	hxllo
+-- !result
+CREATE TABLE t_null_builtin (
+    id int NOT NULL,
+    c  varchar(30) NULL,
+    INDEX idx_c (c) USING GIN ("imp_lib" = "builtin", "parser" = "none")
+)
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t_null_builtin values (1, 'hello'), (2, 'world'), (3, NULL), (4, 'hxllo');
+-- result:
+-- !result
+[ORDER] select id, c from t_null_builtin where c match 'hello';
+-- result:
+1	hello
+-- !result
+[ORDER] select id, c from t_null_builtin where c not match 'hello';
+-- result:
+2	world
+4	hxllo
+-- !result
+drop database test_gin_null_${uuid0};
 -- result:
 -- !result

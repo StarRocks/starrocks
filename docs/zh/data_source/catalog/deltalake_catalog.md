@@ -1,4 +1,5 @@
 ---
+sidebar_position: 60
 description: 直接从 Delta Lake 查询数据
 displayed_sidebar: docs
 ---
@@ -12,7 +13,6 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 ## 使用说明
 
 - StarRocks 支持的 Delta Lake 文件格式是 Parquet。Parquet 文件支持以下压缩格式：SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION。
-- StarRocks 不支持 Delta Lake 的数据类型为 MAP 和 STRUCT。
 
 ## 集成准备
 
@@ -30,7 +30,7 @@ import DatabricksParams from '../../_assets/catalog/_databricks_params.mdx'
 
 在上述三种身份验证方法中，实例配置文件是最广泛使用的。
 
-有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
+有关更多信息，请参见 [AWS IAM 中的身份验证准备](../../integrations/csp_auth/authenticate_to_aws_resources.md#preparation-for-iam-user-based-authentication)。
 
 ### HDFS
 
@@ -152,7 +152,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.glue.access_key           | 否   | 您的 AWS IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 | aws.glue.secret_key           | 否   | 您的 AWS IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS Glue，必须指定此参数。 |
 
-有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
+有关如何选择访问 AWS Glue 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS Glue 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue)。
 
 <DatabricksParams />
 
@@ -202,7 +202,7 @@ Delta Lake catalog 的描述。此参数是可选的。
 | aws.s3.access_key           | 否   | 您的 IAM 用户的访问密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 | aws.s3.secret_key           | 否   | 您的 IAM 用户的密钥。如果使用基于 IAM 用户的身份验证方法访问 AWS S3，必须指定此参数。 |
 
-有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
+有关如何选择访问 AWS S3 的身份验证方法以及如何在 AWS IAM 控制台中配置访问控制策略的信息，请参见 [访问 AWS S3 的身份验证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3)。
 
 ##### S3 兼容存储系统
 

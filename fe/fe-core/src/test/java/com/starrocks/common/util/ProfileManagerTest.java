@@ -26,10 +26,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class ProfileManagerTest {
 
     public RuntimeProfile buildRuntimeProfile(String queryId, String queryType) {
+        return buildRuntimeProfile(queryId, queryType, "");
+    }
+
+    public RuntimeProfile buildRuntimeProfile(String queryId, String queryType, String customQueryId) {
         RuntimeProfile profile = new RuntimeProfile("");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, queryId);
         summaryProfile.addInfoString(ProfileManager.QUERY_TYPE, queryType);
+        summaryProfile.addInfoString(ProfileManager.CUSTOM_QUERY_ID, customQueryId);
 
         profile.addChild(summaryProfile);
 
@@ -85,7 +90,7 @@ public class ProfileManagerTest {
         RuntimeProfile profile2 = buildRuntimeProfile("124", "Load");
         manager.pushProfile(null, profile2);
 
-        assertEquals(2, manager.getAllQueries().size());
+        assertEquals(2, manager.getAllQueries(element -> true).size());
 
         manager.clearProfiles();
     }
@@ -138,17 +143,60 @@ public class ProfileManagerTest {
         ProfileManager manager = ProfileManager.getInstance();
         assertTrue(manager.getAllProfileElements().isEmpty());
 
+        int original = Config.profile_info_reserved_num;
         Config.profile_info_reserved_num = 1;
+        try {
+            RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
+            manager.pushProfile(null, profile1);
 
-        RuntimeProfile profile1 = buildRuntimeProfile("123", "Query");
-        manager.pushProfile(null, profile1);
+            RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
+            manager.pushProfile(null, profile2);
 
-        RuntimeProfile profile2 = buildRuntimeProfile("124", "Query");
-        manager.pushProfile(null, profile2);
+            assertEquals(1, manager.getAllQueries(element -> true).size());
+        } finally {
+            Config.profile_info_reserved_num = original;
+            manager.clearProfiles();
+        }
+    }
 
-        assertEquals(1, manager.getAllQueries().size());
+    @Test
+    public void testCustomQueryIdResolution() {
+        ProfileManager manager = ProfileManager.getInstance();
+        RuntimeProfile profile = buildRuntimeProfile("223", "Query", "my-custom-id");
+        manager.pushProfile(null, profile);
+
+        assertTrue(manager.hasProfile("my-custom-id"), "Profile should be resolvable by custom query id");
+        assertNotNull(manager.getProfile("my-custom-id"), "Profile content should be resolvable by custom query id");
+        assertEquals(manager.getProfileElement("223"), manager.getProfileElement("my-custom-id"),
+                "Custom query id and real query id must resolve to the same profile element");
+
+        manager.removeProfile("my-custom-id");
+        assertFalse(manager.hasProfile("223"), "Removing by custom query id should remove the underlying profile");
 
         manager.clearProfiles();
+    }
+
+    @Test
+    public void testCustomQueryIdEvictionDoesNotClobberNewerMapping() {
+        ProfileManager manager = ProfileManager.getInstance();
+        int original = Config.profile_info_reserved_num;
+        Config.profile_info_reserved_num = 1;
+        try {
+            RuntimeProfile profile1 = buildRuntimeProfile("223", "Query", "shared-id");
+            manager.pushProfile(null, profile1);
+
+            RuntimeProfile profile2 = buildRuntimeProfile("224", "Query", "shared-id");
+            manager.pushProfile(null, profile2);
+
+            // profile1 (query 223) was evicted; "shared-id" must still resolve to the surviving profile2 (224).
+            assertFalse(manager.hasProfile("223"), "Evicted profile should be gone");
+            assertTrue(manager.hasProfile("224"), "Surviving profile should remain");
+            assertTrue(manager.hasProfile("shared-id"), "Custom query id should still resolve");
+            assertEquals("224", manager.getProfileElement("shared-id").infoStrings.get(ProfileManager.QUERY_ID));
+        } finally {
+            Config.profile_info_reserved_num = original;
+            manager.clearProfiles();
+        }
     }
 }
 

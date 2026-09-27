@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "存算分离集群中 Compaction 的管理和监控方法。"
 ---
@@ -100,9 +101,9 @@ mysql> SHOW PROC '/compactions';
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | Partition           | TxnID | StartTime           | CommitTime          | FinishTime          | Error | Profile                                                                                                                                                                                                              |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
-| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18} |
-| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38} |
-| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23} |
+| ssb.lineorder.10081 | 15    | 2026-01-10 03:29:07 | 2026-01-10 03:29:11 | 2026-01-10 03:29:12 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":219,"write_remote_sec":4,"in_queue_sec":18,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10068 | 16    | 2026-01-10 03:29:07 | 2026-01-10 03:29:13 | 2026-01-10 03:29:14 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":38,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
+| ssb.lineorder.10055 | 20    | 2026-01-10 03:29:11 | 2026-01-10 03:29:15 | 2026-01-10 03:29:17 | NULL  | {"sub_task_count":12,"read_local_sec":0,"read_local_mb":218,"read_remote_sec":0,"read_remote_mb":0,"read_segment_count":120,"write_segment_count":12,"write_segment_mb":218,"write_remote_sec":4,"in_queue_sec":23,"score_before":{"avg":10.0,"p50":10.0,"max":10.0},"score_after":{"avg":8.0,"p50":8.0,"max":8.0},"partial_success":false} |
 +---------------------+-------+---------------------+---------------------+---------------------+-------+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 ```
 
@@ -125,15 +126,22 @@ mysql> SHOW PROC '/compactions';
   - `write_segment_mb`: 所有子任务新生成文件的总大小。单位：MB。
   - `write_remote_sec`: 所有子任务往远程存储写入数据的总耗时。单位：秒。
   - `in_queue_sec`：所有子任务排队的总时间。单位：秒。
+  - `score_before`：Compaction 前分区的 Compaction Score。包含 `avg`、`p50` 和 `max` 字段。
+  - `score_after`：Compaction 后分区的 Compaction Score。包含 `avg`、`p50` 和 `max` 字段。
+  - `partial_success`：Compaction 任务是否部分成功（部分 Tablet 失败）。
 
 #### 查看 Compaction 任务的执行详情
 
-每个 Compaction 任务被分解为多个子任务，每个子任务对应一个 Tablet。您可以通过查询系统定义视图 `information_schema.be_cloud_native_compactions` 查看每个子任务的执行详情。
+`information_schema.be_cloud_native_compactions` 中的每一行代表一个 Tablet Compaction 执行单元。启用
+Tablet 并行 Compaction 后，每个并行 Subtask 分别占一行：它们具有相同的事务 ID 和 Tablet ID，但
+`SUBTASK_ID` 不同。并行 Compaction 的 merged context 只是聚合对象，不是实际执行单元，因此不会返回。
 
 示例：
 
 ```Plain
-mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
+mysql> SELECT BE_ID, TXN_ID, TABLET_ID, VERSION, SKIPPED, RUNS, START_TIME, FINISH_TIME,
+              PROGRESS, STATUS, PROFILE
+       FROM information_schema.be_cloud_native_compactions;
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
 | BE_ID | TXN_ID | TABLET_ID | VERSION | SKIPPED | RUNS | START_TIME          | FINISH_TIME | PROGRESS | STATUS | PROFILE                                                                                                                                                                                         |
 +-------+--------+-----------+---------+---------+------+---------------------+-------------+----------+--------+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
@@ -165,6 +173,37 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
   - `read_local_count`：子任务从本地缓存读取数据的次数。
   - `read_remote_count`：子任务从远程存储读取数据的次数。
   - `in_queue_sec`：子任务排队的时间。单位：秒。
+- `SUBTASK_ID`：从 0 开始的并行 Subtask ID。普通非并行 Tablet Task 的值为 `NULL`。如果多行具有相同的
+  `BE_ID`、`TXN_ID` 和 `TABLET_ID`，但 `SUBTASK_ID` 不同，它们就是同一个 Tablet Compaction 的并行执行单元。
+
+`PROFILE` 中新增的全链路字段统一使用纳秒，便于精确对账：
+
+- Profile 状态：
+  - `profile_final`：任务执行中为 `false`，完成后为 `true`。实时 Profile 会将当前 attempt 已经过的时间计入
+    `task_total_ns`；进入 executor 后，也会将当前 executor 已经过的时间计入 `task_execute_ns`。其他阶段计时在
+    当前作用域退出时更新，因此实时 Profile 中的 `task_unaccounted_ns` 可能暂时偏大。
+- Task 总体耗时：
+  - `queue_wait_ns`：任务进入 CN Compaction 队列到 worker 开始执行的时间，不包含在 `task_total_ns` 中。
+  - `task_prepare_ns`：选择输入 Rowset、加载 Tablet 元数据和构造 Compaction Task 的时间。
+  - `task_execute_ns`：进入 Horizontal、Vertical 或 Index Compaction executor 后的 wall time；实时 Profile
+    还包括当前 executor 已经过的时间。
+  - `task_total_ns`：CN worker 开始准备任务到本次 Profile 快照或任务返回的总 wall time。
+  - `task_accounted_ns`：所有互不重叠的顶层阶段之和。
+  - `task_unaccounted_ns`：`task_total_ns - task_accounted_ns`。该值较大通常表示仍有阶段未打点，或存在调度、
+    runtime 开销。
+- 互不重叠的执行阶段：`input_prepare_ns`、`reader_prepare_ns`、`reader_open_ns`、`reader_get_next_ns`、
+  `reader_close_ns`、`chunk_transform_ns`、`writer_create_ns`、`writer_open_ns`、`writer_write_ns`、
+  `writer_flush_ns`、`writer_finish_ns`、`writer_close_ns`、`mask_io_ns`、`txn_log_build_ns`、
+  `pk_sst_merge_ns`、`txn_log_write_ns`、`preload_compaction_state_ns` 和 `tablet_write_log_ns`。
+- Reader 内部明细：`read_remote_ns`、`read_local_ns`、`create_segment_iter_ns`、`segment_init_ns`、
+  `column_iterator_init_ns`、`block_load_ns`、`block_fetch_ns`、`block_seek_ns`、`decompress_ns`、
+  `decode_dict_ns`，以及 Delete Vector/Filter 相关计时。这些字段包含在 Reader 顶层阶段内，不能再次累加到
+  `task_accounted_ns`。
+- Vertical Compaction 明细：`column_group_count`、`vertical_key_group_ns` 和 `vertical_value_group_ns`。
+  Column Group 时间与 Reader/Writer 阶段重叠，仅用于诊断，不能重复累加。
+
+Task 完成时，同一份单 Tablet Profile 还会连同 Tablet ID、Transaction ID、状态、Table ID 和 Partition ID
+写入 CN INFO 日志。因此，即使该任务已经从 `be_cloud_native_compactions` 中消失，仍可以追溯单任务明细。
 
 ### 配置 Compaction 任务
 

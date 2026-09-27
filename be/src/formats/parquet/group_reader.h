@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "cache/cache_options.h"
 #include "cache/scan/shared_buffered_input_stream.h"
 #include "column/column_access_path.h"
 #include "column/vectorized_fwd.h"
@@ -30,23 +31,22 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exec/hdfs_scanner/hdfs_scanner_context.h"
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/utils.h"
+#include "formats/scan_context.h"
 #include "gen_cpp/parquet_types.h"
 #include "runtime/descriptors.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
+#include "storage_primitive/runtime_filter_predicate.h"
 
 namespace starrocks {
 class RandomAccessFile;
 struct FormatScannerStats;
-struct HdfsScannerContext;
 class ExprContext;
 class TIcebergSchemaField;
-class THdfsScanRange;
 
 namespace parquet {
 class ColumnMaterializer;
@@ -86,7 +86,7 @@ struct GroupReaderParam {
     // Always non-null when used from FileReader; may be null in unit tests.
     // Non-const because unit tests need to populate the context fields after
     // construction; GroupReader treats it as read-only by convention.
-    HdfsScannerContext* scanner_ctx = nullptr;
+    FormatScanContext* scan_ctx = nullptr;
 
     // conjunct_ctxs that column is materialized in group reader
     // Mutable per-group-reader shallow copy of the scanner context's by_slot map;
@@ -116,7 +116,6 @@ struct GroupReaderParam {
     // Kept directly in GroupReaderParam for test-compatibility; also used by
     // _get_extended_bigint_value() to read extended_columns from the scan range.
     int32_t scan_range_id = -1;
-    const THdfsScanRange* scan_range = nullptr;
 };
 
 class GroupReader {
@@ -125,8 +124,6 @@ class GroupReader {
 public:
     GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
-    GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
-                int64_t row_group_first_row, int64_t row_group_first_row_id);
     ~GroupReader();
 
     Status init();
@@ -186,10 +183,19 @@ private:
     //    conjuncts (conditional).  Returns true if rows survive.
     StatusOr<bool> _evaluate_variant_predicates(const Range<uint64_t>& r, RowGroupScanState& state);
 
+    // 4.1 Probe join runtime filters against decoded rows, ANDing into chunk_filter
+    //     so non-matching rows are dropped before lazy columns are materialized.
+    //     Returns true if rows survive.
+    StatusOr<bool> _evaluate_runtime_filters(const Range<uint64_t>& r, RowGroupScanState& state);
+
     // 5. Apply combined chunk_filter, compute post-filter range (internal),
     //    and backfill lazy physical columns + lazy variant sources.
     //    Returns true if rows survive filtering; false to skip this range.
     StatusOr<bool> _filter_and_backfill_lazy(const Range<uint64_t>& r, RowGroupScanState& state);
+
+    // Build the subset of scan_ctx->runtime_filter_preds that this row group can
+    // actually serve. Called once per row group after column classification.
+    void _setup_runtime_filter_predicates();
 
     // 6. Emit output: variant projections → physical columns into destination chunk.
     Status _emit_output_columns(RowGroupScanState& state, ChunkPtr* chunk, size_t* row_count);
@@ -199,7 +205,6 @@ private:
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
-    int64_t _row_group_first_row_id = 0;
     SkipRowsContextPtr _skip_rows_ctx;
 
     // column readers for column chunk in row group
@@ -214,6 +219,23 @@ private:
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;
+
+    // ── Join runtime filter pushdown ───────────────────────────────────────
+    // Per-row-group subset of scan_ctx->runtime_filter_preds, holding only the
+    // predicates whose probe column this row group can supply. The subset is
+    // required for correctness -- RuntimeFilterPredicates::evaluate() looks up every
+    // predicate's column, so a predicate we cannot serve must not be in the list, and
+    // which columns exist differs per file after schema evolution. The predicate
+    // objects themselves are shared with the scanner context; only this container
+    // (which carries the adaptive-sampling state) is per-GroupReader.
+    RuntimeFilterPredicates _rf_predicates;
+    // Probe columns, in predicate order. `is_active` selects where the decoded column
+    // comes from: the active chunk, or an on-demand materialize_slot() lazy read.
+    struct RuntimeFilterProbeColumn {
+        SlotId slot_id;
+        bool is_active;
+    };
+    std::vector<RuntimeFilterProbeColumn> _rf_probe_columns;
 
     // param for read row group
     const GroupReaderParam& _param;

@@ -55,6 +55,7 @@ public:
     bool is_json() const override { return true; }
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
+    void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
     uint32_t serialize_size(size_t idx) const override;
     uint32_t serialize(size_t idx, uint8_t* pos) const override;
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
@@ -142,6 +143,14 @@ public:
 
     bool is_equallity_schema(const Column* other) const;
 
+    // Materialize the flat sub-columns back into a plain (non-flat) JSON column.
+    // Returns nullptr when this column is not flat.
+    ColumnPtr unflatten() const;
+
+    // In-place unflatten(): keeps the same rows but stores them as plain JSON values and
+    // drops the flat sub-columns. No-op when this column is not flat.
+    void to_plain_json();
+
     std::string debug_flat_paths() const;
 
     void mutate_each_subcolumn() override {
@@ -151,6 +160,14 @@ public:
     }
 
 private:
+    // Flat-JSON schemas are decided per segment, so one scan can produce chunks whose JSON
+    // columns carry different flat schemas (or none at all). When that happens the flat
+    // fast-path of append()/append_selective() is not applicable: degrade this column to
+    // plain JSON, which can always represent whatever the source holds.
+    void _degrade_to_plain_json(const JsonColumn& src);
+
+    void _clear_flat_schema();
+
     // flat-columns[sub_columns, remain_column]
     std::vector<Column::WrappedPtr> _flat_columns;
 

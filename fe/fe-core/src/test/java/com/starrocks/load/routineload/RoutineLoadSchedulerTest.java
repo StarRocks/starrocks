@@ -35,6 +35,7 @@
 package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -56,6 +57,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class RoutineLoadSchedulerTest {
 
@@ -129,7 +131,7 @@ public class RoutineLoadSchedulerTest {
     }
 
     @Test
-    public void testEmptyTaskQueue(@Injectable RoutineLoadMgr routineLoadManager) {
+    public void testEmptyTaskQueue(@Injectable RoutineLoadMgr routineLoadManager) throws InterruptedException {
         RoutineLoadTaskScheduler routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         new Expectations() {
             {
@@ -192,5 +194,28 @@ public class RoutineLoadSchedulerTest {
         routineLoadManager.addRoutineLoadJob(kafkaRoutineLoadJob1, "db");
 
         Thread.sleep(10000);
+    }
+
+    @Test
+    public void testOnStoppedRestoresRunningJobsToDurableNeedSchedule() throws Exception {
+        KafkaRoutineLoadJob job = new KafkaRoutineLoadJob(1L, "test_demotion_reset", 1L, 1L,
+                "10.74.167.16:8092", "test");
+        RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        // The replay-path insert skips the journal write (no EditLog in this bare-manager test).
+        routineLoadManager.replayCreateRoutineLoadJob(job);
+
+        // Leader-session shape: the NEED_SCHEDULE -> RUNNING transition is deliberately unjournaled
+        // (the durable copy stays NEED_SCHEDULE) and the job carries task bookkeeping. The task has
+        // no BE assigned, like a task waiting in the scheduler queue at demotion time.
+        job.state = RoutineLoadJob.JobState.RUNNING;
+        job.routineLoadTaskInfoList.add(new KafkaTaskInfo(UUID.randomUUID(), job, 10L,
+                System.currentTimeMillis(), Maps.newHashMap(), 60_000L));
+
+        new RoutineLoadScheduler(routineLoadManager).onStopped();
+
+        Assertions.assertEquals(RoutineLoadJob.JobState.NEED_SCHEDULE, job.getState(),
+                "demotion must restore the unjournaled RUNNING state to its durable NEED_SCHEDULE shape");
+        Assertions.assertTrue(job.routineLoadTaskInfoList.isEmpty(),
+                "leader-session task bookkeeping must be dropped so the next leader re-divides cleanly");
     }
 }

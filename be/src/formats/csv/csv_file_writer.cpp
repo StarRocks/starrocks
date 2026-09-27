@@ -224,8 +224,8 @@ Status CSVFileWriter::_write_enclosed_field(csv::Converter* converter, const Col
     return _write_enclosed_string(field_buf.as_string());
 }
 
-FileWriter::CommitResult CSVFileWriter::close() {
-    CommitResult result{
+FileCommitResult CSVFileWriter::close() {
+    FileCommitResult result{
             .io_status = Status::OK(), .format = CSV, .location = _location, .rollback_action = _rollback_action};
 
     // Ensure header is written even if no data was written

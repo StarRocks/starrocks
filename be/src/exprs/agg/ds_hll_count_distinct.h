@@ -39,6 +39,9 @@ template <LogicalType LT, typename T = RunTimeCppType<LT>>
 class HllSketchAggregateFunction final
         : public AggregateFunctionBatchHelper<HLLSketchState, HllSketchAggregateFunction<LT, T>> {
 public:
+    // ds_hll_count_distinct returns a cardinality (0, never NULL), even over a nullable input or an empty frame.
+    bool is_result_non_nullable() const override { return true; }
+
     using ColumnType = RunTimeColumnType<LT>;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
@@ -121,7 +124,14 @@ public:
 
     void convert_to_serialize_format([[maybe_unused]] FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      MutableColumnPtr& dst) const override {
+        // src[0] may be a constant. The _state combinator deliberately leaves constant arguments
+        // packed ("return directly to keep efficiency", state_combinator.h), while chunk_size is the
+        // replicated row count -- so the container unwrapped out of it holds exactly one element and
+        // indexing it by the row reads off the end. update() already takes the row-indexed
+        // GetContainer overload, which handles this; this loop hoists the container and so must do it
+        // itself, the way ds_theta_combine and covariance do.
         const auto& datas = GetContainer<LT>::get_data(src[0]);
+        const bool is_const = src[0]->is_constant();
         auto* result = down_cast<BinaryColumn*>(dst.get());
 
         Bytes& bytes = result->get_bytes();
@@ -141,7 +151,7 @@ public:
         for (size_t i = 0; i < chunk_size; ++i) {
             int64_t memory_usage = 0;
             DataSketchesHll hll{log_k, tgt_type, &memory_usage};
-            uint64_t value = HashUtil::murmur_hash64A<T>(datas[i], HashUtil::MURMUR_SEED);
+            uint64_t value = HashUtil::murmur_hash64A<T>(datas[is_const ? 0 : i], HashUtil::MURMUR_SEED);
             if (value != 0) {
                 hll.update(value);
             }
@@ -150,7 +160,7 @@ public:
             bytes.resize(new_size);
             hll.serialize(bytes.data() + old_size);
 
-            result->get_offset()[i + 1] = new_size;
+            result->get_offset().set(i + 1, new_size);
             old_size = new_size;
         }
     }

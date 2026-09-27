@@ -32,7 +32,17 @@ final class PreSplitMetrics {
      * which hook decided to skip.
      */
     static boolean shortCircuitOnSessionOptOut(SessionVariable sessionVariable) {
-        if (sessionVariable.isEnableTabletPreSplit()) {
+        return shortCircuitOnSessionOptOut(sessionVariable.isEnableTabletPreSplit());
+    }
+
+    /**
+     * Same contract for a caller that resolved the opt-out itself rather than reading it off a
+     * live {@link SessionVariable}. A Broker Load gates on the value its session held when
+     * {@code LOAD LABEL} was accepted, which is not necessarily what that session holds by the
+     * time the pending job fires its hook.
+     */
+    static boolean shortCircuitOnSessionOptOut(boolean preSplitEnabled) {
+        if (preSplitEnabled) {
             return false;
         }
         recordEligibilitySkip(SkipReason.DISABLED_BY_SESSION);

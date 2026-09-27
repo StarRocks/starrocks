@@ -392,7 +392,6 @@ public class GlueMetastoreClientDelegate {
         List<TableMeta> tables = new ArrayList<>();
         List<String> databases = getDatabases(dbPatterns);
         for (String dbName : databases) {
-            String nextToken = null;
             List<Table> dbTables = glueMetastore.getTables(dbName, tablePatterns);
             for (Table catalogTable : dbTables) {
                 if (tableTypes == null ||

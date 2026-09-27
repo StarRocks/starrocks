@@ -38,6 +38,7 @@ public class PrintableMap<K, V> {
     static {
         SENSITIVE_KEY = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         SENSITIVE_KEY.add("password");
+        SENSITIVE_KEY.add("api_key");
         SENSITIVE_KEY.add("kerberos_keytab_content");
         SENSITIVE_KEY.add("bos_secret_accesskey");
         SENSITIVE_KEY.add("fs.s3a.access.key");
@@ -61,6 +62,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("azure.adls1.oauth2_credential");
         SENSITIVE_KEY.add("azure.adls1.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.shared_key");
+        SENSITIVE_KEY.add("azure.adls2.sas_token");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_id");
         SENSITIVE_KEY.add("azure.adls2.oauth2_client_secret");
         SENSITIVE_KEY.add("authentication_ldap_simple_bind_root_pwd");

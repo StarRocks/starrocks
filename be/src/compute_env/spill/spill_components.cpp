@@ -23,6 +23,7 @@
 #include <random>
 
 #include "base/bit/bit_util.h"
+#include "base/failpoint/fail_point.h"
 #include "block_manager.h"
 #include "column/vectorized_fwd.h"
 #include "common/config_exec_flow_fwd.h"
@@ -42,6 +43,9 @@
 #include "runtime/runtime_state.h"
 
 namespace starrocks::spill {
+
+DEFINE_FAIL_POINT(spill_split_partition_error);
+DEFINE_FAIL_POINT(spill_split_yield_after_error);
 // implements for SpillerWriter
 Status SpillerWriter::_decrease_running_flush_tasks() {
     if (_running_flush_tasks.fetch_sub(1) == 1) {
@@ -115,6 +119,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
 }
 
 Status RawSpillerWriter::_spill_mem_table(workgroup::YieldContext& yield_ctx, const MemTablePtr& mem_table) {
+    SCOPED_TIMER(_spiller->metrics().flush_mem_table_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
 
@@ -140,6 +145,7 @@ Status RawSpillerWriter::_spill_mem_table(workgroup::YieldContext& yield_ctx, co
 }
 
 Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) {
+    SCOPED_TIMER(_spiller->metrics().compact_timer);
     auto io_task = std::any_cast<SpillIOTaskContextPtr>(yield_ctx.task_context_data);
     auto flush_ctx = std::static_pointer_cast<FlushContext>(io_task);
     // flush_ctx->output is not nullptr means the task is resumed from yield point
@@ -155,6 +161,9 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
 
         COUNTER_UPDATE(_spiller->metrics().compact_count, 1);
         COUNTER_UPDATE(_spiller->metrics().compact_block_count, block_groups.size());
+        COUNTER_UPDATE(_spiller->metrics().compact_bytes_read,
+                       std::accumulate(block_groups.begin(), block_groups.end(), int64_t{0},
+                                       [](int64_t sum, const auto& group) { return sum + group->data_size(); }));
 
         flush_ctx->compact_input_num_rows =
                 std::accumulate(block_groups.begin(), block_groups.end(), 0,
@@ -170,12 +179,17 @@ Status RawSpillerWriter::_compact_mem_table(workgroup::YieldContext& yield_ctx) 
                                                              options().sort_exprs, options().sort_desc));
     }
     auto st = DataTranster::transfer(yield_ctx, _runtime_state, _spiller->serde().get(), flush_ctx->output,
-                                     flush_ctx->input_stream);
+                                     flush_ctx->input_stream, _spiller->metrics().compact_merge_timer);
     RETURN_IF(!st.is_ok_or_eof(), st);
     RETURN_IF_YIELD(yield_ctx.need_yield);
     RETURN_IF_ERROR(flush_ctx->output->flush());
     flush_ctx->output.reset();
-    DCHECK_EQ(flush_ctx->compact_input_num_rows, flush_ctx->block_group->num_rows());
+    COUNTER_UPDATE(_spiller->metrics().compact_bytes_written, flush_ctx->block_group->data_size());
+    // On cancellation the transfer stops early, so the compacted block group holds fewer rows than
+    // its input; only assert full compaction while the query is still running. Query cancel sets
+    // the runtime state (which the transfer honors) but not necessarily the spiller flag.
+    DCHECK(_runtime_state->is_cancelled() || _spiller->is_cancel() ||
+           flush_ctx->compact_input_num_rows == flush_ctx->block_group->num_rows());
     this->add_block_group(std::move(flush_ctx->block_group));
 
     return Status::OK();
@@ -570,8 +584,19 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
 
         auto st = _split_partition(yield_ctx, context, flush_ctx.reader.get(), partition, flush_ctx.left.get(),
                                    flush_ctx.right.get());
-        RETURN_IF_YIELD(yield_ctx.need_yield);
+        FAIL_POINT_TRIGGER_EXECUTE(spill_split_yield_after_error, {
+            // Stand in for the IO task's time slice expiring right here (5ms preemptive, 100ms
+            // hard), which a large partition being split under load hits routinely.
+            if (!st.is_ok_or_eof()) {
+                yield_ctx.need_yield = true;
+            }
+        });
+        // Surface a failed split before the yield check. _split_partition flushes whatever the
+        // two halves already hold on its way out, so on the next resumption their mem tables are
+        // `done()` and it reports success -- returning OK here just because the task happens to
+        // yield loses the error for good and lets the query read back a half-written partition.
         RETURN_IF(!st.is_ok_or_eof(), st);
+        RETURN_IF_YIELD(yield_ctx.need_yield);
         DCHECK_EQ(flush_ctx.reader.get()->read_rows(), partition->num_rows);
         TRACE_SPILL_LOG << "reader:" << flush_ctx.reader.get() << " read rows:" << flush_ctx.reader->read_rows();
         DCHECK_EQ(flush_ctx.left->num_rows + flush_ctx.right->num_rows, partition->num_rows);
@@ -789,6 +814,18 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
                 RETURN_IF_ERROR(reader->trigger_restore<SyncTaskExecutor>(_runtime_state, EmptyMemGuard{}));
                 if (!reader->has_output_data()) {
+                    // A restore IO-task error is recorded in the spiller task status rather than
+                    // returned from trigger_restore; surface it instead of concluding a clean EOF,
+                    // otherwise a short read (corrupt/partial spill block, deserialize error) is
+                    // silently treated as end-of-partition and the split proceeds on partial data.
+                    RETURN_IF_ERROR(_spiller->task_status());
+                    // On cancellation the restore stops early with a partial read. Bail out instead
+                    // of continuing the split with an incomplete partition, which downstream assumes
+                    // was fully read. Query cancel sets the runtime state (which restore honors) but
+                    // not necessarily the spiller flag.
+                    if (_runtime_state->is_cancelled() || _spiller->is_cancel()) {
+                        return Status::Cancelled("query is cancelled during partition split");
+                    }
                     DCHECK_EQ(reader->read_rows(), partition->num_rows);
                     break;
                 }
@@ -830,14 +867,20 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
 #endif
 
                 if (left_channel_size > 0) {
-                    left_partition->num_rows += left_channel_size;
                     RETURN_IF_ERROR(left_mem_table->append_selective(*chunk, selection.data(), 0, left_channel_size));
+                    left_partition->num_rows += left_channel_size;
                 }
                 if (hash_data.size() != left_channel_size) {
-                    right_partition->num_rows += hash_data.size() - left_channel_size;
                     RETURN_IF_ERROR(right_mem_table->append_selective(*chunk, selection.data(), left_channel_size,
                                                                       hash_data.size() - left_channel_size));
+                    right_partition->num_rows += hash_data.size() - left_channel_size;
                 }
+
+                // Fail a split that has already moved part of the partition into the two halves, so
+                // the DeferOp below flushes them and marks their mem tables done().
+                FAIL_POINT_TRIGGER_EXECUTE(spill_split_partition_error, {
+                    return Status::MemoryLimitExceeded("inject spill_split_partition_error");
+                });
             }
             BREAK_IF_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         }

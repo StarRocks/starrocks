@@ -67,6 +67,10 @@ public class MvTaskRunContext extends TaskRunContext {
     private int partitionTTLNumber = TableProperty.INVALID;
     private final MVRefreshRuntimeState refreshRuntimeState = new MVRefreshRuntimeState();
 
+    // Set when auto_refresh_partitions_limit excluded older changed partitions from a complete refresh
+    // this batch: the batch then does not cover the whole MV and must not confirm whole-MV freshness.
+    private boolean partitionLimitExcludedPartitions = false;
+
     public MvTaskRunContext(TaskRunContext context) {
         super(context);
     }
@@ -137,6 +141,14 @@ public class MvTaskRunContext extends TaskRunContext {
 
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    public boolean isPartitionLimitExcludedPartitions() {
+        return partitionLimitExcludedPartitions;
+    }
+
+    public void setPartitionLimitExcludedPartitions(boolean partitionLimitExcludedPartitions) {
+        this.partitionLimitExcludedPartitions = partitionLimitExcludedPartitions;
     }
 
     /**

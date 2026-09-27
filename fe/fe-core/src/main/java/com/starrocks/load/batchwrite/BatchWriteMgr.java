@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
@@ -87,13 +86,9 @@ public class BatchWriteMgr extends LeaderDaemon {
 
     @Override
     public synchronized void start() {
-        // Refuse to overlap with a previous worker that did not drain in onStopped(): if the
-        // pool is shutdown but not yet terminated, in-flight merge-commit submissions from the
-        // previous leader session are still running.
-        if (threadPoolExecutor != null && threadPoolExecutor.isShutdown() && !threadPoolExecutor.isTerminated()) {
-            throw new IllegalStateException(
-                    "BatchWriteMgr threadPoolExecutor has not terminated; refuse to restart");
-        }
+        // The re-activation cleanliness gate verifies the previous pool terminated before start() runs
+        // (onStopped awaits its termination and only then clears isRunning), so there is no restart
+        // guard here - just rebuild the pool if a previous demotion shut it down (or on first start).
         if (threadPoolExecutor == null || threadPoolExecutor.isShutdown()) {
             threadPoolExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
                     Config.merge_commit_executor_threads_num, "merge-commit", true);
@@ -137,22 +132,10 @@ public class BatchWriteMgr extends LeaderDaemon {
         } catch (Throwable t) {
             LOG.warn("stop coordinatorBackendAssigner failed", t);
         }
-        if (threadPoolExecutor != null && !threadPoolExecutor.isShutdown()) {
-            // shutdownNow() interrupts in-flight merge-commit submissions; wait boundedly so a
-            // subsequent start() does not race a still-alive worker against a freshly created
-            // pool. If termination times out start() will refuse to rebuild.
-            threadPoolExecutor.shutdownNow();
-            try {
-                if (!threadPoolExecutor.awaitTermination(
-                        Config.leader_demotion_drain_timeout_sec, TimeUnit.SECONDS)) {
-                    LOG.error("BatchWriteMgr threadPoolExecutor did not terminate within {}s",
-                            Config.leader_demotion_drain_timeout_sec);
-                }
-            } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-                LOG.warn("Interrupted while waiting for BatchWriteMgr threadPoolExecutor to terminate");
-            }
-        }
+        // shutdownNow() interrupts in-flight merge-commit submissions; wait until the pool actually
+        // terminates so this worker does not clear isRunning while a merge-commit task is still running
+        // (the re-activation gate reads isRunning as the single quiescence signal). start() rebuilds it.
+        shutdownNowAndAwaitTermination("BatchWriteMgr.threadPoolExecutor", threadPoolExecutor);
     }
 
     /**

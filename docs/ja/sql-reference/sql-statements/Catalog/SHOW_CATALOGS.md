@@ -16,8 +16,14 @@ description: "SHOW CATALOGS queries all catalogs in the current StarRocks cluste
 ## 構文
 
 ```SQL
-SHOW CATALOGS
+SHOW CATALOGS [LIKE '<pattern>']
 ```
+
+## パラメータ
+
+| **パラメータ** | **説明**                                              |
+| ------------- | ------------------------------------------------------------ |
+| pattern       | 任意。`LIKE` 句を使用して catalog 名を照合するためのパターン。`%` は任意の数の文字に一致し、`_` は 1 文字に一致します。名前がパターンに一致する catalog のみが返されます。 |
 
 ## 出力
 
@@ -50,6 +56,16 @@ Catalog: hudi_catalog
    Type: Hudi
 Comment: NULL
 *************************** 3. row ***************************
+Catalog: iceberg_catalog
+   Type: Iceberg
+Comment: NULL
+```
+
+名前が特定のパターンに一致する catalog をクエリします。
+
+```SQL
+SHOW CATALOGS LIKE 'iceberg%'\G
+*************************** 1. row ***************************
 Catalog: iceberg_catalog
    Type: Iceberg
 Comment: NULL

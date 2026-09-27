@@ -48,7 +48,7 @@ CREATE FILE "file_name" [IN database]
 CREATE FILE "test.pem"
 PROPERTIES
 (
-    "url" = "http://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
+    "url" = "https://starrocks-public.oss-cn-xxxx.aliyuncs.com/key/test.pem",
     "catalog" = "kafka"
 );
 ```

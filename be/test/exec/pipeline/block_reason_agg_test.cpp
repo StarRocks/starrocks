@@ -33,8 +33,8 @@
 #include "compute_env/spill/spiller_factory.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/spillable_aggregate_blocking_source_operator.h"
-#include "exec/pipeline/primitives/block_reason.h"
-#include "exec/pipeline/primitives/pipeline_observer.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {

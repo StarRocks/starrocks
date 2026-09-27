@@ -28,7 +28,7 @@ public:
         auto ctx_ptr = FunctionContext::create_test_context();
         ctx = std::unique_ptr<FunctionContext>(ctx_ptr);
         state = std::make_unique<BinaryFormatState>();
-        ctx->set_function_state(FunctionContext::THREAD_LOCAL, state.get());
+        ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
     }
 
     StatusOr<ColumnPtr> test_to_binary(const std::string& input, BinaryFormatType type) {

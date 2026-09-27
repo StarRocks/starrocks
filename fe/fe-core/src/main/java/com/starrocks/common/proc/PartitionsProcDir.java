@@ -55,7 +55,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -67,19 +67,13 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OrderByPair;
-import com.starrocks.sql.ast.expression.BinaryPredicate;
-import com.starrocks.sql.ast.expression.BinaryType;
-import com.starrocks.sql.ast.expression.DateLiteral;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.LimitElement;
-import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.type.DateType;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -132,7 +126,9 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("MetaSwitchVersion");
+                    .add("MetaSwitchVersion")
+                    .add("LastUpdateTime")
+                    .add("LastAccessTime");
             this.titleNames = builder.build();
         } else {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
@@ -157,65 +153,11 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DataVersion")
                     .add("VersionEpoch")
                     .add("VersionTxnType")
-                    .add("TabletBalanced");
+                    .add("TabletBalanced")
+                    .add("LastUpdateTime")
+                    .add("LastAccessTime");
             this.titleNames = builder.build();
         }
-    }
-
-    public boolean filter(String columnName, Comparable element, Map<String, Expr> filterMap) throws AnalysisException {
-        if (filterMap == null) {
-            return true;
-        }
-        Expr subExpr = filterMap.get(columnName.toLowerCase());
-        if (subExpr == null) {
-            return true;
-        }
-        if (subExpr instanceof BinaryPredicate) {
-            BinaryPredicate binaryPredicate = (BinaryPredicate) subExpr;
-            if (subExpr.getChild(1) instanceof StringLiteral &&
-                    binaryPredicate.getOp() == BinaryType.EQ) {
-                return ((StringLiteral) subExpr.getChild(1)).getValue().equals(element);
-            }
-            long leftVal;
-            long rightVal;
-            if (subExpr.getChild(1) instanceof DateLiteral) {
-                LocalDateTime elementDateTime = DateUtils.parseStrictDateTime(element.toString());
-                leftVal = new DateLiteral(elementDateTime, DateType.DATETIME).getLongValue();
-                rightVal = ((DateLiteral) subExpr.getChild(1)).getLongValue();
-            } else {
-                leftVal = Long.parseLong(element.toString());
-                rightVal = ((IntLiteral) subExpr.getChild(1)).getLongValue();
-            }
-            switch (binaryPredicate.getOp()) {
-                case EQ:
-                case EQ_FOR_NULL:
-                    return leftVal == rightVal;
-                case GE:
-                    return leftVal >= rightVal;
-                case GT:
-                    return leftVal > rightVal;
-                case LE:
-                    return leftVal <= rightVal;
-                case LT:
-                    return leftVal < rightVal;
-                case NE:
-                    return leftVal != rightVal;
-                default:
-                    Preconditions.checkState(false, "No defined binary operator.");
-            }
-        } else {
-            return like((String) element, ((StringLiteral) subExpr.getChild(1)).getValue());
-        }
-        return true;
-    }
-
-    public boolean like(String str, String expr) {
-        expr = expr.toLowerCase();
-        expr = expr.replace(".", "\\.");
-        expr = expr.replace("?", ".");
-        expr = expr.replace("%", ".*");
-        str = str.toLowerCase();
-        return str.matches(expr);
     }
 
     public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
@@ -223,19 +165,20 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<List<Comparable>> partitionInfos = getPartitionInfos();
         List<List<Comparable>> filterPartitionInfos;
 
+        // Before the filter, and for every statement rather than only the ones with a WHERE: the
+        // loop below pairs titleNames.get(i) with partitionInfo.get(i), and getBasicProcResult
+        // checks again on the way out.
+        ProcUtils.checkRowWidths(this.titleNames, partitionInfos);
+
         // where
         if (filterMap == null || filterMap.isEmpty()) {
             filterPartitionInfos = partitionInfos;
         } else {
             filterPartitionInfos = Lists.newArrayList();
             for (List<Comparable> partitionInfo : partitionInfos) {
-                if (partitionInfo.size() != this.titleNames.size()) {
-                    throw new AnalysisException("PartitionInfos.size() " + partitionInfos.size()
-                            + " not equal TITLE_NAMES.size() " + this.titleNames.size());
-                }
                 boolean isNeed = true;
                 for (int i = 0; i < partitionInfo.size(); i++) {
-                    isNeed = filter(this.titleNames.get(i), partitionInfo.get(i), filterMap);
+                    isNeed = ProcUtils.filterResult(this.titleNames.get(i), partitionInfo.get(i), filterMap);
                     if (!isNeed) {
                         break;
                     }
@@ -256,31 +199,13 @@ public class PartitionsProcDir implements ProcDirInterface {
         }
 
         // limit
-        if (limitElement != null && limitElement.hasLimit()) {
-            int beginIndex = (int) limitElement.getOffset();
-            int endIndex = (int) (beginIndex + limitElement.getLimit());
-            if (endIndex > filterPartitionInfos.size()) {
-                endIndex = filterPartitionInfos.size();
-            }
-            filterPartitionInfos = filterPartitionInfos.subList(beginIndex, endIndex);
-        }
+        filterPartitionInfos = ProcUtils.applyLimit(filterPartitionInfos, limitElement);
 
         return getBasicProcResult(filterPartitionInfos);
     }
 
-    public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) {
-        // set result
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(this.titleNames);
-        for (List<Comparable> info : partitionInfos) {
-            List<String> row = new ArrayList<String>(info.size());
-            for (Comparable comparable : info) {
-                row.add(comparable.toString());
-            }
-            result.addRow(row);
-        }
-
-        return result;
+    public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) throws AnalysisException {
+        return ProcUtils.toProcResult(this.titleNames, partitionInfos);
     }
 
     public List<List<Comparable>> getPartitionInfos() {
@@ -291,6 +216,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
         Locker locker = new Locker();
         long tableId = table.getId();
+        // Access times keyed by logical partition id, aggregated across all FEs (this FE's own records plus
+        // the others' via a best-effort cross-FE RPC).
+        Map<Long, Long> accessTimes = Config.enable_collect_partition_access_time
+                ? GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr().getAccessTimes(db.getId(), tableId)
+                : new HashMap<>();
         locker.lockTableWithIntensiveDbLock(db.getId(), tableId, LockType.READ);
         try {
             List<Long> partitionIds;
@@ -316,16 +246,18 @@ public class PartitionsProcDir implements ProcDirInterface {
                             !partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         if (table.isOlapTableOrMaterializedView()) {
                             partitionInfos.add(
-                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         } else {
-                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         }
                     } else if (Config.enable_display_shadow_partitions) {
                         if (table.isOlapTableOrMaterializedView()) {
                             partitionInfos.add(
-                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                                    getOlapPartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         } else {
-                            partitionInfos.add(getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition));
+                            partitionInfos.add(
+                                    getLakePartitionInfo(tblPartitionInfo, partition, physicalPartition, accessTimes));
                         }
                     }
                 }
@@ -352,7 +284,8 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<Comparable> getOlapPartitionInfo(PartitionInfo tblPartitionInfo,
-                                                  Partition partition, PhysicalPartition physicalPartition) {
+                                                  Partition partition, PhysicalPartition physicalPartition,
+                                                  Map<Long, Long> accessTimes) {
         List<Comparable> partitionInfo = new ArrayList<Comparable>();
         partitionInfo.add(physicalPartition.getId()); // PartitionId
         partitionInfo.add(partition.getName()); // PartitionName
@@ -367,8 +300,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId()));
         DistributionInfo distributionInfo = partition.getDistributionInfo();
         partitionInfo.add(distributionKeyAsString(table, distributionInfo));
-        partitionInfo.add(physicalPartition.getBucketNum() > 0 ?
-                physicalPartition.getBucketNum() : distributionInfo.getBucketNum());
+        partitionInfo.add(physicalPartition.getActualBucketNum(distributionInfo));
 
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
@@ -390,11 +322,17 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
 
         partitionInfo.add(physicalPartition.isTabletBalanced());
+        partitionInfo.add(physicalPartition.getLastUpdateTime() == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(physicalPartition.getLastUpdateTime())); // LastUpdateTime
+        long lastAccessTime = accessTimes.getOrDefault(partition.getId(), 0L);
+        partitionInfo.add(lastAccessTime == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(lastAccessTime)); // LastAccessTime
         return partitionInfo;
     }
 
     private List<Comparable> getLakePartitionInfo(PartitionInfo tblPartitionInfo, Partition partition,
-                                                  PhysicalPartition physicalPartition) {
+                                                  PhysicalPartition physicalPartition,
+                                                  Map<Long, Long> accessTimes) {
         PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
         PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
         Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
@@ -411,7 +349,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                 .stream().map(Column::getName).collect(Collectors.toList()))); // Partition key
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
-        partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
+        partitionInfo.add(physicalPartition.getActualBucketNum(partition.getDistributionInfo())); // Buckets
         partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
         long storageSize = physicalPartition.storageDataSize() + physicalPartition.getExtraFileSize();
         partitionInfo.add(new ByteSizeValue(storageSize)); // StorageSize
@@ -426,6 +364,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(physicalPartition.getVersionEpoch()); // VersionEpoch
         partitionInfo.add(physicalPartition.getVersionTxnType()); // VersionTxnType
         partitionInfo.add(physicalPartition.getMetadataSwitchVersion()); // MetaSwitchVersion
+        partitionInfo.add(physicalPartition.getLastUpdateTime() == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(physicalPartition.getLastUpdateTime())); // LastUpdateTime
+        long lastAccessTime = accessTimes.getOrDefault(partition.getId(), 0L);
+        partitionInfo.add(lastAccessTime == 0 ? FeConstants.NULL_STRING
+                : TimeUtils.longToTimeString(lastAccessTime)); // LastAccessTime
         return partitionInfo;
     }
 
@@ -485,12 +428,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     public int analyzeColumn(String columnName) {
-        for (int i = 0; i < this.titleNames.size(); ++i) {
-            if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
+        // This one reports through ErrorReport instead of throwing, and its title list is built per
+        // table rather than being a constant, so only the lookup is shared.
+        try {
+            return ProcUtils.analyzeColumn(this.titleNames, columnName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+            return -1;
         }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        return -1;
     }
 }

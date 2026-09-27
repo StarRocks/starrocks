@@ -14,6 +14,8 @@
 
 #include "column/variant_converter.h"
 
+#include <limits>
+
 #include "types/variant.h"
 
 namespace starrocks {
@@ -143,6 +145,15 @@ Status VariantRowConverter::cast_to_date(const VariantRowRef& row, const cctz::t
         result.append(DateValue::create(year, month, day));
         return Status::OK();
     }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        DateValue value;
+        if (!value.from_string(text.data(), text.size())) {
+            return Status::VariantError("Failed to parse variant string as DATE");
+        }
+        result.append(value);
+        return Status::OK();
+    }
     default:
         return VARIANT_CAST_NOT_SUPPORT(type, TYPE_DATE);
     }
@@ -171,6 +182,38 @@ Status VariantRowConverter::cast_to_time(const VariantRowRef& row, const cctz::t
         result.append(static_cast<double>(total_micros) / USECS_PER_SEC);
         return Status::OK();
     }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        const auto first_colon = text.find(':');
+        if (first_colon == std::string_view::npos) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto second_colon = text.find(':', first_colon + 1);
+        if (second_colon == std::string_view::npos || text.find(':', second_colon + 1) != std::string_view::npos) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+
+        // Keep VARCHAR's unsigned HH:MM:SS grammar and signed-int hour domain,
+        // but accumulate total seconds in int64_t without narrowing or overflow.
+        StringParser::ParseResult parsed;
+        const auto hour = StringParser::string_to_unsigned_int<uint32_t>(text.data(), first_colon, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || hour > std::numeric_limits<int32_t>::max()) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto minute = StringParser::string_to_unsigned_int<uint32_t>(text.data() + first_colon + 1,
+                                                                           second_colon - first_colon - 1, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || minute >= 60) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const auto second = StringParser::string_to_unsigned_int<uint32_t>(text.data() + second_colon + 1,
+                                                                           text.size() - second_colon - 1, &parsed);
+        if (parsed != StringParser::PARSE_SUCCESS || second >= 60) {
+            return Status::VariantError("Failed to parse variant string as TIME");
+        }
+        const int64_t seconds = static_cast<int64_t>(hour) * SECS_PER_HOUR + minute * SECS_PER_MINUTE + second;
+        result.append(static_cast<double>(seconds));
+        return Status::OK();
+    }
     default:
         return VARIANT_CAST_NOT_SUPPORT(type, TYPE_TIME);
     }
@@ -197,6 +240,15 @@ Status VariantRowConverter::cast_to_datetime(const VariantRowRef& row, const cct
         TimestampValue tsv{};
         tsv.from_unixtime(seconds, microseconds, zone);
         result.append(tsv);
+        return Status::OK();
+    }
+    case VariantType::STRING: {
+        ASSIGN_OR_RETURN(const auto text, variant.get_string());
+        TimestampValue value;
+        if (!value.from_string(text.data(), text.size())) {
+            return Status::VariantError("Failed to parse variant string as DATETIME");
+        }
+        result.append(value);
         return Status::OK();
     }
     default:

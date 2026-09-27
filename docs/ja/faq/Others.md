@@ -1,4 +1,5 @@
 ---
+sidebar_position: 120
 displayed_sidebar: docs
 description: "varchar、文字セット、JOIN 等に関する StarRocks 一般的な質問。"
 ---

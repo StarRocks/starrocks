@@ -19,7 +19,7 @@
 #include <random>
 
 #include "storage/olap_common.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 
 namespace starrocks {
 

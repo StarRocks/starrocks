@@ -39,8 +39,8 @@
 
 #include "base/format.h"
 #include "base/uid_util.h"
-#include "runtime/env/global_env.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_common.h"
 #include "storage/protobuf_file.h"
@@ -136,15 +136,15 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     }
     CHECK(st.ok()) << st;
     init_from_pb(&tablet_meta_pb);
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
-    MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_CONSUME(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 TabletMeta::~TabletMeta() {
-    MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+    MEM_TRACKER_SAFE_RELEASE(RuntimeEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status TabletMeta::create_from_file(const string& file_path) {

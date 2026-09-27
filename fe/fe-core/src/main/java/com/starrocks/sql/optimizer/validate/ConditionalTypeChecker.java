@@ -21,7 +21,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalAIProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -85,8 +87,24 @@ public class ConditionalTypeChecker implements PlanValidator.Checker {
         }
 
         @Override
+        public Void visitLogicalAIProject(OptExpression optExpression, Void context) {
+            LogicalAIProjectOperator op = optExpression.getOp().cast();
+            walkScalars(op.getColumnRefMap());
+            walkScalars(op.getCommonSubOperatorMap());
+            return visit(optExpression, context);
+        }
+
+        @Override
         public Void visitPhysicalProject(OptExpression optExpression, Void context) {
             PhysicalProjectOperator op = optExpression.getOp().cast();
+            walkScalars(op.getColumnRefMap());
+            walkScalars(op.getCommonSubOperatorMap());
+            return visit(optExpression, context);
+        }
+
+        @Override
+        public Void visitPhysicalAIProject(OptExpression optExpression, Void context) {
+            PhysicalAIProjectOperator op = optExpression.getOp().cast();
             walkScalars(op.getColumnRefMap());
             walkScalars(op.getCommonSubOperatorMap());
             return visit(optExpression, context);

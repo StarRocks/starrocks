@@ -68,7 +68,8 @@ ldap_search_user_arg ::=
     "ldap_user_search_attr" = ""
 
 ldap_cache_arg ::= 
-    "ldap_cache_refresh_interval" = ""
+    ["ldap_cache_refresh_interval" = "",]
+    ["ldap_cache_max_stale_time" = ""]
 ```
 
 <UnixFileSyntax />
@@ -178,7 +179,17 @@ LDAP グループ情報のキャッシュ動作を定義するために使用さ
 
 ##### `ldap_cache_refresh_interval`
 
-オプション。StarRocks がキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `900`。
+オプション。StarRocks がキャッシュされた LDAP グループ情報を自動的に更新する間隔。単位: 秒。デフォルト: `300`。
+
+##### `ldap_cache_max_stale_time`
+
+オプション。更新が失敗し続けている間、最後に正常に構築されたキャッシュを引き続き使用できる期間。単位: 秒。デフォルト: `3600`。
+
+更新が LDAP サーバーに到達できない場合、StarRocks はこの値を超えて古くなるまで以前のキャッシュを引き続き使用します。それを超えるとキャッシュは破棄され、すべてのユーザーは空のグループセットに解決されます。更新が失敗した時点で直ちにキャッシュを破棄するには、この項目を `0` に設定します。
+
+:::note
+`permitted_groups` が設定されている場合、キャッシュを直ちに破棄すると、LDAP の一時的な停止がクラスタ全体のログイン失敗に拡大します。空のグループセットは許可リストと決して交差しないためです。この値を大きくすると、グループ情報が古くなる期間が長くなる代わりに、ディレクトリサービスの停止に対する耐性が得られます。
+:::
 
 ### 例
 
@@ -284,6 +295,8 @@ ALTER SECURITY INTEGRATION <security_integration_name> SET
 #### `group_provider`
 
 セキュリティインテグレーションと組み合わせる Group Provider の名前。複数の Group Provider はカンマで区切られます。設定されると、StarRocks はログイン時に各指定されたプロバイダーの下でユーザーのグループ情報を記録します。
+
+このプロパティが設定されていない場合、セキュリティインテグレーションは FE 設定項目 `group_provider`（クラスター全体のデフォルトリスト）にフォールバックします。v4.2 より前のバージョンでは、その場合に Group Provider は一切参照されなかったため、FE 設定項目がこの種のセキュリティインテグレーションに効くのは v4.2 以降です。
 
 #### `permitted_groups`
 

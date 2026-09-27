@@ -1,0 +1,35 @@
+-- name: test_pass_through_cancel
+-- Functional smoke test for the local (same-process) pass-through exchange when the
+-- receiver is cancelled. An INSERT ... SELECT over a shuffle join whose build (right)
+-- side is empty ONLY at runtime makes the hash join short-circuit the probe, which
+-- cancels/closes the probe-side pass-through receiver while the sink may still be
+-- feeding. The query must complete cleanly and return the correct (empty) result.
+create table src (k int, v int) duplicate key(k)
+distributed by hash(k) buckets 8 properties("replication_num" = "1");
+
+insert into src select generate_series % 1000, generate_series from TABLE(generate_series(1, 200000));
+
+create table dst (k int, cnt bigint, s bigint) duplicate key(k)
+distributed by hash(k) buckets 8 properties("replication_num" = "1");
+
+-- Shuffle GROUP BY insert flows through the local pass-through exchange; result must be exact.
+insert into dst select k, count(*), sum(v) from src group by k;
+select count(*) as nkeys, sum(cnt) as nrows, sum(s) as sumv from dst;
+
+-- Empty-at-runtime right side (HAVING can never be satisfied). The optimizer keeps a real
+-- partitioned shuffle join (not EMPTYSET / broadcast), so the probe streams through
+-- pass-through until the empty build short-circuits it -> receiver cancel/close.
+truncate table dst;
+insert into dst
+select a.k, count(*), sum(a.v)
+from src a join [shuffle] (select k, count(v) v from src group by k having count(v) > 999999999) b
+  on a.k = b.k
+group by a.k;
+select count(*) as dst_rows from dst;
+
+-- Pass-through path still correct after the short-circuit cancel.
+insert into dst select k, count(*), sum(v) from src group by k;
+select count(*) as nkeys, sum(cnt) as nrows, sum(s) as sumv from dst;
+
+drop table dst;
+drop table src;

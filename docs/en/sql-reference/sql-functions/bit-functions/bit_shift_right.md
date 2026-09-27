@@ -1,22 +1,20 @@
 ---
 displayed_sidebar: docs
-description: "Shifts the binary representation of a numeric expression to the right by a specified number of bits."
+description: "Shifts the binary representation of a numeric expression to the right by a specified number of bits, preserving the sign."
 ---
 
-# bit_shift_right_logical
+# bit_shift_right
 
 
 
 Shifts the binary representation of a numeric expression to the right by a specified number of bits.
 
-This function performs a **logical right shift,** during which the bit length does not change, the low bit is dropped, and 0 is appended to the high bit despite whether the original bit is positive or negative. **Logical** shifts are unsigned shifts. For example, shifting `10101` by one bit results in `00101`.
-
-bit_shift_right() and bit_shift_right_logical() return the same result for a positive value.
+This function performs an **arithmetic right shift**, during which the bit length does not change, the low bit is dropped, and the sign bit is used as the high bit. For example, shifting `10101` to the right by one bit results in `11010`.
 
 ## Syntax
 
 ```Haskell
-bit_shift_right_logical(value, shift)
+bit_shift_right(value, shift)
 ```
 
 ## Parameters
@@ -43,36 +41,37 @@ Returns a value of the same type as `value`.
 Use this function to shift numeric values.
 
 ```Plain
-SELECT bit_shift_right_logical(2, 1);
-+-------------------------------+
-| bit_shift_right_logical(2, 1) |
-+-------------------------------+
-|                             1 |
-+-------------------------------+
+SELECT bit_shift_right(2, 1);
++-----------------------+
+| bit_shift_right(2, 1) |
++-----------------------+
+|                     1 |
++-----------------------+
 
-SELECT bit_shift_right_logical(2.2, 1);
-+---------------------------------+
-| bit_shift_right_logical(2.2, 1) |
-+---------------------------------+
-|                               1 |
-+---------------------------------+
+SELECT bit_shift_right(2.2, 1);
++-------------------------+
+| bit_shift_right(2.2, 1) |
++-------------------------+
+|                       1 |
++-------------------------+
 
-SELECT bit_shift_right_logical("2", 1);
-+---------------------------------+
-| bit_shift_right_logical('2', 1) |
-+---------------------------------+
-|                               1 |
-+---------------------------------+
+SELECT bit_shift_right("2", 1);
++-------------------------+
+| bit_shift_right('2', 1) |
++-------------------------+
+|                       1 |
++-------------------------+
 
-SELECT bit_shift_right_logical(cast('-2' AS INTEGER(32)), 1);
-+-----------------------------------------------+
-| bit_shift_right_logical(CAST('-2' AS INT), 1) |
-+-----------------------------------------------+
-|                                    2147483647 |
-+-----------------------------------------------+
+SELECT bit_shift_right(-2, 1);
++------------------------+
+| bit_shift_right(-2, 1) |
++------------------------+
+|                     -1 |
++------------------------+
 ```
 
 ## References
 
 - [bit_shift_left](bit_shift_left.md)
-- [bit_shift_right](bit_shift_right.md)
+
+- [bit_shift_right_logical](bit_shift_right_logical.md)

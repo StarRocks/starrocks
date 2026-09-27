@@ -63,7 +63,7 @@
 #include "exec/pipeline/aggregate/spillable_aggregate_distinct_blocking_operator.h"
 #include "exec/pipeline/aggregate/spillable_partitionwise_aggregate_operator.h"
 #include "exec/pipeline/aggregate/spillable_partitionwise_distinct_operator.h"
-#include "exec/pipeline/primitives/block_reason.h"
+#include "exec_primitive/pipeline/primitives/block_reason.h"
 
 namespace starrocks::pipeline {
 

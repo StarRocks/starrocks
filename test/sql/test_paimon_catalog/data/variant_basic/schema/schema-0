@@ -1,0 +1,21 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT"
+  }, {
+    "id" : 1,
+    "name" : "v",
+    "type" : "VARIANT"
+  } ],
+  "highestFieldId" : 1,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ ],
+  "options" : {
+    "owner" : "smith",
+    "file.format" : "parquet"
+  },
+  "timeMillis" : 1786000310015
+}

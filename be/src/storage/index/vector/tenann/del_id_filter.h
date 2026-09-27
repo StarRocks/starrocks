@@ -36,7 +36,7 @@
 
 #ifdef WITH_TENANN
 #include "storage/del_vector.h"
-#include "storage/primitive/range.h"
+#include "storage_primitive/range.h"
 #include "tenann/common/type_traits.h"
 #include "tenann/searcher/id_filter.h"
 

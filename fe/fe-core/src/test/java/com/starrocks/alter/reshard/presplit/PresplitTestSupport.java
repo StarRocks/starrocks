@@ -160,7 +160,7 @@ final class PresplitTestSupport {
                      Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
             invocation.run();
             coordinator.verify(() -> TabletPreSplitCoordinator.submitAsynchronously(
-                    any(), any(), anyLong(), any(), any(), any(), anyInt()), never());
+                    any(), any(), anyLong(), any(), any(), any(), anyInt(), any()), never());
         }
     }
 
@@ -214,6 +214,23 @@ final class PresplitTestSupport {
             }
         }
         return outputPath;
+    }
+
+    /**
+     * Write a two-column composite-key Parquet fixture (tenant VARCHAR + position BIGINT):
+     * tenant changes every 4 rows, position ascends. Centralized here so the composite fixture
+     * shape lives in one place (like {@link #writeParquetFixture}) for the provider tests that
+     * exercise multi-column projection.
+     */
+    static Path writeCompositeParquetFixture(java.nio.file.Path tempDirectory, int rowCount) throws IOException {
+        return writeParquetFixture(
+                tempDirectory,
+                "message schema { required binary tenant (UTF8); required int64 position; }",
+                rowCount,
+                (group, rowIndex) -> {
+                    group.append("tenant", String.format("tenant-%02d", rowIndex / 4));
+                    group.append("position", (long) rowIndex);
+                });
     }
 
     /**

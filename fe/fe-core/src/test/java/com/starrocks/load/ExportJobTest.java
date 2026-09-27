@@ -17,6 +17,7 @@ package com.starrocks.load;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionAccessTimeMgr;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Table;
@@ -50,6 +51,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import mockit.Verifications;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -233,6 +235,81 @@ public class ExportJobTest {
         Deencapsulation.invoke(job, "genTaskFragments", fragments, scanNodes);
         Assertions.assertEquals(5, fragments.size());
         Assertions.assertEquals(5, scanNodes.size());
+    }
+
+    @Test
+    public void testGenScanNodeRecordsPartitionAccess(@Mocked GlobalStateMgr globalStateMgr,
+                                                       @Mocked Table table,
+                                                       @Mocked OlapScanNode scanNode) {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            long dbId = 777L;
+            long tableId = 555L;
+            PartitionAccessTimeMgr accessTimeMgr = new PartitionAccessTimeMgr();
+            new Expectations() {
+                {
+                    table.getType();
+                    result = Table.TableType.OLAP;
+                    table.getId();
+                    result = tableId;
+                    GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+                    result = accessTimeMgr;
+                    // computePartitionInfo() has resolved these data-bearing logical partition ids.
+                    scanNode.getSelectedPartitionIds();
+                    result = Lists.newArrayList(100L, 200L);
+                }
+            };
+
+            ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+            Deencapsulation.setField(job, "exportTable", table);
+            Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+            Deencapsulation.setField(job, "dbId", dbId);
+
+            long before = System.currentTimeMillis();
+            Deencapsulation.invoke(job, "genScanNode");
+
+            // genScanNode records the export scan as a user access for exactly the selected partitions.
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 100L) >= before);
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 200L) >= before);
+            Assertions.assertEquals(0L, accessTimeMgr.getLastAccessTime(dbId, tableId, 300L));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
+    }
+
+    @Test
+    public void testGenScanNodeSkipsAccessRecordingWhenDisabled(@Mocked GlobalStateMgr globalStateMgr,
+                                                                @Mocked Table table,
+                                                                @Mocked OlapScanNode scanNode) {
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = false;
+        try {
+            new Expectations() {
+                {
+                    table.getType();
+                    result = Table.TableType.OLAP;
+                }
+            };
+
+            ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+            Deencapsulation.setField(job, "exportTable", table);
+            Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+            Deencapsulation.setField(job, "dbId", 777L);
+
+            Deencapsulation.invoke(job, "genScanNode");
+
+            // With the feature disabled, genScanNode must not reach the access-time collection at all
+            // (the whole block, starting at GlobalStateMgr.getCurrentState(), is skipped).
+            new Verifications() {
+                {
+                    GlobalStateMgr.getCurrentState();
+                    times = 0;
+                }
+            };
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
     }
 
     @Test

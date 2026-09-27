@@ -166,7 +166,6 @@ public class PipeAnalyzer {
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {
         analyzeProperties(stmt.getProperties());
-        Map<String, String> properties = stmt.getProperties();
 
         InsertStmt insertStmt = stmt.getInsertStmt();
         String insertSql = stmt.getOrigStmt().originStmt.substring(stmt.getInsertSqlStartIndex());

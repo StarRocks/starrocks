@@ -1,0 +1,172 @@
+-- name: test_ivm_with_iceberg_compaction
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table t1 (k int, v int);
+-- result:
+-- !result
+insert into t1 values (1, 10);
+-- result:
+-- !result
+insert into t1 values (2, 20);
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+DISTRIBUTED BY HASH(k)
+REFRESH DEFERRED MANUAL
+properties ("refresh_mode" = "incremental")
+AS SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='test_mv1';
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k;
+-- result:
+1	10
+2	20
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (3, 30);
+-- result:
+-- !result
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+SELECT count(1) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots WHERE operation = 'replace';
+-- result:
+1
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+-- !result
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (4, 40);
+-- result:
+-- !result
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+SELECT count(1) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1$snapshots WHERE operation = 'replace';
+-- result:
+3
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+-- !result
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SKIPPED
+-- !result
+[UC]ALTER TABLE mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 EXECUTE rewrite_data_files(rewrite_all = true);
+insert into mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 values (5, 50);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT STATE FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+SUCCESS
+-- !result
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT k, v FROM test_mv1 ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+-- !result
+SELECT IS_ACTIVE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME = 'test_mv1';
+-- result:
+true
+-- !result
+SELECT k, v FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 ORDER BY k;
+-- result:
+1	10
+2	20
+3	30
+4	40
+5	50
+-- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
+drop database db_${uuid0} force;
+-- result:
+-- !result
+drop catalog mv_iceberg_${uuid0};
+-- result:
+-- !result

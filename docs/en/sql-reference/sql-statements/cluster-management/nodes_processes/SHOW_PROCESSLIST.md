@@ -29,6 +29,7 @@ SHOW [FULL] PROCESSLIST
 
 | Return              | Description                                                  |
 | ------------------- | ------------------------------------------------------------ |
+| Server              | Server ID.                                                   |
 | Id                  | Connection ID.                                               |
 | User                | The name of the user who runs the operation.                 |
 | Host                | The hostname of the client which runs the operation.         |
@@ -40,7 +41,9 @@ SHOW [FULL] PROCESSLIST
 | Info                | The command that the operation is executing.                 |
 | IsPending           | Whether the query is pending in the queue. Valid values: `true` and `false`. |
 | Warehouse           | The name of the warehouse where the query is executed.       |
-| CNGroup             | The name of the compute node group where the query is executed. |
+| CNGroup             | The name of the compute node group where the query is run.   |
+| Catalog             | The name of the catalog.                                     |
+| QueryId             | The qury ID if the Command is "Query".                       |
 
 ## Usage note
 
@@ -56,11 +59,23 @@ The `IsPending`, `Warehouse`, and `CNGroup` fields provide additional informatio
 
 Example 1: lists the operations state via the user `root`.
 
-```Plain
-SHOW PROCESSLIST;
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+-----------+-----------+---------+
-| Id   | User | Host                | Db    | Command | ConnectionStartTime | Time | State | Info             | IsPending  | Warehouse | CNGroup |
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+-----------+-----------+---------+
-|  0   | root | x.x.x.x:xxxx        | tpcds | Query   | 2022-10-09 19:58:25 |    0 | OK    | SHOW PROCESSLIST | false      | default   |         |
-+------+------+---------------------+-------+---------+---------------------+------+-------+------------------+-----------+-----------+---------+
+```SQL
+SHOW PROCESSLIST\G
+
+*************************** 6. row ***************************
+         ServerName: starrocks-fe_9010_1782850099498
+                 Id: 33560554
+               User: root
+               Host: 172.18.0.4:54818
+                 Db:
+            Command: Query
+ConnectionStartTime: 2026-07-02 01:21:14
+               Time: 0
+              State: OK
+               Info: show processlist
+          IsPending: false
+          Warehouse: default_warehouse
+            CNGroup:
+            Catalog: default_catalog
+            QueryId: 019f1eb3-246c-7899-ab3e-40a018645bba
 ```

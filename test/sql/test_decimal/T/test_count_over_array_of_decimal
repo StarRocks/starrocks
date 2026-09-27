@@ -1,0 +1,33 @@
+-- name: test_count_over_array_of_decimal
+CREATE TABLE `t_arr_dec` (
+  `k` int(11) NULL,
+  `a32` ARRAY<DECIMAL32(4, 2)> NULL,
+  `a64` ARRAY<DECIMAL64(10, 2)> NULL,
+  `a128` ARRAY<DECIMAL128(30, 2)> NULL,
+  `d64` DECIMAL64(10, 2) NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 3
+PROPERTIES (
+  "replication_num" = "1"
+);
+
+INSERT INTO t_arr_dec VALUES
+  (1, [1.10, 2.20], [1.10, 2.20], [1.10, 2.20], 1.10),
+  (1, [], [], [], 2.20),
+  (2, NULL, NULL, NULL, NULL),
+  (2, [3.30], [3.30], [3.30], 3.30);
+
+-- count() over an ARRAY is routed through the decimalv3 rewriting because the item type is
+-- decimal, even though there is nothing to widen. The rewritten function used to keep an
+-- INVALID return type, which only surfaced while building the fragment as the unrelated-looking
+-- "Getting analyzing error. Detail message: slot type shouldn't be invalid.".
+select count(a32), count(a64), count(a128) from t_arr_dec;
+select k, count(a32), count(a64), count(a128) from t_arr_dec group by k order by k;
+select count(a64) from t_arr_dec where a64 is not null;
+select count(a64) from (select a64 from t_arr_dec) t;
+select k, count(a64) over (partition by k) as c from t_arr_dec order by k, c;
+
+-- The widening rewriting itself must keep working for an argument that really is a decimal.
+select count(d64), sum(d64), avg(d64) from t_arr_dec;
+select k, count(d64), sum(d64) from t_arr_dec group by k order by k;

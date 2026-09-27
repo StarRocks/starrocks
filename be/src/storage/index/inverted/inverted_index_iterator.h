@@ -17,7 +17,7 @@
 
 #include "storage/index/inverted/inverted_index_option.h"
 #include "storage/index/inverted/inverted_reader.h"
-#include "storage/primitive/inverted_index_iterator.h"
+#include "storage_primitive/inverted_index_iterator.h"
 
 namespace starrocks {
 

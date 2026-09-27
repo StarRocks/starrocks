@@ -52,6 +52,8 @@ using S2Point = Vector3_d;
 
 namespace starrocks {
 
+enum class GeoPointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
+
 class GeoShape {
 public:
     virtual ~GeoShape() = default;
@@ -137,6 +139,7 @@ public:
     const S2Polygon* polygon() const { return _polygon.get(); }
 
     bool contains(const GeoShape* rhs) const override;
+    GeoPointPolygonRelation point_relation(const GeoPoint& point) const;
     std::string as_wkt() const override;
 
 protected:

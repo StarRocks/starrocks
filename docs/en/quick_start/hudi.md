@@ -1,6 +1,6 @@
 ---
 displayed_sidebar: docs
-sidebar_position: 4
+sidebar_position: 50
 description: "Quick start guide for querying Apache Hudi data lakes with StarRocks."
 toc_max_heading_level: 3
 ---

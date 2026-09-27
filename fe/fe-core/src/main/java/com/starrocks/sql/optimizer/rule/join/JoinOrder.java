@@ -371,8 +371,12 @@ public abstract class JoinOrder {
         UKFKConstraints.JoinProperty joinProperty = null;
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         if (sessionVariable.isEnableUKFKJoinReorder()) {
-            UKFKConstraintsCollector.collectColumnConstraints(leftExprInfo.expr);
-            UKFKConstraintsCollector.collectColumnConstraints(rightExprInfo.expr);
+            // enable_ukfk_join_reorder is an independent switch from enable_ukfk_opt, so the constraints have to be
+            // collected unconditionally here. collectColumnConstraints() is a no-op when enable_ukfk_opt is off,
+            // which would leave both children without constraints and make buildJoinColumnConstraint dereference
+            // null. EliminateAggRule uses the force variant for the same reason.
+            UKFKConstraintsCollector.collectColumnConstraintsForce(leftExprInfo.expr);
+            UKFKConstraintsCollector.collectColumnConstraintsForce(rightExprInfo.expr);
             UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,
                     newJoin.getJoinType(), newJoin.getOnPredicate(), leftExprInfo.expr, rightExprInfo.expr);
             joinProperty = constraint.getJoinProperty();

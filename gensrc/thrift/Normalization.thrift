@@ -24,6 +24,24 @@ struct TNormalOlapScanNode {
   12: optional list<string> unused_output_column_name;
   13: optional list<i64> selected_partition_ids;
   14: optional list<i64> selected_partition_versions;
+  15: optional PlanNodes.TTableSampleOptions sample_options;
+  // The ANN search spec. RewriteToVectorPlanRule replaces the distance function in the scan's
+  // projection with an opaque __vector_* column ref and moves the query vector, the folded
+  // distance-range bound and the ordering into TVectorSearchOptions, so none of them survive
+  // anywhere else in the plan -- two ANN scans differing only in the query vector would
+  // otherwise normalize identically. The plan-local distance slot id and column name are
+  // cleared before serializing: they are per-query state, and leaving them in would give
+  // structurally identical plans different digests and stop them sharing an entry.
+  16: optional binary vector_search_options;
+  // The schema the scan reads with. A fast schema evolution (ADD/DROP COLUMN) deliberately does
+  // not rewrite data, so it leaves the partition versions -- and therefore the rest of the cache
+  // key -- untouched, while changing what the very same query returns. Without this field the
+  // entries populated before such a DDL keep being served after it.
+  //
+  // Set only when the schema has actually diverged from the index it belongs to, so that tables
+  // which were never altered keep the digest they had before this field existed. See the note in
+  // OlapScanNode.toNormalForm().
+  17: optional i64 schema_id;
 }
 
 struct TNormalProjectNode {
@@ -42,7 +60,7 @@ struct TNormalAggregationNode {
   6: optional bool use_streaming_preaggregation
   7: optional i32 agg_func_set_version = 1
   8: optional bool has_outer_join_child
-  9: optional PlanNodes.TStreamingPreaggregationMode streaming_preaggregation_mode 
+  9: optional PlanNodes.TStreamingPreaggregationMode streaming_preaggregation_mode
 }
 
 struct TNormalDecodeNode {
@@ -62,12 +80,27 @@ struct TNormalHashJoinNode {
   6: optional list<binary> partition_exprs
   7: optional list<Types.TSlotId> output_columns
   8: optional bool late_materialization
+  // Same commonSlotMap omission as TNormalNestLoopJoinNode above.
+  //
+  // 9 is reserved and unused. It was claimed by a sibling fix for the ASOF temporal condition,
+  // which sits outside the conjunct lists in the same way; that fix ended up marking the fragment
+  // uncacheable instead and needs no field at all. The ordinal is left alone rather than reused,
+  // so that the numbering here does not depend on which of the two changes landed first.
+  10: optional list<Types.TSlotId> cse_slot_ids
+  11: optional list<binary> cse_exprs
 }
 
 
 struct TNormalNestLoopJoinNode {
   1: optional PlanNodes.TJoinOp join_op
   2: optional list<binary> join_conjuncts
+  // Common sub-expressions of the join predicate. join_conjuncts reference these by slot id
+  // only, so without their definitions two joins whose predicates share a shape but differ in
+  // a factored-out subexpression -- `(t.ts % 7) > s.a and (t.ts % 7) < s.b` versus the same
+  // with % 9 -- normalize identically. A NestLoopJoinNode is always a transform join, so it
+  // sits inside the digested subtree and decides which rows the cached aggregate is built from.
+  3: optional list<Types.TSlotId> cse_slot_ids
+  4: optional list<binary> cse_exprs
 }
 
 

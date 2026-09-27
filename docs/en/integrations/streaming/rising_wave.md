@@ -1,4 +1,5 @@
 ---
+sidebar_position: 40
 displayed_sidebar: docs
 description: "RisingWave is a distributed SQL streaming database that enables simple, efficient, and reliable processing of streaming data."
 ---

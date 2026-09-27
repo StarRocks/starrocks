@@ -107,7 +107,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
             allExternalAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             String jobIds = allExternalAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
                     .collect(Collectors.joining(", "));
-            LOG.info("auto collect external statistic on analyze job[{}] start", jobIds);
+            LOG.info("[ExternalStats] auto collect start | jobIds={}", jobIds);
             for (ExternalAnalyzeJob externalAnalyzeJob : allExternalAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 try (var scope = statsConnectCtx.bindScope()) {
@@ -116,7 +116,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
                     externalAnalyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR, jobs);
                 }
             }
-            LOG.info("auto collect external statistic on analyze job[{}] end", jobIds);
+            LOG.info("[ExternalStats] auto collect end   | jobIds={}", jobIds);
         }
         return result;
     }

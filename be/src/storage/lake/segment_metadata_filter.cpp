@@ -15,8 +15,8 @@
 #include "storage/lake/segment_metadata_filter.h"
 
 #include "storage/datum_variant.h"
-#include "storage/primitive/column_predicate_factory.h"
-#include "storage/primitive/zone_map_detail.h"
+#include "storage_primitive/column_predicate_factory.h"
+#include "storage_primitive/zone_map_detail.h"
 
 namespace starrocks::lake {
 

@@ -16,7 +16,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.HintNode;
+import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.MergeIntoStmt;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.parser.SqlParser;
@@ -58,6 +61,13 @@ public class MergeIntoAnalyzerIcebergTest {
     private static MergeIntoStmt parseMerge(String sql) {
         return (MergeIntoStmt) SqlParser.parse(
                 sql, connectContext.getSessionVariable().getSqlMode()).get(0);
+    }
+
+    private static JoinRelation analyzeAndGetSyntheticJoin(String sql) {
+        MergeIntoStmt stmt = parseMerge(sql);
+        MergeIntoAnalyzer.analyze(stmt, connectContext);
+        SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        return (JoinRelation) selectRelation.getRelation();
     }
 
     // ---- Error cases ----
@@ -558,6 +568,35 @@ public class MergeIntoAnalyzerIcebergTest {
         assertTrue(stmt.getTable() instanceof IcebergTable);
         assertNotNull(stmt.getQueryStatement());
         assertNotNull(stmt.getOutputColumnNames());
+    }
+
+    @Test
+    public void testUnpartitionedMergeForcesShuffleJoinHint() {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+
+        JoinRelation joinRelation = analyzeAndGetSyntheticJoin(sql);
+
+        assertEquals(HintNode.HINT_JOIN_SHUFFLE, joinRelation.getJoinHint(),
+                "Unpartitioned Iceberg MERGE must not broadcast the target side");
+    }
+
+    @Test
+    public void testPartitionedMergePinsShuffleJoin() {
+        String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+
+        JoinRelation joinRelation = analyzeAndGetSyntheticJoin(sql);
+
+        // The duplicate-match check sits above this join and is correct only when the target
+        // side is never broadcast/replicated. That holds for partitioned targets too, so the
+        // shuffle hint is pinned unconditionally (not only for the unpartitioned case).
+        assertEquals(HintNode.HINT_JOIN_SHUFFLE, joinRelation.getJoinHint(),
+                "Partitioned Iceberg MERGE must also keep the target side shuffle-distributed");
     }
 
     // ---- Positional INSERT VALUES tests ----

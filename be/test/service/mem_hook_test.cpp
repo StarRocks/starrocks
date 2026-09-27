@@ -14,10 +14,32 @@
 
 #include "service/mem_hook.h"
 
-// Mem hook behavior is only testable when the production hook is enabled.
-#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
-
 #include <gtest/gtest.h>
+
+#include <cstdint>
+#include <limits>
+
+namespace starrocks {
+
+TEST(MemhookTest, test_should_report_large_memory_alloc) {
+    // A threshold of 0 or below disables the report. This is also the value of the config global
+    // before config::init() applies the declared default, so nothing may be reported then.
+    EXPECT_FALSE(should_report_large_memory_alloc(0, 0));
+    EXPECT_FALSE(should_report_large_memory_alloc(1, 0));
+    EXPECT_FALSE(should_report_large_memory_alloc(std::numeric_limits<size_t>::max(), 0));
+    EXPECT_FALSE(should_report_large_memory_alloc(std::numeric_limits<size_t>::max(), -1));
+
+    // Strictly greater than the threshold, matching the historical 1GB constant.
+    constexpr int64_t kThreshold = 1073741824;
+    EXPECT_FALSE(should_report_large_memory_alloc(kThreshold - 1, kThreshold));
+    EXPECT_FALSE(should_report_large_memory_alloc(kThreshold, kThreshold));
+    EXPECT_TRUE(should_report_large_memory_alloc(kThreshold + 1, kThreshold));
+}
+
+} // namespace starrocks
+
+// The remaining mem hook behavior is only testable when the production hook is enabled.
+#if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
 #include <vector>
 
