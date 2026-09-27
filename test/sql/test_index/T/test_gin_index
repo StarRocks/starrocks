@@ -87,6 +87,7 @@ drop database test_gin_index;
 -- name: test_add_gin_index @native
 create database test_gin_add_${uuid0};
 use test_gin_add_${uuid0};
+ADMIN SET FRONTEND CONFIG ("enable_experimental_gin" = "true");
 -- DUPLICATE KEY table without GIN index, then add GIN index after data load
 CREATE TABLE t2_dup (
     id1 bigint(20) NOT NULL COMMENT "",
