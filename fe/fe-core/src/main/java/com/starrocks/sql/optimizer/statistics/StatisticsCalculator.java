@@ -273,8 +273,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             limit = physical.getLimit();
         }
 
-        PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
-                context.getOptExpression());
+        // Index scans operate on an internal virtual table whose columns (for example, `args` and
+        // `index_result`) are not part of the user's table-to-column-ref mapping. Recording them as
+        // user predicate columns is both meaningless and causes resolution warnings for every
+        // distributed index request.
+        if (!(node instanceof LogicalIndexScanOperator) && !(node instanceof PhysicalIndexScanOperator)) {
+            PredicateColumnsMgr.getInstance().recordPredicateColumns(predicate, optimizerContext.getColumnRefFactory(),
+                    context.getOptExpression());
+        }
 
         predicate = removePartitionPredicate(predicate, node, optimizerContext);
         Statistics statistics = context.getStatistics();
