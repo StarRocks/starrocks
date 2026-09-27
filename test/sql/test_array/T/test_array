@@ -132,7 +132,7 @@ from (select c1 from (values([])) as t(c1)) t;
 select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
 from (select c1 from (values([])) as t(c1)) t;
 
---name: testArrayNE
+-- name: testArrayNE
 CREATE TABLE `t2` (
   `pk` bigint(20) NOT NULL COMMENT "",
   `aas_1` array<array<array<varchar(65533)>>> NULL COMMENT "",
