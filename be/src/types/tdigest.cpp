@@ -372,7 +372,12 @@ void TDigest::compress() {
 }
 
 bool TDigest::add(Value x, Weight w) {
-    if (std::isnan(x)) {
+    // Reject non-finite values (NaN, +Inf, -Inf) and non-positive weights:
+    // - NaN propagates through Centroid::add() to silently NaN mean.
+    // - Mixing +Inf and -Inf via Centroid::add() also yields NaN mean.
+    // - w <= 0 corrupts _unprocessed_weight (negative or zero total) and breaks
+    //   weightedAverageSorted() / quantile() with NaN.
+    if (!std::isfinite(x) || !(w > 0)) {
         return false;
     }
     _unprocessed.emplace_back(x, w);
