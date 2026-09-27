@@ -29,6 +29,15 @@ public interface Connector extends MemoryTrackable {
     ConnectorMetadata getMetadata();
 
     /**
+     * Validate an in-place property update without changing connector state or doing remote I/O.
+     * Return null when recreation is required. The returned action is applied after journaling,
+     * under the catalog manager lock, and must not fail for a successfully validated update.
+     */
+    default Runnable preparePropertyUpdate(Map<String, String> properties) {
+        return null;
+    }
+
+    /**
      * Shutdown the connector by releasing any held resources such as
      * threads, sockets, etc. This method will only be called when no
      * queries are using the connector. After this method is called,
