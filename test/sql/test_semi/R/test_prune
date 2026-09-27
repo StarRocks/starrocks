@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 -- name: test_prune @system
 CREATE TABLE `sc3` (
   `v1` bigint(20) NULL COMMENT "",
@@ -146,6 +147,9 @@ select v1 from sc3 where a1[1] not in (select tt.v1 from sc3 as tt where false);
 1
 3
 -- !result
+=======
+-- name: test_prune_with_dict_column @system
+>>>>>>> 0f81782 ([UT] SQL-Tester: record two cases the parser was discarding (#79830))
 CREATE TABLE `scs3` (
   `v1` bigint(20) NULL COMMENT "",
   `str` string NULL COMMENT "",
@@ -315,4 +319,8 @@ select map_size(m1), s1.s2[1].a, s1.s3[1], s1.s4.f from scs3 where str != "aa" a
 -- result:
 2	1	12	2
 2	1	12	2
+<<<<<<< HEAD
 -- !result
+=======
+-- !result
+>>>>>>> 0f81782 ([UT] SQL-Tester: record two cases the parser was discarding (#79830))
