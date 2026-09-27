@@ -350,7 +350,7 @@ class Rule4Test(unittest.TestCase):
         }):
             problems = run_check()
         self.assertEqual(len(problems), 1)
-        self.assertIn("reads it as a comment", whys(problems))
+        self.assertIn("opens no case here", whys(problems))
         self.assertTrue(problems[0][0].endswith(":3"), problems[0][0])
 
     def test_flags_a_marker_on_the_first_line(self):
@@ -370,6 +370,47 @@ class Rule4Test(unittest.TestCase):
                                                   "-- result:\n1\n-- !result\n"}):
                     problems = run_check()
                 self.assertEqual(len(problems), 1, whys(problems))
+
+    def test_flags_an_indented_marker(self):
+        """Indentation is enough to lose the case, and is the shape that hides best.
+
+        choose_cases rstrips the newline and nothing else, so `  -- name: test_b` matches
+        neither startswith("--") nor startswith(NAME_FLAG). It is not skipped as a comment
+        the way `--name: test_b` is; it reaches the statement branch and goes to the server.
+        No case opens either way.
+        """
+        for lead in ("  ", "\t", "    "):
+            with self.subTest(lead=repr(lead)):
+                with case_tree({
+                    "suite/T/file_a": "-- name: test_a\nselect 1;\n"
+                                      + lead + "-- name: test_b\nselect 2;\n",
+                    "suite/R/file_a": "-- name: test_a\nselect 1;\n"
+                                      "-- result:\n1\n-- !result\n",
+                }):
+                    problems = run_check()
+                self.assertEqual(len(problems), 1, whys(problems))
+                self.assertTrue(problems[0][0].endswith(":3"), problems[0][0])
+
+    def test_flags_an_indented_marker_carrying_tags(self):
+        with case_tree({
+            "suite/T/file_a": "-- name: test_a\nselect 1;\n"
+                              "   -- name: test_b @system @slow\nselect 2;\n",
+            "suite/R/file_a": "-- name: test_a\nselect 1;\n-- result:\n1\n-- !result\n",
+        }):
+            problems = run_check()
+        self.assertEqual(len(problems), 1, whys(problems))
+
+    def test_does_not_flag_an_indented_commented_out_schema(self):
+        """The tail still has to be a case declaration, indented or not."""
+        with case_tree({
+            "suite/T/file_a": "-- name: test_a\n"
+                              "    -- create table t (\n"
+                              "    --     name: STRING,\n"
+                              "    -- )\n"
+                              "select 1;\n",
+            "suite/R/file_a": "-- name: test_a\nselect 1;\n-- result:\n1\n-- !result\n",
+        }):
+            self.assertEqual(run_check(), [])
 
     def test_accepts_the_exact_spelling(self):
         with case_tree({

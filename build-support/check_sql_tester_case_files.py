@@ -77,7 +77,13 @@ TO_SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9_]+")
 # The tail has to look like a case declaration and nothing else -- a bare name, in the
 # character set choose_cases accepts, plus any @tags. Without that, commented-out schemas
 # match too: test_iceberg_variant_query_1 has `--    name: STRING,` inside one.
-NEAR_NAME_RE = re.compile(r"^--\s*name\s*:\s*[A-Za-z0-9_-]+(?:\s+@[A-Za-z0-9_-]+)*\s*$")
+#
+# Leading whitespace has to be allowed here, and is the worse shape of the two. choose_cases
+# only rstrips the newline (choose_cases.py:398), so an indented `  -- name: x` fails
+# startswith("--") as well as startswith(NAME_FLAG): it is not even skipped as a comment, and
+# falls through the whole elif chain to the statement branch. Either way no case opens, which
+# is the omission this rule is here for.
+NEAR_NAME_RE = re.compile(r"^\s*--\s*name\s*:\s*[A-Za-z0-9_-]+(?:\s+@[A-Za-z0-9_-]+)*\s*$")
 
 
 def method_name(case_name):
@@ -281,9 +287,10 @@ def check(selected, t_files, r_files):
         for lineno, text in near_name_lines(path):
             problems.append((
                 "%s:%d" % (path, lineno), text.strip(),
-                "looks like a case marker but is not %r exactly, so choose_cases reads it "
-                "as a comment -- the statements under it join the case above, or are "
-                "dropped when there is no case above" % NAME_FLAG))
+                "looks like a case marker but is not %r exactly, so choose_cases opens no "
+                "case here -- it reads the line as a comment, or, if the line is indented, "
+                "as a statement. Either way the statements under it join the case above, or "
+                "are dropped when there is no case above" % NAME_FLAG))
 
         # 3. a T/R pair that does not agree on its extension. Reported once per pair, no
         # matter which side of it the change touched.
