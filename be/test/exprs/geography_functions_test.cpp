@@ -899,6 +899,110 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPredicates) {
     EXPECT_TRUE(boundary_covers.value(0));
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoContainmentConstantPreparation) {
+    const auto verify = [](bool spherical, const ColumnPtr& polygons, const ColumnPtr& points,
+                           const std::vector<std::optional<bool>>& strict_expected,
+                           const std::vector<std::optional<bool>>& inclusive_expected) {
+        ASSERT_EQ(strict_expected.size(), polygons->size());
+        ASSERT_EQ(strict_expected.size(), points->size());
+        ASSERT_EQ(strict_expected.size(), inclusive_expected.size());
+
+        auto contains_result = spherical ? GeoFunctions::st_geography_contains(nullptr, {polygons, points})
+                                         : GeoFunctions::st_geometry_contains(nullptr, {polygons, points});
+        auto within_result = spherical ? GeoFunctions::st_geography_within(nullptr, {points, polygons})
+                                       : GeoFunctions::st_geometry_within(nullptr, {points, polygons});
+        auto covers_result = spherical ? GeoFunctions::st_geography_covers(nullptr, {polygons, points})
+                                       : GeoFunctions::st_geometry_covers(nullptr, {polygons, points});
+        auto covered_by_result = spherical ? GeoFunctions::st_geography_covered_by(nullptr, {points, polygons})
+                                           : GeoFunctions::st_geometry_covered_by(nullptr, {points, polygons});
+        ASSERT_TRUE(contains_result.ok()) << contains_result.status();
+        ASSERT_TRUE(within_result.ok()) << within_result.status();
+        ASSERT_TRUE(covers_result.ok()) << covers_result.status();
+        ASSERT_TRUE(covered_by_result.ok()) << covered_by_result.status();
+        ColumnViewer<TYPE_BOOLEAN> contains(*contains_result);
+        ColumnViewer<TYPE_BOOLEAN> within(*within_result);
+        ColumnViewer<TYPE_BOOLEAN> covers(*covers_result);
+        ColumnViewer<TYPE_BOOLEAN> covered_by(*covered_by_result);
+        for (size_t row = 0; row < strict_expected.size(); ++row) {
+            EXPECT_EQ(!strict_expected[row].has_value(), contains.is_null(row));
+            EXPECT_EQ(!strict_expected[row].has_value(), within.is_null(row));
+            EXPECT_EQ(!inclusive_expected[row].has_value(), covers.is_null(row));
+            EXPECT_EQ(!inclusive_expected[row].has_value(), covered_by.is_null(row));
+            if (strict_expected[row].has_value()) {
+                EXPECT_EQ(*strict_expected[row], contains.value(row));
+                EXPECT_EQ(*strict_expected[row], within.value(row));
+            }
+            if (inclusive_expected[row].has_value()) {
+                EXPECT_EQ(*inclusive_expected[row], covers.value(row));
+                EXPECT_EQ(*inclusive_expected[row], covered_by.value(row));
+            }
+        }
+    };
+
+    constexpr const char* polygon = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))";
+    auto varying_points = geometry({"POINT (1 1)", "POINT (0 5)", "POINT (5 5)", "POINT (20 20)", nullptr});
+    auto constant_polygon = ConstColumn::create(geometry({polygon}), varying_points->size());
+    verify(false, constant_polygon, varying_points, {true, false, false, false, std::nullopt},
+           {true, true, false, false, std::nullopt});
+
+    auto varying_polygons = geometry({polygon, "POLYGON ((20 20, 30 20, 30 30, 20 30, 20 20))", nullptr});
+    auto constant_point = ConstColumn::create(geometry({"POINT (1 1)"}), varying_polygons->size());
+    verify(false, varying_polygons, constant_point, {true, false, std::nullopt}, {true, false, std::nullopt});
+    auto both_constant_polygon = ConstColumn::create(geometry({polygon}), 3);
+    auto both_constant_point = ConstColumn::create(geometry({"POINT (1 1)"}), 3);
+    verify(false, both_constant_polygon, both_constant_point, {true, true, true}, {true, true, true});
+
+    constexpr const char* dateline_polygon = "POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))";
+    auto geography_points = geography({"POINT (179 0)", "POINT (170 0)", "POINT (0 0)", nullptr});
+    auto constant_geography_polygon = ConstColumn::create(geography({dateline_polygon}), geography_points->size());
+    verify(true, constant_geography_polygon, geography_points, {true, false, false, std::nullopt},
+           {true, true, false, std::nullopt});
+
+    auto geography_polygons =
+            geography({dateline_polygon, "POLYGON ((-20 -10, 20 -10, 20 10, -20 10, -20 -10))", nullptr});
+    auto constant_geography_point = ConstColumn::create(geography({"POINT (179 0)"}), geography_polygons->size());
+    verify(true, geography_polygons, constant_geography_point, {true, false, std::nullopt},
+           {true, false, std::nullopt});
+
+    auto both_constant_geography_polygon = ConstColumn::create(geography({dateline_polygon}), 3);
+    auto both_constant_geography_point = ConstColumn::create(geography({"POINT (179 0)"}), 3);
+    verify(true, both_constant_geography_polygon, both_constant_geography_point, {true, true, true},
+           {true, true, true});
+
+    auto varying_geography_polygons = geography({dateline_polygon, dateline_polygon});
+    auto varying_geography_points = geography({"POINT (179 0)", "POINT (0 0)"});
+    verify(true, varying_geography_polygons, varying_geography_points, {true, false}, {true, false});
+
+    constexpr const char* polar_polygon = "POLYGON ((-10 85, 10 85, 10 89, -10 89, -10 85))";
+    auto polar_points = geography({"POINT (0 87)", "POINT (30 87)"});
+    auto constant_polar_polygon = ConstColumn::create(geography({polar_polygon}), polar_points->size());
+    verify(true, constant_polar_polygon, polar_points, {true, false}, {true, false});
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesSphericalComponentsLazily) {
+    constexpr const char* invalid_second_component =
+            "MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 20 20, 20 20, 20 20)))";
+    auto boundary_and_null = geography({"POINT (0 5)", nullptr});
+    auto constant_polygon = ConstColumn::create(geography({invalid_second_component}), boundary_and_null->size());
+    auto early_result = GeoFunctions::st_geography_covers(nullptr, {constant_polygon, boundary_and_null});
+    ASSERT_TRUE(early_result.ok()) << early_result.status();
+    ColumnViewer<TYPE_BOOLEAN> early(*early_result);
+    EXPECT_TRUE(early.value(0));
+    EXPECT_TRUE(early.is_null(1));
+
+    auto outside = geography({"POINT (40 40)"});
+    auto one_constant_polygon = ConstColumn::create(geography({invalid_second_component}), 1);
+    auto invalid_topology = GeoFunctions::st_geography_covers(nullptr, {one_constant_polygon, outside});
+    ASSERT_FALSE(invalid_topology.ok());
+    EXPECT_TRUE(invalid_topology.status().is_invalid_argument());
+
+    auto valid_polygon = ConstColumn::create(geography({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"}), 1);
+    auto fresh_batch = GeoFunctions::st_geography_contains(nullptr, {valid_polygon, geography({"POINT (1 1)"})});
+    ASSERT_TRUE(fresh_batch.ok()) << fresh_batch.status();
+    ColumnViewer<TYPE_BOOLEAN> fresh(*fresh_batch);
+    EXPECT_TRUE(fresh.value(0));
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoContainmentNullEmptyAndRejection) {
     auto polygon = geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
     auto point = geometry({"POINT (1 1)"});
