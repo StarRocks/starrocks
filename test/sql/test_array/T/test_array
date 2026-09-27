@@ -99,6 +99,7 @@ insert into array_exprr SELECT generate_series, generate_series FROM TABLE(gener
 
 select count([CAST(if(c2 is null, c1 + c2, 0) as DECIMAL128(38,0)) + if(c1 is null, c2 ,0)] is null) from array_exprr;
 
+<<<<<<< HEAD
 -- name: testEmptyArray
 with t0 as (
     select c1 from (values([])) as t(c1)
@@ -133,6 +134,9 @@ select array_concat(c1, [named_struct('a', 1, 'b', 2, 'c', 3)])
 from (select c1 from (values([])) as t(c1)) t;
 
 --name: testArrayNE
+=======
+-- name: testArrayNE
+>>>>>>> 0f81782 ([UT] SQL-Tester: record two cases the parser was discarding (#79830))
 CREATE TABLE `t2` (
   `pk` bigint(20) NOT NULL COMMENT "",
   `aas_1` array<array<array<varchar(65533)>>> NULL COMMENT "",
