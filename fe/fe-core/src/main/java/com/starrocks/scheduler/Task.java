@@ -305,5 +305,11 @@ public class Task implements Writable, GsonPostProcessable {
         if (consecutiveFailCount == null) {
             this.consecutiveFailCount = new AtomicInteger();
         }
+        // Migrate legacy task images (pre-#47561) that only persisted createUser.
+        // createUser stored just the user portion, so host-restricted creators
+        // ('alice'@'10.0.0.5') become 'alice'@'%' — fail-closed by design.
+        if (userIdentity == null && createUser != null) {
+            this.userIdentity = UserIdentity.createAnalyzedUserIdentWithIp(createUser, "%");
+        }
     }
 }
