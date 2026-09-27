@@ -20,12 +20,14 @@ import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OdpsTable;
 import com.starrocks.common.tvr.TvrTableSnapshot;
+import com.starrocks.connector.index.IndexTable;
 import com.starrocks.sql.ast.expression.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIndexScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOdpsScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -104,6 +106,44 @@ public class PruneHDFSScanColumnRuleTest {
         ColumnRefSet requiredOutputColumns = new ColumnRefSet(new ArrayList<>());
 
         doIcebergTransform(scan, context, requiredOutputColumns, taskContextList, taskContext);
+    }
+
+    @Test
+    public void transformIndexScanPreservesScanPredicates(@Mocked com.starrocks.catalog.Table innerTable,
+                                                          @Mocked OptimizerContext context,
+                                                          @Mocked TaskContext taskContext) {
+        ColumnRefOperator indexResult = new ColumnRefOperator(4, StringType.STRING, "index_result", true);
+        ColumnRefOperator args = new ColumnRefOperator(5, StringType.STRING, "args", true);
+        ColumnRefOperator rowId = new ColumnRefOperator(6, IntegerType.BIGINT, "row_id", true);
+        Column indexResultColumn = new Column("index_result", StringType.STRING);
+        Column argsColumn = new Column("args", StringType.STRING);
+        Column rowIdColumn = new Column("row_id", IntegerType.BIGINT);
+        LogicalIndexScanOperator indexScan = new LogicalIndexScanOperator(
+                new IndexTable(innerTable),
+                Map.of(indexResult, indexResultColumn, args, argsColumn, rowId, rowIdColumn),
+                Map.of(indexResultColumn, indexResult, argsColumn, args, rowIdColumn, rowId),
+                -1,
+                new BinaryPredicateOperator(BinaryType.EQ, args, ConstantOperator.createVarchar("request")));
+
+        new Expectations() {{
+                context.getTaskContext();
+                minTimes = 0;
+                result = taskContext;
+
+                taskContext.getRequiredColumns();
+                minTimes = 0;
+                result = new ColumnRefSet(Collections.singletonList(indexResult));
+
+                context.getSessionVariable().isEnableCountStarOptimization();
+                result = true;
+            }};
+
+        List<OptExpression> result = icebergRule.transform(OptExpression.create(indexScan), context);
+
+        Assertions.assertEquals(1, result.size());
+        LogicalIndexScanOperator pruned = (LogicalIndexScanOperator) result.get(0).getOp();
+        Assertions.assertEquals(2, pruned.getColRefToColumnMetaMap().size());
+        Assertions.assertSame(indexScan.getScanOperatorPredicates(), pruned.getScanOperatorPredicates());
     }
 
     private void doIcebergTransform(OptExpression scan,
