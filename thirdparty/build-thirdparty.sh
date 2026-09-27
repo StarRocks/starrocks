@@ -1877,6 +1877,18 @@ build_paimon_cpp() {
         paimon_enable_lumina=ON
     fi
 
+    # GCC 12 reports false-positive maybe-uninitialized diagnostics in both
+    # CRoaring and Paimon's optional<shared_ptr> code at -O3. Paimon promotes
+    # every warning to an error, so the ABI-compatible GCC 12 toolchain cannot
+    # build the runtime unless these two diagnostics stay warnings. Keep every
+    # other -Werror check enabled, and do not change newer compiler behavior.
+    local paimon_cxxflags=""
+    local paimon_cxx_version
+    paimon_cxx_version=$("${CXX}" -dumpfullversion -dumpversion 2>/dev/null || true)
+    if [[ "${paimon_cxx_version%%.*}" == "12" ]]; then
+        paimon_cxxflags="-Wno-error=maybe-uninitialized -Wno-error=uninitialized"
+    fi
+
     # protobuf required for rocky9
     ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
@@ -1889,6 +1901,7 @@ build_paimon_cpp() {
         -DPAIMON_ENABLE_LUCENE=OFF \
         -DPAIMON_ENABLE_TANTIVY=OFF \
         -DPAIMON_ENABLE_JINDO=OFF \
+        -DPAIMON_CXXFLAGS="${paimon_cxxflags}" \
         -DPAIMON_DEPENDENCY_SOURCE=BUNDLED \
         -DProtobuf_SOURCE=SYSTEM \
         -DProtobuf_ROOT=$TP_INSTALL_DIR \
