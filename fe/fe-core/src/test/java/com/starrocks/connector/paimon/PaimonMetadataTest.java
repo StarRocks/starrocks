@@ -1116,11 +1116,12 @@ public class PaimonMetadataTest {
             catalog.createDatabase("test_db", true);
             createEmptyTable(catalog, "empty_append", false);
             createEmptyTable(catalog, "empty_data_evolution", true);
+            createEmptyPrimaryKeyTable(catalog, "empty_primary_key");
 
             ColumnRefOperator idColumn = new ColumnRefOperator(1, IntegerType.INT, "id", true);
             ScalarOperator predicate = new BinaryPredicateOperator(
                     BinaryType.EQ, idColumn, ConstantOperator.createInt(1));
-            for (String tableName : List.of("empty_append", "empty_data_evolution")) {
+            for (String tableName : List.of("empty_append", "empty_data_evolution", "empty_primary_key")) {
                 for (ScalarOperator tablePredicate : Arrays.asList(null, predicate)) {
                     PaimonMetadata emptyTableMetadata = new PaimonMetadata(
                             "paimon", new HdfsEnvironment(), catalog,
@@ -1146,6 +1147,16 @@ public class PaimonMetadataTest {
                     .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true");
         }
         catalog.createTable(Identifier.create("test_db", tableName), schema.build(), false);
+    }
+
+    private static void createEmptyPrimaryKeyTable(Catalog catalog, String tableName) throws Exception {
+        Schema schema = Schema.newBuilder()
+                .column("id", DataTypes.INT().notNull())
+                .column("payload", DataTypes.STRING())
+                .primaryKey("id")
+                .option(CoreOptions.BUCKET.key(), "1")
+                .build();
+        catalog.createTable(Identifier.create("test_db", tableName), schema, false);
     }
 
     private static PaimonSplitsInfo planEmptyTableSplits(

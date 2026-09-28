@@ -347,16 +347,19 @@ public class PaimonScanNode extends ScanNode {
         return hasFileColumn ? PaimonReaderMode.NATIVE : paimonReaderMode;
     }
 
-    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor) {
+    static void checkJniReaderVariantSupport(TupleDescriptor tupleDescriptor, boolean indexedSplit) {
         for (SlotDescriptor slot : tupleDescriptor.getSlots()) {
             if (slot.getType().containsVariant()) {
+                String remediation = indexedSplit
+                        ? "Remove the VARIANT column from the query, or disable Paimon Global Index by setting " +
+                        "table option 'global-index.enabled'='false'."
+                        : "Remove the VARIANT column from the query.";
                 throw new StarRocksConnectorException(
                         "Paimon VARIANT column '%s' requires the native reader, but this split must use the JNI " +
                         "reader (merge-on-read data, system table, indexed split, or " +
                         "paimon_force_jni_reader=true). Reading " +
-                        "VARIANT through the Paimon JNI reader is not yet supported. Compact the table or " +
-                        "exclude the VARIANT column from the query.",
-                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
+                        "VARIANT through the Paimon JNI reader is not yet supported. %s",
+                        slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel(), remediation);
             }
         }
     }
@@ -394,7 +397,7 @@ public class PaimonScanNode extends ScanNode {
                 throw new RuntimeException("Failed to serialize Paimon data split", e);
             }
         } else {
-            checkJniReaderVariantSupport(desc);
+            checkJniReaderVariantSupport(desc, PaimonSplitUtils.isGlobalIndexSplit(split));
             hdfsScanRange.setUse_paimon_jni_reader(true);
             hdfsScanRange.setUse_paimon_native_reader(false);
         }

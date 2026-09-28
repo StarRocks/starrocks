@@ -99,7 +99,7 @@ public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
                         .map(optional -> optional.orElseThrow(
                                 () -> new IllegalStateException("Expected a Paimon data split")))
                         .map(dataSplit -> (Split) new IndexedSplit(dataSplit,
-                                List.of(new Range(0, dataSplit.rowCount())), null))
+                                List.of(new Range(0, dataSplit.rowCount() - 1)), null))
                         .collect(Collectors.toList());
                 PaimonSplitsInfo indexedSplitsInfo = new PaimonSplitsInfo(splitsInfo.getPredicate(), indexedSplits);
                 return List.of(RemoteFileInfo.builder()

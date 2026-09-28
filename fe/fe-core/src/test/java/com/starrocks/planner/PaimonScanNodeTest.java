@@ -451,8 +451,24 @@ public class PaimonScanNodeTest {
         slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
         tuple.addSlot(slot);
         StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
-                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false));
         Assertions.assertTrue(e.getMessage().contains("VARIANT"));
+        Assertions.assertFalse(e.getMessage().contains("Compact"));
+        Assertions.assertFalse(e.getMessage().contains("global-index.enabled"));
+    }
+
+    @Test
+    public void testIndexedSplitVariantErrorSuggestsDisablingGlobalIndex() {
+        TupleDescriptor tuple = new TupleDescriptor(new TupleId(0));
+        SlotDescriptor slot = new SlotDescriptor(new SlotId(0), tuple);
+        slot.setType(com.starrocks.type.VariantType.VARIANT);
+        slot.setColumn(new Column("v", com.starrocks.type.VariantType.VARIANT));
+        tuple.addSlot(slot);
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> PaimonScanNode.checkJniReaderVariantSupport(tuple, true));
+        Assertions.assertTrue(e.getMessage().contains("Remove the VARIANT column from the query"));
+        Assertions.assertTrue(e.getMessage().contains("'global-index.enabled'='false'"));
+        Assertions.assertFalse(e.getMessage().contains("Compact"));
     }
 
     @Test
@@ -503,7 +519,7 @@ public class PaimonScanNodeTest {
         slot.setType(IntegerType.INT); // same constant PaimonColumnConverterTest asserts against
         slot.setColumn(new Column("i", IntegerType.INT));
         tuple.addSlot(slot);
-        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple));
+        Assertions.assertDoesNotThrow(() -> PaimonScanNode.checkJniReaderVariantSupport(tuple, false));
     }
 
     private static DataSplit createDataSplit() {
