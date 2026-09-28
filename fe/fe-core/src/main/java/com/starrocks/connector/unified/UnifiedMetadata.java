@@ -39,6 +39,7 @@ import com.starrocks.connector.RemoteFileInfoSource;
 import com.starrocks.connector.SerializedMetaSpec;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetadata;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
 import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
@@ -244,6 +245,11 @@ public class UnifiedMetadata implements ConnectorMetadata, DelegatingConnectorMe
     @Override
     public ConnectorMetadata delegateFor(Table table) {
         return metadataOfTable(table);
+    }
+
+    @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        return metadataOfTable(table).getIndexMetadata(table, versionRange);
     }
 
     @Override
