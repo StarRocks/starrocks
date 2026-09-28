@@ -1,0 +1,58 @@
+-- name: test_paimon_reader_modes
+function: paimon_stage("${uuid0}", "paimon_test.scalar_types")
+-- result:
+None
+-- !result
+function: create_paimon_catalog("paimon_readers_${uuid0}", "filesystem", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+-- result:
+1	2147483647	32767
+2	-2147483648	-32768
+3	None	None
+4	3	2
+-- !result
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+-- result:
+1	2147483647	32767
+2	-2147483648	-32768
+3	None	None
+4	3	2
+-- !result
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "jni")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+-- result:
+1	2147483647	32767
+2	-2147483648	-32768
+3	None	None
+4	3	2
+-- !result
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "starrocks")
+-- result:
+None
+-- !result
+CLEANUP {
+function: paimon_cleanup("paimon_readers_${uuid0}", "${uuid0}")
+} END CLEANUP

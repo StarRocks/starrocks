@@ -1,0 +1,29 @@
+-- name: test_paimon_primary_key_merge
+-- The fixture retains overlapping L0 files and a delete record; AUTO must use JNI.
+function: paimon_stage("${uuid0}", "paimon_test.pk_merge_v1")
+function: create_paimon_catalog("paimon_pk_${uuid0}", "filesystem", "${uuid0}")
+set paimon_reader_mode = 'native';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
+function: assert_paimon_native_profile("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+set paimon_reader_mode = 'auto';
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+CLEANUP {
+function: paimon_cleanup("paimon_pk_${uuid0}", "${uuid0}")
+} END CLEANUP

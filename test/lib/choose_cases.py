@@ -215,6 +215,9 @@ class ChooseCase(object):
             # check ${} contains component info
             _case_sqls = " ".join(_case_sqls)
             _vars = re.findall(r"\${([a-zA-Z0-9._-]+)}", _case_sqls)
+            # Paimon helpers read OSS settings internally, so cases no longer contain these placeholders.
+            if re.search(r"function:\s*paimon_stage\(", _case_sqls):
+                _vars.append("oss_bucket")
             for _var in _vars:
 
                 if not is_pass:
