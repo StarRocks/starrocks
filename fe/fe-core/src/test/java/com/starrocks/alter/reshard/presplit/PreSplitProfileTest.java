@@ -125,4 +125,17 @@ public class PreSplitProfileTest {
     private static SampleSet sampleWithEstimatedBytes(long estimatedBytes) {
         return new SampleSet(List.of(new Tuple(List.of())), new Estimates(estimatedBytes, 1L));
     }
+
+    @Test
+    public void testDataTierFileSelectionIsRecordedOncePerDistinctSummary() {
+        PreSplitProfile profile = new PreSplitProfile();
+
+        try (PreSplitProfile.Scope ignored = PreSplitProfile.startAttempt(profile, LoadKind.BROKER_LOAD)) {
+            PreSplitProfile.recordDataTierFileSelection("subset 3/10 files 3/10 bytes");
+            PreSplitProfile.recordDataTierFileSelection("subset 3/10 files 3/10 bytes");
+        }
+
+        Assertions.assertEquals("subset 3/10 files 3/10 bytes",
+                profile.toRuntimeProfile().getInfoString("DataTierFileSelection"));
+    }
 }

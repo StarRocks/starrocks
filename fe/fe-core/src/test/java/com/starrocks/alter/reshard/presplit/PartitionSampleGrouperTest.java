@@ -1046,6 +1046,107 @@ public class PartitionSampleGrouperTest {
         }
     }
 
+    @Test
+    public void exactPartitionBytesSizeAndRankEachPartition() {
+        Config.tablet_pre_split_max_partitions_per_load = 0;
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        // Sample shares 5/3/2 rows, but the files say 100/900/300 bytes.
+        SampleSet samples = sampleSetWithBreakdown(List.of("2026-05-26", "2026-05-27", "2026-05-28"),
+                List.of(5, 3, 2), List.of(100L, 900L, 300L));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-28", "p20260528");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, 1300L, Set.of());
+
+            assertEquals(List.of("p20260527", "p20260528", "p20260526"),
+                    out.stream().map(PartitionSamples::partitionName).toList());
+            assertEquals(List.of(900L, 300L, 100L), out.stream().map(PartitionSamples::estimatedBytes).toList());
+        }
+    }
+
+    @Test
+    public void theCapKeepsTheHeaviestPartitionsByExactBytes() {
+        Config.tablet_pre_split_max_partitions_per_load = 2;
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        SampleSet samples = sampleSetWithBreakdown(List.of("2026-05-26", "2026-05-27", "2026-05-28"),
+                List.of(5, 3, 2), List.of(100L, 900L, 300L));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-28", "p20260528");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, 1300L, Set.of());
+
+            assertEquals(List.of("p20260527", "p20260528"), out.stream().map(PartitionSamples::partitionName).toList());
+        }
+    }
+
+    @Test
+    public void exactBytesSumEveryPathValueMergedIntoOnePartition() {
+        Config.tablet_pre_split_max_partitions_per_load = 0;
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        SampleSet samples = sampleSetWithBreakdown(List.of("2026-05-26", "2026-05-27"),
+                List.of(1, 1), List.of(100L, 250L));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            // Both days land in one monthly partition.
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p202605");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p202605");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, 1000L, Set.of());
+
+            assertEquals(1, out.size());
+            assertEquals(350L, out.get(0).estimatedBytes());
+        }
+    }
+
+    @Test
+    public void aSampledValueWithoutExactBytesSizesEveryPartitionFromItsSampleShare() {
+        Config.tablet_pre_split_max_partitions_per_load = 0;
+        Column dateCol = new Column("d", DateType.DATE);
+        OlapTable table = stubTable(List.of(dateCol));
+        List<Tuple> partitionTuples = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            partitionTuples.add(tuple(Variant.of(DateType.DATE, "2026-05-26")));
+        }
+        partitionTuples.add(tuple(Variant.of(DateType.DATE, "2026-05-27")));
+        List<Tuple> sortTuples = new ArrayList<>();
+        for (int i = 0; i < partitionTuples.size(); i++) {
+            sortTuples.add(tuple(Variant.of(IntegerType.INT, String.valueOf(i))));
+        }
+        // Only 2026-05-26 has an exact size.
+        SampleSet samples = new SampleSet(sortTuples, partitionTuples, new Estimates(1000L, 0L, List.of(
+                new Estimates.PartitionSourceBytes(List.of(Variant.of(DateType.DATE, "2026-05-26")), 10L))));
+
+        try (MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                MockedConstruction<AlterTableClauseAnalyzer> alterCtor =
+                        Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                MockedConstruction<Locker> lockerCtor = Mockito.mockConstruction(Locker.class)) {
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-26", "p20260526");
+            stubAnalyzerToReturnClauseFor(analyzerUtils, table, "2026-05-27", "p20260527");
+
+            List<PartitionSamples> out = PartitionSampleGrouper.group(samples, table, null, DB_ID, 1000L, Set.of());
+
+            assertEquals(List.of(750L, 250L), out.stream().map(PartitionSamples::estimatedBytes).toList());
+        }
+    }
+
     // ---------- manually range-partitioned target ----------
 
     @Test
@@ -1396,5 +1497,25 @@ public class PartitionSampleGrouperTest {
      */
     private static SampleSet buildSampleSet(List<Tuple> partitionTuples) {
         return sampleSetOf(partitionTuples);
+    }
+
+    /** {@code rowCounts.get(i)} rows of date {@code dates.get(i)}, whose files hold {@code bytes.get(i)}. */
+    private static SampleSet sampleSetWithBreakdown(List<String> dates, List<Integer> rowCounts, List<Long> bytes) {
+        List<Tuple> partitionTuples = new ArrayList<>();
+        List<Estimates.PartitionSourceBytes> breakdown = new ArrayList<>();
+        long totalBytes = 0L;
+        for (int i = 0; i < dates.size(); i++) {
+            for (int row = 0; row < rowCounts.get(i); row++) {
+                partitionTuples.add(tuple(Variant.of(DateType.DATE, dates.get(i))));
+            }
+            breakdown.add(new Estimates.PartitionSourceBytes(List.of(Variant.of(DateType.DATE, dates.get(i))),
+                    bytes.get(i)));
+            totalBytes += bytes.get(i);
+        }
+        List<Tuple> sortTuples = new ArrayList<>();
+        for (int i = 0; i < partitionTuples.size(); i++) {
+            sortTuples.add(tuple(Variant.of(IntegerType.INT, String.valueOf(i))));
+        }
+        return new SampleSet(sortTuples, partitionTuples, new Estimates(totalBytes, 0L, breakdown));
     }
 }

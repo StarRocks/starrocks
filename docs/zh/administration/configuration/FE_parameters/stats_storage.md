@@ -799,6 +799,30 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 基于采样的 Tablet 预分裂 data-tier 储水池采样器在 FE 端累积缓冲的软字节上限。累积值超过该上限后采样器停止读取。首行始终被接纳，超大单行仍会产生非空样本。
 - 引入版本: v4.1.0
 
+### `tablet_pre_split_data_tier_scan_byte_limit`
+
+- 默认值: 4294967296 (4 GiB)
+- 类型: Long
+- 单位: Bytes
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 扫描 Broker Load 或 `INSERT INTO ... SELECT FROM FILES()` 源文件时的字节数软上限。输入超过该值时只从部分文件中采样，采样耗时不再随数据量增长。例外是分区列来自文件数据而非路径，或同时包含来自路径和来自常量的分区列：这时仍扫描全部文件，因为取子集可能漏掉整个分区。选取时先按路径排序，再按相等的字节间隔抽取，因此较大的文件更容易被选中。分区列取自文件路径（`COLUMNS FROM PATH` 或 `columns_from_path`）时，每个分区按字节占比分摊上限，且至少选取一个文件（分区数多于 `tablet_pre_split_data_tier_max_scan_files` 时除外）；各分区的数据量按其全部文件的字节数计算。由于按整个文件选取，实际扫描量可能超过该值（例如单个文件本身就大于上限）。Tablet 数仍按全部输入计算。设为 `0` 表示扫描全部文件。
+
+### `tablet_pre_split_data_tier_min_scan_files`
+
+- 默认值: 64
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）至少扫描的文件数，保证单个文件很大、或每个文件只包含排序键的一小段范围时，样本仍覆盖足够多的独立文件。分区列取自文件路径时，该下限按字节占比分摊到各分区。满足这一下限可能使扫描量超过 `tablet_pre_split_data_tier_scan_byte_limit`，但扫描量达到该值的 4 倍后就不再为凑足下限而增加文件，因此文件很大时扫描时间不会成倍增长。`tablet_pre_split_data_tier_max_scan_files` 为正数时优先于该下限。
+
+### `tablet_pre_split_data_tier_max_scan_files`
+
+- 默认值: 512
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: 基于采样的 Tablet 预分裂在 data tier 只扫描部分文件时（见 `tablet_pre_split_data_tier_scan_byte_limit`）最多扫描的文件数。子集中的每个文件在读数据之前都要做一次元数据查询，不设上限时，由大量小文件组成的子集光是查询就可能耗费数分钟。分区列取自文件路径时，该上限按字节占比分摊到各分区；每个分区仍至少选取一个文件，因此实际文件数可能超过该上限，超出部分最多为每个分区一个文件。分区数多于该上限时，只从数据量最大的那些分区中各选取一个文件。该上限优先于 `tablet_pre_split_data_tier_min_scan_files`。设为 `0` 或负值表示不设上限。
+
 ### `tablet_pre_split_meta_tier_overlap_threshold`
 
 - 默认值: 0.3
@@ -823,7 +847,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型: Int
 - 单位: -
 - 是否可变: Yes
-- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（样本数最少的那部分）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
+- 描述: 单次基于采样的 Tablet 预分裂调用处理的预测目标分区数上限。超出该上限的预测分区（数据量最小的那部分：若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断）会被丢弃，回退到 BE 运行时自动建分区且不做预分裂。用于约束病态多分区导入下钩子的耗时。设为 0 或负值可关闭该上限。
 - 引入版本: v4.1.0
 
 ### `tablet_pre_split_target_size`

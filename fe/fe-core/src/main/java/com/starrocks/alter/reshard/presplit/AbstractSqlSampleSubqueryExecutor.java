@@ -106,6 +106,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * decode in lock-step even when a subclass remaps which source columns back
      * a target column, so the two halves cannot silently desync. Each ident must
      * already be backtick-quoted (e.g. via {@link SqlUtils#getIdentSql}).
+     *
+     * <p>{@code scannedInputBytes} is what the sample actually reads and sizes its rate for;
+     * {@code totalInputBytes} is the whole input, which the estimates report.
      */
     protected record SampleSpec(
             String fromClauseSql,
@@ -117,7 +120,9 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             List<Column> sortKeyColumns,
             List<Column> partitionSourceColumns,
             long totalInputRows,
-            boolean estimateFilteredInput) {
+            boolean estimateFilteredInput,
+            long scannedInputBytes,
+            List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
         public SampleSpec(
                 String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
                 ComputeResource computeResource, List<String> sortKeyProjectionIdents,
@@ -128,6 +133,16 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
                     partitionSourceColumns, 0L, false);
         }
 
+        public SampleSpec(
+                String fromClauseSql, String whereClauseSqlOrNull, long totalInputBytes,
+                ComputeResource computeResource, List<String> sortKeyProjectionIdents,
+                List<String> partitionProjectionIdents, List<Column> sortKeyColumns,
+                List<Column> partitionSourceColumns, long totalInputRows, boolean estimateFilteredInput) {
+            this(fromClauseSql, whereClauseSqlOrNull, totalInputBytes, computeResource,
+                    sortKeyProjectionIdents, partitionProjectionIdents, sortKeyColumns,
+                    partitionSourceColumns, totalInputRows, estimateFilteredInput, totalInputBytes, List.of());
+        }
+
         public SampleSpec {
             Objects.requireNonNull(fromClauseSql, "fromClauseSql");
             Objects.requireNonNull(computeResource, "computeResource");
@@ -135,11 +150,21 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
             Objects.requireNonNull(partitionProjectionIdents, "partitionProjectionIdents");
             Objects.requireNonNull(sortKeyColumns, "sortKeyColumns");
             Objects.requireNonNull(partitionSourceColumns, "partitionSourceColumns");
+            Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
             if (totalInputBytes < 0) {
                 throw new IllegalArgumentException("totalInputBytes must be non-negative, was " + totalInputBytes);
             }
             if (totalInputRows < 0) {
                 throw new IllegalArgumentException("totalInputRows must be non-negative, was " + totalInputRows);
+            }
+            if (scannedInputBytes < 0 || scannedInputBytes > totalInputBytes) {
+                throw new IllegalArgumentException("scannedInputBytes must be within [0, " + totalInputBytes
+                        + "], was " + scannedInputBytes);
+            }
+            // The filtered estimate extrapolates the scanned input's hit ratio to totalInputRows, which
+            // is only sound when the scanned input IS the whole input.
+            if (estimateFilteredInput && scannedInputBytes != totalInputBytes) {
+                throw new IllegalArgumentException("the filtered-input estimate cannot be combined with a file subset");
             }
         }
     }
@@ -180,7 +205,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     @Override
     public final SampleExecution execute(SampleRequest request) throws StarRocksException {
         SampleSpec spec = resolveSampleSpec(request);
-        double samplingRate = pickSamplingRate(spec.totalInputBytes());
+        double samplingRate = pickSamplingRate(spec.scannedInputBytes());
         int rowLimit = pickRowLimit(request.getSampleByteLimit());
         List<SecondaryIndexSpec> secondaryIndexSortKeys = request.getSecondaryIndexSortKeys();
         ProjectionLayout projectionLayout = buildProjectionLayout(
@@ -208,7 +233,7 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
     private static Estimates estimateInput(SampleSpec spec, double samplingRate, int rowLimit, int sampledRows) {
         if (!spec.estimateFilteredInput() || spec.totalInputRows() <= 0L || sampledRows >= rowLimit
                 || samplingRate <= 0.0) {
-            return new Estimates(spec.totalInputBytes(), spec.totalInputRows());
+            return new Estimates(spec.totalInputBytes(), spec.totalInputRows(), spec.partitionSourceBytes());
         }
         long estimatedRows = Math.min(spec.totalInputRows(), Math.max(0L, Math.round(sampledRows / samplingRate)));
         long estimatedBytes = spec.totalInputBytes() == 0L ? 0L : Math.min(spec.totalInputBytes(),
