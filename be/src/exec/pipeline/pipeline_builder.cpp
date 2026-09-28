@@ -256,6 +256,24 @@ OpFactories PipelineBuilderContext::interpolate_local_forced_shuffle_exchange(
                                                         part_type, bucket_properties);
 }
 
+bool PipelineBuilderContext::local_shuffle_matches_sender(const OpFactories& shuffled, const OpFactories& received) {
+    auto* receiver = dynamic_cast<ExchangeSourceOperatorFactory*>(source_operator(received));
+    if (receiver == nullptr || receiver->could_local_shuffle()) {
+        return false;
+    }
+    // ExecutionDAG binds the channel of each bucket to the driver the FE assigned that bucket to, from the
+    // same per-instance choice that hands the scans of this instance their scan ranges per driver.
+    if (receiver->partition_type() == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED &&
+        _fragment_context->has_per_driver_scan_ranges()) {
+        return false;
+    }
+    // The shuffle maybe_interpolate_local_shuffle_exchange applies: this source's partition type, over
+    // the operator's own keys unless the source declares partition exprs or bucket properties of its own.
+    auto* source = source_operator(shuffled);
+    return source->could_local_shuffle() && source->partition_exprs().empty() &&
+           source->get_bucket_properties().empty() && source->partition_type() == receiver->partition_type();
+}
+
 OpFactories PipelineBuilderContext::maybe_interpolate_local_bucket_shuffle_exchange(
         RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators,
         const std::vector<ExprContext*>& partition_expr_ctxs) {
