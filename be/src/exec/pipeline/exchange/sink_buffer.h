@@ -27,6 +27,7 @@
 #include "base/brpc/disposable_closure.h"
 #include "base/phmap/phmap.h"
 #include "base/utility/defer_op.h"
+#include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "exec/pipeline/fragment_context.h"
 #include "runtime/current_thread.h"

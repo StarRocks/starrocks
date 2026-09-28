@@ -554,7 +554,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         const int64_t payload_bytes = static_cast<int64_t>(request.attachment.size() + request.params->ByteSizeLong());
         // _send_rpc runs under SinkContext::mutex (held by _try_to_send_rpc), so the cached pool below is race-free.
         auto& context = sink_ctx(request.fragment_instance_id.lo);
-        auto* cache = _fragment_ctx->runtime_state()->exec_env()->brpc_stub_cache();
+        auto* cache = _fragment_ctx->runtime_state()->query_execution_services()->rpc->brpc_stub_cache;
         const int64_t now_ns = MonotonicNanos();
         if (cache != nullptr && (context.stub_pool == nullptr || now_ns >= context.stub_pool_next_renew_ns)) {
             // Rare (throttled): take the process-global cache lock to (re-)resolve the pool and renew its expiry
