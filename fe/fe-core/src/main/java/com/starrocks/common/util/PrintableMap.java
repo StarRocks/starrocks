@@ -68,6 +68,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("authentication_ldap_simple_ssl_conn_trust_store_pwd");
         SENSITIVE_KEY.add("client_secret");
         SENSITIVE_KEY.add("ldap_bind_root_pwd");
+        SENSITIVE_KEY.add("ldap_ssl_conn_trust_store_pwd");
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,
