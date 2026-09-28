@@ -343,7 +343,25 @@ public class TaskRun implements Comparable<TaskRun> {
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         } else {
-            // Resolve JWT token: prefer caller's JWT (user-triggered REFRESH) over bot token (background refresh)
+            // SR-internal identity: always the creator's real identity/roles, or the ephemeral
+            // fallback if they have no persistent account. This is independent of whether a JWT
+            // is available below — a JWT authenticates the *external* REST catalog call, it does
+            // not imply the task should run as ROOT for StarRocks-internal (e.g. native table) auth.
+            context.setQualifiedUser(status.getUser());
+            context.setCurrentUserIdentity(status.getUserIdentity() != null
+                    ? status.getUserIdentity()
+                    : UserIdentity.createEphemeralUserIdent(status.getUser(), "%"));
+            try {
+                context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
+                        .getRoleIdsByUser(context.getCurrentUserIdentity()));
+            } catch (PrivilegeException e) {
+                LOG.warn("TaskRun {} set role failed", taskRunId, e);
+                context.setCurrentRoleIds(context.getCurrentUserIdentity());
+            }
+            LOG.info("TaskRun switchUser: using creator identity (user={})", status.getUser());
+
+            // External-catalog auth token: orthogonal to the identity above. Prefer the caller's
+            // JWT (user-triggered REFRESH) over the bot's (background refresh).
             String jwtToken = null;
             if (parentRunCtx != null && parentRunCtx.getAuthToken() != null) {
                 jwtToken = parentRunCtx.getAuthToken();
@@ -357,36 +375,12 @@ public class TaskRun implements Comparable<TaskRun> {
                         LOG.info("TaskRun switchUser: using bot JWT token (user={}, token_prefix={})",
                                 status.getUser(), jwtToken.substring(0, Math.min(5, jwtToken.length())));
                     } catch (AuthenticationException e) {
-                        LOG.warn("TaskRun switchUser: failed to get bot token, falling back to creator identity", e);
+                        LOG.warn("TaskRun switchUser: failed to get bot token", e);
                     }
                 }
             }
-
             if (jwtToken != null) {
-                // JWT cluster: ARC/Ranger enforces actual data access via the token.
-                // Use ROOT for StarRocks internal auth so NativeAccessController passes.
-                // TODO: replace with scoped bot_mv_refresh role (notes/bot-mv-refresh-security-hardening.md)
                 context.setAuthToken(jwtToken);
-                context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-                context.setCurrentUserIdentity(UserIdentity.ROOT);
-                context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-                LOG.info("TaskRun switchUser: JWT present, using ROOT identity for SR internal auth, " +
-                        "ARC/Ranger enforces external catalog access");
-            } else {
-                // Non-JWT cluster (e.g. HMS+Kerberos): SR native auth is the enforcement boundary.
-                // Use creator identity with their actual roles — do NOT escalate to ROOT.
-                context.setQualifiedUser(status.getUser());
-                context.setCurrentUserIdentity(status.getUserIdentity() != null
-                        ? status.getUserIdentity()
-                        : UserIdentity.createEphemeralUserIdent(status.getUser(), "%"));
-                try {
-                    context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
-                            .getRoleIdsByUser(context.getCurrentUserIdentity()));
-                } catch (PrivilegeException e) {
-                    LOG.warn("TaskRun {} set role failed", taskRunId, e);
-                    context.setCurrentRoleIds(context.getCurrentUserIdentity());
-                }
-                LOG.info("TaskRun switchUser: no JWT token, using creator identity (user={})", status.getUser());
             }
         }
     }

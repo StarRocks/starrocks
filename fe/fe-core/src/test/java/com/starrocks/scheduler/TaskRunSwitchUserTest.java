@@ -87,7 +87,7 @@ public class TaskRunSwitchUserTest {
     }
 
     @Test
-    public void testCallerJwtTokenUsesRootWithCallerToken() {
+    public void testCallerJwtTokenUsesCreatorIdentityWithCallerToken() {
         Config.mv_use_creator_based_authorization = true;
         TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
         ConnectContext parentCtx = new ConnectContext();
@@ -97,13 +97,16 @@ public class TaskRunSwitchUserTest {
         ConnectContext ctx = new ConnectContext();
         taskRun.switchUser(ctx);
 
-        assertEquals(UserIdentity.ROOT, ctx.getCurrentUserIdentity());
-        assertEquals(AuthenticationMgr.ROOT_USER, ctx.getQualifiedUser());
+        // JWT authenticates the external REST catalog call; it must not grant ROOT for
+        // StarRocks-internal (e.g. native table) authorization — the creator's own identity
+        // (real or ephemeral) is used regardless.
+        assertEquals("alice@corp.example.com", ctx.getQualifiedUser());
+        assertTrue(ctx.getCurrentUserIdentity().isEphemeral());
         assertEquals("caller-jwt-token-abc", ctx.getAuthToken());
     }
 
     @Test
-    public void testBotJwtTokenUsesRootWithBotToken() throws AuthenticationException {
+    public void testBotJwtTokenUsesCreatorIdentityWithBotToken() throws AuthenticationException {
         Config.mv_use_creator_based_authorization = true;
         TaskRun taskRun = buildTaskRun("alice@corp.example.com", null);
 
@@ -114,8 +117,8 @@ public class TaskRunSwitchUserTest {
         ConnectContext ctx = new ConnectContext();
         taskRun.switchUser(ctx);
 
-        assertEquals(UserIdentity.ROOT, ctx.getCurrentUserIdentity());
-        assertEquals(AuthenticationMgr.ROOT_USER, ctx.getQualifiedUser());
+        assertEquals("alice@corp.example.com", ctx.getQualifiedUser());
+        assertTrue(ctx.getCurrentUserIdentity().isEphemeral());
         assertEquals("bot-jwt-token-xyz", ctx.getAuthToken());
     }
 
@@ -181,7 +184,27 @@ public class TaskRunSwitchUserTest {
 
         // caller token wins; bot token should not be fetched
         assertEquals("caller-token", ctx.getAuthToken());
-        assertEquals(UserIdentity.ROOT, ctx.getCurrentUserIdentity());
+        assertTrue(ctx.getCurrentUserIdentity().isEphemeral());
         Mockito.verify(mockProvider, Mockito.never()).getToken();
+    }
+
+    @Test
+    public void testJwtPresentDoesNotEscalateToRootForCreatorWithRealIdentity() {
+        // Regression test: a JWT (caller's or the bot's) must authenticate the external
+        // REST catalog call only. It must never grant ROOT for StarRocks-internal auth —
+        // that would bypass native-table privilege checks for a task that also touches
+        // native tables, since ARC/Ranger has no jurisdiction over those.
+        Config.mv_use_creator_based_authorization = true;
+        UserIdentity creatorIdentity = UserIdentity.createAnalyzedUserIdentWithIp("alice@corp.example.com", "%");
+        TaskRun taskRun = buildTaskRun("alice@corp.example.com", creatorIdentity);
+        ConnectContext parentCtx = new ConnectContext();
+        parentCtx.setAuthToken("caller-jwt-token-abc");
+        taskRun.setConnectContext(parentCtx);
+
+        ConnectContext ctx = new ConnectContext();
+        taskRun.switchUser(ctx);
+
+        assertEquals(creatorIdentity, ctx.getCurrentUserIdentity());
+        assertEquals("caller-jwt-token-abc", ctx.getAuthToken());
     }
 }
