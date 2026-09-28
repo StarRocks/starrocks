@@ -80,6 +80,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -232,8 +233,11 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     @SerializedName("dd")
     private long dbId;
+    // Appended to from the statement path without any lock while other threads scan it, so the list itself
+    // has to be thread safe. Declared as the concrete type because Gson builds the declared type on replay,
+    // and a List<Long> field would come back as a plain ArrayList after an FE restart.
     @SerializedName("tl")
-    private List<Long> tableIdList;
+    private CopyOnWriteArrayList<Long> tableIdList;
     @SerializedName("tx")
     private long transactionId;
     @SerializedName("lb")
@@ -435,7 +439,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public TransactionState() {
         this.dbId = -1;
-        this.tableIdList = Lists.newArrayList();
+        this.tableIdList = new CopyOnWriteArrayList<>();
         this.transactionId = -1;
         this.label = "";
         this.idToTableCommitInfos = Maps.newHashMap();
@@ -463,7 +467,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
                             LoadJobSourceType sourceType, TxnCoordinator txnCoordinator, long callbackId,
                             long timeoutMs) {
         this.dbId = dbId;
-        this.tableIdList = (tableIdList == null ? Lists.newArrayList() : tableIdList);
+        this.tableIdList = (tableIdList == null ? new CopyOnWriteArrayList<>() : new CopyOnWriteArrayList<>(tableIdList));
         this.transactionId = transactionId;
         this.label = label;
         this.requestId = requestId;
@@ -497,7 +501,7 @@ public class TransactionState implements Writable, GsonPreProcessable {
                             LoadJobSourceType sourceType,
                             TxnCoordinator txnCoordinator,
                             long timeoutMs) {
-        this.tableIdList = Lists.newArrayList();
+        this.tableIdList = new CopyOnWriteArrayList<>();
         this.transactionId = transactionId;
         this.label = label;
         this.requestId = requestId;
@@ -527,6 +531,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
 
     public TransactionState(TransactionState txnState) {
         this.dbId = txnState.dbId;
+        // Shared, not copied. A table attached to the original after this copy is taken must still be visible
+        // once the copy replaces it in the running set.
         this.tableIdList = txnState.tableIdList;
         this.transactionId = txnState.transactionId;
         this.label = txnState.label;
@@ -996,44 +1002,26 @@ public class TransactionState implements Writable, GsonPreProcessable {
         return tableIdList;
     }
 
-    public synchronized void addTableIdList(Long tableId) {
+    public void addTableIdList(Long tableId) {
         this.tableIdList.add(tableId);
     }
 
-    // Append tableId unless it is already present, as one indivisible step.
-    //
-    // The table list is a plain ArrayList that is appended to from the statement execution path without
-    // holding any DatabaseTransactionMgr lock, so a check-then-append written at the call site races with
-    // itself and, worse, leaves readers looking at a list that is being resized underneath them. A reader
-    // can observe the new size against the old backing array and index past its end. This method and
-    // containsTableId share the transaction's monitor so mutation and inspection cannot interleave.
-    public synchronized void addTableIdIfAbsent(long tableId) {
-        if (!tableIdList.contains(tableId)) {
-            // Delegate rather than appending inline. The monitor is reentrant, so this stays one atomic
-            // step, and every append still funnels through the single addTableIdList entry point.
-            addTableIdList(tableId);
-        }
+    // addIfAbsent does the check and the append as one atomic step, which a contains-then-add would not.
+    public void addTableIdIfAbsent(long tableId) {
+        tableIdList.addIfAbsent(tableId);
     }
 
-    // Membership test that is safe against a concurrent append. Prefer this over getTableIdList().contains
-    // in any reader that can observe a transaction while it is still attaching tables, which means any
-    // reader scanning the running set: an explicit BEGIN...COMMIT transaction is registered as running
-    // before its first statement attaches a table. getTableIdList() itself still hands out the live list,
-    // so a reader that walks it is on its own.
-    public synchronized boolean containsTableId(long tableId) {
+    public boolean containsTableId(long tableId) {
         return tableIdList.contains(tableId);
     }
 
-    // True when this transaction touches any table in candidateTableIds. Evaluated under the same monitor
-    // as the appenders, so the whole test sees one consistent list rather than one that can grow underneath
-    // it. Walking the live list instead would be worse than inaccurate: an iterator over an ArrayList is
-    // fail fast and throws ConcurrentModificationException on a concurrent append, failing a caller that
-    // has nothing to do with the transaction being appended to.
+    // True when this transaction touches any table in candidateTableIds. The list only grows, so reading it
+    // more than once while a table is being attached can turn a miss into a hit but never the reverse.
     //
     // An empty list on either side counts as intersecting, preserving the conservative answer this
     // predicate has always given. A transaction whose tables are not known yet must never be treated as
     // unrelated, because that is exactly the transaction a watermark caller must still wait for.
-    public synchronized boolean intersectsTableIds(List<Long> candidateTableIds) {
+    public boolean intersectsTableIds(List<Long> candidateTableIds) {
         if (tableIdList.isEmpty() || candidateTableIds == null || candidateTableIds.isEmpty()) {
             return true;
         }

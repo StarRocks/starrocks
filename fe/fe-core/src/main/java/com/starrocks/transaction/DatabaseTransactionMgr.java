@@ -805,10 +805,8 @@ public class DatabaseTransactionMgr {
     // attached to a transaction. Callers must hold the transaction lock, which serializes this scan against
     // structural changes to the running set.
     //
-    // Membership goes through containsTableId rather than reading the list directly. A transaction's table
-    // list is appended to from the statement execution path without this lock, so reading it here unguarded
-    // would race a resize and could index past the backing array, failing an unrelated begin. containsTableId
-    // shares the transaction's monitor with the appenders, so each test is consistent.
+    // A transaction's table list is appended to from the statement execution path without this lock. That
+    // is safe to read concurrently because the list is copy on write.
     //
     // The total is still a snapshot rather than an instant: a table can attach between two iterations of this
     // loop. That is deliberate for a self protection bound. A momentary under-count only biases toward
@@ -2277,9 +2275,8 @@ public class DatabaseTransactionMgr {
         readLock();
         try {
             for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
-                // Ask the transaction itself rather than reading its live table list. This scan runs over
-                // the running set, which holds explicit transactions that have not attached a table yet and
-                // may be appending right now, and the read lock here does not cover that appender.
+                // Explicit transactions can still be attaching tables while this scan runs, because the
+                // attach does not take this lock.
                 if (entry.getValue().getDbId() != dbId || !entry.getValue().intersectsTableIds(tableIdList)
                         || !entry.getValue().isRunning()) {
                     continue;

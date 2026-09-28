@@ -1276,9 +1276,9 @@ public class ExplicitTxnTest {
             Assertions.assertNotNull(explicit);
             new MockUp<TransactionState>() {
                 @Mock
-                public void addTableIdList(Invocation invocation, Long tableId) {
+                public void addTableIdIfAbsent(Invocation invocation, long tableId) {
                     TransactionState invokedState = invocation.getInvokedInstance();
-                    if (invokedState == state && tableId.equals(table1.getId())
+                    if (invokedState == state && tableId == table1.getId()
                             && blockActivation.compareAndSet(true, false)) {
                         activationEntered.countDown();
                         awaitLatch(releaseActivation, "activation was not released");
