@@ -146,7 +146,12 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 
     // Get _conjunct_ctxs.
     _conjunct_ctxs = _scan_node->conjunct_ctxs();
-    _conjunct_ctxs.insert(_conjunct_ctxs.end(), runtime_in_filters.begin(), runtime_in_filters.end());
+    for (auto* filter : runtime_in_filters) {
+        // ScanOperator evaluates these filters after ChunkSource materializes their inputs.
+        if (!_scan_node->uses_heavy_expr_slot(filter)) {
+            _conjunct_ctxs.push_back(filter);
+        }
+    }
 
     // eval_const_conjuncts.
     Status status;

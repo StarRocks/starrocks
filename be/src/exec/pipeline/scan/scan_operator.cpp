@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/scan/scan_operator.h"
 
+#include <algorithm>
+
 #include "base/concurrency/race_detect.h"
 #include "base/failpoint/fail_point.h"
 #include "base/time/time.h"
@@ -393,6 +395,19 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
+void ScanOperator::set_precondition_ready(RuntimeState* state) {
+    SourceOperator::set_precondition_ready(state);
+    auto& filters = runtime_in_filters();
+    auto remaining = std::remove_if(filters.begin(), filters.end(), [this](ExprContext* filter) {
+        if (!_scan_node->uses_heavy_expr_slot(filter)) {
+            return false;
+        }
+        _post_scan_runtime_in_filters.push_back(filter);
+        return true;
+    });
+    filters.erase(remaining, filters.end());
+}
+
 StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RACE_DETECT(race_pull_chunk);
     RETURN_IF_ERROR(_get_scan_status());
@@ -406,6 +421,10 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
         auto [owner_id, is_eos] = _should_emit_eos(res);
+        // ChunkSource materializes heavy-expression slots after the storage reader returns.
+        if (!_post_scan_runtime_in_filters.empty()) {
+            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_post_scan_runtime_in_filters, res.get()));
+        }
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
