@@ -933,7 +933,7 @@ public class PartitionSelector {
         if (partitionInfo.isListPartition()) {
             // support common partition expressions for list partition tables
         } else if (partitionInfo.isRangePartition()) {
-            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctions(predicate);
+            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctionsWhereOrderMatters(predicate);
             if (!result.first) {
                 throw new SemanticException("Retention condition must only contain monotonic functions for range partition " +
                         "tables but contains: " + result.second);

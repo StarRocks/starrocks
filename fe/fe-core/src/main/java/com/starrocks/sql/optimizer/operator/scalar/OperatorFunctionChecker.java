@@ -73,6 +73,32 @@ public class OperatorFunctionChecker {
         }
     }
 
+    /**
+     * Applies the cast predicate only outside (in)equalities and IN lists, where the order of the
+     * compared values is what the caller relies on.
+     */
+    static class RangeOnlyCastCheckVisitor extends FunctionCheckerVisitor {
+        private final FunctionCheckerVisitor anyCastVisitor;
+
+        public RangeOnlyCastCheckVisitor(Predicate<CallOperator> predicate, Predicate<CastOperator> castPredicate) {
+            super(predicate, castPredicate);
+            this.anyCastVisitor = new FunctionCheckerVisitor(predicate, cast -> true);
+        }
+
+        @Override
+        public Pair<Boolean, String> visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+            if (predicate.getBinaryType().isNotRangeComparison()) {
+                return anyCastVisitor.visit(predicate, null);
+            }
+            return visit(predicate, null);
+        }
+
+        @Override
+        public Pair<Boolean, String> visitInPredicate(InPredicateOperator predicate, Void context) {
+            return anyCastVisitor.visit(predicate, null);
+        }
+    }
+
     private static int integerRank(Type type) {
         if (type.isTinyint()) {
             return 1;
@@ -89,10 +115,16 @@ public class OperatorFunctionChecker {
     }
 
     /**
-     * Only some type pairs keep the order. Crossing between strings and numbers or dates does not:
-     * '99845' sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate
-     * mapped through such a cast prunes partitions that hold matching rows. A narrowing numeric cast
-     * wraps or saturates and breaks the order the same way.
+     * Only some type pairs keep the order. Crossing between strings and numbers does not: '99845'
+     * sorts after '998425506019' while 99845 is far below 998425506019, so a range predicate mapped
+     * through such a cast prunes partitions that hold matching rows. A narrowing numeric cast wraps
+     * or saturates and breaks the order the same way.
+     * <p>
+     * Rendering a date as text is the exception. DATE and DATETIME render as fixed-width, zero-padded
+     * fields -- '2020-07-02', '2020-07-02 10:00:00', with a six-digit fraction appended only when it is
+     * not zero -- so the text sorts the way the instant does. str2date(dt, '%Y-%m-%d') over a DATE
+     * column goes through exactly this cast. The reverse direction is a different matter: an
+     * arbitrary string does not parse in text order, so text -> DATE stays refused.
      * <p>
      * This is a question about monotonicity alone. Equality maps soundly through any deterministic
      * function -- a = c implies f(a) = f(c) whatever f does to the order -- so the FE-constant check,
@@ -109,6 +141,9 @@ public class OperatorFunctionChecker {
         if (fromRank > 0 && toRank > 0) {
             // widening within the integer family keeps every value and its order
             return toRank >= fromRank;
+        }
+        if ((from.isDate() || from.isDatetime()) && to.isVarchar()) {
+            return true;
         }
         // DATE and DATETIME order the same way; DATETIME -> DATE truncates, which is non-decreasing
         return (from.isDate() && to.isDatetime()) || (from.isDatetime() && to.isDate());
@@ -127,6 +162,19 @@ public class OperatorFunctionChecker {
     public static Pair<Boolean, String> onlyContainMonotonicFunctions(ScalarOperator scalarOperator) {
         return scalarOperator.accept(
                 new FunctionCheckerVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
+                        cast -> isOrderPreservingCast(cast.fromType(), cast.getType())), null);
+    }
+
+    /**
+     * Like onlyContainMonotonicFunctions(), but a cast only has to keep the order where the order is
+     * compared. Under an (in)equality or an IN list any deterministic cast is fine -- a = c implies
+     * f(a) = f(c) whatever f does to the order -- so there the casts are accepted as before and only
+     * the calls are checked. A retention condition such as str2date(dt, '%Y-%m-%d') = '2020-07-07'
+     * must not be refused because of a cast it only ever compares for equality.
+     */
+    public static Pair<Boolean, String> onlyContainMonotonicFunctionsWhereOrderMatters(ScalarOperator scalarOperator) {
+        return scalarOperator.accept(
+                new RangeOnlyCastCheckVisitor(call -> ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction(call),
                         cast -> isOrderPreservingCast(cast.fromType(), cast.getType())), null);
     }
 
