@@ -208,10 +208,12 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
     COUNTER_SET(network_timer, _network_time());
     COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
-    COUNTER_SET(busy_stub_selection_count, _rpc_busy_stub_selection_count);
-    selected_stub_inflight_max->set(_rpc_selected_stub_inflight_max);
-    COUNTER_SET(stub_created_on_contention_count, _rpc_stub_created_on_contention_count);
-    COUNTER_SET(selection_at_connection_limit_count, _rpc_selection_at_connection_limit_count);
+    COUNTER_SET(busy_stub_selection_count, _rpc_busy_stub_selection_count.load(std::memory_order_relaxed));
+    selected_stub_inflight_max->set(_rpc_selected_stub_inflight_max.load(std::memory_order_relaxed));
+    COUNTER_SET(stub_created_on_contention_count,
+                _rpc_stub_created_on_contention_count.load(std::memory_order_relaxed));
+    COUNTER_SET(selection_at_connection_limit_count,
+                _rpc_selection_at_connection_limit_count.load(std::memory_order_relaxed));
 
     const int64_t buffer_full_time = _full_time.load();
     const int64_t pending_finish_time = MonotonicNanos() - _pending_timestamp;
