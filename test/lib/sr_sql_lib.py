@@ -63,6 +63,7 @@ from timeout_decorator import timeout, TimeoutError
 from dbutils.pooled_db import PooledDB
 
 from lib import skip
+from lib.paimon_fixture import PaimonFixtureMixin
 from lib.result_format import format_cell
 from lib import data_delete_lib
 from lib import data_insert_lib
@@ -150,7 +151,7 @@ TASK_RUN_SUCCESS_STATES = set(["SUCCESS", "MERGED", "SKIPPED"])
 TASK_RUN_FINAL_STATES = set(["SUCCESS", "MERGED", "SKIPPED", "FAILED"])
 
 
-class StarrocksSQLApiLib(object):
+class StarrocksSQLApiLib(PaimonFixtureMixin):
     """api lib"""
 
     version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))

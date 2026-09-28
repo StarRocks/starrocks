@@ -1,0 +1,137 @@
+{
+  "budget": {
+    "total_bytes": 5242880,
+    "per_table_bytes": 307200,
+    "per_change_bytes": 409600,
+    "note": "Initial budget; existing fixture bytes are preserved."
+  },
+  "tables": {
+    "paimon_test.image_blob": {
+      "origin": "Existing fixture at main 273ca5fe7d8; writer and datagen are not recorded in this repository.",
+      "bytes": 7119,
+      "files": {
+        "bucket-0/data-0043ffa5-37c4-48cd-b1a8-a8c22834033e-0.parquet": "1a361d6ff7f54c9f6997bb07e4d7f72a",
+        "bucket-0/data-0043ffa5-37c4-48cd-b1a8-a8c22834033e-1.blob": "49b459ac6eb897be909b2b15a3efe897",
+        "bucket-0/data-1b08810a-8107-4ea7-a641-1857b4f46cbe-0.parquet": "44eac40d378c6c1fd723fbf620085bdd",
+        "bucket-0/data-1b08810a-8107-4ea7-a641-1857b4f46cbe-1.blob": "5005d0eba59a04b6e50ded4d6b6be0cf",
+        "bucket-0/data-b4cde027-c0ab-4ee9-bbb7-b693e037795f-0.parquet": "402277b32d81305c02a06d2f2abac1e9",
+        "bucket-0/data-b4cde027-c0ab-4ee9-bbb7-b693e037795f-1.blob": "ee10d98f5576d927264de90d8c731f1e",
+        "manifest/manifest-c36080b8-65fa-42e7-9044-e771b9609125-0": "471473e61e8447fa2ba03265ac92ac22",
+        "manifest/manifest-list-6d78aa01-c26a-4ffd-ac5b-5ed09581c4ac-0": "d35bfbca3d2c429fa264d31d3a9263ab",
+        "manifest/manifest-list-6d78aa01-c26a-4ffd-ac5b-5ed09581c4ac-1": "52d0dd791429b1ab91aefba00fa9782a",
+        "schema/schema-0": "acaded76d5c72589e078e367e540041a",
+        "snapshot/EARLIEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/LATEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/snapshot-1": "f1d5c550fe8316537a3259430ebae9c1"
+      }
+    },
+    "paimon_test.image_blob_desc": {
+      "origin": "Existing fixture at main 273ca5fe7d8; writer and datagen are not recorded in this repository.",
+      "bytes": 7489,
+      "files": {
+        "bucket-0/data-6606a272-2a3f-465e-a2df-1695cad7d4e7-0.parquet": "7080f9556aba15c2cf38ff5633150683",
+        "bucket-0/data-930a7ea7-f0d2-4064-aaa7-d83c12c282da-0.parquet": "50bc2301dde9f1d5c8d613b108da3a88",
+        "bucket-0/data-a7ef0e70-35b8-4406-8072-498fa9c421bd-0.parquet": "710be8e0b9a3211d6ab342f9dbf9573e",
+        "manifest/manifest-c8fca047-3edf-486f-bed2-57d2ba22b819-0": "5581b3d4a9dd44fc249dc4a18a718919",
+        "manifest/manifest-list-5f988bd3-f55f-4418-840b-a6f14bd3d3f2-0": "355ffac495fd9569f82ee60c9fe22083",
+        "manifest/manifest-list-5f988bd3-f55f-4418-840b-a6f14bd3d3f2-1": "2ce28c3984159a8d387c59ed4d036fcb",
+        "schema/schema-0": "df99a260a10aff25d785b9a0da9b09b4",
+        "snapshot/EARLIEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/LATEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/snapshot-1": "b6923637c047bdf04d696522ba46c108"
+      }
+    },
+    "paimon_test.image_blob_view": {
+      "origin": "Existing fixture at main 273ca5fe7d8; writer and datagen are not recorded in this repository.",
+      "bytes": 6299,
+      "files": {
+        "bucket-0/data-9804f20c-5fbb-45e7-93d2-2fb86e83d754-0.parquet": "91543707b6a981227b8cda99f41cc2a4",
+        "manifest/manifest-63dc4ea8-80e5-4c4c-bb01-68b68a6195a0-0": "eb202b39ed4eae33586eb3c31133e0fc",
+        "manifest/manifest-list-a15b2b2d-a4e7-4772-9435-f741450d27a7-0": "bdc626c367d54f10e5872a56db3d643b",
+        "manifest/manifest-list-a15b2b2d-a4e7-4772-9435-f741450d27a7-1": "686d7ebc1e541c09416c6ee3dfdb3a26",
+        "schema/schema-0": "ca955c737332d1069375a0b3c3ccb64a",
+        "snapshot/EARLIEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/LATEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/snapshot-1": "476f2061bcc5a3bfed4469985c261d79"
+      }
+    },
+    "paimon_test.scalar_types": {
+      "origin": "Existing fixture at main 273ca5fe7d8; writer and datagen are not recorded in this repository.",
+      "bytes": 20970,
+      "files": {
+        "bucket-0/data-16f8fc9f-8b08-4e36-ad6c-d48078575c91-0.parquet": "60a92df477f1b1cbe11ef030a494b034",
+        "bucket-0/data-3056fb05-108b-443e-b272-ee18ff14e469-0.parquet": "9d2dbc1c6feee17beaee38217b62a5b5",
+        "bucket-0/data-d7d43455-a72b-4d05-88c5-05c320d8f156-0.parquet": "99ecd68d987a5449be13781d188fc292",
+        "bucket-0/data-ed37b432-e99c-4156-8e95-22362054620c-0.parquet": "80337c326eccb65ae4a2f8014d284a52",
+        "manifest/manifest-6de90a17-3eef-42c3-9355-199dc5bee95e-0": "9cf22f3155f5f526866bfaeca5827b75",
+        "manifest/manifest-list-260d2703-917f-41aa-aaf0-3f38038ddf27-0": "2a36aa25c061627087e0a359839eb63a",
+        "manifest/manifest-list-260d2703-917f-41aa-aaf0-3f38038ddf27-1": "5ab307bfe3967ccb43c44e80c202497e",
+        "schema/schema-0": "53d6a1c6bb92bc6910e3d89121e554fe",
+        "snapshot/EARLIEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/LATEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/snapshot-1": "38791856204ec815b3a018c2b2eaed4f"
+      }
+    },
+    "paimon_test.variant_basic": {
+      "origin": "Existing fixture at main 273ca5fe7d8; writer and datagen are not recorded in this repository.",
+      "bytes": 12171,
+      "files": {
+        "bucket-0/data-0c9a64d2-28cc-4d91-8d2f-3ca2b21eddf6-0.parquet": "eb6ea81e40e4283a728db48171f326a0",
+        "bucket-0/data-12bd5730-a081-42db-bbee-07573e0ad3bb-0.parquet": "0d6bc74e24f2b8184a2ee0c7ed83342c",
+        "bucket-0/data-22c9cec9-6098-49eb-8c9f-429b00d02be3-0.parquet": "9b7807b9751bda00c22ace88054f3007",
+        "bucket-0/data-32be6288-1d87-486e-9962-bcd451cd5524-0.parquet": "34fc12ce0b511aa8e2f71419a1448a49",
+        "bucket-0/data-9434b6ac-68c1-45a0-8fa1-6d8ca5798f4c-0.parquet": "507bbf8b20877705f806280df61794b5",
+        "bucket-0/data-a7a9400e-d227-48ce-9ef0-bd6541ee1860-0.parquet": "f9403b69900d810883f6b85108676a13",
+        "bucket-0/data-bba15eec-2526-4d9d-bfb9-49f3c90b2a3a-0.parquet": "1df235bf1d05ea2e9c43ffd8fbcf54a6",
+        "bucket-0/data-bbcdb7d1-e975-4e7b-b546-2f29f2ec68d0-0.parquet": "1ecd4c73c6c1628ec926a98fb76904ac",
+        "bucket-0/data-c1046f0c-f590-4d24-860a-503c57a35e30-0.parquet": "26f1e482956bbf3c82988fb1a72a26e5",
+        "manifest/manifest-ef38f678-315f-4211-8cbd-f42b37893c68-0": "4f9ef1327675c325dd0a9a9521c0d4fa",
+        "manifest/manifest-list-9a56d5a5-247a-4e3a-a93c-e8d8f06bd3d8-0": "327bfd716b370fa434dd45df1773d0a5",
+        "manifest/manifest-list-9a56d5a5-247a-4e3a-a93c-e8d8f06bd3d8-1": "8eb8fd1eb1bccb8a2e6513fabd69dc5c",
+        "schema/schema-0": "dd4058d3355db22208e778602be54404",
+        "snapshot/EARLIEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/LATEST": "c4ca4238a0b923820dcc509a6f75849b",
+        "snapshot/snapshot-1": "4845b7f5eaba69cb105b620eb387fea9"
+      }
+    },
+    "paimon_test.pk_merge_v1": {
+      "origin": "Generated locally with Apache Paimon 2.0.0 Java API.",
+      "writer_version": "2.0.0",
+      "datagen": "datagen/GeneratePrimaryKeyFixture.java",
+      "layout": "Two commits, two overlapping level-0 Parquet files, six physical records including one delete; compaction disabled.",
+      "expected_rows": [
+        [
+          1,
+          100,
+          "updated"
+        ],
+        [
+          3,
+          30,
+          "kept"
+        ],
+        [
+          4,
+          40,
+          "added"
+        ]
+      ],
+      "bytes": 12802,
+      "files": {
+        "bucket-0/data-55139f7c-bb32-4cda-aa70-14875a46f6a7-0.parquet": "f26ef8a7809f8403dd10d9ba8cb9c2d6",
+        "bucket-0/data-55139f7c-bb32-4cda-aa70-14875a46f6a7-1.parquet": "4ec70b8d164b36fac00d75a0b53f89b6",
+        "manifest/manifest-dc0f626b-5541-47a2-8a7d-e95980f95aa9-0": "ed72a61ab3362697072e47b1e987ee68",
+        "manifest/manifest-dc0f626b-5541-47a2-8a7d-e95980f95aa9-1": "0f054157ca612a2b3c96db47b7ea73ce",
+        "manifest/manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-0": "d4fafffdcb0ea153011449298492a395",
+        "manifest/manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-1": "b6cc63f791c9eca52870d665e9346fe4",
+        "manifest/manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-2": "c0331c02f23d16ba91cd4a59b5fdfb41",
+        "manifest/manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-3": "2d44f8cf5accb359a7e1d6b993975a46",
+        "schema/schema-0": "4886c2c1052ce229f53362a4b81f16e5",
+        "snapshot/LATEST": "c81e728d9d4c2f636f067f89cc14862c",
+        "snapshot/snapshot-1": "eb9d8290d19f6b99c0d1211a6b0d2deb",
+        "snapshot/snapshot-2": "3c69cbd59929687218dce8e8b4a54d5a"
+      }
+    }
+  },
+  "retired": []
+}

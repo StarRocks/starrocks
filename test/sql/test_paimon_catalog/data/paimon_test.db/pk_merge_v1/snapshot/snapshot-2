@@ -1,0 +1,17 @@
+{
+  "version" : 3,
+  "uuid" : "5fe32b67-cb28-46a3-aca6-07858eeded46",
+  "id" : 2,
+  "schemaId" : 0,
+  "baseManifestList" : "manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-2",
+  "baseManifestListSize" : 1107,
+  "deltaManifestList" : "manifest-list-d63e5a93-ea12-460e-8d45-72e521c8b198-3",
+  "deltaManifestListSize" : 1108,
+  "commitUser" : "starrocks-pk-fixture-v1",
+  "commitIdentifier" : 2,
+  "commitKind" : "APPEND",
+  "timeMillis" : 1790585727273,
+  "totalRecordCount" : 6,
+  "deltaRecordCount" : 3,
+  "nextRowId" : 0
+}
