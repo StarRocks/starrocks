@@ -858,6 +858,9 @@ jobs:
 
   test-checker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     needs: basic-checker
     name: TEST FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
@@ -869,6 +872,17 @@ jobs:
       test_change: ${{ steps.path-filter.outputs.test }}
       pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check Paimon fixtures
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 -m unittest build-support/test_check_paimon_fixture.py -v
+          python3 build-support/check_paimon_fixture.py --base "origin/${BASE_REF}"
+
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:

@@ -181,6 +181,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.resource = list()
 
         sql_list = self._replace_uuid_variables(sql_list)
+        # tearDown must use the same resolved UUIDs as the statements that created the resources.
+        # Collect before execution so cleanup also works when a statement fails before its CLEANUP block.
+        self.case_info.cleanup = [
+            cmd for sql in sql_list if isinstance(sql, dict) and sql.get("type") == CLEANUP_FLAG
+            for cmd in sql["cmd"]
+        ]
 
         for sql in sql_list:
 

@@ -1,19 +1,7 @@
 -- name: test_paimon_filesystem_catalog
 
-shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db >/dev/null || echo "exit 0" >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/scalar_types oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/scalar_types/ >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/variant_basic oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/variant_basic/ >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob/ >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_desc oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_desc/ >/dev/null
-shell: ossutil64 cp -r ./sql/test_paimon_catalog/data/image_blob_view oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/paimon_test.db/image_blob_view/ >/dev/null
-
-create external catalog `paimon_filesystem_catalog_${uuid0}`
-properties (
-"type"  =  "paimon",
-"paimon.catalog.type"  =  "filesystem",
-"paimon.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0}/",
-"aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}"
-);
+function: paimon_stage("${uuid0}", "paimon_test.image_blob,paimon_test.image_blob_desc,paimon_test.image_blob_view,paimon_test.scalar_types,paimon_test.variant_basic")
+function: create_paimon_catalog("paimon_filesystem_catalog_${uuid0}", "filesystem", "${uuid0}")
 
 -- c_ts_ltz (TIMESTAMP WITH LOCAL TIME ZONE) renders in the session time zone; pin it.
 set time_zone = 'Asia/Shanghai';
@@ -54,7 +42,6 @@ select * from image_blob_view order by id;
 set paimon_reader_mode = jni;
 [ORDER]select * from scalar_types order by 1;
 
-set catalog default_catalog;
-drop catalog paimon_filesystem_catalog_${uuid0};
-
-shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_paimon_filesystem_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+CLEANUP {
+function: paimon_cleanup("paimon_filesystem_catalog_${uuid0}", "${uuid0}")
+} END CLEANUP

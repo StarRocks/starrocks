@@ -1,0 +1,106 @@
+-- name: test_paimon_primary_key_merge
+function: paimon_stage("${uuid0}", "paimon_test.pk_merge_v1")
+-- result:
+None
+-- !result
+function: create_paimon_catalog("paimon_pk_${uuid0}", "filesystem", "${uuid0}")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'native';
+-- result:
+-- !result
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+-- result:
+1	100	updated
+3	30	kept
+4	40	added
+-- !result
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+-- result:
+3	170
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+-- result:
+0
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+-- result:
+0
+-- !result
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+-- result:
+1
+4
+-- !result
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "native")
+-- result:
+None
+-- !result
+function: assert_paimon_native_profile("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'jni';
+-- result:
+-- !result
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+-- result:
+1	100	updated
+3	30	kept
+4	40	added
+-- !result
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+-- result:
+3	170
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+-- result:
+0
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+-- result:
+0
+-- !result
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+-- result:
+1
+4
+-- !result
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+-- result:
+None
+-- !result
+set paimon_reader_mode = 'auto';
+-- result:
+-- !result
+[ORDER]select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id;
+-- result:
+1	100	updated
+3	30	kept
+4	40	added
+-- !result
+select count(*), sum(amount) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1;
+-- result:
+3	170
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where id = 2;
+-- result:
+0
+-- !result
+select count(*) from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount = 10;
+-- result:
+0
+-- !result
+[ORDER]select id from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 where amount >= 40 order by id;
+-- result:
+1
+4
+-- !result
+function: assert_paimon_reader("select id, amount, note from paimon_pk_${uuid0}.paimon_test.pk_merge_v1 order by id", "pk_merge_v1", "jni")
+-- result:
+None
+-- !result
+CLEANUP {
+function: paimon_cleanup("paimon_pk_${uuid0}", "${uuid0}")
+} END CLEANUP

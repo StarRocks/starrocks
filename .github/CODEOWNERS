@@ -58,6 +58,7 @@
 # /fe/fe-core/src/main/java/com/starrocks/system/     @StarRocks/metadata-maintainer
 
 # connector
+/test/sql/test_paimon_catalog/data/ @StarRocks/connector-maintainer
 # /fe/fe-core/src/main/java/com/starrocks/connector/  @StarRocks/connector-maintainer
 # /fe/fe-core/src/main/java/com/starrocks/credential/  @StarRocks/connector-maintainer
 
