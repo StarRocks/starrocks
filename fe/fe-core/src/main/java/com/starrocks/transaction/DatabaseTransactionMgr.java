@@ -1683,8 +1683,9 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
-            finalStatusTransactionStateDeque.add(transactionState);
+            if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
+                finalStatusTransactionStateDeque.add(transactionState);
+            }
         }
         updateTxnLabels(transactionState);
     }
@@ -1731,8 +1732,9 @@ public class DatabaseTransactionMgr {
                         .removeFromStartupActiveCompactionTransactionMap(transactionState.getTransactionId());
             }
             transactionGraph.remove(transactionState.getTransactionId());
-            idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState);
-            finalStatusTransactionStateDeque.add(transactionState);
+            if (idToFinalStatusTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
+                finalStatusTransactionStateDeque.add(transactionState);
+            }
             updateTxnLabels(transactionState);
         }
     }
@@ -2085,6 +2087,9 @@ public class DatabaseTransactionMgr {
     private void clearTransactionState(TransactionState transactionState) {
         idToFinalStatusTransactionState.remove(transactionState.getTransactionId());
         Set<Long> txnIds = unprotectedGetTxnIdsByLabel(transactionState.getLabel());
+        if (txnIds == null) {
+            return;
+        }
         txnIds.remove(transactionState.getTransactionId());
         if (txnIds.isEmpty()) {
             labelToTxnIds.remove(transactionState.getLabel());
