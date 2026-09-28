@@ -418,7 +418,9 @@ public class TransactionState implements Writable, GsonPreProcessable {
     // A partition that automatic partitioning creates DURING the load is not in the plan, so its
     // tablets get their node lists from FrontendServiceImpl.buildCreatePartitionResponse instead of
     // from OlapTableSink.createLocation. This is how the plan's decision reaches that path, so a
-    // runtime-created partition spreads the same way the planned ones did.
+    // runtime-created partition spreads the same way the planned ones did. A sub-partition that
+    // automatic bucketing adds during the load (FrontendServiceImpl.updateImmutablePartitionInternal)
+    // reads it the same way.
     //
     // Keyed by table id, like tableToPartitionNameToTPartition above, because the decision is
     // per table and one transaction can carry several: a multi-table Broker Load builds one

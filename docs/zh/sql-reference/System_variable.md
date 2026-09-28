@@ -1701,6 +1701,7 @@ set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
   * `force` —— 只要其余前置条件允许就生效，包括哈希分桶分布。当你希望在 `auto` 不会接管的表上也分散写入时使用。
 * 无论哪种模式，还需同时满足：存算分离表且开启 `file_bundling`、事务使用 combined txn log、且分区的 tablet 数少于本次导入实际分散到的节点数。该宽度取三者的最小值：按导入大小算出的节点数（见 `lake_multi_node_write_bytes_per_node`）、`lake_multi_node_write_max_nodes`、以及存活的计算节点数。tablet 数已经达到该宽度的分区，即使指定 `force` 也仍走单节点写入——六个计算节点的 Warehouse 上有五个 tablet 时，若这次导入的数据量只够三个写入节点，就不会分散。Stream Load 与 Routine Load 一律不参与：这两条路径在规划阶段拿不到导入大小，若把未知大小当成大导入处理，反而会让最小、最频繁的那批写入分散得最宽。部分列更新（行模式与列模式）、条件更新、缺少自增列的导入、以及 schema change 期间的导入均受支持。
 * 由自动分区在导入过程中新建的分区同样会分散写入。这类分区不在执行计划里，其 tablet 是随后通过 create-partition RPC 交给导入的：分散宽度沿用该导入在规划阶段定下的节点数，具体节点则在新建分区的那一刻从当时存活的计算节点中挑选——耗时较长的导入完全可能跨越计算节点的上下线。新建分区的数据边界尚未出现，通常只有一个 tablet，正是本变量所针对的形态。
+* 自动分桶（`bucket_size`）在导入过程中新增的子分区同样会分散写入。自动分桶只适用于 `RANDOM` 分布，因此只在 `force` 模式下生效。
 * **默认值**：auto
 * **类型**：String
 * **粒度**：Session
