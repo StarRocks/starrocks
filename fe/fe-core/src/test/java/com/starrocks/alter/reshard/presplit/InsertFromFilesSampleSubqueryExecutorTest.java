@@ -301,6 +301,39 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
+    void overlappingPartitionAndKeyRolesProjectOnceAndDecodeEveryTuple() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://bucket/data/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://bucket/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[20260921, 11]}"));
+                });
+        Column partitionAndSortKey = bigintColumn("dt");
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(partitionAndSortKey, bigintColumn("exp_id")),
+                List.of(partitionAndSortKey),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                        "SELECT `dt`, `exp_id` FROM FILES"),
+                "the overlapping partition column must be projected only once: " + capturedSql);
+        Assertions.assertFalse(capturedSql.toString().contains("`exp_id`, `dt` FROM FILES"),
+                "the partition projection must reuse the earlier dt result: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals("20260921", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("20260921", row.partitionSourceTuple().get(0).getStringValue(),
+                "partition decoding must reuse the dt cell without changing the logical tuple contract");
+    }
+
+    @Test
     void compositeSortKeyArityMismatchInResultThrows() {
         TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
         // Sampler claims 2 sort-key columns but server returns 1-value rows — surfaced
@@ -544,8 +577,9 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
         Assertions.assertTrue(capturedSql.toString().startsWith(
-                        "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date) FROM FILES("),
-                "the literal stands in for dt in the sort key and the partition column: " + capturedSql);
+                        "SELECT CAST('20260917' AS date), `file_key` FROM FILES("),
+                "the literal stands in for dt in the sort key, and the partition column reuses that result: "
+                        + capturedSql);
     }
 
     @Test

@@ -451,6 +451,40 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
+    void overlappingPartitionAndKeyRolesProjectOnceAndDecodeEveryTuple() throws Exception {
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[20260921, 11]}"));
+                });
+        Column partitionAndSortKey = bigintColumn("dt");
+        SampleRequest request = new SampleRequest(
+                new BrokerLoadScanContext(
+                        new BrokerDesc(Map.of()),
+                        List.of(mockFileGroup("parquet")),
+                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
+                        Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(partitionAndSortKey, bigintColumn("exp_id")),
+                List.of(partitionAndSortKey),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                        "SELECT `dt`, `exp_id` FROM FILES"),
+                "the overlapping partition column must be projected only once: " + capturedSql);
+        Assertions.assertFalse(capturedSql.toString().contains("`exp_id`, `dt` FROM FILES"),
+                "the partition projection must reuse the earlier dt result: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals("20260921", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("20260921", row.partitionSourceTuple().get(0).getStringValue(),
+                "partition decoding must reuse the dt cell without changing the logical tuple contract");
+    }
+
+    @Test
     void compositeSortKeyWithNullableTrailingColumnDecodesNullVariant() throws Exception {
         // Mirrors the InsertFromFiles coverage: ORDER BY(group_id, nullable_col)
         // is valid, and null cells in the nullable column must decode to
