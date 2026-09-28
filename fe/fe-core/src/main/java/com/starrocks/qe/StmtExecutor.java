@@ -63,7 +63,6 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -4392,9 +4391,8 @@ public class StmtExecutor {
     }
 
     private String resolveImpersonatedUser() {
-        String qualifiedUser = ClusterNamespace.getNameFromFullName(context.getQualifiedUser());
-        String currentUser = context.getCurrentUserIdentity() == null ? null :
-                ClusterNamespace.getNameFromFullName(context.getCurrentUserIdentity().getUser());
+        String qualifiedUser = context.getQualifiedUser();
+        String currentUser = context.getCurrentUserIdentity() == null ? null : context.getCurrentUserIdentity().getUser();
         if (currentUser == null || qualifiedUser == null || currentUser.equals(qualifiedUser)) {
             return null;
         }

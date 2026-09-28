@@ -36,7 +36,6 @@ import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
@@ -1694,7 +1693,7 @@ public class ExpressionAnalyzer {
             String funcType = node.getFuncType();
             if (funcType.equalsIgnoreCase(FunctionSet.DATABASE) || funcType.equalsIgnoreCase(FunctionSet.SCHEMA)) {
                 node.setType(VarcharType.VARCHAR);
-                node.setStrValue(ClusterNamespace.getNameFromFullName(session.getDatabase()));
+                node.setStrValue(session.getDatabase());
             } else if (funcType.equalsIgnoreCase(FunctionSet.USER)
                     || funcType.equalsIgnoreCase(FunctionSet.SESSION_USER)) {
                 node.setType(VarcharType.VARCHAR);
