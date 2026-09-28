@@ -160,6 +160,15 @@ This topic introduces the following types of BE configurations:
 - Description: Process-wide maximum number of AI HTTP attempts that can concurrently hold an in-flight admission permit. Lower it to bound HTTP and response-memory pressure. This is an admission limit, not a per-query quota. Runtime updates take effect live, wake queued admissions, and require no BE restart; the fixed completion-queue capacity established at startup does not change.
 - Introduced in: -
 
+### agg_hash_map_key_prefetch_dist
+
+- Default: 8
+- Type: Int
+- Unit: Rows
+- Is mutable: Yes
+- Description: Distance (in rows) of a second software prefetch stage for aggregations grouped by multiple columns or by a non-fixed-size key (serialized keys). The hash table slot of such a key only points at the key bytes, so the key comparison on a hit waits on a cache miss that `agg_hash_map_prefetch_dist` cannot hide. At this many rows ahead, the loop reads the slot the first stage has already prefetched, finds the entry whose cached hash matches without comparing keys, and prefetches its key bytes. It takes effect only when it is greater than `0` and smaller than `agg_hash_map_prefetch_dist`; any other value disables it. It also runs only once the estimated key bytes in the hash table (groups times the average key length) reach `L3_size / 2 * agg_prefetch_l2_ratio`, because smaller keys are already cache-resident and the extra stage is pure overhead. The value is read once per chunk.
+- Introduced in: -
+
 ### agg_hash_map_prefetch_dist
 
 - Default: 16
@@ -175,7 +184,7 @@ This topic introduces the following types of BE configurations:
 - Type: Double
 - Unit: -
 - Is mutable: Yes
-- Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. See also `agg_hash_map_prefetch_dist`.
+- Description: Gates aggregation hash-table software prefetch on L2 residency. Prefetch is enabled only once the bucket array spills L2, that is, when `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio`, where the L2 size is detected at runtime (falling back to 1 MiB if detection fails). Below this point the table is L2-resident and prefetching is a net loss. Lower the ratio on contended deployments that run many drivers per core, where the effective per-table share of L2 is smaller than the nominal per-core size; raising it above 1.0 delays prefetch until the table is well past L2. The same ratio also scales the key-bytes threshold of `agg_hash_map_key_prefetch_dist`. See also `agg_hash_map_prefetch_dist`.
 - Introduced in: -
 
 ### clear_udf_cache_when_start

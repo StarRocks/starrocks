@@ -2168,12 +2168,21 @@ CONF_mInt32(streaming_agg_chunk_buffer_size, "1024");
 // DRAM-resident workloads, lower (or 0) on L1-resident ones.  Read once
 // per chunk; changes take effect on the next chunk.
 CONF_mInt32(agg_hash_map_prefetch_dist, "16");
+// Second prefetch stage for the serialized-key agg hash map. At this many rows
+// ahead (the slot is already prefetched by agg_hash_map_prefetch_dist), the
+// first slot matching the row's hash is located without comparing keys, and the
+// out-of-line key bytes it points at are prefetched, so the key compare on a hit
+// no longer waits on a dependent cache miss. <= 0, or >= agg_hash_map_prefetch_dist,
+// turns it off. It only runs once the map's key bytes reach
+// L3_size / 2 * agg_prefetch_l2_ratio; below that they are cache-resident.
+CONF_mInt32(agg_hash_map_key_prefetch_dist, "8");
 // Software prefetch is gated on the bucket array spilling L2: it is only
 // enabled when bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio.
 // Below that the table is L2-resident and prefetch is a net loss (measured by
 // agg_prefetch_dist_bench; the crossover sits right at L2). Lower the ratio on
 // contended many-driver-per-core deployments where the effective L2 share per
-// table is smaller than the nominal per-core size.
+// table is smaller than the nominal per-core size. The same ratio scales the
+// key-bytes gate of agg_hash_map_key_prefetch_dist.
 CONF_mDouble(agg_prefetch_l2_ratio, "1.0");
 // sink buffer memory limit per driver
 CONF_mInt64(sink_buffer_mem_limit_per_driver, "134217728");

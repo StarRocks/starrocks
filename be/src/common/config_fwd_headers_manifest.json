@@ -186,6 +186,7 @@
         "partition_hash_join_probe_limit_size",
         "streaming_agg_chunk_buffer_size",
         "agg_hash_map_prefetch_dist",
+        "agg_hash_map_key_prefetch_dist",
         "agg_prefetch_l2_ratio",
         "sink_buffer_mem_limit_per_driver",
         "exchange_sink_buffer_flush_threshold_bytes",

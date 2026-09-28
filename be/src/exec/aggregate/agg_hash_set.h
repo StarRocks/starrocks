@@ -61,6 +61,24 @@ inline size_t agg_hash_map_default_prefetch_dist() {
     return v > 0 ? static_cast<size_t>(v) : 0;
 }
 
+// The key-bytes prefetch stage only pays off once the map's key bytes outgrow the cache; below that they are already
+// cached and the stage is pure overhead (-19% on 28 B keys at 64K groups). agg_dict_bench `serpfk` puts the
+// break-even at ~11 MB of key bytes for both 28 B and 92 B keys on a 35.75 MB L3. Half the L3 keeps every measured
+// point below it off and every point above it a win (1.04-1.18x); a miss-only chunk is neutral, so no hit-rate gate.
+// Scaled by the same agg_prefetch_l2_ratio as the bucket gate: a contended deployment has a smaller cache share for
+// both.
+inline size_t agg_key_prefetch_min_bytes() {
+    static const long half_l3 = CpuInfo::get_l3_cache_size() / 2;
+    return static_cast<size_t>(static_cast<double>(half_l3) * config::agg_prefetch_l2_ratio);
+}
+
+// Read once per chunk from config::agg_hash_map_key_prefetch_dist (default 8). The key stage reads the slot the
+// first stage prefetched, so it is only on while it runs behind that stage: 0 < dist < prefetch_dist.
+inline size_t agg_hash_map_default_key_prefetch_dist(size_t prefetch_dist) {
+    const int32_t v = config::agg_hash_map_key_prefetch_dist;
+    return v > 0 && static_cast<size_t>(v) < prefetch_dist ? static_cast<size_t>(v) : 0;
+}
+
 #define AGG_HASH_SET_PRECOMPUTE_HASH_VALS()                  \
     hashes.reserve(chunk_size);                              \
     for (size_t i = 0; i < chunk_size; i++) {                \

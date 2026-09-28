@@ -73,6 +73,151 @@ template <PhmapSeed seed>
 using DateAggHashMap = phmap::flat_hash_map<DateValue, AggDataPtr, StdHashWithSeed<DateValue, seed>>;
 template <PhmapSeed seed>
 using TimeStampAggHashMap = phmap::flat_hash_map<TimestampValue, AggDataPtr, StdHashWithSeed<TimestampValue, seed>>;
+<<<<<<< HEAD
+=======
+
+// Key of the slice agg hash maps. It is exactly sizeof(Slice): `size` is narrowed to 32 bits and the freed 4 bytes
+// cache the key's crc, so a rehash never walks the key bytes again. The size of the map slot and of the agg state
+// prefix (which holds a copy of the key, see AllocateState) stay unchanged.
+//
+// A key of kEscape bytes or more stores kEscape in `size` and its real length in the kEscapeHeader bytes in front of
+// `data`. Such keys are always materialized by make_agg_slice_key() or persist_agg_slice_key().
+template <PhmapSeed seed>
+struct SliceWithHash32 {
+    static constexpr uint32_t kEscape = std::numeric_limits<uint32_t>::max();
+    static constexpr size_t kEscapeHeader = sizeof(uint64_t);
+
+    const char* data = nullptr;
+    uint32_t size = 0;
+    uint32_t hash = 0;
+
+    SliceWithHash32() = default;
+    // Only for keys shorter than kEscape.
+    explicit SliceWithHash32(const Slice& s) : data(s.data), size(static_cast<uint32_t>(s.size)), hash(hash_of(s)) {
+        DCHECK_LT(s.size, kEscape);
+    }
+
+    static uint32_t hash_of(const Slice& s) {
+        if (LIKELY(s.size <= kMaxHashPiece)) {
+            return static_cast<uint32_t>(SliceHashWithSeed<seed>()(s));
+        }
+        return hash_of_huge(s);
+    }
+
+    ALWAYS_INLINE size_t real_size() const {
+        if (LIKELY(size != kEscape)) {
+            return size;
+        }
+        uint64_t v;
+        memcpy(&v, data - kEscapeHeader, sizeof(v));
+        return v;
+    }
+    ALWAYS_INLINE Slice slice() const { return {data, real_size()}; }
+    // convert_hash_map_to_chunk copies the key into a Buffer<Slice>.
+    operator Slice() const { return slice(); }
+
+private:
+    // SliceHashWithSeed takes an int32 length.
+    static constexpr size_t kMaxHashPiece = std::numeric_limits<int32_t>::max();
+
+    // Hashes the key in int32-sized pieces, chaining each piece's hash into the next one's seed.
+    static ALWAYS_NOINLINE uint32_t hash_of_huge(const Slice& s) {
+        size_t h = SliceHashWithSeed<seed>()(Slice(s.data, kMaxHashPiece));
+        for (size_t offset = kMaxHashPiece; offset < s.size; offset += kMaxHashPiece) {
+            const size_t piece = std::min(kMaxHashPiece, s.size - offset);
+            h = crc_hash_64(s.data + offset, static_cast<int32_t>(piece), h);
+        }
+        return static_cast<uint32_t>(h);
+    }
+};
+static_assert(sizeof(SliceWithHash32<PhmapSeed1>) == sizeof(Slice));
+static_assert(alignof(SliceWithHash32<PhmapSeed1>) == alignof(Slice));
+
+template <PhmapSeed seed>
+struct SliceWithHash32Hash {
+    // The crc has 32 bits of entropy, the mix spreads them over 64 bits so H1 keeps its high bits.
+    size_t operator()(const SliceWithHash32<seed>& s) const { return phmap_mix_with_seed<8, seed>()(s.hash); }
+};
+
+template <PhmapSeed seed>
+struct SliceWithHash32Equal {
+    bool operator()(const SliceWithHash32<seed>& x, const SliceWithHash32<seed>& y) const {
+        return x.hash == y.hash && memequal_padded(x.data, x.real_size(), y.data, y.real_size());
+    }
+};
+
+// Builds the key of `data[0, size)`. A key of kEscape bytes or more is copied into `scratch` behind its length
+// header, because the bytes in front of `data` are not ours to write.
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const char* data, size_t size, uint32_t hash, MemPool* scratch) {
+    Key key;
+    if (LIKELY(size < Key::kEscape)) {
+        key.data = data;
+        key.size = static_cast<uint32_t>(size);
+    } else {
+        uint8_t* pos = scratch->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        uint64_t real_size = size;
+        memcpy(pos, &real_size, sizeof(real_size));
+        strings::memcpy_inlined(pos + Key::kEscapeHeader, data, size);
+        key.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+        key.size = Key::kEscape;
+    }
+    key.hash = hash;
+    return key;
+}
+
+template <typename Key>
+ALWAYS_INLINE Key make_agg_slice_key(const Slice& s, MemPool* scratch) {
+    return make_agg_slice_key<Key>(s.data, s.size, Key::hash_of(s), scratch);
+}
+
+// Copies the key bytes into `pool` so the key can live in the hash map.
+template <typename Key>
+ALWAYS_INLINE Key persist_agg_slice_key(const Key& key, MemPool* pool) {
+    const size_t size = key.real_size();
+    Key pk = key;
+    if (LIKELY(key.size != Key::kEscape)) {
+        uint8_t* pos = pool->allocate_with_reserve(size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data, size);
+        pk.data = reinterpret_cast<const char*>(pos);
+    } else {
+        uint8_t* pos = pool->allocate_with_reserve(Key::kEscapeHeader + size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+        strings::memcpy_inlined(pos, key.data - Key::kEscapeHeader, Key::kEscapeHeader + size);
+        pk.data = reinterpret_cast<const char*>(pos + Key::kEscapeHeader);
+    }
+    return pk;
+}
+
+// Frees the escaped probe keys once the chunk is probed: a single one holds 4 GiB or more, which must not outlive the
+// chunk that needed it.
+inline void reset_agg_escape_pool(MemPool* pool) {
+    if (UNLIKELY(pool->total_reserved_bytes() > 0)) {
+        pool->free_all();
+    }
+}
+
+// Prefetches the key bytes of the map entry that `key` most likely hits. The map slot only holds a pointer to them, so
+// without this the key compare on a hit is a dependent miss that prefetch_hash() cannot cover. It must run after
+// prefetch_hash(hashval) has brought the slot in. The candidate is matched on the cached 32-bit hash only; a wrong
+// guess just wastes the prefetch. Escaped keys are skipped: reading their real length is itself a dependent miss.
+template <typename HashMap, typename Key>
+ALWAYS_INLINE void agg_prefetch_slice_key_bytes(const HashMap& map, const Key& key, size_t hashval) {
+    const auto* e = map.find_first_candidate(hashval, [&](const auto& v) { return v.first.hash == key.hash; });
+    if (e == nullptr || e->first.size == 0 || e->first.size == Key::kEscape) {
+        return;
+    }
+    // Longer keys are left to the hardware prefetcher once the first lines stream in.
+    constexpr uintptr_t kLine = 64;
+    constexpr uintptr_t kMaxLines = 4;
+    const auto begin = reinterpret_cast<uintptr_t>(e->first.data);
+    const uintptr_t first = begin & ~(kLine - 1);
+    const uintptr_t last = std::min(begin + e->first.size - 1, first + (kMaxLines - 1) * kLine);
+    for (uintptr_t line = first; line <= last; line += kLine) {
+        __builtin_prefetch(reinterpret_cast<const void*>(line));
+    }
+}
+
+>>>>>>> 3db9ff1d7af... [Enhancement] Prefetch the key bytes of serialized agg keys before the key compare (#63983)
 template <PhmapSeed seed>
 using SliceAggHashMap = phmap::flat_hash_map<Slice, AggDataPtr, SliceHashWithSeed<seed>, SliceEqual>;
 
@@ -815,17 +960,31 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
         [[maybe_unused]] size_t hash_table_size = this->hash_map.size();
         auto* __restrict not_founds = extra->not_founds;
         caches.resize(chunk_size);
+        size_t chunk_key_bytes = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
+<<<<<<< HEAD
             caches[i].key = KeyType(Slice(buffer + i * max_one_row_size, slice_sizes[i]));
+=======
+            caches[i].key = KeyType(key_buffer.key(i));
+            chunk_key_bytes += caches[i].key.size;
+>>>>>>> 3db9ff1d7af... [Enhancement] Prefetch the key bytes of serialized agg keys before the key compare (#63983)
         }
         for (size_t i = 0; i < chunk_size; ++i) {
             caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
         }
 
         const size_t __prefetch_dist = agg_hash_map_default_prefetch_dist();
+        // The map's key bytes, estimated with this chunk's average key length.
+        const bool keys_spill_cache =
+                chunk_size != 0 && hash_table_size * (chunk_key_bytes / chunk_size) >= agg_key_prefetch_min_bytes();
+        const size_t key_prefetch_dist = keys_spill_cache ? agg_hash_map_default_key_prefetch_dist(__prefetch_dist) : 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_dist != 0 && i + __prefetch_dist < chunk_size) {
                 this->hash_map.prefetch_hash(caches[i + __prefetch_dist].hashval);
+            }
+            if (key_prefetch_dist != 0 && i + key_prefetch_dist < chunk_size) {
+                const auto& ahead = caches[i + key_prefetch_dist];
+                agg_prefetch_slice_key_bytes(this->hash_map, ahead.key, ahead.hashval);
             }
 
             const auto& key = caches[i].key;

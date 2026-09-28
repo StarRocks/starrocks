@@ -1602,6 +1602,23 @@ public:
         prefetch_hash(this->hash(key));
     }
 
+    // StarRocks extension. Returns the first element in the first probe group
+    // whose H2 matches `hashval` and that satisfies `pred`, or nullptr. It never
+    // runs the key equality, so it touches only ctrl and slots: it is meant to
+    // run after prefetch_hash() has brought those in, to find what the element
+    // points at (e.g. out-of-line key bytes) and prefetch that too. The result
+    // is only a guess, valid until the next insert.
+    template <class Pred>
+    const value_type* find_first_candidate(size_t hashval, Pred&& pred) const {
+        auto seq = probe(hashval);
+        Group g{ctrl_ + seq.offset()};
+        for (int i : g.Match((h2_t)H2(hashval))) {
+            const value_type* e = &PolicyTraits::element(slots_ + seq.offset((size_t)i));
+            if (pred(*e)) return e;
+        }
+        return nullptr;
+    }
+
     // The API of find() has two extensions.
     //
     // 1. The hash can be passed by the user. It must be equal to the hash of the
@@ -3160,6 +3177,15 @@ public:
         const auto& set = inner.set_;
         typename Lockable::SharedLock m(const_cast<Inner&>(inner));
         set.prefetch_hash(hashval);
+    }
+
+    // See raw_hash_set::find_first_candidate().
+    template <class Pred>
+    const value_type* find_first_candidate(size_t hashval, Pred&& pred) const {
+        const Inner& inner = sets_[subidx(hashval)];
+        const auto& set = inner.set_;
+        typename Lockable::SharedLock m(const_cast<Inner&>(inner));
+        return set.find_first_candidate(hashval, std::forward<Pred>(pred));
     }
 
     // The API of find() has two extensions.

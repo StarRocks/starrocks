@@ -157,6 +157,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 描述：进程级可同时持有 in-flight 准入许可的 AI HTTP attempt 上限。调小可限制 HTTP 与 response memory 压力。该参数是全局准入限制，不是每 Query 配额。运行时修改会实时生效并唤醒等待中的准入请求，无需重启 BE；BE 启动时确定的 completion queue 固定容量不会改变。
 - 引入版本：-
 
+### agg_hash_map_key_prefetch_dist
+
+- 默认值：8
+- 类型：Int
+- 单位：行
+- 是否动态：是
+- 描述：多列分组或非定长分组键（序列化 Key）的聚合中，第二级软件预取的距离（以行数为单位）。这类 Key 在哈希表槽位中只保存指向 Key 字节的指针，命中时比较 Key 需要等待一次 `agg_hash_map_prefetch_dist` 无法隐藏的缓存未命中。在当前行前方该行数处，循环读取第一级已预取的槽位，不比较 Key、只按缓存的哈希值找到对应的条目，并预取其 Key 字节。仅当该值大于 `0` 且小于 `agg_hash_map_prefetch_dist` 时生效，其他取值均禁用该功能。此外，只有当哈希表中 Key 字节的估算总量（分组数乘以平均 Key 长度）达到 `L3_size / 2 * agg_prefetch_l2_ratio` 时才会启用，因为更小的 Key 已驻留在缓存中，额外的预取只会带来开销。该值每处理一个 Chunk 读取一次。
+- 引入版本：-
+
 ### agg_hash_map_prefetch_dist
 
 - 默认值：16
@@ -172,7 +181,7 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 类型：Double
 - 单位：-
 - 是否动态：是
-- 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。另请参阅 `agg_hash_map_prefetch_dist`。
+- 描述：根据 L2 驻留情况控制聚合哈希表的软件预取。仅当桶数组溢出 L2 时才会启用预取，即当 `bucket_count * slot_bytes >= L2_size * agg_prefetch_l2_ratio` 时，其中 L2 大小在运行时检测（若检测失败则回退为 1 MiB）。在此阈值以下，哈希表驻留于 L2 中，此时预取会导致净损耗。在每个核心运行多个驱动程序且竞争激烈的部署环境中，应降低该比率——此时每个哈希表实际占用的 L2 空间小于名义上的每核心大小；将其提高至 1.0 以上会延迟预取，直到哈希表远超 L2 容量。该比率同样用于缩放 `agg_hash_map_key_prefetch_dist` 的 Key 字节阈值。另请参阅 `agg_hash_map_prefetch_dist`。
 - 引入版本：-
 
 ### clear_udf_cache_when_start
