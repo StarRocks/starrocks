@@ -789,6 +789,13 @@ FROM test;
 * **数据类型**: boolean
 * **引入版本**: v3.2.0
 
+### enable_paimon_global_index
+
+* 描述：控制扫描 Data Evolution 表时是否评估 Paimon Global Index。启用后，StarRocks 默认使用 `FULL` 标量索引搜索模式，确保尚未被索引覆盖的行仍会参与扫描。可以在当前会话中将其设置为 `false` 以绕过 Global Index，例如查询 VARIANT 列时需要使用 Paimon Native Reader 的场景。
+* 默认值：true
+* 类型：Boolean
+* 引入版本：v4.2
+
 ### enable_parallel_merge
 
 * 描述：是否启用排序的 Parallel Merge。启用后，排序的合并阶段将使用多个线程进行合并操作。

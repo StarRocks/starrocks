@@ -933,6 +933,13 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 * **Data Type**: boolean
 * **Introduced in**: -
 
+### enable_paimon_global_index
+
+* **Description**: Controls whether Paimon global indexes are evaluated when scanning Data Evolution tables. When enabled, StarRocks uses `FULL` scalar-index search mode by default so rows not yet covered by an index are still scanned. Set this variable to `false` to bypass global indexes for the current session, for example when a query must use the native Paimon reader for a VARIANT column.
+* **Default**: true
+* **Data type**: Boolean
+* **Introduced in**: v4.2
+
 ### enable_parallel_merge
 
 * **Description**: Whether to enable parallel merge for sorting. When this feature is enabled, the merge phase of sorting will utilize multiple threads for merge operations.
