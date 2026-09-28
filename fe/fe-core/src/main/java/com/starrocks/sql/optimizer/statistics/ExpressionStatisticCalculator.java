@@ -798,7 +798,7 @@ public class ExpressionStatisticCalculator {
                             // trip isUnknown() fallbacks; report an all-null estimate instead.
                             // [0, 0] is the limit of [0, sqrt(max)] as max approaches 0.
                             nullsFraction = 1;
-                            distinctValue = 1;
+                            distinctValue = 0;
                         } else if (!minMaxValueInfinite) {
                             // An infinite endpoint makes the negative share Inf/Inf or finite/Inf,
                             // so leave NDV/nulls unchanged rather than writing NaN or 0.

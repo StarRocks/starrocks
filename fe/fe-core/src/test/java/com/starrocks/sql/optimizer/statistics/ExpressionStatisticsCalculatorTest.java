@@ -596,7 +596,7 @@ public class ExpressionStatisticsCalculatorTest {
         }
 
         // Every input is negative, so every output row is NULL. Report an all-null estimate
-        // ([0, 0], nulls=1, NDV=1) rather than unknown(), which claims 0% nulls.
+        // ([0, 0], nulls=1, NDV=0) rather than unknown(), which claims 0% nulls.
         Statistics negativeStats = sqrtInputStatistics(columnRefOperator, -16, -4, 10, 0);
         // max < 0 is enough to conclude every row is NULL, even when min is unbounded.
         Statistics infiniteNegativeStats = sqrtInputStatistics(columnRefOperator,
@@ -608,7 +608,7 @@ public class ExpressionStatisticsCalculatorTest {
                 Assertions.assertEquals(0, columnStatistic.getMinValue(), 0.001, fnName);
                 Assertions.assertEquals(0, columnStatistic.getMaxValue(), 0.001, fnName);
                 Assertions.assertEquals(1, columnStatistic.getNullsFraction(), 0.001, fnName);
-                Assertions.assertEquals(1, columnStatistic.getDistinctValuesCount(), 0.001, fnName);
+                Assertions.assertEquals(0, columnStatistic.getDistinctValuesCount(), 0.001, fnName);
             }
         }
 
