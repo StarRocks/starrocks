@@ -297,7 +297,7 @@ PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, 
     return result;
 }
 
-StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& polygon, const GeoPoint& point) {
+Status prepare_spherical_polygon(const WkbGeometry& polygon, GeoPolygon* native_polygon) {
     GeoCoordinateListList rings;
     for (const auto& ring : polygon.rings) {
         auto* coordinates = new GeoCoordinateList();
@@ -306,11 +306,27 @@ StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& pol
         }
         rings.add(coordinates);
     }
-    GeoPolygon native_polygon;
-    if (native_polygon.from_coords(rings) != GEO_PARSE_OK) {
+    if (native_polygon->from_coords(rings) != GEO_PARSE_OK) {
         return Status::InvalidArgument("Invalid GEOGRAPHY polygon topology");
     }
-    switch (native_polygon.point_relation(point)) {
+    return Status::OK();
+}
+
+StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& polygon, const GeoPoint& point,
+                                                          std::unique_ptr<GeoPolygon>* prepared) {
+    GeoPolygon local;
+    GeoPolygon* native_polygon = &local;
+    if (prepared != nullptr) {
+        if (*prepared == nullptr) {
+            auto cached_polygon = std::make_unique<GeoPolygon>();
+            RETURN_IF_ERROR(prepare_spherical_polygon(polygon, cached_polygon.get()));
+            *prepared = std::move(cached_polygon);
+        }
+        native_polygon = prepared->get();
+    } else {
+        RETURN_IF_ERROR(prepare_spherical_polygon(polygon, native_polygon));
+    }
+    switch (native_polygon->point_relation(point)) {
     case GeoPointPolygonRelation::BOUNDARY:
         return PointPolygonRelation::BOUNDARY;
     case GeoPointPolygonRelation::INSIDE:
@@ -321,25 +337,84 @@ StatusOr<PointPolygonRelation> spherical_polygon_relation(const WkbGeometry& pol
     __builtin_unreachable();
 }
 
-StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeometry& polygon,
-                                                                 const WkbCoordinate& coordinate) {
-    GeoPoint point;
-    if (point.from_coord(coordinate.x, coordinate.y) != GEO_PARSE_OK) {
-        return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
-    }
-    if (polygon.type == WkbGeometryType::POLYGON) return spherical_polygon_relation(polygon, point);
+struct SphericalPolygonFamilyCache {
+    std::vector<std::unique_ptr<GeoPolygon>> components;
+};
+
+struct NativeGeoContainmentArgumentState {
+    bool constant = false;
+    Status parse_status = Status::OK();
+    std::optional<WkbGeometry> geometry;
+};
+
+struct NativeGeoContainmentState {
+    NativeGeoContainmentArgumentState arguments[2];
+};
+
+struct NativeGeoContainmentThreadState final : FunctionThreadState {
+    std::optional<GeoPoint> points[2];
+    SphericalPolygonFamilyCache polygons[2];
+};
+
+StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeometry& polygon, const GeoPoint& point,
+                                                                 SphericalPolygonFamilyCache* cache) {
+    const size_t component_count = polygon.type == WkbGeometryType::POLYGON ? 1 : polygon.children.size();
+    if (cache != nullptr && cache->components.empty()) cache->components.resize(component_count);
     PointPolygonRelation result = PointPolygonRelation::OUTSIDE;
-    for (const auto& child : polygon.children) {
-        if (child.empty) continue;
-        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(child, point));
+    for (size_t i = 0; i < component_count; ++i) {
+        const auto& component = polygon.type == WkbGeometryType::POLYGON ? polygon : polygon.children[i];
+        if (component.empty) continue;
+        auto* prepared = cache == nullptr ? nullptr : &cache->components[i];
+        ASSIGN_OR_RETURN(auto relation, spherical_polygon_relation(component, point, prepared));
         if (relation == PointPolygonRelation::BOUNDARY) return relation;
         if (relation == PointPolygonRelation::INSIDE) result = relation;
     }
     return result;
 }
 
+StatusOr<const WkbGeometry*> containment_geometry(const GeoInput& input, size_t row, WkbCoordinateSemantics semantics,
+                                                  const NativeGeoContainmentArgumentState* prepared,
+                                                  std::optional<WkbGeometry>* constant_geometry,
+                                                  WkbGeometry* varying_geometry) {
+    if (prepared != nullptr && prepared->constant) {
+        RETURN_IF_ERROR(prepared->parse_status);
+        return &prepared->geometry.value();
+    }
+    if (input.constant) {
+        if (!constant_geometry->has_value()) {
+            WkbGeometry parsed;
+            RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &parsed, semantics));
+            constant_geometry->emplace(std::move(parsed));
+        }
+        return &constant_geometry->value();
+    }
+    RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), varying_geometry, semantics));
+    return varying_geometry;
+}
+
+template <LogicalType Type>
+Status prepare_containment_constants(FunctionContext* context, NativeGeoContainmentState* state) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    for (size_t i = 0; i < 2; ++i) {
+        if (!context->is_constant_column(i)) continue;
+        auto& argument = state->arguments[i];
+        argument.constant = true;
+        const auto& column = context->get_constant_column(i);
+        if (column->only_null()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto input, geo_input<Type>(column));
+        WkbGeometry geometry;
+        argument.parse_status = WkbCodec::parse_wkb(input.wkb(0), &geometry, semantics);
+        if (argument.parse_status.ok()) argument.geometry.emplace(std::move(geometry));
+    }
+    return Status::OK();
+}
+
 template <LogicalType Type, bool PolygonFirst, bool IncludeBoundary>
-StatusOr<ColumnPtr> geo_containment_predicate(const Columns& columns, const char* function_name) {
+StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Columns& columns,
+                                              const char* function_name) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
                                                       : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
     const size_t size = columns[0]->size();
@@ -354,17 +429,36 @@ StatusOr<ColumnPtr> geo_containment_predicate(const Columns& columns, const char
     const bool constant = lhs.constant && rhs.constant;
     const size_t rows = constant ? 1 : size;
     ColumnBuilder<TYPE_BOOLEAN> result(rows);
+    const auto* prepared_state = context == nullptr
+                                         ? nullptr
+                                         : reinterpret_cast<const NativeGeoContainmentState*>(
+                                                   context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    NativeGeoContainmentThreadState* thread_state = nullptr;
+    if constexpr (Type == TYPE_GEOGRAPHY) {
+        if (prepared_state != nullptr) {
+            thread_state = context->get_or_create_thread_state<NativeGeoContainmentThreadState>(
+                    [] { return std::make_unique<NativeGeoContainmentThreadState>(); });
+        }
+    }
+    std::optional<WkbGeometry> constant_left;
+    std::optional<WkbGeometry> constant_right;
+    std::optional<GeoPoint> constant_spherical_point;
+    SphericalPolygonFamilyCache constant_spherical_polygon;
     for (size_t row = 0; row < rows; ++row) {
         if (lhs.is_null(row) || rhs.is_null(row)) {
             result.append_null();
             continue;
         }
-        WkbGeometry left;
-        WkbGeometry right;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(lhs.wkb(row), &left, semantics));
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(rhs.wkb(row), &right, semantics));
-        const auto& polygon = PolygonFirst ? left : right;
-        const auto& point = PolygonFirst ? right : left;
+        WkbGeometry varying_left;
+        WkbGeometry varying_right;
+        const auto* prepared_left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
+        const auto* prepared_right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
+        ASSIGN_OR_RETURN(const auto* left,
+                         containment_geometry(lhs, row, semantics, prepared_left, &constant_left, &varying_left));
+        ASSIGN_OR_RETURN(const auto* right,
+                         containment_geometry(rhs, row, semantics, prepared_right, &constant_right, &varying_right));
+        const auto& polygon = PolygonFirst ? *left : *right;
+        const auto& point = PolygonFirst ? *right : *left;
         if (point.type != WkbGeometryType::POINT ||
             (polygon.type != WkbGeometryType::POLYGON && polygon.type != WkbGeometryType::MULTIPOLYGON)) {
             return Status::InvalidArgument(std::string(function_name) +
@@ -376,7 +470,32 @@ StatusOr<ColumnPtr> geo_containment_predicate(const Columns& columns, const char
         }
         PointPolygonRelation relation;
         if constexpr (Type == TYPE_GEOGRAPHY) {
-            ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, point.coordinates[0]));
+            constexpr size_t point_argument = PolygonFirst ? 1 : 0;
+            constexpr size_t polygon_argument = PolygonFirst ? 0 : 1;
+            GeoPoint local_point;
+            GeoPoint* native_point = &local_point;
+            if (PolygonFirst ? rhs.constant : lhs.constant) {
+                const bool prepared_point =
+                        prepared_state != nullptr && prepared_state->arguments[point_argument].constant;
+                auto* cached_point = prepared_point ? &thread_state->points[point_argument] : &constant_spherical_point;
+                if (!cached_point->has_value()) {
+                    cached_point->emplace();
+                    if (cached_point->value().from_coord(point.coordinates[0].x, point.coordinates[0].y) !=
+                        GEO_PARSE_OK) {
+                        return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
+                    }
+                }
+                native_point = &cached_point->value();
+            } else if (native_point->from_coord(point.coordinates[0].x, point.coordinates[0].y) != GEO_PARSE_OK) {
+                return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
+            }
+            const bool prepared_polygon =
+                    prepared_state != nullptr && prepared_state->arguments[polygon_argument].constant;
+            auto* polygon_cache = (PolygonFirst ? lhs.constant : rhs.constant)
+                                          ? (prepared_polygon ? &thread_state->polygons[polygon_argument]
+                                                              : &constant_spherical_polygon)
+                                          : nullptr;
+            ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, *native_point, polygon_cache));
         } else {
             relation = planar_polygon_family_relation(polygon, point.coordinates[0]);
         }
@@ -864,36 +983,67 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_distance(FunctionContext*, const C
     return geo_distance<TYPE_GEOMETRY>(columns);
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geography_contains(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOGRAPHY, true, false>(columns, "ST_Contains");
+Status GeoFunctions::native_geo_containment_prepare(FunctionContext* context,
+                                                    FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL ||
+        (!context->is_constant_column(0) && !context->is_constant_column(1))) {
+        return Status::OK();
+    }
+    const auto* left_type = context->get_arg_type(0);
+    const auto* right_type = context->get_arg_type(1);
+    if (left_type == nullptr || right_type == nullptr || left_type->type != right_type->type) {
+        return Status::InvalidArgument("Native GEO containment requires two arguments of the same type");
+    }
+    auto state = std::make_unique<NativeGeoContainmentState>();
+    if (left_type->type == TYPE_GEOGRAPHY) {
+        RETURN_IF_ERROR(prepare_containment_constants<TYPE_GEOGRAPHY>(context, state.get()));
+    } else if (left_type->type == TYPE_GEOMETRY) {
+        RETURN_IF_ERROR(prepare_containment_constants<TYPE_GEOMETRY>(context, state.get()));
+    } else {
+        return Status::InvalidArgument("Native GEO containment requires GEOGRAPHY or GEOMETRY arguments");
+    }
+    context->set_function_state(scope, state.release());
+    return Status::OK();
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_contains(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOMETRY, true, false>(columns, "ST_Contains");
+Status GeoFunctions::native_geo_containment_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoContainmentState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geography_within(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOGRAPHY, false, false>(columns, "ST_Within");
+StatusOr<ColumnPtr> GeoFunctions::st_geography_contains(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, true, false>(context, columns, "ST_Contains");
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_within(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOMETRY, false, false>(columns, "ST_Within");
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_contains(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, true, false>(context, columns, "ST_Contains");
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geography_covers(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOGRAPHY, true, true>(columns, "ST_Covers");
+StatusOr<ColumnPtr> GeoFunctions::st_geography_within(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, false, false>(context, columns, "ST_Within");
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_covers(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOMETRY, true, true>(columns, "ST_Covers");
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_within(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, false, false>(context, columns, "ST_Within");
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geography_covered_by(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOGRAPHY, false, true>(columns, "ST_CoveredBy");
+StatusOr<ColumnPtr> GeoFunctions::st_geography_covers(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, true, true>(context, columns, "ST_Covers");
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_covered_by(FunctionContext*, const Columns& columns) {
-    return geo_containment_predicate<TYPE_GEOMETRY, false, true>(columns, "ST_CoveredBy");
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_covers(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, true, true>(context, columns, "ST_Covers");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_covered_by(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOGRAPHY, false, true>(context, columns, "ST_CoveredBy");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_covered_by(FunctionContext* context, const Columns& columns) {
+    return geo_containment_predicate<TYPE_GEOMETRY, false, true>(context, columns, "ST_CoveredBy");
 }
 
 struct StContainsState {
