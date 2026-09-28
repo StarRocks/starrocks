@@ -1022,6 +1022,76 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentUsesPrepareCloseLifecycle) {
     verify(true);
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoContainmentKeepsChunkOnlyConstantsBatchLocal) {
+    const auto geo_type = geography_type();
+    constexpr const char* containing_polygon = "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))";
+
+    {
+        auto prepared_polygon = ConstColumn::create(geography({containing_polygon}), 1);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns({prepared_polygon, nullptr});
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+        auto first_point = ConstColumn::create(geography({"POINT (1 1)"}), 1);
+        auto first_result = GeoFunctions::st_geography_contains(context.get(), {prepared_polygon, first_point});
+        ASSERT_TRUE(first_result.ok()) << first_result.status();
+        EXPECT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(*first_result));
+
+        auto second_point = ConstColumn::create(geography({"POINT (20 20)"}), 1);
+        auto second_result = GeoFunctions::st_geography_contains(context.get(), {prepared_polygon, second_point});
+        ASSERT_TRUE(second_result.ok()) << second_result.status();
+        EXPECT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(*second_result));
+
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+
+    {
+        auto prepared_point = ConstColumn::create(geography({"POINT (1 1)"}), 1);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns({nullptr, prepared_point});
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+        auto first_polygon = ConstColumn::create(geography({containing_polygon}), 1);
+        auto first_result = GeoFunctions::st_geography_contains(context.get(), {first_polygon, prepared_point});
+        ASSERT_TRUE(first_result.ok()) << first_result.status();
+        EXPECT_TRUE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(*first_result));
+
+        auto second_polygon = ConstColumn::create(geography({"MULTIPOLYGON (((20 20, 30 20, 30 30, 20 30, 20 20)), "
+                                                             "((40 40, 50 40, 50 50, 40 50, 40 40)))"}),
+                                                  1);
+        auto second_result = GeoFunctions::st_geography_contains(context.get(), {second_polygon, prepared_point});
+        ASSERT_TRUE(second_result.ok()) << second_result.status();
+        EXPECT_FALSE(ColumnHelper::get_const_value<TYPE_BOOLEAN>(*second_result));
+
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesOnlyNullConstant) {
+    const auto verify = [](bool spherical) {
+        const auto geo_type = spherical ? geography_type() : geometry_type();
+        auto constant_null = ColumnHelper::create_const_null_column(2);
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({geo_type, geo_type}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns({constant_null, nullptr});
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+        auto points = spherical ? geography({"POINT (1 1)", "POINT (2 2)"}) : geometry({"POINT (1 1)", "POINT (2 2)"});
+        auto result = spherical ? GeoFunctions::st_geography_contains(context.get(), {constant_null, points})
+                                : GeoFunctions::st_geometry_contains(context.get(), {constant_null, points});
+        ASSERT_TRUE(result.ok()) << result.status();
+        EXPECT_TRUE((*result)->only_null());
+        EXPECT_EQ(2, (*result)->size());
+
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    };
+
+    verify(false);
+    verify(true);
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoContainmentPreparesSphericalComponentsLazily) {
     constexpr const char* invalid_second_component =
             "MULTIPOLYGON (((0 0, 10 0, 10 10, 0 10, 0 0)), ((20 20, 20 20, 20 20, 20 20)))";

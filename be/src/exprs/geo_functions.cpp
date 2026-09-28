@@ -400,8 +400,11 @@ Status prepare_containment_constants(FunctionContext* context, NativeGeoContainm
         if (!context->is_constant_column(i)) continue;
         auto& argument = state->arguments[i];
         argument.constant = true;
-        ASSIGN_OR_RETURN(auto input, geo_input<Type>(context->get_constant_column(i)));
-        if (input.is_null(0)) continue;
+        const auto& column = context->get_constant_column(i);
+        if (column->only_null()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto input, geo_input<Type>(column));
         WkbGeometry geometry;
         argument.parse_status = WkbCodec::parse_wkb(input.wkb(0), &geometry, semantics);
         if (argument.parse_status.ok()) argument.geometry.emplace(std::move(geometry));
@@ -472,8 +475,9 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
             GeoPoint local_point;
             GeoPoint* native_point = &local_point;
             if (PolygonFirst ? rhs.constant : lhs.constant) {
-                auto* cached_point =
-                        thread_state == nullptr ? &constant_spherical_point : &thread_state->points[point_argument];
+                const bool prepared_point =
+                        prepared_state != nullptr && prepared_state->arguments[point_argument].constant;
+                auto* cached_point = prepared_point ? &thread_state->points[point_argument] : &constant_spherical_point;
                 if (!cached_point->has_value()) {
                     cached_point->emplace();
                     if (cached_point->value().from_coord(point.coordinates[0].x, point.coordinates[0].y) !=
@@ -485,9 +489,11 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
             } else if (native_point->from_coord(point.coordinates[0].x, point.coordinates[0].y) != GEO_PARSE_OK) {
                 return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
             }
+            const bool prepared_polygon =
+                    prepared_state != nullptr && prepared_state->arguments[polygon_argument].constant;
             auto* polygon_cache = (PolygonFirst ? lhs.constant : rhs.constant)
-                                          ? (thread_state == nullptr ? &constant_spherical_polygon
-                                                                     : &thread_state->polygons[polygon_argument])
+                                          ? (prepared_polygon ? &thread_state->polygons[polygon_argument]
+                                                              : &constant_spherical_polygon)
                                           : nullptr;
             ASSIGN_OR_RETURN(relation, spherical_polygon_family_relation(polygon, *native_point, polygon_cache));
         } else {
