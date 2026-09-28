@@ -5,6 +5,14 @@
 #
 # Scope is the files the PR changes, not the whole tree. Touching a case file means bringing
 # that file up to standard, which is how the existing ones get worked off.
+#
+# This workflow deliberately carries NO `paths:` filter, even though only a few paths matter.
+# CASE FILES is a required status check, and a workflow that a filter keeps from starting
+# reports nothing at all -- not a skipped check, nothing. GitHub then waits for a required
+# context that will never arrive, and every PR outside the filter is blocked with no error
+# anywhere to explain it. (A job that a filter skips INSIDE a started workflow is the opposite:
+# it reports `skipped`, which counts as passing.) So the workflow starts for every PR and the
+# SCOPE step below decides what to do -- reporting success either way.
 name: CI SQL-Tester Case Files
 
 on:
@@ -16,31 +24,55 @@ on:
     branches:
       - main
       - 'branch*'
-    paths:
-      - 'test/sql/**'
-      - 'build-support/check_sql_tester_case_files.py'
-      - 'build-support/test_check_sql_tester_case_files.py'
-      - '.github/workflows/ci-sql-tester-case-files.yml'
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   case-files:
     runs-on: ubuntu-latest
     name: CASE FILES
     steps:
+      # Work out whether this PR touches anything this check looks at, WITHOUT cloning.
+      # The checkout below needs the full history to reach the merge base, which is not
+      # something to pay for on every PR when almost none of them touch a case file.
+      #
+      # No `|| true` anywhere: if the API call fails we cannot tell "nothing to check" from
+      # "could not look", and the second must block rather than report a green check.
+      - name: SCOPE
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          changed="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}/files" \
+            --paginate -q '.[].filename')"
+          # Mirrors what the checker itself scopes to (test/sql), plus the checker and its
+          # tests: a PR that changes only the checker selects no case file, so CHECK would
+          # exit 0 having exercised none of the rules -- UNIT TESTS is what covers it there.
+          if grep -qE '^test/sql/|^build-support/(test_)?check_sql_tester_case_files\.py$|^\.github/workflows/ci-sql-tester-case-files\.yml$' <<<"${changed}"; then
+            echo "in_scope=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "in_scope=false" >> "$GITHUB_OUTPUT"
+            echo "no case file, checker or workflow change in this PR; nothing to check"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.scope.outputs.in_scope == 'true'
         with:
           # The check compares against the merge base, so it needs both sides.
           fetch-depth: 0
 
-      # Runs on every trigger, including a PR that touches only the checker. Without it
-      # such a PR selects no case files, so CHECK below exits 0 having exercised none of
-      # the rules -- the checker could be broken outright and this job would still be
-      # green. The unit tests are stdlib-only and take well under a second.
+      # Runs whenever anything in scope changed, including a PR that touches only the
+      # checker. Without it such a PR selects no case files, so CHECK below exits 0 having
+      # exercised none of the rules -- the checker could be broken outright and this job
+      # would still be green. The unit tests are stdlib-only and take well under a second.
       - name: UNIT TESTS
+        if: steps.scope.outputs.in_scope == 'true'
         run: python3 -m unittest build-support/test_check_sql_tester_case_files.py -v
 
       - name: CHECK
+        if: steps.scope.outputs.in_scope == 'true'
         run: python3 build-support/check_sql_tester_case_files.py --base "origin/${{ github.base_ref }}"
