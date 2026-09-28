@@ -16,6 +16,7 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#include <algorithm>
 #include <limits>
 
 #include "fmt/format.h"
@@ -113,6 +114,31 @@ Status check_sst_alignment(const TxnLogPB& log) {
     return Status::OK();
 }
 
+// A writer bundles only a segment it opens at end of stream with nothing written before it
+// (HorizontalGeneralTabletWriter::reset_segment_writer), so how a node writes its share of a tablet
+// depends on the share's size: a small share becomes one bundled slice, a share that filled a memtable
+// becomes standalone segment files. The nodes of one tablet rarely get equal shares, so their logs
+// disagree, and a rowset holding both kinds cannot be saved -- the legacy bundle_file_offsets array is
+// all-or-nothing, and normalize_rowset_before_save refuses the mix.
+//
+// A standalone segment file is exactly a bundle holding one slice at offset 0: a bundle file is only its
+// slices back to back, and a slice is read, decrypted and cached by its absolute position in the file.
+// So an offset of 0 describes the same bytes, in the shape a node already writes when its tablet is the
+// only one appending to its bundle, and the rowset is bundled throughout on every BE version. A segment
+// without a size is left as it is, since a slice is read as [offset, offset + size).
+void give_standalone_segments_a_bundle_offset(RowsetMetadataPB* rowset) {
+    const auto& segment_metas = rowset->segment_metas();
+    if (std::none_of(segment_metas.begin(), segment_metas.end(),
+                     [](const SegmentMetadataPB& segment_meta) { return segment_meta.has_bundle_file_offset(); })) {
+        return;
+    }
+    for (auto& segment_meta : *rowset->mutable_segment_metas()) {
+        if (!segment_meta.has_bundle_file_offset() && segment_meta.has_size()) {
+            segment_meta.set_bundle_file_offset(0);
+        }
+    }
+}
+
 } // namespace
 
 Status merge_multi_node_write_txn_log(TxnLogPB* dst, TxnLogPB* src) {
@@ -144,6 +170,7 @@ Status merge_multi_node_write_txn_log(TxnLogPB* dst, TxnLogPB* src) {
         appended->Swap(&segment_meta);
         appended->set_segment_idx(dst_rowset->segment_metas_size() - 1);
     }
+    give_standalone_segments_a_bundle_offset(dst_rowset);
 
     // Rewrite segments ride along with the segments they are named for, keeping the positional pairing
     // publish resolves them by. Both sides were checked to be either full or empty, and mixing the two

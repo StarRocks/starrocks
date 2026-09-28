@@ -18,11 +18,13 @@
 
 #include <limits>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <vector>
 
 #include "base/testutil/assert.h"
 #include "fmt/format.h"
+#include "storage/lake/lake_proto_normalizer.h"
 
 namespace starrocks::lake {
 
@@ -243,6 +245,99 @@ TEST(MultiNodeWriteTxnLogTest, merge_empty_contributor_keeps_bundle_offsets_unif
         EXPECT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
     }
     EXPECT_EQ(2 * 10, rowset.num_rows());
+}
+
+// A node bundles its share of a tablet only when the whole share is the one segment it writes at end
+// of stream; a node whose share filled a memtable writes standalone segment files instead. With uneven
+// shares one tablet gets logs of both kinds, and the fold must still produce a rowset before-save
+// accepts: each standalone segment becomes a slice at offset 0 of its own file.
+namespace {
+TxnLogPB make_bundled_log(const std::string& node, int segments) {
+    auto log = make_log(node, segments, false, 10);
+    auto* rowset = log.mutable_op_write()->mutable_rowset();
+    for (int i = 0; i < rowset->segment_metas_size(); i++) {
+        auto* seg = rowset->mutable_segment_metas(i);
+        seg->set_filename(fmt::format("{}_bundle.dat", node));
+        seg->set_bundle_file_offset(4096 * (i + 1));
+    }
+    return log;
+}
+} // namespace
+
+TEST(MultiNodeWriteTxnLogTest, merge_gives_standalone_segments_offset_zero_next_to_bundled_ones) {
+    auto dst = make_bundled_log("a", 1);
+    auto src = make_log("b", 2, false, 10);
+
+    ASSERT_OK(merge_multi_node_write_txn_log(&dst, &src));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(3, rowset.segment_metas_size());
+    const std::vector<std::tuple<std::string, int64_t, int64_t>> expected = {
+            {"a_bundle.dat", 4096, 1024}, {"b_seg0.dat", 0, 1024}, {"b_seg1.dat", 0, 2048}};
+    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+        const auto& seg = rowset.segment_metas(i);
+        EXPECT_EQ(std::get<0>(expected[i]), seg.filename()) << "segment " << i;
+        ASSERT_TRUE(seg.has_bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(std::get<1>(expected[i]), seg.bundle_file_offset()) << "segment " << i;
+        // The slice must cover the whole standalone file, so the size stays the file's size.
+        EXPECT_EQ(std::get<2>(expected[i]), seg.size()) << "segment " << i;
+    }
+
+    // This is the log put_combined_txn_log saves: before-save used to refuse it as "a mix of bundled
+    // and standalone segments". The legacy array a rolled-back BE reads is now complete.
+    ASSERT_OK(normalize_txn_log_before_save(&dst));
+    const auto& saved = dst.op_write().rowset();
+    ASSERT_EQ(3, saved.deprecated_bundle_file_offsets_size());
+    EXPECT_EQ(4096, saved.deprecated_bundle_file_offsets(0));
+    EXPECT_EQ(0, saved.deprecated_bundle_file_offsets(1));
+    EXPECT_EQ(0, saved.deprecated_bundle_file_offsets(2));
+}
+
+TEST(MultiNodeWriteTxnLogTest, merge_gives_offset_zero_when_the_bundled_writer_comes_second) {
+    auto dst = make_log("a", 2, false, 10);
+    auto src = make_bundled_log("b", 1);
+
+    ASSERT_OK(merge_multi_node_write_txn_log(&dst, &src));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(3, rowset.segment_metas_size());
+    const std::vector<int64_t> expected = {0, 0, 4096};
+    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+        ASSERT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(expected[i], rowset.segment_metas(i).bundle_file_offset()) << "segment " << i;
+    }
+    ASSERT_OK(normalize_txn_log_before_save(&dst));
+}
+
+TEST(MultiNodeWriteTxnLogTest, merge_keeps_standalone_segments_standalone_when_nobody_bundled) {
+    auto dst = make_log("a", 2, false, 10);
+    auto src = make_log("b", 1, false, 10);
+
+    ASSERT_OK(merge_multi_node_write_txn_log(&dst, &src));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(3, rowset.segment_metas_size());
+    for (int i = 0; i < rowset.segment_metas_size(); i++) {
+        EXPECT_FALSE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
+    }
+    ASSERT_OK(normalize_txn_log_before_save(&dst));
+    EXPECT_EQ(0, dst.op_write().rowset().deprecated_bundle_file_offsets_size());
+}
+
+// A slice is read as [offset, offset + size), so a standalone segment without a recorded size cannot be
+// described as one. It is left alone and before-save still reports the mix instead of reading garbage.
+TEST(MultiNodeWriteTxnLogTest, merge_leaves_a_standalone_segment_without_size_unbundled) {
+    auto dst = make_bundled_log("a", 1);
+    auto src = make_log("b", 1, false, 10);
+    src.mutable_op_write()->mutable_rowset()->mutable_segment_metas(0)->clear_size();
+
+    ASSERT_OK(merge_multi_node_write_txn_log(&dst, &src));
+
+    const auto& rowset = dst.op_write().rowset();
+    ASSERT_EQ(2, rowset.segment_metas_size());
+    EXPECT_TRUE(rowset.segment_metas(0).has_bundle_file_offset());
+    EXPECT_FALSE(rowset.segment_metas(1).has_bundle_file_offset());
+    EXPECT_TRUE(normalize_txn_log_before_save(&dst).is_corruption());
 }
 
 // A load that writes only some columns, updates on a condition, or omits its auto-increment column
