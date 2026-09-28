@@ -505,7 +505,7 @@ All transaction metrics share the following labels:
 
 - Unit: Count
 - Type: Cumulative
-- Description: Multi-partition (P2-a) counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the partitions with the highest sample counts and drops the lowest-count tail; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
+- Description: Multi-partition counter. Number of predicted target partitions the grouper dropped because the per-load count exceeded `tablet_pre_split_max_partitions_per_load`. The grouper keeps the heaviest partitions (by input bytes when the data tier sampled a subset of files whose partition values come from the file paths, otherwise by sample count) and drops the lightest; dropped partitions fall back to BE runtime auto-create with no pre-split. Sustained non-zero values mean the cap is biting — consider raising `tablet_pre_split_max_partitions_per_load` or reducing partition cardinality on the load.
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

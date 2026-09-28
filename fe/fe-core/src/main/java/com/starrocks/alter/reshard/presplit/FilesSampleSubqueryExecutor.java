@@ -48,29 +48,26 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
      *
      * <p>{@code wherePredicateSqlOrNull} is copied verbatim into the sampling sub-query, and
      * {@code targetToSourceColumnNames} re-points each projected target column at the FILES column
-     * that backs it. An EMPTY map means the file's columns already carry the target's names, which
-     * is what the three-argument constructor below asserts for its callers.
+     * that backs it. An EMPTY map means the file's columns already carry the target's names.
      * {@code targetToConstantSql} carries the key columns the load feeds with a literal rather
-     * than a FILES column.
+     * than a FILES column. {@code scannedFileBytes} is how much of {@code totalFileBytes} the
+     * sample scans, and {@code partitionSourceBytes} the exact per-path-partition breakdown when a
+     * file subset is sampled.
      */
     protected record Source(
             Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource,
             String wherePredicateSqlOrNull, Map<String, String> targetToSourceColumnNames,
-            Map<String, String> targetToConstantSql) {
+            Map<String, String> targetToConstantSql, long scannedFileBytes,
+            List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
         public Source {
             Objects.requireNonNull(filesProperties, "filesProperties");
             Objects.requireNonNull(computeResource, "computeResource");
             Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
             Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+            Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
             if (totalFileBytes < 0) {
                 throw new IllegalArgumentException("totalFileBytes must be non-negative, was " + totalFileBytes);
             }
-        }
-
-        /** No predicate, and the file columns carry the target's own names. */
-        protected Source(
-                Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource) {
-            this(filesProperties, totalFileBytes, computeResource, null, Map.of(), Map.of());
         }
     }
 
@@ -103,7 +100,8 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
                 source.totalFileBytes(), source.computeResource(),
                 filesProjections(sortKeyColumns, targetToSource, targetToConstantSql),
                 filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql),
-                sortKeyColumns, partitionSourceColumns);
+                sortKeyColumns, partitionSourceColumns, 0L, false,
+                source.scannedFileBytes(), source.partitionSourceBytes());
     }
 
     private static List<String> columnIdentsOf(List<Column> columns) {
