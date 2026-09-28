@@ -1145,6 +1145,62 @@ TEST_F(SpillTest, reset_state_refuses_while_io_in_flight) {
     ASSERT_OK(fx.spiller->reset_state(&dummy_rt_st));
 }
 
+// Keeps submitted tasks until run_all(), so a test can change state while a task is queued.
+struct QueuedExecutor {
+    static std::vector<workgroup::ScanTask> tasks;
+    static Status submit(workgroup::ScanTask task) {
+        tasks.emplace_back(std::move(task));
+        return Status::OK();
+    }
+    static void force_submit(workgroup::ScanTask task) { (void)submit(std::move(task)); }
+    static void run_all() {
+        while (!tasks.empty()) {
+            auto task = std::move(tasks.front());
+            tasks.erase(tasks.begin());
+            do {
+                task.run();
+            } while (!task.is_finished());
+        }
+    }
+};
+std::vector<workgroup::ScanTask> QueuedExecutor::tasks;
+
+// The spillable hash join probe owns its partition readers and drops them when the query is cancelled, while a
+// restore task for such a reader can still be queued. The task must complete its IO when it runs, or the spiller
+// reports running IO forever and the probe driver never leaves PENDING_FINISH.
+TEST_F(SpillTest, queued_restore_completes_after_reader_is_dropped) {
+    ObjectPool pool;
+    RawSpillerFixture fx(this, &pool, &dummy_rt_st, /*pool_size=*/4);
+    RandomChunkBuilder chunk_builder;
+    auto& tuple = fx.ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+    std::vector<bool> nullables = {false, false};
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(fx.spiller.get());
+
+    for (size_t i = 0; i < 256; ++i) {
+        auto chunk = chunk_builder.gen(tuple, nullables);
+        ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+    }
+    ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+
+    std::shared_ptr<spill::SpillInputStream> stream;
+    ASSERT_OK(fx.spiller->_writer->acquire_stream(&stream));
+    auto reader = std::make_shared<spill::SpillerReader>(fx.spiller.get());
+    reader->set_stream(std::move(stream));
+    // The probe watches the reader in the guard of its restore tasks.
+    auto lifetime = std::make_shared<QueryContextLifetime>();
+    auto guard =
+            spill::ResourceMemTrackerGuard(nullptr, std::weak_ptr<QueryContextLifetime>(lifetime),
+                                           fx.spiller->weak_from_this(), std::weak_ptr<spill::SpillerReader>(reader));
+    ASSERT_OK(reader->trigger_restore<QueuedExecutor>(&dummy_rt_st, guard));
+    ASSERT_EQ(1, QueuedExecutor::tasks.size());
+    ASSERT_TRUE(fx.spiller->has_running_io_tasks());
+
+    reader.reset();
+    QueuedExecutor::run_all();
+    ASSERT_FALSE(fx.spiller->has_running_io_tasks());
+}
+
 // Observer lists live on the Spiller and must survive reset_state: re-prepare
 // reallocates writer/reader but must not clear or re-append observers
 // (subscribe-once-per-driver-lifetime).
