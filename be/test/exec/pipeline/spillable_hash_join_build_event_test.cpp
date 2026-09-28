@@ -31,8 +31,8 @@
 #include "compute_env/spill/options.h"
 #include "compute_env/spill/spiller.h"
 #include "compute_env/spill/spiller_factory.h"
-#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "exec/pipeline/spill_process_channel.h"
+#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
