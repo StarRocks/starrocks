@@ -42,7 +42,3 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
           ( cd ci-tool && git pull -q ) || echo "::warning::ci-tool git pull failed; running the cached copy on this runner"
           bash ./ci-tool/bin/ci_case_files.sh
-
-      - name: clean
-        if: always()
-        run: rm -rf ./ci-tool
