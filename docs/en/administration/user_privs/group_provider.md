@@ -276,6 +276,71 @@ In this example, since `ldap_user_search_attr` is not configured, the system wil
 
 This approach is particularly suitable for Microsoft AD environments, as group members in AD may lack simple username attributes.
 
+## Alter a group provider
+
+You can update the properties of an existing group provider without dropping and recreating it. The new configuration is validated and warmed up before it takes effect: the old instance keeps serving requests until the new one is ready, so group lookups never return empty during the change.
+
+### Syntax
+
+```SQL
+ALTER GROUP PROVIDER <group_provider_name> SET
+(
+    "<property_key>" = "<property_value>"
+    [, "<property_key>" = "<property_value>" ...]
+)
+```
+
+### Notes
+
+- Only the listed properties are changed; properties that are not listed keep their previous values.
+- The `type` property cannot be changed. Drop and recreate the provider if you need to switch its type.
+- `SET` adds or overwrites a property, but it cannot remove one. Two properties that are not allowed to coexist therefore cannot be swapped with `ALTER`: an LDAP group provider accepts exactly one of `ldap_group_dn` and `ldap_group_filter`, so moving from one to the other means dropping and recreating the provider.
+- A property that the provider type does not define and that the provider does not already have is rejected. Property names are matched without regard to case, so `SET ("LDAP_BIND_ROOT_PWD" = ...)` updates `ldap_bind_root_pwd`; a misspelled name fails the statement instead of being stored beside the property you meant to change.
+- The new configuration is verified synchronously. If it is not usable (for example, the LDAP bind credentials are wrong or the server is unreachable), the statement fails and the provider keeps its previous configuration.
+- Credentials are never echoed back. `SHOW CREATE GROUP PROVIDER` prints `***` instead of the values of `ldap_bind_root_pwd` and `ldap_ssl_conn_trust_store_pwd`, and the statement recorded in the audit log has them redacted.
+
+### Example
+
+```SQL
+-- Rotate the LDAP bind password
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_bind_root_pwd" = "<new_password>");
+
+-- Adjust the cache refresh interval
+ALTER GROUP PROVIDER ldap_group_provider SET ("ldap_cache_refresh_interval" = "10");
+
+-- Update multiple properties at once
+ALTER GROUP PROVIDER ldap_group_provider SET (
+    "ldap_conn_url" = "ldaps://new-host:636",
+    "ldap_ssl_conn_trust_store_path" = "/etc/ssl/new-truststore.jks"
+);
+```
+
+## View group providers
+
+```SQL
+-- List every group provider with its type. The Comment column is always NULL: no statement sets a comment.
+SHOW GROUP PROVIDERS;
+
+-- Show the statement that would recreate one group provider. Credentials such as
+-- `ldap_bind_root_pwd` and `ldap_ssl_conn_trust_store_pwd` are printed as `***`, so the output cannot be
+-- replayed as-is - fill the passwords back in before reusing it.
+SHOW CREATE GROUP PROVIDER <group_provider_name>;
+```
+
+Both statements require the `SECURITY` privilege on the SYSTEM level.
+
+## Drop a group provider
+
+```SQL
+DROP GROUP PROVIDER [IF EXISTS] <group_provider_name>;
+```
+
+Dropping a group provider takes effect immediately: users who log in afterwards no longer carry the groups
+it resolved, so any role that was granted `TO EXTERNAL GROUP` for those groups stops applying. Security
+integrations keep the dropped name in their `group_provider` property, and simply resolve no groups through
+it. To change the properties of a group provider, use [ALTER GROUP PROVIDER](#alter-a-group-provider)
+instead of dropping and recreating it.
+
 ## Combine group provider with a security integration
 
 After creating the group provider, you can combine it with a security integration to allow users specified by the group provider to log in to StarRocks. For more information on creating a security integration, see [Authenticate with Security Integration](./authentication/security_integration.md).

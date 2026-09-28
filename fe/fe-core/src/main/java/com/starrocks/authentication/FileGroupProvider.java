@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -76,6 +77,11 @@ public class FileGroupProvider extends GroupProvider {
     @Override
     public Set<String> getGroup(UserIdentity userIdentity, String distinguishedName) {
         return userGroups.getOrDefault(userIdentity.getUser(), new HashSet<>());
+    }
+
+    @Override
+    public Set<String> getKnownPropertyKeys() {
+        return ImmutableSet.of(GROUP_PROVIDER_PROPERTY_TYPE_KEY, GROUP_FILE_URL);
     }
 
     @Override
