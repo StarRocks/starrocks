@@ -563,6 +563,76 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testGeneratedColumnPruneSkipsReversedExpression() throws Exception {
+        // A partition expression that runs *backwards* from its column (100 - c1, datediff(const, c1))
+        // still passes isMonotonicFunction(), because that check only asks whether the function
+        // preserves order -- not in which direction. Rewriting `c1 < 20` to `c2 < 80` then keeps the
+        // wrong side of the partition list and silently drops rows, so those expressions must not be
+        // rewritten at all.
+        starRocksAssert.withTable("CREATE TABLE t_reversed (c1 int NOT NULL, c2 bigint NULL AS (100 - c1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z0 VALUES IN ('90')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z1 VALUES IN ('80')");
+        starRocksAssert.ddl("ALTER TABLE t_reversed ADD PARTITION z2 VALUES IN ('70')");
+
+        starRocksAssert.withTable("CREATE TABLE t_days_until (c1 datetime NOT NULL,"
+                + " c2 int NULL AS (datediff('2021-01-10', c1)))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z0 VALUES IN ('9')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z1 VALUES IN ('7')");
+        starRocksAssert.ddl("ALTER TABLE t_days_until ADD PARTITION z2 VALUES IN ('5')");
+
+        // The column sits in the leading argument, so the expression still grows with it: prunable.
+        starRocksAssert.withTable("CREATE TABLE t_minus_const (c1 int NOT NULL, c2 bigint NULL AS (c1 - 7))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z0 VALUES IN ('3')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z1 VALUES IN ('13')");
+        starRocksAssert.ddl("ALTER TABLE t_minus_const ADD PARTITION z2 VALUES IN ('23')");
+
+        starRocksAssert.withTable("CREATE TABLE t_increasing (c1 int NOT NULL, c2 bigint NULL AS (c1 + 1))"
+                + " DUPLICATE KEY(c1) PARTITION BY (c2) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z0 VALUES IN ('11')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z1 VALUES IN ('21')");
+        starRocksAssert.ddl("ALTER TABLE t_increasing ADD PARTITION z2 VALUES IN ('31')");
+
+        // c1 < 20 covers partitions 90 and 80; c1 > 20 covers 80 and 70. Deducing either way round
+        // from a reversed expression would be wrong, so no range predicate may prune here.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 < 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 > 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 <= 20"), "partitions=3/3");
+        assertContains(getFragmentPlan("select c1 from t_days_until where c1 < '2021-01-03 00:00:00'"),
+                "partitions=3/3");
+
+        // Equality is unaffected: 100 - 10 = 90 is exact whichever way the expression runs.
+        assertContains(getFragmentPlan("select c1 from t_reversed where c1 = 10"), "partitions=1/3");
+
+        // No collateral damage: expressions that do grow with the column still prune.
+        assertContains(getFragmentPlan("select c1 from t_minus_const where c1 < 20"), "partitions=2/3");
+        assertContains(getFragmentPlan("select c1 from t_increasing where c1 < 20"), "partitions=2/3");
+    }
+
+    @Test
+    public void testGeneratedColumnPruneSkipsArgumentSensitiveExpression() throws Exception {
+        // Running backwards is not the only way a monotonic function fails its callers. next_day()
+        // is registered monotonic and is monotonic in its date, but its day-of-week argument orders
+        // results arbitrarily: 'Friday' sorts before 'Monday' as a string while next_day() sends them
+        // the other way. A rewrite that keeps the comparison operator is unsound over that argument
+        // just as it is over a decreasing one.
+        starRocksAssert.withTable("CREATE TABLE t_next_day (dow varchar(10) NOT NULL,"
+                + " p date NULL AS (next_day('2024-01-01 00:00:00', dow)))"
+                + " DUPLICATE KEY(dow) PARTITION BY (p) PROPERTIES('replication_num'='1')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z0 VALUES IN ('2024-01-07')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z1 VALUES IN ('2024-01-08')");
+        starRocksAssert.ddl("ALTER TABLE t_next_day ADD PARTITION z2 VALUES IN ('2024-01-02')");
+        // 'Monday' < 'Sunday' holds as a string, but next_day('2024-01-01','Monday') is 2024-01-08,
+        // which sits ABOVE next_day('2024-01-01','Sunday') = 2024-01-07. Deducing p < '2024-01-07'
+        // would drop the partition holding the matching row.
+        assertContains(getFragmentPlan("select dow from t_next_day where dow < 'Sunday'"), "partitions=3/3");
+        assertContains(getFragmentPlan("select dow from t_next_day where dow = 'Sunday'"), "partitions=1/3");
+
+    }
+
+    @Test
     public void testMinMaxPrune_Check() throws Exception {
         starRocksAssert.withTable("create table t5_dup " +
                 "(c1 datetime NOT NULL, c2 int) " +
