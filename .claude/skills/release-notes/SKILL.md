@@ -48,19 +48,23 @@ reports it as `new_ref_source`:
   published for it.
 - `branch`: `<new_tag>` is not tagged yet, so the diff runs to the current head of
   `branch-<minor>` (override with `--branch <name>`). The result includes every commit merged
-  to the branch so far, which can be more than will ship. Tell the user, and suggest pinning
-  the release point with `--commit`.
+  to the branch so far, which can be more than will ship. Tell the user, and ask for the
+  release commit to pin with `--commit`. Do not open the PR (step 6) from a `branch` result
+  unless the user confirms that the branch head is the release point. If they do, state in
+  the PR body that the notes were drafted from the branch head at `new_ref`.
 - `commit`: the user supplied a release commit ID, passed with `--commit`. `<new_tag>` is then
   only the version label.
 
 `new_ref` is the tag or the resolved full SHA. For an untagged ref, `release_date_raw` is that
-commit's date.
+commit's date. When `unreleased` is `true`, tell the user that no GitHub release is published
+yet when you ask for the release date (step 3), and note it in the PR body.
 
 It returns
 `{ new_ref, new_ref_source, unreleased, release_date_raw, pr_count, prs: [{number,title,url,base,resolved_to_main,labels,body_excerpt}],
-unresolved_count, unresolved: [...] }` for every PR backported between the two tags. If
-`pr_count` is 0, stop and report — the tags likely don't exist yet or the order is wrong
-(`gh api repos/StarRocks/starrocks/tags`).
+unresolved_count, unresolved: [...] }` for every PR backported between the two refs. If the
+collector exits with an error or `pr_count` is 0, stop and report. Check that `<prev_tag>`
+exists, that the order is prev...new (`gh api repos/StarRocks/starrocks/tags`), and that any
+`--commit` or `--branch` value is on the release branch.
 
 Each PR's `number` is already resolved to the **original `main` PR** (release notes always
 cite the main PR). `release_date_raw` is only a **suggestion** (the tag/commit date) — see

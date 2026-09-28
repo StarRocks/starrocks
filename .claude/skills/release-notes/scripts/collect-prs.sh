@@ -44,9 +44,11 @@ BRANCH=""
 positional=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --commit)   COMMIT="${2:?--commit requires a commit SHA}"; shift 2 ;;
+    --commit)   [[ $# -ge 2 ]] || { echo "error: --commit requires a commit SHA" >&2; exit 1; }
+                COMMIT="$2"; shift 2 ;;
     --commit=*) COMMIT="${1#--commit=}"; shift ;;
-    --branch)   BRANCH="${2:?--branch requires a branch name}"; shift 2 ;;
+    --branch)   [[ $# -ge 2 ]] || { echo "error: --branch requires a branch name" >&2; exit 1; }
+                BRANCH="$2"; shift 2 ;;
     --branch=*) BRANCH="${1#--branch=}"; shift ;;
     -h|--help)  echo "$usage"; exit 0 ;;
     -*)         echo "error: unknown option '$1'" >&2; echo "$usage" >&2; exit 1 ;;
@@ -150,8 +152,9 @@ case "$compare_status" in
   diverged)
     behind_by="$(jq -r '.behind_by' <<<"$compare_json")"
     if [[ "$behind_by" -gt 50 ]]; then
-      echo "warning: ${NEW_REF} is ${behind_by} commits behind ${PREV_TAG}; it is probably not on the same release branch." >&2
-      echo "         the PR list likely includes unrelated commits." >&2
+      echo "error: ${NEW_REF} is ${behind_by} commits behind ${PREV_TAG}; it is probably not on the same release branch." >&2
+      echo "       the PR list would include unrelated commits. Pass a --commit or --branch on the release branch." >&2
+      exit 1
     fi ;;
   behind|identical)
     echo "warning: ${NEW_REF} has no commits beyond ${PREV_TAG} (status: ${compare_status})." >&2 ;;
@@ -225,7 +228,7 @@ for n in ${pr_numbers[@]+"${pr_numbers[@]}"}; do
       pr="$(gh pr view "$cur" --repo "$REPO" \
             --json number,title,labels,body,url,baseRefName 2>/dev/null || true)"
       [[ -n "$pr" ]] && break
-      sleep 2
+      if [[ "$_try" -lt 3 ]]; then sleep 2; fi
     done
     [[ -z "$pr" ]] && break
     base="$(jq -r '.baseRefName' <<<"$pr")"
