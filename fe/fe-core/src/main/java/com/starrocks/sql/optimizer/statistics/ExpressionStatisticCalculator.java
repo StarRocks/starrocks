@@ -1385,11 +1385,17 @@ public class ExpressionStatisticCalculator {
                     long totalFalseRows = 0;
                     if (conditionHistogram != null) {
                         final var conditionMcv = conditionHistogram.getMCV();
-                        trueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
-                        final long falseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
-                        final long nonNullRows = trueRows + falseRows;
-                        // IF(NULL, a, b) redirects to the ELSE branch, just like IF(false, a, b). Therefore:
-                        totalFalseRows = falseRows + Math.max(0L, Math.round(rowCount) - nonNullRows);
+                        final long mcvTrueRows = conditionMcv.getOrDefault(booleanToMcvValue(true), 0L);
+                        final long mcvFalseRows = conditionMcv.getOrDefault(booleanToMcvValue(false), 0L);
+                        final long mcvNonNullRows = mcvTrueRows + mcvFalseRows;
+                        if (mcvNonNullRows > 0) {
+                            final double conditionNullsFraction = Double.isNaN(condStat.getNullsFraction())
+                                    ? 0 : condStat.getNullsFraction();
+                            final double nonNullRows = rowCount * (1 - conditionNullsFraction);
+                            trueRows = Math.round(nonNullRows * mcvTrueRows / mcvNonNullRows);
+                            // IF(NULL, a, b) redirects to the ELSE branch, just like IF(false, a, b). Therefore:
+                            totalFalseRows = Math.round(rowCount) - trueRows;
+                        }
 
                         final long totalRows = trueRows + totalFalseRows;
                         if (totalRows > 0) {
