@@ -1,0 +1,28 @@
+{
+  "version" : 3,
+  "id" : 0,
+  "fields" : [ {
+    "id" : 0,
+    "name" : "id",
+    "type" : "INT NOT NULL"
+  }, {
+    "id" : 1,
+    "name" : "amount",
+    "type" : "INT"
+  }, {
+    "id" : 2,
+    "name" : "note",
+    "type" : "STRING"
+  } ],
+  "highestFieldId" : 2,
+  "partitionKeys" : [ ],
+  "primaryKeys" : [ "id" ],
+  "options" : {
+    "bucket" : "1",
+    "write-only" : "true",
+    "file.format" : "parquet",
+    "write-buffer-size" : "1 mb",
+    "merge-engine" : "deduplicate"
+  },
+  "timeMillis" : 1790585725726
+}
