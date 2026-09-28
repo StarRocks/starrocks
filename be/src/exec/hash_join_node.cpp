@@ -506,6 +506,58 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     // in some partition hash table, and other partition hash table can output chunk.
     // TODO: support nullaware left anti join with shuffle join
     DCHECK(_join_type != TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN || _distribution_mode == TJoinDistributionMode::BROADCAST);
+<<<<<<< HEAD
+=======
+
+    // The two sides of a hash join share one hash table partitioned across drivers, so a key has to
+    // reach the same driver from both. Each side is partitioned by whoever touched it last: a side
+    // reporting could_local_shuffle() == false was already partitioned by its sender (or by the
+    // per-driver morsel assignment the FE handed it) and is left as it arrives, a side reporting true
+    // gets a fresh local shuffle. When the two disagree those are two unrelated numberings of the
+    // same key space, and the join silently drops (1 - 1/DOP) of its matches.
+    //
+    // Neither side can be moved onto the other's numbering: the receiving fragment is never told
+    // which bucket function and bucket count the sender used -- TExchangeNode carries only the
+    // sender's partition type -- so the only scheme both sides can produce is a fresh plain hash of
+    // their own key exprs. Deciding that needs BOTH sides, hence the probe child is decomposed here,
+    // before anything about the build side is settled.
+    //
+    // This does not disturb HashJoinerFactory's "all the builders must be created earlier than
+    // prober" rule: the probe pipeline is the OpFactories this function returns and the caller
+    // registers it, so it still lands after the build pipeline added below. Only the probe subtree's
+    // own pipelines move ahead of it, and none of them creates a builder or prober for this join.
+    auto* group_before_probe = context->current_execution_group();
+    const auto probe_child_begin = context->mark();
+    ASSIGN_OR_RETURN(auto lhs_operators, child(0)->decompose_to_pipeline(context));
+    const auto probe_child_end = context->mark();
+    auto* group_after_probe = context->current_execution_group();
+    context->set_current_execution_group(group_before_probe);
+
+    // Re-partition both sides only when they disagree. When they agree nothing below changes, so a
+    // shuffle join whose two sides were both partitioned by their senders keeps skipping the local
+    // exchange entirely. The side reporting true already pays one today, so the added cost lands
+    // only on the mismatched case -- which is exactly the case that is wrong without it.
+    // A colocate exec group is excluded: there the probe side is deliberately left untouched below,
+    // and touching only the build side is what makes the two disagree in the first place.
+    //
+    // Disagreeing is not yet being misaligned: a bucket shuffle join over split tablets has local scans
+    // reporting true against an exchange whose sender already partitioned each bucket per driver with
+    // the function the scans' own local shuffle uses. Re-partitioning such a pair adds a shuffle of the
+    // build side, and its plain hash no longer matches the partition index a pipeline-level
+    // multi-partitioned runtime filter of this join computes for the probe rows.
+    const bool join_in_colocate_group =
+            context->find_exec_group_by_plan_node_id(_id)->type() == ExecutionGroupType::COLOCATE;
+    const bool rhs_could_local_shuffle = context->could_local_shuffle(rhs_operators);
+    const bool lhs_could_local_shuffle = context->could_local_shuffle(lhs_operators);
+    const auto& shuffled_side = rhs_could_local_shuffle ? rhs_operators : lhs_operators;
+    const auto& received_side = rhs_could_local_shuffle ? lhs_operators : rhs_operators;
+    const bool sides_misaligned =
+            rhs_could_local_shuffle != lhs_could_local_shuffle &&
+            !::starrocks::pipeline::builder::local_shuffle_matches_sender(context, shuffled_side, received_side);
+    const bool align_both_sides =
+            !join_in_colocate_group && _distribution_mode != TJoinDistributionMode::BROADCAST && sides_misaligned;
+
+>>>>>>> 273ca5f ([BugFix] Stop re-partitioning bucket shuffle join inputs the sender already aligned (#79769))
     if (_distribution_mode == TJoinDistributionMode::BROADCAST) {
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
