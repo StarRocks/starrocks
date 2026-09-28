@@ -40,6 +40,10 @@ import com.starrocks.connector.PointerType;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
+import com.starrocks.connector.index.ConnectorIndexDescriptor;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexOperation;
+import com.starrocks.connector.index.ConnectorIndexType;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.ha.FrontendNodeType;
@@ -1088,6 +1092,14 @@ public class PaimonMetadataTest {
 
             PaimonMetadata fullMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable starRocksTable = (PaimonTable) fullMetadata.getTable(
+                    context, identifier.getDatabaseName(), identifier.getObjectName());
+            ConnectorIndexMetadata discovered = fullMetadata.getIndexMetadata(
+                    starRocksTable, TvrTableSnapshot.of(snapshotId));
+            ConnectorIndexDescriptor btree = discovered.findDescriptor(0, ConnectorIndexType.RANGE).orElseThrow();
+            assertEquals("btree", btree.getProvider());
+            assertTrue(btree.supports(ConnectorIndexOperation.EQUAL));
+
             PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId);
             assertTrue(fullSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1, 3), readIds((FileStoreTable) catalog.getTable(identifier), fullSplits));
@@ -1099,6 +1111,22 @@ public class PaimonMetadataTest {
             PaimonSplitsInfo fastSplits = planSplits(fastMetadata, context, predicate, snapshotId);
             assertTrue(fastSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds((FileStoreTable) catalog.getTable(identifier), fastSplits));
+
+            // The index manifest is bound to field id 0 in the snapshot schema. A metadata-only
+            // rename does not create a new snapshot, so discovery must expose the current name
+            // without matching the historical descriptor by name.
+            catalog.alterTable(identifier, SchemaChange.renameColumn("id", "renamed_id"), false);
+            PaimonMetadata renamedMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonTable renamedTable = (PaimonTable) renamedMetadata.getTable(
+                    context, identifier.getDatabaseName(), identifier.getObjectName());
+            ConnectorIndexMetadata renamedDiscovery = renamedMetadata.getIndexMetadata(
+                    renamedTable, TvrTableSnapshot.of(snapshotId));
+            assertEquals(0, renamedDiscovery.getCurrentFieldId("renamed_id").orElseThrow());
+            assertTrue(renamedDiscovery.getCurrentFieldId("id").isEmpty());
+            ConnectorIndexDescriptor renamedDescriptor = renamedDiscovery
+                    .findDescriptor(0, ConnectorIndexType.RANGE).orElseThrow();
+            assertEquals("renamed_id", renamedDescriptor.getColumnName());
 
             catalog.dropTable(identifier, true);
             catalog.dropDatabase(identifier.getDatabaseName(), true, true);
