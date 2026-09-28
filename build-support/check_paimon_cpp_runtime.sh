@@ -44,7 +44,7 @@ case ${expected_arch} in
         ;;
 esac
 
-for command in readelf ldd; do
+for command in readelf ldd nm; do
     command -v "${command}" >/dev/null 2>&1 || {
         echo "${command} is required to validate the Paimon runtime package" >&2
         exit 2
@@ -111,6 +111,15 @@ fi
 
 require_needed "${shim}" libpaimon.so
 require_needed "${shim}" libpaimon_global_index.so
+
+# fmt is linked statically into the shim because starrocks_be does not export
+# its hidden fmt symbols. ldd cannot detect an unresolved fmt reference in a
+# shared object, but dlopen(RTLD_NOW) will reject it at runtime.
+if nm -D --undefined-only "${shim}" | c++filt | grep -Fq 'fmt::'; then
+    echo "${shim} contains unresolved fmt symbols and cannot be loaded by starrocks_be" >&2
+    nm -D --undefined-only "${shim}" | c++filt | grep -F 'fmt::' >&2
+    exit 1
+fi
 
 if (( require_lumina == 1 )); then
     lumina_plugin=${runtime_dir}/libpaimon_lumina_index.so

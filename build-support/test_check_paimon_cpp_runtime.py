@@ -68,6 +68,12 @@ class CheckPaimonCppRuntimeTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("must carry an $ORIGIN", result.stderr)
 
+    def test_rejects_unresolved_fmt_symbol(self) -> None:
+        self._compile_shim(with_runpath=True, with_undefined_fmt=True)
+        result = self._check()
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("contains unresolved fmt symbols", result.stderr)
+
     @unittest.skipUnless(platform.machine() == "x86_64", "Lumina is x86-64 only")
     def test_rejects_absolute_needed_entry(self) -> None:
         source = self._write_source("absolute.c", "int lumina_symbol(void); int bad(void) { return lumina_symbol(); }")
@@ -87,11 +93,14 @@ class CheckPaimonCppRuntimeTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("absolute DT_NEEDED", result.stderr)
 
-    def _compile_shim(self, *, with_runpath: bool) -> None:
+    def _compile_shim(self, *, with_runpath: bool, with_undefined_fmt: bool = False) -> None:
         source = textwrap.dedent(
             """\
             int paimon_symbol(void);
             int global_index_symbol(void);
+            #if defined(WITH_UNDEFINED_FMT)
+            extern int missing_fmt(void) __asm__("_ZN3fmt3v107missingEv");
+            #endif
             #if defined(WITH_LUMINA)
             int lumina_symbol(void);
             int lumina_index_symbol(void);
@@ -101,6 +110,9 @@ class CheckPaimonCppRuntimeTest(unittest.TestCase):
             #if defined(WITH_LUMINA)
                 result += lumina_symbol() + lumina_index_symbol();
             #endif
+            #if defined(WITH_UNDEFINED_FMT)
+                result += missing_fmt();
+            #endif
                 return result;
             }
             """
@@ -108,6 +120,8 @@ class CheckPaimonCppRuntimeTest(unittest.TestCase):
         flags = [f"-L{self.runtime}", "-Wl,--no-as-needed", "-l:libpaimon.so", "-l:libpaimon_global_index.so"]
         if self.arch == "x86_64":
             flags.extend(["-DWITH_LUMINA", "-l:libpaimon_lumina_index.so", "-l:liblumina.so"])
+        if with_undefined_fmt:
+            flags.append("-DWITH_UNDEFINED_FMT")
         if with_runpath:
             flags.append("-Wl,-rpath,$ORIGIN")
         self._compile("libstarrocks_paimon.so", source, flags)

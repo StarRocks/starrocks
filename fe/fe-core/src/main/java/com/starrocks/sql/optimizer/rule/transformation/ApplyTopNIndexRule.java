@@ -100,12 +100,6 @@ public class ApplyTopNIndexRule extends TransformationRule {
         if (vectorColumn.isEmpty()) {
             return List.of();
         }
-        // Paimon vector indexes omit NULL vectors. Even with NULLS LAST, pruning to ANN candidates
-        // could underfill a query when fewer than limit + offset non-null rows exist.
-        if (vectorColumn.get().isNullable()) {
-            return List.of();
-        }
-
         // The projection may expose the vector score through a monotonic floating-point cast.
         // Keep that projection and the original TopN unchanged, but send the underlying call to
         // paimon-cpp because the VectorSearch protocol accepts the distance function itself.

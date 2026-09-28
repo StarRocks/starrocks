@@ -156,7 +156,7 @@ public class ApplyConnectorIndexRuleTest {
     }
 
     @Test
-    public void testTopNRuleDefersFilteredAndNullableVectorQueries() {
+    public void testTopNRuleDefersFilteredAndAcceptsNullableConnectorColumns() {
         BinaryPredicateOperator predicate =
                 new BinaryPredicateOperator(BinaryType.EQ, idColumn, ConstantOperator.createInt(7));
         ColumnRefOperator nullableVector =
@@ -189,12 +189,12 @@ public class ApplyConnectorIndexRuleTest {
         OptExpression nullableNullsFirst = OptExpression.create(
                 nullsFirst, OptExpression.create(createScan(null, nullableProjection, nullableVector)));
         Assertions.assertTrue(nullableRule.check(nullableNullsFirst, null));
-        Assertions.assertTrue(nullableRule.transform(nullableNullsFirst, null).isEmpty());
+        Assertions.assertEquals(1, nullableRule.transform(nullableNullsFirst, null).size());
 
         OptExpression nullableNullsLast = OptExpression.create(
                 nullsLast, OptExpression.create(createScan(null, nullableProjection, nullableVector)));
         Assertions.assertTrue(nullableRule.check(nullableNullsLast, null));
-        Assertions.assertTrue(nullableRule.transform(nullableNullsLast, null).isEmpty());
+        Assertions.assertEquals(1, nullableRule.transform(nullableNullsLast, null).size());
 
         CallOperator unsupportedScore = new CallOperator("unsupported_distance", FloatType.FLOAT,
                 List.of(vectorColumn, queryVector));

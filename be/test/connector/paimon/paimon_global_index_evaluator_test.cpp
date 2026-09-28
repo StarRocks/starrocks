@@ -307,9 +307,26 @@ TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesVectorTopNScoreFunctions) {
         EXPECT_EQ(nullptr, reader->last_vector_search()->predicate);
         ASSERT_TRUE(reader->last_vector_search()->distance_type.has_value());
         EXPECT_EQ(test_case.distance_type, reader->last_vector_search()->distance_type.value());
-        EXPECT_TRUE(reader->last_vector_search()->options.empty());
+        EXPECT_EQ("1024", reader->last_vector_search()->options.at("lumina.diskann.search.list_size"));
+        EXPECT_EQ("5", reader->last_vector_search()->options.at("lumina.search.parallel_number"));
+        EXPECT_EQ("4", reader->last_vector_search()->options.at("lumina.diskann.search.beam_width"));
         EXPECT_NE(nullptr, std::dynamic_pointer_cast<paimon::ScoredGlobalIndexResult>(result.value()));
     }
+}
+
+TEST(PaimonGlobalIndexEvaluatorTest, ScalesLuminaSearchListForLargeTopN) {
+    auto reader = std::make_shared<FakeGlobalIndexReader>(result_from_ranges({paimon::Range(1, 2)}));
+    reader->set_vector_result(scored_result({3}, {0.8f}));
+    PaimonGlobalIndexEvaluator evaluator(
+            [reader](std::string_view) -> StatusOr<std::shared_ptr<paimon::GlobalIndexReader>> { return reader; });
+    rapidjson::Document expression = parse_json(
+            R"({"o":"ca","f":"approx_l2_distance","a":[{"o":"cr","t":"array<float>","n":"embedding"},{"o":"a","i":"float","c":[{"o":"co","t":"float","v":1.25}]}]})");
+
+    auto result = evaluator.evaluate_top_n(expression, 1200);
+
+    ASSERT_TRUE(result.ok()) << result.status();
+    ASSERT_NE(nullptr, reader->last_vector_search());
+    EXPECT_EQ("1800", reader->last_vector_search()->options.at("lumina.diskann.search.list_size"));
 }
 
 TEST(PaimonGlobalIndexEvaluatorTest, EvaluatesVectorTopNWithLiteralFirst) {

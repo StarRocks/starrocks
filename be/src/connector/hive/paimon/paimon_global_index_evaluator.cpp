@@ -229,9 +229,15 @@ StatusOr<std::shared_ptr<paimon::GlobalIndexResult>> PaimonGlobalIndexEvaluator:
     ASSIGN_OR_RETURN(paimon::VectorSearch::DistanceType distance_type, vector_distance_type(function));
     ASSIGN_OR_RETURN(std::shared_ptr<paimon::GlobalIndexReader> reader, _reader_getter(column));
 
+    std::map<std::string, std::string> index_options = {{"lumina.diskann.search.list_size", "1024"},
+                                                        {"lumina.search.parallel_number", "5"},
+                                                        {"lumina.diskann.search.beam_width", "4"}};
+    if (limit > 1024) {
+        index_options["lumina.diskann.search.list_size"] = std::to_string(limit * 3 / 2);
+    }
     auto search = std::make_shared<paimon::VectorSearch>(
             std::string(column), limit, query, nullptr, nullptr,
-            std::optional<paimon::VectorSearch::DistanceType>(distance_type), std::map<std::string, std::string>());
+            std::optional<paimon::VectorSearch::DistanceType>(distance_type), std::move(index_options));
     auto result = reader->VisitVectorSearch(search);
     if (!result.ok()) {
         return paimon_error("vector TopN evaluation", result.status());
