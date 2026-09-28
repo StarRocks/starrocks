@@ -125,7 +125,8 @@ public:
     // from schema.table_indices if still present.
     void apply_drop_index(const TxnLogPB_OpDropIndex& op);
 
-    // batch processing functions for merging multiple opwrites into one rowset
+    // batch processing functions for merging multiple opwrites into one rowset (set_final_rowset()
+    // splits it into consecutive rowsets when some of the segments are bundled and others are not)
     void batch_apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, SegmentFileInfo>& replace_segments,
                              const std::vector<FileMetaPB>& orphan_files);
     void add_rowset(const RowsetMetadataPB& rowset_pb, const std::map<int, SegmentFileInfo>& replace_segments,
@@ -149,6 +150,14 @@ public:
 
     // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
     uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
+
+    // The rowset batch_apply_opwrite() has merged so far, and the partial-update rewrites to apply to
+    // it, keyed by segment position in that rowset. set_final_rowset() materializes the two as one
+    // rowset whose id is the tablet's next_rowset_id().
+    const RowsetMetadataPB& pending_rowset() const { return _pending_rowset_data.rowset_pb; }
+    const std::map<int, SegmentFileInfo>& pending_replace_segments() const {
+        return _pending_rowset_data.replace_segments;
+    }
 
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
@@ -180,6 +189,18 @@ private:
                                                 std::vector<DelfileWithRowsetId>* collect_del_files);
 
 private:
+    // What one add_rowset() call put into the pending rowset.
+    struct PendingOpWrite {
+        // First rssid slot the op_write took, counted from the start of the pending rowset.
+        uint32_t slot_begin = 0;
+        // Positions [segment_pos_begin, segment_pos_end) of its segments in the pending rowset.
+        int segment_pos_begin = 0;
+        int segment_pos_end = 0;
+        // The op_write's own rowset without its segments. num_dels also counts the deletes
+        // update_num_del_stat() records against its segments.
+        RowsetMetadataPB rowset;
+    };
+
     struct PendingRowsetData {
         RowsetMetadataPB rowset_pb;
         std::map<int, SegmentFileInfo> replace_segments;
@@ -194,7 +215,27 @@ private:
         // Parallel to `dels`: each del file's tombstone (delete row) count (0 when a del carries none).
         std::vector<int64_t> del_num_rows;
         uint32_t assigned_segment_idx = 0;
+        // One entry per add_rowset() call, in call order.
+        std::vector<PendingOpWrite> op_writes;
     };
+
+    // One of the rowsets set_final_rowset() splits the pending rowset into: the op_writes
+    // [op_write_begin, op_write_end) of PendingRowsetData::op_writes and their segments.
+    struct FinalRowsetPart {
+        size_t op_write_begin = 0;
+        size_t op_write_end = 0;
+        // First rssid slot of the part, counted from the start of the pending rowset. The part's
+        // rowset id is next_rowset_id() plus this, which keeps every rssid what it was.
+        uint32_t slot_begin = 0;
+        int segment_pos_begin = 0;
+        int segment_pos_end = 0;
+        bool bundled = false;
+    };
+
+    // set_final_rowset() helpers, see there.
+    StatusOr<std::vector<FinalRowsetPart>> _split_final_rowset(const RowsetMetadataPB& merged) const;
+    void _add_final_rowset(const RowsetMetadataPB& rowset_pb, uint32_t rowset_id, uint32_t slot_base,
+                           const std::vector<size_t>& del_indexes);
 
     Tablet _tablet;
     std::shared_ptr<TabletMetadata> _tablet_meta;

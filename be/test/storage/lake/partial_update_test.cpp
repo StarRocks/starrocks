@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <map>
+#include <numeric>
+#include <optional>
 #include <random>
 
 #include "base/testutil/assert.h"
@@ -34,6 +36,7 @@
 #include "common/config_primary_key_fwd.h"
 #include "common/config_rowset_fwd.h"
 #include "common/logging.h"
+#include "fs/bundle_file.h"
 #include "fs/fs.h"
 #include "platform/key_cache.h"
 #include "storage/chunk_helper.h"
@@ -6160,5 +6163,762 @@ TEST(RowsetUpdateStateNarrowedEmitTest, a_whole_segment_emit_keeps_the_copy_and_
     EXPECT_FALSE(RowsetUpdateState::narrowed_emit_owns_only(/*emitted_rows=*/301, /*source_rows=*/300, &mask));
     EXPECT_TRUE(mask.empty());
 }
+
+// The statements of ONE multi-statement transaction that write the same tablet -- a SQL BEGIN ...
+// COMMIT, published with a TxnInfoPB that carries each statement's load_id -- are applied together:
+// TxnLogApplier folds every statement's op_write into one merged rowset (MetaFileBuilder::
+// batch_apply_opwrite() per statement, then set_final_rowset()). These tests drive that path with
+// row-mode partial updates through the real writer and publish_version(), once with the serial
+// per-segment rewrite (one partial-update thread) and once with the parallel one.
+class LakeMultiStatementPartialUpdateTest : public LakePartialUpdateTestBase, public testing::WithParamInterface<int> {
+public:
+    LakeMultiStatementPartialUpdateTest() : LakePartialUpdateTestBase(kTestDirectory) {
+        _tablet_metadata->set_enable_persistent_index(true);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
+
+        _c2_slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        _c2_slots.emplace_back(2, "c2", TypeDescriptor{LogicalType::TYPE_INT});
+        for (auto& slot : _c2_slots) {
+            _c2_slot_pointers.emplace_back(&slot);
+        }
+    }
+
+    void SetUp() override {
+        LakePartialUpdateTestBase::SetUp();
+        auto* pool = RuntimeEnv::GetInstance()->lake_partial_update_thread_pool();
+        _saved_partial_update_threads = pool->max_threads();
+        ASSERT_OK(pool->update_max_threads(GetParam()));
+    }
+
+    void TearDown() override {
+        EXPECT_TRUE(RuntimeEnv::GetInstance()
+                            ->lake_partial_update_thread_pool()
+                            ->update_max_threads(_saved_partial_update_threads)
+                            .ok());
+        LakePartialUpdateTestBase::TearDown();
+    }
+
+    constexpr static const char* const kTestDirectory = "test_lake_multi_statement_partial_update";
+
+protected:
+    // The seeded rows carry c1 = 3 * c0 and c2 = 4 * c0, as generate_data() makes them; a partial
+    // update of c1 writes 5 * c0 and one of c2 writes 7 * c0.
+    constexpr static int kSeedC1 = 3;
+    constexpr static int kSeedC2 = 4;
+    constexpr static int kNewC1 = 5;
+    constexpr static int kNewC2 = 7;
+
+    // What a column-mode partial update of c1 that inserts a key writes into c2: the column default.
+    constexpr static int kDefaultC2 = 10;
+
+    enum class Write {
+        kFullRow,        // every column, seeded values
+        kC1,             // row-mode partial update of c1
+        kC2,             // row-mode partial update of c2
+        kColumnC1,       // column-mode partial update of c1, inserting the keys it does not find
+        kColumnC2,       // column-mode partial update of c2, inserting the keys it does not find
+        kColumnUpdateC1, // column-mode update of c1 (an UPDATE statement), skipping the keys it does not find
+    };
+
+    // A row as the reader returns it; nullopt is NULL.
+    struct Row {
+        std::optional<int32_t> c1;
+        std::optional<int32_t> c2;
+        bool operator==(const Row& other) const { return c1 == other.c1 && c2 == other.c2; }
+    };
+
+    static std::string to_string(const Row& row) {
+        auto value = [](const std::optional<int32_t>& v) { return v.has_value() ? std::to_string(*v) : "NULL"; };
+        return "(" + value(row.c1) + ", " + value(row.c2) + ")";
+    }
+
+    static std::vector<int> key_range(int begin, int end) {
+        std::vector<int> result(end - begin);
+        std::iota(result.begin(), result.end(), begin);
+        return result;
+    }
+
+    static void add_rows(std::map<int, Row>* rows, const std::vector<int>& keys, int c1_factor, int c2_factor) {
+        for (int key : keys) {
+            (*rows)[key] = Row{key * c1_factor, key * c2_factor};
+        }
+    }
+
+    static PUniqueId statement_load_id(int64_t lo) {
+        PUniqueId id;
+        id.set_hi(1);
+        id.set_lo(lo);
+        return id;
+    }
+
+    Chunk make_chunk(Write kind, const std::vector<int>& keys) {
+        auto column = [&keys](int factor) {
+            auto c = Int32Column::create();
+            for (int key : keys) {
+                c->append(key * factor);
+            }
+            return c;
+        };
+        Chunk::SlotHashMap slot_map;
+        switch (kind) {
+        case Write::kFullRow:
+            return Chunk({column(1), column(kSeedC1), column(kSeedC2)}, _slot_cid_map);
+        case Write::kC1:
+        case Write::kColumnC1:
+        case Write::kColumnUpdateC1:
+            slot_map[0] = 0;
+            slot_map[1] = 1;
+            return Chunk({column(1), column(kNewC1)}, slot_map);
+        case Write::kC2:
+        case Write::kColumnC2:
+            slot_map[0] = 0;
+            slot_map[2] = 1;
+            return Chunk({column(1), column(kNewC2)}, slot_map);
+        }
+        return Chunk();
+    }
+
+    StatusOr<std::unique_ptr<DeltaWriter>> new_writer(int64_t tablet_id, int64_t txn_id, const PUniqueId* load_id,
+                                                      Write kind, BundleWritableFileContext* bundle = nullptr) {
+        DeltaWriterBuilder builder;
+        builder.set_tablet_manager(_tablet_mgr.get())
+                .set_tablet_id(tablet_id)
+                .set_txn_id(txn_id)
+                .set_partition_id(_partition_id)
+                .set_mem_tracker(_mem_tracker.get())
+                .set_schema_id(_tablet_schema->id());
+        switch (kind) {
+        case Write::kFullRow:
+            break;
+        case Write::kC1:
+            builder.set_slot_descriptors(&_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+            break;
+        case Write::kC2:
+            builder.set_slot_descriptors(&_c2_slot_pointers).set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+            break;
+        case Write::kColumnC1:
+            builder.set_slot_descriptors(&_slot_pointers)
+                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
+            break;
+        case Write::kColumnC2:
+            builder.set_slot_descriptors(&_c2_slot_pointers)
+                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE);
+            break;
+        case Write::kColumnUpdateC1:
+            builder.set_slot_descriptors(&_slot_pointers)
+                    .set_partial_update_mode(PartialUpdateMode::COLUMN_UPDATE_MODE);
+            break;
+        }
+        if (load_id != nullptr) {
+            // A statement of a multi-statement transaction writes its own txn log, keyed by load_id.
+            builder.set_load_id(*load_id).set_is_multi_statements_txn(true);
+        }
+        if (bundle != nullptr) {
+            builder.set_bundle_writable_file_context(bundle);
+        }
+        return builder.build();
+    }
+
+    void write_chunk(DeltaWriter* writer, Write kind, const std::vector<int>& keys) {
+        auto chunk = make_chunk(kind, keys);
+        std::vector<uint32_t> indexes(keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSERT_OK(writer->write(chunk, indexes.data(), indexes.size()));
+    }
+
+    // Write one statement to `tablet_id`, one segment per entry of `segments`: write_buffer_size is 1,
+    // so every write() call flushes. A null `load_id` writes an ordinary single-statement load.
+    void write_statement(int64_t tablet_id, int64_t txn_id, const PUniqueId* load_id, Write kind,
+                         const std::vector<std::vector<int>>& segments) {
+        ConfigResetGuard<int64_t> one_segment_per_write(&config::write_buffer_size, 1);
+        ASSIGN_OR_ABORT(auto writer, new_writer(tablet_id, txn_id, load_id, kind));
+        ASSERT_OK(writer->open());
+        for (const auto& keys : segments) {
+            ASSERT_NO_FATAL_FAILURE(write_chunk(writer.get(), kind, keys));
+        }
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+    }
+
+    // Write one statement to every tablet of `tablet_ids` through one bundle file, as a load with file
+    // bundling writes the tablets of a partition: every writer is opened before any of them finishes,
+    // and each writes its keys in one flush at the end of the load, so each tablet's segment goes into
+    // the shared file at its own offset.
+    void write_bundled_statement(const std::vector<int64_t>& tablet_ids, int64_t txn_id, const PUniqueId& load_id,
+                                 Write kind, const std::map<int64_t, std::vector<int>>& keys_per_tablet) {
+        auto bundle = std::make_unique<BundleWritableFileContext>();
+        std::vector<std::unique_ptr<DeltaWriter>> writers;
+        for (int64_t tablet_id : tablet_ids) {
+            ASSIGN_OR_ABORT(auto writer, new_writer(tablet_id, txn_id, &load_id, kind, bundle.get()));
+            ASSERT_OK(writer->open());
+            writers.emplace_back(std::move(writer));
+        }
+        for (size_t i = 0; i < tablet_ids.size(); i++) {
+            ASSERT_NO_FATAL_FAILURE(write_chunk(writers[i].get(), kind, keys_per_tablet.at(tablet_ids[i])));
+            ASSERT_OK(writers[i]->finish_with_txnlog());
+            writers[i]->close();
+        }
+    }
+
+    // Version `version` of `tablet_id`: one ordinary load of full rows for `keys`.
+    void seed(int64_t tablet_id, int64_t version, const std::vector<int>& keys) {
+        const int64_t txn_id = next_id();
+        ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, nullptr, Write::kFullRow, {keys}));
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id).status());
+    }
+
+    // Version `version` of `tablet_id`: write `keys` again as seeded full rows, either through the
+    // primary index the publishes before left in memory or through one rebuilt from the persisted
+    // metadata (what a CN restart does). An index entry naming another row than the key's shows as a
+    // row the load did not replace (a duplicate key), or as another key's row deleted in its place.
+    void rewrite_keys(int64_t tablet_id, int64_t version, const std::vector<int>& keys, bool rebuild_pindex,
+                      std::map<int, Row>* expected) {
+        const int64_t txn_id = next_id();
+        ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, nullptr, Write::kFullRow, {keys}));
+        ASSERT_OK(publish_single_version(tablet_id, version, txn_id, rebuild_pindex).status());
+        add_rows(expected, keys, kSeedC1, kSeedC2);
+    }
+
+    // Keys a column-mode partial update inserted: the column it writes, the other one's default.
+    static void add_inserted_rows(std::map<int, Row>* rows, const std::vector<int>& keys, Write kind) {
+        for (int key : keys) {
+            if (kind == Write::kColumnC1) {
+                (*rows)[key] = Row{key * kNewC1, kDefaultC2};
+            } else {
+                (*rows)[key] = Row{std::nullopt, key * kNewC2};
+            }
+        }
+    }
+
+    // BEGIN; INSERT rows; INSERT c1 of new keys in column mode; COMMIT; -- see the tests that call it.
+    void publish_column_upsert_of_new_keys_after_insert(bool bundled_insert) {
+        const int64_t tablet_id = _tablet_metadata->id();
+        const auto inserted = key_range(0, 12);
+        // More new keys than inserted ones, in two segments of the column-mode statement that
+        // overlap, so that its second segment of new rows deletes rows of its first.
+        const auto new_keys = key_range(100, 124);
+        const int64_t txn_id = next_id();
+        const auto stmt1 = statement_load_id(1);
+        const auto stmt2 = statement_load_id(2);
+        if (bundled_insert) {
+            ASSERT_NO_FATAL_FAILURE(
+                    write_bundled_statement({tablet_id}, txn_id, stmt1, Write::kFullRow, {{tablet_id, inserted}}));
+        } else {
+            ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+        }
+        ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnC1,
+                                                {key_range(100, 116), key_range(108, 124)}));
+        ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 2, 0));
+        ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2}).status());
+
+        std::map<int, Row> expected;
+        add_rows(&expected, inserted, kSeedC1, kSeedC2);
+        add_inserted_rows(&expected, new_keys, Write::kColumnC1);
+        expect_rows(tablet_id, 2, expected);
+
+        ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+        // The inserted rows take rssid slot 0 and the two segments of new rows slots 1 and 2, in one
+        // rowset, or in two when the INSERT bundled its segment.
+        EXPECT_EQ(bundled_insert ? 2 : 1, metadata->rowsets_size());
+        EXPECT_EQ(metadata->rowsets(0).id() + 3, metadata->next_rowset_id());
+
+        ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, inserted, /*rebuild_pindex=*/false, &expected));
+        expect_rows(tablet_id, 3, expected);
+        ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, new_keys, /*rebuild_pindex=*/true, &expected));
+        expect_rows(tablet_id, 4, expected);
+    }
+
+    // The statement's txn log holds `segments` segments and `dels` del files: the shape the test means
+    // to publish.
+    void expect_statement_shape(int64_t tablet_id, int64_t txn_id, const PUniqueId& load_id, int segments, int dels) {
+        ASSIGN_OR_ABORT(auto log, _tablet_mgr->get_txn_log(tablet_id, txn_id, load_id));
+        ASSERT_TRUE(log->has_op_write());
+        EXPECT_EQ(segments, log->op_write().rowset().segment_metas_size());
+        EXPECT_EQ(dels, log->op_write().dels_meta_size());
+    }
+
+    // Publish `txn_id` as the multi-statement transaction made of the statements written under
+    // `load_ids`, with the TxnInfoPB the FE sends for a SQL BEGIN ... COMMIT.
+    StatusOr<TabletMetadataPtr> publish_statements(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                   const std::vector<PUniqueId>& load_ids) {
+        auto txn_info = TEST_txn_info(txn_id, time(nullptr));
+        for (const auto& load_id : load_ids) {
+            txn_info.add_load_ids()->CopyFrom(load_id);
+        }
+        std::vector<TxnInfoPB> txns{std::move(txn_info)};
+        return publish_version(_tablet_mgr.get(), PublishTabletInfo(tablet_id), new_version - 1, new_version, txns,
+                               false);
+    }
+
+    // Every row of `tablet_id` visible at `version`, keyed by c0. A key read a second time is a
+    // duplicate primary key and goes to `duplicates`.
+    Status read_rows(int64_t tablet_id, int64_t version, std::map<int, Row>* rows, std::vector<int>* duplicates) {
+        ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        auto reader = std::make_shared<TabletReader>(_tablet_mgr.get(), metadata, *_schema);
+        RETURN_IF_ERROR(reader->prepare());
+        RETURN_IF_ERROR(reader->open(TabletReaderParams()));
+        auto chunk = ChunkFactory::new_chunk(*_schema, 128);
+        while (true) {
+            auto st = reader->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            RETURN_IF_ERROR(st);
+            const auto& columns = chunk->columns();
+            for (size_t i = 0; i < chunk->num_rows(); i++) {
+                const int key = columns[0]->get(i).get_int32();
+                Row row;
+                if (auto c1 = columns[1]->get(i); !c1.is_null()) {
+                    row.c1 = c1.get_int32();
+                }
+                if (auto c2 = columns[2]->get(i); !c2.is_null()) {
+                    row.c2 = c2.get_int32();
+                }
+                if (!rows->emplace(key, row).second) {
+                    duplicates->push_back(key);
+                }
+            }
+            chunk->reset();
+        }
+        return Status::OK();
+    }
+
+    // `tablet_id` at `version` holds exactly `expected`: the same keys, one live row per key, the same
+    // values. Every difference is reported, so a failure shows all of the damage at once.
+    void expect_rows(int64_t tablet_id, int64_t version, const std::map<int, Row>& expected) {
+        std::map<int, Row> actual;
+        std::vector<int> duplicates;
+        ASSERT_OK(read_rows(tablet_id, version, &actual, &duplicates));
+        EXPECT_TRUE(duplicates.empty()) << "duplicate primary keys: " << JoinInts(duplicates, ",");
+        for (const auto& [key, row] : expected) {
+            auto it = actual.find(key);
+            if (it == actual.end()) {
+                ADD_FAILURE() << "key " << key << " is missing, expected " << to_string(row);
+            } else if (!(it->second == row)) {
+                ADD_FAILURE() << "key " << key << " reads " << to_string(it->second) << ", expected " << to_string(row);
+            }
+        }
+        for (const auto& [key, row] : actual) {
+            if (expected.count(key) == 0) {
+                ADD_FAILURE() << "key " << key << " " << to_string(row) << " should not exist";
+            }
+        }
+    }
+
+    std::vector<SlotDescriptor> _c2_slots;
+    std::vector<SlotDescriptor*> _c2_slot_pointers;
+    int _saved_partial_update_threads = 0;
+};
+
+// Two row-mode partial updates of different keys. The second statement has one segment more than the
+// first, so its rewrite of segment 0 comes from the same position of its own op_write as the first
+// statement's rewrite, and its rewrite of segment 1 from a position the first statement does not
+// have. Each rewrite must replace its own statement's segment of the merged rowset.
+TEST_P(LakeMultiStatementPartialUpdateTest, partial_updates_of_different_keys) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0; UPDATE c2 of g2 and g3; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kC2, {g2, g3}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 1, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 2, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kSeedC2);
+    add_rows(&expected, g1, kSeedC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kNewC2);
+    expect_rows(tablet_id, 3, expected);
+}
+
+// The second statement also updates keys the first one updated in the same transaction, so its rewrite
+// has to read the column it does not write, c1, from the first statement's rows -- which exist only in
+// the rowset this publish is still merging. Its segment 0 holds other keys, so a rewrite registered
+// under the rssid of the first statement's segment would be read in their place.
+TEST_P(LakeMultiStatementPartialUpdateTest, partial_update_of_keys_an_earlier_statement_updated) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0; UPDATE c2 of g2 and g0; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kC2, {g2, g0}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 1, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 2, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kNewC2);
+    add_rows(&expected, g1, kSeedC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    // version 4: rebuild the primary index from the persisted metadata (what a CN restart does), then
+    // write g0 again. An index rebuilt differently from what the publish applied would leave the old
+    // rows of g0 live next to the new ones.
+    const int64_t probe_txn_id = next_id();
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, probe_txn_id, nullptr, Write::kFullRow, {g0}));
+    ASSERT_OK(publish_single_version(tablet_id, 4, probe_txn_id, /*rebuild_pindex=*/true).status());
+    add_rows(&expected, g0, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 4, expected);
+}
+
+// A statement that routes no row to this tablet still leaves an op_write here, with no segment. It
+// takes an rssid slot of the merged rowset (get_rowset_id_step() reserves one) but no segment
+// position, so the segments of every statement after it sit one position below their slot, and the
+// rewrite of the last statement has to be placed by position.
+TEST_P(LakeMultiStatementPartialUpdateTest, statement_without_rows_between_partial_updates) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto g0 = key_range(0, 12);
+    const auto g1 = key_range(12, 24);
+    const auto g2 = key_range(24, 36);
+    const auto g3 = key_range(36, 48);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, key_range(0, 48)));
+
+    // version 3: BEGIN; UPDATE c1 of g0 and g1; INSERT rows of other tablets only; UPDATE c2 of g2; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    const auto stmt3 = statement_load_id(3);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {g0, g1}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kFullRow, {}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt3, Write::kC2, {g2}));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt1, 2, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 0, 0));
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt3, 1, 0));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2, stmt3}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, g0, kNewC1, kSeedC2);
+    add_rows(&expected, g1, kNewC1, kSeedC2);
+    add_rows(&expected, g2, kSeedC1, kNewC2);
+    add_rows(&expected, g3, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    // version 4: rebuild the primary index from the persisted metadata, then write g2 again.
+    const int64_t probe_txn_id = next_id();
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, probe_txn_id, nullptr, Write::kFullRow, {g2}));
+    ASSERT_OK(publish_single_version(tablet_id, 4, probe_txn_id, /*rebuild_pindex=*/true).status());
+    add_rows(&expected, g2, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 4, expected);
+}
+
+// A column-mode partial update that inserts keys writes the new rows into segments of their own
+// (UpdateManager::_handle_column_upsert_mode). In a batch they have to take the rssid slots after
+// those of the statements applied before: added as a rowset of their own they took
+// next_rowset_id(), the earlier statements' rowset then got the next id, and every key an earlier
+// statement wrote named a row of the new ones in the primary index. The rows still read back right
+// -- nothing deleted them -- until the next load of those keys deleted the new rows in their place
+// and left the old ones live next to its own.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_new_keys_after_insert) {
+    ASSERT_NO_FATAL_FAILURE(publish_column_upsert_of_new_keys_after_insert(/*bundled_insert=*/false));
+}
+
+// The same with the INSERT's segment in a bundle file, as a small INSERT writes it: the new rows are
+// standalone files, so they go into a rowset of their own, at the slots they were indexed at.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_new_keys_after_bundled_insert) {
+    ASSERT_NO_FATAL_FAILURE(publish_column_upsert_of_new_keys_after_insert(/*bundled_insert=*/true));
+}
+
+// A column-mode update reads the current values of the rows it updates. A row an earlier statement of
+// the transaction wrote is only in the rowset this publish is still merging, which the reader has to
+// see, or the publish fails ("segment ... not found").
+TEST_P(LakeMultiStatementPartialUpdateTest, column_update_of_rows_an_earlier_statement_inserted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto seeded = key_range(0, 12);
+    const auto inserted = key_range(12, 24);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, seeded));
+
+    // version 3: BEGIN; INSERT rows; UPDATE c1 of some of them and of some seeded rows; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnUpdateC1, {key_range(6, 18)}));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(0, 6), kSeedC1, kSeedC2);
+    add_rows(&expected, key_range(6, 18), kNewC1, kSeedC2);
+    add_rows(&expected, key_range(18, 24), kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, inserted, /*rebuild_pindex=*/false, &expected));
+    expect_rows(tablet_id, 4, expected);
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 5, seeded, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 5, expected);
+}
+
+// Both at once: a column-mode partial update of rows seeded before the transaction, of rows an
+// earlier statement inserted, and of keys nobody wrote.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_of_seeded_inserted_and_new_keys) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto seeded = key_range(0, 12);
+    const auto inserted = key_range(12, 24);
+    const auto new_keys = key_range(100, 112);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, seeded));
+
+    // version 3: BEGIN; INSERT rows; INSERT c1 of seeded, inserted and new keys in column mode; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnC1, {key_range(6, 18), new_keys}));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(0, 6), kSeedC1, kSeedC2);
+    add_rows(&expected, key_range(6, 18), kNewC1, kSeedC2);
+    add_rows(&expected, key_range(18, 24), kSeedC1, kSeedC2);
+    add_inserted_rows(&expected, new_keys, Write::kColumnC1);
+    expect_rows(tablet_id, 3, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, inserted, /*rebuild_pindex=*/false, &expected));
+    expect_rows(tablet_id, 4, expected);
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 5, new_keys, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 5, expected);
+}
+
+// The order that already worked: the column-mode partial update first, then an INSERT that bundled
+// its segment. Its new rows now join the batch instead of taking a rowset id ahead of it, and being
+// standalone files they still end up in a rowset apart from the bundled one.
+TEST_P(LakeMultiStatementPartialUpdateTest, bundled_insert_after_column_upsert_of_new_keys) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto new_keys = key_range(0, 12);
+    const auto inserted = key_range(100, 112);
+
+    // version 2: BEGIN; INSERT c1 of new keys in column mode; INSERT rows; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kColumnC1, {new_keys}));
+    ASSERT_NO_FATAL_FAILURE(
+            write_bundled_statement({tablet_id}, txn_id, stmt2, Write::kFullRow, {{tablet_id, inserted}}));
+    ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_inserted_rows(&expected, new_keys, Write::kColumnC1);
+    add_rows(&expected, inserted, kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 2, expected);
+    ASSIGN_OR_ABORT(auto metadata, _tablet_mgr->get_tablet_metadata(tablet_id, 2));
+    ASSERT_EQ(2, metadata->rowsets_size());
+    EXPECT_FALSE(metadata->rowsets(0).segment_metas(0).has_bundle_file_offset());
+    EXPECT_TRUE(metadata->rowsets(1).segment_metas(0).has_bundle_file_offset());
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, new_keys, /*rebuild_pindex=*/false, &expected));
+    expect_rows(tablet_id, 3, expected);
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, inserted, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 4, expected);
+}
+
+// Two column-mode updates of the same column of rows an earlier statement inserted, each of other
+// rows, then one of another column. A column-mode update writes the whole column of the segment, so
+// the later one has to read the earlier one's values (its delta column group, recorded against the
+// rssid the rows will get) for the rows it does not update.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_updates_of_rows_an_earlier_statement_inserted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto inserted = key_range(0, 12);
+
+    // version 2: BEGIN; INSERT rows; UPDATE c1 of half; UPDATE c1 of the other half; UPDATE c2; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    const auto stmt3 = statement_load_id(3);
+    const auto stmt4 = statement_load_id(4);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnUpdateC1, {key_range(0, 6)}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt3, Write::kColumnUpdateC1, {key_range(6, 12)}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt4, Write::kColumnC2, {key_range(3, 9)}));
+    ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2, stmt3, stmt4}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(0, 3), kNewC1, kSeedC2);
+    add_rows(&expected, key_range(3, 9), kNewC1, kNewC2);
+    add_rows(&expected, key_range(9, 12), kNewC1, kSeedC2);
+    expect_rows(tablet_id, 2, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, inserted, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 3, expected);
+}
+
+// A column-mode update of rows a column-mode partial update of an earlier statement inserted: the
+// rows are in the new-row segment the batch is still merging.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_update_of_rows_a_column_upsert_inserted) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto new_keys = key_range(0, 12);
+
+    // version 2: BEGIN; INSERT c1 of new keys in column mode; INSERT c2 of some of them in column mode; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kColumnC1, {new_keys}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnC2, {key_range(3, 9)}));
+    ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_inserted_rows(&expected, new_keys, Write::kColumnC1);
+    add_rows(&expected, key_range(3, 9), kNewC1, kNewC2);
+    expect_rows(tablet_id, 2, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, new_keys, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 3, expected);
+}
+
+// A column-mode update after a row-mode partial update of the same rows: the rows are in the
+// row-mode statement's segment, which only has c0 and c1 until the rewrite that replaces it, so the
+// column-mode update has to read c2 of the rows it does not update from the rewritten file.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_update_after_row_mode_partial_update) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto seeded = key_range(0, 12);
+    ASSERT_NO_FATAL_FAILURE(seed(tablet_id, 2, seeded));
+
+    // version 3: BEGIN; UPDATE c1 in row mode; UPDATE c2 of half of the rows in column mode; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kC1, {seeded}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnC2, {key_range(0, 6)}));
+    ASSERT_OK(publish_statements(tablet_id, 3, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(0, 6), kNewC1, kNewC2);
+    add_rows(&expected, key_range(6, 12), kNewC1, kSeedC2);
+    expect_rows(tablet_id, 3, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, seeded, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 4, expected);
+}
+
+// A row-mode partial update after a column-mode update of the same rows, which an earlier statement
+// inserted: the row-mode rewrite reads c1 of those rows, which the column-mode update holds in a
+// delta column group recorded against the rssid the rows will get.
+TEST_P(LakeMultiStatementPartialUpdateTest, row_mode_partial_update_after_column_update) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto inserted = key_range(0, 12);
+
+    // version 2: BEGIN; INSERT rows; UPDATE c1 of half in column mode; UPDATE c2 in row mode; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    const auto stmt3 = statement_load_id(3);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt2, Write::kColumnUpdateC1, {key_range(0, 6)}));
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt3, Write::kC2, {key_range(3, 9)}));
+    ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2, stmt3}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(0, 3), kNewC1, kSeedC2);
+    add_rows(&expected, key_range(3, 6), kNewC1, kNewC2);
+    add_rows(&expected, key_range(6, 9), kSeedC1, kNewC2);
+    add_rows(&expected, key_range(9, 12), kSeedC1, kSeedC2);
+    expect_rows(tablet_id, 2, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, inserted, /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 3, expected);
+}
+
+// A column-mode partial update that also deletes (a load with __op) applies the deletes after its new
+// rows, so the rebuild has to replay them from the same place of the batch: after the new rows, which
+// follow the earlier statement's.
+TEST_P(LakeMultiStatementPartialUpdateTest, column_upsert_with_deletes_after_insert) {
+    const int64_t tablet_id = _tablet_metadata->id();
+    const auto inserted = key_range(0, 12);
+    const auto new_keys = key_range(100, 106);
+
+    // version 2: BEGIN; INSERT rows; delete keys 0-2, set c1 of keys 3-5 and insert new keys in column mode; COMMIT;
+    const int64_t txn_id = next_id();
+    const auto stmt1 = statement_load_id(1);
+    const auto stmt2 = statement_load_id(2);
+    ASSERT_NO_FATAL_FAILURE(write_statement(tablet_id, txn_id, &stmt1, Write::kFullRow, {inserted}));
+    {
+        std::vector<int> keys;
+        std::vector<uint8_t> ops;
+        for (int key : key_range(0, 3)) {
+            keys.push_back(key);
+            ops.push_back(TOpType::DELETE);
+        }
+        for (int key : key_range(3, 6)) {
+            keys.push_back(key);
+            ops.push_back(TOpType::UPSERT);
+        }
+        for (int key : new_keys) {
+            keys.push_back(key);
+            ops.push_back(TOpType::UPSERT);
+        }
+        auto c0 = Int32Column::create();
+        auto c1 = Int32Column::create();
+        auto op = Int8Column::create();
+        for (size_t i = 0; i < keys.size(); i++) {
+            c0->append(keys[i]);
+            c1->append(keys[i] * kNewC1);
+            op->append(static_cast<int8_t>(ops[i]));
+        }
+        Chunk::SlotHashMap slot_map;
+        slot_map[0] = 0;
+        slot_map[1] = 1;
+        slot_map[3] = 2;
+        Chunk chunk({std::move(c0), std::move(c1), std::move(op)}, slot_map);
+        std::vector<SlotDescriptor> slots;
+        slots.emplace_back(0, "c0", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(1, "c1", TypeDescriptor{LogicalType::TYPE_INT});
+        slots.emplace_back(3, "__op", TypeDescriptor{LogicalType::TYPE_TINYINT});
+        std::vector<SlotDescriptor*> slot_pointers;
+        for (auto& slot : slots) {
+            slot_pointers.emplace_back(&slot);
+        }
+        ASSIGN_OR_ABORT(auto writer, DeltaWriterBuilder()
+                                             .set_tablet_manager(_tablet_mgr.get())
+                                             .set_tablet_id(tablet_id)
+                                             .set_txn_id(txn_id)
+                                             .set_partition_id(_partition_id)
+                                             .set_mem_tracker(_mem_tracker.get())
+                                             .set_schema_id(_tablet_schema->id())
+                                             .set_slot_descriptors(&slot_pointers)
+                                             .set_partial_update_mode(PartialUpdateMode::COLUMN_UPSERT_MODE)
+                                             .set_load_id(stmt2)
+                                             .set_is_multi_statements_txn(true)
+                                             .build());
+        ASSERT_OK(writer->open());
+        std::vector<uint32_t> indexes(keys.size());
+        std::iota(indexes.begin(), indexes.end(), 0);
+        ASSERT_OK(writer->write(chunk, indexes.data(), indexes.size()));
+        ASSERT_OK(writer->finish_with_txnlog());
+        writer->close();
+    }
+    ASSERT_NO_FATAL_FAILURE(expect_statement_shape(tablet_id, txn_id, stmt2, 1, 1));
+    ASSERT_OK(publish_statements(tablet_id, 2, txn_id, {stmt1, stmt2}).status());
+
+    std::map<int, Row> expected;
+    add_rows(&expected, key_range(3, 6), kNewC1, kSeedC2);
+    add_rows(&expected, key_range(6, 12), kSeedC1, kSeedC2);
+    add_inserted_rows(&expected, new_keys, Write::kColumnC1);
+    expect_rows(tablet_id, 2, expected);
+
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 3, key_range(3, 12), /*rebuild_pindex=*/true, &expected));
+    expect_rows(tablet_id, 3, expected);
+    ASSERT_NO_FATAL_FAILURE(rewrite_keys(tablet_id, 4, key_range(0, 3), /*rebuild_pindex=*/false, &expected));
+    expect_rows(tablet_id, 4, expected);
+}
+
+INSTANTIATE_TEST_SUITE_P(LakeMultiStatementPartialUpdateTest, LakeMultiStatementPartialUpdateTest,
+                         ::testing::Values(1, 4), [](const testing::TestParamInfo<int>& info) {
+                             return info.param == 1 ? std::string("serial_rewrite") : std::string("parallel_rewrite");
+                         });
 
 } // namespace starrocks::lake

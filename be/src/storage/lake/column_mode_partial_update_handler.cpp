@@ -232,9 +232,15 @@ Status ColumnModePartialUpdateHandler::_read_from_source_segment_and_update(
     }
     uint32_t rowset_id = params.container.rssid_to_rowid().at(rssid);
     // 2. load segment meta.
+    // A segment written by an earlier statement of the transaction this batch publish applies is in
+    // MetaFileBuilder's pending rowset, registered under next_rowset_id(): its final rowset id and
+    // index are set only in set_final_rowset(), which may split that rowset. The metadata cache keeps
+    // the segment id a Segment was first loaded with, and a reader computes rssids from it, so do not
+    // cache one loaded under the provisional id.
+    const bool fill_meta_cache = rowset_id < params.metadata->next_rowset_id();
     ASSIGN_OR_RETURN(auto segment, params.tablet->tablet_mgr()->load_segment(
                                            fileinfo, rssid - rowset_id /* segment id inside rowset */,
-                                           &footer_size_hint, lake_io_opts, true, params.tablet_schema));
+                                           &footer_size_hint, lake_io_opts, fill_meta_cache, params.tablet_schema));
     SegmentReadOptions seg_options;
     ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(fileinfo.path));
     seg_options.stats = &stats;
