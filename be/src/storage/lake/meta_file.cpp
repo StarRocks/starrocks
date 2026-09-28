@@ -1248,13 +1248,26 @@ Status MetaFileBuilder::update_num_del_stat(const std::map<uint32_t, size_t>& se
                 return Status::InternalError(err_msg);
             }
         } else {
-            const int64_t prev_num_dels = segment_id_to_rowset[each.first]->num_dels();
+            auto* rowset = segment_id_to_rowset[each.first];
+            const int64_t prev_num_dels = rowset->num_dels();
             if (each.second > std::numeric_limits<int64_t>::max() - prev_num_dels) {
                 // Can't be possible
                 LOG(ERROR) << "Integer overflow detected";
                 return Status::InternalError("Integer overflow detected");
             }
-            segment_id_to_rowset[each.first]->set_num_dels(prev_num_dels + each.second);
+            rowset->set_num_dels(prev_num_dels + each.second);
+            if (rowset == &_pending_rowset_data.rowset_pb) {
+                // Also count them against the op_write whose segment it is, which is where they go
+                // when set_final_rowset() splits the pending rowset.
+                const uint32_t slot = each.first - _tablet_meta->next_rowset_id();
+                auto& op_writes = _pending_rowset_data.op_writes;
+                auto it = std::upper_bound(op_writes.begin(), op_writes.end(), slot,
+                                           [](uint32_t s, const PendingOpWrite& w) { return s < w.slot_begin; });
+                if (it != op_writes.begin()) {
+                    auto& owner = std::prev(it)->rowset;
+                    owner.set_num_dels(owner.num_dels() + each.second);
+                }
+            }
         }
     }
     return Status::OK();
@@ -1776,6 +1789,18 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
                                  const std::map<int, SegmentFileInfo>& replace_segments,
                                  const std::vector<FileMetaPB>& orphan_files, const std::vector<FileMetaPB>& dels,
                                  const std::vector<int64_t>& del_op_offsets, const std::vector<int64_t>& del_num_rows) {
+    // What this op_write adds to the pending rowset, in case set_final_rowset() has to split it.
+    PendingOpWrite added;
+    added.slot_begin = _pending_rowset_data.assigned_segment_idx;
+    added.segment_pos_begin = _pending_rowset_data.rowset_pb.segment_metas_size();
+    added.rowset.CopyFrom(rowset_pb);
+    added.rowset.clear_segment_metas();
+    added.rowset.clear_deprecated_segments();
+    added.rowset.clear_deprecated_segment_size();
+    added.rowset.clear_deprecated_segment_encryption_metas();
+    added.rowset.clear_deprecated_bundle_file_offsets();
+    added.rowset.clear_deprecated_shared_segments();
+    added.rowset.clear_del_files();
     // If this is the first call, copy rowset_pb directly
     if (_pending_rowset_data.rowset_pb.segment_metas_size() == 0) {
         _pending_rowset_data.rowset_pb.CopyFrom(rowset_pb);
@@ -1846,6 +1871,9 @@ void MetaFileBuilder::add_rowset(const RowsetMetadataPB& rowset_pb,
         _pending_rowset_data.del_num_rows.push_back(i < del_num_rows.size() ? del_num_rows[i] : 0);
     }
 
+    added.segment_pos_end = _pending_rowset_data.rowset_pb.segment_metas_size();
+    _pending_rowset_data.op_writes.emplace_back(std::move(added));
+
     // Track cumulative rssid slots already assigned when batch applying multiple opwrites.
     _pending_rowset_data.assigned_segment_idx += get_rowset_id_step(rowset_pb);
 }
@@ -1855,7 +1883,8 @@ Status MetaFileBuilder::set_final_rowset() {
         return Status::OK(); // Nothing to do
     }
 
-    auto rowset = _tablet_meta->add_rowsets();
+    RowsetMetadataPB merged_rowset;
+    auto* rowset = &merged_rowset;
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
 
     // Apply replace_segments
@@ -1863,6 +1892,14 @@ Status MetaFileBuilder::set_final_rowset() {
         auto* segment_meta = rowset->mutable_segment_metas(replace_seg.first);
         segment_meta->set_filename(replace_seg.second.path);
         segment_meta->set_size(replace_seg.second.size.value());
+        // The rewrite file is standalone, so it has no offset inside a bundle file. Clear the offset of
+        // the rewritten segment only: unlike apply_opwrite(), whose rowset is the one op_write that was
+        // rewritten, the merged rowset also carries the other statements' segments, and a bundled one
+        // among them still lives at its offset in the bundle file it shares with sibling tablets.
+        // Without the offset a reader takes that segment from the start of the file (another tablet's
+        // bytes, or a failed footer check), and vacuum takes the file for unshared. The mix of bundled
+        // and standalone segments this leaves is split into separate rowsets below.
+        segment_meta->clear_bundle_file_offset();
         // See apply_opwrite: a filtered rewrite's own row count and sort-key fields replace the ones
         // copied from op_write, keyed on the flag so a legitimate zero-row output is not read as
         // "unfiltered".
@@ -1891,10 +1928,6 @@ Status MetaFileBuilder::set_final_rowset() {
         }
     }
     if (!_pending_rowset_data.replace_segments.empty()) {
-        // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
-        for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
-            segment_metadata.clear_bundle_file_offset();
-        }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
         // identity. If any segment was physically rewritten, the data is now private to this
@@ -1902,25 +1935,177 @@ Status MetaFileBuilder::set_final_rowset() {
         tablet_reshard_helper::set_rowset_uid(rowset);
     }
 
-    rowset->set_id(_tablet_meta->next_rowset_id());
+    // A statement that wrote this tablet in one flush at the end of its load put that segment into
+    // the bundle file it shares with the other tablets of the partition; a statement that flushed
+    // more than once wrote standalone files, and so are the rewrites above. One rowset cannot hold
+    // both kinds -- normalize_rowset_before_save() refuses a mix, which the legacy flat offset array
+    // cannot express -- so a batch that merged both is split into consecutive rowsets, one per run
+    // of op_writes of the same kind. A part's id is next_rowset_id() plus the first rssid slot it
+    // covers and its segment indexes are counted from there: every rssid stays what the primary
+    // index, the delete vectors and the delta column groups of this publish already use, and the
+    // parts keep the order of their op_writes.
+    const uint32_t rowset_id = _tablet_meta->next_rowset_id();
+    const uint32_t rowset_id_step = get_rowset_id_step(*rowset);
+    ASSIGN_OR_RETURN(auto parts, _split_final_rowset(*rowset));
+    if (parts.empty()) {
+        std::vector<size_t> del_indexes(_pending_rowset_data.dels.size());
+        for (size_t i = 0; i < del_indexes.size(); ++i) {
+            del_indexes[i] = i;
+        }
+        _add_final_rowset(*rowset, rowset_id, 0, del_indexes);
+    } else {
+        const auto& op_writes = _pending_rowset_data.op_writes;
+        LOG(INFO) << "tablet " << _tablet_meta->id() << " version " << _tablet_meta->version() << " splits the "
+                  << rowset->segment_metas_size() << " segments of " << op_writes.size()
+                  << " batch-applied op_writes into " << parts.size()
+                  << " rowsets, because some are bundled and others are not";
+        // A del file goes with the part whose slots hold the one it follows.
+        std::vector<std::vector<size_t>> del_indexes(parts.size());
+        for (size_t i = 0; i < _pending_rowset_data.dels.size(); ++i) {
+            size_t k = parts.size() - 1;
+            while (k > 0 && _pending_rowset_data.del_op_offsets[i] < parts[k].slot_begin) {
+                --k;
+            }
+            del_indexes[k].push_back(i);
+        }
+        for (size_t k = 0; k < parts.size(); ++k) {
+            const auto& part = parts[k];
+            // As add_rowset() builds the merged rowset: the rowset-level fields of the first op_write
+            // with segments, the counts of all of them.
+            size_t first = part.op_write_begin;
+            while (op_writes[first].segment_pos_begin == op_writes[first].segment_pos_end) {
+                ++first;
+            }
+            RowsetMetadataPB part_rowset;
+            part_rowset.CopyFrom(op_writes[first].rowset);
+            int64_t num_rows = 0;
+            int64_t data_size = 0;
+            int64_t num_dels = 0;
+            for (size_t i = part.op_write_begin; i < part.op_write_end; ++i) {
+                num_rows += op_writes[i].rowset.num_rows();
+                data_size += op_writes[i].rowset.data_size();
+                num_dels += op_writes[i].rowset.num_dels();
+            }
+            part_rowset.set_num_rows(num_rows);
+            part_rowset.set_data_size(data_size);
+            part_rowset.set_num_dels(num_dels);
+            if (first + 1 < part.op_write_end) {
+                part_rowset.set_overlapped(true);
+            }
+            bool rewritten = false;
+            for (int pos = part.segment_pos_begin; pos < part.segment_pos_end; ++pos) {
+                auto* segment_meta = part_rowset.add_segment_metas();
+                segment_meta->CopyFrom(rowset->segment_metas(pos));
+                segment_meta->set_segment_idx(get_segment_idx(*rowset, pos) - part.slot_begin);
+                rewritten |= _pending_rowset_data.replace_segments.count(pos) > 0;
+            }
+            if (rewritten) {
+                // See above: rewritten data is private to this tablet.
+                tablet_reshard_helper::set_rowset_uid(&part_rowset);
+            }
+            _add_final_rowset(part_rowset, rowset_id + part.slot_begin, part.slot_begin, del_indexes[k]);
+        }
+    }
+
+    // If rowset doesn't contain segment files, still increment next_rowset_id
+    _tablet_meta->set_next_rowset_id(rowset_id + rowset_id_step);
+
+    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
+    for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
+        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
+        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
+        added_orphan->CopyFrom(orphan_file);
+        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
+        // their creation version is the metadata version being built. Respect an accurate version if
+        // the producer already set one.
+        if (!added_orphan->has_version()) {
+            added_orphan->set_version(_tablet_meta->version());
+        }
+    }
+
+    // Clear pending cache
+    _pending_rowset_data = PendingRowsetData{};
+
+    return Status::OK();
+}
+
+StatusOr<std::vector<MetaFileBuilder::FinalRowsetPart>> MetaFileBuilder::_split_final_rowset(
+        const RowsetMetadataPB& merged) const {
+    std::vector<FinalRowsetPart> parts;
+    int bundled_segments = 0;
+    for (const auto& segment_meta : merged.segment_metas()) {
+        bundled_segments += segment_meta.has_bundle_file_offset() ? 1 : 0;
+    }
+    if (bundled_segments == 0 || bundled_segments == merged.segment_metas_size()) {
+        return parts;
+    }
+    const auto& op_writes = _pending_rowset_data.op_writes;
+    for (size_t i = 0; i < op_writes.size(); ++i) {
+        const auto& op_write = op_writes[i];
+        if (op_write.segment_pos_begin == op_write.segment_pos_end) {
+            // No segment (a pure-delete statement, or one that routed no row here): it stays with the
+            // part before it, or, before any segment, with the first part.
+            if (!parts.empty()) {
+                parts.back().op_write_end = i + 1;
+            }
+            continue;
+        }
+        const bool bundled = merged.segment_metas(op_write.segment_pos_begin).has_bundle_file_offset();
+        for (int pos = op_write.segment_pos_begin + 1; pos < op_write.segment_pos_end; ++pos) {
+            if (merged.segment_metas(pos).has_bundle_file_offset() != bundled) {
+                // A load bundles only the one segment it writes at the end of the load, so one
+                // op_write is never both kinds.
+                return Status::InternalError(
+                        fmt::format("tablet {} op_write {} of a batch publish has both bundled and standalone segments",
+                                    _tablet_meta->id(), i));
+            }
+        }
+        if (parts.empty()) {
+            // The first part starts at the first slot, with the op_writes without segments before it.
+            parts.push_back(FinalRowsetPart{.op_write_begin = 0,
+                                            .op_write_end = i + 1,
+                                            .slot_begin = 0,
+                                            .segment_pos_begin = op_write.segment_pos_begin,
+                                            .segment_pos_end = op_write.segment_pos_end,
+                                            .bundled = bundled});
+        } else if (parts.back().bundled == bundled) {
+            parts.back().op_write_end = i + 1;
+            parts.back().segment_pos_end = op_write.segment_pos_end;
+        } else {
+            parts.push_back(FinalRowsetPart{.op_write_begin = i,
+                                            .op_write_end = i + 1,
+                                            .slot_begin = op_write.slot_begin,
+                                            .segment_pos_begin = op_write.segment_pos_begin,
+                                            .segment_pos_end = op_write.segment_pos_end,
+                                            .bundled = bundled});
+        }
+    }
+    return parts;
+}
+
+void MetaFileBuilder::_add_final_rowset(const RowsetMetadataPB& rowset_pb, uint32_t rowset_id, uint32_t slot_base,
+                                        const std::vector<size_t>& del_indexes) {
+    auto* rowset = _tablet_meta->add_rowsets();
+    rowset->CopyFrom(rowset_pb);
+    rowset->set_id(rowset_id);
     rowset->set_version(_tablet_meta->version());
 
     // Handle delete files (same logic as apply_opwrite). op_offset is carried parallel in
     // _pending_rowset_data.del_op_offsets (already rebased into the merged rowset's segment space).
-    for (size_t i = 0; i < _pending_rowset_data.dels.size(); ++i) {
+    for (size_t i : del_indexes) {
         const auto& del = _pending_rowset_data.dels[i];
         DelfileWithRowsetId del_file_with_rid;
         del_file_with_rid.set_name(del.name());
         del_file_with_rid.set_origin_rowset_id(rowset->id());
         // op_offset is already resolved into this merged rowset's segment-id space by add_rowset(),
-        // which is the only place that knows which op_write each del came from. Clamp it to the
-        // merged rowset's last segment: a trailing pure-delete statement's reserved slot sits past
-        // that segment, and an op_offset outside the rowset's own rssid range would push the
-        // rebuild point into the next rowset. Clamping keeps the "erases everything in this rowset"
-        // meaning (the rebuild's ordering filter is skipped once op_offset reaches the max) without
-        // escaping the range.
+        // which is the only place that knows which op_write each del came from; count it from this
+        // rowset's first slot. Clamp it to the rowset's last segment: a trailing pure-delete
+        // statement's reserved slot sits past that segment, and an op_offset outside the rowset's own
+        // rssid range would push the rebuild point into the next rowset. Clamping keeps the "erases
+        // everything in this rowset" meaning (the rebuild's ordering filter is skipped once op_offset
+        // reaches the max) without escaping the range.
         del_file_with_rid.set_op_offset(static_cast<uint32_t>(
-                std::min<int64_t>(_pending_rowset_data.del_op_offsets[i], get_max_segment_idx(*rowset))));
+                std::min<int64_t>(_pending_rowset_data.del_op_offsets[i] - slot_base, get_max_segment_idx(*rowset))));
         if (!del.encryption_meta().empty()) {
             del_file_with_rid.set_encryption_meta(del.encryption_meta());
         }
@@ -1939,22 +2124,6 @@ Status MetaFileBuilder::set_final_rowset() {
         rowset->add_del_files()->CopyFrom(del_file_with_rid);
     }
 
-    // If rowset doesn't contain segment files, still increment next_rowset_id
-    _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + get_rowset_id_step(*rowset));
-
-    // Collect orphan files: replaced partial-update segments and their segment-name-keyed .vi files
-    for (const auto& orphan_file : _pending_rowset_data.orphan_files) {
-        DCHECK(is_segment(orphan_file.name()) || is_vector_index(orphan_file.name()));
-        auto* added_orphan = _tablet_meta->mutable_orphan_files()->Add();
-        added_orphan->CopyFrom(orphan_file);
-        // These replaced segment/.vi files are produced by this txn's partial-update rewrite, so
-        // their creation version is the metadata version being built. Respect an accurate version if
-        // the producer already set one.
-        if (!added_orphan->has_version()) {
-            added_orphan->set_version(_tablet_meta->version());
-        }
-    }
-
     // Handle schema mapping (same logic as apply_opwrite)
     if (!_tablet_meta->rowset_to_schema().empty()) {
         auto schema_id = _tablet_meta->schema().id();
@@ -1964,11 +2133,6 @@ Status MetaFileBuilder::set_final_rowset() {
             item.CopyFrom(_tablet_meta->schema());
         }
     }
-
-    // Clear pending cache
-    _pending_rowset_data = PendingRowsetData{};
-
-    return Status::OK();
 }
 
 void MetaFileBuilder::batch_apply_opwrite(const TxnLogPB_OpWrite& op_write,
