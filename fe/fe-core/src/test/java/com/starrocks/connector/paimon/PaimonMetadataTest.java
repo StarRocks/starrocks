@@ -173,9 +173,7 @@ import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1058,7 +1056,7 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testScalarGlobalIndexUsesFullModeAndCanBeDisabled() throws Exception {
+    public void testScalarGlobalIndexUsesFullMode() throws Exception {
         java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_scalar_index_");
         Identifier identifier = Identifier.create("test_db", "indexed_table");
         ConnectContext context = UtFrameUtils.createDefaultCtx();
@@ -1087,7 +1085,6 @@ public class PaimonMetadataTest {
             ScalarOperator predicate = new InPredicateOperator(false, List.of(
                     idColumn, ConstantOperator.createInt(1), ConstantOperator.createInt(3)));
 
-            context.getSessionVariable().setEnablePaimonGlobalIndex(true);
             PaimonMetadata fullMetadata = new PaimonMetadata(
                     "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
             PaimonSplitsInfo fullSplits = planSplits(fullMetadata, context, predicate, snapshotId);
@@ -1101,17 +1098,6 @@ public class PaimonMetadataTest {
             PaimonSplitsInfo fastSplits = planSplits(fastMetadata, context, predicate, snapshotId);
             assertTrue(fastSplits.getPaimonSplits().stream().allMatch(IndexedSplit.class::isInstance));
             assertEquals(List.of(1), readIds((FileStoreTable) catalog.getTable(identifier), fastSplits));
-
-            context.getSessionVariable().setEnablePaimonGlobalIndex(false);
-            // Connector metadata is query-scoped. Use a new instance to model the next query's
-            // session policy, then verify repeated planning within that query uses its local cache.
-            PaimonMetadata disabledMetadata = new PaimonMetadata(
-                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
-            PaimonSplitsInfo disabledSplits = planSplits(disabledMetadata, context, predicate, snapshotId);
-            assertFalse(disabledSplits.getPaimonSplits().isEmpty());
-            assertTrue(disabledSplits.getPaimonSplits().stream().allMatch(DataSplit.class::isInstance));
-            assertEquals(List.of(1, 3), readIds((FileStoreTable) catalog.getTable(identifier), disabledSplits));
-            assertSame(disabledSplits, planSplits(disabledMetadata, context, predicate, snapshotId));
 
             catalog.dropTable(identifier, true);
             catalog.dropDatabase(identifier.getDatabaseName(), true, true);

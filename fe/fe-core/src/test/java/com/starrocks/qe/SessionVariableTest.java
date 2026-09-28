@@ -77,17 +77,6 @@ public class SessionVariableTest {
     }
 
     @Test
-    public void testEnablePaimonGlobalIndex() {
-        SessionVariable sessionVariable = new SessionVariable();
-        Assertions.assertTrue(sessionVariable.isEnablePaimonGlobalIndex());
-
-        sessionVariable.setEnablePaimonGlobalIndex(false);
-        Assertions.assertFalse(sessionVariable.isEnablePaimonGlobalIndex());
-        Assertions.assertEquals(false,
-                sessionVariable.getNonDefaultVariables().get(SessionVariable.ENABLE_PAIMON_GLOBAL_INDEX).actualValue);
-    }
-
-    @Test
     public void testNonDefaultVariables() {
         SessionVariable sessionVariable = new SessionVariable();
         Map<String, SessionVariable.NonDefaultValue> nonDefaultVariables = sessionVariable.getNonDefaultVariables();

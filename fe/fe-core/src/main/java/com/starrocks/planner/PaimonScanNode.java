@@ -355,8 +355,7 @@ public class PaimonScanNode extends ScanNode {
                         "reader (merge-on-read data, system table, indexed split, or " +
                         "paimon_force_jni_reader=true). Reading " +
                         "VARIANT through the Paimon JNI reader is not yet supported. Compact the table or " +
-                        "exclude the VARIANT column from the query. For indexed splits, set " +
-                        "enable_paimon_global_index=false for the query.",
+                        "exclude the VARIANT column from the query.",
                         slot.getColumn() != null ? slot.getColumn().getName() : slot.getLabel());
             }
         }

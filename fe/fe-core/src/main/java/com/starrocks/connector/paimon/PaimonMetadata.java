@@ -632,10 +632,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (snapshotId >= 0) {
             options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
         }
-        boolean enablePaimonGlobalIndex = isPaimonGlobalIndexEnabled();
-        if (!enablePaimonGlobalIndex) {
-            options.put(CoreOptions.GLOBAL_INDEX_ENABLED.key(), Boolean.FALSE.toString());
-        } else if (versionedPaimonTable instanceof FileStoreTable
+        if (versionedPaimonTable instanceof FileStoreTable
                 && !versionedPaimonTable.options().containsKey(CoreOptions.SCALAR_INDEX_SEARCH_MODE.key())
                 && !versionedPaimonTable.options().containsKey(CoreOptions.GLOBAL_INDEX_SEARCH_MODE.key())) {
             // Paimon's FAST default only searches indexed row IDs. FULL also scans row IDs not
@@ -652,9 +649,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        // PaimonMetadata is query-scoped, so the session policy is stable for this local cache.
-        PaimonSplitsInfo cachedSplits = paimonSplits.get(filter);
-        if (cachedSplits == null) {
+        if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
@@ -678,16 +673,11 @@ public class PaimonMetadata implements ConnectorMetadata {
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(cachedSplits));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
         return Lists.newArrayList(remoteFileInfo);
-    }
-
-    static boolean isPaimonGlobalIndexEnabled() {
-        ConnectContext context = ConnectContext.get();
-        return context == null || context.getSessionVariable().isEnablePaimonGlobalIndex();
     }
 
     private void traceScanMetrics(PaimonMetricRegistry metricRegistry,
