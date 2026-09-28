@@ -68,14 +68,7 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("authentication_ldap_simple_ssl_conn_trust_store_pwd");
         SENSITIVE_KEY.add("client_secret");
         SENSITIVE_KEY.add("ldap_bind_root_pwd");
-<<<<<<< HEAD
-=======
         SENSITIVE_KEY.add("ldap_ssl_conn_trust_store_pwd");
-        SENSITIVE_KEY.add("fs.obs.access_key");
-        SENSITIVE_KEY.add("fs.obs.secret_key");
-        SENSITIVE_KEY.add("fs.obs.access.key");
-        SENSITIVE_KEY.add("fs.obs.secret.key");
->>>>>>> 50926cc ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#79166))
     }
 
     public PrintableMap(Map<K, V> map, String keyValueSaperator,

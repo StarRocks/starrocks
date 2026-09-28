@@ -19,11 +19,8 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.UserIdentity;
-<<<<<<< HEAD
-import com.starrocks.persist.EditLog;
-=======
 import com.starrocks.common.ErrorReportException;
->>>>>>> 50926cc ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#79166))
+import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;

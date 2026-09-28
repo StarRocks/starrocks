@@ -17,10 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
-<<<<<<< HEAD
-=======
 import com.starrocks.persist.GroupProviderLog;
->>>>>>> 50926cc ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#79166))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -32,13 +29,9 @@ import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
-<<<<<<< HEAD
-=======
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.jupiter.api.AfterAll;
->>>>>>> 50926cc ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#79166))
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,12 +47,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.mockito.ArgumentMatchers.any;
-<<<<<<< HEAD
 import static org.mockito.ArgumentMatchers.anyShort;
 import static org.mockito.Mockito.doNothing;
-=======
 import static org.mockito.Mockito.doThrow;
->>>>>>> 50926cc ([Enhancement] Support ALTER GROUP PROVIDER for in-place property update (#79166))
 import static org.mockito.Mockito.spy;
 
 /**
