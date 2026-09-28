@@ -992,7 +992,7 @@ build_arrow() {
     # so disable jemalloc here and use SystemAllocator.
     #
     # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
-    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
+    ${CMAKE_CMD} -DARROW_TESTING=ON -DGTest_SOURCE=SYSTEM -DGTest_ROOT=$TP_INSTALL_DIR -DARROW_PARQUET=ON -DPARQUET_REQUIRE_ENCRYPTION=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_STATIC=ON -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
     -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
@@ -1041,6 +1041,24 @@ build_arrow() {
     # copy zstd headers
     mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
+
+    # Expose two of parquet-cpp's internal encryption headers. They are private to Arrow:
+    # ARROW_INSTALL_ALL_HEADERS skips any header whose name matches "internal", and only the
+    # high-level FileEncryption/DecryptionProperties are public. BE needs the module-level
+    # InternalFileDecryptor, Decryptor, AesDecryptor and CreateModuleAad to decrypt Parquet Modular
+    # Encryption footers, page headers, pages, page index and bloom filters inside StarRocks' own
+    # reader, which keeps its pruning optimizations. Arrow's public reader would mean giving that
+    # reader up. The write path uses only the public API and needs neither header.
+    #
+    # Being internal, these can change in any Arrow release: GetFooterDecryptorForColumn{Meta,Data}
+    # exist in 19.0.1 and are gone by 24.0.0. Arrow is pinned by version and checksum in vars.sh, the
+    # BE use is confined to formats/parquet/{metadata,page_reader}.cpp, and an API change is a compile
+    # error at the Arrow bump rather than a silent behaviour change. The symbols are already in
+    # libparquet.a; only the headers are missing.
+    mkdir -p ${TP_INSTALL_DIR}/include/parquet/encryption
+    for h in internal_file_decryptor.h encryption_internal.h; do
+        cp -f "$TP_SOURCE_DIR/$ARROW_SOURCE/cpp/src/parquet/encryption/$h" ${TP_INSTALL_DIR}/include/parquet/encryption/
+    done
 
     restore_compile_flags
 }
