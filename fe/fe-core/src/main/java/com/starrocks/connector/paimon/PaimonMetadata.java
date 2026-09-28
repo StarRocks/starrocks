@@ -629,7 +629,9 @@ public class PaimonMetadata implements ConnectorMetadata {
         org.apache.paimon.table.Table versionedPaimonTable = getNativeTable(paimonTable.getNativeTable(),
                 tvrVersionRange);
         Map<String, String> options = new HashMap<>();
-        options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        if (snapshotId >= 0) {
+            options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        }
         boolean enablePaimonGlobalIndex = isPaimonGlobalIndexEnabled();
         if (!enablePaimonGlobalIndex) {
             options.put(CoreOptions.GLOBAL_INDEX_ENABLED.key(), Boolean.FALSE.toString());
@@ -650,7 +652,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        PaimonSplitsInfo cachedSplits = enablePaimonGlobalIndex ? paimonSplits.get(filter) : null;
+        // PaimonMetadata is query-scoped, so the session policy is stable for this local cache.
+        PaimonSplitsInfo cachedSplits = paimonSplits.get(filter);
         if (cachedSplits == null) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
@@ -669,9 +672,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
-            if (enablePaimonGlobalIndex) {
-                paimonSplits.put(filter, paimonSplitsInfo);
-            }
+            paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                     PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);

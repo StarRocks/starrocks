@@ -175,6 +175,7 @@ import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1102,12 +1103,15 @@ public class PaimonMetadataTest {
             assertEquals(List.of(1), readIds((FileStoreTable) catalog.getTable(identifier), fastSplits));
 
             context.getSessionVariable().setEnablePaimonGlobalIndex(false);
-            // Reuse fastMetadata after it cached IndexedSplit to verify that disabling the index
-            // cannot reuse a split planned under the enabled session policy.
-            PaimonSplitsInfo disabledSplits = planSplits(fastMetadata, context, predicate, snapshotId);
+            // Connector metadata is query-scoped. Use a new instance to model the next query's
+            // session policy, then verify repeated planning within that query uses its local cache.
+            PaimonMetadata disabledMetadata = new PaimonMetadata(
+                    "paimon", new HdfsEnvironment(), catalog, new ConnectorProperties(ConnectorType.PAIMON));
+            PaimonSplitsInfo disabledSplits = planSplits(disabledMetadata, context, predicate, snapshotId);
             assertFalse(disabledSplits.getPaimonSplits().isEmpty());
             assertTrue(disabledSplits.getPaimonSplits().stream().allMatch(DataSplit.class::isInstance));
             assertEquals(List.of(1, 3), readIds((FileStoreTable) catalog.getTable(identifier), disabledSplits));
+            assertSame(disabledSplits, planSplits(disabledMetadata, context, predicate, snapshotId));
 
             catalog.dropTable(identifier, true);
             catalog.dropDatabase(identifier.getDatabaseName(), true, true);
@@ -1115,6 +1119,60 @@ public class PaimonMetadataTest {
             ConnectContext.remove();
             FileUtils.deleteDirectory(tmpDir.toFile());
         }
+    }
+
+    @Test
+    public void testEmptyAppendOnlyAndDataEvolutionTablesDoNotUseInvalidSnapshot() throws Exception {
+        java.nio.file.Path tmpDir = Files.createTempDirectory("paimon_empty_table_");
+        ConnectContext context = UtFrameUtils.createDefaultCtx();
+        context.setThreadLocalInfo();
+        try (Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())))) {
+            catalog.createDatabase("test_db", true);
+            createEmptyTable(catalog, "empty_append", false);
+            createEmptyTable(catalog, "empty_data_evolution", true);
+
+            ColumnRefOperator idColumn = new ColumnRefOperator(1, IntegerType.INT, "id", true);
+            ScalarOperator predicate = new BinaryPredicateOperator(
+                    BinaryType.EQ, idColumn, ConstantOperator.createInt(1));
+            for (String tableName : List.of("empty_append", "empty_data_evolution")) {
+                for (ScalarOperator tablePredicate : Arrays.asList(null, predicate)) {
+                    PaimonMetadata emptyTableMetadata = new PaimonMetadata(
+                            "paimon", new HdfsEnvironment(), catalog,
+                            new ConnectorProperties(ConnectorType.PAIMON));
+                    PaimonSplitsInfo splitsInfo = planEmptyTableSplits(
+                            emptyTableMetadata, context, tableName, tablePredicate);
+                    assertTrue(splitsInfo.getPaimonSplits().isEmpty());
+                }
+            }
+        } finally {
+            ConnectContext.remove();
+            FileUtils.deleteDirectory(tmpDir.toFile());
+        }
+    }
+
+    private static void createEmptyTable(Catalog catalog, String tableName, boolean dataEvolution) throws Exception {
+        Schema.Builder schema = Schema.newBuilder()
+                .column("id", DataTypes.INT())
+                .column("payload", DataTypes.STRING())
+                .option(CoreOptions.BUCKET.key(), "-1");
+        if (dataEvolution) {
+            schema.option(CoreOptions.ROW_TRACKING_ENABLED.key(), "true")
+                    .option(CoreOptions.DATA_EVOLUTION_ENABLED.key(), "true");
+        }
+        catalog.createTable(Identifier.create("test_db", tableName), schema.build(), false);
+    }
+
+    private static PaimonSplitsInfo planEmptyTableSplits(
+            PaimonMetadata metadata, ConnectContext context, String tableName, ScalarOperator predicate) {
+        PaimonTable table = (PaimonTable) metadata.getTable(context, "test_db", tableName);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
+                .setFieldNames(List.of("id", "payload"))
+                .setPredicate(predicate)
+                .setLimit(-1)
+                .setTableVersionRange(TvrTableSnapshot.of(-1L))
+                .build();
+        RemoteFileInfo remoteFile = metadata.getRemoteFiles(table, params).get(0);
+        return ((PaimonRemoteFileDesc) remoteFile.getFiles().get(0)).getPaimonSplitsInfo();
     }
 
     private static void writeRows(FileStoreTable table, GenericRow... rows) throws Exception {

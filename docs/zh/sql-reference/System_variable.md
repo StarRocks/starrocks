@@ -791,7 +791,7 @@ FROM test;
 
 ### enable_paimon_global_index
 
-* 描述：控制扫描 Data Evolution 表时是否评估 Paimon Global Index。启用后，StarRocks 默认使用 `FULL` 标量索引搜索模式，确保尚未被索引覆盖的行仍会参与扫描。可以在当前会话中将其设置为 `false` 以绕过 Global Index，例如查询 VARIANT 列时需要使用 Paimon Native Reader 的场景。
+* 描述：控制规划扫描时是否使用 Paimon Global Index，包括 Paimon 为 Data Evolution 表自动评估的 Global Index，以及 Primary Key 表的全局索引（例如 PK sorted index）。对于标量索引，StarRocks 默认使用 `FULL` 搜索模式，确保尚未被索引覆盖的行仍会参与扫描。可以在当前会话中将其设置为 `false` 以禁用这两类索引，例如查询 VARIANT 列时需要使用 Paimon Native Reader 的场景。
 * 默认值：true
 * 类型：Boolean
 * 引入版本：v4.2

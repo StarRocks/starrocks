@@ -782,6 +782,13 @@ StarRocks は 2 種類の RF を提供します：ローカル RF とグロー�
 * **データ型**: boolean
 * **導入バージョン**: v3.2.0
 
+### enable_paimon_global_index
+
+* **説明**: スキャンのプランニング時に Paimon Global Index を使用するかどうかを制御します。対象には、Paimon が Data Evolution テーブルに対して自動的に評価する Global Index と、PK sorted index などの Primary Key テーブルの Global Index が含まれます。スカラーインデックスに対して、StarRocks はデフォルトで検索モードに `FULL` を使用し、まだインデックスでカバーされていない行もスキャンします。現在のセッションでこれら両方のインデックスを無効にするには、例えば VARIANT 列に対するクエリで Paimon Native Reader を使用する必要がある場合、この変数を `false` に設定します。
+* **デフォルト**: true
+* **データ型**: Boolean
+* **導入バージョン**: v4.2
+
 ### enable_parallel_merge
 
 * **説明**: ソートの Parallel Merge を有効にするかどうか。この機能を有効にすると、ソートのマージフェーズでマージ操作に複数のスレッドが使用されます。

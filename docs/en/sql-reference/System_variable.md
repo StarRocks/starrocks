@@ -935,7 +935,7 @@ If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join
 
 ### enable_paimon_global_index
 
-* **Description**: Controls whether Paimon global indexes are evaluated when scanning Data Evolution tables. When enabled, StarRocks uses `FULL` scalar-index search mode by default so rows not yet covered by an index are still scanned. Set this variable to `false` to bypass global indexes for the current session, for example when a query must use the native Paimon reader for a VARIANT column.
+* **Description**: Controls whether Paimon global indexes are used when planning scans. This includes Global Indexes that Paimon automatically evaluates for Data Evolution tables and global indexes for Primary Key tables, such as the PK sorted index. For scalar indexes, StarRocks uses `FULL` search mode by default so rows not yet covered by an index are still scanned. Set this variable to `false` to disable both categories of indexes for the current session, for example when a query over a VARIANT column must use the native Paimon reader.
 * **Default**: true
 * **Data type**: Boolean
 * **Introduced in**: v4.2

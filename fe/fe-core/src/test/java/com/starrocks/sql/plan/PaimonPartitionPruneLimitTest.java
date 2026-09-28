@@ -14,11 +14,27 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.connector.GetRemoteFilesParams;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.paimon.PaimonRemoteFileDesc;
+import com.starrocks.connector.paimon.PaimonSplitUtils;
+import com.starrocks.connector.paimon.PaimonSplitsInfo;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
+import org.apache.paimon.globalindex.IndexedSplit;
+import org.apache.paimon.table.source.Split;
+import org.apache.paimon.utils.Range;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
     @BeforeEach
@@ -66,5 +82,37 @@ public class PaimonPartitionPruneLimitTest extends ConnectorPlanTestBase {
         connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
         String plan4 = getFragmentPlan(sql3);
         assertContains(plan4, "partitions=0/1");
+    }
+
+    @Test
+    public void testIndexedSplitPaimonPartitionPruneLimit() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public List<RemoteFileInfo> getRemoteFiles(Invocation invocation, Table table,
+                                                       GetRemoteFilesParams params) {
+                List<RemoteFileInfo> remoteFileInfos = invocation.proceed(table, params);
+                PaimonRemoteFileDesc remoteFileDesc =
+                        (PaimonRemoteFileDesc) remoteFileInfos.get(0).getFiles().get(0);
+                PaimonSplitsInfo splitsInfo = remoteFileDesc.getPaimonSplitsInfo();
+                List<Split> indexedSplits = splitsInfo.getPaimonSplits().stream()
+                        .map(PaimonSplitUtils::getDataSplit)
+                        .map(optional -> optional.orElseThrow(
+                                () -> new IllegalStateException("Expected a Paimon data split")))
+                        .map(dataSplit -> (Split) new IndexedSplit(dataSplit,
+                                List.of(new Range(0, dataSplit.rowCount())), null))
+                        .collect(Collectors.toList());
+                PaimonSplitsInfo indexedSplitsInfo = new PaimonSplitsInfo(splitsInfo.getPredicate(), indexedSplits);
+                return List.of(RemoteFileInfo.builder()
+                        .setFiles(List.of(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(indexedSplitsInfo)))
+                        .build());
+            }
+        };
+
+        connectContext.getSessionVariable().setScanLakePartitionNumLimit(3);
+        String msg = "Exceeded the limit of number of paimon table partitions to be scanned. " +
+                "Number of partitions allowed: 3, number of partitions to be scanned: 10. " +
+                "Please adjust the SQL or change the limit by set variable scan_lake_partition_num_limit.";
+        ExceptionChecker.expectThrowsWithMsg(StarRocksPlannerException.class, msg,
+                () -> getFragmentPlan("select * from partitioned_table"));
     }
 }

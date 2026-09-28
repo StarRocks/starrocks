@@ -52,14 +52,21 @@ public class TestPaimonIndexedSplitScanner {
     @TempDir
     Path tempDir;
 
+    private String originalPlatformUtValue;
+
     @BeforeEach
     public void setUp() {
+        originalPlatformUtValue = System.getProperty(Platform.UT_KEY);
         System.setProperty(Platform.UT_KEY, Boolean.TRUE.toString());
     }
 
     @AfterEach
     public void tearDown() {
-        System.setProperty(Platform.UT_KEY, Boolean.FALSE.toString());
+        if (originalPlatformUtValue == null) {
+            System.clearProperty(Platform.UT_KEY);
+        } else {
+            System.setProperty(Platform.UT_KEY, originalPlatformUtValue);
+        }
     }
 
     @Test
