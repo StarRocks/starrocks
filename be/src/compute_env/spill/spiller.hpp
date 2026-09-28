@@ -314,7 +314,10 @@ Status SpillerReader::trigger_restore(RuntimeState* state, MemGuard&& guard) {
             return Status::OK();
         }
         _running_restore_tasks++;
-        auto restore_task = [this, guard, trace = TraceInfo(state),
+        // The task holds its reader. The owner of a transient reader, such as a spillable hash join probe, can
+        // drop the reader while the task is queued. A guard that also watches the reader would then fail, the
+        // task would skip its completion, and has_running_io_tasks() would stay true forever.
+        auto restore_task = [this, self = weak_from_this().lock(), guard, trace = TraceInfo(state),
                              _stream = _stream](auto& yield_ctx) -> CompletionDecided {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
             SCOPED_SET_MODULE_TYPE(ThreadModuleType::QUERY);

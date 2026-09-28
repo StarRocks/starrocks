@@ -41,7 +41,7 @@ class Spiller;
 using FlushAllCallBack = std::function<Status()>;
 using SpillHashColumn = UInt32Column;
 
-class SpillerReader {
+class SpillerReader : public std::enable_shared_from_this<SpillerReader> {
 public:
     SpillerReader(Spiller* spiller) : _spiller(spiller) {}
 
