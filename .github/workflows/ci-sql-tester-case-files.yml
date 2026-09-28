@@ -1,9 +1,9 @@
 # Check that the SQL-Tester case files a PR touches are shaped so their cases actually run.
 #
-# Flow only. Every step lives in build-support/ci_case_files.sh, including the decision of
-# whether this PR has anything in scope -- see that file for why there is no `paths:` filter
-# here (CASE FILES is a required check, and a workflow a filter keeps from starting reports
-# nothing at all, blocking the PR forever).
+# Flow only. Every step lives in StarRocks/ci-tool bin/ci_case_files.sh, including the
+# decision of whether this PR has anything in scope -- see that file for why there is no
+# `paths:` filter here (CASE FILES is a required check, and a workflow a filter keeps from
+# starting reports nothing at all, blocking the PR forever with no error to explain it).
 name: CI SQL-Tester Case Files
 
 on:
@@ -22,7 +22,11 @@ permissions:
 
 jobs:
   case-files:
-    runs-on: ubuntu-latest
+    # Self-hosted, not ubuntu-latest: ci-tool is a private repo, so a GitHub-hosted runner
+    # would need a PAT to clone it -- and secrets are not available to a `pull_request` run
+    # from a fork, which is most contributions. The self-hosted runners carry the checkout
+    # at /var/lib/ci-tool, the same way every other check in this repo reaches it.
+    runs-on: [self-hosted, quick]
     name: CASE FILES
     steps:
       # Shallow on purpose: the script deepens the history itself, and only once it has
@@ -34,4 +38,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           BASE_REF: ${{ github.base_ref }}
-        run: bash build-support/ci_case_files.sh
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool
+          ( cd ci-tool && git pull -q ) || echo "::warning::ci-tool git pull failed; running the cached copy on this runner"
+          bash ./ci-tool/bin/ci_case_files.sh
+
+      - name: clean
+        if: always()
+        run: rm -rf ./ci-tool
