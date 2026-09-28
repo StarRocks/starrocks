@@ -61,7 +61,7 @@ subprojects {
         set("httpclient5.version", "5.6.4")
         set("httpcore5.version", "5.4.3")
         set("hudi.version", "1.0.2")
-        set("iceberg.version", "1.10.0")
+        set("iceberg.version", "1.11.0")
         set("io.netty.version", "4.1.137.Final")
         set("jackson.version", "2.21.6")
         set("jackson-annotations.version", "2.21")
