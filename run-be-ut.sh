@@ -67,6 +67,7 @@ Usage: $0 <options>
      --without-connector-jdbc       build without the JDBC connector
      --without-connector-mysql
                                     build without the MySQL connector
+     --with-connector-lance         build the Lance Rust connector (disabled by default)
      --without-connector-lance      build without the Lance Rust connector
      --excluding-test-suit          don't run cases of specific suit
      --module                       module to run uts
@@ -126,6 +127,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
+  -l 'with-connector-lance' \
   -l 'without-connector-lance' \
   -l 'excluding-test-suit:' \
   -l 'use-staros' \
@@ -161,7 +163,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
-WITH_CONNECTOR_LANCE=ON
+WITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE:-OFF}
 if starrocks_is_darwin; then
     WITH_STARCACHE=OFF
 else
@@ -198,6 +200,7 @@ while true; do
         --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
         --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
         --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+        --with-connector-lance) WITH_CONNECTOR_LANCE=ON; shift ;;
         --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
         --without-starcache) WITH_STARCACHE=OFF; shift ;;
         --excluding-test-suit) EXCLUDING_TEST_SUIT=$2; shift 2;;

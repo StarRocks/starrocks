@@ -122,6 +122,7 @@ Usage: $0 <options>
                         build Backend without the JDBC connector
      --without-connector-mysql
                         build Backend without the MySQL connector
+     --with-connector-lance   build the Lance Rust connector (disabled by default)
      --without-connector-lance
                         build Backend without the Lance Rust connector
      --with-dynamic     build Backend with dynamic linking of individual StarRocks modules (developer option)
@@ -192,6 +193,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'without-connector-elasticsearch' \
   -l 'without-connector-jdbc' \
   -l 'without-connector-mysql' \
+  -l 'with-connector-lance' \
   -l 'without-connector-lance' \
   -l 'with-dynamic' \
   -l 'module' \
@@ -236,7 +238,7 @@ WITH_CONNECTOR_BENCHMARK=ON
 WITH_CONNECTOR_ELASTICSEARCH=ON
 WITH_CONNECTOR_JDBC=ON
 WITH_CONNECTOR_MYSQL=ON
-WITH_CONNECTOR_LANCE=ON
+WITH_CONNECTOR_LANCE=${WITH_CONNECTOR_LANCE:-OFF}
 WITH_CLANG_TIDY=OFF
 WITH_GLIBC_COMPAT=OFF
 WITH_COMPRESS=ON
@@ -365,6 +367,7 @@ else
             --without-connector-elasticsearch) WITH_CONNECTOR_ELASTICSEARCH=OFF; shift ;;
             --without-connector-jdbc) WITH_CONNECTOR_JDBC=OFF; shift ;;
             --without-connector-mysql) WITH_CONNECTOR_MYSQL=OFF; shift ;;
+            --with-connector-lance) WITH_CONNECTOR_LANCE=ON; shift ;;
             --without-connector-lance) WITH_CONNECTOR_LANCE=OFF; shift ;;
             --with-dynamic) ENABLE_MULTI_DYNAMIC_LIBS=ON; shift ;;
             --module) BUILD_BE_MODULE=$2; shift 2 ;;

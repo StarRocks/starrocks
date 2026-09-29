@@ -1,6 +1,6 @@
 # Native Lance reader
 
-This crate uses Lance SDK 8.0.1 and exports a private C ABI declared in
+This crate uses Lance SDK 12.0.0 with Arrow 58.3.0 and exports a private C ABI declared in
 `../lance_rs_ffi.h`. It exchanges record batches using the Arrow C Data Interface;
 C++ imports them and converts the projected columns to StarRocks columns.
 The reader has no JVM dependency.
@@ -10,7 +10,7 @@ The reader has no JVM dependency.
 ```sh
 cargo test --locked --manifest-path be/src/connector/lance/rust/Cargo.toml
 cargo clippy --locked --manifest-path be/src/connector/lance/rust/Cargo.toml --tests -- -D warnings
-./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --without-java-ext
+./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --with-connector-lance --without-java-ext
 ```
 
 BE CMake builds the shared library with `build-support/build_lance.py`. It uses
@@ -18,6 +18,15 @@ Rust 1.96.1 or newer, or installs a checksum-verified toolchain within the BE bu
 directory on Linux x86-64/AArch64. `Cargo.lock` pins dependencies. Configure
 `WITH_CONNECTOR_LANCE=OFF` to omit the crate and its toolchain entirely.
 `LANCE_BUILD_JOBS` bounds Cargo parallelism independently of the C++ build.
+
+Lance is disabled by default in CMake, `build.sh`, and `run-be-ut.sh`. Default
+builds do not invoke Cargo or download a Rust toolchain. Enable the connector
+with `--with-connector-lance` (or `WITH_CONNECTOR_LANCE=ON` in the environment);
+direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. `--without-connector-lance`
+explicitly disables it even when the environment enables it. The scripts pass
+the selected value to CMake on every invocation so an old CMake cache cannot
+silently keep Lance enabled. Switching off also omits a previously built Lance
+shared library from the BE package.
 
 ## Ownership and query semantics
 

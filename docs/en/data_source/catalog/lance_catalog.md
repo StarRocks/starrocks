@@ -65,7 +65,19 @@ SAS tokens and temporary S3 credentials are static catalog configuration; the co
 - The catalog is read-only. Local file URIs must be accessible on the BE selected for the scan.
 - The native reader is packaged as `be/lib/libstarrocks_lance.so` on Linux. Lance scans do not require a Java reader or JVM.
 
-To build without Lance, pass `--without-connector-lance` to `build.sh`. This disables the BE connector, skips the Rust build, and excludes its native library from the BE package.
+Lance uses Rust SDK 12.0.0 and is **disabled by default**. Default builds skip Cargo, Rust toolchain downloads, and the native Lance library. Enable it explicitly on every BE/CN that will execute Lance scans:
+
+```bash
+./build.sh --be --with-connector-lance
+```
+
+For focused connector tests:
+
+```bash
+./run-be-ut.sh --build-target connector_lance_test --module connector_lance_test --with-connector-lance --without-java-ext
+```
+
+Build automation can instead set `WITH_CONNECTOR_LANCE=ON` in the environment. Direct CMake builds use `-DWITH_CONNECTOR_LANCE=ON`. Pass `--without-connector-lance` to explicitly disable it, including when the environment enables it. A default or explicitly disabled build excludes a previously built Lance shared library from the BE package. Catalog discovery remains available on the FE, but querying Lance requires a BE built with the connector enabled.
 
 The reader opens a dataset once and keeps that immutable snapshot for all batches of a scan. The FE does not yet pin a common version across separate scan operators, including self-joins.
 
