@@ -18,10 +18,16 @@
 
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
+#include "base/uid_util.h"
 #include "common/runtime_profile.h"
+#include "compute_env/spill/dir_manager.h"
+#include "compute_env/spill/global_spill_manager.h"
+#include "exec/exec_env.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/logical_type.h"
 
 namespace starrocks::pipeline {
@@ -84,6 +90,41 @@ TEST(MultiCastLocalExchangeTest, pendingFinishWaitsForSpillTasks) {
     ASSERT_TRUE(source->pending_finish());
     ASSERT_TRUE(sink->pending_finish());
     exchanger->pending = false;
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+}
+
+TEST(MultiCastLocalExchangeTest, spillableExchangerReportsPendingTasks) {
+    TQueryOptions options;
+    options.__set_enable_spill(true);
+    options.__set_spillable_operator_mask(1LL << TSpillableOperatorType::MULTI_CAST_LOCAL_EXCHANGE);
+
+    spill::GlobalSpillManager global_spill_manager;
+    spill::DirManager spill_dir_manager;
+    RuntimeServices runtime_services;
+    runtime_services.global_spill_manager = &global_spill_manager;
+    runtime_services.spill_dir_mgr = &spill_dir_manager;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+
+    auto query_ctx = std::make_shared<QueryContext>();
+    query_ctx->set_query_id(generate_uuid());
+    query_ctx->set_query_execution_services(&query_execution_services);
+    query_ctx->init_mem_tracker(RuntimeEnv::GetInstance()->query_pool_mem_tracker()->limit(),
+                                RuntimeEnv::GetInstance()->query_pool_mem_tracker());
+    ASSERT_OK(query_ctx->init_spill_manager(options));
+    query_ctx->set_query_execution_services(nullptr);
+
+    RuntimeState state(query_ctx->query_id(), generate_uuid(), options, TQueryGlobals{}, &query_execution_services,
+                       ExecEnv::GetInstance());
+    query_ctx->attach_to_runtime_state(&state);
+    auto exchanger = std::make_shared<SpillableMultiCastLocalExchanger>(&state, 1, 1);
+    MultiCastLocalExchangeSourceOperatorFactory source_factory(1, 1, 0, exchanger);
+    MultiCastLocalExchangeSinkOperatorFactory sink_factory(2, 1, exchanger);
+    auto source = source_factory.create(1, 0);
+    auto sink = sink_factory.create(1, 0);
+
+    ASSERT_FALSE(exchanger->has_pending_io_tasks());
     ASSERT_FALSE(source->pending_finish());
     ASSERT_FALSE(sink->pending_finish());
 }
