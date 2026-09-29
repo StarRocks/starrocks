@@ -487,9 +487,11 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
   - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需等到 `tablet_reshard_target_size` 即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。在 `PROPERTIES` 中指定 `tablet_reshard_target_size` 会禁用该行为，并严格按照指定的目标大小执行。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
 
-  - 触发合并（MERGE）的条件：
-    - 两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size`。
-    - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
+  - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
+    - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用 FE 配置项 `tablet_reshard_target_size`。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
+    - 自动合并与未指定 Tablet ID 的手动 MERGE 按相同方式选取要合并的 Tablet。手动 MERGE 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。只有小于 `ceil(0.8 × tablet_reshard_target_size)` 的 Tablet 才会参与合并：相邻的此类 Tablet 按 Range 顺序分组，每组大小总和不超过 `tablet_reshard_target_size`，中间遇到更大的 Tablet 时分组随之断开。合并不会使物化索引的 Tablet 数量低于其并行度下限，即所属仓库的计算节点数（受 `tablet_reshard_max_split_count` 上限约束，且不小于 2）。如果没有可合并的 Tablet，手动执行的语句会报错 `No tablets need to merge in table ...`。
+    - 指定 Tablet ID 的手动 MERGE 直接按指定的分组合并，不检查 Tablet 大小，也不受并行度下限约束。每组须由同一分区、同一物化索引内至少两个连续的 Tablet 组成。
+    - 无论哪种方式，当前正在执行 SPLIT 或 MERGE 的 Tablet 数量都须小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
 :::note
 
