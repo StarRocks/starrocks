@@ -53,10 +53,12 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | `ST_Y(GEOMETRY point)` | 120091 | `DOUBLE`、入力 CRS の単位 | 空でない XY `POINT` | `NULL` は伝播します。`EMPTY`、非 `POINT`、未対応ディスクリプタはエラーです。 |
 | `ST_GeometryType(GEOGRAPHY value)` | 120170 | `VARCHAR` ファミリ名 | 対応するすべての XY ファミリ | `NULL` は伝播します。型付き `EMPTY` はファミリ名を保持します。未対応の次元またはディスクリプタはエラーです。 |
 | `ST_GeometryType(GEOMETRY value)` | 120171 | `VARCHAR` ファミリ名 | 対応するすべての XY ファミリ | `NULL` は伝播します。型付き `EMPTY` はファミリ名を保持します。未対応の次元またはディスクリプタはエラーです。 |
-| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`、メートル | 球面 CRS84 契約の XY `POINT`/`POINT` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、ディスクリプタはエラーです。 |
-| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`、入力 CRS の単位 | ディスクリプタが一致する XY `POINT`/`POINT` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、互換性のないディスクリプタはエラーです。 |
+| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`、メートル | 球面 CRS84 契約の XY `POINT`/`POINT`、または `POINT` と `LINESTRING`/`MULTILINESTRING` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、ディスクリプタ、曖昧な対蹠線分はエラーです。 |
+| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`、入力 CRS の単位 | ディスクリプタが一致する XY `POINT`/`POINT`、または `POINT` と `LINESTRING`/`MULTILINESTRING` | `NULL` または `EMPTY` は `NULL` です。未対応のファミリ、次元、互換性のないディスクリプタはエラーです。 |
+| `ST_DWithin(GEOGRAPHY lhs, GEOGRAPHY rhs, DOUBLE distance)` | 120230 | `BOOLEAN`、`distance` はメートル | XY `POINT` と `LINESTRING`/`MULTILINESTRING`（引数の順序は不問） | しきい値は等しい場合を含みます。`NULL` は伝播し、`EMPTY` は `false` です。しきい値は有限の非負値である必要があります。 |
+| `ST_DWithin(GEOMETRY lhs, GEOMETRY rhs, DOUBLE distance)` | 120231 | `BOOLEAN`、`distance` は入力 CRS の単位 | ディスクリプタが一致する XY `POINT` と `LINESTRING`/`MULTILINESTRING`（引数の順序は不問） | しきい値は等しい場合を含みます。`NULL` は伝播し、`EMPTY` は `false` です。しきい値は有限の非負値である必要があります。 |
 
-[ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md) を参照してください。
+[ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md)、[ST_DWithin](st_dwithin.md) を参照してください。
 
 ## 包含関係の述語
 

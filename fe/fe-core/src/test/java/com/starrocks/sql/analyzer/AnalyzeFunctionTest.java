@@ -155,6 +155,13 @@ public class AnalyzeFunctionTest {
                 PrimitiveType.DOUBLE);
         assertFunctionContract("select ST_Distance(" + geometry + ", " + geometry + ")", 120181,
                 PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_DWithin(" + geography + ", " + geography + ", 100.0)", 120230,
+                PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_DWithin(" + geometry + ", " + geometry + ", 100.0)", 120231,
+                PrimitiveType.BOOLEAN);
+
+        analyzeFail("select ST_DWithin(" + geography + ", " + geometry + ", 100.0)",
+                "No matching function with signature: st_dwithin");
 
         assertFunctionContract("select ST_X(ST_Point(1, 2))", 120001, PrimitiveType.DOUBLE);
         assertFunctionContract("select ST_Y(ST_Point(1, 2))", 120002, PrimitiveType.DOUBLE);

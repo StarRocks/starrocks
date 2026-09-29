@@ -128,6 +128,27 @@ private:
     std::unique_ptr<S2Polyline> _polyline;
 };
 
+// Prepared spherical LINESTRING/MULTILINESTRING components for exact point-to-edge distance queries.
+// S2 implementation details stay in geo_types.cpp so expression code does not depend on S2 headers.
+class GeoSphericalLine {
+public:
+    GeoSphericalLine();
+    ~GeoSphericalLine();
+    GeoSphericalLine(GeoSphericalLine&&) noexcept;
+    GeoSphericalLine& operator=(GeoSphericalLine&&) noexcept;
+
+    GeoSphericalLine(const GeoSphericalLine&) = delete;
+    GeoSphericalLine& operator=(const GeoSphericalLine&) = delete;
+
+    GeoParseStatus add_component(const GeoCoordinateList& coordinates);
+    bool distance(const GeoPoint& point, double* meters) const;
+    bool dwithin(const GeoPoint& point, double meters) const;
+
+private:
+    class Impl;
+    std::unique_ptr<Impl> _impl;
+};
+
 class GeoPolygon : public GeoShape {
 public:
     GeoPolygon();
