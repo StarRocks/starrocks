@@ -277,10 +277,14 @@ long double planar_point_segment_distance(const WkbCoordinate& point, const WkbC
     const long double dy = static_cast<long double>(end.y) - start.y;
     const long double px = static_cast<long double>(point.x) - start.x;
     const long double py = static_cast<long double>(point.y) - start.y;
-    const long double length_squared = dx * dx + dy * dy;
-    if (length_squared == 0) return std::hypotl(px, py);
-    const long double projection = std::clamp((px * dx + py * dy) / length_squared, 0.0L, 1.0L);
-    return std::hypotl(px - projection * dx, py - projection * dy);
+    if (dx == 0 && dy == 0) return std::hypotl(px, py);
+    if (px * dx + py * dy <= 0) return std::hypotl(px, py);
+
+    const long double qx = static_cast<long double>(point.x) - end.x;
+    const long double qy = static_cast<long double>(point.y) - end.y;
+    if (qx * -dx + qy * -dy <= 0) return std::hypotl(qx, qy);
+
+    return std::abs(dx * py - dy * px) / std::hypotl(dx, dy);
 }
 
 long double planar_point_line_distance(const WkbCoordinate& point, const WkbGeometry& line) {

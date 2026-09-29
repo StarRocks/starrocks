@@ -329,10 +329,13 @@ bool GeoSphericalLine::distance(const GeoPoint& point, double* meters) const {
 }
 
 bool GeoSphericalLine::dwithin(const GeoPoint& point, double meters) const {
-    const auto limit = S1ChordAngle::Radians(S2Earth::MetersToRadians(meters)).Successor();
+    S1ChordAngle minimum = S1ChordAngle::Infinity();
     for (const auto& component : _impl->components) {
         for (size_t i = 1; i < component.size(); ++i) {
-            if (S2::IsDistanceLess(*point.point(), component[i - 1], component[i], limit)) return true;
+            if (S2::UpdateMinDistance(*point.point(), component[i - 1], component[i], &minimum) &&
+                S2Earth::ToMeters(minimum) <= meters) {
+                return true;
+            }
         }
     }
     return false;
