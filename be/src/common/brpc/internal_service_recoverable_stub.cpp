@@ -14,6 +14,7 @@
 
 #include "common/brpc/internal_service_recoverable_stub.h"
 
+#include <limits>
 #include <memory>
 
 #include "common/config_rpc_client_fwd.h"
@@ -21,6 +22,16 @@
 namespace starrocks {
 
 namespace {
+
+int64_t request_payload_bytes(const google::protobuf::Message* request, google::protobuf::RpcController* controller) {
+    const size_t request_bytes = request != nullptr ? request->ByteSizeLong() : 0;
+    const size_t attachment_bytes = static_cast<brpc::Controller*>(controller)->request_attachment().size();
+    constexpr size_t max_payload_bytes = static_cast<size_t>(std::numeric_limits<int64_t>::max());
+    if (request_bytes > max_payload_bytes || attachment_bytes > max_payload_bytes - request_bytes) {
+        return std::numeric_limits<int64_t>::max();
+    }
+    return static_cast<int64_t>(request_bytes + attachment_bytes);
+}
 
 class RpcInFlightClosure : public google::protobuf::Closure {
 public:
@@ -52,7 +63,8 @@ public:
                     google::protobuf::Closure* done) override {
         google::protobuf::Closure* closure = done;
         if (done != nullptr) {
-            auto* accounting = new RpcInFlightClosure(_owner->reserve_rpc(), done);
+            auto* accounting =
+                    new RpcInFlightClosure(_owner->reserve_rpc(request_payload_bytes(request, controller)), done);
             closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
                                                                                    controller, accounting);
         }
