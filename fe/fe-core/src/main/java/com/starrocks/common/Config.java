@@ -1386,6 +1386,18 @@ public class Config extends ConfigBase {
             "are upgraded to a version that supports it.")
     public static boolean lake_enable_batch_publish_multi_table = false;
 
+    /**
+     * Minimum interval, in milliseconds, before PublishVersionDaemon retries a partition whose last publish
+     * attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch
+     * publish path.
+     * Only a partition that actually failed waits. A partition that publishes on its first attempt is never
+     * delayed, and one that is merely waiting for an earlier version to become visible is not treated as a
+     * failure. Set it to 0 to retry on every daemon tick, which is the behaviour from before the backoff
+     * existed. A negative value is clamped to 0.
+     */
+    @ConfField(mutable = true)
+    public static long lake_publish_version_retry_interval_ms = 1000;
+
     @ConfField(mutable = true)
     public static boolean lake_use_combined_txn_log = false;
 
@@ -2501,6 +2513,26 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int authentication_ldap_simple_server_port = 389;
 
+    @ConfField(mutable = true, comment = "TCP connect timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple. Without it the bind falls back to the OS TCP timeout, which can pin " +
+            "the request thread for minutes when the directory is unreachable. Matches the default of the other " +
+            "LDAP paths (group provider, enterprise ldap integration).")
+    public static int authentication_ldap_simple_conn_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "Socket read timeout in milliseconds for the LDAP bind done by " +
+            "authentication_ldap_simple.")
+    public static int authentication_ldap_simple_conn_read_timeout_ms = 30000;
+
+    @ConfField(mutable = true, comment = "How long (seconds) a rejected credential is remembered so that a " +
+            "client retrying the same wrong password does not produce one LDAP bind per attempt. The cache key " +
+            "includes a hash of the credential, so fixing the password takes effect immediately. 0 disables it.")
+    public static int authentication_failure_cache_ttl_second = 10;
+
+    @ConfField(mutable = true, comment = "Maximum number of rejected credentials remembered by " +
+            "authentication_failure_cache_ttl_second. Bounds the memory a client (or an attacker) cycling " +
+            "usernames can occupy.")
+    public static int authentication_failure_cache_capacity = 1024;
+
     @ConfField(mutable = true, comment = "false to enable ssl connection")
     public static boolean authentication_ldap_simple_ssl_conn_allow_insecure = true;
 
@@ -2565,6 +2597,24 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "name of the user entry attribute carrying group membership, " +
             "e.g. memberOf (AD, OpenLDAP with memberof overlay) or isMemberOf (389-DS)")
     public static String authentication_ldap_simple_memberof_attr = "memberOf";
+
+    /**
+     * Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case.
+     * <p>
+     * When true, a login whose name differs only in case from a user created with
+     * AUTHENTICATION_LDAP_SIMPLE still resolves to that user, so its per-user DN and the roles
+     * granted to it apply; and a login authenticated by an LDAP security integration takes its
+     * session identity from the name the directory holds rather than the one the client typed.
+     * <p>
+     * This both widens which stored user a login may resolve to and changes the value reported by
+     * current_user() and SHOW PROCESSLIST, so it is opt-in. Native-password, JWT and OAuth2 users
+     * are never affected. Group names are matched without regard to case independently of this.
+     */
+    @ConfField(mutable = true, comment = "Whether to relax LDAP/AD user name matching to be " +
+            "case-insensitive on the StarRocks side. Affects native users whose auth plugin is " +
+            "AUTHENTICATION_LDAP_SIMPLE and ephemeral users from an LDAP security integration. " +
+            "Does not affect native-password, JWT or OAuth2 users.")
+    public static boolean authentication_ldap_case_insensitive = false;
 
     /**
      * For forward compatibility, will be removed later.
@@ -4979,6 +5029,26 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static int group_provider_refresh_thread_num = 4;
 
+    /**
+     * Connect timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s)
+     * URL. Must be positive.
+     * <p>
+     * Without a bound the fetch can hang forever on a server that accepts the connection and never
+     * answers - and it runs not only on the statement's own session but on the journal replay thread,
+     * where it would stop the FE from applying this and every later metadata operation, and from becoming
+     * ready at all during a restart.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_connect_timeout_ms = 5000;
+
+    /**
+     * Read timeout, in milliseconds, for a file group provider whose `group_file_url` is an http(s) URL.
+     * Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see
+     * `group_provider_http_connect_timeout_ms` for why the fetch must be bounded at all.
+     */
+    @ConfField(mutable = true)
+    public static int group_provider_http_read_timeout_ms = 30000;
+
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 
@@ -5176,10 +5246,11 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
-            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
-            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
-            + "enable_tablet_pre_split must also be true for pre-split to run.")
+            + "INSERT INTO ... SELECT FROM <table> loads whose source is an internal OLAP table or a "
+            + "table in an external catalog (views excluded), including explicit real/temp partitions "
+            + "and static/dynamic overwrite. Default on as of v4.1.0 after the GA gate. Set to false "
+            + "to disable cluster-wide. The session variable enable_tablet_pre_split must also be "
+            + "true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for the "

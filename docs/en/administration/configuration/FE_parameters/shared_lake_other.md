@@ -391,6 +391,24 @@ This topic introduces the following types of FE configurations:
 - Description: The cluster-wide default list of Group Providers, separated by commas. It applies to natively authenticated users, and from v4.2 also to a security integration that sets no `group_provider` property of its own - earlier versions consulted no Group Provider at all in that case. See [Authenticate User Groups](../../user_privs/group_provider.md).
 - Introduced in: v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- Default: 5000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Connect timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. If the server does not accept the connection within this time, the CREATE or ALTER GROUP PROVIDER statement fails and the group provider keeps its previous configuration. Without a bound, a server that never answers would block not only the statement but also journal replay on every FE.
+- Introduced in: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Read timeout for a File Group Provider whose `group_file_url` is an `http://` or `https://` URL. Must be positive. Bounds how long a connected server may stay silent before the fetch fails; see `group_provider_http_connect_timeout_ms` for the failure behavior.
+- Introduced in: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - Default: 300
@@ -742,6 +760,15 @@ This topic introduces the following types of FE configurations:
 - Description: Sets the minimum number of consecutive transaction versions required to form a publish batch for lake tables. DatabaseTransactionMgr.getReadyToPublishTxnListBatch passes this value to transactionGraph.getTxnsWithTxnDependencyBatch together with `lake_batch_publish_max_version_num` to select dependent transactions. A value of `1` allows single-transaction publishes (no batching). Values `>1` require at least that many consecutively-versioned, single-table, non-replication transactions to be available; batching is aborted if versions are non-consecutive, a replication transaction appears, or a schema change consumes a version. Increasing this value can improve publish throughput by grouping commits but may delay publishing while waiting for enough consecutive transactions.
 - Introduced in: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- Default: 1000
+- Type: Long
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Minimum interval before PublishVersionDaemon retries a partition whose last publish attempt failed, in shared-data (lake) mode. It applies to both the single-transaction and the batch publish path. Only a partition that actually failed waits: a partition that publishes on its first attempt is never delayed, and a partition that is merely waiting for an earlier version to become visible is not treated as a failure. Raising this value reduces the load a persistently failing publish puts on the leader and on object storage, at the cost of a slower recovery once the underlying problem clears. Setting it to `0` retries on every daemon tick, which is the behavior from before the backoff existed. A negative value is treated as `0`.
+- Introduced in: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - Default: true
@@ -900,6 +927,33 @@ This topic introduces the following types of FE configurations:
 - Description: The token that is used for identity authentication within the StarRocks cluster to which the FE belongs. If this parameter is left unspecified, StarRocks generates a random token for the cluster at the time when the leader FE of the cluster is started for the first time.
 - Introduced in: -
 
+### `authentication_failure_cache_capacity`
+
+- Default: 1024
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: How many rejected credentials `authentication_failure_cache_ttl_second` remembers at most. It bounds the memory a client - or an attacker cycling usernames - can occupy; the oldest entries are evicted first.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: How long a credential rejected by the security integration chain is remembered, so that a client retrying the same wrong password does not produce one LDAP bind per attempt - which is what drives Active Directory's `badPwdCount` toward locking the account out. The cache key includes a hash of the credential, so correcting the password takes effect immediately instead of after the TTL, and a failure caused by the directory being unreachable is never cached. Set to `0` to disable.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Whether the StarRocks-side matching of an LDAP/AD user name is relaxed to ignore case. When this item is set to `true`, a login whose name differs only in case from a user created with `AUTHENTICATION_LDAP_SIMPLE` still resolves to that user, so its per-user DN and the roles granted to it apply; and a login authenticated by an LDAP security integration takes its session identity from the name held by the directory rather than the one typed by the client. Because this both widens which stored user a login may resolve to and changes the value reported by `current_user()` and `SHOW PROCESSLIST`, it is disabled by default. Users authenticated by native password, JWT, or OAuth2 are never affected. If two users created with `AUTHENTICATION_LDAP_SIMPLE` have names that differ only in case, a login matching both of them is refused rather than resolved to either. Group names are matched without regard to case independently of this item.
+- Introduced in: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - Default: Empty string
@@ -934,6 +988,24 @@ This topic introduces the following types of FE configurations:
 - Is mutable: Yes
 - Description: The password of the administrator used to search for users' authentication information.
 - Introduced in: -
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: Socket read timeout for the LDAP bind performed by `authentication_ldap_simple`. See `authentication_ldap_simple_conn_timeout_ms`.
+- Introduced in: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- Default: 30000
+- Type: Int
+- Unit: Milliseconds
+- Is mutable: Yes
+- Description: TCP connect timeout for the LDAP bind performed by `authentication_ldap_simple`. Without it the bind falls back to the operating system's TCP timeout, which can hold the thread serving the request - an HTTP worker or a Thrift handler, now that a security integration also authenticates those channels - for minutes when the directory is unreachable. Lower it if authentication has to fail fast.
+- Introduced in: v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 

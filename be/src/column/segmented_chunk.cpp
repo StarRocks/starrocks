@@ -26,6 +26,7 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -41,7 +42,8 @@ template <class ColumnT>
 inline constexpr bool is_segmented_object_column =
         std::is_same_v<ColumnT, ArrayColumn> || std::is_same_v<ColumnT, StructColumn> ||
         std::is_same_v<ColumnT, MapColumn> || std::is_same_v<ColumnT, JsonColumn> ||
-        std::is_same_v<ColumnT, VariantColumn> || std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
+        std::is_same_v<ColumnT, VariantColumn> || std::is_same_v<ColumnT, FileColumn> ||
+        std::is_same_v<ObjectColumn<typename ColumnT::ValueType>, ColumnT>;
 
 // Selective-copy data from SegmentedColumn according to provided index.
 class SegmentedColumnSelectiveCopy final : public ColumnVisitorAdapter<SegmentedColumnSelectiveCopy> {

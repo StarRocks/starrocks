@@ -136,7 +136,6 @@ TEST(NativeGeoTypeTest, FrontendWireFixture) {
 TEST(NativeGeoTypeTest, ReservedLogicalTypeSlots) {
     EXPECT_EQ(28, TYPE_GEOGRAPHY);
     EXPECT_EQ(29, TYPE_GEOMETRY);
-    EXPECT_EQ(56, TYPE_MAX_VALUE);
     // Internal slots are independent of the existing wire identities.
     EXPECT_EQ(TPrimitiveType::GEOGRAPHY, to_thrift(TYPE_GEOGRAPHY));
     EXPECT_EQ(TPrimitiveType::GEOMETRY, to_thrift(TYPE_GEOMETRY));

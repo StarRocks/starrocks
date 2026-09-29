@@ -553,7 +553,7 @@ void register_config_update_hooks(ExecEnv* exec_env, const RuntimeEnv& runtime_e
     registry->register_callback("compact_threads", [=]() -> Status {
         auto tablet_manager = StorageEnv::GetInstance()->lake_tablet_manager();
         if (tablet_manager != nullptr) {
-            tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            return tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
         }
         return Status::OK();
     });

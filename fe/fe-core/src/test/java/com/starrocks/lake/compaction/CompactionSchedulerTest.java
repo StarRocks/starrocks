@@ -844,6 +844,7 @@ public class CompactionSchedulerTest {
 
         OlapTable mockTable = Mockito.mock(OlapTable.class);
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+        Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createCompactionTasks",
                 long.class, Map.class, long.class, boolean.class, PartitionStatistics.CompactionPriority.class,
@@ -865,6 +866,12 @@ public class CompactionSchedulerTest {
         Assertions.assertEquals(5, (int) request.parallelConfig.maxParallelPerTablet);
         // maxBytesPerSubtask is 0 (let BE use its own config)
         Assertions.assertEquals(0L, (long) request.parallelConfig.maxBytesPerSubtask);
+        Assertions.assertFalse(request.allowBaseCompaction);
+
+        List<CompactionTask> manualTasks = (List<CompactionTask>) method.invoke(scheduler, currentVersion, beToTablets,
+                txnId, false, PartitionStatistics.CompactionPriority.MANUAL_COMPACT, mockTable);
+        CompactRequest manualRequest = (CompactRequest) requestField.get(manualTasks.get(0));
+        Assertions.assertTrue(manualRequest.allowBaseCompaction);
     }
 
     /**
@@ -925,6 +932,7 @@ public class CompactionSchedulerTest {
 
         OlapTable mockTable = Mockito.mock(OlapTable.class);
         Mockito.when(mockTable.getTableProperty()).thenReturn(tableProperty);
+        Mockito.when(mockTable.getBaseCompactionForbiddenTimeRanges()).thenReturn("* * * * *");
 
         Method method = CompactionScheduler.class.getDeclaredMethod("createAggregateCompactionTask",
                 long.class, Map.class, long.class, PartitionStatistics.CompactionPriority.class, 
@@ -948,6 +956,7 @@ public class CompactionSchedulerTest {
             Assertions.assertTrue(req.parallelConfig.enableParallel);
             Assertions.assertEquals(8, (int) req.parallelConfig.maxParallelPerTablet);
             Assertions.assertFalse(req.unshareSegments);
+            Assertions.assertFalse(req.allowBaseCompaction);
             // maxBytesPerSubtask is 0 (let BE use its own config)
             Assertions.assertEquals(0L, (long) req.parallelConfig.maxBytesPerSubtask);
         }

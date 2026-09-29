@@ -39,7 +39,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
@@ -133,20 +132,17 @@ public class InformationSchemaDataSource {
         List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        for (String fullName : dbNames) {
-
+        for (String dbName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, dbName);
             } catch (AccessDeniedException e) {
                 continue;
             }
 
-            final String dbName = ClusterNamespace.getNameFromFullName(fullName);
-
             if (!PatternMatcher.matchPattern(authInfo.getPattern(), dbName, matcher, caseSensitive)) {
                 continue;
             }
-            authorizedDbs.add(fullName);
+            authorizedDbs.add(dbName);
         }
         return new AuthDbRequestResult(authorizedDbs, context);
     }

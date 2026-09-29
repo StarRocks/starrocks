@@ -24,8 +24,13 @@ import Experimental from '../_assets/commonMarkdown/_experimental.mdx'
 |        ✅        |        ✅         |    Incremental materialization    |
 |        ✅        |        ✅         |         Primary Key Model         |
 |        ✅        |        ✅         |              Sources              |
-|        ✅        |        ✅         |         Custom data tests         |
+|        ✅        |        ✅         | Data tests (generic and singular) |
+|        ✅        |        ✅         |            Unit tests             |
+|        ✅        |        ✅         |      Storing test failures        |
+|        ✅        |        ✅         |  Source freshness (`loaded_at_field`) |
+|        ❌        |        ❌         |  Metadata-based source freshness  |
 |        ✅        |        ✅         |           Docs generate           |
+|        ❌        |        ❌         |          `persist_docs`           |
 |        ✅        |        ✅         |       Expression Partition        |
 |        ❌        |        ❌         |               Kafka               |
 |        ❌        |        ✅         |         Dynamic Overwrite         |
@@ -298,6 +303,120 @@ For more information about which overwrite strategy to use, see the [INSERT](../
 
 :::note
 Currently, incremental merge is not supported. 
+:::
+
+## Testing
+
+`dbt-starrocks` supports every dbt test type. No adapter-specific configuration is required — the tests compile to standard SQL that StarRocks executes directly.
+
+### Data tests
+
+The four built-in generic tests (`not_null`, `unique`, `accepted_values`, and `relationships`) are supported, as are custom generic tests defined in `macros/` and singular tests defined as `.sql` files under `test-paths`.
+
+```yml
+models:
+  - name: stg_customers
+    columns:
+      - name: id
+        data_tests: [not_null, unique]
+      - name: region
+        data_tests:
+          - accepted_values:
+              values: ['us', 'eu']
+          - relationships:
+              to: ref('dim_customers')
+              field: region
+```
+
+Test severity settings (`severity`, `error_if`, `warn_if`, `fail_calc`, and `limit`) are handled by dbt before any SQL reaches StarRocks and behave as they do on other adapters.
+
+### Unit tests
+
+Unit tests are supported. dbt builds the fixture rows into the compiled query, so no data is written to StarRocks:
+
+```yml
+unit_tests:
+  - name: test_dim_customers_counts
+    model: dim_customers
+    given:
+      - input: ref('stg_customers')
+        rows:
+          - {id: 1, name: 'a', region: 'us'}
+          - {id: 2, name: 'b', region: 'us'}
+    expect:
+      rows:
+        - {region: 'us', n: 2}
+```
+
+Run them with:
+
+```sh
+dbt test --select test_type:unit
+```
+
+### Storing test failures
+
+`dbt test --store-failures`, the `store_failures` config, and `store_failures_as` (`table` or `view`) are all supported. Failing rows are written to a separate schema named `<schema>_dbt_test__audit`, which the adapter creates if it does not exist:
+
+```sql
+SELECT * FROM `analytics_dbt_test__audit`.`not_null_stg_customers_name`;
+```
+
+Failure tables are created with `CREATE TABLE AS`, so they accept the same configuration options as table models. Use this to control how the failure table is stored:
+
+```yml
+      - name: name
+        data_tests:
+          - not_null:
+              config:
+                store_failures: true
+                alias: nn_name_failures
+                distributed_by: ['id']
+                buckets: 3
+```
+
+Without a `distributed_by` value, the failure table is created with random distribution.
+
+:::tip
+`store_failures_as: view` stores the failing rows as a view instead of a table, which avoids creating and reloading a table on every test run.
+:::
+
+### Source freshness
+
+`dbt source freshness` requires each source table to declare a `loaded_at_field`:
+
+```yml
+sources:
+  - name: raw
+    tables:
+      - name: events
+        loaded_at_field: updated_at
+        freshness:
+          warn_after: {count: 1, period: hour}
+          error_after: {count: 24, period: hour}
+```
+
+:::warning
+Metadata-based freshness is not supported. Every source that needs a freshness check must expose a timestamp column.
+:::
+
+## Generating documentation
+
+`dbt docs generate` builds the project catalog by querying `information_schema.tables` and `information_schema.columns`. Models, seeds, views, materialized views, and sources are all included, each with its columns, ordinal positions, and data types. `dbt docs generate --static` and `dbt docs serve` work as well.
+
+The descriptions you write in your `.yml` files are read from the dbt manifest, so they appear in the documentation site as usual. However, the following metadata is not collected from StarRocks:
+
+- Table and column comments stored in the database.
+- Table owner.
+- Table statistics, such as row counts and sizes.
+
+Two further details affect how relations are described:
+
+- Column types are reported without precision. A `VARCHAR(64)` column appears as `varchar`, and a `DECIMAL(18,4)` column appears as `decimal`. Use [SHOW CREATE TABLE](../sql-reference/sql-statements/table_bucket_part_index/SHOW_CREATE_TABLE.md) when the exact type matters.
+- Materialized views are documented as views. This affects the documentation site only, not `dbt run`.
+
+:::warning
+`persist_docs` is not supported. Do not set `persist_docs` in `dbt_project.yml`, where it would apply to every model in the project.
 :::
 
 ## Troubleshooting

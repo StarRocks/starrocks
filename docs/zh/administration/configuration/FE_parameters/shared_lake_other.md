@@ -392,6 +392,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 集群级默认 Group Provider 列表，多个之间用逗号分隔。对使用本地认证的用户生效；从 v4.2 起，未设置自身 `group_provider` 属性的 Security Integration 也会回退到该值，此前版本在这种情况下不会查询任何 Group Provider。参见[认证用户组](../../user_privs/group_provider.md)。
 - 引入版本: v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- 默认值: 5000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的连接超时，必须为正数。服务端在该时间内未接受连接时，CREATE 或 ALTER GROUP PROVIDER 语句失败，Group Provider 保持原有配置。若没有上限，一个永不响应的服务端不仅会卡住该语句，还会卡住每台 FE 的日志回放。
+- 引入版本: v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `group_file_url` 为 `http://` 或 `https://` URL 的 File Group Provider 的读取超时，必须为正数。限制已建立连接的服务端最多可以静默多久，超时后读取失败；失败后的行为见 `group_provider_http_connect_timeout_ms`。
+- 引入版本: v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - 默认值: 300
@@ -752,6 +770,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 设置构成 lake 表发布批次所需的最小连续事务版本数。DatabaseTransactionMgr.getReadyToPublishTxnListBatch 将此值与 `lake_batch_publish_max_version_num` 一起传递给 transactionGraph.getTxnsWithTxnDependencyBatch 以选择依赖事务。值为 `1` 允许单事务发布（不批处理）。值 `>1` 要求至少有相同数量的连续版本、单表、非复制事务可用；如果版本不连续，出现复制事务，或 schema 更改消耗版本，则批处理中止。增加此值可以通过分组提交来提高发布吞吐量，但可能会在等待足够连续的事务时延迟发布。
 - 引入版本: v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- 默认值: 1000
+- 类型: Long
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: 存算分离（lake）模式下，PublishVersionDaemon 重试上次发布失败的分区之前的最小间隔。单事务发布路径和批量发布路径均适用。只有真正失败的分区才会等待：首次尝试即成功发布的分区不会被延迟，仅在等待前序版本可见的分区不算作失败。增大该值可以降低发布持续失败时 leader 和对象存储的负载，但问题恢复后的追赶速度也会变慢。设置为 `0` 表示每个守护线程周期都重试，即退避机制引入之前的行为。负值按 `0` 处理。
+- 引入版本: v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - 默认值: true
@@ -900,6 +927,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述: 用于 StarRocks 集群内部身份验证的令牌。如果未指定此参数，StarRocks 会在集群 Leader FE 首次启动时为集群生成一个随机令牌。
 - 引入版本: -
 
+### `authentication_failure_cache_capacity`
+
+- 默认值: 1024
+- 类型: Int
+- 单位: -
+- 是否可变: Yes
+- 描述: `authentication_failure_cache_ttl_second` 最多记住多少条被拒绝的凭据。用于限制一个客户端（或一个不断更换用户名的攻击者）能占用的内存，超出后按最早写入的顺序淘汰。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- 默认值: 10
+- 类型: Int
+- 单位: 秒
+- 是否可变: Yes
+- 描述: 被 security integration 认证链拒绝的凭据记住多久，使得反复重试同一个错误口令的客户端不会每次都产生一次 LDAP bind——正是这种重试会把 Active Directory 的 `badPwdCount` 推向账号锁定。缓存的 key 包含凭据的哈希，因此把口令改对后立即生效，不必等 TTL 过期；由目录本身不可用导致的失败不会被缓存。设为 `0` 表示关闭。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- 默认值: false
+- 类型: Boolean
+- 单位: -
+- 是否可变: Yes
+- 描述: StarRocks 侧匹配 LDAP/AD 用户名时是否放宽为忽略大小写。设置为 `true` 时：登录名与使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户仅大小写不同时仍能匹配到该用户，从而保证其 per-user DN 和已授予的 Role 生效；通过 LDAP Security Integration 认证成功的登录，其会话身份取自目录中记录的用户名，而不是客户端键入的写法。由于该项同时放宽了登录可匹配到的用户范围、并改变 `current_user()` 与 `SHOW PROCESSLIST` 的返回值，默认关闭。使用原生密码、JWT 或 OAuth2 认证的用户不受影响。如果存在两个仅大小写不同、且均使用 `AUTHENTICATION_LDAP_SIMPLE` 创建的用户，同时匹配到二者的登录会被拒绝，而不会任选其一。组名的大小写匹配与该项无关，独立生效。
+- 引入版本: v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - 默认值: 空字符串
@@ -934,6 +988,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否可变: Yes
 - 描述: 用于搜索用户身份验证信息的管理员密码。
 - 引入版本: -
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 socket 读超时。参见 `authentication_ldap_simple_conn_timeout_ms`。
+- 引入版本: v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- 默认值: 30000
+- 类型: Int
+- 单位: 毫秒
+- 是否可变: Yes
+- 描述: `authentication_ldap_simple` 执行 LDAP bind 时的 TCP 连接超时。不设置时会退回到操作系统的 TCP 超时，目录不可达时可能把处理请求的线程占住几分钟——security integration 现在也为 HTTP、Arrow Flight 和 BE→FE 的导入 RPC 做认证，占住的就是这些通道的工作线程。需要认证快速失败时可以调小。
+- 引入版本: v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 

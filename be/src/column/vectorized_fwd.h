@@ -116,6 +116,8 @@ class JsonColumn;
 using VariantColumnBase = ObjectColumn<VariantRowValue>;
 class VariantColumn;
 
+class FileColumn;
+
 class MapColumn;
 class StructColumn;
 

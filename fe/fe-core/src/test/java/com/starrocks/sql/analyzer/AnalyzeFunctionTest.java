@@ -21,6 +21,9 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.GeoTypeDescriptor;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -68,7 +71,143 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
         analyzeSuccess("select ST_AsWKT(ST_GeogFromText('LINESTRING (1 2, 3 4)', 4326))");
         analyzeSuccess("select ST_AsBinary(ST_GeogFromWKB(ST_AsWKB(ST_GeogFromText('POINT (1 2)'))))");
+        analyzeSuccess("select ST_X(ST_GeogFromText('POINT (1 2)'))");
+        analyzeSuccess("select ST_Y(ST_GeogFromText('POINT (1 2)'))");
+        analyzeSuccess("select ST_GeometryType(ST_GeogFromText('POLYGON ((0 0, 0 1, 1 1, 0 0))'))");
+        analyzeSuccess("select ST_Distance(ST_GeogFromText('POINT (0 0)'), ST_GeogFromText('POINT (1 1)'))");
+        analyzeFail("select ST_Distance('POINT (0 0)', 'POINT (1 1)')",
+                "No matching function with signature: st_distance(varchar, varchar)");
 
+    }
+
+    @Test
+    public void testNativeGeometrySqlBoundary() {
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1000000 2000000)', 'EPSG:3857')")).getQueryRelation();
+        ScalarType type = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(PrimitiveType.GEOMETRY, type.getPrimitiveType());
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), type.getGeoDescriptor());
+
+        analyzeSuccess("select ST_AsText(ST_GeomFromText('POINT EMPTY', 'EPSG:3857'))");
+        analyzeSuccess("select ST_AsWKT(ST_GeomFromText('LINESTRING (1 2, 3 4)', 'custom:local'))");
+        analyzeSuccess("select ST_AsText(ST_GeomFromWKB(" +
+                "ST_AsWKB(ST_GeomFromText('POINT (1 2)', 'EPSG:3857')), 'EPSG:3857'))");
+
+        QueryRelation legacy = ((QueryStatement) analyzeSuccess(
+                "select ST_GeomFromText('POINT (1 2)')")).getQueryRelation();
+        Assertions.assertTrue(((SelectRelation) legacy).getOutputExpression().get(0).getType().isVarchar());
+
+        analyzeFail("select ST_GeomFromText('POINT (1 2)', '')", "requires CRS to be a non-empty string literal");
+        analyzeFail("select ST_GeomFromText('POINT (1 2)', concat('EPSG:', '3857'))",
+                "requires CRS to be a non-empty string literal");
+        analyzeFail("select ST_GeomFromWKB(cast('x' as varbinary))",
+                "No matching function with signature: st_geomfromwkb(varbinary)");
+    }
+
+    @Test
+    public void testNativeGeometryInitialFunctions() {
+        analyzeSuccess("select ST_X(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
+        analyzeSuccess("select ST_Y(ST_GeomFromText('POINT (1 2)', 'EPSG:3857'))");
+        analyzeSuccess("select ST_GeometryType(" +
+                "ST_GeomFromText('GEOMETRYCOLLECTION (POINT (1 2))', 'EPSG:3857'))");
+        analyzeSuccess("select ST_Distance(" +
+                "ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), " +
+                "ST_GeomFromText('POINT (3 4)', 'EPSG:3857'))");
+
+        analyzeFail("select ST_Distance(" +
+                        "ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), " +
+                        "ST_GeogFromText('POINT (3 4)'))",
+                "No matching function with signature: st_distance");
+    }
+
+    @Test
+    public void testNativeGeoFunctionContract() {
+        assertFunctionContract("select ST_GeogFromText('POINT (1 2)')", 120020, PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeogFromText('POINT (1 2)', 4326)", 120021,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeomFromText('POINT (1 2)', 'EPSG:3857')", 120022,
+                PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_GeogFromWKB(cast('x' as varbinary))", 120030,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeogFromWKB(cast('x' as varbinary), 4326)", 120031,
+                PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_GeomFromWKB(cast('x' as varbinary), 'EPSG:3857')", 120032,
+                PrimitiveType.GEOMETRY);
+
+        String geography = "ST_GeogFromText('POINT (1 2)')";
+        String geometry = "ST_GeomFromText('POINT (1 2)', 'EPSG:3857')";
+        assertFunctionContract("select ST_AsText(" + geography + ")", 120040, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsText(" + geometry + ")", 120041, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(" + geography + ")", 120050, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(" + geometry + ")", 120051, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsBinary(" + geography + ")", 120060, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsBinary(" + geometry + ")", 120061, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsWKB(" + geography + ")", 120070, PrimitiveType.VARBINARY);
+        assertFunctionContract("select ST_AsWKB(" + geometry + ")", 120071, PrimitiveType.VARBINARY);
+
+        assertFunctionContract("select ST_X(" + geography + ")", 120080, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_X(" + geometry + ")", 120081, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(" + geography + ")", 120090, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(" + geometry + ")", 120091, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_GeometryType(" + geography + ")", 120170, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeometryType(" + geometry + ")", 120171, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_Distance(" + geography + ", " + geography + ")", 120180,
+                PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Distance(" + geometry + ", " + geometry + ")", 120181,
+                PrimitiveType.DOUBLE);
+
+        assertFunctionContract("select ST_X(ST_Point(1, 2))", 120001, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Y(ST_Point(1, 2))", 120002, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_AsText(ST_Point(1, 2))", 120004, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_AsWKT(ST_Point(1, 2))", 120005, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeometryFromText('POINT (1 2)')", 120006, PrimitiveType.VARCHAR);
+        assertFunctionContract("select ST_GeomFromText('POINT (1 2)')", 120007, PrimitiveType.VARCHAR);
+    }
+
+    @Test
+    public void testNativeGeoContainmentContract() {
+        String geographyPoint = "ST_GeogFromText('POINT (1 1)')";
+        String geographyPolygon = "ST_GeogFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))')";
+        String geometryPoint = "ST_GeomFromText('POINT (1 1)', 'EPSG:3857')";
+        String geometryPolygon =
+                "ST_GeomFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))', 'EPSG:3857')";
+
+        assertFunctionContract("select ST_Contains(" + geographyPolygon + ", " + geographyPoint + ")",
+                120190, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Contains(" + geometryPolygon + ", " + geometryPoint + ")",
+                120191, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Within(" + geographyPoint + ", " + geographyPolygon + ")",
+                120200, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Within(" + geometryPoint + ", " + geometryPolygon + ")",
+                120201, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Covers(" + geographyPolygon + ", " + geographyPoint + ")",
+                120210, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Covers(" + geometryPolygon + ", " + geometryPoint + ")",
+                120211, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_CoveredBy(" + geographyPoint + ", " + geographyPolygon + ")",
+                120220, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_CoveredBy(" + geometryPoint + ", " + geometryPolygon + ")",
+                120221, PrimitiveType.BOOLEAN);
+
+        assertFunctionContract(
+                "select ST_Contains(ST_Polygon('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'), ST_Point(1, 1))",
+                120014, PrimitiveType.BOOLEAN);
+        analyzeFail("select ST_Contains(" + geographyPolygon + ", " + geometryPoint + ")",
+                "No matching function with signature: st_contains");
+        analyzeFail("select ST_Within(" + geometryPoint + ", " + geographyPolygon + ")",
+                "No matching function with signature: st_within");
+    }
+
+    private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
+        if (returnType == PrimitiveType.GEOGRAPHY) {
+            Assertions.assertEquals(AnyGeographyType.GEOGRAPHY, call.getType(), sql);
+        } else {
+            Assertions.assertEquals(returnType, call.getType().getPrimitiveType(), sql);
+        }
     }
 
     @Test

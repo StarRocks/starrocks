@@ -32,6 +32,7 @@
 #include "column/column_helper.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
+#include "column/file_column.h"
 #include "column/fixed_length_column.h"
 #include "column/geo_column.h"
 #include "column/json_column.h"
@@ -943,6 +944,34 @@ public:
     }
 };
 
+// FILE has a fixed field layout, so the fields are written back to back without any schema.
+class FileColumnSerde {
+public:
+    using Serde = serde::ColumnArraySerde;
+    static int64_t max_serialized_size(const FileColumn& column, const int encode_level) {
+        int64_t size = 0;
+        for (const ColumnPtr& field : column.fields()) {
+            size += Serde::max_serialized_size(*field, encode_level);
+        }
+        return size;
+    }
+
+    static StatusOr<uint8_t*> serialize(const FileColumn& column, uint8_t* buff, const int encode_level) {
+        for (const ColumnPtr& field : column.fields()) {
+            ASSIGN_OR_RETURN(buff, Serde::serialize(*field, buff, false, encode_level));
+        }
+        return buff;
+    }
+
+    static StatusOr<const uint8_t*> deserialize(const uint8_t* buff, const uint8_t* end, FileColumn* column,
+                                                const int encode_level) {
+        for (const ColumnPtr& field : column->fields()) {
+            ASSIGN_OR_RETURN(buff, Serde::deserialize(buff, end, field->as_mutable_raw_ptr(), false, encode_level));
+        }
+        return buff;
+    }
+};
+
 class ConstColumnSerde {
 public:
     using Serde = serde::ColumnArraySerde;
@@ -994,6 +1023,11 @@ public:
 
     Status do_visit(const StructColumn& column) {
         _size += StructColumnSerde::max_serialized_size(column, _encode_level);
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
+        _size += FileColumnSerde::max_serialized_size(column, _encode_level);
         return Status::OK();
     }
 
@@ -1067,6 +1101,11 @@ public:
 
     Status do_visit(const StructColumn& column) {
         ASSIGN_OR_RETURN(_cur, StructColumnSerde::serialize(column, _cur, _encode_level));
+        return Status::OK();
+    }
+
+    Status do_visit(const FileColumn& column) {
+        ASSIGN_OR_RETURN(_cur, FileColumnSerde::serialize(column, _cur, _encode_level));
         return Status::OK();
     }
 
@@ -1153,6 +1192,11 @@ public:
 
     Status do_visit(StructColumn* column) {
         ASSIGN_OR_RETURN(_cur, StructColumnSerde::deserialize(_cur, _end, column, _encode_level));
+        return Status::OK();
+    }
+
+    Status do_visit(FileColumn* column) {
+        ASSIGN_OR_RETURN(_cur, FileColumnSerde::deserialize(_cur, _end, column, _encode_level));
         return Status::OK();
     }
 

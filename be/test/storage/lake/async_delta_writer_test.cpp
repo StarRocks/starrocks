@@ -18,6 +18,8 @@
 #include <gtest/gtest.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <chrono>
 #include <random>
 #include <thread>
 
@@ -34,11 +36,13 @@
 #include "column/vectorized_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/logging.h"
+#include "common/thread/threadpool.h"
 #include "compute_env/load_spill/load_spill_block_merge_executor.h"
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "runtime/descriptors.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/delta_writer.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
@@ -866,6 +870,109 @@ TEST_F(LakeAsyncDeltaWriterTest, test_close_race_with_finish_submit_merge_task) 
     // Close concurrently. Before the fix, close() could destroy _block_merge_token while
     // execute() was about to call _block_merge_token->submit(), causing SIGSEGV.
     delta_writer->close();
+}
+
+// Regression test: ThreadPoolToken::shutdown() waits for the tasks it is running but cancels the
+// ones still queued, and a cancelled MergeBlockTask used to be destroyed without ever answering the
+// finish callback it owned. In production the caller of finish() is
+// LakeTabletsChannel::add_chunk(), which blocks on a latch that only that callback counts down, so
+// the bthread serving tablet_writer_add_chunks parked forever -- holding its brpc closure, and with
+// it a connection that Server::Join() then waited on for the rest of the process's life.
+//
+// Pin the merge pool to a single thread and keep that thread busy, so the task finish() submits has
+// to queue and close() is guaranteed to cancel it rather than run it.
+TEST_F(LakeAsyncDeltaWriterTest, test_finish_callback_is_answered_when_merge_task_is_cancelled) {
+    static const int kChunkSize = 128;
+    auto chunk0 = generate_data(kChunkSize);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto txn_id = next_id();
+    auto tablet_id = _tablet_metadata->id();
+    auto* merge_executor = StorageEnv::GetInstance()->load_spill_block_merge_executor();
+
+    int64_t old_max_thread = config::load_spill_merge_max_thread;
+    config::load_spill_merge_max_thread = 1;
+    ASSERT_OK(merge_executor->refresh_max_thread_num());
+
+    CountDownLatch blocker_started(1);
+    CountDownLatch release_blocker(1);
+    CountDownLatch blocker_finished(1);
+    ASSERT_OK(merge_executor->get_thread_pool()->submit_func([&]() {
+        blocker_started.count_down();
+        release_blocker.wait();
+        blocker_finished.count_down();
+    }));
+    // The merge pool's only thread is now busy, so nothing submitted below can start.
+    blocker_started.wait();
+
+    DeferOp restore([&]() {
+        release_blocker.count_down();
+        // Releasing the blocker is not enough: these latches live on this frame, and the pool
+        // thread is still inside release_blocker.wait() reacquiring its lock. Wait for the task to
+        // return before letting them go out of scope.
+        blocker_finished.wait();
+        config::load_spill_merge_max_thread = old_max_thread;
+        (void)merge_executor->refresh_max_thread_num();
+    });
+
+    CountDownLatch flush_latch(10);
+    // Flush repeatedly so the writer ends up with spill blocks, which is what makes finish() hand
+    // its callback to a MergeBlockTask instead of answering it inline.
+    int64_t old_buffer_size = config::write_buffer_size;
+    config::write_buffer_size = 1;
+    ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    for (int i = 0; i < 10; i++) {
+        delta_writer->write(&chunk0, indexes.data(), indexes.size(), [&](const Status& st) { ASSERT_OK(st); });
+        delta_writer->flush([&](const Status& st) {
+            ASSERT_OK(st);
+            flush_latch.count_down();
+        });
+    }
+    flush_latch.wait();
+    // The flush callback only means the memtable was handed to the flush pool, not that it has been
+    // spilled. Wait for the spills themselves, or finish() can find no spill block yet and answer
+    // inline instead of submitting a merge task.
+    DeltaWriter::io_threads()->wait();
+    config::write_buffer_size = old_buffer_size;
+
+    // Wait for the merge task to be *submitted*, not merely for time to pass. If close() were to
+    // shut the token down first, submit() would fail and its own branch would answer the callback,
+    // which passes whether or not a cancelled task answers for itself.
+    CountDownLatch merge_task_submitted(1);
+    SyncPoint::GetInstance()->SetCallBack("AsyncDeltaWriterImpl::merge_task_submitted",
+                                          [&](void*) { merge_task_submitted.count_down(); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([&]() {
+        SyncPoint::GetInstance()->ClearCallBack("AsyncDeltaWriterImpl::merge_task_submitted");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    std::atomic<int> finish_calls{0};
+    delta_writer->finish([&](StatusOr<TxnLogPtr> res) { finish_calls.fetch_add(1); });
+
+    ASSERT_TRUE(merge_task_submitted.wait_for(std::chrono::seconds(30)))
+            << "finish() never submitted a merge task -- did the writer end up with no spill block?";
+    // Queued behind the blocker, so it cannot have run.
+    ASSERT_EQ(0, finish_calls.load());
+
+    // close() shuts the merge token down, which cancels the queued task.
+    delta_writer->close();
+
+    // Whichever way the task ended, the callback owes exactly one answer.
+    EXPECT_EQ(1, finish_calls.load());
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {

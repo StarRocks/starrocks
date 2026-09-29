@@ -127,3 +127,73 @@ set enable_wait_dependent_event = false;
 set enable_runtime_adaptive_dop = false;
 -- result:
 -- !result
+create table fa (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 2 properties("replication_num" = "1");
+-- result:
+-- !result
+create table fb (id bigint, g bigint) duplicate key(id)
+  distributed by hash(id) buckets 2 properties("replication_num" = "1");
+-- result:
+-- !result
+insert into fa select s1, s1 % 7 from table(generate_series(1, 5000)) s(s1);
+-- result:
+-- !result
+insert into fb select s1, s1 % 7 from table(generate_series(1, 3000)) s(s1);
+-- result:
+-- !result
+set enable_pipeline_level_multi_partitioned_rf = true;
+-- result:
+-- !result
+set pipeline_dop = 8;
+-- result:
+-- !result
+select count(*) from fa join [bucket] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*), min(fa.id), max(fa.id), sum(fa.id) from fa join [bucket] fb on fa.id = fb.id;
+-- result:
+3000	1	3000	4501500
+-- !result
+select count(*) from fa join [colocate] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*) from fa left semi join [bucket] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*) from fa left anti join [bucket] fb on fa.id = fb.id;
+-- result:
+2000
+-- !result
+select count(*) from (select id from fa union select id from fa) z join [bucket] fb on z.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*) from fa join [bucket] (select id from fb union select id from fb) z on fa.id = z.id;
+-- result:
+3000
+-- !result
+select count(*) from fa join [broadcast] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*) from fa join [shuffle] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+set enable_pipeline_level_multi_partitioned_rf = false;
+-- result:
+-- !result
+select count(*) from fa join [bucket] fb on fa.id = fb.id;
+-- result:
+3000
+-- !result
+select count(*) from (select id from fa union select id from fa) z join [bucket] fb on z.id = fb.id;
+-- result:
+3000
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result

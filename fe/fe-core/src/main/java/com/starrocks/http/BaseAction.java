@@ -318,8 +318,10 @@ public abstract class BaseAction implements IAction {
     // return currentUserIdentity from StarRocks auth
     public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
         try {
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
-                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8));
+            // HTTP Basic carries a cleartext password: declare that so security integrations that
+            // consume a password (LDAP) are matched instead of skipped.
+            return AuthenticationHandler.authenticateWithClearPassword(new ConnectContext(), authInfo.fullUserName,
+                    authInfo.remoteIp, authInfo.password);
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }

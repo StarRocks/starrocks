@@ -37,6 +37,7 @@ set(EXEC_FILES
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
         ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/lookup_operator_test.cpp
         ./exec/pipeline/scan/logical_split_morsel_queue_test.cpp
         ./exec/pipeline/scan/morsel_queue_builder_test.cpp
         ./exec/pipeline/scan/morsel_queue_capability_test.cpp
@@ -48,6 +49,7 @@ set(EXEC_FILES
         ./exec/sink/connector_sink_operator_test.cpp
         ./exec/sink/sink_io_buffer_test.cpp
         ./exec/agg_hash_map_test.cpp
+        ./exec/compress_serializer_test.cpp
         ./exec/hash_variant_test.cpp
         ./exec/pipeline/olap_scan_operator_test.cpp
         ./exec/analytor_test.cpp
@@ -294,6 +296,8 @@ SET(DW_TEST_FILES
     ./storage/lake/primary_key_compaction_task_test.cpp
     ./storage/lake/primary_key_publish_test.cpp
     ./storage/lake/lake_merged_del_op_offset_test.cpp
+    ./storage/lake/lake_multi_statement_bundle_mix_test.cpp
+    ./storage/lake/tablet_merger_test.cpp
     ./storage/lake/tablet_reshard_helper_test.cpp
     ./storage/lake/tablet_reshard_test.cpp
     ./storage/lake/tablet_splitter_test.cpp
@@ -459,9 +463,11 @@ if ("${WITH_PAIMON_CPP}" STREQUAL "ON")
         connector/paimon/paimon_scanner_mem_usage_test.cpp
         connector/paimon/paimon_predicate_converter_test.cpp
         connector/paimon/paimon_file_system_test.cpp
+        connector/paimon/paimon_blob_converter_test.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_predicate_converter.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_file_system.cpp
         ${SRC_DIR}/connector/hive/paimon/paimon_scanner.cpp
+        ${SRC_DIR}/connector/hive/paimon/paimon_blob_converter.cpp
     )
     target_link_libraries(paimon_cpp_test paimon)
 endif ()

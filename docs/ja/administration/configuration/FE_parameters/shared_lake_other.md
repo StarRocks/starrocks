@@ -392,6 +392,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：クラスター全体のデフォルトの Group Provider リスト。複数の場合はカンマで区切ります。ネイティブ認証のユーザーに適用され、v4.2 以降は自身の `group_provider` プロパティを設定していない security integration もこの値にフォールバックします。それ以前のバージョンでは、その場合に Group Provider は一切参照されませんでした。[ユーザーグループの認証](../../user_privs/group_provider.md)を参照してください。
 - 導入時期：v3.5
 
+### `group_provider_http_connect_timeout_ms`
+
+- デフォルト：5000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の接続タイムアウト。正の値でなければなりません。この時間内にサーバーが接続を受け付けない場合、CREATE または ALTER GROUP PROVIDER ステートメントは失敗し、Group Provider は以前の設定を保持します。上限がなければ、応答しないサーバーはステートメントだけでなく、すべての FE のジャーナル再生もブロックします。
+- 導入時期：v4.2
+
+### `group_provider_http_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`group_file_url` が `http://` または `https://` の URL である File Group Provider の読み取りタイムアウト。正の値でなければなりません。接続済みのサーバーが応答しないまま待てる時間の上限で、超過すると取得は失敗します。失敗時の動作は `group_provider_http_connect_timeout_ms` を参照してください。
+- 導入時期：v4.2
+
 ### `hdfs_file_system_expire_seconds`
 
 - デフォルト：300
@@ -765,6 +783,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：レイクテーブルの公開バッチを形成するために必要な連続するトランザクションバージョンの最小数を設定します。DatabaseTransactionMgr.getReadyToPublishTxnListBatch は、依存トランザクションを選択するためにこの値を `lake_batch_publish_max_version_num` とともに transactionGraph.getTxnsWithTxnDependencyBatch に渡します。値が `1` の場合、単一トランザクションの公開が許可されます (バッチ処理なし)。値が `>1` の場合、少なくともその数の連続したバージョンを持つ単一テーブル、非レプリケーショントランザクションが利用可能である必要があります。バージョンが連続していない場合、レプリケーショントランザクションが出現した場合、またはスキーマ変更がバージョンを消費した場合、バッチ処理は中止されます。この値を増やすと、コミットをグループ化することで公開スループットが向上する可能性がありますが、十分な連続トランザクションを待機している間に公開が遅延する可能性があります。
 - 導入時期：v3.2.0
 
+### `lake_publish_version_retry_interval_ms`
+
+- デフォルト：1000
+- タイプ：Long
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：共有データ (lake) モードにおいて、直前の公開が失敗したパーティションを PublishVersionDaemon が再試行するまでの最小間隔です。単一トランザクションの公開パスとバッチ公開パスの両方に適用されます。待機するのは実際に失敗したパーティションだけです。最初の試行で公開できたパーティションが遅延することはなく、先行バージョンが可視になるのを待っているだけのパーティションは失敗とはみなされません。この値を大きくすると、公開が失敗し続ける場合に leader とオブジェクトストレージにかかる負荷は減りますが、原因が解消してからの復旧は遅くなります。`0` を指定するとデーモンの実行ごとに再試行し、バックオフ導入前の動作に戻ります。負の値は `0` として扱われます。
+- 導入時期：v4.1
+
 ### `lake_enable_batch_publish_version`
 
 - デフォルト：true
@@ -904,6 +931,33 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明：FE が属する StarRocks クラスター内で ID 認証に使用されるトークン。このパラメーターが指定されていない場合、StarRocks はクラスターのリーダー FE が最初に起動されたときに、クラスターのランダムなトークンを生成します。
 - 導入時期：-
 
+### `authentication_failure_cache_capacity`
+
+- デフォルト：1024
+- タイプ：Int
+- 単位：-
+- 変更可能：Yes
+- 説明：`authentication_failure_cache_ttl_second` が記憶する拒否済み認証情報の最大件数。1 つのクライアント（またはユーザー名を次々に変える攻撃者）が占有できるメモリを制限し、超過分は古いものから破棄されます。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_failure_cache_ttl_second`
+
+- デフォルト：10
+- タイプ：Int
+- 単位：秒
+- 変更可能：Yes
+- 説明：security integration の認証チェーンが拒否した認証情報を記憶する時間。同じ誤ったパスワードを再試行するクライアントが試行ごとに LDAP バインドを発生させないようにするためのもので、この再試行が Active Directory の `badPwdCount` を増やしアカウントロックにつながります。キャッシュキーには認証情報のハッシュが含まれるため、パスワードを修正すると TTL の経過を待たずに直ちに反映されます。ディレクトリ自体に到達できないことによる失敗はキャッシュされません。`0` で無効になります。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_case_insensitive`
+
+- デフォルト：false
+- タイプ：Boolean
+- 単位：-
+- 変更可能：Yes
+- 説明：StarRocks 側での LDAP/AD ユーザー名の照合を大文字小文字の区別なしに緩めるかどうか。`true` に設定すると、`AUTHENTICATION_LDAP_SIMPLE` で作成されたユーザーと大文字小文字だけが異なるログイン名でもそのユーザーに解決されるため、ユーザーごとの DN と付与されたロールが有効になります。また LDAP security integration で認証されたログインは、クライアントが入力した表記ではなくディレクトリが保持する名前をセッション ID として使用します。この項目はログインが解決しうる保存済みユーザーの範囲を広げ、さらに `current_user()` と `SHOW PROCESSLIST` が返す値を変えるため、デフォルトでは無効です。ネイティブパスワード、JWT、OAuth2 で認証されたユーザーは影響を受けません。`AUTHENTICATION_LDAP_SIMPLE` で作成された 2 つのユーザーの名前が大文字小文字だけ異なる場合、その両方に一致するログインはどちらかに解決されるのではなく拒否されます。グループ名の照合はこの項目とは独立しています。
+- 導入時期：v4.2.0
+
 ### `authentication_ldap_simple_bind_base_dn`
 
 - デフォルト：Empty string
@@ -938,6 +992,24 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 変更可能：Yes
 - 説明：ユーザーの認証情報を検索するために使用される管理者のパスワード。
 - 導入時期：-
+
+### `authentication_ldap_simple_conn_read_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドのソケット読み取りタイムアウト。`authentication_ldap_simple_conn_timeout_ms` を参照してください。
+- 導入時期：v4.2, v4.1.6
+
+### `authentication_ldap_simple_conn_timeout_ms`
+
+- デフォルト：30000
+- タイプ：Int
+- 単位：ミリ秒
+- 変更可能：Yes
+- 説明：`authentication_ldap_simple` が実行する LDAP バインドの TCP 接続タイムアウト。設定しない場合は OS の TCP タイムアウトにフォールバックし、ディレクトリに到達できないときにリクエストを処理しているスレッド（security integration が HTTP・Arrow Flight・BE→FE のロード RPC も認証するようになったため、これらのチャネルのワーカースレッド）を数分間占有する可能性があります。認証を早く失敗させたい場合は小さくしてください。
+- 導入時期：v4.2, v4.1.6
 
 ### `authentication_ldap_simple_group_source`
 

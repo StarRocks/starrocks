@@ -72,6 +72,7 @@
 #include "platform/http/http_request.h"
 #include "platform/platform_env.h"
 #include "runtime/runtime_env.h"
+#include "simdjson.h"
 
 class mg_connection;
 
@@ -570,6 +571,7 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     ASSERT_TRUE(ctx->enable_batch_write);
     ASSERT_NE(nullptr, ctx->buffer);
     ASSERT_EQ(content.length(), ctx->buffer->limit);
+    ASSERT_EQ(simdjson::SIMDJSON_PADDING, ctx->buffer->padding);
 
     evbuffer_add(evb, content.data(), content.size());
     ctx->status = Status::OK();
@@ -590,6 +592,39 @@ TEST_F(StreamLoadActionTest, batch_write_json) {
     ASSERT_EQ(load_params, ctx->load_parameters);
     ASSERT_EQ(content, std::string(ctx->buffer->ptr, ctx->buffer->limit));
 
+    rapidjson::Document doc;
+    doc.Parse(k_response_str.c_str());
+    ASSERT_STREQ("Success", doc["Status"].GetString());
+}
+
+TEST_F(StreamLoadActionTest, json_buffer_allocated_on_header) {
+    StreamLoadAction action(&_env, &_stream_load_orchestrator, _stream_load_executor.get(), _limiter.get(),
+                            _batch_write_mgr.get());
+    HttpRequest request(_evhttp_req);
+
+    std::string content = "{\"c0\":\"a\",\"c1\":\"b\"}";
+    request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
+    request._headers.emplace(HTTP_FORMAT_KEY, "json");
+    request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
+    request.set_handler(&action);
+
+    ASSERT_EQ(0, action.on_header(&request));
+    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(request._handler_ctx);
+    ASSERT_NE(nullptr, ctx);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_FALSE(ctx->enable_batch_write);
+    ASSERT_EQ(TFileFormatType::FORMAT_JSON, ctx->format);
+    ASSERT_NE(nullptr, ctx->buffer);
+    ASSERT_EQ(content.length(), ctx->buffer->limit);
+    ASSERT_EQ(simdjson::SIMDJSON_PADDING, ctx->buffer->padding);
+
+    auto evb = request.get_evhttp_request()->input_buffer;
+    evbuffer_add(evb, content.data(), content.size());
+    action.on_chunk_data(&request);
+    ASSERT_TRUE(ctx->status.ok());
+    ASSERT_EQ(content.length(), ctx->buffer->pos);
+
+    action.handle(&request);
     rapidjson::Document doc;
     doc.Parse(k_response_str.c_str());
     ASSERT_STREQ("Success", doc["Status"].GetString());

@@ -23,10 +23,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -37,17 +39,21 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Groups a {@link SampleSet}'s rows into per-target-partition buckets ready
@@ -68,6 +74,11 @@ import java.util.Set;
  * under an intensive table READ lock; the lock is released before this method
  * returns so the coordinator can acquire its own WRITE lock for
  * {@code addPartitions}.
+ *
+ * <p>A manually range-partitioned target ({@link #isManualRangePartitioned}) takes a different
+ * resolution step: its partitions are all declared up front, so each sampled tuple is mapped onto
+ * the existing partition whose range contains it, and a tuple no range contains is dropped. No
+ * {@link AddPartitionClause} is ever built for such a target, so nothing is pre-created.
  *
  * <p>The result is capped at {@link Config#tablet_pre_split_max_partitions_per_load}.
  * Excess partitions (those with the lowest sample count) are dropped and the
@@ -182,70 +193,81 @@ public final class PartitionSampleGrouper {
             return Collections.emptyList();
         }
 
-        // Analyze + merge phase (no lock): resolve each raw group to its target
-        // partition name and merge raw groups that resolve to the SAME partition
-        // into one logical group. For expression partitioning (e.g.
-        // PARTITION BY date_trunc('day', ts)), two raw values within the same day
-        // resolve to one partition; without this merge they would emit two
-        // PartitionSamples with the same partitionName + oldTabletId, and the
-        // coordinator's oldTabletIdToRanges.put would silently drop one.
-        //
-        // The analyzer runs OUTSIDE the intensive table READ lock here, mirroring
-        // the runtime auto-create path: FrontendServiceImpl.parseAddPartitionClause
-        // analyzes without holding the table READ lock and addPartitions does its
-        // own locking later.
-        Map<String, MergedGroup> byPartitionName = new LinkedHashMap<>();
-        for (RawGroup rawGroup : rawGroups.values()) {
-            AnalyzedClauseEntry entry = analyzeOnce(
-                    table, rawGroup.formattedValues, ctx, temporaryPartition, partitionNamePrefix);
-            if (entry == null) {
-                PreSplitMetrics.recordEligibilitySkip(SkipReason.INVALID_PARTITION_VALUE);
-                continue;
-            }
-            MergedGroup merged = byPartitionName.get(entry.partitionName);
-            if (merged == null) {
-                // The first raw group that resolves to this partition supplies the
-                // representative formatted values + analyzed clause; later raw
-                // groups resolve to the same partition so their clause is equivalent.
-                merged = new MergedGroup(entry.partitionName, rawGroup.formattedValues, entry.clause);
-                byPartitionName.put(entry.partitionName, merged);
-            }
-            merged.rows.addAll(rawGroup.rows);
-        }
-
-        if (byPartitionName.isEmpty()) {
-            PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
-            return Collections.emptyList();
-        }
-
-        // Scope phase (no lock): when the INSERT named its target partitions, drop every group that
-        // resolves outside that set BEFORE the cap ranks anything. Capping first lets out-of-scope
-        // partitions with more sampled rows evict the named target, and the scope check further down
-        // then discards whatever the cap kept -- so an explicitly targeted INSERT or overwrite would
-        // silently receive no pre-split at all. Resolving here also memoizes the mapping, so the
-        // locked pass below does not repeat the range-fallback scan. Catalog name lookups are safe
-        // outside the lock for the same reason the analyzer above is: the locked pass re-resolves
-        // every partition it actually uses.
+        boolean manualRange = isManualRangePartitioned(table);
         Map<String, String> scopedCatalogNames = new LinkedHashMap<>();
         List<MergedGroup> mergedGroups;
-        if (partitionScope.isSpecified()) {
-            mergedGroups = new ArrayList<>();
-            for (MergedGroup group : byPartitionName.values()) {
-                String catalogPartitionName =
-                        resolveCatalogPartitionName(table, group, partitionColumns, partitionScope);
-                if (catalogPartitionName == null) {
-                    // The sample row belongs to a partition outside the explicit INSERT target.
-                    continue;
-                }
-                scopedCatalogNames.put(group.partitionName, catalogPartitionName);
-                mergedGroups.add(group);
-            }
+        if (manualRange) {
+            // Every partition a manual target can write already exists; resolve against those
+            // ranges only, so a sampled value outside all of them never becomes a new partition.
+            mergedGroups = groupByExistingRange(table, dbId, rawGroups.values(), partitionColumns, partitionScope);
             if (mergedGroups.isEmpty()) {
                 PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
                 return Collections.emptyList();
             }
         } else {
-            mergedGroups = new ArrayList<>(byPartitionName.values());
+            // Analyze + merge phase (no lock): resolve each raw group to its target
+            // partition name and merge raw groups that resolve to the SAME partition
+            // into one logical group. For expression partitioning (e.g.
+            // PARTITION BY date_trunc('day', ts)), two raw values within the same day
+            // resolve to one partition; without this merge they would emit two
+            // PartitionSamples with the same partitionName + oldTabletId, and the
+            // coordinator's oldTabletIdToRanges.put would silently drop one.
+            //
+            // The analyzer runs OUTSIDE the intensive table READ lock here, mirroring
+            // the runtime auto-create path: FrontendServiceImpl.parseAddPartitionClause
+            // analyzes without holding the table READ lock and addPartitions does its
+            // own locking later.
+            Map<String, MergedGroup> byPartitionName = new LinkedHashMap<>();
+            for (RawGroup rawGroup : rawGroups.values()) {
+                AnalyzedClauseEntry entry = analyzeOnce(
+                        table, rawGroup.formattedValues, ctx, temporaryPartition, partitionNamePrefix);
+                if (entry == null) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.INVALID_PARTITION_VALUE);
+                    continue;
+                }
+                MergedGroup merged = byPartitionName.get(entry.partitionName);
+                if (merged == null) {
+                    // The first raw group that resolves to this partition supplies the
+                    // representative formatted values + analyzed clause; later raw
+                    // groups resolve to the same partition so their clause is equivalent.
+                    merged = new MergedGroup(entry.partitionName, rawGroup.formattedValues, entry.clause);
+                    byPartitionName.put(entry.partitionName, merged);
+                }
+                merged.rows.addAll(rawGroup.rows);
+            }
+
+            if (byPartitionName.isEmpty()) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
+                return Collections.emptyList();
+            }
+
+            // Scope phase (no lock): when the INSERT named its target partitions, drop every group that
+            // resolves outside that set BEFORE the cap ranks anything. Capping first lets out-of-scope
+            // partitions with more sampled rows evict the named target, and the scope check further down
+            // then discards whatever the cap kept -- so an explicitly targeted INSERT or overwrite would
+            // silently receive no pre-split at all. Resolving here also memoizes the mapping, so the
+            // locked pass below does not repeat the range-fallback scan. Catalog name lookups are safe
+            // outside the lock for the same reason the analyzer above is: the locked pass re-resolves
+            // every partition it actually uses.
+            if (partitionScope.isSpecified()) {
+                mergedGroups = new ArrayList<>();
+                for (MergedGroup group : byPartitionName.values()) {
+                    String catalogPartitionName =
+                            resolveCatalogPartitionName(table, group, partitionColumns, partitionScope);
+                    if (catalogPartitionName == null) {
+                        // The sample row belongs to a partition outside the explicit INSERT target.
+                        continue;
+                    }
+                    scopedCatalogNames.put(group.partitionName, catalogPartitionName);
+                    mergedGroups.add(group);
+                }
+                if (mergedGroups.isEmpty()) {
+                    PreSplitMetrics.recordEligibilitySkip(SkipReason.GROUPER_EMPTY);
+                    return Collections.emptyList();
+                }
+            } else {
+                mergedGroups = new ArrayList<>(byPartitionName.values());
+            }
         }
 
         // Cap phase (no lock): rank merged groups heaviest-first and trim to the
@@ -280,7 +302,7 @@ public final class PartitionSampleGrouper {
                         ? table.getPartition(catalogPartitionName, true)
                         : table.getPartition(catalogPartitionName);
                 if (partition == null) {
-                    if (partitionScope.isSpecified()) {
+                    if (manualRange || partitionScope.isSpecified()) {
                         PreSplitMetrics.recordEligibilitySkip(SkipReason.STALE_CATALOG_STATE);
                         continue;
                     }
@@ -308,7 +330,8 @@ public final class PartitionSampleGrouper {
                             group.partitionName, table.getName());
                     continue;
                 }
-                if (baseIndex.getTablets().size() != 1 || baseIndex.getRowCount() > 0) {
+                if (baseIndex.getTablets().size() != 1
+                        || !PreSplitTargets.isEmptyPartition(physicalPartition, baseIndex)) {
                     // Existing partition is non-empty or multi-tablet, so it is not
                     // eligible for pre-split. Record the specific skip reason at the
                     // drop site so operators can tell these apart from a truly empty
@@ -398,6 +421,110 @@ public final class PartitionSampleGrouper {
                     desc.getPartitionName(), invalidRange.getMessage());
             return null;
         }
+    }
+
+    /**
+     * Whether {@code table} is range-partitioned over plain columns with user-declared partitions --
+     * neither automatic nor expression-based, whose partition keys are not the sampled column values.
+     */
+    static boolean isManualRangePartitioned(OlapTable table) {
+        return table.getPartitionInfo().getType() == PartitionType.RANGE;
+    }
+
+    /**
+     * Cheap pre-sample gate for a manually range-partitioned target: whether any partition the load
+     * may write is still empty and single-tablet. A manual table is typically loaded repeatedly, so
+     * most of its partitions are ineligible; answering this from the catalog avoids sampling the
+     * source only for the grouper to drop every group afterwards. The grouper and the coordinator
+     * re-check each partition they actually use.
+     */
+    static boolean hasEmptySingleTabletPartition(long dbId, OlapTable table, PreSplitPartitionScope partitionScope) {
+        try (AutoCloseableLock ignored = new AutoCloseableLock(
+                new Locker(), dbId, Lists.newArrayList(table.getId()), LockType.READ)) {
+            for (Partition partition : candidatePartitions(table, partitionScope)) {
+                PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+                MaterializedIndex baseIndex = physicalPartition == null
+                        ? null : physicalPartition.getIndex(table.getBaseIndexMetaId());
+                if (baseIndex != null && baseIndex.getTablets().size() == 1
+                        && PreSplitTargets.isEmptyPartition(physicalPartition, baseIndex)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The existing partitions a load into a manually partitioned target may write: the partitions the
+     * INSERT named, or every real partition. Names that do not resolve are skipped -- the hook runs
+     * before analysis, which is what rejects them. Caller holds the table READ lock.
+     */
+    private static List<Partition> candidatePartitions(OlapTable table, PreSplitPartitionScope partitionScope) {
+        if (!partitionScope.isSpecified()) {
+            return new ArrayList<>(table.getPartitions());
+        }
+        List<Partition> partitions = new ArrayList<>();
+        for (String partitionName : partitionScope.catalogPartitionNames()) {
+            Partition partition = table.getPartition(partitionName, partitionScope.isTemporary());
+            if (partition != null) {
+                partitions.add(partition);
+            }
+        }
+        return partitions;
+    }
+
+    /**
+     * Maps every raw group onto the existing partition whose range contains its partition key and
+     * merges groups that land in the same partition. A group matching no range is dropped: for a
+     * manual target those rows fail the load anyway, and creating a partition for them is exactly
+     * what the load itself would refuse to do.
+     */
+    private static List<MergedGroup> groupByExistingRange(
+            OlapTable table, long dbId, Collection<RawGroup> rawGroups, List<Column> partitionColumns,
+            PreSplitPartitionScope partitionScope) {
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        // Declared ranges of one partition set never overlap, so the partition that can contain a key
+        // is the one with the greatest lower bound not above it.
+        TreeMap<PartitionKey, Entry<String, Range<PartitionKey>>> rangesByLowerBound = new TreeMap<>();
+        try (AutoCloseableLock ignored = new AutoCloseableLock(
+                new Locker(), dbId, Lists.newArrayList(table.getId()), LockType.READ)) {
+            for (Partition partition : candidatePartitions(table, partitionScope)) {
+                Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+                if (range != null && !range.isEmpty()) {
+                    rangesByLowerBound.put(range.lowerEndpoint(), Map.entry(partition.getName(), range));
+                }
+            }
+        }
+
+        Map<String, MergedGroup> byPartitionName = new LinkedHashMap<>();
+        for (RawGroup rawGroup : rawGroups) {
+            PartitionKey key;
+            try {
+                List<PartitionValue> values = new ArrayList<>(rawGroup.formattedValues.size());
+                for (String formattedValue : rawGroup.formattedValues) {
+                    values.add(new PartitionValue(formattedValue));
+                }
+                key = PartitionKey.createPartitionKey(values, partitionColumns);
+            } catch (AnalysisException | RuntimeException invalidKey) {
+                LOG.debug("Pre-split: cannot build partition key from {}: {}",
+                        rawGroup.formattedValues, invalidKey.getMessage());
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.INVALID_PARTITION_VALUE);
+                continue;
+            }
+            Entry<PartitionKey, Entry<String, Range<PartitionKey>>> floor = rangesByLowerBound.floorEntry(key);
+            if (floor == null || !floor.getValue().getValue().contains(key)) {
+                PreSplitMetrics.recordEligibilitySkip(SkipReason.NO_MATCHING_PARTITION);
+                continue;
+            }
+            String partitionName = floor.getValue().getKey();
+            MergedGroup merged = byPartitionName.get(partitionName);
+            if (merged == null) {
+                merged = new MergedGroup(partitionName, rawGroup.formattedValues, null);
+                byPartitionName.put(partitionName, merged);
+            }
+            merged.rows.addAll(rawGroup.rows);
+        }
+        return new ArrayList<>(byPartitionName.values());
     }
 
     /**

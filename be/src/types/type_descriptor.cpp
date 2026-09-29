@@ -268,7 +268,7 @@ bool TypeDescriptor::support_join() const {
         return std::all_of(children.begin(), children.end(), [](const TypeDescriptor& t) { return t.support_join(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+           type != TYPE_VARIANT && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_orderby() const {
@@ -282,7 +282,7 @@ bool TypeDescriptor::support_orderby() const {
         return all_support;
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_MAP && type != TYPE_VARIANT;
+           type != TYPE_MAP && type != TYPE_VARIANT && type != TYPE_FILE;
 }
 
 bool TypeDescriptor::support_groupby() const {
@@ -292,7 +292,7 @@ bool TypeDescriptor::support_groupby() const {
                            [](const TypeDescriptor& t) { return t.support_groupby(); });
     }
     return type != TYPE_JSON && type != TYPE_OBJECT && type != TYPE_PERCENTILE && type != TYPE_HLL &&
-           type != TYPE_VARIANT;
+           type != TYPE_VARIANT && type != TYPE_FILE;
 }
 
 TypeDescriptor TypeDescriptor::from_storage_type_info(TypeInfo* type_info) {
@@ -327,6 +327,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_PERCENTILE:
     case TYPE_JSON:
     case TYPE_VARIANT:
+    case TYPE_FILE:
     case TYPE_VARBINARY:
     case TYPE_GEOGRAPHY:
     case TYPE_GEOMETRY:

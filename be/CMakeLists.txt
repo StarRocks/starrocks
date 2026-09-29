@@ -208,6 +208,8 @@ option(USE_AVX2 "Build with AVX2 instruction" ON)
 
 option(USE_AVX512 "Build with AVX512f/AVX512BW instruction" OFF)
 
+option(USE_ARM_CRC32 "Build with ARM CRC32 instruction" ON)
+
 option(WITH_TENANN "Build with TENANN" OFF)
 
 option(WITH_PAIMON_CPP "Build with paimon-cpp" ON)
@@ -397,7 +399,11 @@ if ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "x86" OR "${CMAKE_BUILD_TARGET_ARCH}" 
         set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -mavx512f -mavx512bw -mavx512dq -mavx512cd -mavx512vl")
     endif()
 elseif ("${CMAKE_BUILD_TARGET_ARCH}" STREQUAL "aarch64")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
+    if (${USE_ARM_CRC32})
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a+crc")
+    else()
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -march=armv8-a")
+    endif()
 endif()
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS}  -Wno-attributes -DS2_USE_GFLAGS -DS2_USE_GLOG")
 

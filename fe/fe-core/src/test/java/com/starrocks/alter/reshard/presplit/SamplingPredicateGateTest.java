@@ -15,6 +15,7 @@
 package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.TableName;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -22,8 +23,11 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
 
 /**
  * Tests for {@link SamplingPredicateGate}.
@@ -101,11 +105,22 @@ public class SamplingPredicateGateTest {
     // --- deterministic but session-sensitive functions: also rejected ---
 
     @Test
-    public void deterministicFunctionRejected() {
-        // abs() is fully deterministic, but the broad rule rejects every
-        // FunctionCallExpr: any function can be session-timezone-sensitive
-        // (e.g. from_unixtime, convert_tz), so no per-function exception is made.
-        Assertions.assertFalse(safe(whereOf("abs(a) > 10")));
+    public void deterministicFunctionOutsideAllowlistRejected() {
+        // md5() is deterministic, but only the vetted row-level allowlist passes: an
+        // unvetted function may read session state the ROOT context does not share.
+        Assertions.assertFalse(safe(whereOf("md5(b) = 'x'")));
+    }
+
+    @Test
+    public void rowLevelAllowlistedFunctionSafe() {
+        Assertions.assertTrue(safe(whereOf("date_trunc('day', ts) = '2026-01-01'")));
+        Assertions.assertTrue(safe(whereOf("abs(a) > 10 AND upper(b) = 'X'")));
+    }
+
+    @Test
+    public void dbQualifiedFunctionRejected() {
+        // db1.upper(...) names a UDF, not the vetted built-in.
+        Assertions.assertFalse(safe(whereOf("db1.upper(b) = 'X'")));
     }
 
     @Test
@@ -215,5 +230,111 @@ public class SamplingPredicateGateTest {
         // round-trip: re-parse should not throw
         Expr reparsed = whereOf(sql);
         Assertions.assertNotNull(reparsed);
+    }
+
+    // --- plan-time constant folding in the caller's context ---
+
+    /** A fresh context with a pinned start time and session time zone. */
+    private static ConnectContext contextAt(String isoInstant, String timeZone) {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.getSessionVariable().setTimeZone(timeZone);
+        ctx.setStartTime(Instant.parse(isoInstant));
+        return ctx;
+    }
+
+    private static String foldedSql(String pred, ConnectContext ctx) {
+        Expr folded = SamplingPredicateGate.foldPlanTimeConstants(whereOf(pred), ctx);
+        return folded == null ? null : SamplingPredicateGate.toSql(folded);
+    }
+
+    @Test
+    public void currentDateArithmeticFoldsToTypedLiteral() {
+        ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");
+        Expr folded = SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("dt >= date_sub(current_date(), 7)"), ctx);
+        Assertions.assertNotNull(folded);
+        Assertions.assertTrue(safe(folded));
+        // date_sub over a DATE yields DATETIME; the cast keeps the type the INSERT itself compares.
+        Assertions.assertEquals("`dt` >= (CAST('2026-09-16 00:00:00' AS DATETIME))",
+                SamplingPredicateGate.toSql(folded));
+        // The sampler re-parses the rendered SQL, and it must still pass the gate there.
+        Assertions.assertTrue(safe(whereOf(SamplingPredicateGate.toSql(folded))));
+    }
+
+    @Test
+    public void foldUsesTheCallersTimeZone() {
+        // 2026-09-23T20:00Z is already the 24th in Shanghai: the literal must be the day the
+        // INSERT itself sees, not the ROOT sampling context's day.
+        Assertions.assertEquals("`dt` = (CAST('2026-09-23' AS DATE))",
+                foldedSql("dt = current_date()", contextAt("2026-09-23T20:00:00Z", "UTC")));
+        Assertions.assertEquals("`dt` = (CAST('2026-09-24' AS DATE))",
+                foldedSql("dt = current_date()", contextAt("2026-09-23T20:00:00Z", "Asia/Shanghai")));
+        Assertions.assertEquals("`ts` > (CAST('1970-01-01 08:00:00' AS VARCHAR))",
+                foldedSql("ts > from_unixtime(0)", contextAt("2026-09-23T20:00:00Z", "Asia/Shanghai")));
+    }
+
+    @Test
+    public void nowFoldsToTheQueryStartTime() {
+        // now() is fixed at plan time: the INSERT's planner folds it from the same start time.
+        Assertions.assertEquals("`ts` < (CAST('2026-09-23 18:30:05' AS DATETIME))",
+                foldedSql("ts < now()", contextAt("2026-09-23T10:30:05Z", "Asia/Shanghai")));
+    }
+
+    @Test
+    public void foldDoesNotMutateTheParsedPredicate() {
+        Expr where = whereOf("dt >= date_sub(current_date(), 7)");
+        String before = SamplingPredicateGate.toSql(where);
+        SamplingPredicateGate.foldPlanTimeConstants(where, contextAt("2026-09-23T10:00:00Z", "UTC"));
+        Assertions.assertEquals(before, SamplingPredicateGate.toSql(where));
+    }
+
+    @Test
+    public void foldKeepsColumnDependentCallsAndFoldsTheirConstantArguments() {
+        Assertions.assertEquals("(date_trunc('day', `ts`)) = (CAST('2026-09-22 00:00:00' AS DATETIME))",
+                foldedSql("date_trunc('day', ts) = date_sub(current_date(), 1)",
+                        contextAt("2026-09-23T10:00:00Z", "UTC")));
+    }
+
+    @Test
+    public void foldedInListIsConstant() {
+        Expr folded = SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("dt IN (current_date(), date_sub(current_date(), 1))"),
+                contextAt("2026-09-23T10:00:00Z", "UTC"));
+        Assertions.assertNotNull(folded);
+        Assertions.assertTrue(safe(folded));
+    }
+
+    @Test
+    public void perRowNonDeterministicFunctionDoesNotFold() {
+        ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");
+        Assertions.assertNull(SamplingPredicateGate.foldPlanTimeConstants(whereOf("rand() < 0.5"), ctx));
+        Assertions.assertNull(SamplingPredicateGate.foldPlanTimeConstants(whereOf("a > rand()"), ctx));
+        Assertions.assertNull(SamplingPredicateGate.foldPlanTimeConstants(whereOf("b = uuid()"), ctx));
+    }
+
+    @Test
+    public void nonBooleanConstantPredicateDoesNotFold() {
+        Assertions.assertNull(SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("now()"), contextAt("2026-09-23T10:00:00Z", "UTC")));
+    }
+
+    @Test
+    public void foldLeavesSessionDependentColumnCallsForTheGate() {
+        // from_unixtime(col) is per-row and time-zone dependent: not foldable, and the gate rejects it.
+        Expr folded = SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("from_unixtime(ts) > '2024-01-01'"), contextAt("2026-09-23T10:00:00Z", "UTC"));
+        Assertions.assertNotNull(folded);
+        Assertions.assertFalse(safe(folded));
+    }
+
+    @Test
+    public void foldKeepsSubqueryAndForeignQualifierRejections() {
+        ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");
+        Assertions.assertFalse(safe(SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("dt > (SELECT max(x) FROM t WHERE x < current_date())"), ctx)));
+        Assertions.assertFalse(safe(SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("other.dt >= date_sub(current_date(), 7)"), ctx)));
+        Assertions.assertFalse(safe(SamplingPredicateGate.foldPlanTimeConstants(
+                whereOf("dt >= date_sub(current_date(), 7) AND b = current_user()"), ctx)));
     }
 }
