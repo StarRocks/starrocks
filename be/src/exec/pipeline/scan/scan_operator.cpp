@@ -190,6 +190,12 @@ void ScanOperator::close(RuntimeState* state) {
 
     do_close(state);
     Operator::close(state);
+    if (!_post_scan_runtime_in_filters.empty()) {
+        // Moving an IN filter after materialization must not make it disappear from the scan profile.
+        _init_rf_counters(false);
+        COUNTER_SET(_runtime_in_filter_num_counter,
+                    static_cast<int64_t>(runtime_in_filters().size() + _post_scan_runtime_in_filters.size()));
+    }
 }
 
 void ScanOperator::_arm_back_pressure_throttle_timer() const {
@@ -397,6 +403,9 @@ Status ScanOperator::set_finishing(RuntimeState* state) {
 
 void ScanOperator::set_precondition_ready(RuntimeState* state) {
     SourceOperator::set_precondition_ready(state);
+    // Storage chunks do not contain synthetic heavy-expression slots yet. Keep physical-slot filters
+    // available for storage pushdown, but defer filters needing those slots until materialization.
+    _post_scan_runtime_in_filters.clear();
     auto& filters = runtime_in_filters();
     auto remaining = std::remove_if(filters.begin(), filters.end(), [this](ExprContext* filter) {
         if (!_scan_node->uses_heavy_expr_slot(filter)) {
@@ -421,9 +430,10 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
         auto [owner_id, is_eos] = _should_emit_eos(res);
-        // ChunkSource materializes heavy-expression slots after the storage reader returns.
+        // The buffered chunk already contains the heavy-expression results, so deferred IN filters
+        // can safely read their slots here, before downstream operators see the rows.
         if (!_post_scan_runtime_in_filters.empty()) {
-            RETURN_IF_ERROR(ChunkPredicateEvaluator::eval_conjuncts(_post_scan_runtime_in_filters, res.get()));
+            RETURN_IF_ERROR(eval_conjuncts(_post_scan_runtime_in_filters, res.get()));
         }
         evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());

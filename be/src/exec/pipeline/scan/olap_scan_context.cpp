@@ -147,7 +147,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
     // Get _conjunct_ctxs.
     _conjunct_ctxs = _scan_node->conjunct_ctxs();
     for (auto* filter : runtime_in_filters) {
-        // ScanOperator evaluates these filters after ChunkSource materializes their inputs.
+        // The storage reader cannot resolve synthetic slots. Leave these filters to ScanOperator,
+        // which sees the chunk after ChunkSource materializes the heavy expressions.
         if (!_scan_node->uses_heavy_expr_slot(filter)) {
             _conjunct_ctxs.push_back(filter);
         }
