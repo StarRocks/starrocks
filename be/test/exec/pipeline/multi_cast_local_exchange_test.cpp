@@ -19,6 +19,8 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/sync_point.h"
 #include "common/runtime_profile.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_sink_operator.h"
+#include "exec/pipeline/exchange/multi_cast_local_exchange_source_operator.h"
 #include "runtime/runtime_state.h"
 #include "types/logical_type.h"
 
@@ -51,6 +53,40 @@ protected:
     RuntimeState dummy_runtime_state;
     RuntimeProfile dummy_runtime_profile{"dummy"};
 };
+
+class PendingTaskExchanger final : public MultiCastLocalExchanger {
+public:
+    bool support_event_scheduler() const override { return false; }
+    Status init_metrics(RuntimeProfile*, bool) override { return Status::OK(); }
+    bool can_pull_chunk(int32_t) const override { return false; }
+    bool can_push_chunk() const override { return false; }
+    Status push_chunk(const ChunkPtr&, int32_t) override { return Status::OK(); }
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState*, int32_t) override { return ChunkPtr{}; }
+    void open_source_operator(int32_t) override {}
+    void close_source_operator(int32_t) override {}
+    void open_sink_operator() override {}
+    void close_sink_operator() override {}
+    bool has_pending_io_tasks() const override { return pending; }
+
+    bool pending = false;
+};
+
+TEST(MultiCastLocalExchangeTest, pendingFinishWaitsForSpillTasks) {
+    auto exchanger = std::make_shared<PendingTaskExchanger>();
+    MultiCastLocalExchangeSourceOperatorFactory source_factory(1, 1, 0, exchanger);
+    MultiCastLocalExchangeSinkOperatorFactory sink_factory(2, 1, exchanger);
+    auto source = source_factory.create(1, 0);
+    auto sink = sink_factory.create(1, 0);
+
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+    exchanger->pending = true;
+    ASSERT_TRUE(source->pending_finish());
+    ASSERT_TRUE(sink->pending_finish());
+    exchanger->pending = false;
+    ASSERT_FALSE(source->pending_finish());
+    ASSERT_FALSE(sink->pending_finish());
+}
 
 TEST_F(InMemoryMultiCastLocalExchangerTest, test_push_pop) {
     const int32_t consumer_number = 2;
