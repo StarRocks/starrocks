@@ -10,12 +10,12 @@ name = "starrocks_lance"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-arrow-cast = "=58.1.0"
-arrow-array = { version = "=58.1.0", features = ["ffi"] }
-arrow-schema = { version = "=58.1.0", features = ["ffi"] }
+arrow-cast = "=58.3.0"
+arrow-array = { version = "=58.3.0", features = ["ffi"] }
+arrow-schema = { version = "=58.3.0", features = ["ffi"] }
 futures = "0.3"
 mimalloc = { version = "0.1", default-features = false }
-lance = { version = "=8.0.1", default-features = false, features = ["aws", "azure", "gcp"] }
+lance = { version = "=12.0.0", default-features = false, features = ["aws", "azure", "gcp"] }
 tokio = { version = "1", features = ["rt-multi-thread", "time"] }
 url = "2"
 
