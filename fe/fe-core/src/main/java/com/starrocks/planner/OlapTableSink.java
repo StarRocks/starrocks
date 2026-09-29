@@ -706,7 +706,8 @@ public class OlapTableSink extends DataSink {
             // replica set. It has to be true of every location this load will ever receive, and the
             // location just built is not all of them: a partition that automatic partitioning creates
             // DURING the load gets its tablets from FrontendServiceImpl.buildCreatePartitionResponse,
-            // long after this flag is serialised.
+            // and a sub-partition that automatic bucketing adds gets them from
+            // updateImmutablePartitionInternal, both long after this flag is serialised.
             //
             // So the flag is the OR of what the plan produced and what that later path may produce.
             // createLocation recorded the width on the transaction exactly when this load can reach
@@ -1474,16 +1475,20 @@ public class OlapTableSink extends DataSink {
         // upper bound on it.
         int writerWidth = Math.min(writerNodeCount, writerCandidates.size());
         // Hand the resolved width to the create-partition path, which has to make this same decision for
-        // a partition that does not exist yet. Only for a load that partitions automatically -- no other
-        // load can reach that path, and recording it for one that cannot would turn on
-        // enable_multi_node_write (complete() reads this back) for a load that never spreads anything.
+        // a partition that does not exist yet, and to the immutable-partition path, which makes it for a
+        // sub-partition that automatic bucketing adds during the load. Only for a load that can reach one
+        // of them -- recording it for one that cannot would turn on enable_multi_node_write (complete()
+        // reads this back) for a load that never spreads anything. getAutomaticBucketSize() > 0 is the
+        // same test the planners use to set this sink's automatic_bucket_size, which is what makes BE
+        // mark a sub-partition immutable and ask for a new one.
         //
         // Recorded against THIS table. One transaction can carry several: a multi-table Broker Load
         // plans a sink per table on one txn id before any of them runs, and every input to the width
         // -- file bundling, colocate MV, and the estimated size -- belongs to one table. A shared
         // value would let this table's width answer another table's create-partition RPC, and set
         // that table's flag, with nothing having established its eligibility.
-        if (writerWidth > 1 && txnState != null && partitionParam.isEnable_automatic_partition()) {
+        if (writerWidth > 1 && txnState != null
+                && (partitionParam.isEnable_automatic_partition() || table.getAutomaticBucketSize() > 0)) {
             txnState.setMultiNodeWriteWidth(table.getId(), writerWidth);
         }
         for (TOlapTablePartition tPhysicalPartition : partitionParam.getPartitions()) {
