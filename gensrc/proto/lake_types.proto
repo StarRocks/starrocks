@@ -380,6 +380,9 @@ message TabletMetadataPB {
     repeated int64 placeholder_50 = 50;
     optional bytes placeholder_51 = 51;
     optional TabletMetadataExtPB ext = 25;
+    // Completion time of the most recent successfully published base compaction. Used to
+    // limit automatic base compaction independently of cumulative compaction.
+    optional int64 last_base_compaction_time = 52;
 }
 
 // Extension point for MetadataUpdateInfoPB. DO NOT MODIFY: do not add fields
@@ -519,6 +522,8 @@ message TxnLogPB {
         optional TuplePB range_split_upper_bound = 16;
         optional bool range_split_lower_inclusive = 17;
         optional bool range_split_upper_inclusive = 18;
+        // Unix seconds when base compaction was selected; absent for cumulative compaction.
+        optional int64 base_compaction_time = 52;
     }
 
     // Parallel compaction operation: contains multiple subtask compaction results.
@@ -543,6 +548,8 @@ message TxnLogPB {
         // Whether this parallel compaction uses range-split strategy.
         // When true, the merged output rowset is non-overlapping.
         optional bool is_range_split = 7;
+        // Unix seconds when the parent selection was a base compaction.
+        optional int64 base_compaction_time = 52;
     }
 
     message OpSchemaChange {

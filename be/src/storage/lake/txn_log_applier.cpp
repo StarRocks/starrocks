@@ -506,6 +506,10 @@ public:
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(
                     check_and_recover([&]() { return apply_compaction_log(log.op_compaction(), log.txn_id()); }));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(check_and_recover(
@@ -754,6 +758,7 @@ private:
 
         RETURN_IF_ERROR(prepare_primary_index());
 
+        bool applied_rowsets = false;
         // Process each subtask's OpCompaction
         for (int i = 0; i < op_parallel.subtask_compactions_size(); i++) {
             const auto& subtask_op = op_parallel.subtask_compactions(i);
@@ -776,6 +781,7 @@ private:
             // - Primary index and metadata are updated
             RETURN_IF_ERROR(_tablet.update_mgr()->publish_primary_compaction(subtask_op, txn_id, _metadata, _tablet,
                                                                              _index_entry, &_builder, _base_version));
+            applied_rowsets = true;
         }
 
         // Apply unified SST compaction results (if any)
@@ -808,6 +814,10 @@ private:
             added->set_version(_new_version);
         }
 
+        if (applied_rowsets && op_parallel.base_compaction_time() > 0) {
+            _metadata->set_last_base_compaction_time(
+                    std::max(_metadata->last_base_compaction_time(), op_parallel.base_compaction_time()));
+        }
         return Status::OK();
     }
 
@@ -1072,9 +1082,18 @@ public:
         }
         if (log.has_op_compaction()) {
             RETURN_IF_ERROR(apply_compaction_log(log.op_compaction()));
+            if (!log.op_compaction().input_rowsets().empty() && log.op_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(
+                        std::max(_metadata->last_base_compaction_time(), log.op_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_parallel_compaction()) {
             RETURN_IF_ERROR(apply_parallel_compaction_log(log.op_parallel_compaction()));
+            if (log.op_parallel_compaction().subtask_compactions_size() > 0 &&
+                log.op_parallel_compaction().base_compaction_time() > 0) {
+                _metadata->set_last_base_compaction_time(std::max(_metadata->last_base_compaction_time(),
+                                                                  log.op_parallel_compaction().base_compaction_time()));
+            }
         }
         if (log.has_op_schema_change()) {
             RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change()));
