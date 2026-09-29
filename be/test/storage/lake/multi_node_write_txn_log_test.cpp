@@ -222,6 +222,7 @@ TEST(MultiNodeWriteTxnLogTest, merge_keeps_each_segment_on_its_own_bundle_file) 
         EXPECT_EQ(expected[i].first, rowset.segment_metas(i).filename()) << "segment " << i;
         ASSERT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
         EXPECT_EQ(expected[i].second, rowset.segment_metas(i).bundle_file_offset()) << "segment " << i;
+        EXPECT_FALSE(rowset.segment_metas(i).synthetic_bundle_file_offset()) << "segment " << i;
         EXPECT_EQ(i, rowset.segment_metas(i).segment_idx()) << "segment " << i;
     }
 }
@@ -279,6 +280,7 @@ TEST(MultiNodeWriteTxnLogTest, merge_gives_standalone_segments_offset_zero_next_
         EXPECT_EQ(std::get<0>(expected[i]), seg.filename()) << "segment " << i;
         ASSERT_TRUE(seg.has_bundle_file_offset()) << "segment " << i;
         EXPECT_EQ(std::get<1>(expected[i]), seg.bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(i != 0, seg.synthetic_bundle_file_offset()) << "segment " << i;
         // The slice must cover the whole standalone file, so the size stays the file's size.
         EXPECT_EQ(std::get<2>(expected[i]), seg.size()) << "segment " << i;
     }
@@ -305,6 +307,7 @@ TEST(MultiNodeWriteTxnLogTest, merge_gives_offset_zero_when_the_bundled_writer_c
     for (int i = 0; i < rowset.segment_metas_size(); i++) {
         ASSERT_TRUE(rowset.segment_metas(i).has_bundle_file_offset()) << "segment " << i;
         EXPECT_EQ(expected[i], rowset.segment_metas(i).bundle_file_offset()) << "segment " << i;
+        EXPECT_EQ(i != 2, rowset.segment_metas(i).synthetic_bundle_file_offset()) << "segment " << i;
     }
     ASSERT_OK(normalize_txn_log_before_save(&dst));
 }
