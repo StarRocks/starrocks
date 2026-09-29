@@ -52,12 +52,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
-<<<<<<< HEAD
-=======
 import com.starrocks.mysql.MysqlPackageDecoder;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.MysqlProto;
->>>>>>> 357c898 ([BugFix] Fix prepared statement leak on COM_STMT_CLOSE (#79860))
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
