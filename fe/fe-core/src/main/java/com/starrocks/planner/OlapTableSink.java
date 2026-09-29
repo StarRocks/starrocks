@@ -299,8 +299,9 @@ public class OlapTableSink extends DataSink {
         // Bundled data files are what make the fold safe to widen across nodes: each node opens its
         // OWN bundle file (uuid-named, so no collision) and every SegmentMetadataPB carries its own
         // filename plus bundle_file_offset, so concatenating segments from several bundles resolves
-        // correctly. It also keeps the publish-side check "all segments have offsets or none do"
-        // satisfied, which a mix of bundling and non-bundling writers would violate.
+        // correctly. Bundling alone does not make every writer bundle, though: a node whose share of the
+        // tablet fills a memtable writes standalone segments, so BE's fold gives those offset 0 to keep
+        // the check "all segments have offsets or none do" satisfied.
         if (!dstTable.isFileBundling()) {
             return NO_MULTI_NODE_WRITE;
         }
