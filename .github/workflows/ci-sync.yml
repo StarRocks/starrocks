@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: commit_sha
         id: commit_sha
+        env:
+          BRANCH: ${{ github.base_ref }}
         run: |
           set -x
           pr_info=$(gh pr view ${PR_NUMBER} -R ${{ github.repository }} --json mergeCommit,labels,title,headRefName)
@@ -73,13 +75,20 @@ jobs:
             fi
           fi
 
+          # Exclude three-component release branches from Mirrorship sync.
+          # Keep the CelerData path and the existing anti-loop decisions independent.
+          if [[ "${BRANCH}" =~ ^branch-[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            skip_ms=true
+            echo "Skipping Mirrorship sync for three-component release branch ${BRANCH}"
+          fi
+
           commit_sha=`echo $pr_info | jq -r '.mergeCommit.oid'`
           echo "commit_sha=${commit_sha:0:7}" >> $GITHUB_OUTPUT
           echo "skip_cd=${skip_cd}" >> $GITHUB_OUTPUT
           echo "skip_ms=${skip_ms}" >> $GITHUB_OUTPUT
 
       - name: sync
-        # Run unless BOTH downstreams are anti-looped; run-repo-sync.sh gates each
+        # Run unless BOTH downstreams are skipped; run-repo-sync.sh gates each
         # dispatch on its own flag.
         if: steps.commit_sha.outputs.skip_cd != 'true' || steps.commit_sha.outputs.skip_ms != 'true'
         env:
