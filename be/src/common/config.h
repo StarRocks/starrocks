@@ -1682,6 +1682,13 @@ CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "500");
 CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
+// Whether a scheduled lake primary-key compaction switches to base compaction on its own once the
+// tablet's deletes reach one of the two thresholds below. Off by default: the rows threshold is an
+// absolute count, so on a large tablet whose existing keys keep being updated or deleted it is
+// reached again soon after each base compaction, and every such round rewrites up to
+// update_compaction_ratio_threshold of the tablet's data. A manual ALTER TABLE ... COMPACT runs
+// base compaction whether or not this is on.
+CONF_mBool(lake_pk_compaction_base_enable_delete_trigger, "false");
 // Lake primary-key base compaction (delete reclamation) triggers -- either condition switches a
 // tablet from cumulative selection (the size-tiered small-file merge, which favors small
 // freshly-written rowsets) to base compaction, which rewrites the delete-bearing rowsets (most
@@ -1694,6 +1701,7 @@ CONF_mInt64(lake_pk_compaction_min_input_segments, "5");
 //      long before the aggregate ratio -- diluted by many mostly-live rowsets -- crosses (1).
 // Without these, delete-heavy base rowsets keep losing size-tiered level selection and their
 // deletes / delete-vectors grow without bound even though the tablet keeps getting compacted.
+// Both thresholds are checked only while lake_pk_compaction_base_enable_delete_trigger is on.
 CONF_mDouble(lake_pk_compaction_base_delete_ratio_threshold, "0.5");
 CONF_mInt64(lake_pk_compaction_base_delete_rows_threshold, "10000000");
 // Master switch for the lake PK size-tiered compaction "score gate" (the block of knobs
