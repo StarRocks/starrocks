@@ -70,7 +70,9 @@ public class LanceMetadata implements ConnectorMetadata {
                         if (colonIdx > 0) {
                             String name = field.substring(0, colonIdx).trim();
                             String typeStr = field.substring(colonIdx + 1).trim();
-                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr)));
+                            // Configured schemas do not declare nullability. Keep null-sensitive optimizer
+                            // rewrites valid even when the underlying dataset contains nulls.
+                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr), true));
                         }
                     }
                 }
