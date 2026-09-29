@@ -184,52 +184,262 @@ StatusOr<ColumnPtr> geo_type(const Columns& columns) {
     return output;
 }
 
+struct NativeGeoDistanceArgumentState {
+    bool constant = false;
+    Status parse_status = Status::OK();
+    std::optional<WkbGeometry> geometry;
+};
+
+struct NativeGeoDistanceState {
+    NativeGeoDistanceArgumentState arguments[2];
+};
+
+struct NativeGeoDistanceThreadState final : FunctionThreadState {
+    std::optional<GeoPoint> points[2];
+    std::optional<GeoSphericalLine> lines[2];
+};
+
+bool is_line_family(WkbGeometryType type) {
+    return type == WkbGeometryType::LINESTRING || type == WkbGeometryType::MULTILINESTRING;
+}
+
+bool is_point_line_pair(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+    return (lhs.type == WkbGeometryType::POINT && is_line_family(rhs.type)) ||
+           (rhs.type == WkbGeometryType::POINT && is_line_family(lhs.type));
+}
+
+bool is_empty_line_family(const WkbGeometry& geometry) {
+    if (geometry.type == WkbGeometryType::LINESTRING) return geometry.empty;
+    if (geometry.type != WkbGeometryType::MULTILINESTRING || geometry.empty) return geometry.empty;
+    return std::all_of(geometry.children.begin(), geometry.children.end(),
+                       [](const WkbGeometry& child) { return child.empty; });
+}
+
+StatusOr<const WkbGeometry*> distance_geometry(const GeoInput& input, size_t row, WkbCoordinateSemantics semantics,
+                                               const NativeGeoDistanceArgumentState* prepared,
+                                               std::optional<WkbGeometry>* constant_geometry,
+                                               WkbGeometry* varying_geometry) {
+    if (prepared != nullptr && prepared->constant) {
+        RETURN_IF_ERROR(prepared->parse_status);
+        return &prepared->geometry.value();
+    }
+    if (input.constant) {
+        if (!constant_geometry->has_value()) {
+            WkbGeometry parsed;
+            RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &parsed, semantics));
+            constant_geometry->emplace(std::move(parsed));
+        }
+        return &constant_geometry->value();
+    }
+    RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), varying_geometry, semantics));
+    return varying_geometry;
+}
+
 template <LogicalType Type>
-StatusOr<ColumnPtr> geo_distance(const Columns& columns) {
+Status prepare_distance_constants(FunctionContext* context, NativeGeoDistanceState* state) {
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
                                                       : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    for (size_t i = 0; i < 2; ++i) {
+        if (!context->is_constant_column(i)) continue;
+        auto& argument = state->arguments[i];
+        argument.constant = true;
+        const auto& column = context->get_constant_column(i);
+        if (column->only_null()) continue;
+        ASSIGN_OR_RETURN(auto input, geo_input<Type>(column));
+        WkbGeometry geometry;
+        argument.parse_status = WkbCodec::parse_wkb(input.wkb(0), &geometry, semantics);
+        if (argument.parse_status.ok()) argument.geometry.emplace(std::move(geometry));
+    }
+    return Status::OK();
+}
+
+StatusOr<GeoSphericalLine> prepare_spherical_line_family(const WkbGeometry& line) {
+    GeoSphericalLine result;
+    const size_t component_count = line.type == WkbGeometryType::LINESTRING ? 1 : line.children.size();
+    for (size_t component_index = 0; component_index < component_count; ++component_index) {
+        const auto& component = line.type == WkbGeometryType::LINESTRING ? line : line.children[component_index];
+        GeoCoordinateList coordinates;
+        coordinates.list.reserve(component.coordinates.size());
+        for (const auto& coordinate : component.coordinates) {
+            coordinates.add({coordinate.x, coordinate.y});
+        }
+        if (result.add_component(coordinates) != GEO_PARSE_OK) {
+            return Status::InvalidArgument(
+                    "GEOGRAPHY line contains an exact or numerically ambiguous antipodal segment");
+        }
+    }
+    return result;
+}
+
+long double planar_point_segment_distance(const WkbCoordinate& point, const WkbCoordinate& start,
+                                          const WkbCoordinate& end) {
+    const long double dx = static_cast<long double>(end.x) - start.x;
+    const long double dy = static_cast<long double>(end.y) - start.y;
+    const long double px = static_cast<long double>(point.x) - start.x;
+    const long double py = static_cast<long double>(point.y) - start.y;
+    const long double length_squared = dx * dx + dy * dy;
+    if (length_squared == 0) return std::hypotl(px, py);
+    const long double projection = std::clamp((px * dx + py * dy) / length_squared, 0.0L, 1.0L);
+    return std::hypotl(px - projection * dx, py - projection * dy);
+}
+
+long double planar_point_line_distance(const WkbCoordinate& point, const WkbGeometry& line) {
+    long double minimum = std::numeric_limits<long double>::infinity();
+    const size_t component_count = line.type == WkbGeometryType::LINESTRING ? 1 : line.children.size();
+    for (size_t component_index = 0; component_index < component_count; ++component_index) {
+        const auto& component = line.type == WkbGeometryType::LINESTRING ? line : line.children[component_index];
+        for (size_t vertex = 1; vertex < component.coordinates.size(); ++vertex) {
+            minimum = std::min(minimum, planar_point_segment_distance(point, component.coordinates[vertex - 1],
+                                                                      component.coordinates[vertex]));
+        }
+    }
+    return minimum;
+}
+
+template <LogicalType Type, bool DWithin>
+StatusOr<ColumnPtr> geo_distance(FunctionContext* context, const Columns& columns) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    constexpr const char* function_name = DWithin ? "ST_DWithin" : "ST_Distance";
     const size_t size = columns[0]->size();
-    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    if (columns[0]->only_null() || columns[1]->only_null() || (DWithin && columns[2]->only_null())) {
+        return ColumnHelper::create_const_null_column(size);
+    }
     ASSIGN_OR_RETURN(auto lhs, geo_input<Type>(columns[0]));
     ASSIGN_OR_RETURN(auto rhs, geo_input<Type>(columns[1]));
     if constexpr (Type == TYPE_GEOMETRY) {
         if (!is_geo_compute_compatible(lhs.data->descriptor(), rhs.data->descriptor())) {
-            return Status::InvalidArgument("ST_Distance requires compatible GEOMETRY descriptors");
+            return Status::InvalidArgument(std::string(function_name) + " requires compatible GEOMETRY descriptors");
         }
     }
-    const bool constant = lhs.constant && rhs.constant;
+    std::optional<ColumnViewer<TYPE_DOUBLE>> threshold;
+    if constexpr (DWithin) threshold.emplace(columns[2]);
+    const bool constant = ColumnHelper::is_all_const(columns);
     const size_t rows = constant ? 1 : size;
-    ColumnBuilder<TYPE_DOUBLE> result(rows);
+    const auto* prepared_state = context == nullptr
+                                         ? nullptr
+                                         : reinterpret_cast<const NativeGeoDistanceState*>(
+                                                   context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    NativeGeoDistanceThreadState* thread_state = nullptr;
+    if constexpr (Type == TYPE_GEOGRAPHY) {
+        if (prepared_state != nullptr) {
+            thread_state = context->get_or_create_thread_state<NativeGeoDistanceThreadState>(
+                    [] { return std::make_unique<NativeGeoDistanceThreadState>(); });
+        }
+    }
+    std::optional<WkbGeometry> constant_geometry[2];
+    std::optional<GeoPoint> constant_spherical_points[2];
+    std::optional<GeoSphericalLine> constant_spherical_lines[2];
+    ColumnBuilder<DWithin ? TYPE_BOOLEAN : TYPE_DOUBLE> result(rows);
     for (size_t row = 0; row < rows; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
+        if (lhs.is_null(row) || rhs.is_null(row) || (DWithin && threshold->is_null(row))) {
             result.append_null();
             continue;
         }
-        WkbGeometry left;
-        WkbGeometry right;
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(lhs.wkb(row), &left, semantics));
-        RETURN_IF_ERROR(WkbCodec::parse_wkb(rhs.wkb(row), &right, semantics));
-        if (left.empty || right.empty) {
-            result.append_null();
-            continue;
+        double threshold_value = 0;
+        if constexpr (DWithin) {
+            threshold_value = threshold->value(row);
+            if (!std::isfinite(threshold_value) || threshold_value < 0) {
+                return Status::InvalidArgument("ST_DWithin requires a finite, nonnegative distance threshold");
+            }
         }
-        if (left.type != WkbGeometryType::POINT || right.type != WkbGeometryType::POINT) {
-            if constexpr (Type == TYPE_GEOGRAPHY) {
-                return Status::InvalidArgument("ST_Distance requires POINT/POINT GEOGRAPHY inputs");
+        WkbGeometry varying_geometry[2];
+        const auto* prepared_left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
+        const auto* prepared_right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
+        ASSIGN_OR_RETURN(const auto* left, distance_geometry(lhs, row, semantics, prepared_left, &constant_geometry[0],
+                                                             &varying_geometry[0]));
+        ASSIGN_OR_RETURN(const auto* right, distance_geometry(rhs, row, semantics, prepared_right,
+                                                              &constant_geometry[1], &varying_geometry[1]));
+        const bool point_point = left->type == WkbGeometryType::POINT && right->type == WkbGeometryType::POINT;
+        if ((!DWithin && !point_point && !is_point_line_pair(*left, *right)) ||
+            (DWithin && !is_point_line_pair(*left, *right))) {
+            return Status::InvalidArgument(std::string(function_name) +
+                                           (DWithin ? " supports only POINT with LINESTRING/MULTILINESTRING inputs"
+                                                    : " supports POINT/POINT and POINT with "
+                                                      "LINESTRING/MULTILINESTRING inputs"));
+        }
+        if (left->empty || right->empty || is_empty_line_family(*left) || is_empty_line_family(*right)) {
+            if constexpr (DWithin) {
+                result.append(false);
             } else {
-                return Status::InvalidArgument("ST_Distance requires POINT/POINT GEOMETRY inputs");
+                result.append_null();
             }
+            continue;
         }
-        if constexpr (Type == TYPE_GEOGRAPHY) {
-            double distance;
-            if (!GeoPoint::st_distance_sphere(left.coordinates[0].x, left.coordinates[0].y, right.coordinates[0].x,
-                                              right.coordinates[0].y, &distance)) {
-                return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
+        if (point_point) {
+            if constexpr (Type == TYPE_GEOGRAPHY) {
+                double distance;
+                if (!GeoPoint::st_distance_sphere(left->coordinates[0].x, left->coordinates[0].y,
+                                                  right->coordinates[0].x, right->coordinates[0].y, &distance)) {
+                    return Status::InvalidArgument("ST_Distance received invalid GEOGRAPHY coordinates");
+                }
+                result.append(distance);
+            } else {
+                result.append(std::hypot(right->coordinates[0].x - left->coordinates[0].x,
+                                         right->coordinates[0].y - left->coordinates[0].y));
             }
-            result.append(distance);
+            continue;
+        }
+        const size_t point_argument = left->type == WkbGeometryType::POINT ? 0 : 1;
+        const size_t line_argument = 1 - point_argument;
+        const auto& point_geometry = point_argument == 0 ? *left : *right;
+        const auto& line_geometry = line_argument == 0 ? *left : *right;
+        if constexpr (Type == TYPE_GEOGRAPHY) {
+            GeoPoint local_point;
+            const GeoPoint* point = &local_point;
+            const bool point_constant = point_argument == 0 ? lhs.constant : rhs.constant;
+            if (point_constant) {
+                const bool plan_constant =
+                        prepared_state != nullptr && prepared_state->arguments[point_argument].constant;
+                auto* cached = plan_constant ? &thread_state->points[point_argument]
+                                             : &constant_spherical_points[point_argument];
+                if (!cached->has_value()) {
+                    cached->emplace();
+                    if (cached->value().from_coord(point_geometry.coordinates[0].x, point_geometry.coordinates[0].y) !=
+                        GEO_PARSE_OK) {
+                        return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
+                    }
+                }
+                point = &cached->value();
+            } else if (local_point.from_coord(point_geometry.coordinates[0].x, point_geometry.coordinates[0].y) !=
+                       GEO_PARSE_OK) {
+                return Status::InvalidArgument("Invalid GEOGRAPHY point coordinates");
+            }
+            GeoSphericalLine local_line;
+            const GeoSphericalLine* line = &local_line;
+            const bool line_constant = line_argument == 0 ? lhs.constant : rhs.constant;
+            if (line_constant) {
+                const bool plan_constant =
+                        prepared_state != nullptr && prepared_state->arguments[line_argument].constant;
+                auto* cached =
+                        plan_constant ? &thread_state->lines[line_argument] : &constant_spherical_lines[line_argument];
+                if (!cached->has_value()) {
+                    ASSIGN_OR_RETURN(auto prepared, prepare_spherical_line_family(line_geometry));
+                    cached->emplace(std::move(prepared));
+                }
+                line = &cached->value();
+            } else {
+                ASSIGN_OR_RETURN(local_line, prepare_spherical_line_family(line_geometry));
+            }
+            if constexpr (DWithin) {
+                result.append(line->dwithin(*point, threshold_value));
+            } else {
+                double distance;
+                if (!line->distance(*point, &distance)) {
+                    result.append_null();
+                } else {
+                    result.append(distance);
+                }
+            }
         } else {
-            result.append(std::hypot(right.coordinates[0].x - left.coordinates[0].x,
-                                     right.coordinates[0].y - left.coordinates[0].y));
+            const auto distance = planar_point_line_distance(point_geometry.coordinates[0], line_geometry);
+            if constexpr (DWithin) {
+                result.append(distance <= static_cast<long double>(threshold_value));
+            } else if (!std::isfinite(distance) || distance > std::numeric_limits<double>::max()) {
+                return Status::InvalidArgument("ST_Distance result is outside the finite DOUBLE range");
+            } else {
+                result.append(static_cast<double>(distance));
+            }
         }
     }
     auto output = result.build(false);
@@ -963,8 +1173,12 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_type(FunctionContext*, const Colu
     return geo_type<TYPE_GEOGRAPHY>(columns);
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geography_distance(FunctionContext*, const Columns& columns) {
-    return geo_distance<TYPE_GEOGRAPHY>(columns);
+StatusOr<ColumnPtr> GeoFunctions::st_geography_distance(FunctionContext* context, const Columns& columns) {
+    return geo_distance<TYPE_GEOGRAPHY, false>(context, columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_dwithin(FunctionContext* context, const Columns& columns) {
+    return geo_distance<TYPE_GEOGRAPHY, true>(context, columns);
 }
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_x(FunctionContext*, const Columns& columns) {
@@ -979,8 +1193,42 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_type(FunctionContext*, const Colum
     return geo_type<TYPE_GEOMETRY>(columns);
 }
 
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_distance(FunctionContext*, const Columns& columns) {
-    return geo_distance<TYPE_GEOMETRY>(columns);
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_distance(FunctionContext* context, const Columns& columns) {
+    return geo_distance<TYPE_GEOMETRY, false>(context, columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_dwithin(FunctionContext* context, const Columns& columns) {
+    return geo_distance<TYPE_GEOMETRY, true>(context, columns);
+}
+
+Status GeoFunctions::native_geo_distance_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL ||
+        (!context->is_constant_column(0) && !context->is_constant_column(1))) {
+        return Status::OK();
+    }
+    const auto* left_type = context->get_arg_type(0);
+    const auto* right_type = context->get_arg_type(1);
+    if (left_type == nullptr || right_type == nullptr || left_type->type != right_type->type) {
+        return Status::InvalidArgument("Native GEO distance requires two arguments of the same type");
+    }
+    auto state = std::make_unique<NativeGeoDistanceState>();
+    if (left_type->type == TYPE_GEOGRAPHY) {
+        RETURN_IF_ERROR(prepare_distance_constants<TYPE_GEOGRAPHY>(context, state.get()));
+    } else if (left_type->type == TYPE_GEOMETRY) {
+        RETURN_IF_ERROR(prepare_distance_constants<TYPE_GEOMETRY>(context, state.get()));
+    } else {
+        return Status::InvalidArgument("Native GEO distance requires GEOGRAPHY or GEOMETRY arguments");
+    }
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_distance_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoDistanceState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
 }
 
 Status GeoFunctions::native_geo_containment_prepare(FunctionContext* context,

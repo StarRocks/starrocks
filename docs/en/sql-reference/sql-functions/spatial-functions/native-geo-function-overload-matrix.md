@@ -53,10 +53,12 @@ See [ST_AsText and ST_AsWKT](st_astext.md) and [ST_AsBinary and ST_AsWKB](st_asb
 | `ST_Y(GEOMETRY point)` | 120091 | `DOUBLE`, input CRS units | Non-empty XY `POINT` | `NULL` propagates. `EMPTY`, non-`POINT`, or an unsupported descriptor is an error. |
 | `ST_GeometryType(GEOGRAPHY value)` | 120170 | `VARCHAR` family name | Every supported XY family | `NULL` propagates. A typed `EMPTY` keeps its family name. Unsupported dimensions or descriptors are errors. |
 | `ST_GeometryType(GEOMETRY value)` | 120171 | `VARCHAR` family name | Every supported XY family | `NULL` propagates. A typed `EMPTY` keeps its family name. Unsupported dimensions or descriptors are errors. |
-| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`, meters | XY `POINT`/`POINT` under the spherical CRS84 contract | `NULL` or `EMPTY` produces `NULL`. Unsupported families, dimensions, or descriptors are errors. |
-| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`, input CRS units | XY `POINT`/`POINT` with matching descriptors | `NULL` or `EMPTY` produces `NULL`. Unsupported families, dimensions, or incompatible descriptors are errors. |
+| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`, meters | XY `POINT`/`POINT`, or `POINT` with `LINESTRING`/`MULTILINESTRING`, under the spherical CRS84 contract | `NULL` or `EMPTY` produces `NULL`. Unsupported families, dimensions, descriptors, or ambiguous antipodal line segments are errors. |
+| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`, input CRS units | XY `POINT`/`POINT`, or `POINT` with `LINESTRING`/`MULTILINESTRING`, with matching descriptors | `NULL` or `EMPTY` produces `NULL`. Unsupported families, dimensions, or incompatible descriptors are errors. |
+| `ST_DWithin(GEOGRAPHY lhs, GEOGRAPHY rhs, DOUBLE distance)` | 120230 | `BOOLEAN`; `distance` in meters | XY `POINT` with `LINESTRING`/`MULTILINESTRING`, in either order | Inclusive threshold. `NULL` propagates; `EMPTY` returns `false`. The threshold must be finite and nonnegative. |
+| `ST_DWithin(GEOMETRY lhs, GEOMETRY rhs, DOUBLE distance)` | 120231 | `BOOLEAN`; `distance` in input CRS units | XY `POINT` with `LINESTRING`/`MULTILINESTRING`, in either order, with matching descriptors | Inclusive threshold. `NULL` propagates; `EMPTY` returns `false`. The threshold must be finite and nonnegative. |
 
-See [ST_X](st_x.md), [ST_Y](st_y.md), [ST_GeometryType](st_geometrytype.md), and [ST_Distance](st_distance.md).
+See [ST_X](st_x.md), [ST_Y](st_y.md), [ST_GeometryType](st_geometrytype.md), [ST_Distance](st_distance.md), and [ST_DWithin](st_dwithin.md).
 
 ## Containment predicates
 

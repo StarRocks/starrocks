@@ -15,6 +15,11 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <cmath>
+#include <limits>
+#include <thread>
+
 #include "butil/time.h"
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
@@ -649,11 +654,118 @@ TEST_F(geographyFunctionsTest, nativeGeographyPointDistance) {
     auto null =
             GeoFunctions::st_geography_distance(nullptr, {geography({nullptr}), geography({"POINT (0 0)"})}).value();
     EXPECT_TRUE(null->is_null(0));
+}
 
-    auto unsupported = GeoFunctions::st_geography_distance(
-            nullptr, {geography({"LINESTRING (0 0, 1 1)"}), geography({"POINT (0 0)"})});
-    ASSERT_FALSE(unsupported.ok());
-    EXPECT_TRUE(unsupported.status().is_invalid_argument());
+TEST_F(geographyFunctionsTest, nativeGeometryPointLineDistanceAndDWithin) {
+    auto points = geometry({"POINT (5 3)", "POINT (-2 0)", "POINT (5 1)", "POINT (5 3)"});
+    auto lines = geometry({"LINESTRING (0 0, 10 0)", "LINESTRING (0 0, 10 0)",
+                           "MULTILINESTRING ((0 10, 10 10), (0 0, 10 0))", "LINESTRING (0 0, 0 0, 10 0)"});
+    auto distance_result = GeoFunctions::st_geometry_distance(nullptr, {points, lines});
+    ASSERT_TRUE(distance_result.ok()) << distance_result.status();
+    ColumnViewer<TYPE_DOUBLE> distance(*distance_result);
+    EXPECT_DOUBLE_EQ(3, distance.value(0));
+    EXPECT_DOUBLE_EQ(2, distance.value(1));
+    EXPECT_DOUBLE_EQ(1, distance.value(2));
+    EXPECT_DOUBLE_EQ(3, distance.value(3));
+
+    auto reversed = GeoFunctions::st_geometry_distance(nullptr, {lines, points});
+    ASSERT_TRUE(reversed.ok()) << reversed.status();
+    ColumnViewer<TYPE_DOUBLE> reversed_distance(*reversed);
+    for (size_t row = 0; row < points->size(); ++row)
+        EXPECT_DOUBLE_EQ(distance.value(row), reversed_distance.value(row));
+
+    auto equality = ColumnHelper::create_const_column<TYPE_DOUBLE>(3, points->size());
+    auto within_result = GeoFunctions::st_geometry_dwithin(nullptr, {points, lines, equality});
+    ASSERT_TRUE(within_result.ok()) << within_result.status();
+    ColumnViewer<TYPE_BOOLEAN> within(*within_result);
+    EXPECT_TRUE(within.value(0));
+    EXPECT_TRUE(within.value(1));
+    EXPECT_TRUE(within.value(2));
+    EXPECT_TRUE(within.value(3));
+
+    auto exact_point = geometry({"POINT (5 3)"});
+    auto exact_line = geometry({"LINESTRING (0 0, 10 0)"});
+    auto below = ColumnHelper::create_const_column<TYPE_DOUBLE>(std::nextafter(3.0, 0.0), 1);
+    auto above = ColumnHelper::create_const_column<TYPE_DOUBLE>(std::nextafter(3.0, 4.0), 1);
+    auto below_result = GeoFunctions::st_geometry_dwithin(nullptr, {exact_point, exact_line, below});
+    ASSERT_TRUE(below_result.ok()) << below_result.status();
+    ColumnViewer<TYPE_BOOLEAN> below_within(*below_result);
+    EXPECT_FALSE(below_within.value(0));
+
+    auto above_result = GeoFunctions::st_geometry_dwithin(nullptr, {exact_line, exact_point, above});
+    ASSERT_TRUE(above_result.ok()) << above_result.status();
+    ColumnViewer<TYPE_BOOLEAN> above_within(*above_result);
+    EXPECT_TRUE(above_within.value(0));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeographyPointLineDistanceAndDWithin) {
+    auto points = geography({"POINT (0 1)", "POINT (180 1)", "POINT (0 89)"});
+    auto lines = geography({"LINESTRING (-1 0, 1 0)", "LINESTRING (179 0, -179 0)",
+                            "MULTILINESTRING ((-90 89, 90 89), (0 80, 1 80))"});
+    auto distance_result = GeoFunctions::st_geography_distance(nullptr, {points, lines});
+    ASSERT_TRUE(distance_result.ok()) << distance_result.status();
+    ColumnViewer<TYPE_DOUBLE> distance(*distance_result);
+    EXPECT_NEAR(111195.101177484, distance.value(0), 0.001);
+    EXPECT_NEAR(111195.101177484, distance.value(1), 0.001);
+    EXPECT_NEAR(111195.101177484, distance.value(2), 0.001);
+
+    auto thresholds = DoubleColumn::create();
+    thresholds->append(distance.value(0));
+    thresholds->append(std::nextafter(distance.value(1), 0.0));
+    thresholds->append(std::nextafter(distance.value(2), std::numeric_limits<double>::infinity()));
+    auto within_result = GeoFunctions::st_geography_dwithin(nullptr, {lines, points, thresholds});
+    ASSERT_TRUE(within_result.ok()) << within_result.status();
+    ColumnViewer<TYPE_BOOLEAN> within(*within_result);
+    EXPECT_TRUE(within.value(0));
+    EXPECT_FALSE(within.value(1));
+    EXPECT_TRUE(within.value(2));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoPointLineDistanceNullEmptyAndRejection) {
+    auto point = geometry({"POINT (1 1)"});
+    auto empty_line = geometry({"LINESTRING EMPTY"});
+    EXPECT_TRUE(GeoFunctions::st_geometry_distance(nullptr, {point, empty_line}).value()->is_null(0));
+    ColumnViewer<TYPE_BOOLEAN> empty_within(
+            GeoFunctions::st_geometry_dwithin(nullptr,
+                                              {point, empty_line, ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1)})
+                    .value());
+    EXPECT_FALSE(empty_within.value(0));
+    auto empty_multiline = geometry({"MULTILINESTRING (EMPTY)"});
+    EXPECT_TRUE(GeoFunctions::st_geometry_distance(nullptr, {point, empty_multiline}).value()->is_null(0));
+    ColumnViewer<TYPE_BOOLEAN> empty_multi_within(
+            GeoFunctions::st_geometry_dwithin(
+                    nullptr, {point, empty_multiline, ColumnHelper::create_const_column<TYPE_DOUBLE>(0, 1)})
+                    .value());
+    EXPECT_FALSE(empty_multi_within.value(0));
+
+    auto null_distance = GeoFunctions::st_geometry_distance(nullptr, {geometry({nullptr}), empty_line}).value();
+    EXPECT_TRUE(null_distance->is_null(0));
+    auto null_threshold = ColumnHelper::create_const_null_column(1);
+    EXPECT_TRUE(GeoFunctions::st_geometry_dwithin(nullptr, {point, empty_line, null_threshold}).value()->is_null(0));
+
+    for (double invalid : {-1.0, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity()}) {
+        auto threshold = ColumnHelper::create_const_column<TYPE_DOUBLE>(invalid, 1);
+        auto result = GeoFunctions::st_geometry_dwithin(nullptr, {point, empty_line, threshold});
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_invalid_argument());
+    }
+
+    auto collection = geometry({"GEOMETRYCOLLECTION (LINESTRING (0 0, 1 1))"});
+    EXPECT_FALSE(GeoFunctions::st_geometry_distance(nullptr, {point, collection}).ok());
+    EXPECT_FALSE(GeoFunctions::st_geometry_dwithin(
+                         nullptr, {point, collection, ColumnHelper::create_const_column<TYPE_DOUBLE>(1, 1)})
+                         .ok());
+    EXPECT_FALSE(GeoFunctions::st_geometry_dwithin(nullptr, {point, geometry({"POINT (2 2)"}),
+                                                             ColumnHelper::create_const_column<TYPE_DOUBLE>(1, 1)})
+                         .ok());
+
+    auto antipodal = GeoFunctions::st_geography_distance(
+            nullptr, {geography({"POINT (0 10)"}), geography({"LINESTRING (0 0, 180 0)"})});
+    ASSERT_FALSE(antipodal.ok());
+    EXPECT_TRUE(antipodal.status().is_invalid_argument());
+    auto near_antipodal = GeoFunctions::st_geography_distance(
+            nullptr, {geography({"POINT (0 10)"}), geography({"LINESTRING (0 0, 179.999 0)"})});
+    EXPECT_TRUE(near_antipodal.ok()) << near_antipodal.status();
 }
 
 TEST_F(geographyFunctionsTest, nativeGeographyComputeChecksDescriptorCapabilityAndDimension) {
@@ -728,10 +840,6 @@ TEST_F(geographyFunctionsTest, nativeGeometryComputeRejectsUnsupportedInputs) {
     auto line_x = GeoFunctions::st_geometry_x(nullptr, {line});
     ASSERT_FALSE(line_x.ok());
     EXPECT_TRUE(line_x.status().is_invalid_argument());
-
-    auto non_point = GeoFunctions::st_geometry_distance(nullptr, {line, geometry({"POINT (0 0)"})});
-    ASSERT_FALSE(non_point.ok());
-    EXPECT_TRUE(non_point.status().is_invalid_argument());
 
     auto incompatible = GeoFunctions::st_geometry_distance(
             nullptr, {geometry({"POINT (0 0)"}), geometry({"POINT (3 4)"}, geometry_type("EPSG:4326", 4326))});
@@ -1148,6 +1256,79 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentNullEmptyAndRejection) {
     EXPECT_TRUE(mixed_kind.status().is_not_supported());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoDistanceUsesPrepareCloseAndKeepsChunkConstantsBatchLocal) {
+    const auto type = geography_type();
+    auto prepared_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
+    std::unique_ptr<FunctionContext> line_context(
+            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+    line_context->set_constant_columns({nullptr, prepared_line});
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(line_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_NE(nullptr, line_context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    auto first_point = ConstColumn::create(geography({"POINT (0 1)"}), 1);
+    auto first = GeoFunctions::st_geography_distance(line_context.get(), {first_point, prepared_line});
+    ASSERT_TRUE(first.ok()) << first.status();
+    EXPECT_NEAR(111195.101177484, ColumnHelper::get_const_value<TYPE_DOUBLE>(*first), 0.001);
+
+    auto second_point = ConstColumn::create(geography({"POINT (0 2)"}), 1);
+    auto second = GeoFunctions::st_geography_distance(line_context.get(), {second_point, prepared_line});
+    ASSERT_TRUE(second.ok()) << second.status();
+    EXPECT_NEAR(222390.202354968, ColumnHelper::get_const_value<TYPE_DOUBLE>(*second), 0.001);
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_close(line_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    EXPECT_EQ(nullptr, line_context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    auto prepared_point = ConstColumn::create(geography({"POINT (0 1)"}), 1);
+    std::unique_ptr<FunctionContext> point_context(
+            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+    point_context->set_constant_columns({prepared_point, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(point_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    auto first_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
+    first = GeoFunctions::st_geography_distance(point_context.get(), {prepared_point, first_line});
+    ASSERT_TRUE(first.ok()) << first.status();
+    EXPECT_NEAR(111195.101177484, ColumnHelper::get_const_value<TYPE_DOUBLE>(*first), 0.001);
+
+    auto second_line = ConstColumn::create(geography({"LINESTRING (0 -1, 0 -2)"}), 1);
+    second = GeoFunctions::st_geography_distance(point_context.get(), {prepared_point, second_line});
+    ASSERT_TRUE(second.ok()) << second.status();
+    EXPECT_NEAR(222390.202354968, ColumnHelper::get_const_value<TYPE_DOUBLE>(*second), 0.001);
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_close(point_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoDistanceIsolatesPreparedSphericalCachePerWorker) {
+    const auto type = geography_type();
+    auto constant_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_DOUBLE)));
+    context->set_constant_columns({nullptr, constant_line});
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    std::atomic<bool> passed = true;
+    std::vector<std::thread> workers;
+    for (size_t worker = 0; worker < 4; ++worker) {
+        workers.emplace_back([&, worker] {
+            const double latitude = static_cast<double>(worker + 1);
+            const std::string point_wkt = "POINT (0 " + std::to_string(latitude) + ")";
+            auto points = geography({point_wkt.c_str()});
+            for (size_t iteration = 0; iteration < 20; ++iteration) {
+                auto result = GeoFunctions::st_geography_distance(context.get(), {points, constant_line});
+                if (!result.ok()) {
+                    passed = false;
+                    return;
+                }
+                ColumnViewer<TYPE_DOUBLE> distance(*result);
+                if (std::abs(distance.value(0) - 111195.101177484 * latitude) > 0.001) {
+                    passed = false;
+                    return;
+                }
+            }
+        });
+    }
+    for (auto& worker : workers) worker.join();
+    EXPECT_TRUE(passed);
+    ASSERT_TRUE(GeoFunctions::native_geo_distance_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     struct ExpectedFunction {
         uint64_t id;
@@ -1186,6 +1367,8 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120211, "ST_Covers", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
             {120220, "ST_CoveredBy", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
             {120221, "ST_CoveredBy", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
+            {120230, "ST_DWithin", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY", "DOUBLE"}},
+            {120231, "ST_DWithin", "BOOLEAN", {"GEOMETRY", "GEOMETRY", "DOUBLE"}},
     };
 
     for (const auto& function : expected) {
@@ -1199,7 +1382,7 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
         for (size_t i = 0; i < function.arg_types.size(); ++i) {
             EXPECT_STREQ(function.arg_types[i], descriptor->arg_types[i]);
         }
-        if (function.id >= 120190) {
+        if (function.id >= 120180) {
             EXPECT_TRUE(static_cast<bool>(descriptor->prepare_function));
             EXPECT_TRUE(static_cast<bool>(descriptor->close_function));
         }

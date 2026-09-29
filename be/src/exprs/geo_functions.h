@@ -75,10 +75,17 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_y);
     DEFINE_VECTORIZED_FN(st_geography_type);
     DEFINE_VECTORIZED_FN(st_geography_distance);
+    DEFINE_VECTORIZED_FN(st_geography_dwithin);
     DEFINE_VECTORIZED_FN(st_geometry_x);
     DEFINE_VECTORIZED_FN(st_geometry_y);
     DEFINE_VECTORIZED_FN(st_geometry_type);
     DEFINE_VECTORIZED_FN(st_geometry_distance);
+    DEFINE_VECTORIZED_FN(st_geometry_dwithin);
+
+    static Status native_geo_distance_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_distance_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
 
     static Status native_geo_containment_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
             __attribute__((used));

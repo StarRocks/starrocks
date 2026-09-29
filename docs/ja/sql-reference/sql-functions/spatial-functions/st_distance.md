@@ -1,13 +1,13 @@
 ---
 displayed_sidebar: docs
-description: "互換性のある 2 つの GEOGRAPHY または GEOMETRY 点間の距離を返します。"
+description: "対応する GEOGRAPHY または GEOMETRY 値間の最小距離を返します。"
 ---
 
 # ST_DISTANCE
 
-`GEOGRAPHY` の場合、OGC:CRS84 のセマンティクスに基づき、2 点間の球面距離をメートル単位で返します。
+対応する 2 つの値間の最小距離を返します。点から線への距離は、線分の内部と端点を含む、すべての線分上の最近点までの距離です。
 
-`GEOMETRY` の場合、宣言された CRS の単位で平面ユークリッド距離を返します。両方の入力に互換性のあるディスクリプターが必要です。角度 CRS の座標も平面座標値として扱われ、このオーバーロードは球面計算や CRS 変換を行いません。
+`GEOGRAPHY` は球面 OGC:CRS84 エッジで評価し、メートル単位で返します。`GEOMETRY` は平面エッジで評価し、宣言された CRS の単位で返します。`GEOMETRY` 入力には互換性のあるディスクリプタが必要です。この関数は CRS 変換を行いません。
 
 ## 構文
 
@@ -16,22 +16,31 @@ DOUBLE ST_DISTANCE(GEOGRAPHY lhs, GEOGRAPHY rhs)
 DOUBLE ST_DISTANCE(GEOMETRY lhs, GEOMETRY rhs)
 ```
 
+## パラメータ
+
+次のファミリの組み合わせに対応します。
+
+- `POINT` と `POINT`
+- `POINT` と `LINESTRING` または `MULTILINESTRING`（引数の順序は問いません）
+
+すべての値は 2 次元である必要があります。`GEOGRAPHY` の線にある正確な対蹠線分、または数値的に曖昧な対蹠線分は、一意な最短球面エッジを定義しないため拒否されます。
+
 ## 戻り値
 
-両方の値が `POINT` である必要があります。いずれかの入力が `NULL` または EMPTY の場合は `NULL` を返します。`POINT` 以外のファミリー、サポートされていない次元またはディスクリプター、`GEOGRAPHY` と `GEOMETRY` の混在、互換性のない `GEOMETRY` ディスクリプターはエラーになります。他のジオメトリファミリーの組み合わせはサポートされません。
+いずれかの入力が `NULL` または EMPTY の場合は `NULL` を返します。未対応のファミリまたはディスクリプタ、`GEOGRAPHY` と `GEOMETRY` の混在、互換性のない `GEOMETRY` ディスクリプタはエラーになります。
 
 ## 例
 
 ```SQL
 SELECT ST_DISTANCE(
-    ST_GeogFromText('POINT (0 0)'),
-    ST_GeogFromText('POINT (1 0)'));
+    ST_GeogFromText('POINT (0 1)'),
+    ST_GeogFromText('LINESTRING (-1 0, 1 0)'));
 -- 約 111195.1 メートル
 
 SELECT ST_DISTANCE(
-    ST_GeomFromText('POINT (0 0)', 'EPSG:3857'),
-    ST_GeomFromText('POINT (3 4)', 'EPSG:3857'));
--- 5
+    ST_GeomFromText('POINT (5 3)', 'EPSG:3857'),
+    ST_GeomFromText('LINESTRING (0 0, 10 0)', 'EPSG:3857'));
+-- 3
 ```
 
 ## キーワード

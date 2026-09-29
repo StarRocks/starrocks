@@ -34,9 +34,11 @@
 
 #include "geo/geo_types.h"
 
+#include <s2/s1chord_angle.h>
 #include <s2/s2cap.h>
 #include <s2/s2cell.h>
 #include <s2/s2earth.h>
+#include <s2/s2edge_distances.h>
 #include <s2/s2latlng.h>
 #include <s2/s2polygon.h>
 #include <s2/s2polyline.h>
@@ -286,6 +288,55 @@ std::string GeoPoint::as_wkt() const {
 
 GeoLine::GeoLine() = default;
 GeoLine::~GeoLine() = default;
+
+class GeoSphericalLine::Impl {
+public:
+    std::vector<std::vector<S2Point>> components;
+};
+
+GeoSphericalLine::GeoSphericalLine() : _impl(std::make_unique<Impl>()) {}
+GeoSphericalLine::~GeoSphericalLine() = default;
+GeoSphericalLine::GeoSphericalLine(GeoSphericalLine&&) noexcept = default;
+GeoSphericalLine& GeoSphericalLine::operator=(GeoSphericalLine&&) noexcept = default;
+
+GeoParseStatus GeoSphericalLine::add_component(const GeoCoordinateList& coordinates) {
+    constexpr double kAntipodalToleranceRadians = 1e-15;
+    const double pi = std::acos(-1.0);
+    std::vector<S2Point> vertices(coordinates.list.size());
+    for (size_t i = 0; i < coordinates.list.size(); ++i) {
+        const auto status = to_s2point(coordinates.list[i], &vertices[i]);
+        if (status != GEO_PARSE_OK) return status;
+    }
+    for (size_t i = 1; i < vertices.size(); ++i) {
+        if (pi - vertices[i - 1].Angle(vertices[i]) <= kAntipodalToleranceRadians) {
+            return GEO_PARSE_POLYLINE_INVALID;
+        }
+    }
+    _impl->components.emplace_back(std::move(vertices));
+    return GEO_PARSE_OK;
+}
+
+bool GeoSphericalLine::distance(const GeoPoint& point, double* meters) const {
+    S1ChordAngle minimum = S1ChordAngle::Infinity();
+    for (const auto& component : _impl->components) {
+        for (size_t i = 1; i < component.size(); ++i) {
+            S2::UpdateMinDistance(*point.point(), component[i - 1], component[i], &minimum);
+        }
+    }
+    if (minimum.is_infinity()) return false;
+    *meters = S2Earth::ToMeters(minimum);
+    return true;
+}
+
+bool GeoSphericalLine::dwithin(const GeoPoint& point, double meters) const {
+    const auto limit = S1ChordAngle::Radians(S2Earth::MetersToRadians(meters)).Successor();
+    for (const auto& component : _impl->components) {
+        for (size_t i = 1; i < component.size(); ++i) {
+            if (S2::IsDistanceLess(*point.point(), component[i - 1], component[i], limit)) return true;
+        }
+    }
+    return false;
+}
 
 GeoParseStatus GeoLine::from_coords(const GeoCoordinateList& list) {
     return to_s2polyline(list, &_polyline);
