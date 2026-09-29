@@ -2018,6 +2018,104 @@ TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     }
 }
 
+// Deciding whether a bundle file goes with the deleted tablets reads its footer, which may come from a
+// read that mixed locally cached blocks of two writes while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the footer was read again, and
+// leaving the damage in place proves nothing is deleted on a bundle that stays bad.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_rereads_corrupted_bundle) {
+    ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    const std::string segment = "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat";
+    create_data_file(segment);
+    auto t720_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 720,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "0000000000f259e4_22222222-2222-2222-2222-2222222222a1.dat"
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[720] = *t720_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+
+    auto fs = FileSystem::Default();
+    auto bundle_path = _tablet_mgr->bundle_tablet_metadata_location(720, 2);
+    auto overwrite = [&](const std::string& content) {
+        ASSERT_OK(fs->delete_file(bundle_path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(bundle_path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(bundle_path));
+    ASSIGN_OR_ABORT(auto intact_content, rf->read_all());
+    // The footer ends with [crc32][size]; flipping a byte of the stored crc fails the footer check.
+    std::string mixed_content = intact_content;
+    mixed_content[mixed_content.size() - sizeof(uint64_t) - sizeof(uint32_t)] ^= 0xFF;
+
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+    auto delete_tablet_720 = [&]() {
+        DeleteTabletRequest request;
+        DeleteTabletResponse response;
+        request.add_tablet_ids(720);
+        delete_tablets(_tablet_mgr.get(), request, &response);
+        EXPECT_TRUE(response.has_status());
+        return response.status().status_code();
+    };
+
+    {
+        // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+        config::lake_clear_corrupted_cache_meta = false;
+        overwrite(mixed_content);
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(0, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is still there after the drop, so the second read fails and nothing is deleted.
+        config::lake_clear_corrupted_cache_meta = true;
+        restore_on_drop = false;
+        cache_drops = 0;
+        EXPECT_NE(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_TRUE(file_exist(segment));
+    }
+    {
+        // The damage is gone after the drop, so the second read succeeds and the tablet's files go.
+        restore_on_drop = true;
+        cache_drops = 0;
+        EXPECT_EQ(0, delete_tablet_720());
+        EXPECT_EQ(1, cache_drops);
+        EXPECT_FALSE(file_exist(tablet_metadata_filename(0, 2)));
+        EXPECT_FALSE(file_exist(segment));
+    }
+}
+
 // A split-shared segment's .vi is named by the recorded owner, so it is the SAME file for every
 // sibling tablet. It must follow the shared segment's deletion policy: kept while any sibling still
 // references the segment, deleted only once none do. Owner (710) differs from the sibling (711) to
