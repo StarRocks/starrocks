@@ -25,12 +25,18 @@ import com.starrocks.catalog.Variant;
 import com.starrocks.common.Config;
 import com.starrocks.common.Range;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Deployer;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.type.IntegerType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -40,6 +46,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * End-to-end coordinator-side scan-range dispatch tests for range-distribution
@@ -260,6 +267,7 @@ public class RangeColocateScanRangeDispatchTest {
         scanNode.setTabletId2BucketSeq(stale);
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
                 scanNode::getBucketNums);
+        Assertions.assertInstanceOf(RangeColocateUnalignedException.class, exception);
         Assertions.assertTrue(exception.getMessage().contains("stale bucket assignment"),
                 "actual: " + exception.getMessage());
     }
@@ -298,7 +306,68 @@ public class RangeColocateScanRangeDispatchTest {
         // the colocate-dispatch path must fail closed rather than pairing by the position fallback.
         IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
                 scan::getBucketNums);
+        Assertions.assertInstanceOf(RangeColocateUnalignedException.class, exception);
         Assertions.assertTrue(exception.getMessage().contains("unaligned state"),
                 "actual: " + exception.getMessage());
+    }
+
+    @Test
+    public void testStaleAssignmentFailsSchedulingAndReleasesSlots() throws Exception {
+        // Two tables of one stable group whose ColocateRanges no longer match their single tablets: the colocate
+        // join is planned, then fails closed at scheduling, before anything is deployed.
+        starRocksAssert.withTable("create table t_stale_l (k1 int, k2 int, v1 int) order by(k1, k2) "
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_stale:k1');");
+        starRocksAssert.withTable("create table t_stale_r (k1 int, k2 int, v2 int) order by(k1, k2) "
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_stale:k1');");
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(db.getFullName(), "t_stale_l");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        long grpId = colocateTableIndex.getGroup(table.getId()).grpId;
+        colocateTableIndex.getColocateRangeMgr().setColocateRanges(grpId, Arrays.asList(
+                new ColocateRange(Range.lt(makeTuple(100)), 9201L),
+                new ColocateRange(Range.gelt(makeTuple(100), makeTuple(200)), 9202L),
+                new ColocateRange(Range.ge(makeTuple(200)), 9203L)));
+
+        AtomicInteger releases = new AtomicInteger();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void onReleaseSlots(Invocation invocation) {
+                releases.incrementAndGet();
+                invocation.proceed();
+            }
+        };
+
+        String sql = "select l.v1, r.v2 from t_stale_l l join t_stale_r r on l.k1 = r.k1";
+        RangeColocateUnalignedException exception = Assertions.assertThrows(RangeColocateUnalignedException.class,
+                () -> UtFrameUtils.getPlanAndStartScheduling(connectContext, sql));
+        Assertions.assertTrue(exception.getMessage().contains("unaligned state"), "actual: " + exception.getMessage());
+        Assertions.assertEquals(1, releases.get(), "the failed attempt releases its query-queue slot before the re-plan");
+    }
+
+    @Test
+    public void testStaleAssignmentDuringDeployIsNotRetryable() throws Exception {
+        // An aligned group passes the initial prepareExec. Past that point fragments may be running (phased scheduling
+        // assigns more scan ranges after the first deploy), so a stale assignment raised in the deploy phase must not
+        // reach the retry as the retryable type. The injected failure hits the deploy phase's first call, which is
+        // the same wrapper a later round goes through.
+        starRocksAssert.withTable("create table t_deployed_l (k1 int, k2 int, v1 int) order by(k1, k2) "
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_deployed:k1');");
+        starRocksAssert.withTable("create table t_deployed_r (k1 int, k2 int, v2 int) order by(k1, k2) "
+                + "properties('replication_num' = '1', 'colocate_with' = 'rg_deployed:k1');");
+        String message = "range colocate group 1 has a stale bucket assignment in physical partition 2";
+        new MockUp<Deployer>() {
+            @Mock
+            public void deployFragments(DeployState deployState) {
+                throw new RangeColocateUnalignedException(message);
+            }
+        };
+
+        String sql = "select l.v1, r.v2 from t_deployed_l l join t_deployed_r r on l.k1 = r.k1";
+        IllegalStateException exception = Assertions.assertThrows(IllegalStateException.class,
+                () -> UtFrameUtils.startScheduling(connectContext, sql));
+        Assertions.assertFalse(exception instanceof RangeColocateUnalignedException,
+                "a failure in the deploy phase must not be retried");
+        Assertions.assertEquals(message, exception.getMessage());
+        Assertions.assertInstanceOf(RangeColocateUnalignedException.class, exception.getCause());
     }
 }

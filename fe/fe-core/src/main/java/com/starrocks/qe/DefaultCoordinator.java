@@ -70,6 +70,7 @@ import com.starrocks.planner.DescriptorTable;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
@@ -627,13 +628,38 @@ public class DefaultCoordinator extends Coordinator {
 
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Prepare")) {
             prepareExec();
+        } catch (RangeColocateUnalignedException e) {
+            // Nothing is deployed yet. Give the query-queue slot back now rather than after the statement is re-planned
+            // (the retry loop releases it again when it unregisters this coordinator, which is harmless), and close any
+            // external scan sources this attempt opened: the retry loop does not clear them.
+            onReleaseSlots();
+            clearExternalResources();
+            throw e;
         }
 
+<<<<<<< HEAD
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
             deliverExecFragments(option);
         }
+=======
+        if (StarRocksRemoteScanSessionManager.hasPreparedRemoteScans(connectContext)) {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "StartRemoteScan")) {
+                StarRocksRemoteScanSessionManager.startPreparedRemoteScans(connectContext);
+            }
+        }
 
-        scheduler.continueSchedule(option);
+        try {
+            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
+                deliverExecFragments(option);
+            }
+>>>>>>> 1f3e44a404b... [BugFix] Re-plan a query whose range-colocate bucket assignment went stale (#64046)
+
+            scheduler.continueSchedule(option);
+        } catch (RangeColocateUnalignedException e) {
+            // Fragments may already be running here (phased scheduling assigns more scan ranges after deploying the
+            // first ones), so this attempt must not be re-planned: fail it as the plain scheduling error it was.
+            throw new IllegalStateException(e.getMessage(), e);
+        }
 
         // Prevent `explain scheduler` from waiting until the profile timeout.
         if (!option.doDeploy) {

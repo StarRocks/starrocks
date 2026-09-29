@@ -19,10 +19,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.starrocks.StarRocksRemoteScanSessionManager;
 import com.starrocks.context.ai.AIProviderType;
 import com.starrocks.lake.LakeMetaVersionNotFoundException;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.StarRocksScanNode;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.AIProviderMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,9 +39,13 @@ import com.starrocks.thrift.TAIModelConfiguration;
 import com.starrocks.thrift.TAIModelSource;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStatusCode;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -104,6 +111,112 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
                         + "partition_id=10002, version=144847: Not found"), retryContext));
 
         Assertions.assertNotEquals(retryContext.getExecPlan(), execPlan);
+    }
+
+    @Test
+    public void testHandleRangeColocateUnalignedException() throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+
+        // The plan's tablet -> bucket assignment is stale; only a new plan can dispatch the query.
+        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(
+                new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                        + "physical partition 2"), retryContext));
+
+        Assertions.assertNotEquals(execPlan, retryContext.getExecPlan());
+    }
+
+    @Test
+    public void testRangeColocateUnalignedWithRemoteStarRocksScanIsNotRetried(@Mocked StarRocksScanNode remoteScan)
+            throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        // The failed plan read a remote StarRocks table: its prepared remote scan session is registered on the
+        // connection and a retry would start it although nothing reads it.
+        List<ScanNode> scanNodes = new ArrayList<>(execPlan.getScanNodes());
+        scanNodes.add(remoteScan);
+        new MockUp<ExecPlan>() {
+            @Mock
+            public List<ScanNode> getScanNodes() {
+                return scanNodes;
+            }
+        };
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+
+        Assertions.assertThrows(RangeColocateUnalignedException.class, () -> ExecuteExceptionHandler.handle(
+                new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                        + "physical partition 2"), retryContext));
+        Assertions.assertSame(execPlan, retryContext.getExecPlan());
+    }
+
+    @Test
+    public void testExplainOnlyRangeColocateUnalignedWithRemoteScanReplans(@Mocked StarRocksScanNode remoteScan)
+            throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        List<ScanNode> scanNodes = new ArrayList<>(execPlan.getScanNodes());
+        scanNodes.add(remoteScan);
+        new MockUp<ExecPlan>() {
+            @Mock
+            public List<ScanNode> getScanNodes() {
+                return scanNodes;
+            }
+        };
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+        // Explain-only planning (EXPLAIN SCHEDULER here) prepares no remote scan session, so nothing would be started
+        // behind the retry's back.
+        StatementBase.ExplainLevel previous = connectContext.getExplainLevel();
+        connectContext.setExplainLevel(StatementBase.ExplainLevel.SCHEDULER);
+        try {
+            ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(
+                    new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                            + "physical partition 2"), retryContext));
+        } finally {
+            connectContext.setExplainLevel(previous);
+        }
+        Assertions.assertNotSame(execPlan, retryContext.getExecPlan());
+    }
+
+    @Test
+    public void testRangeColocateUnalignedReplansDespiteAnotherStatementsRemoteSessions() throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+        // An earlier statement on this connection read a remote StarRocks table; its session entry is removed
+        // asynchronously after that statement finished and may still be registered here.
+        new MockUp<StarRocksRemoteScanSessionManager>() {
+            @Mock
+            public static boolean hasPreparedRemoteScans(ConnectContext context) {
+                return true;
+            }
+        };
+
+        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(
+                new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                        + "physical partition 2"), retryContext));
+        Assertions.assertNotEquals(execPlan, retryContext.getExecPlan());
+    }
+
+    @Test
+    public void testOtherIllegalStateExceptionIsNotRetried() throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+
+        Assertions.assertThrows(IllegalStateException.class, () -> ExecuteExceptionHandler.handle(
+                new IllegalStateException("unrelated"), retryContext));
+        Assertions.assertEquals(execPlan, retryContext.getExecPlan());
     }
 
     @Test
