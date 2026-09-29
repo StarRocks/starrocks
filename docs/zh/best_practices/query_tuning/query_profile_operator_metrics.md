@@ -306,6 +306,10 @@ Exchange Operator 负责在 BE 节点之间传输数据。可以有几种交换�
 | OverallTime | 整个传输过程的总时间，即从发送第一个数据包到确认最后一个数据包正确接收的时间。 |
 | RpcAvgTime | RPC 的平均时间。 |
 | RpcCount | RPC 的总次数。 |
+| RpcBusyStubSelectionCount | 分配到已有在途 RPC 的连接上的 RPC 数量。 |
+| RpcSelectedStubInflightMax | 所选连接在被选中时已有的最大在途 RPC 数量。 |
+| RpcStubCreatedOnContentionCount | 因所有现有连接均繁忙而创建的连接数量。 |
+| RpcSelectionAtConnectionLimitCount | 因已达到每个服务器的连接数上限而分配到现有连接上的 RPC 数量。 |
 
 #### Exchange Source Operator
 
