@@ -372,6 +372,23 @@ TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub) {
     ASSERT_TRUE(least_loaded.selected_at_connection_limit);
 }
 
+TEST_F(BrpcStubCacheTest, first_stub_is_not_created_on_contention) {
+    BrpcStubCache cache(_timer.get());
+    butil::EndPoint endpoint;
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1", 123, &endpoint));
+
+    auto pool = cache.get_or_create_pool(endpoint);
+    ASSERT_NE(nullptr, pool);
+    ASSERT_TRUE(pool->_stubs.empty());
+
+    auto selected_or = pool->acquire_least_loaded(endpoint, 0);
+    ASSERT_OK(selected_or.status());
+    auto selected = std::move(selected_or).value();
+    ASSERT_NE(nullptr, selected.reservation.stub());
+    ASSERT_FALSE(selected.created_on_contention);
+    ASSERT_FALSE(selected.selected_at_connection_limit);
+}
+
 TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub_prefers_lower_payload_load) {
     config::brpc_max_connections_per_server = 2;
     BrpcStubCache cache(_timer.get());

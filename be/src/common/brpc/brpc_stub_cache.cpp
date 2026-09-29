@@ -244,7 +244,7 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
         auto stub = _create_stub_locked(endpoint);
         if (stub != nullptr) {
             _selection_idx = size;
-            return StubSelection{.reservation = stub->reserve_rpc(payload_bytes), .created_on_contention = true};
+            return StubSelection{.reservation = stub->reserve_rpc(payload_bytes), .created_on_contention = size > 0};
         }
         LOG(WARNING) << "Failed to create bRPC stub on contention for endpoint: " << endpoint;
     }
