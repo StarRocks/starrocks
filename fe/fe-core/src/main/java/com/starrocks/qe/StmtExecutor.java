@@ -1254,6 +1254,7 @@ public class StmtExecutor {
 
         if (clonedSessionVariable != null) {
             context.setSessionVariable(clonedSessionVariable);
+            context.getAuditEventBuilder().setCustomQueryId(clonedSessionVariable.getCustomQueryId());
         }
     }
 
