@@ -28,6 +28,7 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -625,10 +626,40 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 /*partitionSourceColumns=*/ List.of(dt),
                 /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
 
+        // dt is also the partition column, so its partition projection reuses the base key's dt result
+        // instead of projecting the literal a third time.
         Assertions.assertTrue(capturedSql.toString().startsWith(
                         "SELECT CAST('20260917' AS date), `file_key`, CAST('20260917' AS date), `file_key` "
                                 + "FROM FILES("),
                 "the literal stands in for dt in every key: " + capturedSql);
+    }
+
+    @Test
+    void distinctLiteralProjectionsKeepThePartitionValue() throws Exception {
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/data/*", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/data/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"A\",11,\"a\"]}"));
+                });
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("file_key", "file_key"), /*wherePredicateSql=*/ null,
+                        Map.of("sort_literal", "'A'", "partition_literal", "'a'")),
+                List.of(new Column("sort_literal", VarcharType.VARCHAR), bigintColumn("file_key")),
+                List.of(new Column("partition_literal", VarcharType.VARCHAR)),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        List<SampleRow> rows = Lists.newArrayList(execution.rows());
+        Assertions.assertEquals(1, rows.size());
+        Assertions.assertEquals("A", rows.get(0).sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("a", rows.get(0).partitionSourceTuple().get(0).getStringValue());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('A' AS"), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("CAST('a' AS"), capturedSql.toString());
     }
 
     @Test
