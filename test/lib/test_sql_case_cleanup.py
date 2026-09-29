@@ -25,6 +25,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import Mock, patch
 
+import nose.case
+
 from lib import choose_cases
 
 
@@ -107,9 +109,49 @@ class CleanupTest(unittest.TestCase):
     def test_later_cleanup_still_runs_if_first_cleanup_fails(self):
         self.runner.cleanup_regression()
         self.runner.execute_single_statement.side_effect = [RuntimeError("cleanup failed"), None]
-        self.runner.tearDown()
+        with self.assertRaisesRegex(RuntimeError, "CLEANUP failed"):
+            self.runner.tearDown()
         self.assert_cleanup_matches_created_ids()
         self.module.log.warning.assert_called_once()
+        self.runner.close_starrocks.assert_called_once()
+        self.runner.close_hive.assert_called_once()
+
+    def run_with_cleanup_failure(self, fail_query=False):
+        if fail_query:
+            self.runner.check.side_effect = [None, AssertionError("original query failure")]
+        self.runner.execute_single_statement.side_effect = [
+            ("", [], None, False), ("", [], None, False),
+            RuntimeError("first cleanup failure"), RuntimeError("second cleanup failure"),
+        ]
+        result = unittest.TestResult()
+        nose.case.FunctionTestCase(self.runner.cleanup_regression, tearDown=self.runner.tearDown).run(result)
+        self.assert_cleanup_matches_created_ids()
+        self.runner.close_starrocks.assert_called_once()
+        self.assertFalse(result.wasSuccessful())
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn("CLEANUP failed", result.errors[0][1])
+        self.assertIn("first cleanup failure", result.errors[0][1])
+        self.assertIn("second cleanup failure", result.errors[0][1])
+        return result
+
+    def test_cleanup_failure_marks_successful_case_as_error(self):
+        result = self.run_with_cleanup_failure()
+        self.assertEqual(len(result.failures), 0)
+
+    def test_cleanup_failure_preserves_original_query_failure(self):
+        result = self.run_with_cleanup_failure(fail_query=True)
+        self.assertEqual(len(result.failures), 1)
+        self.assertIn("original query failure", result.failures[0][1])
+
+    def test_cleanup_failure_does_not_save_recorded_results(self):
+        self.runner.cleanup_regression()
+        self.runner.save_r_into_db = Mock()
+        self.runner.execute_single_statement.side_effect = [RuntimeError("cleanup failed"), None]
+        with patch.object(self.module, "record_mode", True):
+            with self.assertRaisesRegex(RuntimeError, "CLEANUP failed"):
+                self.runner.tearDown()
+        self.runner.save_r_into_db.assert_not_called()
+        self.runner.close_starrocks.assert_called_once()
 
 
 if __name__ == "__main__":

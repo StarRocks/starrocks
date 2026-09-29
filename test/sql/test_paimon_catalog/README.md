@@ -17,6 +17,8 @@ Declare a literal comma-separated list of logical table names with `paimon_stage
 Create a filesystem catalog with `create_paimon_catalog` and put `paimon_cleanup` in a `CLEANUP` block.
 Each case gets its own `${uuid0}` warehouse, including on concurrent runs.
 Cleanup is idempotent and removes partial uploads even when catalog creation fails.
+An exception from a CLEANUP command is reported as a teardown error after the remaining
+CLEANUP commands and connection cleanup. A query failure is retained separately.
 An externally killed runner still needs CI bucket lifecycle cleanup.
 
 `test_paimon_reader_modes` compares scalar values against fixed expected results for JNI, NATIVE,
@@ -35,7 +37,10 @@ writer version, generation command and independent Paimon reader/layout checks.
 The SQL-Tester CLEANUP UUID regression tests run without a cluster, using the regular
 SQL-Tester Python dependencies. From `test/`, run
 `python3 -m unittest lib.test_sql_case_cleanup -v`. They exercise the real parser and runner
-through successful execution, assertion failure, and failure of an individual cleanup command.
+through successful execution, assertion failure, and failure of individual cleanup commands.
+They also verify that cleanup failures fail the case without hiding the original query failure.
+The `SQL-Tester Unit Tests` CI job runs these tests for changes under `test/`, independently
+of cluster deployment.
 
 ## Data changes
 

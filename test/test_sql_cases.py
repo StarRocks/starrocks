@@ -139,6 +139,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         log.info("[TearDown begin]: %s" % self.case_info.name)
 
         # run custom cleanup (always)
+        cleanup_errors = []
         try:
             if hasattr(self.case_info, "cleanup"):
                 for stmt in self.case_info.cleanup:
@@ -146,8 +147,10 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
                         self.execute_single_statement(stmt, -1, False)
                     except Exception as e:
                         log.warning(f"cleanup stmt error: {e}")
+                        cleanup_errors.append(str(e))
         except Exception as e:
             log.warning(f"cleanup error: {e}")
+            cleanup_errors.append(str(e))
 
         for each_db in self.db:
             self.drop_database(each_db)
@@ -156,7 +159,7 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
             self.drop_resource(each_resource)
 
         res = None
-        if record_mode:
+        if record_mode and not cleanup_errors:
             # save case result into db
             res = self.save_r_into_db(self.case_info.file, self.case_info.name, self.res_log, self.version)
 
@@ -170,6 +173,12 @@ class TestSQLCases(sr_sql_lib.StarrocksSQLApiLib):
         self.close_trino()
         self.close_spark()
         self.close_hive()
+
+        # Report teardown errors separately from the test body so nose preserves
+        # any original query failure. Attempt all custom cleanup and close the
+        # connections before reporting a failure.
+        if cleanup_errors:
+            raise RuntimeError("CLEANUP failed: " + "; ".join(cleanup_errors))
 
         if record_mode:
             tools.assert_true(res, "Save %s.%s result error" % (self.case_info.file, self.case_info.name))
