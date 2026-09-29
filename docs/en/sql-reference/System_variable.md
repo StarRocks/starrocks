@@ -736,6 +736,12 @@ Used for MySQL client compatibility. No practical usage.
 * **Default**: true
 * **Introduced in**: v3.3.0
 
+### enable_gather_fragment_child_affinity
+
+* **Description**: Whether to assign the gather fragment (the single-instance result fragment with `DataPartition = UNPARTITIONED`) to a worker already used by one of its child fragments, instead of selecting via global round-robin across all BEs. When enabled, the gather fragment inherits the label constraints of its child fragments, which are already constrained to labeled BEs through data locality. This preserves physical label isolation (via `labels.location`) end-to-end for SELECT queries. Set to `false` to revert to legacy round-robin behavior.
+* **Default**: false
+* **Introduced in**: v4.1
+
 ### enable_global_runtime_filter
 
 Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
