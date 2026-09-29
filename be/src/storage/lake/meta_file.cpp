@@ -35,6 +35,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/lake_persistent_index.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
 #include "storage/lake/tablet_reshard_helper.h"
@@ -1857,6 +1858,8 @@ Status MetaFileBuilder::set_final_rowset() {
 
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(_pending_rowset_data.rowset_pb);
+    // The op_writes folded here may come from different statements, some bundled and some standalone.
+    give_standalone_segments_a_bundle_offset(rowset);
 
     // Apply replace_segments
     for (const auto& replace_seg : _pending_rowset_data.replace_segments) {

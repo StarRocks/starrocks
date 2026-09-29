@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "fmt/format.h"
+#include "storage/lake/lake_proto_normalizer.h"
 
 namespace starrocks::lake {
 
