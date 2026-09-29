@@ -35,6 +35,7 @@ import com.starrocks.thrift.TInPredicate;
 import com.starrocks.thrift.TInfoFunc;
 import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
+import com.starrocks.type.CharType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
 import com.starrocks.type.IntegerType;
@@ -44,6 +45,7 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.type.VarbinaryType;
+import com.starrocks.type.VarcharType;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +56,33 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 public class ExprToThriftTest {
+
+    @Test
+    public void testOnlyExplicitBoundedCharCastRequestsTruncation() {
+        SlotRef source = new SlotRef(new SlotDescriptor(new SlotId(0), "n", IntegerType.BIGINT, true));
+        CastExpr assignment = new CastExpr(new CharType(10), source);
+        Assertions.assertFalse(convert(assignment).isSetCast_char_truncate());
+
+        CastExpr explicit = new CastExpr(new CharType(10), source);
+        explicit.setImplicit(false);
+        Assertions.assertTrue(convert(explicit).isCast_char_truncate());
+        Assertions.assertTrue(convert(explicit.clone()).isCast_char_truncate());
+
+        for (Type target : List.of(CharType.CHAR, new VarcharType(10))) {
+            CastExpr cast = new CastExpr(target, source);
+            cast.setImplicit(false);
+            Assertions.assertFalse(convert(cast).isSetCast_char_truncate());
+        }
+    }
+
+    @Test
+    public void testLoadSlotConversionPreservesAssignmentSemantics() throws Exception {
+        SlotRef source = new SlotRef(new SlotDescriptor(new SlotId(0), "n", IntegerType.BIGINT, true));
+        // ScanNode.castToSlot uses the same helper for file and stream load destination columns.
+        Expr cast = ExprCastFunction.castTo(source, new CharType(10));
+        Assertions.assertTrue(((CastExpr) cast).isImplicit());
+        Assertions.assertFalse(convert(cast).isSetCast_char_truncate());
+    }
 
     @Test
     public void testExprToThriftCoverage() {

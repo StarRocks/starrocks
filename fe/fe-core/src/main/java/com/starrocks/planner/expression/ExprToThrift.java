@@ -110,6 +110,7 @@ import com.starrocks.thrift.TStringLiteral;
 import com.starrocks.thrift.TVarType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.InvalidType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeSerializer;
 
@@ -563,6 +564,10 @@ public final class ExprToThrift {
         @Override
         public Void visitCastExpr(CastExpr node, TExprNode msg) {
             msg.node_type = TExprNodeType.CAST_EXPR;
+            if (!node.isImplicit() && node.getType().isChar()
+                    && ((ScalarType) node.getType()).getLength() >= 0) {
+                msg.setCast_char_truncate(true);
+            }
             msg.setOpcode(ExprOpcodeRegistry.getCastOpcode());
             Type childType = node.getChild(0).getType();
             if (childType.isComplexType() || childType.isDecimalOfAnyVersion() || childType.isChar()

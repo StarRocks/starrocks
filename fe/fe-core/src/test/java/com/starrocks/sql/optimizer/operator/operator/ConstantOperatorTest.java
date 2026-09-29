@@ -32,7 +32,7 @@ public class ConstantOperatorTest {
     public void testCastToCharTruncatesToLength() {
         // POST-1335 / QuickSight: CAST(1775580223839 AS CHAR(10)) -> "1775580223" (first 10 chars).
         ConstantOperator bigint = ConstantOperator.createBigint(1775580223839L);
-        ConstantOperator asChar10 = bigint.castTo(new CharType(10)).get();
+        ConstantOperator asChar10 = bigint.castToExplicitly(new CharType(10)).get();
         Assertions.assertEquals("1775580223", asChar10.getVarchar());
         Assertions.assertEquals(10, asChar10.getVarchar().length());
 
@@ -42,7 +42,7 @@ public class ConstantOperatorTest {
 
         // String source truncates too.
         Assertions.assertEquals("hello",
-                ConstantOperator.createVarchar("hello world").castTo(new CharType(5)).get().getVarchar());
+                ConstantOperator.createVarchar("hello world").castToExplicitly(new CharType(5)).get().getVarchar());
     }
 
     @Test
@@ -52,6 +52,22 @@ public class ConstantOperatorTest {
         Assertions.assertEquals("1775580223839", bigint.castTo(new VarcharType(10)).get().getVarchar());
         // Wildcard CHAR (no length, len == -1) is not truncated.
         Assertions.assertEquals("1775580223839", bigint.castTo(CharType.CHAR).get().getVarchar());
+    }
+
+    @Test
+    public void testGenericCharConversionPreservesOversizedValues() {
+        Assertions.assertEquals("1775580223839",
+                ConstantOperator.createBigint(1775580223839L).castTo(new CharType(10)).get().getVarchar());
+        Assertions.assertEquals("hello world",
+                ConstantOperator.createVarchar("hello world").castTo(new CharType(5)).get().getVarchar());
+    }
+
+    @Test
+    public void testExplicitCharCastCountsCodePoints() {
+        ConstantOperator value = ConstantOperator.createVarchar("中😀文abc");
+        Assertions.assertEquals("中😀", value.castToExplicitly(new CharType(2)).get().getVarchar());
+        Assertions.assertEquals("", value.castToExplicitly(new CharType(0)).get().getVarchar());
+        Assertions.assertEquals("中😀文abc", value.castToExplicitly(new CharType(6)).get().getVarchar());
     }
 
     @Test

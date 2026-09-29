@@ -615,16 +615,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
 
             } else if (desc.isChar() || desc.isVarchar()) {
-                String charValue = childString;
-                if (desc.isChar()) {
-                    int declaredLen = ((ScalarType) desc).getLength();
-                    // MySQL semantics: CAST(x AS CHAR(N)) truncates to the first N characters.
-                    // Wildcard CHAR (len < 0) and VARCHAR keep the full value.
-                    if (declaredLen >= 0) {
-                        charValue = truncateToCodePoints(childString, declaredLen);
-                    }
-                }
-                res = ConstantOperator.createChar(charValue, desc);
+                res = ConstantOperator.createChar(childString, desc);
             } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
                 res = ConstantOperator.createBinary(childString.getBytes(), desc);
             }
@@ -633,6 +624,20 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
         
         return Optional.ofNullable(res);
+    }
+
+    // Explicit SQL casts may truncate; generic type adaptation must preserve values for sink validation.
+    public Optional<ConstantOperator> castToExplicitly(Type desc) {
+        if (isNull()) {
+            return Optional.of(ConstantOperator.createNull(desc));
+        }
+        Optional<ConstantOperator> result = castTo(desc);
+        if (!desc.isChar() || ((ScalarType) desc).getLength() < 0) {
+            return result;
+        }
+        int maxChars = ((ScalarType) desc).getLength();
+        return result.map(value -> value.isNull() ? value :
+                ConstantOperator.createChar(truncateToCodePoints(value.getVarchar(), maxChars), desc));
     }
 
     // Truncate to the first maxChars Unicode code points (MySQL CHAR(N) semantics). ASCII fast paths first.

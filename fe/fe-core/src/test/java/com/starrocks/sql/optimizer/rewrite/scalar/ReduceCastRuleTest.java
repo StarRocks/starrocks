@@ -167,6 +167,13 @@ public class ReduceCastRuleTest {
     }
 
     @Test
+    public void testImplicitCharCastStillReducesAsTypeAdaptation() {
+        ColumnRefOperator source = new ColumnRefOperator(5, VarcharType.VARCHAR, "s", false);
+        CastOperator implicit = new CastOperator(new CharType(5), source, true);
+        Assertions.assertFalse(new ReduceCastRule().apply(implicit, null) instanceof CastOperator);
+    }
+
+    @Test
     public void testVarcharLengthIsNotInheritedByDefault() {
         ScalarOperatorRewriteRule rule = new ReduceCastRule();
         ScalarOperator child =
