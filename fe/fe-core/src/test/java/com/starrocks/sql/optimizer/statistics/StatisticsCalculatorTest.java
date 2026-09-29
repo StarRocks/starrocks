@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -1498,6 +1499,32 @@ public class StatisticsCalculatorTest {
         new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
 
         // Without partition statistics, the partition size and row-number NDV cannot be estimated reliably.
+        ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
+        Assertions.assertTrue(rowNumberStatistic.isUnknown());
+    }
+
+    @Test
+    public void testPartitionedRowNumberStatisticsWithComputedPartitionExpression() {
+        ColumnRefOperator pk = columnRefFactory.create("pk", IntegerType.BIGINT, false);
+        ColumnRefOperator rn = columnRefFactory.create("rn", IntegerType.BIGINT, false);
+        CallOperator rowNumber = new CallOperator(FunctionSet.ROW_NUMBER, IntegerType.BIGINT, Lists.newArrayList());
+
+        Statistics.Builder childStats = Statistics.builder();
+        childStats.setOutputRowCount(1000);
+        childStats.addColumnStatistic(pk, ColumnStatistic.builder()
+                .setMinValue(1).setMaxValue(100).setDistinctValuesCount(100).setNullsFraction(0).build());
+        Group childGroup = new Group(0);
+        childGroup.setStatistics(childStats.build());
+
+        LogicalWindowOperator windowOperator = new LogicalWindowOperator.Builder()
+                .setWindowCall(ImmutableMap.of(rn, rowNumber))
+                .setPartitionExpressions(Lists.newArrayList(new CastOperator(IntegerType.BIGINT, pk)))
+                .build();
+        GroupExpression groupExpression = new GroupExpression(windowOperator, Lists.newArrayList(childGroup));
+        groupExpression.setGroup(new Group(1));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+        new StatisticsCalculator(expressionContext, columnRefFactory, optimizerContext).estimatorStats();
+
         ColumnStatistic rowNumberStatistic = expressionContext.getStatistics().getColumnStatistic(rn);
         Assertions.assertTrue(rowNumberStatistic.isUnknown());
     }

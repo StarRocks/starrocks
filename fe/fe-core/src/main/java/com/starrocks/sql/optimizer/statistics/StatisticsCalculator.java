@@ -2216,8 +2216,12 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     // partition size follows from that group count. Assumes partitions are evenly sized.
     private static OptionalDouble estimateRowsPerPartition(List<ScalarOperator> partitionExpressions,
                                                            Statistics inputStatistics, double rowCount) {
-        if (partitionExpressions.isEmpty() || !partitionExpressions.stream().allMatch(ScalarOperator::isColumnRef)) {
+        if (partitionExpressions.isEmpty()) {
             return OptionalDouble.of(rowCount);
+        }
+        if (!partitionExpressions.stream().allMatch(ScalarOperator::isColumnRef)) {
+            // TODO: Estimate NDV for non-column partition expressions when expression statistics support it.
+            return OptionalDouble.empty();
         }
 
         // Duplicate partition keys (e.g. PARTITION BY pk, pk) do not create extra partitions, so deduplicate
