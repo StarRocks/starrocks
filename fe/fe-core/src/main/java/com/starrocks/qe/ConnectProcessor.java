@@ -548,6 +548,7 @@ public class ConnectProcessor {
 
         for (int i = 0; i < stmts.size(); ++i) {
             ctx.getState().reset();
+            ctx.getAuditEventBuilder().setCustomQueryId(ctx.getCustomQueryId());
             if (i > 0) {
                 ctx.resetReturnRows();
                 ctx.setQueryId(UUIDUtil.genUUID());

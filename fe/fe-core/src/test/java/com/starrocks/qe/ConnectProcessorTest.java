@@ -891,7 +891,10 @@ public class ConnectProcessorTest extends DDLTestBase {
     @ParameterizedTest
     @MethodSource("customQueryIdCases")
     public void testAuditRecordsEffectiveCustomQueryId(String sql, String expectedCustomQueryId) throws Exception {
-        ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString(sql);
+        ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()), GlobalStateMgr.getCurrentState());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.getSessionVariable().setCustomQueryId("session_id");
@@ -905,6 +908,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         return Stream.of(
                 Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
                 Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
+                Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1; select 2", "session_id"),
+                Arguments.of("set custom_query_id = 'set_id'; select 1", "set_id"),
                 Arguments.of("select 1", "session_id"));
     }
 
