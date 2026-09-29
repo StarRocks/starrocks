@@ -52,14 +52,7 @@ import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
-<<<<<<< HEAD
-=======
-import com.starrocks.mysql.MysqlPackageDecoder;
-import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.MysqlProto;
->>>>>>> 357c898 ([BugFix] Fix prepared statement leak on COM_STMT_CLOSE (#79860))
 import com.starrocks.mysql.MysqlSerializer;
-import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -369,28 +362,6 @@ public class ConnectProcessorTest extends DDLTestBase {
             Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
             Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
         }
-    }
-
-    @Test
-    public void testStmtCloseFromPackageDecoder() throws Exception {
-        MysqlSerializer serializer = MysqlSerializer.newInstance();
-        serializer.writeInt4(5); // three-byte payload length followed by sequence ID 0
-        serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
-        serializer.writeInt4(1);
-        MysqlPackageDecoder decoder = new MysqlPackageDecoder();
-        decoder.consume(serializer.toByteBuffer());
-        RequestPackage request = decoder.poll();
-        Assertions.assertNotNull(request);
-
-        MysqlChannel channel = mockChannel(request.byteBuffer());
-        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
-        ctx.putPreparedStmt("1", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
-
-        new ConnectProcessor(ctx).processOnce(request);
-
-        Assertions.assertNull(ctx.getPreparedStmt("1"));
-        Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
-        Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
     }
 
     @Test
