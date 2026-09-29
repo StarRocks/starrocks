@@ -1454,6 +1454,71 @@ TEST_F(LakeReplicationMetadataConversionTest, new_bundled_segments_with_tde_are_
     }
 }
 
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_segment_with_tde_remains_private) {
+    seed_test_encryption_keys();
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = true;
+
+    auto source = make_metadata(53049, 2);
+    auto target = make_metadata(53050, 1);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+    auto* rowset = source->add_rowsets();
+    rowset->set_id(1);
+    auto* segment = rowset->add_segment_metas();
+    const auto filename = file_name(49, "dat");
+    segment->set_filename(filename);
+    segment->set_size(11);
+    segment->set_bundle_file_offset(0);
+    segment->set_synthetic_bundle_file_offset(true);
+
+    std::unordered_map<std::string, size_t> segment_sizes;
+    LakeReplicationTxnManager::SourceEncryptionMetaMap source_encryption_metas;
+    auto result = convert(source, target, lake::join_path(_test_dir, "source_data"), &segment_sizes, nullptr, nullptr,
+                          &source_encryption_metas);
+    ASSERT_OK(result.status());
+    EXPECT_EQ(11, segment_sizes.at(filename));
+    EXPECT_EQ("", source_encryption_metas.at(filename));
+    EXPECT_TRUE((*result)->rowsets(0).segment_metas(0).synthetic_bundle_file_offset());
+}
+
+TEST_F(LakeReplicationMetadataConversionTest, synthetic_offset_reuses_existing_standalone_file_metadata) {
+    BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
+    config::enable_transparent_data_encryption = false;
+
+    for (bool target_synthetic : {false, true}) {
+        const int id = target_synthetic ? 53 : 51;
+        const auto filename = file_name(id, "dat");
+        auto source = make_metadata(id, 2);
+        auto target = make_metadata(id + 1, 1);
+        auto* target_rowset = target->add_rowsets();
+        target_rowset->set_id(1);
+        auto* target_segment = target_rowset->add_segment_metas();
+        target_segment->set_filename(filename);
+        target_segment->set_size(23);
+        target_segment->set_encryption_meta("target-encryption-meta");
+        if (target_synthetic) {
+            target_segment->set_bundle_file_offset(0);
+            target_segment->set_synthetic_bundle_file_offset(true);
+        }
+        ASSERT_OK(_tablet_mgr->put_tablet_metadata(*target));
+
+        auto* source_rowset = source->add_rowsets();
+        source_rowset->set_id(1);
+        auto* source_segment = source_rowset->add_segment_metas();
+        source_segment->set_filename(filename);
+        source_segment->set_size(11);
+        source_segment->set_bundle_file_offset(0);
+        source_segment->set_synthetic_bundle_file_offset(true);
+
+        auto result = convert(source, target, lake::join_path(_test_dir, "source_data"));
+        ASSERT_OK(result.status());
+        const auto& copied = (*result)->rowsets(0).segment_metas(0);
+        EXPECT_EQ("target-encryption-meta", copied.encryption_meta());
+        EXPECT_EQ(23, copied.size());
+        EXPECT_TRUE(copied.synthetic_bundle_file_offset());
+    }
+}
+
 TEST_F(LakeReplicationMetadataConversionTest, new_source_encrypted_bundle_is_rejected_without_target_tde) {
     BoolConfigGuard enc_guard(&config::enable_transparent_data_encryption);
     config::enable_transparent_data_encryption = false;
@@ -2899,6 +2964,218 @@ TEST_F(LakeReplicationRemoteStorageTest, test_parallel_copy_error_handling) {
     pool->shutdown();
 }
 
+<<<<<<< HEAD
+=======
+// Regression: lake-to-lake replication must replicate the source's IDG (.idx) fast-path
+// indexes and must NOT carry the target's pre-replication idg_meta.
+// Before the fix, convert_and_build_new_tablet_meta cleared rowsets/dcg/sstable/delvec but
+// left idg_meta untouched and never rebuilt it from the source, so the built (copied) tablet
+// metadata carried the target's STALE idg_meta and never picked up the source's — silently
+// losing the index on the replica and leaking the target's stale .idx files. This drives the
+// full replicate path and inspects the produced replication txn log (whose tablet_metadata is
+// exactly what the publish-time applier commits).
+TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_replicated_and_stale_dropped) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Give the TARGET tablet (data_version 1) a pre-existing (stale) idg_meta entry keyed by an
+    // rssid the replicated rowsets won't use, referencing a distinct .idx file. It must not survive.
+    const std::string stale_idx = "00000000000000ff_ffffffff-ffff-ffff-ffff-0000000000ff.idx";
+    {
+        auto target_v1 = std::make_shared<TabletMetadata>(*_target_tablet_metadata);
+        auto& stale_ver = (*target_v1->mutable_idg_meta()->mutable_idgs())[999];
+        auto* stale_entry = stale_ver.add_entries();
+        auto* sk = stale_entry->add_keys();
+        sk->set_col_unique_id(42);
+        sk->set_index_type(BITMAP);
+        stale_entry->set_index_file(stale_idx);
+        stale_entry->set_version(1);
+        // A stale entry with an empty index_file exercises the empty-index_file skip in
+        // build_existed_filename_uuids_map (the file is not registered for dedup); it must
+        // still be dropped along with the rest of the target's stale idg_meta.
+        auto* stale_empty = stale_ver.add_entries();
+        stale_empty->add_keys()->set_col_unique_id(43);
+        stale_empty->set_version(1); // index_file intentionally unset
+        CHECK_OK(_tablet_mgr->put_tablet_metadata(*target_v1));
+    }
+
+    // Source tablet metadata (version 2) with one rowset + segment and a source IDG entry
+    // (rssid=1) referencing a source .idx file.
+    const std::string src_idx = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000aa.idx";
+    const std::string src_uuid = "aaaaaaaa-bbbb-cccc-dddd-0000000000aa";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    rowset->add_segment_metas()->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    src_meta_v2->set_next_rowset_id(2);
+    {
+        auto& src_ver = (*src_meta_v2->mutable_idg_meta()->mutable_idgs())[1];
+        auto* src_entry = src_ver.add_entries();
+        auto* k = src_entry->add_keys();
+        k->set_col_unique_id(1);
+        k->set_index_type(NGRAMBF); // non-default (BITMAP==0) so carry-through is discriminating
+        src_entry->set_index_file(src_idx);
+        src_entry->set_version(2);
+    }
+    {
+        // A source entry with no index_file exercises the empty-index_file skip in the rebuild
+        // loop: it must be carried through verbatim (no filename rewrite, no copy registration).
+        auto& src_ver2 = (*src_meta_v2->mutable_idg_meta()->mutable_idgs())[2];
+        auto* e = src_ver2.add_entries();
+        e->add_keys()->set_col_unique_id(7);
+        e->set_version(2); // index_file intentionally unset
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 1024; });
+    // The .idx file goes through the non-segment copy path (use_converter=false); mock it.
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 512; });
+
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 0; // sequential path
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    (void)update_master_info(original_master_info);
+    ASSERT_OK(status);
+
+    // Inspect the produced replication txn log; its tablet_metadata is what publish will apply.
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id));
+    ASSERT_TRUE(txn_log->has_op_replication());
+    ASSERT_TRUE(txn_log->op_replication().has_tablet_metadata());
+    const auto& built_meta = txn_log->op_replication().tablet_metadata();
+
+    // The source's IDG entries (rssid=1 with a .idx, rssid=2 with none) survive; the target's
+    // stale entries (rssid=999) are gone.
+    const auto& idgs = built_meta.idg_meta().idgs();
+    ASSERT_EQ(2u, idgs.size());
+    ASSERT_TRUE(idgs.find(999) == idgs.end());
+    auto it1 = idgs.find(1);
+    ASSERT_TRUE(it1 != idgs.end());
+
+    // The empty-index_file source entry (rssid=2) is carried through verbatim: still present,
+    // still has no index_file (the rebuild loop skipped it without rewriting/registering a file).
+    auto it2 = idgs.find(2);
+    ASSERT_TRUE(it2 != idgs.end());
+    ASSERT_EQ(1, it2->second.entries_size());
+    EXPECT_FALSE(it2->second.entries(0).has_index_file());
+
+    const auto& built_ver = it1->second;
+    ASSERT_EQ(1, built_ver.entries_size());
+    const auto& built_entry = built_ver.entries(0);
+    ASSERT_TRUE(built_entry.has_index_file());
+    // The .idx filename is rewritten to the target's txn-scoped name (source UUID preserved),
+    // so it differs from both the raw source name and the target's stale name.
+    EXPECT_NE(src_idx, built_entry.index_file());
+    EXPECT_NE(stale_idx, built_entry.index_file());
+    EXPECT_NE(std::string::npos, built_entry.index_file().find(".idx"));
+    EXPECT_NE(std::string::npos, built_entry.index_file().find(src_uuid)); // UUID carried across rename
+    EXPECT_EQ(extract_uuid_from(src_idx), extract_uuid_from(built_entry.index_file()));
+    // The stale .idx filename must never appear in the built metadata.
+    EXPECT_EQ(std::string::npos, built_entry.index_file().find("0000000000ff"));
+    // Key metadata is carried through.
+    ASSERT_EQ(1, built_entry.keys_size());
+    EXPECT_EQ(1, built_entry.keys(0).col_unique_id());
+    EXPECT_EQ(NGRAMBF, built_entry.keys(0).index_type());
+    EXPECT_EQ(2, built_entry.version());
+}
+
+// Regression: when the source and target tablets assign DIFFERENT column unique ids to the same
+// logical column (fast-schema-change divergence, calc_column_unique_id_map non-empty), replication
+// must NOT copy the source idg_meta / .idx verbatim. The IDG entry keys and the col_unique_ids
+// embedded in the .idx payload footer are keyed by the SOURCE id, while the scan probe and
+// IndexFileReader::find() look up by the TARGET id, so a verbatim copy would be silently ignored or
+// (on a unique-id collision) mis-applied to a different column and prune rows wrongly. Until the
+// .idx-footer + IDG-key remap is implemented, the fast path is skipped and idg_meta stays empty on
+// the replica (index absent, to be rebuilt on the target) -- never a mismappable index.
+TEST_F(LakeReplicationRemoteStorageTest, test_idg_meta_skipped_on_divergent_column_ids) {
+    auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>();
+    SyncPoint::GetInstance()->SetCallBack("new_fs_starlet::get_shard_filesystem", [&](void* arg) {
+        auto* fs_st = static_cast<absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>>*>(arg);
+        *fs_st = mock_fs;
+    });
+
+    // Source tablet metadata (version 2) with one rowset + segment and a source IDG entry.
+    const std::string src_idx = "0000000000000001_aaaaaaaa-bbbb-cccc-dddd-0000000000aa.idx";
+    auto src_meta_v2 = std::make_shared<TabletMetadata>(*_src_tablet_metadata);
+    src_meta_v2->set_version(2);
+    // Diverge the source's column unique-id space from the target's (target c1 uid == 2). This makes
+    // calc_column_unique_id_map() non-empty and must trigger the IDG replication skip.
+    src_meta_v2->mutable_schema()->mutable_column(1)->set_unique_id(9999);
+    auto* rowset = src_meta_v2->add_rowsets();
+    rowset->set_id(1);
+    rowset->set_overlapped(false);
+    rowset->set_num_rows(10);
+    rowset->set_data_size(4096);
+    auto* segment = rowset->add_segment_metas();
+    segment->set_filename("0000000000000001_aaaaaaaa-bbbb-cccc-dddd-000000000001.dat");
+    segment->set_size(1024);
+    segment->set_bundle_file_offset(0);
+    segment->set_synthetic_bundle_file_offset(true);
+    src_meta_v2->set_next_rowset_id(2);
+    {
+        auto& src_ver = (*src_meta_v2->mutable_idg_meta()->mutable_idgs())[1];
+        auto* src_entry = src_ver.add_entries();
+        auto* k = src_entry->add_keys();
+        k->set_col_unique_id(2); // source-space id for column c1
+        k->set_index_type(NGRAMBF);
+        src_entry->set_index_file(src_idx);
+        src_entry->set_version(2);
+    }
+
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::build_source_tablet_meta::inject",
+                                          [&](void* arg) {
+                                              auto* meta_ptr = static_cast<TabletMetadataPtr*>(arg);
+                                              *meta_ptr = src_meta_v2;
+                                          });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::download_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 1024; });
+    SyncPoint::GetInstance()->SetCallBack("LakeReplicationTxnManager::replicate_task::copy_non_segment",
+                                          [&](void* arg) { *static_cast<size_t*>(arg) = 512; });
+
+    Int32ConfigGuard min_file_guard(&config::lake_replication_parallel_copy_min_file_count);
+    config::lake_replication_parallel_copy_min_file_count = 0; // sequential path
+
+    auto original_master_info = get_master_info();
+    TMasterInfo info = original_master_info;
+    info.__set_min_active_txn_id(0);
+    ASSERT_TRUE(update_master_info(info));
+
+    auto request = build_request(false /* with_full_path */);
+    Status status = _replication_txn_manager->replicate_lake_remote_storage(request, nullptr);
+    (void)update_master_info(original_master_info);
+    ASSERT_OK(status);
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(_target_tablet_id, _transaction_id));
+    ASSERT_TRUE(txn_log->has_op_replication());
+    ASSERT_TRUE(txn_log->op_replication().has_tablet_metadata());
+    const auto& built_meta = txn_log->op_replication().tablet_metadata();
+
+    // The rowset/segment still replicates; only the IDG fast-path index is skipped.
+    ASSERT_EQ(1, built_meta.rowsets_size());
+    // idg_meta must be empty: neither the source's entry nor any target stale entry survives.
+    EXPECT_TRUE(built_meta.idg_meta().idgs().empty());
+}
+
+>>>>>>> 744ecc5 ([BugFix] Publish a multi-statement txn that mixes bundled and standalone statements (#79894))
 TEST_F(LakeReplicationRemoteStorageTest, copies_complete_bundle_object_through_full_replication) {
     const std::string physical_contents = "AAAAABBBBBBB-physical-tail";
     auto mock_fs = std::make_shared<MockStarletFileSystemForReplication>(physical_contents);

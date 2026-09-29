@@ -23,6 +23,7 @@
 #include "runtime/current_thread.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/lake_primary_key_recover.h"
+#include "storage/lake/lake_proto_normalizer.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/table_schema_service.h"
 #include "storage/lake/tablet.h"
@@ -1048,16 +1049,12 @@ public:
             merged_rowset->add_segment_metas()->CopyFrom(segment_meta);
         }
 
-        // Validate bundle file offsets consistency across all TxnLogs.
-        // All TxnLogs must consistently either have or lack bundle_file_offsets.
-        // Mixing bundled and non-bundled rowsets is an error because downstream readers
-        // require offsets to locate segments within bundle files. Silently dropping offsets
-        // would leave bundled segment paths without positional info, causing data corruption.
+        // Each statement of a multi-statement transaction writes its own log, bundled if the statement's
+        // share of this tablet was one segment at end of stream and standalone if it flushed mid-load, so
+        // the logs routinely disagree. Keep the offsets of the bundled ones (dropping them would lose the
+        // slice positions) and give the standalone segments offset 0, which names the same bytes.
         if (has_bundle_offsets && has_segments_without_bundle_offsets) {
-            return Status::InternalError(
-                    fmt::format("Inconsistent bundle_file_offsets across txn logs for tablet {}: "
-                                "some logs have offsets, some don't. Cannot safely merge rowsets.",
-                                _tablet.id()));
+            give_standalone_segments_a_bundle_offset(merged_rowset);
         }
 
         // Set rowset ID and update next_rowset_id

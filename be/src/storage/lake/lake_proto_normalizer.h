@@ -50,4 +50,20 @@ Status normalize_rowset_before_save(RowsetMetadataPB* rowset_metadata);
 void normalize_op_write_after_load(TxnLogPB::OpWrite* op_write);
 Status normalize_op_write_before_save(TxnLogPB::OpWrite* op_write);
 
+// A writer bundles a segment only when it is the one segment written at end of stream, so a rowset
+// merged from several writers' output (e.g. the statements of a multi-statement transaction) can
+// hold both bundled and standalone segments, which normalize_rowset_before_save refuses. A standalone
+// segment file is exactly a bundle holding one slice at offset 0, so once any segment of the rowset is
+// bundled this gives every standalone segment bundle_file_offset 0: the same bytes, readable on every
+// BE version through the legacy all-or-nothing offsets array. The synthetic flag lets physical-file
+// operations distinguish these standalone objects from true bundles. A segment without a size is left
+// as it is, since a slice is read as [offset, offset + size).
+void give_standalone_segments_a_bundle_offset(RowsetMetadataPB* rowset_metadata);
+
+// An offset selects a readable slice. Only a non-synthetic offset also identifies a physical
+// bundle file whose slices may belong to other tablets or use distinct encryption keys.
+inline bool is_physical_bundle_segment(const SegmentMetadataPB& segment_meta) {
+    return segment_meta.has_bundle_file_offset() && !segment_meta.synthetic_bundle_file_offset();
+}
+
 } // namespace starrocks::lake
