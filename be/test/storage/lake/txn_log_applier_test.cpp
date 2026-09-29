@@ -1308,8 +1308,10 @@ TEST(TxnLogApplierCompactionTest, NonPKCompactionDropsDeletePredicate) {
     output->set_data_size(300);
     output->add_segment_metas()->set_filename("out.dat");
     op_compaction->set_compact_version(2);
+    op_compaction->set_base_compaction_time(12345);
 
     ASSERT_TRUE(applier->apply(*log).ok());
+    EXPECT_EQ(12345, meta->last_base_compaction_time());
 
     // Input rowsets archived into compaction_inputs must NOT retain delete_predicate.
     ASSERT_EQ(2, meta->compaction_inputs_size());
