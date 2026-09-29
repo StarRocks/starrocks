@@ -391,7 +391,7 @@ public class ColumnFilterConverter {
             // of it: that helper strips the enclosing cast, and a cast is exactly what can break the
             // order -- cast(bill as bigint) maps '99845' to 99845, which sorts the other way round.
             if (!binaryType.isEqual()
-                    && !OperatorFunctionChecker.onlyContainMonotonicFunctions(translate).first) {
+                    && !OperatorFunctionChecker.onlyContainIncreasingFunctions(translate).first) {
                 return predicate;
             }
             ScalarOperator evaluation = ScalarOperatorEvaluator.INSTANCE.evaluation(callOperator);
