@@ -1866,8 +1866,10 @@ CONF_mInt32(lake_pk_index_block_cache_limit_percent, "10");
 CONF_mBool(lake_enable_protobuf_file_checksum, "true");
 // clear *.meta cache for lake table
 CONF_mBool(lake_clear_corrupted_cache_meta, "true");
-// clear *.data cache for lake table
-CONF_mBool(lake_clear_corrupted_cache_data, "false");
+// clear *.data cache for lake table, so that a read which finds the local copy of a data file corrupted
+// recovers from remote storage. Test environments that need the corrupted copy to keep failing reads and
+// stay in the cache for root-causing set it to false.
+CONF_mBool(lake_clear_corrupted_cache_data, "true");
 // clear corrupted datacache for external tables, as lake_clear_corrupted_cache_data does for lake tables
 CONF_mBool(external_table_clear_corrupted_cache_data, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
