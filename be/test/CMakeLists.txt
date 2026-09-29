@@ -97,7 +97,15 @@ set(EXEC_FILES
         ./exec/pipeline/ordered_partition_exchanger_test.cpp
         ./exec/pipeline/mem_limited_chunk_queue_test.cpp
         ./exec/pipeline/exec_group_test.cpp
+<<<<<<< HEAD
         ./exec/pipeline/fragment_executor_test.cpp
+=======
+        ./exec/pipeline/glm_manager_tablet_adaptor_test.cpp
+        ./exec/pipeline/lookup_operator_test.cpp
+        ./exec/pipeline/scan/logical_split_morsel_queue_test.cpp
+        ./exec/pipeline/scan/morsel_queue_builder_test.cpp
+        ./exec/pipeline/scan/morsel_queue_capability_test.cpp
+>>>>>>> f2a36d8 ([BugFix] Fix BE crash in LookUpOperator when the event scheduler is off (#79711))
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./exec/query_spill_manager_test.cpp
         ./exec/query_cache/query_cache_test.cpp
