@@ -18,16 +18,17 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 
-import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
  * {@link ScanContext} concrete for the INSERT-from-table integration.
  * Carries the source {@link Table} reference and its snapshot estimates so the sampler can size
- * the input, the pre-quoted FROM clause SQL, plus the source-column name lists that map the
- * target sort key and partition columns back to their source equivalents. The optional WHERE
+ * the input, the pre-quoted FROM clause SQL, plus the target-&gt;source column-name map the sampler
+ * uses to project the sort key and the partition columns by their source column names. The optional WHERE
  * predicate SQL is threaded through verbatim from the INSERT-SELECT statement so the sample
- * covers only the rows the load will actually write.
+ * covers only the rows the load will actually write. A key column the SELECT feeds with a literal has no
+ * source column; it is carried as the literal's SQL, which the sampler projects instead.
  *
  * <p>The estimates are carried explicitly rather than read back off {@code sourceTable} because an
  * external source does not expose them the way an {@link OlapTable} does: an Iceberg table's totals
@@ -36,31 +37,37 @@ import java.util.Objects;
 public record InsertFromTableScanContext(
         Table sourceTable,
         String sourceFromSql,                       // "`db`.`tbl` `alias`" or "`catalog`.`db`.`tbl` `alias`"
-        List<String> sortKeySourceColumnNames,
-        List<String> partitionSourceColumnNames,
+        Map<String, String> targetToSourceColumnNames,   // directly mapped lower-cased target name -> source name
         String wherePredicateSql,                   // nullable
         ComputeResource computeResource,
         long sourceTotalBytes,
-        long sourceTotalRows) implements ScanContext {
+        long sourceTotalRows,
+        Map<String, String> targetToConstantSql) implements ScanContext {   // lower-cased target name -> SQL
 
     public InsertFromTableScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(sourceFromSql, "sourceFromSql");
-        Objects.requireNonNull(sortKeySourceColumnNames, "sortKeySourceColumnNames");
-        Objects.requireNonNull(partitionSourceColumnNames, "partitionSourceColumnNames");
+        Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(computeResource, "computeResource");
+        Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
         if (sourceTotalBytes < 0 || sourceTotalRows < 0) {
             throw new IllegalArgumentException("source estimates must be non-negative");
         }
     }
 
+    /** Every key column is backed by a source column. */
+    public InsertFromTableScanContext(
+            Table sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
+            String wherePredicateSql, ComputeResource computeResource, long sourceTotalBytes, long sourceTotalRows) {
+        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
+                sourceTotalBytes, sourceTotalRows, Map.of());
+    }
+
     /** Backward-compatible constructor for the original internal-OLAP source path and its tests. */
     public InsertFromTableScanContext(
-            OlapTable sourceTable, String sourceFromSql, List<String> sortKeySourceColumnNames,
-            List<String> partitionSourceColumnNames, String wherePredicateSql,
-            ComputeResource computeResource) {
-        this(sourceTable, sourceFromSql, sortKeySourceColumnNames, partitionSourceColumnNames,
-                wherePredicateSql, computeResource,
+            OlapTable sourceTable, String sourceFromSql, Map<String, String> targetToSourceColumnNames,
+            String wherePredicateSql, ComputeResource computeResource) {
+        this(sourceTable, sourceFromSql, targetToSourceColumnNames, wherePredicateSql, computeResource,
                 Math.max(0L, sourceTable.getDataSize()), Math.max(0L, sourceTable.getRowCount()));
     }
 }

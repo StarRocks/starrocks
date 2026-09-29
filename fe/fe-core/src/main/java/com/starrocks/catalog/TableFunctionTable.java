@@ -133,12 +133,12 @@ public class TableFunctionTable extends Table {
 
     private static final String PROPERTY_FILL_MISMATCH_COLUMN_WITH = "fill_mismatch_column_with";
 
-    private static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
-    private static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
-    private static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
-    private static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
-    private static final String PROPERTY_CSV_ESCAPE = "csv.escape";
-    private static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
+    public static final String PROPERTY_CSV_COLUMN_SEPARATOR = "csv.column_separator";
+    public static final String PROPERTY_CSV_ROW_DELIMITER = "csv.row_delimiter";
+    public static final String PROPERTY_CSV_SKIP_HEADER = "csv.skip_header";
+    public static final String PROPERTY_CSV_ENCLOSE = "csv.enclose";
+    public static final String PROPERTY_CSV_ESCAPE = "csv.escape";
+    public static final String PROPERTY_CSV_TRIM_SPACE = "csv.trim_space";
     private static final String PROPERTY_CSV_INCLUDE_HEADER = "csv.include_header";
 
     private static final String PROPERTY_PARQUET_USE_LEGACY_ENCODING = "parquet.use_legacy_encoding";
@@ -380,6 +380,25 @@ public class TableFunctionTable extends Table {
     @Override
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    /**
+     * Re-derives the fields that come from the load properties {@code InsertAnalyzer} pushes down
+     * from the enclosing INSERT into the {@code FILES()} property map.
+     *
+     * <p>Needed because the push-down does not always run before this table is built. Two callers
+     * resolve a {@code FILES()} schema outside the planner meta lock and before
+     * {@code InsertAnalyzer#analyzeProperties}: {@code StatementPlanner}'s lock-free pre-analysis
+     * for an INSERT that mixes {@code FILES()} with locked tables, and the Sample-Based Tablet
+     * Pre-Split hook. {@code QueryAnalyzer#resolveTableRef} then reuses the instance they built
+     * instead of rebuilding it, so the constructor parsed the property map while the pushed-down
+     * keys were still absent and every derived field kept its default -- silently dropping, for
+     * example, the {@code strict_mode} the statement (or the session default) asked for.
+     */
+    public void applyPushedDownLoadProperties(Map<String, String> pushedDownProperties) {
+        if (pushedDownProperties.containsKey(PROPERTY_STRICT_MODE)) {
+            strictMode = Boolean.parseBoolean(pushedDownProperties.get(PROPERTY_STRICT_MODE));
+        }
     }
 
     @Override

@@ -488,7 +488,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
+- 标签：`reason` — SkipReason 枚举值（小写形式）。单次导入级取值：`not_range_distribution`、`table_not_normal`、`has_materialized_view_or_rollup`、`unsupported_sort_key`、`source_missing_sampled_column`（从 `FILES()` 导入的 INSERT，其目标排序键或分区列既没有源列也没有字面量为其供值，采样器无法投影该列 —— 这类语句在此直接判定为不适用，而不是计入 `tablet_pre_split_sampler_failed{reason=sample_failed}`）、`metadata_not_resolved`、`multiple_base_index_tablets`、`partition_not_empty`、`disabled_by_config`、`disabled_by_session`、`estimate_unavailable`（INSERT-from-table 导入无法根据表统计信息估算 External Catalog 源表的大小）。多分区路径（P2-a）的逐分区取值：`unsupported_partition_column_type`（分区源列类型无法投影，如 STRUCT/ARRAY）、`invalid_partition_value`（采样到的分区列值无法格式化为 `AddPartitionClause`，如非空列出现 null、日期无法解析）、`grouper_empty`（每行样本都被格式化器或分析器丢弃）、`no_matching_partition`（手动 Range 分区的目标表：采样到的分区列值不落在本次导入可写入的任何已声明分区范围内，该值直接丢弃，不会据此新建分区）、`stale_catalog_state`（grouper 阶段看到的分区在 coordinator 持 READ 锁重新解析时已消失 —— 并发分区 drop/replace）、`partition_not_eligible_post_create`（预建后的逐分区资格复检失败，通常因分区已非空或现在拥有多 tablet）。
 - 描述：基于采样的 Tablet 预分裂（Sample-Based Tablet Pre-Split）在 FE 端被资格门拒绝、采样器尚未启动的总次数，按拒绝原因细分。运维可据此一眼定位"预分裂没跑"是哪条具体分支造成的。多分区路径（P2-a）下，本计数器同时记录 grouper 与逐分区复解析阶段抛出的逐分区跳过原因。
 
 ## `starrocks_fe_tablet_pre_split_sampler_invocations`
@@ -527,7 +527,7 @@ description: "Alphabetical s"
 
 - 单位：计数
 - 类型：累计
-- 描述：多分区路径（P2-a）计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留样本数最多的分区、丢弃样本数最少的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
+- 描述：多分区路径计数器。grouper 因单次导入的预测分区数超过 `tablet_pre_split_max_partitions_per_load` 而丢弃的分区数。grouper 保留数据量最大的分区（若 data tier 只采样了部分文件且分区值取自文件路径，按字节数判断，否则按样本数判断），丢弃数据量最小的尾部；被丢弃的分区回退到 BE 运行时自动建分区且不做预分裂。持续非零意味着上限正在生效 —— 可考虑调高 `tablet_pre_split_max_partitions_per_load` 或降低载入的分区基数。
 
 ## `starrocks_fe_tablet_pre_split_pre_create`
 

@@ -16,7 +16,9 @@ package com.starrocks.alter.reshard.presplit;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.common.Config;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -31,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 class InsertFromFilesRowGroupStatisticsProviderTest {
 
@@ -147,6 +150,219 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
         Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
     }
 
+    @Test
+    void footerReadParallelismOneUsesSerialPathAndAggregates() throws Exception {
+        // parallelism == 1 takes the serial branch; aggregation must still cover every file.
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                            brokerFileStatus(writeBigintParquet(24, 1000L)),
+                            brokerFileStatus(writeBigintParquet(8, 2000L))),
+                    Long.MAX_VALUE);
+            Assertions.assertEquals(48L, totalRowCount(provider.fetch(request)));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void serialAndParallelReadsProduceIdenticalStatistics() throws Exception {
+        // Reading footers concurrently must not change the result: the same aggregated row count and
+        // row-group count whether parallelism is 1 (serial) or > 1 (concurrent), since futures are
+        // collected in file order.
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(16, 0L)),
+                brokerFileStatus(writeBigintParquet(24, 1000L)),
+                brokerFileStatus(writeBigintParquet(40, 2000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<RowGroupStatistics> serial = provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<RowGroupStatistics> parallel = provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE));
+
+            Assertions.assertEquals(80L, totalRowCount(parallel));
+            Assertions.assertEquals(totalRowCount(serial), totalRowCount(parallel));
+            Assertions.assertEquals(serial.size(), parallel.size(),
+                    "same row-group count regardless of parallelism");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void unreadableFileInParallelReadFallsBackToDataTier() throws Exception {
+        // A missing file among valid ones: the parallel footer read must preserve the
+        // MetaTierUnavailableException signal so the pipeline falls back to the data tier.
+        Path good = writeBigintParquet(16, 0L);
+        Path missing = new Path(tempDirectory.resolve("missing.parquet").toUri());
+        TBrokerFileStatus missingStatus = new TBrokerFileStatus(
+                missing.toString(), false, 1L, true);
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(good), missingStatus),
+                    Long.MAX_VALUE);
+            Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void parallelReadPreservesMetaTierUnavailableSignal() throws Exception {
+        // joinFooterRead rethrows a StarRocksException *subclass* unchanged. That subtype matters: a
+        // MetaTierUnavailableException means "fall back to data tier", while a plain StarRocksException
+        // means "skip pre-split". A footer read that raises MetaTierUnavailableException (here: the
+        // sort-key column is absent from the Parquet schema) must surface through the parallel path as
+        // MetaTierUnavailableException, not get downgraded to a plain StarRocksException.
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet",
+                List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                        brokerFileStatus(writeBigintParquet(24, 1000L))));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(new Column("absent_sort_key", IntegerType.BIGINT)),   // not present in the file schema
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;   // force the parallel path
+        try {
+            Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void nonPositiveParallelismClampsToSerialPath() throws Exception {
+        // Config <= 0 must not create a 0-thread pool: Math.max(1, ...) clamps it to the serial path,
+        // which still aggregates every file.
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 0;
+        try {
+            SampleRequest request = bigintSampleRequest(
+                    List.of(brokerFileStatus(writeBigintParquet(16, 0L)),
+                            brokerFileStatus(writeBigintParquet(24, 1000L))),
+                    Long.MAX_VALUE);
+            Assertions.assertEquals(40L, totalRowCount(provider.fetch(request)));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void moreFilesThanParallelismAggregatesAllViaBoundedPool() throws Exception {
+        // files.size() > parallelism: the bounded pool must queue the excess tasks and still aggregate
+        // every file (parallelism caps concurrency, never coverage).
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(4, 0L)),
+                brokerFileStatus(writeBigintParquet(4, 1000L)),
+                brokerFileStatus(writeBigintParquet(4, 2000L)),
+                brokerFileStatus(writeBigintParquet(4, 3000L)),
+                brokerFileStatus(writeBigintParquet(4, 4000L)),
+                brokerFileStatus(writeBigintParquet(4, 5000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        Config.tablet_pre_split_meta_tier_footer_read_parallelism = 2;   // fewer threads than files
+        try {
+            Assertions.assertEquals(24L, totalRowCount(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE))));
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void parallelReadPreservesFileOrder() throws Exception {
+        // The parallel branch collects futures in submission order, so the aggregated stats must land
+        // in the same order as the serial branch — the sampler downstream relies on a stable ordering.
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus(writeBigintParquet(16, 0L)),
+                brokerFileStatus(writeBigintParquet(24, 1000L)),
+                brokerFileStatus(writeBigintParquet(40, 2000L)));
+
+        int saved = Config.tablet_pre_split_meta_tier_footer_read_parallelism;
+        try {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 1;
+            List<Long> serialOrder = rowCountsInOrder(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE)));
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = 8;
+            List<Long> parallelOrder = rowCountsInOrder(provider.fetch(bigintSampleRequest(files, Long.MAX_VALUE)));
+
+            Assertions.assertEquals(serialOrder, parallelOrder, "aggregated stats must keep file order");
+        } finally {
+            Config.tablet_pre_split_meta_tier_footer_read_parallelism = saved;
+        }
+    }
+
+    @Test
+    void wherePredicateFallsBackToDataTier() throws Exception {
+        // A footer describes every row in the file; nothing in it can be narrowed to the rows a
+        // predicate keeps, so boundaries planned from one would describe a row set the load never
+        // writes. Only the data tier can apply the predicate.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), "`sort_key` > 10"),
+                List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void renamedSortKeyIsLocatedByItsFilesColumnName() throws Exception {
+        // INSERT INTO t(target_key) SELECT sort_key FROM FILES(...): the file has no "target_key"
+        // field, so locating the footer column by the TARGET name would fall back to the data tier.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 32, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("target_key", "sort_key"), /*wherePredicateSql=*/ null),
+                List.of(new Column("target_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        List<RowGroupStatistics> rowGroupStatistics = provider.fetch(request);
+
+        Assertions.assertFalse(rowGroupStatistics.isEmpty());
+        Assertions.assertEquals(32L, totalRowCount(rowGroupStatistics));
+    }
+
+    @Test
+    void sortKeyWithNoFilesMappingFallsBackToDataTier() throws Exception {
+        // The sort key is named after a field the file DOES carry, so reading the footer would
+        // succeed -- what must stop it is that the projection never mapped that target column, so
+        // nothing proves the file's like-named field is the one the load writes into it.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null),
+                List.of(new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
+    @Test
+    void literalFedSortKeyColumnFallsBackToDataTier() throws Exception {
+        // ORDER BY (dt, sort_key) with '20260917' AS dt: dt lives in no footer, so the meta tier
+        // cannot describe the key and must hand the load to the data tier, which projects the literal.
+        Path parquetPath = writeBigintParquet(/*rowCount=*/ 8, /*valueOffset=*/ 0L);
+        TableFunctionTable sourceTable = mockTableFunctionTable("parquet", List.of(brokerFileStatus(parquetPath)));
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("sort_key", "sort_key"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'")),
+                List.of(new Column("dt", DateType.DATE), new Column("sort_key", IntegerType.BIGINT)),
+                Long.MAX_VALUE, /*seed=*/ 0L);
+
+        Assertions.assertThrows(MetaTierUnavailableException.class, () -> provider.fetch(request));
+    }
+
     private Path writeBigintParquet(int rowCount, long valueOffset) throws IOException {
         return PresplitTestSupport.writeParquetFixture(
                 tempDirectory,
@@ -190,5 +406,9 @@ class InsertFromFilesRowGroupStatisticsProviderTest {
 
     private static long totalRowCount(List<RowGroupStatistics> rowGroupStatistics) {
         return rowGroupStatistics.stream().mapToLong(RowGroupStatistics::getRowCount).sum();
+    }
+
+    private static List<Long> rowCountsInOrder(List<RowGroupStatistics> rowGroupStatistics) {
+        return rowGroupStatistics.stream().map(RowGroupStatistics::getRowCount).toList();
     }
 }

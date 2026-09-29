@@ -4834,10 +4834,11 @@ public class Config extends ConfigBase {
     public static boolean enable_tablet_pre_split_for_broker_load = true;
 
     @ConfField(mutable = true, comment = "Whether to enable Sample-Based Tablet Pre-Split for "
-            + "INSERT INTO ... SELECT FROM <table> loads with an internal OLAP or external Iceberg "
-            + "source, including explicit real/temp partitions and static/dynamic overwrite. Default on as of "
-            + "v4.1.0 after the GA gate. Set to false to disable cluster-wide. The session variable "
-            + "enable_tablet_pre_split must also be true for pre-split to run.")
+            + "INSERT INTO ... SELECT FROM <table> loads whose source is an internal OLAP table or a "
+            + "table in an external catalog (views excluded), including explicit real/temp partitions "
+            + "and static/dynamic overwrite. Default on as of v4.1.0 after the GA gate. Set to false "
+            + "to disable cluster-wide. The session variable enable_tablet_pre_split must also be "
+            + "true for pre-split to run.")
     public static boolean enable_tablet_pre_split_for_insert_from_table = true;
 
     @ConfField(mutable = true, comment = "Wall-clock budget for the pre-submit phase of "
@@ -4873,15 +4874,52 @@ public class Config extends ConfigBase {
             + "so an oversize row still produces a non-empty sample.")
     public static long tablet_pre_split_sample_byte_limit = 16L * 1024L * 1024L;
 
+    @ConfField(mutable = true, comment = "Soft limit on the source-file bytes the Sample-Based Tablet Pre-Split "
+            + "data tier scans for a Broker Load or INSERT-from-FILES load. A larger input is sampled from a "
+            + "subset of its files, so sampling time no longer grows with the input, while the tablet count is "
+            + "still sized from every file. Files are sorted by path and picked at even byte intervals, which "
+            + "favors larger files; each path partition (COLUMNS FROM PATH / columns_from_path) gets a share in "
+            + "proportion to its bytes and at least one file. Files are taken whole, so a scan can exceed the "
+            + "limit. The exception is a partition column read from the file data rather than from the path, or "
+            + "path and literal partition columns mixed: every file is then still scanned, because a subset "
+            + "could miss whole partitions. 0 scans every file.")
+    public static long tablet_pre_split_data_tier_scan_byte_limit = 4L * 1024L * 1024L * 1024L;
+
+    @ConfField(mutable = true, comment = "Fewest files the Sample-Based Tablet Pre-Split data tier scans "
+            + "once it samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit), "
+            + "so the sample spans enough independent files even when each file is large or holds only a narrow "
+            + "range of the sort key. Split across path partitions by bytes. This floor can take the scan above the "
+            + "byte limit, but adds no files once the scan reaches four times that limit. A positive "
+            + "tablet_pre_split_data_tier_max_scan_files takes precedence.")
+    public static int tablet_pre_split_data_tier_min_scan_files = 64;
+
+    @ConfField(mutable = true, comment = "Most files the Sample-Based Tablet Pre-Split data tier scans once it "
+            + "samples a subset of a load's files (see tablet_pre_split_data_tier_scan_byte_limit). Every file in "
+            + "a subset costs FILES one metadata lookup before it reads anything, so a subset of many small "
+            + "files would otherwise stall on thousands of lookups. Split across path partitions by bytes; every "
+            + "partition keeps at least one file, so the cap can be exceeded by up to one file per partition; "
+            + "with more partitions than the cap, only the heaviest are sampled, one file each. 0 or a negative "
+            + "value removes the cap.")
+    public static int tablet_pre_split_data_tier_max_scan_files = 512;
+
     @ConfField(mutable = true, comment = "Maximum overlap fraction tolerated when Sample-Based "
             + "Tablet Pre-Split's meta tier (Parquet/ORC row-group metadata) computes boundaries. "
             + "Above this threshold the cumulative-row count stops being monotone in sorted-min "
             + "order so meta tier falls back to data tier (row sampling).")
     public static double tablet_pre_split_meta_tier_overlap_threshold = 0.3;
 
+    @ConfField(mutable = true, comment = "Number of Parquet/ORC footers the Sample-Based Tablet "
+            + "Pre-Split meta tier reads concurrently from a file-backed load source (FILES() or "
+            + "Broker Load). Footer reads are independent per file and the sampler sorts the "
+            + "aggregated stats, so concurrency only cuts the wall time of the pre-split hook "
+            + "(each footer is a remote round-trip; a many-file source otherwise serializes "
+            + "hundreds of round-trips). 1 disables concurrency.")
+    public static int tablet_pre_split_meta_tier_footer_read_parallelism = 16;
+
     @ConfField(mutable = true, comment = "Maximum number of predicted target partitions a single "
             + "Sample-Based Tablet Pre-Split invocation will operate on. Excess predicted partitions "
-            + "(those with the lowest sample count) are dropped and fall back to runtime auto-create "
+            + "(the lightest: fewest input bytes when the data tier knows them per partition, otherwise fewest "
+            + "sampled rows) are dropped and fall back to runtime auto-create "
             + "with no pre-split. Bounds hook latency on pathological multi-partition loads. Set to "
             + "zero or a negative value to disable the cap.")
     public static int tablet_pre_split_max_partitions_per_load = 32;

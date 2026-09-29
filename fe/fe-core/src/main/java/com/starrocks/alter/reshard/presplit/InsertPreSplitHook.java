@@ -30,6 +30,8 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StatementBase.ExplainLevel;
@@ -54,8 +56,8 @@ import java.util.Set;
  * the statement-shape pre-filters, {@link SelectRelation} extraction, the
  * mutually-exclusive strategy selection, the per-path config gate, the
  * per-session opt-out, and target resolve + authorization. The conservative-skip
- * statement gates live alongside them: the statement-shape and load-properties
- * gates in {@link #passesCommonPreFilters}, and the materialized-view gate in
+ * statement gates live alongside them: the statement-shape gates in
+ * {@link #passesCommonPreFilters}, and the materialized-view gate in
  * {@link #resolveEligibleTable}. Each {@link InsertPreSplitSource} supplies the
  * source-specific detection + resolve, and the submit flow (plus the
  * automatic-partition gate) lives in {@link PreSplitFlow}.
@@ -184,6 +186,40 @@ public final class InsertPreSplitHook {
         }
     }
 
+    /**
+     * Cheap statement-shape gates, all of them about WHERE the load writes.
+     *
+     * <p>Deliberately no {@code PROPERTIES(...)} gate. There used to be one, declining any statement
+     * written with a properties clause, and it was removed because it could not name a property it
+     * was protecting against:
+     *
+     * <ul>
+     *   <li>Most of {@code LoadStmt.PROPERTIES_SET} is shared load vocabulary that an INSERT ignores
+     *       outright -- {@code partial_update}, {@code timezone}, {@code priority},
+     *       {@code load_mem_limit}, the JSON options, {@code warehouse} -- read only by
+     *       {@code LoadJob#setJobProperties}, which for an INSERT runs after {@code InsertPlanner}
+     *       built the plan and the coordinator is already executing, and consumed from there only by
+     *       {@code BrokerLoadJob}. On this path they are SHOW LOAD bookkeeping.</li>
+     *   <li>The ones that ARE live only remove rows: {@code strict_mode} filters at the scan,
+     *       {@code max_filter_ratio} decides commit-or-abort, {@code merge_condition} turns the
+     *       upsert conditional. None of them can move a row to a different tablet, so none can make
+     *       a boundary invalid -- the worst case is tablets sized below target, and pre-split is a
+     *       sizing optimization.</li>
+     *   <li>{@code enable_push_down_schema} makes the load read the FILES() columns at the target's
+     *       types while the sampler reads them as BE inferred them. That divergence is NOT specific
+     *       to the property: {@code Config.files_enable_insert_push_down_column_type} defaults to
+     *       true and {@code QueryAnalyzer#resolveTableRef} applies the push-down to the table this
+     *       hook pre-resolved, so every pre-split INSERT-from-FILES already samples raw types and
+     *       loads pushed-down ones, properties or not.</li>
+     * </ul>
+     *
+     * <p>The gate's other stated purpose -- never reshard for a statement that is about to fail
+     * property validation -- was arbitrary in the same way. This hook runs pre-analysis, so it
+     * cannot tell whether the statement will fail on an unknown column, a type mismatch or a source
+     * privilege either; a reshard is data-preserving, so an unused split costs tablet metadata
+     * churn, not correctness. Guarding one narrow slice of "may fail analysis" while ignoring the
+     * rest bought nothing.
+     */
     private static boolean passesCommonPreFilters(InsertStmt insertStmt, ConnectContext context) {
         // An explicit target column list is validated after target resolution:
         // the source-agnostic targetColumnListIsPreSplitSafe gate plus each
@@ -201,24 +237,7 @@ public final class InsertPreSplitHook {
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return false;
         }
-        if (insertStmt.isStaticKeyPartitionInsert()) {
-            return false;
-        }
-        return !carriesLoadProperties(insertStmt);
-    }
-
-    /**
-     * Whether the statement was written with a {@code PROPERTIES(...)} clause, which can change the
-     * row set the load writes (max_filter_ratio, strict_mode, ...) relative to what the sampler saw.
-     *
-     * <p>Deliberately not {@code getProperties().isEmpty()}: {@code InsertAnalyzer#analyzeProperties}
-     * fills that map with the session defaults for max_filter_ratio / strict_mode / timeout, so after
-     * analysis it is never empty. {@link #passesCommonPreFilters} runs before analysis and would not
-     * notice, but {@link #passesDynamicOverwritePreFilters} runs after it and would reject every
-     * statement. Both ask the parse-time question so the two gates cannot drift apart.
-     */
-    private static boolean carriesLoadProperties(InsertStmt insertStmt) {
-        return !insertStmt.getUserSpecifiedPropertyKeys().isEmpty();
+        return !insertStmt.isStaticKeyPartitionInsert();
     }
 
     private static boolean passesDynamicOverwritePreFilters(
@@ -232,10 +251,7 @@ public final class InsertPreSplitHook {
         if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID) {
             return false;
         }
-        if (insertStmt.isSpecifyPartitionNames() || insertStmt.isStaticKeyPartitionInsert()) {
-            return false;
-        }
-        return !carriesLoadProperties(insertStmt);
+        return !insertStmt.isSpecifyPartitionNames() && !insertStmt.isStaticKeyPartitionInsert();
     }
 
     private static boolean passesStaticOverwritePreFilters(InsertStmt insertStmt, ConnectContext context) {
@@ -245,11 +261,8 @@ public final class InsertPreSplitHook {
         if (insertStmt.isExplain() && !ExplainLevel.ANALYZE.equals(insertStmt.getExplainLevel())) {
             return false;
         }
-        if (context.getTxnId() != 0 || insertStmt.getTxnId() != DmlStmt.INVALID_TXN_ID
-                || insertStmt.isStaticKeyPartitionInsert()) {
-            return false;
-        }
-        return !carriesLoadProperties(insertStmt);
+        return context.getTxnId() == 0 && insertStmt.getTxnId() == DmlStmt.INVALID_TXN_ID
+                && !insertStmt.isStaticKeyPartitionInsert();
     }
 
     /**
@@ -316,32 +329,49 @@ public final class InsertPreSplitHook {
     }
 
     /**
-     * Whether the target column list names every base (non-generated) column
-     * exactly once, in schema order — i.e. it is semantically identical to
-     * omitting the list. Used by the INSERT-from-table source, whose column
-     * mapping assumes the full base schema in order; partial / reordered lists
-     * are not yet supported there.
+     * Whether the SELECT's projection shape is one every source can reproduce in its own sampling
+     * sub-query: a bare {@code SELECT *} (single star, no qualifier / EXCLUDE / alias) or an
+     * explicit list without stars, with no DISTINCT and no GROUP BY / HAVING / ORDER BY / LIMIT.
      *
-     * <p>Returns true when there is no target column list or when the list is a
-     * full, in-order identity list.
+     * <p>A WHERE clause is allowed here and gated separately by each source
+     * ({@link SamplingPredicateGate}), because a predicate the sampler can copy verbatim keeps the
+     * sampled row set equal to the loaded one. The rejected clauses are the ones that genuinely
+     * change that row set: DISTINCT collapses duplicates, GROUP BY / HAVING aggregate, and
+     * ORDER BY pairs with LIMIT to keep a deterministic prefix.
      *
-     * <p>Package-private (not private) so the unit test can drive it directly.
+     * <p>Expressions in an explicit list are checked later by {@link InsertSelectSourceColumns}:
+     * only the target columns needed for partitioning and range distribution must be direct
+     * source-column refs, and an expression may reference nothing beyond the resolved source
+     * relation.
+     *
+     * <p>Shared by both {@link InsertPreSplitSource} implementations, and package-private so the
+     * unit tests can drive it directly.
      */
-    static boolean targetColumnListIsFullIdentity(InsertStmt insertStmt, OlapTable target) {
-        List<String> targetColumnNames = insertStmt.getTargetColumnNames();
-        if (targetColumnNames == null || targetColumnNames.isEmpty()) {
-            return true;
-        }
-        List<Column> baseColumns = target.getBaseSchemaWithoutGeneratedColumn();
-        if (targetColumnNames.size() != baseColumns.size()) {
+    static boolean hasSupportedProjectionShape(SelectRelation selectRelation) {
+        SelectList selectList = selectRelation.getSelectList();
+        if (selectList == null || selectList.isDistinct()) {
             return false;
         }
-        for (int i = 0; i < baseColumns.size(); i++) {
-            if (!targetColumnNames.get(i).equalsIgnoreCase(baseColumns.get(i).getName())) {
+        List<SelectListItem> items = selectList.getItems();
+        if (items.isEmpty()) {
+            return false;
+        }
+        SelectListItem first = items.get(0);
+        if (items.size() == 1 && first.isStar()) {
+            if (first.getTblName() != null || !first.getExcludedColumns().isEmpty() || first.getAlias() != null) {
                 return false;
             }
+        } else {
+            for (SelectListItem item : items) {
+                if (item.isStar()) {
+                    return false;
+                }
+            }
         }
-        return true;
+        return !selectRelation.hasGroupByClause()
+                && !selectRelation.hasHavingClause()
+                && !selectRelation.hasOrderByClause()
+                && !selectRelation.hasLimit();
     }
 
     private static SelectRelation extractSelectRelation(InsertStmt insertStmt) {
