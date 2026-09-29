@@ -482,10 +482,10 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 - `tablet_reshard_target_size`: 执行 SPLIT 或 MERGE 后的 Tablet 目标大小。默认值：10 GB。如果已明确指定了 Tablet ID，则无需指定此参数。
 
   - 触发拆分（SPLIT）的条件：
-    - Tablet 的大小**大于** `tablet_reshard_target_size`。
+    - Tablet 的大小**大于或等于** `tablet_reshard_target_size` 的 1.5 倍（即 `ceil(1.5 × tablet_reshard_target_size)`）。以默认值 10 GB 为例，Tablet 达到 15 GB 才会拆分。后台自动拆分和手动执行的 `ALTER TABLE ... SPLIT` 均按此阈值判断：自动拆分使用 FE 配置项 `tablet_reshard_target_size`；手动 SPLIT 使用 `PROPERTIES` 中指定的值，未指定时同样使用该 FE 配置项。指定 Tablet ID 时也不例外：小于该阈值的 Tablet 不会被拆分；如果没有任何 Tablet 满足条件，语句会报错 `No tablets need to split in table ...`。
     - 当前正在执行 SPLIT 或 MERGE 的 Tablet 数量小于 FE 配置项 `tablet_reshard_max_parallel_tablets`（默认值：10240）。
 
-  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需等到 `tablet_reshard_target_size` 即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。在 `PROPERTIES` 中指定 `tablet_reshard_target_size` 会禁用该行为，并严格按照指定的目标大小执行。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
+  - 此外，如果 Tablet 所属物化索引的 Tablet 数量少于其所属仓库的计算节点数（该数量同时受 `tablet_reshard_max_split_count` 上限约束，因此调小该配置会让此行为更早停止），且该 Tablet 的大小达到该规则目标大小的两倍，则无需达到上述阈值即可触发拆分，从而使新建分区更快获得集群级别的写入并行度。该规则的目标大小为“索引数据量按上述槽位数均分”所得的大小，并以 `tablet_reshard_min_split_size` 为下限；因此在其 2 GB 默认值下，数据量尚未超过该下限的索引会在单个 Tablet 达到 4 GB 时触发拆分。该规则适用于后台自动拆分，以及既未指定 Tablet ID、也未指定 `tablet_reshard_target_size` 的手动 SPLIT；指定其中任意一项都会禁用该规则，仅按上述阈值判断。如需在整个集群范围内禁用，可将 `tablet_reshard_min_split_size` 设置为大于或等于 `tablet_reshard_target_size`。
 
   - 合并（MERGE）需要将 FE 配置项 `tablet_reshard_enable_tablet_merge` 设置为 `true`（默认值：`false`），否则系统不会自动合并 Tablet，`ALTER TABLE ... MERGE` 也会被拒绝。开启后，合并规则如下：
     - 自动合并：物化索引中任意两个相邻 Tablet 的大小总和**小于** `tablet_reshard_target_size` 的 80%（即 `ceil(0.8 × tablet_reshard_target_size)`）时触发，此处使用 FE 配置项 `tablet_reshard_target_size`。以默认值 10 GB 为例，相邻两个 Tablet 合计不足 8 GB 时即触发合并。
