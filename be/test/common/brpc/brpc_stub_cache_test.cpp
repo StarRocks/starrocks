@@ -27,6 +27,7 @@
 #include <unordered_set>
 
 #include "base/failpoint/fail_point.h"
+#include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
@@ -387,6 +388,39 @@ TEST_F(BrpcStubCacheTest, first_stub_is_not_created_on_contention) {
     ASSERT_NE(nullptr, selected.reservation.stub());
     ASSERT_FALSE(selected.created_on_contention);
     ASSERT_FALSE(selected.selected_at_connection_limit);
+}
+
+TEST_F(BrpcStubCacheTest, stub_creation_failure_is_not_connection_limit) {
+#ifdef FIU_ENABLE
+    config::brpc_max_connections_per_server = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub);
+    auto busy = stub->reserve_rpc();
+
+    auto* failpoint = failpoint::FailPointRegistry::GetInstance()->get("brpc_stub_cache_create_stub_failed");
+    ASSERT_NE(nullptr, failpoint);
+    PFailPointTriggerMode mode;
+    mode.set_mode(FailPointTriggerModeType::ENABLE);
+    failpoint->setMode(mode);
+    DeferOp disable_failpoint([&] {
+        mode.set_mode(FailPointTriggerModeType::DISABLE);
+        failpoint->setMode(mode);
+    });
+
+    auto selected_or = cache.acquire_least_loaded_stub(stub->endpoint());
+    ASSERT_OK(selected_or.status());
+    auto selected = std::move(selected_or).value();
+    ASSERT_EQ(stub.get(), selected.reservation.stub());
+    ASSERT_FALSE(selected.created_on_contention);
+    ASSERT_FALSE(selected.selected_at_connection_limit);
+#else
+    GTEST_SKIP() << "requires FIU_ENABLE to inject stub creation failure";
+#endif
 }
 
 TEST_F(BrpcStubCacheTest, acquire_least_loaded_stub_prefers_lower_payload_load) {

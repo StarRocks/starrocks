@@ -30,6 +30,8 @@
 
 namespace starrocks {
 
+DEFINE_FAIL_POINT(brpc_stub_cache_create_stub_failed);
+
 namespace {
 
 const char* const kBrpcEndpointStubCountMetric = "brpc_endpoint_stub_count";
@@ -208,6 +210,7 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::_create_stub_locked(
         const butil::EndPoint& endpoint) {
+    FAIL_POINT_TRIGGER_RETURN(brpc_stub_cache_create_stub_failed, nullptr);
     auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "", static_cast<int64_t>(_stubs.size()));
     if (!stub->reset_channel().ok()) {
         return nullptr;
@@ -240,7 +243,8 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
         }
     }
 
-    if (size < config::brpc_max_connections_per_server) {
+    const bool at_connection_limit = size >= config::brpc_max_connections_per_server;
+    if (!at_connection_limit) {
         auto stub = _create_stub_locked(endpoint);
         if (stub != nullptr) {
             _selection_idx = size;
@@ -255,7 +259,7 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
     // If no idle stub exists and the pool cannot grow, reuse the least-loaded busy stub.
     _selection_idx = selected;
     return StubSelection{.reservation = _stubs[selected]->reserve_rpc(payload_bytes),
-                         .selected_at_connection_limit = true};
+                         .selected_at_connection_limit = at_connection_limit};
 }
 
 void HttpBrpcStubCache::initialize(BthreadTimer* timer) {
