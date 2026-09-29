@@ -402,6 +402,7 @@ void give_standalone_segments_a_bundle_offset(RowsetMetadataPB* rowset_metadata)
     for (auto& segment_meta : *rowset_metadata->mutable_segment_metas()) {
         if (!segment_meta.has_bundle_file_offset() && segment_meta.has_size()) {
             segment_meta.set_bundle_file_offset(0);
+            segment_meta.set_synthetic_bundle_file_offset(true);
         }
     }
 }

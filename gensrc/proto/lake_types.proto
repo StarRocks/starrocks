@@ -262,6 +262,10 @@ message SegmentMetadataPB {
     // uid too. Consumers (read / GC / async build) only read it for vector-indexed segments and
     // DCHECK its presence -- there is no fall back to the reading tablet's id.
     optional int64 segment_vector_index_uid = 13;
+    // The bundle offset was synthesized for a complete standalone file when a rowset mixed
+    // bundled and standalone segments. Readers still use offset 0; replication uses this flag
+    // to distinguish that physical file from a shared bundle object.
+    optional bool synthetic_bundle_file_offset = 14 [default=false];
 }
 
 message RowsetMetadataPB {

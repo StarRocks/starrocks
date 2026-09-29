@@ -731,8 +731,10 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsets) {
     const auto& rs = meta->rowsets(0);
     ASSERT_EQ(2, rs.segment_metas_size());
     EXPECT_EQ(4096, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(0).synthetic_bundle_file_offset());
     ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
     EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
     EXPECT_EQ("seg_b", rs.segment_metas(1).filename());
     EXPECT_EQ(123, rs.segment_metas(1).size());
     // The rowset now encodes into the legacy all-or-nothing offsets array.
@@ -757,9 +759,12 @@ TEST(TxnLogApplierBatchTest, NonPrimaryKeyBatchMergeMixedBundleOffsetsReverse) {
     ASSERT_EQ(3, rs.segment_metas_size());
     ASSERT_TRUE(rs.segment_metas(0).has_bundle_file_offset());
     EXPECT_EQ(0, rs.segment_metas(0).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(0).synthetic_bundle_file_offset());
     ASSERT_TRUE(rs.segment_metas(1).has_bundle_file_offset());
     EXPECT_EQ(0, rs.segment_metas(1).bundle_file_offset());
+    EXPECT_TRUE(rs.segment_metas(1).synthetic_bundle_file_offset());
     EXPECT_EQ(2048, rs.segment_metas(2).bundle_file_offset());
+    EXPECT_FALSE(rs.segment_metas(2).synthetic_bundle_file_offset());
 }
 
 // Test that a single TxnLog with mismatched offset/segment count returns error.

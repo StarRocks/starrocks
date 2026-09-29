@@ -135,7 +135,7 @@ protected:
         }
         std::vector<TxnInfoPB> txns{info};
         return publish_version(_tablet_mgr.get(), PublishTabletInfo(_tablet_metadata->id()), new_version - 1,
-                               new_version, txns, false, std::nullopt);
+                               new_version, txns, false);
     }
 
     // Row count, sum(c0), sum(c1) at `version`.
@@ -211,8 +211,10 @@ protected:
             ASSERT_TRUE(segment_meta.has_bundle_file_offset());
             if (segment_meta.filename() == bundled_segment.filename()) {
                 EXPECT_EQ(bundled_segment.bundle_file_offset(), segment_meta.bundle_file_offset());
+                EXPECT_FALSE(segment_meta.synthetic_bundle_file_offset());
             } else {
                 EXPECT_EQ(0, segment_meta.bundle_file_offset());
+                EXPECT_TRUE(segment_meta.synthetic_bundle_file_offset());
             }
         }
 

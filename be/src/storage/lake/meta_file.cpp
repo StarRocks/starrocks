@@ -351,6 +351,7 @@ void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // A rewritten segment makes this rowset's data private to this tablet, so it must not
         // alias a cross-published sibling: mint a fresh uid. With no rewrite, the CopyFrom above
@@ -1897,6 +1898,7 @@ Status MetaFileBuilder::set_final_rowset() {
         // The rewrite files are no longer bundled, so clear all bundle offsets once after the rewrites.
         for (auto& segment_metadata : *rowset->mutable_segment_metas()) {
             segment_metadata.clear_bundle_file_offset();
+            segment_metadata.clear_synthetic_bundle_file_offset();
         }
         // The batch-merged rowset keeps the first contributing op_write's uid (carried by the
         // initial CopyFrom in add_rowset) so cross-published children converge on the same
