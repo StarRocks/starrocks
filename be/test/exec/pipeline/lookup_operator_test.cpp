@@ -17,37 +17,20 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <string>
 #include <vector>
 
-#include "base/testutil/assert.h"
-#include "exec/lookup_stream_mgr.h"
+#include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/query_context.h"
-#include "exec_primitive/pipeline/primitives/pipeline_observer.h"
+#include "runtime/lookup_stream_mgr.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks::pipeline {
-
-namespace {
-
-class CountingObserver final : public PipelineObserver {
-public:
-    void source_trigger() override { ++source_wakeups; }
-    void sink_trigger() override {}
-    void cancel_trigger() override {}
-    void all_trigger() override {}
-    void runtime_filter_timeout_trigger() override {}
-    std::string debug_string() const override { return "lookup-operator-test-observer"; }
-
-    size_t source_wakeups = 0;
-};
-
-} // namespace
 
 class LookUpOperatorTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        _state.set_query_ctx(_query_ctx.get(), &_query_ctx->query_runtime_state(), _query_ctx->object_pool());
+        _state.set_query_ctx(_query_ctx.get());
         auto dispatcher = std::make_shared<LookUpDispatcher>(TUniqueId(), 1, std::vector<TupleId>{});
         _factory = std::make_unique<LookUpOperatorFactory>(1, 1, _row_pos_descs, std::move(dispatcher), 1);
     }
@@ -66,6 +49,7 @@ protected:
     phmap::flat_hash_map<TupleId, RowPositionDescriptor*> _row_pos_descs;
     std::unique_ptr<LookUpOperatorFactory> _factory;
     OperatorPtr _op;
+    std::unique_ptr<PipelineDriver> _driver;
 };
 
 // Under the poll scheduler (e.g. exec_mode='etl' enables wait-dependent events), drivers never get an observer.
@@ -82,13 +66,15 @@ TEST_F(LookUpOperatorTest, io_task_notify_without_event_scheduler) {
 // Under the event scheduler the finished IO task must still wake the driver, or the lookup source hangs.
 TEST_F(LookUpOperatorTest, io_task_notify_wakes_driver_with_event_scheduler) {
     _state.set_enable_event_scheduler(true);
-    CountingObserver observer;
     _op = _factory->create(1, 0);
-    _op->set_observer(&observer);
+    // In 4.1 the observer is concrete. Verify its reschedule signal on a real, unblocked driver.
+    _driver = std::make_unique<PipelineDriver>(Operators{_op}, _query_ctx.get(), nullptr, nullptr, -1);
+    _op->set_observer(_driver->observer());
     ASSERT_OK(_op->prepare(&_state));
 
+    ASSERT_FALSE(_driver->need_check_reschedule());
     notify_from_io_task();
-    EXPECT_EQ(1, observer.source_wakeups);
+    EXPECT_TRUE(_driver->need_check_reschedule());
 }
 
 } // namespace starrocks::pipeline
