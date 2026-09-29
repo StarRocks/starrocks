@@ -61,12 +61,18 @@ public:
     void CallMethod(const google::protobuf::MethodDescriptor* method, google::protobuf::RpcController* controller,
                     const google::protobuf::Message* request, google::protobuf::Message* response,
                     google::protobuf::Closure* done) override {
-        auto reservation = _owner->reserve_rpc(request_payload_bytes(request, controller));
+        PInternalService_RecoverableStub::RpcInFlightGuard reservation;
         google::protobuf::Closure* closure = done;
+        if (config::brpc_connection_type == "single") {
+            reservation = _owner->reserve_rpc(request_payload_bytes(request, controller));
+            if (done != nullptr) {
+                closure = new RpcInFlightClosure(std::move(reservation), done);
+            }
+        }
+
         if (done != nullptr) {
-            auto* accounting = new RpcInFlightClosure(std::move(reservation), done);
             closure = new PInternalService_RecoverableStub::RecoverableClosureType(_owner->shared_from_this(),
-                                                                                   controller, accounting);
+                                                                                   controller, closure);
         }
         _owner->stub()->CallMethod(method, controller, request, response, closure);
     }

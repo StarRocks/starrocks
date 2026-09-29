@@ -283,7 +283,8 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
 
     // Wait until the server has actually received the RPC, guaranteeing it is in-flight.
     ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
-    EXPECT_EQ(1, stub->num_in_flight_rpcs());
+    EXPECT_EQ(0, stub->num_in_flight_rpcs());
+    EXPECT_EQ(0, stub->num_in_flight_payload_bytes());
     EXPECT_FALSE(buffer->is_finished());
 
     const auto cancel_start = std::chrono::steady_clock::now();
@@ -297,6 +298,7 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
     }
     EXPECT_TRUE(buffer->is_finished());
     EXPECT_EQ(0, stub->num_in_flight_rpcs());
+    EXPECT_EQ(0, stub->num_in_flight_payload_bytes());
 
     RuntimeProfile profile("pooled exchange");
     buffer->update_profile(&profile);
