@@ -75,6 +75,15 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 これらのオーバーロードは、XY `POINT` と `POLYGON` または `MULTIPOLYGON` の組み合わせに対応します。`GEOGRAPHY` は球面 CRS84 エッジ、`GEOMETRY` は平面エッジで評価し、後者は一致するディスクリプタを必要とします。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、次元、ディスクリプタ、および `GEOGRAPHY`/`GEOMETRY` の混在呼び出しは拒否されます。[ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md)、[ST_CoveredBy](st_coveredby.md) を参照してください。
 
+## 交差述語
+
+| シグネチャ | 関数 ID | 境界の動作 |
+| --- | ---: | --- |
+| `ST_Intersects(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120240 | 球面上の重なり、包含、境界接触で `true` を返します。 |
+| `ST_Intersects(GEOMETRY lhs, GEOMETRY rhs)` | 120241 | 平面上の重なり、包含、境界接触で `true` を返します。 |
+
+これらのオーバーロードは XY `POLYGON` と `MULTIPOLYGON` をサポートします。`GEOMETRY` 入力には一致するディスクリプタが必要です。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、コレクション、ネイティブ論理型の混在は拒否されます。[ST_Intersects](st_intersects.md) を参照してください。
+
 ## レガシー互換性
 
 ネイティブオーバーロードは、既存の `VARCHAR` 関数を再採番または置換しません。

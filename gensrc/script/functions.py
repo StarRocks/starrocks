@@ -1136,6 +1136,12 @@ vectorized_functions = [
     [120231, "ST_DWithin", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY", "DOUBLE"],
      "GeoFunctions::st_geometry_dwithin", "GeoFunctions::native_geo_distance_prepare",
      "GeoFunctions::native_geo_distance_close"],
+    [120240, "ST_Intersects", False, False, "BOOLEAN", ["GEOGRAPHY", "GEOGRAPHY"],
+     "GeoFunctions::st_geography_intersects", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
+    [120241, "ST_Intersects", False, False, "BOOLEAN", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersects", "GeoFunctions::native_geo_containment_prepare",
+     "GeoFunctions::native_geo_containment_close"],
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
