@@ -1059,8 +1059,15 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
-          cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
-          echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
+          # Keyed by run id, not just PR_NUMBER: if this PR gets re-pushed/re-run
+          # before this run's own Teardown executes, a PR_NUMBER-only filename
+          # would get overwritten by the newer run's Deploy step, and Teardown
+          # would tear down the NEWER run's instances instead of this run's --
+          # permanently orphaning this run's real ECS instances (confirmed
+          # leak pattern: same PR shows multiple qa-ci instance-creation
+          # timestamps, only the newest ever gets cleaned up).
+          cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-${GITHUB_RUN_ID}-starrocks_deploy.conf
+          echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-${GITHUB_RUN_ID}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
       - name: Deploy SR
         id: deploy_sr
