@@ -35,6 +35,8 @@ class Slice;
 
 namespace starrocks::parquet {
 
+struct NullInfos;
+
 class LevelDecoder {
 public:
     LevelDecoder(int64_t* const timer) : _timer(timer) {}
@@ -94,8 +96,25 @@ public:
         return _levels_decoded - _levels_parsed;
     }
 
+<<<<<<< HEAD
     // Append `level_nums` default levels to the parsed levels. Levels decoded but not consumed yet (look-ahead)
     // are kept behind the appended ones, so the decoder position in the page does not change.
+=======
+    // Whether decode_nulls() can decode this page's levels: RLE levels of a column whose max level is 1.
+    bool can_decode_nulls() const { return _encoding == tparquet::Encoding::RLE && _bit_width == 1; }
+
+    // Decodes the next `n` levels straight into the null flags of `infos` (level 0 is null) and counts the
+    // nulls and null/non-null runs, without materializing them as level_t: 1-bit RLE levels unpack into
+    // bytes directly. Levels get_avail_levels() already buffered are used first, so this can be mixed with
+    // the level_t API on one page; consumed levels are not available to get_levels() afterwards.
+    // Requires can_decode_nulls(). Returns false if the page has fewer than `n` levels left.
+    bool decode_nulls(size_t n, NullInfos* infos);
+
+    // Skips the next `n` levels, counting how many are 1 (non-null), without materializing them as level_t.
+    // Same buffer handling and requirement as decode_nulls().
+    bool skip_count_non_null(size_t n, size_t* num_non_null);
+
+>>>>>>> 0cfa81bbd1b... [Enhancement] Cut parquet scan CPU: batch nullable PLAIN/BOOLEAN decoding, vectorized def-level nulls, zero-copy cached pages, cheaper timestamp converters (#64021)
     void append_default_levels(size_t level_nums) {
         size_t num_lookahead = _levels_decoded - _levels_parsed;
         size_t new_capacity = _levels_decoded + level_nums;
@@ -132,7 +151,7 @@ private:
         return 0;
     }
 
-    tparquet::Encoding::type _encoding;
+    tparquet::Encoding::type _encoding = tparquet::Encoding::PLAIN;
     level_t _bit_width = 0;
     [[maybe_unused]] level_t _max_level = 0;
     uint32_t _num_levels = 0;
@@ -146,6 +165,8 @@ private:
     size_t _levels_decoded = 0;
     size_t _levels_capacity = 0;
     std::vector<level_t> _levels;
+    // 1-bit levels unpacked as bytes by skip_count_non_null
+    std::vector<uint8_t> _skip_levels;
 };
 
 } // namespace starrocks::parquet
