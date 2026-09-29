@@ -53,10 +53,12 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `ST_Y(GEOMETRY point)` | 120091 | `DOUBLE`，输入 CRS 单位 | 非空 XY `POINT` | `NULL` 传递。`EMPTY`、非 `POINT` 或不支持的描述符报错。 |
 | `ST_GeometryType(GEOGRAPHY value)` | 120170 | `VARCHAR` 类型名称 | 所有受支持的 XY 类型 | `NULL` 传递。带类型的 `EMPTY` 保留其类型名称。不支持的维度或描述符报错。 |
 | `ST_GeometryType(GEOMETRY value)` | 120171 | `VARCHAR` 类型名称 | 所有受支持的 XY 类型 | `NULL` 传递。带类型的 `EMPTY` 保留其类型名称。不支持的维度或描述符报错。 |
-| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`，米 | 球面 CRS84 契约下的 XY `POINT`/`POINT` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或描述符报错。 |
-| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`，输入 CRS 单位 | 描述符匹配的 XY `POINT`/`POINT` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或不兼容描述符报错。 |
+| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`，米 | 球面 CRS84 契约下的 XY `POINT`/`POINT`，或 `POINT` 与 `LINESTRING`/`MULTILINESTRING` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度、描述符或不明确的对跖线段报错。 |
+| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`，输入 CRS 单位 | 描述符匹配的 XY `POINT`/`POINT`，或 `POINT` 与 `LINESTRING`/`MULTILINESTRING` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或不兼容描述符报错。 |
+| `ST_DWithin(GEOGRAPHY lhs, GEOGRAPHY rhs, DOUBLE distance)` | 120230 | `BOOLEAN`；`distance` 单位为米 | XY `POINT` 与 `LINESTRING`/`MULTILINESTRING`，参数顺序不限 | 阈值包含相等边界。`NULL` 传递；`EMPTY` 返回 `false`。阈值必须是有限的非负数。 |
+| `ST_DWithin(GEOMETRY lhs, GEOMETRY rhs, DOUBLE distance)` | 120231 | `BOOLEAN`；`distance` 使用输入 CRS 单位 | 描述符匹配的 XY `POINT` 与 `LINESTRING`/`MULTILINESTRING`，参数顺序不限 | 阈值包含相等边界。`NULL` 传递；`EMPTY` 返回 `false`。阈值必须是有限的非负数。 |
 
-参见 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md) 和 [ST_Distance](st_distance.md)。
+参见 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md) 和 [ST_DWithin](st_dwithin.md)。
 
 ## 包含关系谓词
 
