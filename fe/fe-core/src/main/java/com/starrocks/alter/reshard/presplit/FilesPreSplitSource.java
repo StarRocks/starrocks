@@ -85,19 +85,48 @@ final class FilesPreSplitSource implements InsertPreSplitSource {
         List<Column> sortKeyColumns = MetaUtils.getRangeDistributionColumns(target);
         List<Column> partitionColumns =
                 target.getPartitionInfo().getPartitionColumns(target.getIdToColumn());
-        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolve(
+        // resolveUngated, not resolve: the gates are applied below so an UNFED sampled column can be
+        // attributed, instead of being folded into resolve()'s undifferentiated projection-SHAPE null.
+        InsertSelectSourceColumns.Resolved resolved = InsertSelectSourceColumns.resolveUngated(
                 insertStmt, selectRelation, target, sourceTable,
-                filesRelation.getName(), /*sourceAlias*/ null, sortKeyColumns, partitionColumns,
+                filesRelation.getName(), /*sourceAlias*/ null,
                 InsertSelectSourceColumns.SchemaPairing.PER_COLUMN);
         if (resolved == null) {
             return null;
         }
-        Map<String, String> targetToSource = resolved.targetToSource();
         List<SecondaryIndexSpec> secondaryIndexSpecs = SecondaryIndexSpec.forVisibleRollups(target);
+        // ATTRIBUTED: a sampled column that NOTHING feeds -- neither a source column nor a literal.
+        // Uses the same firstUnfedColumn the sampleable gates below are written in terms of, so the
+        // reason can never disagree with the decision.
+        Column unfed = InsertSelectSourceColumns.firstUnfedColumn(sortKeyColumns, resolved);
+        if (unfed == null) {
+            unfed = InsertSelectSourceColumns.firstUnfedColumn(partitionColumns, resolved);
+        }
+        if (unfed == null) {
+            for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
+                unfed = InsertSelectSourceColumns.firstUnfedColumn(spec.sortKey(), resolved);
+                if (unfed != null) {
+                    break;
+                }
+            }
+        }
+        if (unfed != null) {
+            PreSplitMetrics.recordEligibilitySkip(SkipReason.SOURCE_MISSING_SAMPLED_COLUMN);
+            LOG.info("Sample-Based Tablet Pre-Split: table {} column \"{}\" is fed by neither a source "
+                    + "column nor a literal, so the sampler cannot project it; skipping pre-split",
+                    target.getName(), unfed.getName());
+            return null;
+        }
+        // UNATTRIBUTED, deliberately: every column IS fed, but an all-literal sort key has one value
+        // for every row, so no cut can separate them. That is a degenerate key, not a missing column --
+        // labelling it SOURCE_MISSING_SAMPLED_COLUMN would send an operator looking for a column that
+        // is not the problem. Only the sort key can still fail here: the partition columns were proven
+        // fed by firstUnfedColumn above, and being fed is all partitionColumnsSampleable asks.
+        if (!InsertSelectSourceColumns.sortKeySampleable(sortKeyColumns, resolved)) {
+            return null;
+        }
+        Map<String, String> targetToSource = resolved.targetToSource();
         for (SecondaryIndexSpec spec : secondaryIndexSpecs) {
-            // A rollup sort-key column backed by neither a FILES column nor a literal, or a rollup key
-            // made only of literals, cannot be sampled -> skip pre-split for the whole load, using the
-            // same gate the base sort key already passed inside resolve(). Mirrors TablePreSplitSource.
             if (!InsertSelectSourceColumns.sortKeySampleable(spec.sortKey(), resolved)) {
                 return null;
             }

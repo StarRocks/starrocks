@@ -118,6 +118,32 @@ final class InsertSelectSourceColumns {
             TableName normalizedSourceName, String sourceAlias,
             List<Column> sortKeyColumns, List<Column> partitionColumns,
             SchemaPairing pairing) {
+        Resolved resolved = resolveUngated(insertStmt, selectRelation, targetTable, sourceTable,
+                normalizedSourceName, sourceAlias, pairing);
+        if (resolved == null) {
+            return null;
+        }
+        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
+            return null;
+        }
+        return resolved;
+    }
+
+    /**
+     * {@link #resolve} without its final presence gates: the projection mapping alone, or {@code null}
+     * for a projection SHAPE problem (duplicate output name, by-position arity mismatch, a
+     * foreign-qualified slot, ...).
+     *
+     * <p>Split out so a caller that wants to ATTRIBUTE a presence failure can apply the gates itself
+     * and name the offending column via {@link #firstUnfedColumn}. Folding the two together, as
+     * {@link #resolve} does for callers that do not care, makes an unfed sampled column
+     * indistinguishable from the shape rejections.
+     */
+    static Resolved resolveUngated(
+            InsertStmt insertStmt, SelectRelation selectRelation,
+            OlapTable targetTable, Table sourceTable,
+            TableName normalizedSourceName, String sourceAlias,
+            SchemaPairing pairing) {
         boolean byName = insertStmt.isColumnMatchByName();
         List<SelectListItem> items = selectRelation.getSelectList().getItems();
         List<Column> targetCols = effectiveTargetColumns(insertStmt, targetTable);
@@ -265,11 +291,7 @@ final class InsertSelectSourceColumns {
 
         // The executors derive every projection from the two maps at sample time (see projections),
         // so only the presence gates matter here.
-        Resolved resolved = new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql));
-        if (!sortKeySampleable(sortKeyColumns, resolved) || !partitionColumnsSampleable(partitionColumns, resolved)) {
-            return null;
-        }
-        return resolved;
+        return new Resolved(Map.copyOf(targetToSource), Map.copyOf(targetToConstantSql));
     }
 
     /**
@@ -280,16 +302,41 @@ final class InsertSelectSourceColumns {
      * row has the same key, so no cut can separate them.
      */
     static boolean sortKeySampleable(List<Column> sortKey, Resolved resolved) {
-        boolean anySourceBacked = sortKey.isEmpty();
-        for (Column column : sortKey) {
-            String targetName = column.getName().toLowerCase();
-            if (resolved.targetToSource().containsKey(targetName)) {
-                anySourceBacked = true;
-            } else if (!resolved.targetToConstantSql().containsKey(targetName)) {
-                return false;
+        if (firstUnfedColumn(sortKey, resolved) != null) {
+            return false;
+        }
+        // Every column is fed; the key is still degenerate if NONE of them varies.
+        return sortKey.isEmpty() || anySourceBacked(sortKey, resolved);
+    }
+
+    private static boolean anySourceBacked(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
+            if (resolved.targetToSource().containsKey(column.getName().toLowerCase())) {
+                return true;
             }
         }
-        return anySourceBacked;
+        return false;
+    }
+
+    /**
+     * The first column that NOTHING feeds -- neither a source column nor a literal -- or {@code null}
+     * when every one is fed. The single definition of "fed" in this class: {@link #sortKeySampleable}
+     * and {@link #partitionColumnsSampleable} are both expressed in terms of it, so a caller that
+     * needs to NAME the offending column for a skip reason cannot drift from the gates that decide.
+     *
+     * <p>A literal-fed column counts as fed. It is projected as {@code CAST(<literal> AS <type>)} and
+     * never read from the source, so "no source column behind it" is not a defect there -- declining
+     * such a statement as a missing column is exactly the misattribution this helper exists to avoid.
+     */
+    static Column firstUnfedColumn(List<Column> columns, Resolved resolved) {
+        for (Column column : columns) {
+            String targetName = column.getName().toLowerCase();
+            if (!resolved.targetToSource().containsKey(targetName)
+                    && !resolved.targetToConstantSql().containsKey(targetName)) {
+                return column;
+            }
+        }
+        return null;
     }
 
     /**
@@ -297,14 +344,7 @@ final class InsertSelectSourceColumns {
      * partition column sends every row to the one partition that literal names.
      */
     static boolean partitionColumnsSampleable(List<Column> partitionColumns, Resolved resolved) {
-        for (Column column : partitionColumns) {
-            String targetName = column.getName().toLowerCase();
-            if (!resolved.targetToSource().containsKey(targetName)
-                    && !resolved.targetToConstantSql().containsKey(targetName)) {
-                return false;
-            }
-        }
-        return true;
+        return firstUnfedColumn(partitionColumns, resolved) == null;
     }
 
     /**
