@@ -255,7 +255,9 @@ Exchange Operator がクエリのボトルネックになる可能性のある�
 | OverallThroughput | スループット率。 |
 | NetworkTime | データパケット転送にかかった時間（受信後の処理時間を除く）。 |
 | NetworkBandwidth | 推定ネットワーク帯域幅。 |
-| WaitTime | 送信者キューが満杯のための待機時間。 |
+| WaitTime | `BufferFullTime` と `PendingFinishTime` の合計。 |
+| BufferFullTime | 送信側バッファが満杯だった時間の記録済み累計。`WaitTime` の子メトリック。 |
+| PendingFinishTime | シンクバッファが終了処理を開始してからプロファイル更新時点までの経過時間。終了処理の開始前はゼロ。`WaitTime` の子メトリックであり、Pipeline レベルの同名メトリックとは別に計測されます。 |
 | OverallTime | 送信プロセス全体の総時間、つまり最初のデータパケットの送信から最後のデータパケットの正しい受信の確認まで。 |
 | RpcAvgTime | RPC の平均時間。 |
 | RpcCount | RPC の総数。 |
