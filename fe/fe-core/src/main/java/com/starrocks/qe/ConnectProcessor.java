@@ -817,7 +817,7 @@ public class ConnectProcessor {
     }
 
     private void handleStmtClose() {
-        int stmtId = packetBuf.getInt();
+        int stmtId = MysqlCodec.readInt4(packetBuf);
         ctx.removePreparedStmt(String.valueOf(stmtId));
         ctx.getState().setStateType(QueryState.MysqlStateType.NOOP);
     }
