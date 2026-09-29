@@ -402,7 +402,7 @@ public class ExpressionStatisticsCalculatorTest {
         Assertions.assertEquals(100, columnStatistic.getDistinctValuesCount(), 0.001);
         Assertions.assertFalse(columnStatistic.isUnknown());
         // test dsqrt function
-        callOperator = new CallOperator(FunctionSet.DSQRT, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+        callOperator = new CallOperator(FunctionSet.DSQRT, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, statistics);
         Assertions.assertEquals(columnStatistic.getMaxValue(), 10, 0.001);
         Assertions.assertEquals(columnStatistic.getMinValue(), 0, 0.001);
@@ -522,7 +522,7 @@ public class ExpressionStatisticsCalculatorTest {
 
     @Test
     public void testSqrtFunctionCall() {
-        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, FloatType.DOUBLE, "id", true);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.DOUBLE, "id", true);
         // sqrt and dsqrt are the same backend function, so they must derive identical statistics.
         List<String> sqrtFunctions = ImmutableList.of(FunctionSet.SQRT, FunctionSet.DSQRT);
 
@@ -613,7 +613,7 @@ public class ExpressionStatisticsCalculatorTest {
     private static ColumnStatistic calculateSqrt(String fnName, ColumnRefOperator columnRefOperator,
                                                  Statistics inputStatistics) {
         CallOperator callOperator =
-                new CallOperator(fnName, FloatType.DOUBLE, Lists.newArrayList(columnRefOperator));
+                new CallOperator(fnName, Type.DOUBLE, Lists.newArrayList(columnRefOperator));
         return ExpressionStatisticCalculator.calculate(callOperator, inputStatistics);
     }
 
