@@ -4249,7 +4249,13 @@ public class StmtExecutor {
             if (coord != null) {
                 coord.clearExternalResources();
             } else {
-                PlanFragmentBuilder.releaseScanResources(plan);
+                for (ScanNode scanNode : plan.getScanNodes()) {
+                    try {
+                        scanNode.clear();
+                    } catch (Exception e) {
+                        LOG.warn("Failed to clear scan resources for {}", scanNode.getClass().getSimpleName(), e);
+                    }
+                }
             }
         }
     }
