@@ -132,6 +132,7 @@ public class LanceMetadataTest {
         Assertions.assertEquals(DATETIME, eventTimeCol.getType());
 
         Assertions.assertEquals(4, lanceDiscovered.getColumns().size());
+        Assertions.assertTrue(lanceDiscovered.getColumns().stream().allMatch(Column::isAllowNull));
         Column embeddingCol = lanceDiscovered.getColumn("embedding");
         Assertions.assertNotNull(embeddingCol);
         Assertions.assertTrue(embeddingCol.getType().isArrayType());
