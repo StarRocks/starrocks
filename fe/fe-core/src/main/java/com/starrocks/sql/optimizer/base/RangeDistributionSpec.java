@@ -66,9 +66,11 @@ import java.util.stream.Collectors;
  * source-type filter alone is not sufficient to restrict activation to
  * joins. The set-op guarantor in
  * {@code ChildOutputPropertyGuarantor.visitPhysicalSetOperation} runs a
- * top-of-method range-normalization pass that converts every range child
- * to hash {@code SHUFFLE_JOIN} before any {@code isShuffle()} precondition
- * or {@code HashDistributionSpec} cast runs.
+ * top-of-method range-normalization pass that puts every range child
+ * behind a hash {@code SHUFFLE_ENFORCE} exchange — a property no range
+ * spec satisfies, so the exchange cannot be dropped in favour of the
+ * bare range child — before any {@code isShuffle()} precondition or
+ * {@code HashDistributionSpec} cast runs.
  */
 public final class RangeDistributionSpec extends DistributionSpec {
     private final List<DistributionCol> colocateColumns;
