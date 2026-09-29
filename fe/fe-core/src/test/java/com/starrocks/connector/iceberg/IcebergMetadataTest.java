@@ -2532,6 +2532,46 @@ public class IcebergMetadataTest extends TableTestBase {
     }
 
     @Test
+    public void testPartitionsAtAnEarlierSnapshot() {
+        mockedNativeTableB.newAppend().appendFile(FILE_B_1).commit();
+        long earlier = mockedNativeTableB.currentSnapshot().snapshotId();
+        DataFile laterFileInK2Is2 = DataFiles.builder(SPEC_B)
+                .withPath("/path/to/data-b1-later.parquet")
+                .withFileSizeInBytes(20)
+                .withPartitionPath("k2=2")
+                .withRecordCount(5)
+                .build();
+        mockedNativeTableB.newAppend().appendFile(laterFileInK2Is2).appendFile(FILE_B_2).commit();
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(ConnectContext context, String dbName, String tableName)
+                    throws StarRocksConnectorException {
+                return mockedNativeTableB;
+            }
+
+            @Mock
+            Database getDB(ConnectContext context, String dbName) {
+                return new Database(0, dbName);
+            }
+        };
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        CachingIcebergCatalog cachingIcebergCatalog = new CachingIcebergCatalog(CATALOG_NAME, icebergHiveCatalog,
+                DEFAULT_CATALOG_PROPERTIES, Executors.newSingleThreadExecutor());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, cachingIcebergCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME,
+                "resource_name", "db",
+                "table", "", Lists.newArrayList(), mockedNativeTableB, Maps.newHashMap());
+        ConnectorMetadataRequestContext atEarlier = new ConnectorMetadataRequestContext();
+        atEarlier.setTableVersionRange(TvrTableSnapshot.of(Optional.of(earlier)));
+
+        Assertions.assertEquals(List.of("k2=2"), metadata.listPartitionNames("db", "table", atEarlier));
+        PartitionInfo readAtEarlier = metadata.getPartitions(icebergTable, List.of("k2=2"), atEarlier).get(0);
+        PartitionInfo readLive = metadata.getPartitions(icebergTable, List.of("k2=2")).get(0);
+        Assertions.assertNotEquals(readLive.getVersion(), readAtEarlier.getVersion());
+    }
+
+    @Test
     public void testGetPartitions1() {
         mockedNativeTableB.newAppend().appendFile(FILE_B_1).appendFile(FILE_B_2).commit();
         new MockUp<IcebergHiveCatalog>() {
