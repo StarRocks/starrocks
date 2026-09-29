@@ -470,6 +470,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
     public static final String ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION = "enable_gather_fragment_locality_optimization";
+    public static final String ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY = "enable_gather_fragment_child_affinity";
 
     public static final String SKIP_LOCAL_DISK_CACHE = "skip_local_disk_cache";
 
@@ -1398,6 +1399,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_LOCALITY_OPTIMIZATION)
     private boolean enableGatherFragmentLocalityOptimization = false;
+
+    /**
+     * When enabled, the gather fragment (UNPARTITIONED, single instance) is assigned to a worker
+     * already used by one of its child fragments, rather than via global round-robin.
+     * Child fragment workers are label-constrained through data locality, so this keeps the
+     * gather fragment within the same label boundary. Disable to revert to legacy behavior.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_GATHER_FRAGMENT_CHILD_AFFINITY)
+    private boolean enableGatherFragmentChildAffinity = false;
 
     @VariableMgr.VarAttr(name = SKIP_LOCAL_DISK_CACHE)
     private boolean skipLocalDiskCache = false;
@@ -4072,6 +4082,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableGatherFragmentLocalityOptimization() {
         return enableGatherFragmentLocalityOptimization;
+    }
+
+    public boolean isEnableGatherFragmentChildAffinity() {
+        return enableGatherFragmentChildAffinity;
     }
 
     public boolean isSkipLocalDiskCache() {
