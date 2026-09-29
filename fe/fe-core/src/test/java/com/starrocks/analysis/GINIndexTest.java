@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
@@ -153,6 +154,77 @@ public class GINIndexTest extends PlanTestBase {
                 () -> IndexAnalyzer.checkInvertedIndexValid(c2, new HashMap<String, String>() {{
                     put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name());
                 }}, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void testCheckInvertedIndexLowerCasesPropertyKeys() {
+        Column c = new Column("f2", StringType.STRING, true);
+
+        Map<String, String> upperCaseKey = new HashMap<>();
+        upperCaseKey.put(IMP_LIB.name().toUpperCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexValid(c, upperCaseKey, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT),
+                upperCaseKey.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertFalse(upperCaseKey.containsKey(IMP_LIB.name().toUpperCase(Locale.ROOT)));
+
+        // Values stay untouched: only keys are case-folded.
+        Map<String, String> mixedCaseKeys = new HashMap<>();
+        mixedCaseKeys.put("Imp_Lib", InvertedIndexImpType.BUILTIN.name().toUpperCase(Locale.ROOT));
+        mixedCaseKeys.put(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY.toUpperCase(Locale.ROOT),
+                IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+        Assertions.assertDoesNotThrow(() -> IndexAnalyzer.checkInvertedIndexValid(c, mixedCaseKeys, KeysType.DUP_KEYS));
+        Assertions.assertEquals(InvertedIndexImpType.BUILTIN.name().toUpperCase(Locale.ROOT),
+                mixedCaseKeys.get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertEquals(IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH,
+                mixedCaseKeys.get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY));
+
+        // dict_gram_num needs the folding (BE uses an exact find()); lower_case only pins the stored spelling.
+        Map<String, String> upperCaseIndexParams = new HashMap<>();
+        upperCaseIndexParams.put(IMP_LIB.name().toUpperCase(Locale.ROOT),
+                InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
+        upperCaseIndexParams.put(IndexParamsKey.DICT_GRAM_NUM.name().toUpperCase(Locale.ROOT), "4");
+        upperCaseIndexParams.put(IndexParamsKey.PARSER.name().toUpperCase(Locale.ROOT),
+                IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH);
+        upperCaseIndexParams.put(IndexAnalyzer.INVERTED_INDEX_LOWER_CASE_KEY.toUpperCase(Locale.ROOT), "true");
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkInvertedIndexValid(c, upperCaseIndexParams, KeysType.DUP_KEYS));
+        Assertions.assertEquals("4", upperCaseIndexParams.get(IndexAnalyzer.INVERTED_INDEX_DICT_GRAM_NUM_KEY));
+        Assertions.assertEquals("true", upperCaseIndexParams.get(IndexAnalyzer.INVERTED_INDEX_LOWER_CASE_KEY));
+        Assertions.assertTrue(upperCaseIndexParams.keySet().stream()
+                .allMatch(key -> key.equals(key.toLowerCase(Locale.ROOT))));
+
+        Map<String, String> collidingKeys = new HashMap<>();
+        collidingKeys.put(IMP_LIB.name().toUpperCase(Locale.ROOT), InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT));
+        collidingKeys.put(IMP_LIB.name().toLowerCase(Locale.ROOT), InvertedIndexImpType.CLUCENE.name().toLowerCase(Locale.ROOT));
+        ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                "Duplicated index property for GIN after lower-casing the key: " + IMP_LIB.name().toLowerCase(Locale.ROOT),
+                () -> IndexAnalyzer.checkInvertedIndexValid(c, collidingKeys, KeysType.DUP_KEYS));
+    }
+
+    @Test
+    public void testUpperCaseImpLibReachesBeAsLowerCaseKey() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t_upper_case_imp_lib` (\n" +
+                "  `k` int NOT NULL COMMENT \"\",\n" +
+                "  `v` varchar(50) NOT NULL COMMENT \"\",\n" +
+                "  INDEX gin_v (`v`) USING GIN(\"IMP_LIB\" = \"builtin\", \"PARSER\" = \"english\", " +
+                "\"DICT_GRAM_NUM\" = \"4\")\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k`)\n" +
+                "DISTRIBUTED BY HASH(`k`) BUCKETS 1\n" +
+                "PROPERTIES (\"replication_num\" = \"1\");");
+
+        OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable("test", "t_upper_case_imp_lib");
+        TOlapTableIndex olapIndex = table.getIndexes().get(0).toThrift();
+        // BE fails the load with "Can not get inverted imp type" unless the key lands here exactly as imp_lib.
+        Assertions.assertEquals(InvertedIndexImpType.BUILTIN.name().toLowerCase(Locale.ROOT),
+                olapIndex.getCommon_properties().get(IMP_LIB.name().toLowerCase(Locale.ROOT)));
+        Assertions.assertEquals(IndexAnalyzer.INVERTED_INDEX_PARSER_ENGLISH,
+                olapIndex.getIndex_properties().get(IndexAnalyzer.INVERTED_INDEX_PARSER_KEY));
+        // BE reads the gram num with an exact find() as well, so an upper-case key silently disables the dictionary.
+        Assertions.assertEquals("4", olapIndex.getIndex_properties().get(IndexAnalyzer.INVERTED_INDEX_DICT_GRAM_NUM_KEY));
+        Assertions.assertTrue(olapIndex.getExtra_properties().isEmpty());
+        starRocksAssert.dropTable("t_upper_case_imp_lib");
     }
 
     @Test

@@ -25,7 +25,7 @@ description: "partitions_meta 提供表分区的信息。"
 | PARTITION_KEY                 | 分区的分区键。                                                                                                  |
 | PARTITION_VALUE               | 分区的值（例如，`Range` 或 `List`）。                                                                               |
 | DISTRIBUTION_KEY              | 分区的分布键。                                                                                                  |
-| BUCKETS                       | 分区中的 Bucket 数量。                                                                                          |
+| BUCKETS                       | 分区中的 Bucket 数量。对于使用 Range 分布的表，该值为分区中 Base Index 的实际 Tablet 数量，会随 Tablet 的分裂与合并而变化。同一分区中的 Rollup Index 可能拥有不同的 Tablet 数量。 |
 | REPLICATION_NUM               | 分区的副本数量。                                                                                                 |
 | STORAGE_MEDIUM                | 分区的存储介质。                                                                                                 |
 | COOLDOWN_TIME                 | 分区的冷却时间。                                                                                                 |

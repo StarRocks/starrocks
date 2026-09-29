@@ -57,7 +57,7 @@ From v4.0, this feature can be configured on the table level.
 ### Enable for versions earlier than v4.0
 
 1. Modify BE configuration: `enable_json_flat`, which defaults to `false` before v4.0. For modification methods, refer to
-[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters).
+[Configure BE parameters](../administration/configuration/BE_parameters/BE_parameters.md#configure-be-parameters).
 2. Enable FE pruning feature:
 
    ```SQL
@@ -218,11 +218,11 @@ SET cbo_json_v2_dict_opt = true;
 
 ### BE Configurations
 
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+- [json_flat_null_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_lazy_dynamic_flat_json)
 
 ## Feature Limitations
 

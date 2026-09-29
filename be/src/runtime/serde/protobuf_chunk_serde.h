@@ -32,14 +32,36 @@ class Schema;
 
 namespace starrocks::serde {
 
+// ENCODE_ALL_NULL changes the NullableColumn layout, so both ends of a payload must agree on it
+// before it may be used. An exchange payload carries no such agreement: its level comes from the
+// free-form transmission_encode_level session variable, and a peer that predates the bit treats it
+// as unused, so with the variable set to 15 or -1 that peer advertises the bit in ChunkPB while
+// emitting the legacy layout -- and the level a receiver applies is the sender's, not its own.
+// Strip it from every exchange level in both directions.
+inline int exchange_encode_level(int encode_level) {
+    return encode_level & ~ENCODE_ALL_NULL;
+}
+
+// The tablet sink RPC does establish that agreement: the receiving BE advertises the bits it honors
+// in PTabletWriterOpenResult::supported_chunk_encode_level, and the sender ANDs its own level with
+// it before the first chunk goes out. That path passes |all_null_negotiated| = true; every other
+// caller keeps the exchange behavior of stripping the bit.
+inline int wire_encode_level(int encode_level, bool all_null_negotiated) {
+    return all_null_negotiated ? encode_level : exchange_encode_level(encode_level);
+}
+
 class ProtobufChunkDeserializer;
 
 class ProtobufChunkSerde {
 public:
-    static int64_t max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr);
+    // |all_null_negotiated| must stay false unless the receiver has agreed to the ENCODE_ALL_NULL
+    // layout; see wire_encode_level().
+    static int64_t max_serialized_size(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr,
+                                       bool all_null_negotiated = false);
 
     // Write the contents of |chunk| to ChunkPB
-    static StatusOr<ChunkPB> serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr);
+    static StatusOr<ChunkPB> serialize(const Chunk& chunk, const std::shared_ptr<EncodeContext>& context = nullptr,
+                                       bool all_null_negotiated = false);
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()
@@ -47,7 +69,8 @@ public:
     //  - is_nulls()
     //  - is_consts()
     static StatusOr<ChunkPB> serialize_without_meta(const Chunk& chunk,
-                                                    const std::shared_ptr<EncodeContext>& context = nullptr);
+                                                    const std::shared_ptr<EncodeContext>& context = nullptr,
+                                                    bool all_null_negotiated = false);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
     //  - slot_id_map()
@@ -72,14 +95,14 @@ struct ProtobufChunkMeta {
 class ProtobufChunkDeserializer {
 public:
     explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, const ChunkPB* const pb = nullptr,
-                                       const int encode_level = 0)
+                                       const int encode_level = 0, bool all_null_negotiated = false)
             : _meta(meta) {
         _encode_level.clear();
         // NOTE: to be compatible with older version, during upgrade or downgrade, encode_level should be 0,
         // and older version sends chunks without encode_level fields.
         if (pb != nullptr && encode_level) {
             for (auto i = 0; i < pb->encode_level_size(); ++i) {
-                _encode_level.emplace_back(pb->encode_level(i));
+                _encode_level.emplace_back(wire_encode_level(pb->encode_level(i), all_null_negotiated));
             }
         }
     }

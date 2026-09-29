@@ -286,6 +286,23 @@ public class DatabaseTransactionMgr {
         }
     }
 
+    public TransactionState activateTransactionTable(long transactionId, long tableId)
+            throws TransactionNotFoundException {
+        writeLock();
+        try {
+            TransactionState transactionState = unprotectedGetTransactionState(transactionId);
+            if (transactionState == null || !transactionState.isRunning()) {
+                throw new TransactionNotFoundException(transactionId);
+            }
+            if (!transactionState.getTableIdList().contains(tableId)) {
+                transactionState.addTableIdList(tableId);
+            }
+            return transactionState;
+        } finally {
+            writeUnlock();
+        }
+    }
+
     private void checkLabel(String label, TUniqueId requestId)
             throws LabelAlreadyUsedException, DuplicatedRequestException {
         /*
@@ -1264,6 +1281,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // Fold in the stats the BEs reported through their publish tasks before snapshotting,
+                // so the finishing thread is the only writer of the commit infos (see issue #77595).
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
                 boolean hasError = false;
                 Set<Long> droppedTableIds = Sets.newHashSet();
@@ -1570,7 +1590,7 @@ public class DatabaseTransactionMgr {
                     // reset data version to visible version
                     partitionCommitInfo.setDataVersion(partitionCommitInfo.getVersion());
                     if (partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                        partitionCommitInfo.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
                     }
                 } else {
                     // double write logic partition
@@ -1595,7 +1615,7 @@ public class DatabaseTransactionMgr {
                     partitionCommitInfo.setDataVersion(partition.getNextDataVersion());
                     if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.LAKE_COMPACTION &&
                             partition.getVersionTxnType() == TransactionType.TXN_REPLICATION) {
-                        partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
+                        partitionCommitInfo.setVersionEpoch(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
                     }
                     LOG.debug("set partition {} version to {} in transaction {}",
                             partitionId, partitionCommitInfo.getVersion(), transactionState);
@@ -2400,6 +2420,9 @@ public class DatabaseTransactionMgr {
         try {
             transactionState.writeLock();
             try {
+                // See the sibling call in finishTransaction(): merge the publish tasks' reported stats
+                // here, under the txn write lock, so nothing mutates the commit infos while we copy.
+                transactionState.applyPublishTaskTabletStats();
                 copiedState = new TransactionState(transactionState);
 
                 finishSpan.addEvent("txnmgr_lock");

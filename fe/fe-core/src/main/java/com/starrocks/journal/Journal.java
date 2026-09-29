@@ -17,6 +17,7 @@
 
 package com.starrocks.journal;
 
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DataOutputBuffer;
 
 import java.util.List;
@@ -33,6 +34,13 @@ public interface Journal {
     // Get the newest journal id 
     long getMaxJournalId();
 
+    // Return (oldest journal id, newest journal id).
+    default Pair<Long, Long> getJournalIdRange() {
+        List<Long> databaseNames = getDatabaseNames();
+        long minJournalId = databaseNames == null || databaseNames.isEmpty() ? -1L : databaseNames.get(0);
+        return Pair.create(minJournalId, getMaxJournalId());
+    }
+
     // Close the environment
     void close();
 
@@ -43,6 +51,12 @@ public interface Journal {
 
     // Delete journals whose max id is less than deleteToJournalId
     void deleteJournals(long deleteJournalToId);
+
+    default long deleteJournalsAndGetMinJournalId(long deleteJournalToId) {
+        deleteJournals(deleteJournalToId);
+        List<Long> databaseNames = getDatabaseNames();
+        return databaseNames == null || databaseNames.isEmpty() ? -1L : databaseNames.get(0);
+    }
 
     // Current db's min journal id - 1
     long getFinalizedJournalId();

@@ -202,6 +202,15 @@ public class TaskRunHistoryTable {
         return "'" + SqlUtils.escapeSqlString(value) + "'";
     }
 
+    /**
+     * The database name inside history_content_json. Rows written by older versions carry the default_cluster
+     * prefix and stay until their partition expires, so both forms are matched.
+     */
+    private static String dbNamePredicate(String dbName) {
+        return " get_json_string(" + CONTENT_COLUMN + ", 'dbName') IN (" + quoteLiteral(dbName) + ", "
+                + quoteLiteral(ClusterNamespace.getFullName(dbName)) + ")";
+    }
+
     public List<TaskRunStatus> lookup(TGetTasksParams params) {
         if (params == null) {
             return Lists.newArrayList();
@@ -209,8 +218,7 @@ public class TaskRunHistoryTable {
         String sql = LOOKUP;
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(params.getDb())) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(params.getDb())));
+            predicates.add(dbNamePredicate(params.getDb()));
         }
         if (StringUtils.isNotEmpty(params.getTask_name())) {
             predicates.add(" task_name = " + quoteLiteral(params.getTask_name()));
@@ -229,7 +237,7 @@ public class TaskRunHistoryTable {
             sql += " ORDER BY create_time DESC LIMIT " + Config.task_runs_max_history_number;
         }
 
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -239,8 +247,7 @@ public class TaskRunHistoryTable {
     public List<TaskRunStatus> lookupByTaskNames(String dbName, Set<String> taskNames) {
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
@@ -248,7 +255,7 @@ public class TaskRunHistoryTable {
         }
 
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -278,8 +285,7 @@ public class TaskRunHistoryTable {
 
         List<String> predicates = Lists.newArrayList("TRUE");
         if (StringUtils.isNotEmpty(dbName)) {
-            predicates.add(" get_json_string(" + CONTENT_COLUMN + ", 'dbName') = "
-                    + quoteLiteral(ClusterNamespace.getFullName(dbName)));
+            predicates.add(dbNamePredicate(dbName));
         }
         if (CollectionUtils.isNotEmpty(taskNames)) {
             String values = taskNames.stream().sorted().map(TaskRunHistoryTable::quoteLiteral).collect(Collectors.joining(","));
@@ -295,7 +301,20 @@ public class TaskRunHistoryTable {
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();
 
-        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
+        List<TResultBatch> batch = executeRepoDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
+    }
+
+    /**
+     * Run an internal DQL against the task-run history table, bounded by the outer user query's
+     * remaining {@code query_timeout} instead of the default {@code statistic_collect_query_timeout}.
+     * This keeps serving-path callers (e.g. {@code information_schema.materialized_views} /
+     * {@code SHOW MATERIALIZED VIEWS}) from outliving the user query when the underlying scan is
+     * unavailable. Background callers keep the previous (large) timeout via
+     * {@link SimpleExecutor#outerRemainingQueryTimeoutS()}.
+     */
+    private static List<TResultBatch> executeRepoDQL(String sql) {
+        int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
+        return SimpleExecutor.getRepoExecutor().executeDQL(sql, Math.max(1, remaining));
     }
 }

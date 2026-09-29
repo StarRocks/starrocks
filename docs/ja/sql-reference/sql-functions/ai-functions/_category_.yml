@@ -1,0 +1,7 @@
+position: 10
+label: 'AI functions'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: ai_functions

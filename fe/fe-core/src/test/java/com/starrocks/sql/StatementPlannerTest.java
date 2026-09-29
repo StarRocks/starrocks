@@ -22,6 +22,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.ast.CTERelation;
@@ -61,6 +62,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -72,6 +74,24 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.times;
 
 class StatementPlannerTest extends PlanTestBase {
+
+    @Test
+    public void testAuthorizationPrecedesAIProviderResolution() throws Exception {
+        boolean oldBypassAuthorizerCheck = connectContext.isBypassAuthorizerCheck();
+        connectContext.setBypassAuthorizerCheck(false);
+        RuntimeException denied = new RuntimeException("authorization-order-sentinel");
+        try (MockedStatic<Authorizer> authorizer = mockStatic(Authorizer.class)) {
+            authorizer.when(() -> Authorizer.check(Mockito.any(), Mockito.same(connectContext))).thenThrow(denied);
+            StatementBase statement = UtFrameUtils.parseStmtWithNewParser(
+                    "select ai_custom_query('missing_authorization_order_provider', 'prompt')", connectContext);
+
+            Assertions.assertSame(denied,
+                    Assertions.assertThrows(RuntimeException.class,
+                            () -> StatementPlanner.plan(statement, connectContext)));
+        } finally {
+            connectContext.setBypassAuthorizerCheck(oldBypassAuthorizerCheck);
+        }
+    }
 
     @Test
     public void testDeferLock() throws Exception {
@@ -347,6 +367,90 @@ class StatementPlannerTest extends PlanTestBase {
         } finally {
             FeConstants.runningUnitTest = originalRunningUnitTest;
         }
+    }
+
+    @Test
+    public void testCtasFilesResolvedBeforeLock() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            String sql = "create table ctas_files_target as "
+                    + "with src as (select col_int, col_string "
+                    + "from files(\"path\"=\"fake://ctas\", \"format\"=\"csv\")) "
+                    + "select src.col_int as c1 from src join t0 on src.col_int = t0.v1";
+            assertFilesResolvedBeforeLock(sql);
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testSubmitTaskCtasFilesResolvedBeforeLock() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            // SUBMIT TASK carries the CTAS in its own field, so the statement is a SubmitTaskStmt and
+            // the CTAS has to be unwrapped before the pre-pass can see its files().
+            String sql = "submit task as create table submit_ctas_files_target as "
+                    + "with src as (select col_int, col_string "
+                    + "from files(\"path\"=\"fake://submit\", \"format\"=\"csv\")) "
+                    + "select src.col_int as c1 from src join t0 on src.col_int = t0.v1";
+            assertFilesResolvedBeforeLock(sql);
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    @Test
+    public void testInsertFilesMixedWithNormalTableResolvedBeforeLock() throws Exception {
+        boolean originalRunningUnitTest = FeConstants.runningUnitTest;
+        try {
+            FeConstants.runningUnitTest = false;
+            String sql = "insert into t0 select t.v1, t.v2, t.v3 "
+                    + "from files(\"path\"=\"fake://insert\", \"format\"=\"csv\") as f "
+                    + "join t0 as t on true";
+            assertFilesResolvedBeforeLock(sql);
+        } finally {
+            FeConstants.runningUnitTest = originalRunningUnitTest;
+        }
+    }
+
+    /**
+     * Asserts that every files() relation of the statement is already resolved by the time the
+     * PlannerMetaLock is taken, i.e. the object-store LIST and the BE get_file_schema RPC stay off
+     * the lock critical path.
+     */
+    private void assertFilesResolvedBeforeLock(String sql) throws Exception {
+        // parseStmtWithNewParser() analyzes as well, which would resolve files() up front and make the
+        // assertion below vacuous. Parse only, so analyzeStatement() sees a pristine AST.
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+        List<FileTableFunctionRelation> fileRelations = AnalyzerUtils.collectFileTableFunctionRelation(stmt);
+        assertFalse(fileRelations.isEmpty(), "no files() relation found in: " + sql);
+        fileRelations.forEach(relation -> assertNull(relation.getTable(),
+                "files() must be unresolved right after parsing: " + sql));
+
+        AtomicInteger lockCalls = new AtomicInteger();
+        AtomicBoolean resolvedAtLockTime = new AtomicBoolean(false);
+        PlannerMetaLocker locker = new PlannerMetaLocker(connectContext, stmt) {
+            @Override
+            public void lock() {
+                lockCalls.incrementAndGet();
+                resolvedAtLockTime.set(fileRelations.stream()
+                        .allMatch(relation -> relation.getTable() instanceof TableFunctionTable));
+                super.lock();
+            }
+        };
+        // Without an internal table to lock there is no critical section to stay out of.
+        assertFalse(locker.isEmpty(), "statement must lock at least one internal table: " + sql);
+
+        // close() drains the whole heldStack; unlock() would pop only one frame and leak a real
+        // read lock into the rest of the surefire fork if the statement ever locked twice.
+        try (PlannerMetaLocker ignored = locker) {
+            StatementPlanner.analyzeStatement(stmt, connectContext, locker);
+        }
+
+        assertTrue(lockCalls.get() >= 1, "meta lock should be taken at least once");
+        assertTrue(resolvedAtLockTime.get(), "files() must be resolved before the meta lock is taken: " + sql);
     }
 
     @Test

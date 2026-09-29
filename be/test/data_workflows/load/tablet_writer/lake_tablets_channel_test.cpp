@@ -17,10 +17,15 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <atomic>
+#include <chrono>
+#include <thread>
+
 #include "base/bthreads/util.h"
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/time/time.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "column/chunk.h"
@@ -1110,6 +1115,76 @@ TEST_F(LakeTabletsChannelTest, test_finish_after_abort) {
     }
 }
 
+// The cancel RPC records a reason before aborting the channel. A sender whose eos races with the
+// abort must report that reason -- it carries the root cause of the load failure -- instead of the
+// generic "AsyncDeltaWriter has been closed" error.
+TEST_F(LakeTabletsChannelTest, test_finish_after_cancel_and_abort) {
+    constexpr const char* kCancelReason = "Cancelled by pipeline engine, reason: Division by zero";
+
+    auto open_request = _open_request;
+    open_request.set_num_senders(2);
+
+    ASSERT_OK(_tablets_channel->open(open_request, &_open_response, _schema_param, false));
+
+    {
+        constexpr int kChunkSize = 128;
+        constexpr int kChunkSizePerTablet = kChunkSize / 4;
+        auto chunk = generate_data(kChunkSize);
+
+        PTabletWriterAddChunkRequest add_chunk_request;
+        PTabletWriterAddBatchResult add_chunk_response;
+        add_chunk_request.set_index_id(kIndexId);
+        add_chunk_request.set_sender_id(0);
+        add_chunk_request.set_eos(true);
+        add_chunk_request.set_packet_seq(0);
+        add_chunk_request.set_timeout_ms(60000);
+
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            add_chunk_request.add_tablet_ids(tablet_id);
+            add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
+
+        bool close_channel;
+        _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
+        ASSERT_FALSE(close_channel);
+
+        _tablets_channel->cancel(kCancelReason);
+        _tablets_channel->abort();
+
+        _tablets_channel->add_chunk(nullptr, add_chunk_request, &add_chunk_response, &close_channel);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, add_chunk_response.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+    {
+        PTabletWriterAddChunkRequest finish_request;
+        PTabletWriterAddBatchResult finish_response;
+        finish_request.set_index_id(kIndexId);
+        finish_request.set_sender_id(1);
+        finish_request.set_eos(true);
+        finish_request.set_packet_seq(0);
+        finish_request.set_timeout_ms(60000);
+
+        bool close_channel;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response, &close_channel);
+        ASSERT_EQ(TStatusCode::CANCELLED, finish_response.status().status_code());
+        ASSERT_GE(finish_response.status().error_msgs_size(), 1);
+        const auto& message = finish_response.status().error_msgs(0);
+        ASSERT_TRUE(message.find(kCancelReason) != std::string::npos) << message;
+        ASSERT_TRUE(message.find("AsyncDeltaWriter has been closed") == std::string::npos) << message;
+        ASSERT_TRUE(close_channel);
+
+        PTabletWriterAddBatchResult finish_response2;
+        _tablets_channel->add_chunk(nullptr, finish_request, &finish_response2, &close_channel);
+        ASSERT_EQ(TStatusCode::DUPLICATE_RPC_INVOCATION, finish_response2.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+}
+
 TEST_F(LakeTabletsChannelTest, test_profile) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
@@ -1247,6 +1322,93 @@ class LakeTabletsChannelMultiSenderTest : public LakeTabletsChannelTestBase,
 public:
     LakeTabletsChannelMultiSenderTest() : LakeTabletsChannelTestBase("lake_tablets_channel_multi_sender_test") {}
 };
+
+// Regression test: in combined-txn-log mode the elected coordinator (sender 0) parks in
+// `_txn_log_collector.wait()` until every sender's eos has been processed, because only that makes
+// `close_channel` -- and with it the collector's one `notify()` -- happen. A cancelled load has no
+// more eos coming, so before the fix the coordinator waited out `request.timeout_ms()`, which for an
+// INSERT is `insert_timeout`: four hours by default. It holds the ClosureGuard of its
+// tablet_writer_add_chunks for all of it, so brpc never recycles that connection and the BE cannot
+// finish Server::Join() on exit.
+//
+// Here sender 1 never sends its eos, so sender 0 is left waiting, and cancel() has to release it.
+TEST_F(LakeTabletsChannelTest, test_cancel_releases_txn_log_waiter) {
+    constexpr int kChunkSize = 128;
+    constexpr int kChunkSizePerTablet = kChunkSize / 4;
+    // Long enough that a run which falls back to the timeout is unmistakable, and short enough that
+    // such a run still ends instead of hanging the suite.
+    constexpr int kTimeoutMs = 20000;
+    auto chunk = generate_data(kChunkSize);
+
+    auto open_request = _open_request;
+    open_request.set_sender_id(0);
+    open_request.set_num_senders(2); // sender 1 never reports, so sender 0 is left waiting
+    open_request.mutable_lake_tablet_params()->set_write_txn_log(false);
+
+    auto open_response = PTabletWriterOpenResult{};
+    ASSERT_OK(_tablets_channel->open(open_request, &open_response, _schema_param, false));
+    ASSERT_EQ(0, open_response.status().status_code());
+
+    // Sender 0 writes its data.
+    {
+        PTabletWriterAddChunkRequest request;
+        PTabletWriterAddBatchResult response;
+        request.set_index_id(kIndexId);
+        request.set_sender_id(0);
+        request.set_eos(false);
+        request.set_packet_seq(0);
+        request.set_timeout_ms(kTimeoutMs);
+        for (int i = 0; i < kChunkSize; i++) {
+            int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
+            request.add_tablet_ids(tablet_id);
+            request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
+        }
+        ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
+        request.mutable_chunk()->Swap(&chunk_pb);
+
+        bool close_channel = false;
+        _tablets_channel->add_chunk(&chunk, request, &response, &close_channel);
+        ASSERT_EQ(TStatusCode::OK, response.status().status_code());
+        ASSERT_FALSE(close_channel);
+    }
+
+    // Sender 0's eos. It parks in the collector: sender 1 still owes its eos.
+    PTabletWriterAddBatchResult eos_response;
+    std::atomic<bool> eos_returned{false};
+    auto eos_task = std::thread([&]() {
+        PTabletWriterAddChunkRequest request;
+        request.set_index_id(kIndexId);
+        request.set_sender_id(0);
+        request.set_eos(true);
+        request.set_packet_seq(1);
+        request.add_partition_ids(10);
+        request.add_partition_ids(11);
+        request.set_timeout_ms(kTimeoutMs);
+
+        bool close_channel = false;
+        _tablets_channel->add_chunk(nullptr, request, &eos_response, &close_channel);
+        eos_returned.store(true);
+    });
+
+    // Give it time to reach the wait, then end the load the way a cancelled one does.
+    for (int i = 0; i < 100 && !eos_returned.load(); i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    ASSERT_FALSE(eos_returned.load()) << "sender 0 returned before it could be cancelled";
+
+    auto cancelled_at = MonotonicMillis();
+    _tablets_channel->cancel("cancelled for test");
+    // Bounded by kTimeoutMs even without the fix, so the suite ends either way.
+    eos_task.join();
+    auto waited_ms = MonotonicMillis() - cancelled_at;
+
+    ASSERT_NE(TStatusCode::OK, eos_response.status().status_code());
+    ASSERT_GT(eos_response.status().error_msgs_size(), 0);
+    // Before the fix this reads "wait txn log timed out" instead, after the full timeout.
+    EXPECT_NE(std::string::npos, eos_response.status().error_msgs(0).find("cancelled for test"))
+            << eos_response.status().error_msgs(0);
+    EXPECT_LT(waited_ms, kTimeoutMs / 2) << "cancel did not release the waiter promptly";
+}
 
 TEST_P(LakeTabletsChannelMultiSenderTest, test_dont_write_txn_log) {
     auto num_sender = GetParam().num_sender;

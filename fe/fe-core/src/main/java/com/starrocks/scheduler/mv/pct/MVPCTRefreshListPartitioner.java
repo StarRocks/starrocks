@@ -17,7 +17,6 @@ package com.starrocks.scheduler.mv.pct;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -51,7 +50,6 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.PartitionDiffResult;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -61,6 +59,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     private final ListPartitionDiffer differ;
@@ -103,7 +103,19 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
     @Override
     public boolean syncAddOrDropPartitions() throws LockTimeoutException {
-        // collect mv partition items with lock
+        differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
+        // Collect the base tables' partitions before taking the lock: for a base table in an external catalog
+        // this goes through the connector, and the lock below is on the mv alone, so it never protected the
+        // base tables anyway. The range partitioner and MVTimelinessArbiter already collect them unlocked.
+        Map<Table, BaseToMVPartitionMapping> refBaseTablePartitionMap = differ.syncBaseTablePartitionInfos();
+        if (refBaseTablePartitionMap == null) {
+            // both signals the locked path used to emit: the differ's prepare log and the caller's warning
+            logMVPrepare(mv, "Partitioned mv collect base table infos failed");
+            logger.warn("compute list partition diff failed, result is null");
+            return false;
+        }
+
+        // the mv's own partition cells are read under the lock, a concurrent DDL can mutate them
         Locker locker = new Locker();
         if (!locker.tryLockTableWithIntensiveDbLock(db.getId(), mv.getId(),
                 LockType.READ, Config.mv_refresh_try_lock_timeout_ms, TimeUnit.MILLISECONDS)) {
@@ -114,8 +126,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
 
         PartitionDiffResult result;
         try {
-            differ.setPinnedRanges(mvContext.getRefreshRuntimeState().getPinnedTvrMap());
-            result = differ.computePartitionDiff(null);
+            result = differ.computePartitionDiff(null, refBaseTablePartitionMap);
             if (result == null) {
                 logger.warn("compute list partition diff failed, result is null");
                 return false;
@@ -321,7 +332,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             partitionDescs.add(multiItemListPartitionDesc);
         }
 
-        for (List<PartitionDesc> batch : ListUtils.partition(partitionDescs, CREATE_PARTITION_BATCH_SIZE)) {
+        addPartitionsInBatches(partitionDescs, batch -> {
             ListPartitionDesc listPartitionDesc = new ListPartitionDesc(mv.getPartitionColumnNames(), batch);
             AddPartitionClause addPartitionClause =
                     new AddPartitionClause(listPartitionDesc, distributionDesc, partitionProperties, false);
@@ -335,7 +346,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                         "failed to add list partition, db: %s, cause: %s",
                         e, database.getFullName(), mv.getName(), database.getFullName(), e.getMessage());
             }
-            Uninterruptibles.sleepUninterruptibly(Config.mv_create_partition_batch_interval_ms, TimeUnit.MILLISECONDS);
-        }
+        });
     }
 }

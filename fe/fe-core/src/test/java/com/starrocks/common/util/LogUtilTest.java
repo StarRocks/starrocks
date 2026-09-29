@@ -14,10 +14,15 @@
 
 package com.starrocks.common.util;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.plugin.AuditEvent;
+import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +48,27 @@ public class LogUtilTest {
         Config.audit_log_modules = new String[] {"slow_query", "query", "connection"};
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(new ConnectContext(), null);
         Assertions.assertFalse(QueryDetailQueue.getQueryDetailsAfterTime(0L).isEmpty());
+    }
+
+    // A failed login reports its message in both ErrorCode (historically) and ErrorMessage.
+    @Test
+    public void testLogConnectionInfoSanitizesErrorFields() {
+        Config.audit_log_modules = new String[] {"slow_query", "query", "connection"};
+        List<AuditEvent> events = Lists.newArrayList();
+        new MockUp<AuditEventProcessor>() {
+            @Mock
+            public void handleAuditEvent(AuditEvent event) {
+                events.add(event);
+            }
+        };
+
+        ConnectContext ctx = new ConnectContext();
+        ctx.getState().setError("Access denied for user 'u'\n|State=OK");
+        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(ctx, null);
+
+        Assertions.assertEquals(1, events.size());
+        Assertions.assertEquals("Access denied for user 'u' State=OK", events.get(0).errorCode);
+        Assertions.assertEquals("Access denied for user 'u' State=OK", events.get(0).errorMessage);
     }
 
     @Test

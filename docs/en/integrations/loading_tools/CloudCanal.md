@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "How to use BladePipe to replicate data in real time from databases and message queues into StarRocks."
 ---

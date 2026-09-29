@@ -21,6 +21,7 @@
 #include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
@@ -121,7 +122,7 @@ private:
             _add_shard_listener(shardId);
         }
     }
-    uint64_t get_table_id(const ShardInfo& shared_info);
+    std::optional<uint64_t> get_table_id(const ShardInfo& shard_info);
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>

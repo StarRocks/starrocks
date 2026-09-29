@@ -67,8 +67,11 @@ import com.starrocks.type.ArrayType;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.DateType;
 import com.starrocks.type.FloatType;
+import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.NullType;
+import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.ScalarType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.StructField;
 import com.starrocks.type.StructType;
@@ -284,6 +287,10 @@ public class FunctionAnalyzer {
                     new FunctionCallExpr(argFuncNameWithoutIf, functionParamsWithOutIf);
             analyzeBuiltinAggFunction(argFuncNameWithoutIf, functionParamsWithOutIf, functionCallWithoutIf);
         }
+
+        if (fn != null && fn.isAi()) {
+            AIFunctionAnalyzer.analyze(functionCallExpr);
+        }
     }
 
     private static void analyzeBuiltinAggFunction(FunctionCallExpr functionCallExpr) {
@@ -298,6 +305,24 @@ public class FunctionAnalyzer {
         if (fnParams.isStar() && !fnName.equals(FunctionSet.COUNT)) {
             throw new SemanticException("'*' can only be used in conjunction with COUNT: " + ExprToSql.toSql(functionCallExpr),
                     functionCallExpr.getPos());
+        }
+
+        // DISTINCT aggregation over a PERCENTILE value has no meaning and no rewrite: unlike
+        // count(distinct bitmap) / count(distinct hll) -- which the optimizer rewrites to
+        // bitmap_union_count / hll cardinality -- a PERCENTILE cannot be de-duplicated, so the
+        // call reaches the BE as a raw distinct aggregate. There it is dispatched to the
+        // string/binary distinct path and down_casts the PercentileColumn to a BinaryColumn it is
+        // not, which aborts a debug build (casts.h down_cast on BinaryColumnBase) and dereferences
+        // garbage in a release build (SIGSEGV). Reject it at analysis time instead.
+        if (fnParams.isDistinct()) {
+            for (Expr child : functionCallExpr.getChildren()) {
+                if (child.getType().isPercentile()) {
+                    throw new SemanticException(
+                            "DISTINCT aggregation is not supported for PERCENTILE type: " +
+                                    ExprToSql.toSql(functionCallExpr),
+                            functionCallExpr.getPos());
+                }
+            }
         }
 
         if (fnName.equals(FunctionSet.COUNT)) {
@@ -943,6 +968,8 @@ public class FunctionAnalyzer {
         } catch (Exception e) {
             throw new SemanticException("Failed to parse view definition: " + fn.getSql());
         }
+        AIFunctionUsageAnalyzer.verifyNoAIFunctions(
+                expr, AIFunctionUsageAnalyzer.PlacementContext.SQL_UDF_BODY);
         SqlFunction v = (SqlFunction) fn.copy();
         v.setAnalyzeExpr(expr);
         v.setRetType(expr.getType());
@@ -1029,6 +1056,21 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if ((FunctionSet.ST_GEOMFROMTEXT.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_GEOMFROMWKB.equalsIgnoreCase(fnName)) && argumentTypes.length == 2) {
+            if (!(node.getChild(1) instanceof StringLiteral)) {
+                throw new SemanticException("%s requires CRS to be a non-empty string literal", fnName);
+            }
+            String crs = ((StringLiteral) node.getChild(1)).getStringValue();
+            if (crs.isEmpty()) {
+                throw new SemanticException("%s requires CRS to be a non-empty string literal", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY, GeoTypeDescriptor.geometry(crs)));
+            }
         } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
                 child.getType().isArrayType())) {
             List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {

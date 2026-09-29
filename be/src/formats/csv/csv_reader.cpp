@@ -16,25 +16,12 @@
 
 #include <unordered_set>
 
+#include "base/string/trim.h"
+#include "runtime/current_thread.h"
+
 namespace starrocks {
 
 using Field = Slice;
-
-static std::pair<const char*, size_t> trim(const char* value, size_t len) {
-    size_t begin = 0;
-
-    while (begin < len && value[begin] == ' ') {
-        ++begin;
-    }
-
-    size_t end = len;
-
-    while (end > begin && value[end - 1] == ' ') {
-        --end;
-    }
-
-    return std::make_pair(value + begin, end - begin);
-}
 
 inline bool CSVReader::is_column_delimiter(bool expandBuffer) {
     if (LIKELY(_column_delimiter_length == 1)) {
@@ -558,7 +545,9 @@ Status CSVReader::_expand_buffer() {
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
     DCHECK_EQ(_storage.data(), _buff.position()) << "should compact buffer before expand";
-    _storage.resize(new_capacity);
+    // The buffer doubles up to kMaxBufferSize, so a single record without a row delimiter can make
+    // this ask for gigabytes at once.
+    TRY_CATCH_BAD_ALLOC(_storage.resize(new_capacity));
     CSVBuffer new_buff(_storage.data(), _storage.size());
     new_buff.add_limit(_buff.available());
     DCHECK_EQ(_storage.data(), new_buff.position());
@@ -574,7 +563,7 @@ Status CSVReader::_expand_buffer_loosely() {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
-    _storage.resize(new_capacity);
+    TRY_CATCH_BAD_ALLOC(_storage.resize(new_capacity));
     CSVBuffer new_buff(_storage.data(), _storage.size());
     new_buff.set_position_offset(_buff.position_offset());
     new_buff.set_limit_offset(_buff.limit_offset());
@@ -609,8 +598,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
             if (next_delimiter == nullptr) {
                 // No more delimiters found, add the remaining part
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, end - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(end - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, end - value);
                 }
@@ -618,8 +607,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
             } else {
                 // Found delimiter, add the field
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, next_delimiter - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(next_delimiter - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, next_delimiter - value);
                 }
@@ -635,8 +624,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
                                             _column_delimiter_length));
             if (ptr != nullptr) {
                 if (_parse_options.trim_space) {
-                    std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-                    columns->emplace_back(newPos.first, newPos.second);
+                    std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+                    columns->emplace_back(field.data(), field.size());
                 } else {
                     columns->emplace_back(value, ptr - value);
                 }
@@ -648,8 +637,8 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
 
         // Add the last field for multi-character delimiter case
         if (_parse_options.trim_space) {
-            std::pair<const char*, size_t> newPos = trim(value, ptr - value);
-            columns->emplace_back(newPos.first, newPos.second);
+            std::string_view field = trim_spaces({value, static_cast<size_t>(ptr - value)});
+            columns->emplace_back(field.data(), field.size());
         } else {
             columns->emplace_back(value, ptr - value);
         }

@@ -56,7 +56,7 @@ v4.0 以降では、この機能はテーブルレベルで設定可能です。
 
 ### v4.0 より前のバージョンで有効にする
 
-1. BE 設定を変更します：`enable_json_flat` はバージョン 4.0 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/management/BE_configuration.md#configure-be-parameters) を参照してください。
+1. BE 設定を変更します：`enable_json_flat` はバージョン 4.0 以前はデフォルトで `false` です。変更方法については、[Configure BE parameters](../administration/configuration/BE_parameters/BE_parameters.md#configure-be-parameters) を参照してください。
 2. FE プルーニング機能を有効化します：
 
    ```SQL
@@ -217,11 +217,11 @@ SET cbo_json_v2_dict_opt = true;
 
 ### BE 設定
 
-- [json_flat_null_factor](../administration/management/BE_configuration.md#json_flat_null_factor)
-- [json_flat_column_max](../administration/management/BE_configuration.md#json_flat_column_max)
-- [json_flat_sparsity_factor](../administration/management/BE_configuration.md#json_flat_sparsity_factor)
-- [enable_compaction_flat_json](../administration/management/BE_configuration.md#enable_compaction_flat_json)
-- [enable_lazy_dynamic_flat_json](../administration/management/BE_configuration.md#enable_lazy_dynamic_flat_json)
+- [json_flat_null_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_null_factor)
+- [json_flat_column_max](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_column_max)
+- [json_flat_sparsity_factor](../administration/configuration/BE_parameters/BE_parameters.md#json_flat_sparsity_factor)
+- [enable_compaction_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_compaction_flat_json)
+- [enable_lazy_dynamic_flat_json](../administration/configuration/BE_parameters/BE_parameters.md#enable_lazy_dynamic_flat_json)
 
 ## 機能の制限
 

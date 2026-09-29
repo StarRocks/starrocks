@@ -24,7 +24,7 @@ BOOLEAN array_contains_seq(arr1, arr2)
 
 `arr`: 比較する 2 つの配列。この構文は、`arr2` が `arr1` の部分集合であり、同じ順序であるかどうかを確認します。
 
-2 つの配列内の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、[ARRAY](../../../sql-reference/data-types/semi_structured/Array.md) を参照してください。
+2 つの配列内の要素のデータ型は同じでなければなりません。StarRocks がサポートする配列要素のデータ型については、[ARRAY](../../data-types/semi_structured/Array.md) を参照してください。
 
 ## 戻り値
 

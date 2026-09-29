@@ -274,6 +274,12 @@ static void set_all_data_files_shared(TxnLogPB_OpWrite* op_write) {
     for (auto& del_meta : *op_write->mutable_dels_meta()) {
         del_meta.set_shared(true);
     }
+    // Pre-built tombstone sstables are ingested by every child during split cross-publish; mark them
+    // shared too so bulk_erase records them as shared and a child's vacuum/compaction cannot delete a
+    // file the siblings still reference.
+    for (auto& del_sst : *op_write->mutable_del_ssts()) {
+        del_sst.set_shared(true);
+    }
 }
 
 // Marks all data files referenced by an OpCompaction as shared. Used both for the
@@ -396,6 +402,43 @@ void set_all_data_files_shared(TabletMetadataPB* tablet_metadata, bool skip_delv
         set_all_data_files_shared(&rowset_metadata);
     }
     set_non_segment_files_shared(tablet_metadata, skip_delvecs);
+}
+
+bool has_shared_files(const TabletMetadataPB& metadata) {
+    // Field order below follows TabletMetadataPB / RowsetMetadataPB declaration order; see the
+    // header for the full walk and for why each remaining field is skipped.
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& del : rowset.del_files()) {
+            if (del.shared()) {
+                return true;
+            }
+        }
+        for (const auto& segment : rowset.segment_metas()) {
+            if (segment.shared()) {
+                return true;
+            }
+        }
+    }
+    for (const auto& sstable : metadata.sstable_meta().sstables()) {
+        if (sstable.shared()) {
+            return true;
+        }
+    }
+    for (const auto& dcg_entry : metadata.dcg_meta().dcgs()) {
+        for (bool shared : dcg_entry.second.shared_files()) {
+            if (shared) {
+                return true;
+            }
+        }
+    }
+    for (const auto& idg_entry : metadata.idg_meta().idgs()) {
+        for (const auto& entry : idg_entry.second.entries()) {
+            if (entry.shared_file()) {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb) {
@@ -619,19 +662,13 @@ Status update_rowset_ranges(TxnLogPB* txn_log, const TabletRangePB& range) {
 
 void update_rowset_data_stats(RowsetMetadataPB* rowset, int32_t split_count, int32_t split_index) {
     if (split_count <= 1) return;
-
-    if (rowset->has_num_rows()) {
-        int64_t num_rows = rowset->num_rows();
-        rowset->set_num_rows(num_rows / split_count + (split_index < num_rows % split_count ? 1 : 0));
-    }
-    if (rowset->has_data_size()) {
-        int64_t data_size = rowset->data_size();
-        rowset->set_data_size(data_size / split_count + (split_index < data_size % split_count ? 1 : 0));
-    }
+    auto apportion = [split_count, split_index](int64_t value) {
+        return value / split_count + (split_index < value % split_count ? 1 : 0);
+    };
+    if (rowset->has_num_rows()) rowset->set_num_rows(apportion(rowset->num_rows()));
+    if (rowset->has_data_size()) rowset->set_data_size(apportion(rowset->data_size()));
     if (rowset->has_num_dels()) {
-        int64_t num_dels = rowset->num_dels();
-        int64_t scaled_num_dels = num_dels / split_count + (split_index < num_dels % split_count ? 1 : 0);
-        rowset->set_num_dels(std::min<int64_t>(scaled_num_dels, rowset->num_rows()));
+        rowset->set_num_dels(std::min<int64_t>(apportion(rowset->num_dels()), rowset->num_rows()));
     }
 }
 

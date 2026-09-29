@@ -98,6 +98,7 @@ public class VectorIndexParams {
 
     public enum MetricsType {
         COSINE_SIMILARITY,
+        INNER_PRODUCT,
         L2_DISTANCE,
     }
 

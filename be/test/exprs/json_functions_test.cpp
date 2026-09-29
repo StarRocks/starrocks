@@ -217,6 +217,50 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
                         .ok());
 }
 
+TEST_F(JsonFunctionsTest, get_json_string_array_index_out_of_bounds) {
+    // Mirrors the production shape GET_JSON_STRING(col, '[0].value.url') over rows whose array is empty
+    // or too short: every such row must come back NULL, and rows that do have the element still resolve.
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    Columns columns;
+    auto jsons = BinaryColumn::create();
+    auto paths = BinaryColumn::create();
+
+    std::string values[] = {R"([])",
+                            R"([{"value": {"url": "http://x"}}])",
+                            R"([{"value": {}}])",
+                            R"({"value": {"url": "http://y"}})",
+                            R"([[], [1]])",
+                            R"([])"};
+    std::string strs[] = {"[0].value.url", "[0].value.url", "[0].value.url", "[0].value.url", "[1][0]", "$[3]"};
+    bool expect_null[] = {true, false, true, true, false, true};
+    std::string expected[] = {"", "http://x", "", "", "1", ""};
+
+    for (int j = 0; j < std::size(values); ++j) {
+        jsons->append(values[j]);
+        paths->append(strs[j]);
+    }
+    columns.emplace_back(jsons);
+    columns.emplace_back(paths);
+
+    ctx.get()->set_constant_columns(columns);
+    ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
+    auto v = ColumnHelper::as_column<NullableColumn>(result);
+    ASSERT_EQ(std::size(values), v->size());
+    for (int j = 0; j < std::size(values); ++j) {
+        ASSERT_EQ(expect_null[j], v->is_null(j)) << "row " << j;
+        if (!expect_null[j]) {
+            ASSERT_EQ(expected[j], v->get(j).get_slice().to_string()) << "row " << j;
+        }
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
 TEST_F(JsonFunctionsTest, get_json_string_invalid_json_respects_allow_throw_exception) {
     Columns columns;
     auto strings = BinaryColumn::create();
@@ -516,6 +560,18 @@ INSTANTIATE_TEST_SUITE_P(
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[3]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [1,2,3]} )", "$.k1[-1]", R"( NULL )"),
+                // index beyond a short or empty array must yield NULL without throwing per row
+                std::make_tuple(R"( [] )", "$[0]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": []} )", "$.k1[0]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": []} )", "$.k1[7]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [[]]} )", "$.k1[0][0]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [{"value": {"url": "u"}}]} )", "$.k1[0].value.url", R"( "u" )"),
+                std::make_tuple(R"( {"k1": [{"value": {"url": "u"}}]} )", "$.k1[1].value.url", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [{"value": {}}]} )", "$.k1[0].value.url", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [1,2,3,4,5,6,7,8,9,10]} )", "$.k1[9]", R"( 10 )"),
+                std::make_tuple(R"( {"k1": [1,2,3,4,5,6,7,8,9,10]} )", "$.k1[10]", R"( NULL )"),
+                std::make_tuple(R"( {"k1": [1,"a",[2],{"b":3},null,4.5,6,7,8,9]} )", "$.k1[9]", R"( 9 )"),
+                std::make_tuple(R"( {"k1": [1,"a",[2],{"b":3},null,4.5,6,7,8,9]} )", "$.k1[10]", R"( NULL )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][0]", R"( 1 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][1]", R"( 2 )"),
                 std::make_tuple(R"( {"k1": [[1,2,3], [4,5,6]]} )", "$.k1[0][2]", R"( 3 )"),

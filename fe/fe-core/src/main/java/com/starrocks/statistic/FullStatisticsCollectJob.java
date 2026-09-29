@@ -270,7 +270,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
                 LOG.warn("Statistics collect fail | {} | Error Message [{}]", DebugUtil.printId(context.getQueryId()),
                         context.getState().getErrorMessage());
-                if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
+                if (StringUtils.contains(context.getState().getErrorMessage(), TOO_MANY_VERSIONS_MARKER)) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
                 } else {

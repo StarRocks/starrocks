@@ -103,7 +103,7 @@ FEの状態において、ヒープモニタリングとGCモニタリングは�
 | `jvm_old_gc{type="count"}` | Full GC回数。                          |
 | `jvm_old_gc{type="time"}`  | Full GC時間。                           |
 
-これらのメトリクスおよびその他のモニタリング情報は[モニタリングとアラート](../administration/management/monitoring/Monitor_and_Alert.md)
+これらのメトリクスおよびその他のモニタリング情報は[モニタリングとアラート](../administration/management/monitoring/monitoring.md)
 
 メモリプロファイルは突発的なヒープ増加を分析できます。サービスのインストール完了後、正常に動作するかどうかを確認する必要があります。
 
@@ -222,7 +222,7 @@ FEの長期運用中に、ヒープ内メモリ使用量が異常に増加し、
 
 ### 現地調査のプロセス
 
-監視ツールを開いてください：[監視とアラート](../administration/management/monitoring/Monitor_and_Alert.md)
+監視ツールを開いてください：[監視とアラート](../administration/management/monitoring/monitoring.md)
 
 **ステップ1：以下の監視を確認する**
 

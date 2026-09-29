@@ -11,7 +11,7 @@ Broker Load 是一种异步的导入方式。您提交导入作业以后，StarR
 
 Broker Load 支持单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load)。您可以通过单次导入操作，把一个或多个数据文件导入单张或多张目标表。而且 Broker Load 能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
 
-Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](./Etl_in_loading.md)和[通过导入实现数据变更](../loading/Load_to_Primary_Key_tables.md)。
+Broker Load 支持在导入过程中做数据转换、以及通过 UPSERT 和 DELETE 操作实现数据变更。请参见[导入过程中实现数据转换](./Etl_in_loading.md)和[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
 
 > **注意**
 >
@@ -162,7 +162,7 @@ PROPERTIES
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#hdfs)。
 
-从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 HDFS 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](./InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 #### 从 AWS S3 导入
 
@@ -193,7 +193,7 @@ WITH BROKER
 
 以上示例中，`StorageCredentialParams` 代表一组认证参数，具体包含哪些参数，需要根据您所使用的认证方式来确定，详情请参见 [BROKER LOAD](../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md#aws-s3)。
 
-从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](../loading/InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
+从 3.1 版本起，StarRocks 支持使用 INSERT 语句和 TABLE 关键字直接从 AWS S3 导入 Parquet 或 ORC 格式的数据文件，避免了需事先创建外部表的麻烦。参见 [通过 INSERT 语句导入数据 > 通过 TABLE 关键字直接导入外部数据文件](./InsertInto.md#通过-insert-into-select-以及表函数-files-导入外部数据文件)。
 
 #### 从 Google GCS 导入
 
@@ -501,7 +501,7 @@ WHERE LABEL = "label";
 
 - 如果声明多个 `data_desc` 参数对应导入同一张表的不同分区，则每个分区数据的导入会拆分成一个子任务。
 
-每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/management/FE_configuration.md)决定：
+每个子任务还会拆分成一个或者多个实例，然后这些实例会均匀地被分配到 BE 上并行执行。实例的拆分由以下 [FE 配置](../administration/configuration/FE_parameters/FE_parameters.md)决定：
 
 - `min_bytes_per_broker_scanner`：单个实例处理的最小数据量，默认为 64 MB。
 
@@ -515,7 +515,7 @@ WHERE LABEL = "label";
 
 ## 相关配置项
 
-[FE 配置项](../administration/management/FE_configuration.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+[FE 配置项](../administration/configuration/FE_parameters/FE_parameters.md) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 
@@ -523,4 +523,4 @@ StarRocks v2.5 版本中，如果某一时间段内提交的 Broker Load 作业�
 
 ## 常见问题
 
-请参见 [Broker Load 常见问题](../faq/loading/Broker_load_faq.md)。
+请参见 [Broker Load 常见问题](../faq/data_migration/loading/Broker_load_faq.md)。

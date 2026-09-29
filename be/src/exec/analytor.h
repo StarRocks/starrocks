@@ -38,6 +38,19 @@ struct FunctionTypes {
     TypeDescriptor result_type;
     bool has_nullable_child;
     bool is_nullable; // window function result whether is nullable
+    // Cached from AggregateFunction::is_result_non_nullable(): the aggregate declares it never emits a NULL
+    // (e.g. bitmap_union_count/count), so build its window result column non-null.
+    bool is_result_non_nullable = false;
+
+    // Nullability of the materialized window result column. A window frame can be empty, so the result is
+    // nullable when EITHER the input or the declared result is nullable -- unless the aggregate declares it
+    // never returns NULL, in which case the column is always non-nullable.
+    bool is_result_nullable() const {
+        if (is_result_non_nullable) {
+            return false;
+        }
+        return has_nullable_child || is_nullable;
+    }
 };
 
 class Analytor;

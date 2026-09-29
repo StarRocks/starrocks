@@ -369,6 +369,33 @@ TEST(QueryContextManagerTest, testReadStats) {
     ASSERT_EQ(200, ctx.get_read_remote_cnt());
 }
 
+TEST(QueryContextManagerTest, testIntermediateQueryStatisticCarriesReadStats) {
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
+
+    ctx.incr_read_stats(100, 200);
+
+    auto intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, intermediate_stats);
+    PQueryStatistics intermediate_pb;
+    intermediate_stats->to_pb(&intermediate_pb);
+    EXPECT_EQ(100, intermediate_pb.read_local_cnt());
+    EXPECT_EQ(200, intermediate_pb.read_remote_cnt());
+
+    // The delta has been drained, so a second report carries nothing.
+    auto second_intermediate_stats = ctx.intermediate_query_statistic(0);
+    ASSERT_NE(nullptr, second_intermediate_stats);
+    PQueryStatistics second_intermediate_pb;
+    second_intermediate_stats->to_pb(&second_intermediate_pb);
+    EXPECT_EQ(0, second_intermediate_pb.read_local_cnt());
+    EXPECT_EQ(0, second_intermediate_pb.read_remote_cnt());
+
+    // Totals used by the final-sink path are unaffected by delta consumption.
+    EXPECT_EQ(100, ctx.get_read_local_cnt());
+    EXPECT_EQ(200, ctx.get_read_remote_cnt());
+}
+
 class MockRuntimeFilterQueryLifecycle final : public RuntimeFilterQueryLifecycle {
 public:
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
@@ -610,6 +637,56 @@ TEST(QueryContextManagerTest, testQueryStatisticsUsesQueryRuntimeStateCpuAndScan
     EXPECT_EQ(100, snapshot_pb.stats_items(0).table_id());
     EXPECT_EQ(8, snapshot_pb.stats_items(0).scan_rows());
     EXPECT_EQ(11, snapshot_pb.stats_items(0).scan_bytes());
+}
+
+TEST(QueryContextManagerTest, testAIStatisticsFollowExistingDeltaAndSnapshotSemantics) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    task.request_count = 2;
+    task.total_tokens = 7;
+    task.total_usage_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    upstream.mutable_ai_statistics()->set_total_tokens(11);
+    upstream.mutable_ai_statistics()->set_total_usage_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+
+    PQueryStatistics first;
+    ctx.intermediate_query_statistic(0)->to_pb(&first);
+    EXPECT_EQ(4, first.ai_statistics().task_count());
+    EXPECT_EQ(18, first.ai_statistics().total_tokens());
+    PQueryStatistics second;
+    ctx.intermediate_query_statistic(0)->to_pb(&second);
+    EXPECT_FALSE(second.has_ai_statistics());
+
+    // Like CPU and scan statistics, a failure snapshot retains the local total,
+    // not just the delta remaining after the intermediate report.
+    PQueryStatistics snapshot;
+    ctx.snapshot_query_statistic()->to_pb(&snapshot);
+    EXPECT_EQ(1, snapshot.ai_statistics().task_count());
+    EXPECT_EQ(7, snapshot.ai_statistics().total_tokens());
+}
+
+TEST(QueryContextManagerTest, testFinalAIStatisticsMergeLocalAndUpstream) {
+    auto parent = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
+    QueryContext ctx;
+    ctx.init_mem_tracker(parent->limit(), parent.get());
+    ctx.set_final_sink();
+    AIExecutionStatistics task;
+    task.task_count = 1;
+    ctx.query_runtime_state().add_ai_statistics(task);
+    PQueryStatistics upstream;
+    upstream.mutable_ai_statistics()->set_task_count(3);
+    ctx.maintained_query_recv()->insert(upstream, 0);
+    EXPECT_EQ(nullptr, ctx.intermediate_query_statistic(0));
+    PQueryStatistics result;
+    ctx.final_query_statistic()->to_pb(&result);
+    EXPECT_EQ(4, result.ai_statistics().task_count());
 }
 
 TEST(QueryContextManagerTest, testAttachRuntimeStateWiresQueryRuntimeState) {

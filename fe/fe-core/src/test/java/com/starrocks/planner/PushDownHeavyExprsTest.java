@@ -140,19 +140,31 @@ public class PushDownHeavyExprsTest {
         Assertions.assertTrue(plan.contains("1:Project\n" +
                 "  |  <slot 8> : CASE WHEN (((5: field_varchar_2 = 'VALUE_ALPHA') AND " +
                 "(coalesce(nullif(nullif(6: field_varchar_3, ''), '0'), '') NOT IN ('', '0'))) AND " +
-                "(coalesce(nullif(9: get_json_object, '0'), '') != '')) AND " +
-                "(12: regexp_replace LIKE '%pattern_match_1%') THEN 9: get_json_object WHEN " +
-                "(coalesce(nullif(11: get_json_object, '0'), '') != '') AND " +
-                "(12: regexp_replace LIKE '%pattern_match_2%') THEN 11: get_json_object ELSE '0' END\n" +
+                "(coalesce(nullif(10: get_json_object, '0'), '') != '')) AND " +
+                "(13: regexp_replace LIKE '%pattern_match_1%') THEN 10: get_json_object WHEN " +
+                "(coalesce(nullif(12: get_json_object, '0'), '') != '') AND " +
+                "(13: regexp_replace LIKE '%pattern_match_2%') THEN 12: get_json_object ELSE '0' END\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 9> : get_json_object(7: field_text_1, '$.key_json_1')\n" +
-                "  |  <slot 10> : get_json_object(7: field_text_1, '$.key_json_2')\n" +
-                "  |  <slot 11> : get_json_object(7: field_text_1, '$.key_json_3')\n" +
+                "  |  <slot 9> : parse_json(7: field_text_1)\n" +
+                "  |  <slot 10> : get_json_object(9: parse_json, '$.key_json_1')\n" +
+                "  |  <slot 11> : get_json_object(9: parse_json, '$.key_json_2')\n" +
+                "  |  <slot 12> : get_json_object(9: parse_json, '$.key_json_3')\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: tbl_transaction_001\n" +
                 "     heavy exprs: \n" +
-                "          <slot 12> : regexp_replace(get_json_object(7: field_text_1, '$.key_json_2'), " +
+                "          <slot 13> : regexp_replace(get_json_object(parse_json(7: field_text_1), '$.key_json_2'), " +
                 "'^\\\\[\\\\\"|\\\\\"]$', '')\n"), plan);
+    }
+
+    @Test
+    public void testTopNFilterProbeOnHeavyExprSlot() throws Exception {
+        // ORDER BY a heavy expr + LIMIT puts a TopN runtime filter probe on the heavy-expr
+        // slot, which has no backing column. Serializing the scan node used to NPE in
+        // assignOrderByHints; only toThrift takes that path, so plan the query to thrift.
+        String q = "SELECT regexp_replace(field_varchar_1, 'x', 'y') AS s " +
+                "FROM tbl_transaction_001 ORDER BY s LIMIT 3";
+        String plan = UtFrameUtils.getPlanThriftString(ctx, q);
+        Assertions.assertTrue(plan.contains("SORT_NODE"), plan);
     }
 }

@@ -15,8 +15,10 @@
 #pragma once
 
 #include <optional>
+#include <set>
 #include <vector>
 
+#include "common/column_id.h"
 #include "exec_primitive/pipeline/scan/scan_morsel.h"
 #include "runtime/mem_pool.h"
 #include "storage/delete_predicates.h"
@@ -52,6 +54,12 @@ class TabletManager;
 // Declared here so it can be unit-tested directly (the definition lives in tablet_reader.cpp).
 SparseRange<> subtract_sparse_ranges(const SparseRange<>& lhs, const SparseRange<>& rhs);
 
+// Column ids the tablet's delete predicates evaluate; mirrors TabletReader::init_delete_predicates, which
+// filters neither by version nor by key column, so a caller keeping them out of the unused-output set cannot
+// disagree with what the reader reads.
+Status delete_predicate_column_ids(const TabletMetadataPB& metadata, const TabletSchema& schema,
+                                   std::set<ColumnId>* column_ids);
+
 class TabletReader final : public ChunkIterator {
     using Chunk = starrocks::Chunk;
     using ChunkIteratorPtr = starrocks::ChunkIteratorPtr;
@@ -75,7 +83,7 @@ public:
                  std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema);
     TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
                  std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
-                 std::shared_ptr<const TabletSchema> tablet_schema);
+                 std::shared_ptr<const TabletSchema> tablet_schema, RowSourceMaskBuffer* selection_buffer = nullptr);
     ~TabletReader() override;
 
     DISALLOW_COPY_AND_MOVE(TabletReader);
@@ -169,6 +177,7 @@ private:
     bool _is_vertical_merge = false;
     bool _is_key = false;
     RowSourceMaskBuffer* _mask_buffer = nullptr;
+    RowSourceMaskBuffer* _selection_buffer = nullptr;
 
     std::shared_ptr<VersionedTablet> _tablet;
 

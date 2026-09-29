@@ -130,14 +130,31 @@ if [[ "${RUN_NUMA}" -ne "-1" ]]; then
 fi
 
 final_java_opt=${JAVA_OPTS}
-# Compatible with scenarios upgraded from jdk9~jdk16
+# JAVA_OPTS_FOR_JDK_9_AND_LATER is no longer supported, warn loudly if it is still set
 if [ ! -z "${JAVA_OPTS_FOR_JDK_9_AND_LATER}" ] ; then
-    echo "Warning: Configuration parameter JAVA_OPTS_FOR_JDK_9_AND_LATER is not supported, JAVA_OPTS is the only place to set jvm parameters"
-    final_java_opt=${JAVA_OPTS_FOR_JDK_9_AND_LATER}
+    component_name="StarRocks BE"
+    component_conf_file="$STARROCKS_HOME/conf/be.conf"
+    if [ ${RUN_CN} -eq 1 ]; then
+        component_name="StarRocks CN"
+        component_conf_file="$STARROCKS_HOME/conf/cn.conf"
+    fi
+    warn_removed_java_opts "$component_name" "JAVA_OPTS_FOR_JDK_9_AND_LATER" "$component_conf_file"
 fi
 
 # Appending the option to avoid "process heaper" stack overflow exceptions.
 final_java_opt="$final_java_opt -Djdk.lang.processReaperUseDefaultStackSize=true"
+
+# JDK 18+ (JEP 411) rejects System.setSecurityManager unless the JVM is started with
+# -Djava.security.manager=allow, which UDFClassLoader needs when java.security.policy is
+# set. JDK 24+ (JEP 486) rejects every value other than 'disallow' and the JVM will not
+# start at all, so only [18,24) gets the flag. Whatever JAVA_OPTS already sets wins,
+# including a deliberate -Djava.security.manager=disallow.
+if [[ "${java_version:-0}" -ge 18 && "${java_version:-0}" -lt 24 ]]; then
+    if [[ "$final_java_opt" != *"-Djava.security.manager="* ]]; then
+        final_java_opt="$final_java_opt -Djava.security.manager=allow"
+    fi
+fi
+
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
@@ -166,12 +183,12 @@ if [[ -z "$JEMALLOC_CONF" ]]; then
     if [ ${RUN_JEMALLOC_DEBUG} -eq 1 ] ; then
         export JEMALLOC_CONF="junk:true,tcache:false,prof:true"
     elif [ ${RUN_CHECK_MEM_LEAK} -eq 1 ] ; then
-        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
+        export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:true,prof_leak:true,lg_prof_sample:0,prof_final:true"
     else
         # Normal mode: take the value from the `jemalloc_conf` config in be.conf/cn.conf so it is
         # observable via information_schema.be_configs. Fall back to the built-in default when unset.
-        # NOTE: keep this default in sync with CONF_String(jemalloc_conf, ...) in be/src/common/config.h.
-        jemalloc_conf="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
+        # NOTE: keep this default in sync with CONF_mString(jemalloc_conf, ...) in be/src/common/config.h.
+        jemalloc_conf="percpu_arena:percpu,oversize_threshold:134217728,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true,prof:true,prof_active:false"
         if [ ${RUN_BE} -eq 1 ]; then
             read_var_from_conf jemalloc_conf $STARROCKS_HOME/conf/be.conf
         elif [ ${RUN_CN} -eq 1 ]; then

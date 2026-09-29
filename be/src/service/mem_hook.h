@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 // Sanitizers need to own malloc/free, and Darwin executable-level allocator
@@ -28,5 +29,14 @@
 namespace starrocks {
 
 int64_t set_large_memory_alloc_failure_threshold(int64_t);
+
+// Whether an allocation of `size` bytes must be reported as a large allocation.
+// `threshold` comes from config::large_memory_alloc_report_threshold; a value of 0 or below
+// disables reporting. Zero is also what the config global holds before config::init() applies
+// the declared default, so allocations made during static initialization are never reported.
+// Kept inline because every allocation goes through it.
+constexpr bool should_report_large_memory_alloc(size_t size, int64_t threshold) {
+    return threshold > 0 && size > static_cast<size_t>(threshold);
+}
 
 } // namespace starrocks

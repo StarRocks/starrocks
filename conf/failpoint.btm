@@ -1,0 +1,162 @@
+RULE bdb_ha_get_leader_exception
+CLASS  com.starrocks.ha.BDBHA
+METHOD getLeader()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("bdb_ha_get_leader_exception")
+DO throw new RuntimeException("failpoint triggered");
+ENDRULE
+
+
+# Statistics Collection
+RULE stmt_executor_process_profile_async_exception
+CLASS com.starrocks.qe.StmtExecutor
+METHOD processProfileAsync(ExecPlan, int)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("stmt_executor_process_profile_async_exception")
+DO throw new NullPointerException("failpoint triggered");
+ENDRULE
+
+RULE statistic_executor_collect_statistics
+CLASS com.starrocks.statistic.StatisticExecutor
+METHOD collectStatistics
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("statistic_executor_collect_statistics")
+DO sleep(10000);
+ENDRULE
+
+# Only the predicate overload is hooked: the production write path (JournalWriter) calls it
+# directly, and the no-arg batchWriteCommit() delegates to it - hooking both would double the
+# injected delay for no-arg callers.
+RULE bdb_write_jitter_with_retry_predicate
+CLASS com.starrocks.journal.bdbje.BDBJEJournal
+METHOD batchWriteCommit(java.util.function.BooleanSupplier)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("bdb_write_jitter")
+DO sleep(10000);
+ENDRULE
+
+# Hangs the in-memory apply of a CREATE DATABASE while the leader WAL fence still counts it in-flight
+# but the fence lock is not held (unprotectCreateDb runs in the EditLog WALApplier.apply, after the
+# journal commit), so a concurrent demotion's EditLog.awaitWalDrained sees inFlight>0 and times out ->
+# deterministic drain-timeout self-fence (TC-HA-FP-02). The sleep must exceed the TEST's (small)
+# leader_demotion_drain_timeout_sec, not the 180s default. CAVEAT: unprotectCreateDb is also on the
+# replay path (replayCreateDb) and thus on the checkpoint thread's image replay - while this
+# failpoint is armed, a checkpoint or follower replaying a CREATE DATABASE stalls 20s too. Only arm
+# it for the duration of the drain-timeout test.
+RULE wal_apply_hang
+CLASS com.starrocks.server.LocalMetastore
+METHOD unprotectCreateDb
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("wal_apply_hang")
+DO sleep(20000);
+ENDRULE
+
+# Thrift server accept exception
+RULE thrift_server_accept_exception
+CLASS org.apache.thrift.transport.TServerSocket
+METHOD accept()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("thrift_server_accept_exception")
+DO throw new OutOfMemoryError("failpoint triggered");
+ENDRULE
+
+# Audit event processor throws OOM exception
+RULE audit_event_processor_oom
+CLASS com.starrocks.qe.AuditLogBuilder
+METHOD exec(AuditEvent)
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("audit_event_processor_oom")
+DO throw new OutOfMemoryError("failpoint triggered");
+ENDRULE
+
+# ---------------------------------------------------------------------------
+# Range-distribution reshard (tablet split / merge).
+#
+# These exist because a forced split finishes in well under a second, so no external fault
+# (an FE restart takes ~17s) can land inside RUNNING. Arm one WITH PAUSE to freeze the job at
+# that phase, act externally, then ADMIN DISABLE FAILPOINT to release.
+#
+# Where a pause parks -- read this before arming one:
+#   * All six rules below park the SINGLE TabletReshardJobMgr daemon thread, which runs
+#     ColocateChecker.runOneCycle(), drainReshardCandidates() and runTabletReshardJobs() in
+#     sequence. So any one of them freezes every reshard job AND colocate convergence on that
+#     frontend, and only one can be in effect at a time. The daemon loop has no watchdog, so a
+#     park just means missed ticks.
+#   * NEVER write a rule inside SplitTabletJob/MergeTabletJob.addNewMaterializedIndexes: it holds
+#     the table WRITE lock, so parking there makes the table unavailable to queries and DDL for
+#     the whole pause. The two *_before_metadata_switch rules below deliberately sit at the CALL
+#     to it, which is outside every lock.
+#
+# Every DO is a safe no-op, so arming one of these with ENABLE instead of PAUSE skips one daemon
+# tick rather than corrupting a job.
+# ---------------------------------------------------------------------------
+
+# Generic amplifier: hold any reshard job at its current state so an external fault (kill a CN,
+# switch the leader, partition the network) lands while the job is still in flight. Note run()
+# catches Exception and aborts the job, so DO throw here would inject a job FAILURE, not a pause.
+RULE tablet_reshard_job_run
+CLASS com.starrocks.alter.reshard.TabletReshardJob
+METHOD run()
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("tablet_reshard_job_run")
+DO return;
+ENDRULE
+
+# Split points computed and the split transaction published, catalog NOT yet switched. Kill the
+# leader here and the follower must take over with the tablet set and ranges exactly as before.
+RULE split_before_metadata_switch
+CLASS com.starrocks.alter.reshard.SplitTabletJob
+METHOD runRunningJob
+AT INVOKE addNewMaterializedIndexes
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("split_before_metadata_switch")
+DO return;
+ENDRULE
+
+# Merge peer of split_before_metadata_switch.
+RULE merge_before_metadata_switch
+CLASS com.starrocks.alter.reshard.MergeTabletJob
+METHOD runRunningJob
+AT INVOKE addNewMaterializedIndexes
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("merge_before_metadata_switch")
+DO return;
+ENDRULE
+
+# Catalog switched and the CLEANING transition already journalled (setJobState writes
+# logUpdateTabletReshardJob), job not yet FINISHED. Restart here and replay must be idempotent:
+# ranges contiguous, no overlap, no duplicate tablet id.
+RULE split_after_metadata_switch
+CLASS com.starrocks.alter.reshard.SplitTabletJob
+METHOD runCleaningJob
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("split_after_metadata_switch")
+DO return;
+ENDRULE
+
+# Merge peer of split_after_metadata_switch.
+RULE merge_after_metadata_switch
+CLASS com.starrocks.alter.reshard.MergeTabletJob
+METHOD runCleaningJob
+AT ENTRY
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("merge_after_metadata_switch")
+DO return;
+ENDRULE
+
+# Colocate cross-table alignment, per table. AT EXIT, not AT ENTRY: the trigger has no table
+# predicate or call counter, so an armed PAUSE stops the FIRST invocation of the cycle. At ENTRY that
+# would mean no table was processed at all -- a not-started group, not a mid-alignment one. At EXIT the
+# first table of the group has been processed (its alignment job fired, if it needed one) and the next
+# has not, which is the partially-processed state "fail-close or full rollback" must be asserted
+# against. Note the fired job cannot run while this rule is parked: it would run on this same daemon
+# thread. false is what the method already returns for "work still needed, retry next cycle".
+RULE colocate_mid_align_table
+CLASS com.starrocks.alter.reshard.ColocateChecker
+METHOD alignTableIfApplicable
+AT EXIT
+HELPER com.starrocks.failpoint.FailPointHelper
+IF shouldTrigger("colocate_mid_align_table")
+DO return false;
+ENDRULE

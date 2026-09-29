@@ -248,7 +248,7 @@ public class VectorIndexTest extends PlanTestBase {
         // already covered by testQuantizerPropertyRegistration.
         Column vecCol = new Column("f2", ArrayType.ARRAY_FLOAT, false);
 
-        // PQ happy path: m_pq divides dim, nbits_pq in range.
+        // PQ happy path: preserve the previously accepted upper bound for compatibility.
         Assertions.assertDoesNotThrow(
                 () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
                     put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
@@ -259,7 +259,33 @@ public class VectorIndexTest extends PlanTestBase {
                     put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
                     put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
                     put(IndexParamsKey.M_PQ.name(), "16");
-                    put(IndexParamsKey.NBITS_PQ.name(), "8");
+                    put(IndexParamsKey.NBITS_PQ.name(), "16");
+                }}, KeysType.DUP_KEYS));
+
+        // Inner product is supported by every HNSW storage type, including PQ.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.HNSW.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.INNER_PRODUCT.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.M.name(), "16");
+                    put(IndexParamsKey.EFCONSTRUCTION.name(), "40");
+                    put(IndexParamsKey.QUANTIZER.name(), QuantizerType.PQ.name());
+                    put(IndexParamsKey.M_PQ.name(), "16");
+                    put(IndexParamsKey.NBITS_PQ.name(), "4");
+                }}, KeysType.DUP_KEYS));
+
+        // Native inner product is also available to IVFPQ.
+        Assertions.assertDoesNotThrow(
+                () -> IndexAnalyzer.checkVectorIndexValid(vecCol, new HashMap<>() {{
+                    put(CommonIndexParamKey.INDEX_TYPE.name(), VectorIndexType.IVFPQ.name());
+                    put(CommonIndexParamKey.DIM.name(), "128");
+                    put(CommonIndexParamKey.METRIC_TYPE.name(), MetricsType.INNER_PRODUCT.name());
+                    put(CommonIndexParamKey.IS_VECTOR_NORMED.name(), "false");
+                    put(IndexParamsKey.NLIST.name(), "16");
+                    put(IndexParamsKey.NBITS.name(), "8");
+                    put(IndexParamsKey.M_IVFPQ.name(), "16");
                 }}, KeysType.DUP_KEYS));
 
         // Quantized HNSW (SQ/PQ) on cosine_similarity: tenann composes the factory

@@ -81,7 +81,10 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     params.base_version = _base_version;
     params.new_version = _metadata->version();
     params.delvec_loader = delvec_loader.get();
-    params.index = _index;
+    params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks) {
+        return _index->replace(rssid, rowid_start, replace_indexes, pks);
+    };
     return handler(params, segment_iters, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         (*_segment_id_to_add_dels)[rssid] += num_dels;
         _delvecs->emplace_back(rssid, dv);
@@ -125,7 +128,10 @@ Status LakePrimaryKeyCompactionConflictResolver::segment_iterator(
     params.base_version = _base_version;
     params.new_version = _metadata->version();
     params.delvec_loader = delvec_loader.get();
-    params.index = _index;
+    params.replace_rows = [this](uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
+                                 const Column& pks) {
+        return _index->replace(rssid, rowid_start, replace_indexes, pks);
+    };
     return handler(params, segments, [&](uint32_t rssid, const DelVectorPtr& dv, uint32_t num_dels) {
         (*_segment_id_to_add_dels)[rssid] += num_dels;
         _delvecs->emplace_back(rssid, dv);

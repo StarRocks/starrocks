@@ -206,6 +206,9 @@ public class LakeTableDropIndexJob extends LakeTableIndexFastPathJobBase {
         copy.partitionToTablets = this.partitionToTablets;
         copy.tabletToIndexMetaId = this.tabletToIndexMetaId;
         copy.commitVersionMap = this.commitVersionMap;
+        // Must be journaled: replay() installs whatever the FINISHED entry carries, so a null here
+        // would leave a recovered FE unable to resolve the schema this flip retired.
+        copy.historySchema = this.historySchema;
         copySubclassFields(copy);
         return copy;
     }

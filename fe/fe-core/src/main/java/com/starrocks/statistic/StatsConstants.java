@@ -39,6 +39,12 @@ public class StatsConstants {
     public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
     public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
     public static final int STATISTIC_PARTITION_VERSION_V2 = 20;
+    // Reserved, not produced here: the enterprise build uses 21 for an external-statistics query that
+    // also reports how many partitions its aggregate covers. Declared so the number cannot be handed to
+    // a different result shape on this side - the version travels between frontend and backend, and two
+    // meanings for one number is not something a later merge can reconcile. Deliberately left out of
+    // STATISTIC_SUPPORTED_VERSION: nothing here knows how to read that shape.
+    public static final int STATISTIC_EXTERNAL_QUERY_V3_VERSION = 21;
 
 
 
@@ -110,6 +116,9 @@ public class StatsConstants {
     public static final String SPM_BASELINE_TABLE_NAME = "spm_baselines";
     public static final String QUERY_HISTORY_TABLE_NAME = "query_history";
 
+    // Durable per-partition LAST_ACCESS_TIME table
+    public static final String PARTITION_ACCESS_TIME_TABLE_NAME = "partition_access_time";
+
     /**
      * Deprecated stats properties
      */
@@ -138,7 +147,8 @@ public class StatsConstants {
             EXTERNAL_FULL_STATISTICS_TABLE_NAME,
             MULTI_COLUMN_STATISTICS_TABLE_NAME,
             HISTOGRAM_STATISTICS_TABLE_NAME,
-            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+            EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME,
+            PARTITION_ACCESS_TIME_TABLE_NAME
     );
 
     public enum AnalyzeType {

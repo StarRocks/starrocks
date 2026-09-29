@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "StarRocks offers a rich set of features to deliver a blazing-fast, real-time analytics experience on data at scale."
 ---

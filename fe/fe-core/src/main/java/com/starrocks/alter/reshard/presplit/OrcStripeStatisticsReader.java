@@ -93,7 +93,8 @@ import java.util.Optional;
  * non-matching-precision/scale DECIMAL, ORC CHAR, and any complex type --
  * makes the reader throw
  * {@link MetaTierUnavailableException} so the pipeline falls back to data tier. That is
- * NOT a load failure. Pure I/O failures surface as {@link StarRocksException}.
+ * NOT a load failure. Footer I/O failures use the same signal because the data tier can retry the
+ * source through the BE/CN storage stack instead of abandoning pre-split entirely.
  * Note: a legacy ORC file lacking modern UTC stats (pre-1.5-era footer) decodes through the JVM
  * default timezone, which may bias or reorder cut points — the load still routes every row by its
  * actual value, so this only mis-places the split, never loses or corrupts data.
@@ -137,7 +138,7 @@ public final class OrcStripeStatisticsReader {
             }
             return result;
         } catch (IOException ioException) {
-            throw new StarRocksException(
+            throw new MetaTierUnavailableException(
                     "failed to read ORC footer for " + fileStatus.getPath() + ": " + ioException.getMessage(),
                     ioException);
         }

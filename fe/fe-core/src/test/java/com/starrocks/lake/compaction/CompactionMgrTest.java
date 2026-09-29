@@ -208,6 +208,18 @@ public class CompactionMgrTest {
     }
 
     @Test
+    public void testTriggerUnshareCompactionHasHighestPriority() {
+        CompactionMgr compactionManager = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        PartitionStatistics statistics = compactionManager.triggerUnshareCompaction(partition);
+
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, statistics.getPriority());
+        List<PartitionStatisticsSnapshot> compactionList = compactionManager.choosePartitionsToCompact(new HashSet<>());
+        Assertions.assertEquals(1, compactionList.size());
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE, compactionList.get(0).getPriority());
+    }
+
+    @Test
     public void testExistCompaction() {
         long txnId = 11111;
         CompactionMgr compactionManager = new CompactionMgr();
@@ -319,5 +331,32 @@ public class CompactionMgrTest {
 
         compactionMgr.removeFromStartupActiveCompactionTransactionMap(txnId);
         Assertions.assertEquals(0, activeCompactionTransactionMap.size());
+    }
+
+    /**
+     * A priority-carrying request that is abandoned before it starts must not leave the marker behind.
+     * The scheduler's own reset only covers partitions that reached runningCompactions, and ScoreSelector
+     * admits any non-DEFAULT priority regardless of score or cooldown -- so a marker left on a partition
+     * that never starts gets it reselected and refused every cycle, and its ordinary compaction never
+     * resumes.
+     */
+    @Test
+    public void testResetPriorityClearsAnAbandonedMarker() {
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition = new PartitionIdentifier(1, 2, 3);
+        compactionMgr.handleLoadingFinished(partition, 1, System.currentTimeMillis(), new Quantiles(0, 0, 0));
+
+        compactionMgr.triggerUnshareCompaction(partition);
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.UNSHARE,
+                compactionMgr.getStatistics(partition).getPriority());
+
+        compactionMgr.resetPriority(partition);
+        Assertions.assertEquals(PartitionStatistics.CompactionPriority.DEFAULT,
+                compactionMgr.getStatistics(partition).getPriority(),
+                "an abandoned UNSHARE request must not keep the partition at a non-default priority");
+
+        // Unknown partitions are a no-op rather than an error: the scheduler may drop a request for a
+        // partition the manager has already forgotten.
+        compactionMgr.resetPriority(new PartitionIdentifier(9, 9, 9));
     }
 }

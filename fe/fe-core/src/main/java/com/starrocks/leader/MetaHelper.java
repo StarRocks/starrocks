@@ -35,7 +35,6 @@
 package com.starrocks.leader;
 
 import com.google.common.base.Strings;
-import com.sleepycat.je.config.EnvironmentParams;
 import com.starrocks.common.Config;
 import com.starrocks.common.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
@@ -245,10 +244,11 @@ public class MetaHelper {
             throw new InvalidMetaDirException();
         }
 
-        long lowerFreeDiskSize = Long.parseLong(EnvironmentParams.FREE_DISK.getDefault());
+        long lowerFreeDiskSize = Config.bdbje_free_disk_size;
         FileStore store = Files.getFileStore(Paths.get(Config.meta_dir));
         if (store.getUsableSpace() < lowerFreeDiskSize) {
-            LOG.error("Free capacity left for meta dir: {} is less than {}",
+            LOG.error("Free capacity left for meta dir: {} is less than {}. Free up space, or lower " +
+                            "bdbje_free_disk_size to start with less headroom and let bdb-je reclaim its own files",
                     Config.meta_dir, new ByteSizeValue(lowerFreeDiskSize));
             throw new InvalidMetaDirException();
         }

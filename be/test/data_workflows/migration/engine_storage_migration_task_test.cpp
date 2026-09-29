@@ -16,6 +16,7 @@
 
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
+#include <curl/curl.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -758,6 +759,12 @@ int main(int argc, char** argv) {
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    const CURLcode curl_status = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_status != CURLE_OK) {
+        fprintf(stderr, "failed to initialize libcurl, curl_status=%d\n", static_cast<int>(curl_status));
+        return -1;
+    }
+    starrocks::DeferOp curl_cleanup([] { curl_global_cleanup(); });
 
     starrocks::config::sys_log_level = "INFO";
     butil::FilePath storage_root;

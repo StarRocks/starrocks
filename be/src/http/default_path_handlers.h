@@ -18,6 +18,9 @@
 #pragma once
 
 #include <cstdio>
+#include <optional>
+#include <string>
+#include <string_view>
 
 #include "http/web_page_handler.h"
 
@@ -31,6 +34,14 @@ class MemTracker;
 void add_default_path_handlers(WebPageHandler* web_page_handler, const RuntimeEnv& runtime_env);
 
 void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
+
+// Validates the `opts` /memz was asked for against the set malloc_stats_print() understands,
+// and returns what to hand it. `requested` being absent means the caller did not ask, which
+// yields the page's default of "a" -- omit the per-arena statistics.
+//
+// Returns nullopt when `requested` holds a character jemalloc does not recognise. It ignores
+// those silently, so a typo would otherwise look like it took effect.
+std::optional<std::string> parse_jemalloc_stats_opts(std::optional<std::string_view> requested);
 
 class MemTrackerWebPageHandler {
 public:

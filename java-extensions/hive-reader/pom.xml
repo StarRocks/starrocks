@@ -26,7 +26,6 @@
             <groupId>com.starrocks</groupId>
             <artifactId>hadoop-ext</artifactId>
             <version>1.0.0</version>
-            <scope>provided</scope>
         </dependency>
 
         <dependency>
@@ -119,6 +118,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/hive-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+                            <includeScope>runtime</includeScope>
                         </configuration>
                     </execution>
                 </executions>

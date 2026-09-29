@@ -1,4 +1,5 @@
 ---
+sidebar_position: 50
 displayed_sidebar: docs
 keywords: ['iceberg', 'ddl', 'create table', 'alter table', 'create database', 'drop table', 'create view', 'alter view']
 description: "StarRocks Iceberg Catalog supports a variety of Data Definition Language (DDL) operations, including creating and managing databases, tables, and views."

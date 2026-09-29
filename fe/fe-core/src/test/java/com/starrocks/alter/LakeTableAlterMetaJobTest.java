@@ -22,23 +22,28 @@ import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.mv.MVRepairHandler;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -63,6 +68,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -845,5 +851,149 @@ public class LakeTableAlterMetaJobTest {
         combined.add(row);
         combined.sort(new ListComparator<>(0, 1, 2, 3, 4, 5));
         Assertions.assertEquals(2, combined.size());
+    }
+
+    /**
+     * Regression: the MV version-map repair at the tail of this job family must actually run.
+     *
+     * Every LakeTableAlterMetaJobBase job advances the visible version and visible version time of every
+     * physical partition without rewriting a single row. MV staleness detection
+     * (OlapPartitionTraits#isBaseTableChanged) keys off exactly those two fields, so a dependent
+     * materialized view would re-materialize its entire history after a metadata-only ALTER. The
+     * compensation is handleMVRepair -> MVMetaVersionRepairer, which advances the MV watermark in place.
+     *
+     * commitVersionMap is keyed by PHYSICAL partition id, while MaterializedView.BasePartitionInfo is keyed
+     * on the LOGICAL partition (name + id). Feeding the physical id straight to OlapTable#getPartition(),
+     * which only resolves logical ids, returned null for every entry, so the repair list came out empty and
+     * the compensation silently never ran.
+     */
+    @Test
+    public void testMVVersionMapRepairUsesLogicalPartitionId() throws Exception {
+        // Without a dependent MV, handleMVRepair returns before building the repair list.
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+
+        Partition partition = table.getPartitions().iterator().next();
+        PhysicalPartition physicalPartition = partition.getDefaultPhysicalPartition();
+        // Premise: the logical partition and its physical partition carry DIFFERENT ids. If that ever stops
+        // holding, the assertions below would pass for the wrong reason.
+        Assertions.assertNotEquals(partition.getId(), physicalPartition.getId());
+        long versionBefore = physicalPartition.getVisibleVersion();
+        long versionTimeBefore = physicalPartition.getVisibleVersionTime();
+
+        List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void handleMVRepair(Database database, com.starrocks.catalog.Table changedTable,
+                                       List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+                captured.addAll(partitionRepairInfos);
+            }
+        };
+
+        job.runPendingJob();
+        job.runRunningJob();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
+
+        // The metadata-only job advanced the partition version ...
+        Assertions.assertEquals(versionBefore + 1, physicalPartition.getVisibleVersion());
+        // ... so the MV watermark repair must have been handed exactly one entry, carrying the LOGICAL
+        // partition id and name, and the version the MV will read back.
+        Assertions.assertEquals(1, captured.size());
+        MVRepairHandler.PartitionRepairInfo repairInfo = captured.get(0);
+        Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
+        Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
+        Assertions.assertEquals(versionBefore, repairInfo.getLastVersion());
+        // The pre-alter visible version time has to be reported, otherwise MVMetaVersionRepairer cannot
+        // tell an up-to-date MV from one that is already stale through isBaseTableChanged's time disjunct.
+        Assertions.assertEquals(versionTimeBefore, repairInfo.getLastVersionTime());
+        Assertions.assertEquals(versionBefore + 1, repairInfo.getNewVersion());
+        Assertions.assertEquals(partition.getLatestPhysicalPartition().getVisibleVersion(),
+                repairInfo.getNewVersion());
+    }
+
+    /**
+     * A logical partition with several physical sub-partitions (the shape automatic bucketing produces)
+     * involves TWO different physical partitions, and the repair owes each of them something different:
+     *
+     *   * the new watermark must be the version the MV reads back, i.e. the version of whichever
+     *     sub-partition getLatestPhysicalPartition() resolves to AFTER updateVisibleVersion() gave every
+     *     sub-partition the same version time and thereby turned that call into a tie;
+     *   * the validation values handed to MVMetaVersionRepairer must describe the sub-partition that
+     *     decided staleness BEFORE the alter, because that is the one the MV's recorded watermark was
+     *     compared against. Validating against the post-alter winner accepts an MV that was already stale
+     *     on the pre-alter latest sub-partition and silently erases that change.
+     *
+     * With a single physical partition the two coincide, so only this shape can tell them apart.
+     */
+    @Test
+    public void testMVRepairValidatesPreAlterLatestAndRecordsPostAlterWinner() throws Exception {
+        // Sub-partitions can only be added to a randomly distributed table
+        // (LocalMetastore#addSubPartitions), which is exactly the shape the review finding named.
+        LakeTable multiSubTable = createTable(connectContext,
+                "CREATE TABLE t_multi_sub(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY RANDOM BUCKETS 1");
+        multiSubTable.addRelatedMaterializedView(
+                new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+
+        Partition partition = multiSubTable.getPartitions().iterator().next();
+        GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .addSubPartitions(db, multiSubTable, partition, 1, WarehouseManager.DEFAULT_RESOURCE);
+        Assertions.assertEquals(2, partition.getSubPartitions().size());
+
+        // Distinct versions AND distinct version times, so reading either value off the wrong
+        // sub-partition is observable.
+        List<PhysicalPartition> subPartitions = new ArrayList<>(partition.getSubPartitions());
+        subPartitions.sort(Comparator.comparingLong(PhysicalPartition::getId));
+        subPartitions.get(0).updateVisibleVersion(5L, 100L);
+        subPartitions.get(1).updateVisibleVersion(7L, 200L);
+
+        // Pre-alter, staleness is decided by the sub-partition with the newest version time.
+        PhysicalPartition preAlterLatest = partition.getLatestPhysicalPartition();
+        Assertions.assertEquals(subPartitions.get(1).getId(), preAlterLatest.getId());
+        long preAlterLatestVersion = preAlterLatest.getVisibleVersion();
+        long preAlterLatestVersionTime = preAlterLatest.getVisibleVersionTime();
+
+        LakeTableAlterMetaJob multiJob = new LakeTableAlterMetaJob(
+                GlobalStateMgr.getCurrentState().getNextId(), db.getId(), multiSubTable.getId(),
+                multiSubTable.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true,
+                "CLOUD_NATIVE");
+        Map<Long, Long> commitVersions = new HashMap<>();
+        for (PhysicalPartition subPartition : subPartitions) {
+            commitVersions.put(subPartition.getId(), subPartition.getVisibleVersion() + 1);
+            MaterializedIndex baseIndex = subPartition.getLatestBaseIndex();
+            multiJob.addDirtyPartitionIndex(subPartition.getId(), baseIndex.getId(), baseIndex);
+        }
+        Deencapsulation.setField(multiJob, "commitVersionMap", commitVersions);
+        Deencapsulation.setField(multiJob, "finishedTimeMs", 900L);
+
+        List<MVRepairHandler.PartitionRepairInfo> captured = new ArrayList<>();
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public void handleMVRepair(Database database, com.starrocks.catalog.Table changedTable,
+                                       List<MVRepairHandler.PartitionRepairInfo> partitionRepairInfos) {
+                captured.addAll(partitionRepairInfos);
+            }
+        };
+
+        multiJob.capturePreAlterLatestPartitions(multiSubTable);
+        multiJob.updateVisibleVersion(multiSubTable);
+        // Every sub-partition now carries finishedTimeMs, so this resolves a tie.
+        PhysicalPartition postAlterLatest = partition.getLatestPhysicalPartition();
+        Assertions.assertEquals(900L, postAlterLatest.getVisibleVersionTime());
+        multiJob.handleMVRepair(db, multiSubTable);
+
+        // One slot per logical partition.
+        Assertions.assertEquals(1, captured.size());
+        MVRepairHandler.PartitionRepairInfo repairInfo = captured.get(0);
+        Assertions.assertEquals(partition.getId(), repairInfo.getPartitionId());
+        Assertions.assertEquals(partition.getName(), repairInfo.getPartitionName());
+        // Validation describes the PRE-alter latest sub-partition ...
+        Assertions.assertEquals(preAlterLatestVersion, repairInfo.getLastVersion());
+        Assertions.assertEquals(preAlterLatestVersionTime, repairInfo.getLastVersionTime());
+        // ... while the watermark carries the version the reader compares against afterwards.
+        Assertions.assertEquals(commitVersions.get(postAlterLatest.getId()).longValue(),
+                repairInfo.getNewVersion());
+        Assertions.assertEquals(900L, repairInfo.getNewVersionTime());
     }
 }

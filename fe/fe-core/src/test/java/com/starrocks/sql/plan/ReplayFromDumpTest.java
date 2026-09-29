@@ -1350,6 +1350,17 @@ public class ReplayFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    public void testWindowSkewMergeSortWithHistogramJoinNulls() throws Exception {
+        String dumpString = getDumpInfoFromFile("query_dump/window_skew_merge_sort");
+        QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpString);
+        Pair<QueryDumpInfo, String> replayPair =
+                getCostPlanFragment(dumpString, queryDumpInfo.getSessionVariable());
+        String plan = replayPair.second;
+
+        PlanTestBase.assertContains(plan, "ANALYTIC", "MERGING-EXCHANGE");
+    }
+
+    @Test
     public void testPushDownDistinctBelowWindowNoEmptyAnalytic() throws Exception {
         String dumpString = getDumpInfoFromFile(
                 "query_dump/push_down_distinct_below_window_empty_analytic");

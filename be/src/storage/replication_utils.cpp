@@ -329,10 +329,20 @@ Status ReplicationUtils::download_lake_file_with_converter(const std::string& sr
                                                            const std::shared_ptr<FileSystem>& src_fs,
                                                            const FileConverterCreatorFunc& file_converters,
                                                            size_t* final_file_size) {
+    return download_lake_file_with_converter(src_file_path, src_file_name, src_file_size, src_fs,
+                                             RandomAccessFileOptions{}, file_converters, final_file_size);
+}
+
+Status ReplicationUtils::download_lake_file_with_converter(const std::string& src_file_path,
+                                                           const std::string& src_file_name, size_t src_file_size,
+                                                           const std::shared_ptr<FileSystem>& src_fs,
+                                                           const RandomAccessFileOptions& src_opts,
+                                                           const FileConverterCreatorFunc& file_converters,
+                                                           size_t* final_file_size) {
     TRACE_COUNTER_SCOPE_LATENCY_US("lake_replication_download_segment_cost_us");
     TRACE("Start download_lake_file_with_converter, src_file: $0", src_file_path);
 
-    ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_file_path));
+    ASSIGN_OR_RETURN(auto src_file, src_fs->new_random_access_file(src_opts, src_file_path));
     if (src_file_size == 0) {
         VLOG(3) << "No src file size for " << src_file_path << ", try to get it from file system";
         ASSIGN_OR_RETURN(src_file_size, src_file->get_size());

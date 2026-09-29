@@ -27,6 +27,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class StmtExecutorNewTest extends StarRocksTestBase  {
@@ -102,7 +103,7 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
     }
 
     @Test
-    public void testGenerateExecPlanWithException() throws Exception {
+    public void testGenerateExecPlanForwardsWhenNotLeader() throws Exception {
         StatementBase stmt = parse("trace logs mv select * from non_existent_table");
         StmtExecutor executor = new StmtExecutor(ctx, stmt);
         
@@ -111,13 +112,10 @@ public class StmtExecutorNewTest extends StarRocksTestBase  {
                 "generateExecPlan");
         method.setAccessible(true);
         
-        // This should not throw exception even if planning fails
-        try {
-            method.invoke(executor);
-        } catch (Exception e) {
-            // Exception is expected but should be handled gracefully
-            assertTrue(true);
-        }
+        // This harness starts no cluster, so the FE is not the leader and generateExecPlan() takes
+        // the forward-to-leader path: the whole planning block is skipped and null comes back
+        // without the unknown table ever being resolved.
+        assertNull(method.invoke(executor));
     }
 
     @Test

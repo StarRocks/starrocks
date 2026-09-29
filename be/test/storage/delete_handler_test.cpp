@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/testutil/assert.h"
 #include "common/config_memory_allocator_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/storage_define.h"
@@ -844,6 +845,88 @@ TEST_F(TestDeleteConditionHandler2, InvalidConditionValue) {
     res = _delete_condition_handler.generate_delete_predicate(tablet->unsafe_tablet_schema_ref(), conditions,
                                                               &del_pred_24);
     ASSERT_TRUE(res.is_invalid_argument());
+}
+
+// Builds a schema with two key columns (k1, k2) and two value columns (v1, v2).
+static TabletSchemaSPtr make_schema(KeysType keys_type) {
+    TabletSchemaPB schema_pb;
+    schema_pb.set_keys_type(keys_type);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_num_rows_per_row_block(65535);
+    const char* names[] = {"k1", "k2", "v1", "v2"};
+    for (int i = 0; i < 4; ++i) {
+        auto* col = schema_pb.add_column();
+        col->set_unique_id(i);
+        col->set_name(names[i]);
+        col->set_type("INT");
+        col->set_is_nullable(false);
+        col->set_is_key(i < 2);
+        if (i >= 2) {
+            col->set_aggregation(keys_type == DUP_KEYS ? "NONE" : "REPLACE");
+        }
+    }
+    return TabletSchema::create(schema_pb);
+}
+
+static DeletePredicatePB* add_pred(DelPredicateArray* preds, int32_t version) {
+    auto* pred = preds->Add();
+    pred->set_version(version);
+    return pred;
+}
+
+TEST(DeletePredicateColumnIdsTest, CollectsKeyAndValueColumnsOnDupKeys) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    pred->add_sub_predicates("k1=1");
+    pred->add_sub_predicates("v1=2");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    // A DUP table evaluates delete conditions on value columns too, so both are read.
+    ASSERT_EQ((std::set<ColumnId>{0, 2}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, SkipsPredicatesNewerThanTheReadVersion) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    add_pred(&preds, 3)->add_sub_predicates("k1=1");
+    add_pred(&preds, 11)->add_sub_predicates("k2=2");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_EQ((std::set<ColumnId>{0}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, NonKeySubPredicateIsDroppedButInPredicateIsKept) {
+    auto schema = make_schema(AGG_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    // The reader drops a non-key column's sub predicate on a non-DUP table, but applies no such filter to
+    // IN predicates; this asymmetry is pre-existing behaviour that the helper must mirror exactly.
+    pred->add_sub_predicates("v1=1");
+    auto* in_pred = pred->add_in_predicates();
+    in_pred->set_column_name("v2");
+    in_pred->set_is_not_in(false);
+    in_pred->add_values("7");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_EQ((std::set<ColumnId>{3}), cids);
+}
+
+TEST(DeletePredicateColumnIdsTest, IgnoresUnknownColumns) {
+    auto schema = make_schema(DUP_KEYS);
+    DelPredicateArray preds;
+    auto* pred = add_pred(&preds, 2);
+    pred->add_sub_predicates("nosuchcol=1");
+    auto* in_pred = pred->add_in_predicates();
+    in_pred->set_column_name("alsomissing");
+    in_pred->add_values("7");
+
+    std::set<ColumnId> cids;
+    ASSERT_OK(DeleteHandler::delete_predicate_column_ids(preds, *schema, 10, &cids));
+    ASSERT_TRUE(cids.empty());
 }
 
 } // namespace starrocks

@@ -1,0 +1,97 @@
+-- name: test_ai_complete @sequential
+-- A secure BE-local AI_FUNCTION_MODEL_API_KEY is required before an AI fragment opens,
+-- so this case deliberately fixes only the FE analyzer/planner SQL contract with EXPLAIN.
+-- Existing loopback HTTP/provider and AIProject pipeline BE UTs cover the execution contract.
+
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "https://models.example.test/v1/chat/completions");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "integration-test-model");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "openai_compatible");
+-- result:
+-- !result
+
+EXPLAIN SELECT ai_complete('prompt-overload');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXPLAIN SELECT ai_complete(
+    'prompt-options-overload',
+    CAST(NULL AS MAP<VARCHAR, JSON>)
+);
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXPLAIN SELECT ai_complete('explicit-model', 'model-prompt-overload');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXPLAIN SELECT ai_complete(
+    'explicit-model',
+    'model-prompt-options-overload',
+    map{'temperature': 0.0}
+);
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+EXPLAIN SELECT ai_complete(CAST(NULL AS VARCHAR));
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXPLAIN SELECT id, ai_complete(prompt)
+FROM (VALUES
+    (1, 'values-first'),
+    (2, CAST(NULL AS VARCHAR)),
+    (3, 'values-third')
+) AS v(id, prompt)
+ORDER BY id;
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+EXPLAIN SELECT id, ai_complete('explicit-model', prompt)
+FROM (
+    SELECT 4 AS id, 'union-first' AS prompt
+    UNION ALL
+    SELECT 5, CAST(NULL AS VARCHAR)
+    UNION ALL
+    SELECT 6, 'union-third'
+) AS u
+ORDER BY id;
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+EXPLAIN SELECT ai_complete('reserved-option', map{'model': 'forbidden'});
+-- result:
+[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: ai_complete option MAP contains reserved option key 'model'\.['"]\)
+-- !result
+EXPLAIN SELECT ai_complete('nonconstant-options', map{'temperature': temperature})
+FROM (VALUES (0.1)) AS v(temperature);
+-- result:
+[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: ai_complete requires a constant option MAP\.['"]\)
+-- !result
+EXPLAIN SELECT DISTINCT ai_complete('forbidden-distinct');
+-- result:
+[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: SELECT DISTINCT cannot contain AI function ai_complete\.['"]\)
+-- !result
+
+ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
+-- result:
+-- !result
+EXPLAIN SELECT ai_complete('missing-default-model');
+-- result:
+[REGEX]E: \(1064, ['"]Getting analyzing error(?: (?:from|at) line [0-9]+, column [0-9]+(?: to line [0-9]+, column [0-9]+)?)?\. Detail message: FE config 'ai_default_chat_model' must be set for prompt-only ai_complete calls\.['"]\)
+-- !result
+EXPLAIN SELECT ai_complete('explicit-model', 'plans-without-default-model');
+-- result:
+[REGEX][0-9]+:AIProject
+-- !result
+
+CLEANUP {
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_endpoint" = "");
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_model" = "");
+    ADMIN SET FRONTEND CONFIG ("ai_default_chat_provider" = "");
+} END CLEANUP

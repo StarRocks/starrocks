@@ -35,6 +35,7 @@ public class VectorSearchOptions {
     private int resultOrder = 0;
 
     private double predicateRange = -1;
+    private boolean hasPredicateRange = false;
     private List<String> queryVector = new ArrayList<>();
 
     public boolean isEnableUseANN() {
@@ -75,6 +76,7 @@ public class VectorSearchOptions {
 
     public void setPredicateRange(double predicateRange) {
         this.predicateRange = predicateRange;
+        this.hasPredicateRange = true;
     }
 
     public void setResultOrder(boolean isAsc) {
@@ -89,6 +91,7 @@ public class VectorSearchOptions {
         opts.setVector_slot_id(distanceSlotId);
         opts.setQuery_vector(queryVector);
         opts.setVector_range(predicateRange);
+        opts.setHas_vector_range(hasPredicateRange);
         opts.setResult_order(resultOrder);
         opts.setRefine_distance(refineDistance);
         // Also set the deprecated use_ivfpq to the same value during the deprecation window: an older BE
@@ -106,7 +109,7 @@ public class VectorSearchOptions {
                 "LimitK: " + limitK + ", " +
                 "Order: " + (resultOrder == RESULT_ORDER_ASC ? "ASC" : "DESC") + ", " +
                 "Query Vector: " + queryVector + ", " +
-                "Predicate Range: " + predicateRange +
+                "Predicate Range: " + (hasPredicateRange ? Double.toString(predicateRange) : "N/A") +
                 "\n";
     }
 }

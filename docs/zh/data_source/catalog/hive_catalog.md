@@ -1,4 +1,5 @@
 ---
+sidebar_position: 30
 displayed_sidebar: docs
 description: "Hive catalog 是外部 catalog，无需数据导入即可查询 Hive 数据及执行数据转换。"
 toc_max_heading_level: 5
@@ -48,7 +49,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
   - Parquet 和 ORC 文件支持 NO_COMPRESSION、SNAPPY、LZ4、ZSTD 和 GZIP 压缩格式。
   - Textfile 文件支持 NO_COMPRESSION 压缩格式。
 
-  您可以通过表属性 [`compression_codec`](../../data_source/catalog/hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
+  您可以通过表属性 [`compression_codec`](./hive_catalog.md#properties) 或系统变量 [`connector_sink_compression_codec`](../../sql-reference/System_variable.md#connector_sink_compression_codec) 来设置写入到 Hive 表时的压缩算法。
 
   在写入 Hive 表时，如果该表的属性中包含了 `compression_codec`，StarRocks 优先使用该算法对写入数据进行压缩。否则，使用系统变量 `connector_sink_compression_codec` 中设置的压缩算法代替。
 
@@ -66,7 +67,7 @@ Hive Catalog 是一种 External Catalog，自 2.3 版本开始支持。通过 Hi
 - Assumed Role
 - IAM User
 
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/csp_auth/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
@@ -205,7 +206,7 @@ StarRocks 访问 Hive 集群元数据服务的相关参数配置。
 | hive.metastore.glue.catalogid | 否       | 要使用的 AWS Glue Data Catalog 的 ID。未指定时，使用当前 AWS 账户的 Data Catalog。当需要访问其他 AWS 账户中的 Glue Data Catalog（跨账户访问）时，必须指定此参数。 |
 | aws.glue.resource_share_type  | 否       | 通过设置发送给 AWS Glue `GetDatabases` API 的 `ResourceShareType`，控制 `SHOW DATABASES` 列出哪些数据库。不区分大小写。取值范围：`FOREIGN`（其他账户通过 AWS Resource Access Manager 与你的账户共享的数据库）、`FEDERATED`（引用外部数据源的数据库，如 JDBC 连接）、`ALL`（本地数据库加上前两者）。不指定时仅列出本地数据库。该参数仅影响列表结果：StarRocks 查询数据库时仍然使用 `hive.metastore.glue.catalogid` 配置的单一账户，因此列出的 `FOREIGN` 数据库仍无法查询，除非将 `hive.metastore.glue.catalogid` 也设置为其所有者账户，或在自己的 Data Catalog 中为其创建 [resource link](https://docs.aws.amazon.com/lake-formation/latest/dg/resource-links-about.html)；而 `FEDERATED` 数据库并非 Hive 兼容的数据库，无法通过该 Catalog 查询。 |
 
-有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
+有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
 #### StorageCredentialParams
 
@@ -253,7 +254,7 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 | aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
-有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/csp_auth/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 ##### 阿里云 OSS
 
@@ -1304,13 +1305,13 @@ REFRESH EXTERNAL TABLE <table_name> [PARTITION ('partition_name', ...)]
 
 ## 周期性刷新元数据缓存
 
-自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/management/FE_configuration.md)配置 Hive 元数据缓存周期性刷新：
+自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/configuration/FE_parameters/FE_parameters.md)配置 Hive 元数据缓存周期性刷新：
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/management/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/configuration/FE_parameters/FE_parameters.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 

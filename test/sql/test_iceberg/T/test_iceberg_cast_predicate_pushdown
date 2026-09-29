@@ -1,0 +1,30 @@
+-- name: test_iceberg_cast_predicate_pushdown
+
+create external catalog iceberg_cast_predicate_${uuid0}
+PROPERTIES (
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hadoop",
+    "iceberg.catalog.warehouse" = "oss://${oss_bucket}/test_iceberg_cast_predicate_pushdown/${uuid0}/warehouse/"
+);
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_iceberg_cast_predicate_pushdown/${uuid0}/warehouse/db > /dev/null
+
+use iceberg_cast_predicate_${uuid0}.db;
+
+create table test_cast_predicate (
+    d decimal(5, 2)
+) properties (
+    "format-version" = "2"
+);
+
+insert into test_cast_predicate values (10.50);
+
+select d
+from test_cast_predicate
+where cast(d as bigint) = 10;
+
+drop table test_cast_predicate force;
+set catalog default_catalog;
+drop catalog iceberg_cast_predicate_${uuid0};
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_iceberg_cast_predicate_pushdown/${uuid0}/ > /dev/null

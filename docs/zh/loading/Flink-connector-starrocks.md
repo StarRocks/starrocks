@@ -1,9 +1,12 @@
 ---
+sidebar_position: 110
 displayed_sidebar: docs
 description: "通过 Apache Flink connector 持续加载数据到 StarRocks，支持 DataStream、Table API 和 Python API。"
 ---
 
 # 从 Apache Flink® 持续导入
+
+import FlinkStarRocksConnection from '../_assets/commonMarkdown/Edition_Specific_Flink_StarRocks_Connection.mdx'
 
 StarRocks 提供 Apache Flink® 连接器 (以下简称 Flink connector)，可以通过 Flink 导入数据至 StarRocks表。
 
@@ -92,6 +95,10 @@ Flink connector JAR 文件的命名格式如下：
     >
     > 未正式发布的 Flink connector 的名称包含 `SNAPSHOT` 后缀。
 
+## 连接 StarRocks
+
+<FlinkStarRocksConnection />
+
 ## 参数说明
 
 ### 常用选项
@@ -143,7 +150,7 @@ Flink connector JAR 文件的命名格式如下：
 - **是否必填**：否
 - **默认值**：AUTO
 - **描述**：用于数据导入的接口。该参数自 Flink connector 1.2.4 版本起支持。取值范围：
-  - `V1`: 使用 [Stream Load](../loading/StreamLoad.md) 接口导入数据。1.2.4 之前的 Connector 仅支持此模式。
+  - `V1`: 使用 [Stream Load](./StreamLoad.md) 接口导入数据。1.2.4 之前的 Connector 仅支持此模式。
   - `V2`: 使用 [Stream Load transaction](./Stream_Load_transaction_interface.md) 接口导入数据。要求 StarRocks 版本至少为 2.4。推荐使用 `V2`，因为它优化了内存使用，并提供了更稳定的 exactly-once 实现。
   - `AUTO`: 如果 StarRocks 版本支持事务 Stream Load，则自动选择 `V2`，否则选择 `V1`。
 
@@ -487,7 +494,7 @@ DISTRIBUTED BY HASH(id);
 
 #### 网络配置
 
-确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/management/FE_configuration.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/management/FE_configuration.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) 端口（默认 `8040`）。
+确保 Flink 所在机器能够访问 StarRocks 集群中 FE 节点的 [`http_port`](../administration/configuration/FE_parameters/FE_parameters.md#http_port)（默认 `8030`） 和 [`query_port`](../administration/configuration/FE_parameters/FE_parameters.md#query_port) 端口（默认 `9030`），以及 BE 节点的 [`be_http_port`](../administration/configuration/BE_parameters/BE_parameters.md#be_http_port) 端口（默认 `8040`）。
 
 ### 使用 Flink SQL 写入数据
 

@@ -44,6 +44,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
+import com.starrocks.backup.SnapshotRetentionCache.SnapshotRetention;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
@@ -68,6 +69,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.estimate.Estimator;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.TableRefPersist;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -86,6 +88,7 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CatalogRef;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.DropSnapshotStmt;
 import com.starrocks.sql.ast.FunctionRef;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -130,6 +133,14 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
     @SerializedName("rm")
     private RepositoryMgr repoMgr = new RepositoryMgr();
 
+    // Retention read out of the repositories, remembered per snapshot. Runtime only: every FE fills
+    // its own, and losing it costs a re-read.
+    private final SnapshotRetentionCache retentionCache = new SnapshotRetentionCache();
+
+    // repo id + label -> how many times in a row automatic cleanup failed to delete that snapshot.
+    // Runtime only, so a restart or a leader switch resumes the attempts.
+    private final Map<String, Integer> cleanFailures = Maps.newConcurrentMap();
+
     // db id -> last running or finished backup/restore jobs
     // We only save the last backup/restore job of a database.
     // Newly submitted job will replace the current job, only if current job is finished or cancelled.
@@ -173,6 +184,10 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
 
     public RepositoryMgr getRepoMgr() {
         return repoMgr;
+    }
+
+    public SnapshotRetentionCache getRetentionCache() {
+        return retentionCache;
     }
 
     private boolean init() {
@@ -535,6 +550,7 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
 
         BackupJob backupJob = new BackupJob(stmt.getLabel(), dbId, dbName, tableRefPersists,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
+        backupJob.setTtl(stmt.getTtl());
         List<Function> allFunctions = Lists.newArrayList();
 
         if (!stmt.containsExternalCatalog() && (!stmt.withOnClause() || stmt.allFunction())) {
@@ -949,6 +965,244 @@ public class BackupHandler extends LeaderDaemon implements Writable, MemoryTrack
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         });
+    }
+
+    // handle drop snapshot stmt
+    public void dropSnapshot(DropSnapshotStmt stmt) throws DdlException {
+        tryLock();
+        try {
+            Repository repo = repoMgr.getRepo(stmt.getRepoName());
+            if (repo == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Repository does not exist: " + stmt.getRepoName());
+            }
+            if (repo.isReadOnly()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Repository " + repo.getName() + " is read only");
+            }
+
+            String label = stmt.getSnapshotName();
+            List<String> labels = Lists.newArrayList();
+            Status st = repo.listSnapshots(labels);
+            if (!st.ok()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Failed to list snapshots in repository " + repo.getName() + ": " + st.getErrMsg());
+            }
+            // Listing the directory, rather than reading the job info file, is what decides whether
+            // the snapshot is there: an interrupted backup leaves a directory with no job info file,
+            // and that leftover is exactly what an operator needs to be able to drop.
+            if (!labels.contains(label)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Snapshot does not exist in repository " + repo.getName() + ": " + label);
+            }
+            if (isBeingBackedUp(repo.getId(), label)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Can not drop snapshot " + label + ": a backup is writing it");
+            }
+            if (isBeingRestored(repo.getId(), label)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Can not drop snapshot " + label + ": a restore is reading it");
+            }
+
+            SnapshotRetention retention = retentionCache.get(repo, label);
+            if (!stmt.isForceDrop()) {
+                checkOwnedByThisCluster(repo, label, retention);
+            }
+
+            Status deleteStatus = deleteSnapshot(repo, label, retention, DeleteTrigger.MANUAL);
+            if (!deleteStatus.ok()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Failed to delete snapshot " + label + " in repository " + repo.getName() + ": "
+                                + deleteStatus.getErrMsg());
+            }
+        } finally {
+            seqlock.unlock();
+        }
+    }
+
+    /**
+     * Refuses a snapshot that this cluster did not write. Deleting one is a decision about data
+     * someone else owns, which is what FORCE is for: it says the operator has established that the
+     * data is theirs to remove, in a way this cluster cannot check for them.
+     *
+     * <p>A snapshot with no readable retention -- written before this feature existed, or with a job
+     * info file that cannot be read -- is refused for the same reason: it cannot be shown to belong
+     * here.
+     */
+    private void checkOwnedByThisCluster(Repository repo, String label, SnapshotRetention retention)
+            throws DdlException {
+        int clusterId = globalStateMgr.getNodeMgr().getClusterId();
+        if (retention != null && retention.isOwnedBy(clusterId)) {
+            return;
+        }
+
+        String whose = retention == null || retention.getClusterId() == null
+                ? "does not record which cluster created it"
+                : "was created by cluster " + retention.getClusterId();
+        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                "Snapshot " + label + " in repository " + repo.getName() + " " + whose
+                        + ", and this cluster is " + clusterId
+                        + ". Use DROP SNAPSHOT ... FORCE to drop it anyway");
+    }
+
+    /** What asked for a snapshot's files to be deleted. */
+    public enum DeleteTrigger {
+        // Automatic ttl cleanup: the only caller that comes back on its own, and therefore the only
+        // one whose failures count toward backup_clean_retry_limit.
+        AUTO,
+        // DROP SNAPSHOT, whose failure is reported to the operator in their own session.
+        MANUAL
+    }
+
+    /**
+     * Deletes the snapshots whose ttl has elapsed. Run by the cleaner daemon on the leader.
+     *
+     * <p>What may be deleted is decided entirely from the repository: a snapshot goes only when its
+     * job info file names this cluster and an expiration that has passed. Everything else -- a
+     * snapshot from another cluster, one written before this feature existed, one still being backed
+     * up, one whose job info file cannot be read -- falls outside that and is left alone.
+     */
+    public void cleanExpiredSnapshots() {
+        int clusterId = globalStateMgr.getNodeMgr().getClusterId();
+        for (Repository repo : repoMgr.getAllRepositories()) {
+            if (repo.isReadOnly()) {
+                continue;
+            }
+
+            List<String> labels = Lists.newArrayList();
+            Status st = repo.listSnapshots(labels);
+            if (!st.ok()) {
+                LOG.warn("failed to list snapshots in repo {} for ttl cleanup: {}", repo.getName(), st.getErrMsg());
+                continue;
+            }
+
+            for (String label : labels) {
+                SnapshotRetention retention = retentionCache.get(repo, label);
+                if (retention == null || !retention.isOwnedBy(clusterId)
+                        || !retention.isExpired(System.currentTimeMillis())) {
+                    continue;
+                }
+                if (isCleanRetryExhausted(repo.getId(), label, retention)) {
+                    continue;
+                }
+                if (isBeingBackedUp(repo.getId(), label) || isBeingRestored(repo.getId(), label)) {
+                    continue;
+                }
+                if (!cleanExpiredSnapshot(repo, label, retention)) {
+                    // A backup or restore is being submitted; come back next round.
+                    return;
+                }
+            }
+        }
+    }
+
+    /**
+     * Deletes one expired snapshot under the seqlock, and reports whether the round can go on. The
+     * lock is taken and released per snapshot, so a large backlog never keeps backup and restore
+     * requests waiting for long.
+     */
+    private boolean cleanExpiredSnapshot(Repository repo, String label, SnapshotRetention retention) {
+        if (!tryLockQuietly()) {
+            return false;
+        }
+        try {
+            // The snapshot was judged expired before the lock was taken, and the label can have been
+            // dropped and backed up again in between -- the reuse check passes once the directory is
+            // gone -- so what sits under it now may be fresh data. Re-reading the backup timestamp
+            // tells the two apart, and covers both variants: a backup still running has written no
+            // job info file at all, and a finished one wrote a different timestamp.
+            if (!retention.getBackupTimestamp().equals(repo.getSnapshotTimestamp(label))) {
+                LOG.info("skip deleting snapshot {} in repo {}: it no longer holds the backup that expired, "
+                        + "or could not be re-read", label, repo.getName());
+                cleanFailures.remove(cleanFailureKey(repo.getId(), label, retention));
+                return true;
+            }
+            if (isBeingBackedUp(repo.getId(), label)) {
+                LOG.info("skip deleting snapshot {} in repo {}: a backup is writing it", label, repo.getName());
+                return true;
+            }
+            if (isBeingRestored(repo.getId(), label)) {
+                LOG.info("skip deleting snapshot {} in repo {}: a restore is reading it", label, repo.getName());
+                return true;
+            }
+
+            Status deleteStatus = deleteSnapshot(repo, label, retention, DeleteTrigger.AUTO);
+            if (!deleteStatus.ok()) {
+                int failures = cleanFailures.merge(cleanFailureKey(repo.getId(), label, retention), 1, Integer::sum);
+                LOG.warn("failed to delete expired snapshot {} in repo {} ({} consecutive failures): {}",
+                        label, repo.getName(), failures, deleteStatus.getErrMsg());
+                if (failures >= Config.backup_clean_retry_limit) {
+                    LOG.error("giving up automatic cleanup of snapshot {} in repo {} after {} consecutive "
+                                    + "failures. It is attempted again after a restart or a leader switch, or "
+                                    + "once backup_clean_retry_limit is raised; DROP SNAPSHOT deletes it either way",
+                            label, repo.getName(), failures);
+                }
+            }
+            return true;
+        } finally {
+            seqlock.unlock();
+        }
+    }
+
+    /**
+     * Deletes one snapshot's files and counts the outcome. The delete is a recursive delete of the
+     * snapshot directory, so a failure leaves the snapshot exactly as it was and a repeat is safe.
+     */
+    private Status deleteSnapshot(Repository repo, String label, SnapshotRetention retention, DeleteTrigger trigger) {
+        Status st = repo.deleteSnapshot(label);
+        if (!st.ok()) {
+            if (MetricRepo.hasInit) {
+                MetricRepo.COUNTER_BACKUP_SNAPSHOT_CLEAN_FAILED.increase(1L);
+            }
+            return st;
+        }
+
+        if (MetricRepo.hasInit) {
+            MetricRepo.COUNTER_BACKUP_SNAPSHOT_CLEAN_SUCCESS.increase(1L);
+        }
+        retentionCache.invalidate(repo.getId(), label);
+        if (retention != null) {
+            cleanFailures.remove(cleanFailureKey(repo.getId(), label, retention));
+        }
+        LOG.info("deleted snapshot {} in repo {}, trigger: {}, backup timestamp: {}, cluster id: {}",
+                label, repo.getName(), trigger,
+                retention == null ? null : retention.getBackupTimestamp(),
+                retention == null ? null : retention.getClusterId());
+        return Status.OK;
+    }
+
+    private boolean isCleanRetryExhausted(long repoId, String label, SnapshotRetention retention) {
+        return cleanFailures.getOrDefault(cleanFailureKey(repoId, label, retention), 0)
+                >= Config.backup_clean_retry_limit;
+    }
+
+    // Keyed by the backup timestamp as well, so a new backup under the same label starts from zero.
+    private static String cleanFailureKey(long repoId, String label, SnapshotRetention retention) {
+        return repoId + ":" + label + ":" + retention.getBackupTimestamp();
+    }
+
+    /** The background counterpart of {@link #tryLock()}: gives up rather than failing a statement. */
+    private boolean tryLockQuietly() {
+        try {
+            return seqlock.tryLock(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private boolean isBeingBackedUp(long repoId, String label) {
+        return dbIdToBackupOrRestoreJob.values().stream()
+                .anyMatch(job -> job instanceof BackupJob && isUnfinishedJobFor(job, repoId, label));
+    }
+
+    private boolean isBeingRestored(long repoId, String label) {
+        return dbIdToBackupOrRestoreJob.values().stream()
+                .anyMatch(job -> job instanceof RestoreJob && isUnfinishedJobFor(job, repoId, label));
+    }
+
+    private static boolean isUnfinishedJobFor(AbstractJob job, long repoId, String label) {
+        return !job.isDone() && !job.isCancelled() && job.getRepoId() == repoId && label.equals(job.getLabel());
     }
 
     /**

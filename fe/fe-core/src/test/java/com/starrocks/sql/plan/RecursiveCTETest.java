@@ -19,6 +19,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.recursivecte.RecursiveCTEAstCheck;
 import com.starrocks.qe.recursivecte.RecursiveCTEExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
@@ -72,6 +73,38 @@ public class RecursiveCTETest extends PlanTestBase {
                 + "FROM `test`.`cte_");
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "SELECT `cte`.`id`, `cte`.`parent_id`");
+    }
+
+    @Test
+    public void testRecursiveCteCtasReusesInferredColumns() throws Exception {
+        String sql = "create table recursive_ctas as " +
+                "with recursive cte(s) as " +
+                "(select cast('a' as varchar(10)) " +
+                "union all select cast(concat(s, 'a') as varchar(10)) from cte where length(s) < 2) " +
+                "select s from cte";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        CreateTableAsSelectStmt ctas = (CreateTableAsSelectStmt) statement;
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+
+        RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
+        executor.splitOuterStmt(statement);
+
+        Assertions.assertEquals(1, ctas.getCreateTableStmt().getColumnDefs().size());
+        Assertions.assertEquals("varchar(10)",
+                ctas.getCreateTableStmt().getColumnDefs().get(0).getType().toSql().toLowerCase());
+    }
+
+    @Test
+    public void testRecursiveCteCtasValidatesOuterStatementBeforeSplit() {
+        String sql = "create table recursive_ctas(a, b) as " +
+                "with recursive cte(n) as " +
+                "(select 1 union all select n + 1 from cte where n < 3) " +
+                "select n from cte";
+        StatementBase statement = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+
+        RecursiveCTEExecutor executor = new RecursiveCTEExecutor(connectContext);
+        Assertions.assertThrows(SemanticException.class, () -> executor.splitOuterStmt(statement));
     }
 
     @Test
@@ -140,6 +173,101 @@ public class RecursiveCTETest extends PlanTestBase {
         assertContains(plan, "Recursive Statement: SELECT `cte`.`v1` + 1 AS `v1 + 1`");
         assertContains(plan, "Outer Statement After Rewriting:\n"
                 + "SELECT `cte`.`v1`");
+    }
+
+    @Test
+    public void testNestedRecursiveCteCrossScopeReferenceRejected() throws Exception {
+        // A recursive CTE nested inside another one, whose recursive member references the OUTER
+        // recursive CTE. The single-value recursive-CTE marker used to lose the outer name, so the
+        // table collectors expanded the outer CTE without end (StackOverflowError / hang). It must be
+        // rejected with a clear error, not blow the stack.
+        String sql = "with recursive q as ("
+                + " select v1, v2, v3 from t0"
+                + " union all ("
+                + "   with recursive x as ("
+                + "     select v1, v2, v3 from t0"
+                + "     union all ("
+                + "       select v1, v2, v3 from q where v1 < 10"
+                + "       union all"
+                + "       select v1, v2, v3 from x where v2 < 10"
+                + "     )"
+                + "   )"
+                + "   select v1, v2, v3 from x"
+                + " )"
+                + ") select v1 from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(true);
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"),
+                e.getMessage());
+    }
+
+    @Test
+    public void testNestedRecursiveCteEnableFalseAlsoRejected() throws Exception {
+        // With enable_recursive_cte=false the RecursiveCTEAstCheck multi-level guard does not run
+        // (it is gated on the session var), so the nested reference reaches QueryAnalyzer. It must
+        // still be rejected there instead of overflowing the stack in the table collectors.
+        String sql = "with recursive q as ("
+                + " select v1, v2, v3 from t0"
+                + " union all ("
+                + "   with recursive x as ("
+                + "     select v1, v2, v3 from t0"
+                + "     union all ("
+                + "       select v1, v2, v3 from q where v1 < 10"
+                + "       union all"
+                + "       select v1, v2, v3 from x where v2 < 10"
+                + "     )"
+                + "   )"
+                + "   select v1, v2, v3 from x"
+                + " )"
+                + ") select v1 from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testRecursiveCteReferencedOnlyInScalarSubqueryRejected() throws Exception {
+        // The recursive member's FROM is a base table; the recursive CTE q is referenced only inside a
+        // scalar subquery. That reference is resolved by the fresh QueryAnalyzer the subquery spawns,
+        // whose own recursiveCteStack is empty, so the per-Visitor guard cannot see it. The
+        // session-shared recursive-CTE path must catch it; before the fix it slipped through and the
+        // table collectors expanded q forever ("Unknown error" / StackOverflowError).
+        String sql = "with recursive q as ("
+                + " select v1, v2, v3 from t0"
+                + " union all"
+                + " select v1, v2, v3 from t0 where v1 < (select max(v1) from q)"
+                + ") select v1 from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"),
+                e.getMessage());
+    }
+
+    @Test
+    public void testRecursiveCteReferencedOnlyInInSubqueryRejected() throws Exception {
+        // Same as above but the reference hides in an IN subquery instead of a scalar one.
+        String sql = "with recursive q as ("
+                + " select v1, v2, v3 from t0"
+                + " union all"
+                + " select v1, v2, v3 from t0 where v1 in (select v1 from q)"
+                + ") select v1 from q";
+        connectContext.getSessionVariable().setEnableRecursiveCTE(false);
+        SemanticException e = Assertions.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+        Assertions.assertTrue(e.getMessage().contains("Doesn't support multi-level recursive CTE"),
+                e.getMessage());
+    }
+
+    @Test
+    public void testRecursiveMemberSubqueryOverOtherRelationNotRejected() throws Exception {
+        // Negative control: a subquery inside the recursive member that does NOT reference the
+        // recursive CTE (only a base table) must plan normally. The session-shared path only holds
+        // the recursive CTE's own name, so an unrelated subquery is never rejected.
+        String sql = "with recursive cte as ("
+                + " select v1 from t0"
+                + " union all"
+                + " select v1 + 1 from cte where v1 < (select max(v1) from t0)"
+                + ") select * from cte";
+        String plan = explainRecursiveCte(sql);
+        assertContains(plan, "Recursive Statement:");
     }
 
     @Test

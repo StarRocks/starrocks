@@ -106,9 +106,6 @@ CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_size_tiered_compaction_strategy, "true");
 
-// Whether enable parallel compaction for primary key index in shared-data mode.
-CONF_mBool(enable_pk_index_parallel_compaction, "true");
-
 // We support real-time compaction strategy for primary key tables in shared-data mode.
 // This real-time compaction strategy enables compacting rowsets across multiple levels simultaneously.
 // The parameter `size_tiered_max_compaction_level` defines the maximum compaction level allowed in a single compaction task.
@@ -251,5 +248,13 @@ CONF_mBool(enable_lake_compaction_range_split, "false");
 
 // chunk size used by lake compaction
 CONF_mInt32(lake_compaction_chunk_size, "4096");
+
+// Hold the input segments of a compaction task on its Rowset objects for the whole task, so the
+// per-column-group passes of vertical compaction reuse them instead of reloading through the
+// metadata cache. When the cache cannot hold all input segments (small limit, or a node crowded
+// with many tablets), every pass otherwise rebuilds every segment's column metadata, which is
+// CPU-bound and proportional to the column count. Memory cost is one set of segment metadata per
+// running task, bounded by the task's input size.
+CONF_mBool(lake_compaction_hold_input_segments, "true");
 
 } // namespace starrocks::config

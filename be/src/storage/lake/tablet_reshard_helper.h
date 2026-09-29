@@ -98,6 +98,38 @@ void set_dcg_shared(DeltaColumnGroupVerPB* dcg, bool shared);
 // per-segment ownership propagation (private for an exclusive segment).
 void set_idg_shared(IndexDeltaGroupVerPB* idg, bool shared);
 
+// True iff |metadata| references a live data file carrying the shared flag. This computes the value
+// the BE reports as TabletStatPB / TabletStat.has_shared_files, which merge planning uses to refuse a
+// tablet whose files a split left co-owned: a merge inherits its sources' files verbatim, so a second
+// owner would make the merged tablet unsafe.
+//
+// The fields are walked in TabletMetadataPB declaration order, so this list can be diffed against
+// lake_types.proto whenever a field is added:
+//
+//   (4)  rowsets           del_files[].shared, then segment_metas[].shared   CHECKED
+//   (7)  delvec_meta       version_to_file[].shared                          skipped: a merge rewrites
+//                          the delvec pages it keeps into a new file, so a shared source delvec never
+//                          constrains it
+//   (8)  compaction_inputs                                                   skipped: garbage records
+//   (10) orphan_files                                                        skipped: garbage records
+//   (15) sstable_meta      sstables[].shared                                 CHECKED
+//   (16) dcg_meta          dcgs[].shared_files[]                             CHECKED
+//   (24) idg_meta          idgs[].entries[].shared_file                      CHECKED
+//   (25) ext               an empty message today; revisit if it gains file fields
+//
+// Every other field carries ids, versions, schemas or ranges rather than files.
+//
+// The two sidecar kinds are checked directly rather than derived from their segment's flag: an
+// OpAddIndex cross-publish can install a shared IDG entry for a segment without touching that
+// segment's own flag, so a privately owned segment can still carry a shared .idx.
+//
+// Only segment_metas[].shared is read, never RowsetMetadataPB's deprecated parallel
+// deprecated_shared_segments: the proto normalizer back-fills the former from the latter on load
+// (lake_proto_normalizer.cpp), so legacy metadata is covered without reading a deprecated field.
+//
+// Reads metadata only; performs no I/O.
+bool has_shared_files(const TabletMetadataPB& metadata);
+
 StatusOr<TabletRangePB> intersect_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 StatusOr<TabletRangePB> union_range(const TabletRangePB& lhs_pb, const TabletRangePB& rhs_pb);
 Status update_rowset_range(RowsetMetadataPB* rowset, const TabletRangePB& range);
@@ -205,9 +237,7 @@ std::vector<std::string> collect_compaction_output_files(const TxnLogPB& txn_log
 //     remainder. Preserves Σ exactly.
 //
 // Used by per-rowset stat anchoring during tablet split (see
-// `tablet_splitter.cpp`'s `apply_rowset_anchor`). The future
-// cross-publish (P2) refactor of `update_txn_log_data_stats` is expected
-// to reuse this helper for sibling-wide range-aware allocation.
+// `tablet_splitter.cpp`'s `apply_rowset_anchor`).
 void allocate_proportionally(int64_t total, const std::vector<int64_t>& weights, std::vector<int64_t>* out);
 
 // Given per-bucket row counts and a pre-allocated per-bucket num_dels vector,

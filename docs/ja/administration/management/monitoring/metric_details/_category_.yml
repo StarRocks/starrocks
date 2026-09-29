@@ -3,5 +3,5 @@ label: 'メトリクス詳細'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
-  title: 'メトリクス詳細'
+  type: doc
+  id: metric_details

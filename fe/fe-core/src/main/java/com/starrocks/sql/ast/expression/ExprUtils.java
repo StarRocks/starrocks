@@ -196,6 +196,14 @@ public class ExprUtils {
         if (slotRef.isFromLambda()) {
             return true;
         }
+        // A slot the planner materialises for an intermediate expression -- the cast wrapping
+        // array_length() inside a lambda body, for one -- carries no column and never joins a tuple,
+        // so its descriptor has no parent. Such a slot is bound by no tuple at all. Say that instead
+        // of dereferencing the absent parent: TopN runtime-filter construction walks into nested
+        // lambda bodies and reaches exactly these slots.
+        if (slotRef.getDesc().getParent() == null) {
+            return false;
+        }
         for (TupleId tupleId : tupleIds) {
             if (tupleId.equals(slotRef.getDesc().getParent().getId())) {
                 return true;

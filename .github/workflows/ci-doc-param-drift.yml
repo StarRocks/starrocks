@@ -57,6 +57,43 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Materialize the PR's inputs into the working tree. Without this the
+      # checker diffs the base branch against itself -- HEAD is the base
+      # checkout -- so the diff is always empty and no new param is ever found.
+      #
+      # Both halves of the comparison have to come from the PR head. The config
+      # sources supply the new parameters; the parameter reference pages supply
+      # the headings they are matched against. Taking only the sources would
+      # report a false gap for a PR that adds a parameter and documents it in the
+      # same change, which is the pattern contributors are asked to follow.
+      #
+      # Everything checked out here is data -- Java, C++ headers, and Markdown,
+      # none of it executed. The checker script itself still comes from the
+      # trusted base checkout, so nothing executable crosses over from the
+      # untrusted PR head under pull_request_target.
+      - name: Materialize PR sources and docs for diffing
+        run: |
+          # pipefail so a failure in --print-doc-paths cannot be masked by the
+          # exit status of the xargs on the right-hand side of the pipe.
+          set -o pipefail
+
+          git checkout pr-head -- \
+            be/src/common/config.h \
+            fe/fe-core/src/main/java/com/starrocks/common/Config.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/SessionVariable.java \
+            fe/fe-core/src/main/java/com/starrocks/qe/GlobalVariable.java
+
+          # Ask the checker which doc files it reads rather than keeping a second
+          # copy of the list here. A workflow copy would silently fall out of step
+          # with the script, which is how the stale management/ paths went
+          # unnoticed in the first place.
+          python3 build-support/extract_and_diff_params.py --print-doc-paths \
+            | xargs git checkout pr-head --
+
+          git --no-pager diff --stat "origin/${{ steps.branch.outputs.branch }}"
+
+      # stdout carries the comment body; stderr is kept out of it so a warning
+      # or traceback cannot end up posted as the report.
       - name: Run param drift check
         id: drift
         run: |
@@ -65,8 +102,18 @@ jobs:
             --new-params-only \
             --diff-base "origin/${{ steps.branch.outputs.branch }}" \
             --output github-comment \
-            > drift_report.md 2>&1
+            > drift_report.md
           echo "exitcode=$?" >> $GITHUB_OUTPUT
+
+      # Exit codes: 0 = no gaps, 1 = gaps found, anything else = the checker
+      # itself broke. Without this the job would treat a crash as "no gaps" and
+      # post the reassuring placeholder.
+      - name: Fail if the checker itself errored
+        if: steps.drift.outputs.exitcode != '0' && steps.drift.outputs.exitcode != '1'
+        run: |
+          echo "::error::param drift checker exited ${{ steps.drift.outputs.exitcode }}"
+          cat drift_report.md
+          exit 1
 
       - name: Post or update PR comment (gaps found)
         if: steps.drift.outputs.exitcode == '1'
@@ -78,7 +125,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Clear PR comment (no gaps)
-        if: steps.drift.outputs.exitcode != '1'
+        if: steps.drift.outputs.exitcode == '0'
         uses: thollander/actions-comment-pull-request@v2
         with:
           message: |

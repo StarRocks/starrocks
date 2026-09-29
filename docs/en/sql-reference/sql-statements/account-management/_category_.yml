@@ -3,4 +3,5 @@ label: 'User account management'
 collapsible: true
 collapsed: true
 link:
-  type: generated-index
+  type: doc
+  id: account-management

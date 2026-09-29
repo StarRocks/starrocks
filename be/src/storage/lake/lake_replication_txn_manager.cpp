@@ -16,6 +16,8 @@
 
 #include <atomic>
 #include <mutex>
+#include <optional>
+#include <unordered_set>
 
 #include "base/coding.h"
 #include "base/testutil/sync_point.h"
@@ -51,10 +53,68 @@
 
 namespace starrocks::lake {
 namespace {
-// Backlog guard for shared REPLICATE_SNAPSHOT thread pool.
-// Parallel copy is disabled when queue depth exceeds num_threads * this factor
-// to avoid adding more pressure to an already saturated pool.
-constexpr int kParallelCopyMaxQueuePerThread = 8;
+std::unordered_set<std::string> collect_shared_file_names(const TabletMetadataPB& metadata) {
+    std::unordered_set<std::string> files;
+    for (const auto& rowset : metadata.rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if (segment.shared()) {
+                files.emplace(segment.filename());
+            }
+        }
+        for (const auto& del : rowset.del_files()) {
+            if (del.shared()) {
+                files.emplace(del.name());
+            }
+        }
+    }
+    for (const auto& sstable : metadata.sstable_meta().sstables()) {
+        if (sstable.shared()) {
+            files.emplace(sstable.filename());
+        }
+    }
+    for (const auto& [_, file] : metadata.delvec_meta().version_to_file()) {
+        if (file.shared()) {
+            files.emplace(file.name());
+        }
+    }
+    for (const auto& [_, dcg] : metadata.dcg_meta().dcgs()) {
+        for (int i = 0; i < dcg.column_files_size(); ++i) {
+            if (i < dcg.shared_files_size() && dcg.shared_files(i)) {
+                files.emplace(dcg.column_files(i));
+            }
+        }
+    }
+    for (const auto& [_, idg] : metadata.idg_meta().idgs()) {
+        for (const auto& entry : idg.entries()) {
+            if (entry.shared_file() && entry.has_index_file() && !entry.index_file().empty()) {
+                files.emplace(entry.index_file());
+            }
+        }
+    }
+    return files;
+}
+
+StatusOr<std::optional<size_t>> get_existing_file_size(const std::string& path) {
+    ASSIGN_OR_RETURN(auto fs, FileSystemFactory::CreateSharedFromString(path));
+    auto size = fs->get_file_size(path);
+    std::optional<size_t> existing_size;
+    if (size.ok()) {
+        existing_size = static_cast<size_t>(*size);
+    } else if (!size.status().is_not_found()) {
+        return size.status();
+    }
+    TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::get_existing_file_size", &existing_size);
+    return existing_size;
+}
+
+void remove_cleanup_file(std::vector<std::string>* files_to_delete, const std::string& path, std::mutex* mutex) {
+    if (mutex != nullptr) {
+        std::lock_guard lock(*mutex);
+        std::erase(*files_to_delete, path);
+    } else {
+        std::erase(*files_to_delete, path);
+    }
+}
 
 StatusOr<TabletMetadataPtr> load_source_standalone_tablet_metadata(const std::string& metadata_path,
                                                                    const std::shared_ptr<FileSystem>& source_fs) {
@@ -330,6 +390,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     // `filename_map` is another mapping between source and target file name,
     // and it's borrowed from lake::ReplicationTxnManager
     std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>> filename_map;
+    SourceEncryptionMetaMap source_encryption_metas;
     // `segment_name_to_size_map` is the mapping between segment file name to its file size
     // we use the `segment_size` field in rowset metadata to get the file size.
     // for history reasons, the `segment_size` field is not always present, so the resulting map is not guaranteed to
@@ -340,19 +401,43 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     ASSIGN_OR_RETURN(auto target_tablet, _tablet_manager->get_tablet(target_tablet_id));
     ASSIGN_OR_RETURN(auto target_tablet_meta, target_tablet.get_metadata(target_visible_version));
-    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
-    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
-    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
-                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
-                                                       target_tablet_id, txn_id, data_version, src_data_dir,
-                                                       segment_name_to_size_map, file_locations, filename_map));
-    // calc column unique id to adapt for fast schema change
     if (!src_tablet_meta->has_schema()) {
         LOG(WARNING) << "Failed to get source schema, source tablet: " << src_tablet_id
                      << ", target tablet: " << target_tablet_id;
         return Status::Corruption("Failed to get source schema");
     }
     const TabletSchemaPB& source_schema_pb = src_tablet_meta->schema();
+    std::unordered_set<std::string> bundled_segment_names;
+    for (const auto& rowset : src_tablet_meta->rowsets()) {
+        for (const auto& segment : rowset.segment_metas()) {
+            if (!segment.has_bundle_file_offset()) {
+                continue;
+            }
+            bundled_segment_names.emplace(segment.filename());
+        }
+    }
+    // Copy the rowsets, sstables etc. into tablet metadata on target cluster,
+    // then replace file names and return `copied_target_tablet_meta` as the final target tablet metadata
+    ASSIGN_OR_RETURN(auto copied_target_tablet_meta,
+                     convert_and_build_new_tablet_meta(src_tablet_meta, target_tablet_meta, src_tablet_id,
+                                                       target_tablet_id, txn_id, src_data_dir, segment_name_to_size_map,
+                                                       file_locations, filename_map, source_encryption_metas));
+    SourceEncryptionInfoMap source_encryption_infos;
+    source_encryption_infos.reserve(source_encryption_metas.size());
+    for (const auto& [filename, encryption_meta] : source_encryption_metas) {
+        if (encryption_meta.empty()) {
+            continue;
+        }
+        ASSIGN_OR_RETURN(auto info, KeyCache::instance().unwrap_encryption_meta_without_cache(encryption_meta));
+        source_encryption_infos.emplace(filename, std::move(info));
+    }
+    std::unordered_set<std::string> shared_file_names;
+    if (src_tablet_meta->has_range() && target_tablet_meta->has_range()) {
+        // Aligned range children retain the source shared-file flags and resolve to the same
+        // partition data path, so their per-tablet replication tasks may target the same object.
+        shared_file_names = collect_shared_file_names(*src_tablet_meta);
+    }
+    // calc column unique id to adapt for fast schema change
     std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
     ReplicationUtils::calc_column_unique_id_map(source_schema_pb.column(), target_tablet_meta->schema().column(),
                                                 &column_unique_id_map);
@@ -360,6 +445,10 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     if (column_unique_id_map.size() > 0) {
         LOG(INFO) << "Lake replicate storage task, need rebuild column unique id, txn_id: " << txn_id
                   << ", tablet_id: " << target_tablet_id << ", unique_id_map size: " << column_unique_id_map.size();
+        if (!bundled_segment_names.empty()) {
+            return Status::NotSupported(
+                    "Fast schema conversion of bundled segments is not supported in lake replication");
+        }
     }
     std::vector<std::string> files_to_delete;
     CancelableDefer clean_files([&files_to_delete]() { lake::delete_files_async(std::move(files_to_delete)); });
@@ -385,12 +474,21 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
 
     ThreadPool* repl_pool = replicate_file_thread_pool;
     bool use_parallel = should_use_parallel_copy(filename_map.size(), repl_pool);
+    bool use_file_copy_pool = repl_pool != nullptr && repl_pool->max_threads() > 0 &&
+                              config::lake_replication_parallel_copy_min_file_count > 0;
+    size_t worker_count = 1;
+    if (use_parallel) {
+        worker_count = std::min<size_t>(filename_map.size(),
+                                        std::max(1, config::lake_replication_max_parallel_files_per_tablet));
+    }
     std::mutex mu;
     std::mutex* shared_mutex = nullptr;
     FileConverterCreatorFunc active_file_converters = file_converters;
     if (use_parallel) {
         LOG(INFO) << "Start parallel file copy, file_count: " << filename_map.size() << ", txn_id: " << txn_id
-                  << ", tablet_id: " << target_tablet_id << ", pool num_threads: " << repl_pool->num_threads()
+                  << ", tablet_id: " << target_tablet_id << ", worker_count: " << worker_count
+                  << ", pool max_threads: " << repl_pool->max_threads()
+                  << ", pool num_threads: " << repl_pool->num_threads()
                   << ", pool active_threads: " << repl_pool->active_threads()
                   << ", pool queued_tasks: " << repl_pool->num_queued_tasks();
         shared_mutex = &mu;
@@ -418,17 +516,25 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
             src_file_size = size_it->second;
         }
         bool is_seg = is_segment(src_file_name);
+        bool is_bundled_segment = is_seg && bundled_segment_names.contains(src_file_name);
+        bool is_shared_file = is_bundled_segment || shared_file_names.contains(src_file_name);
         // Segments and .del files go through download_lake_file_with_converter + file_converters,
         // which routes .del files through DelFileStreamConverter when V1→V2 transcoding is needed.
         bool use_converter = is_seg || is_del(src_file_name);
         const auto& target_file_name = pair.second.first;
-        FileEncryptionInfo encryption_info;
+        FileEncryptionInfo target_encryption_info;
         if (config::enable_transparent_data_encryption) {
-            encryption_info = pair.second.second.info;
+            target_encryption_info = pair.second.second.info;
+        }
+        FileEncryptionInfo source_encryption_info;
+        auto source_encryption_it = source_encryption_infos.find(src_file_name);
+        if (source_encryption_it != source_encryption_infos.end()) {
+            source_encryption_info = source_encryption_it->second;
         }
 
         tasks.emplace_back([&, src_file_name, src_file_location, target_file_location, target_file_name, src_file_size,
-                            is_seg, use_converter, encryption_info]() -> Status {
+                            is_seg, is_bundled_segment, is_shared_file, use_converter, target_encryption_info,
+                            source_encryption_info]() -> Status {
             // Fast cancel: check right before each file copy starts.
             if (txn_id < get_master_info().min_active_txn_id) {
                 LOG(WARNING) << "Lake replication task cancelled before file copy, transaction is aborted"
@@ -443,16 +549,44 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                       << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
             size_t final_file_size = 0;
+            bool copy_needed = true;
             auto start_ts = butil::gettimeofday_us();
-            if (use_converter) {
+            if (is_shared_file) {
+                // Reuse a sibling's completed copy. Remote shared-data filesystems expose the
+                // final path after close/rename, rather than exposing an in-progress multipart or
+                // temporary file at this path.
+                ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                if (existing_size.has_value()) {
+                    final_file_size = *existing_size;
+                    copy_needed = false;
+                    LOG(INFO) << "Skip copying an existing shared physical file, src: " << src_file_location
+                              << ", target: " << target_file_location << ", txn_id: " << txn_id
+                              << ", tablet_id: " << target_tablet_id << ", size: " << final_file_size;
+                }
+            }
+            if (copy_needed && use_converter) {
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::download_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    RETURN_IF_ERROR(ReplicationUtils::download_lake_file_with_converter(
-                            src_file_location, src_file_name, src_file_size, shared_src_fs, active_file_converters,
-                            &final_file_size));
+                    RandomAccessFileOptions source_opts{.encryption_info = source_encryption_info};
+                    auto copy_status = ReplicationUtils::download_lake_file_with_converter(
+                            src_file_location, src_file_name, src_file_size, shared_src_fs, source_opts,
+                            active_file_converters, &final_file_size);
+                    if (is_shared_file) {
+                        remove_cleanup_file(&files_to_delete, target_file_location, shared_mutex);
+                        if (copy_status.is_already_exist()) {
+                            ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                            if (!existing_size.has_value()) {
+                                return Status::Corruption("Shared physical file disappeared after concurrent copy: " +
+                                                          target_file_location);
+                            }
+                            final_file_size = *existing_size;
+                            copy_status = Status::OK();
+                        }
+                    }
+                    RETURN_IF_ERROR(copy_status);
                 }
-                if (is_seg && final_file_size > 0 && final_file_size != src_file_size) {
+                if (is_seg && !is_bundled_segment && final_file_size > 0 && final_file_size != src_file_size) {
                     if (shared_mutex != nullptr) {
                         std::lock_guard lock(*shared_mutex);
                         segment_size_changes[target_file_name] = final_file_size;
@@ -463,24 +597,36 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
                               << ", target_file: " << target_file_name << ", original size: " << src_file_size
                               << ", final size: " << final_file_size;
                 }
-            } else {
+            } else if (copy_needed) {
                 WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
                 if (config::enable_transparent_data_encryption) {
-                    opts.encryption_info = encryption_info;
+                    opts.encryption_info = target_encryption_info;
                 }
                 int max_retry = std::max(1, config::lake_replication_max_file_copy_retry);
                 TEST_SYNC_POINT_CALLBACK("LakeReplicationTxnManager::replicate_task::copy_non_segment",
                                          &final_file_size);
                 if (final_file_size == 0) {
-                    ASSIGN_OR_RETURN(final_file_size,
-                                     copy_non_segment_file_with_retry(src_file_location, shared_src_fs,
-                                                                      target_file_location, opts, max_retry));
-                }
-                if (shared_mutex != nullptr) {
-                    std::lock_guard lock(*shared_mutex);
-                    files_to_delete.push_back(target_file_location);
-                } else {
-                    files_to_delete.push_back(target_file_location);
+                    if (!is_shared_file) {
+                        if (shared_mutex != nullptr) {
+                            std::lock_guard lock(*shared_mutex);
+                            files_to_delete.push_back(target_file_location);
+                        } else {
+                            files_to_delete.push_back(target_file_location);
+                        }
+                    }
+                    SequentialFileOptions source_opts{.encryption_info = source_encryption_info};
+                    auto copy_result = copy_non_segment_file_with_retry(src_file_location, shared_src_fs, source_opts,
+                                                                        target_file_location, opts, max_retry);
+                    if (!copy_result.ok() && is_shared_file && copy_result.status().is_already_exist()) {
+                        ASSIGN_OR_RETURN(auto existing_size, get_existing_file_size(target_file_location));
+                        if (!existing_size.has_value()) {
+                            return Status::Corruption("Shared physical file disappeared after concurrent copy: " +
+                                                      target_file_location);
+                        }
+                        final_file_size = *existing_size;
+                    } else {
+                        ASSIGN_OR_RETURN(final_file_size, std::move(copy_result));
+                    }
                 }
             }
 
@@ -497,26 +643,16 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
         });
     }
     // step 4: execute tasks and collect copy metrics.
-    // Follow the ThreadPoolToken(CONCURRENT) + wait() pattern used in txn_manager.cpp.
-    if (use_parallel) {
-        auto token = repl_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
-        std::vector<Status> task_results(tasks.size());
-        for (size_t i = 0; i < tasks.size(); i++) {
-            auto st =
-                    token->submit_func([&task_results, i, task = std::move(tasks[i])]() { task_results[i] = task(); });
-            if (!st.ok()) {
-                task_results[i] = std::move(st);
-            }
-        }
-        token->wait();
-        for (const auto& r : task_results) {
-            if (!r.ok()) {
-                LOG(WARNING) << "Parallel file copy failed, txn_id: " << txn_id << ", tablet_id: " << target_tablet_id
-                             << ", pool num_threads: " << repl_pool->num_threads()
-                             << ", pool active_threads: " << repl_pool->active_threads()
-                             << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << r;
-                return r;
-            }
+    if (use_file_copy_pool) {
+        auto st = execute_file_copy_tasks(std::move(tasks), repl_pool, worker_count);
+        if (!st.ok()) {
+            LOG(WARNING) << "File copy through dedicated pool failed, txn_id: " << txn_id
+                         << ", tablet_id: " << target_tablet_id << ", worker_count: " << worker_count
+                         << ", pool max_threads: " << repl_pool->max_threads()
+                         << ", pool num_threads: " << repl_pool->num_threads()
+                         << ", pool active_threads: " << repl_pool->active_threads()
+                         << ", pool queued_tasks: " << repl_pool->num_queued_tasks() << ", error: " << st;
+            return st;
         }
     } else {
         for (const auto& task : tasks) {
@@ -530,8 +666,9 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     }
     LOG(INFO) << "Replicated tablet file count: " << filename_map.size() << ", total bytes: " << total_file_size
               << ", cost: " << total_time_sec << "s, rate: " << copy_rate
-              << "MB/s, parallel: " << (use_parallel ? "true" : "false") << ", txn_id: " << txn_id
-              << ", tablet_id: " << target_tablet_id;
+              << "MB/s, file_copy_pool: " << (use_file_copy_pool ? "true" : "false")
+              << ", parallel: " << (use_parallel ? "true" : "false") << ", worker_count: " << worker_count
+              << ", txn_id: " << txn_id << ", tablet_id: " << target_tablet_id;
 
     // step 5: update metadata and write txn log.
     // Update segment sizes in tablet_metadata if there are any changes
@@ -570,19 +707,58 @@ bool LakeReplicationTxnManager::should_use_parallel_copy(size_t file_count, cons
     if (min_file_count == 0) {
         return false;
     }
+    if (config::lake_replication_max_parallel_files_per_tablet <= 1) {
+        return false;
+    }
     if (file_count < static_cast<size_t>(min_file_count)) {
         return false;
     }
-    const int num_threads = thread_pool->num_threads();
-    if (num_threads <= 0) {
+    if (thread_pool->max_threads() <= 0) {
         return false;
     }
-    return thread_pool->num_queued_tasks() <= num_threads * kParallelCopyMaxQueuePerThread;
+    return true;
+}
+
+Status LakeReplicationTxnManager::execute_file_copy_tasks(std::vector<ReplicationTask> tasks, ThreadPool* thread_pool,
+                                                          size_t max_workers) {
+    if (tasks.empty()) {
+        return Status::OK();
+    }
+    if (thread_pool == nullptr || thread_pool->max_threads() <= 0) {
+        return Status::InvalidArgument("Lake replication file copy thread pool is unavailable");
+    }
+
+    const size_t worker_count = std::min(tasks.size(), std::max<size_t>(1, max_workers));
+    auto token = thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::atomic<size_t> next_task{0};
+    std::vector<Status> task_results(tasks.size());
+    Status submit_status;
+    for (size_t i = 0; i < worker_count; ++i) {
+        auto st = token->submit_func([&]() {
+            while (true) {
+                size_t task_index = next_task.fetch_add(1, std::memory_order_relaxed);
+                if (task_index >= tasks.size()) {
+                    return;
+                }
+                task_results[task_index] = tasks[task_index]();
+            }
+        });
+        if (!st.ok() && submit_status.ok()) {
+            submit_status = std::move(st);
+        }
+    }
+    token->wait();
+    RETURN_IF_ERROR(submit_status);
+    for (const auto& result : task_results) {
+        RETURN_IF_ERROR(result);
+    }
+    return Status::OK();
 }
 
 StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
         const std::string& src_file_location, const std::shared_ptr<FileSystem>& shared_src_fs,
-        const std::string& target_file_location, const WritableFileOptions& opts, int max_retry) {
+        const SequentialFileOptions& src_opts, const std::string& target_file_location, const WritableFileOptions& opts,
+        int max_retry) {
     ASSIGN_OR_RETURN(auto expected_size, shared_src_fs->get_file_size(src_file_location));
 
     const size_t buff_size = std::max<size_t>(
@@ -592,7 +768,8 @@ StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
     Status copy_status;
     size_t final_file_size = 0;
     for (int retry = 0; retry < max_retry; ++retry) {
-        auto res = fs::copy_file(src_file_location, shared_src_fs, target_file_location, nullptr, opts, buff_size);
+        auto res = fs::copy_file(src_file_location, shared_src_fs, src_opts, target_file_location, nullptr, opts,
+                                 buff_size);
         if (!res.ok()) {
             copy_status = res.status();
             LOG(WARNING) << "Failed to copy file " << src_file_location << " to " << target_file_location
@@ -609,6 +786,13 @@ StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
         LOG(WARNING) << copy_status.message() << ", retry=" << retry;
     }
     return copy_status;
+}
+
+StatusOr<size_t> LakeReplicationTxnManager::copy_non_segment_file_with_retry(
+        const std::string& src_file_location, const std::shared_ptr<FileSystem>& shared_src_fs,
+        const std::string& target_file_location, const WritableFileOptions& opts, int max_retry) {
+    return copy_non_segment_file_with_retry(src_file_location, shared_src_fs, SequentialFileOptions{},
+                                            target_file_location, opts, max_retry);
 }
 
 StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::build_source_tablet_meta(
@@ -712,75 +896,97 @@ StatusOr<TabletMetadataPtr> LakeReplicationTxnManager::try_build_source_tablet_m
     return result;
 }
 
-Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
-        const TabletMetadataPtr& target_data_version_tablet_meta,
-        std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids) {
+Status LakeReplicationTxnManager::build_existed_filename_uuids_map(const TabletMetadataPtr& target_tablet_meta,
+                                                                   ExistingFileMap& existed_filename_uuids,
+                                                                   ExistingBundleSliceInfoMap& bundle_slice_infos) {
     // Collect UUIDs from rowsets (segments and del files)
-    for (const auto& rowset : target_data_version_tablet_meta->rowsets()) {
+    for (const auto& rowset : target_tablet_meta->rowsets()) {
         for (const auto& segment_meta : rowset.segment_metas()) {
             const auto& segment_name = segment_meta.filename();
-            if (segment_meta.has_encryption_meta()) {
-                existed_filename_uuids.emplace(extract_uuid_from(segment_name),
-                                               std::make_pair(segment_name, segment_meta.encryption_meta()));
-            } else {
-                existed_filename_uuids.emplace(extract_uuid_from(segment_name), std::make_pair(segment_name, ""));
+            const auto uuid = extract_uuid_from(segment_name);
+            const std::optional<int64_t> segment_size =
+                    segment_meta.has_size() ? std::make_optional(segment_meta.size()) : std::nullopt;
+            existed_filename_uuids.emplace(
+                    uuid, ExistingFileInfo{segment_name,
+                                           segment_meta.has_bundle_file_offset() ? "" : segment_meta.encryption_meta(),
+                                           segment_meta.shared(),
+                                           segment_meta.has_bundle_file_offset() ? std::nullopt : segment_size});
+            if (segment_meta.has_bundle_file_offset()) {
+                auto& slice_infos = bundle_slice_infos[uuid];
+                auto [it, inserted] =
+                        slice_infos.emplace(segment_meta.bundle_file_offset(),
+                                            ExistingBundleSliceInfo{segment_meta.encryption_meta(), segment_size});
+                if (!inserted && it->second.encryption_meta != segment_meta.encryption_meta()) {
+                    return Status::Corruption(
+                            fmt::format("Conflicting target bundle slice encryption metadata for UUID {} at offset {}",
+                                        uuid, segment_meta.bundle_file_offset()));
+                }
+                if (!inserted && it->second.segment_size.has_value() && segment_size.has_value() &&
+                    it->second.segment_size != segment_size) {
+                    return Status::Corruption(
+                            fmt::format("Conflicting target bundle slice sizes for UUID {} at offset {}", uuid,
+                                        segment_meta.bundle_file_offset()));
+                }
+                if (!inserted && !it->second.segment_size.has_value()) {
+                    it->second.segment_size = segment_size;
+                }
             }
         }
         for (const auto& del : rowset.del_files()) {
             const auto& del_filename = del.name();
             existed_filename_uuids.emplace(extract_uuid_from(del_filename),
-                                           std::make_pair(del_filename, del.encryption_meta()));
+                                           ExistingFileInfo{del_filename, del.encryption_meta(), del.shared()});
         }
     }
 
     // Collect UUIDs from SST files
-    if (target_data_version_tablet_meta->has_sstable_meta()) {
-        const auto& dest_meta = target_data_version_tablet_meta->sstable_meta();
+    if (target_tablet_meta->has_sstable_meta()) {
+        const auto& dest_meta = target_tablet_meta->sstable_meta();
         for (const auto& sst : dest_meta.sstables()) {
             const auto& sst_filename = sst.filename();
             existed_filename_uuids.emplace(extract_uuid_from(sst_filename),
-                                           std::make_pair(sst_filename, sst.encryption_meta()));
+                                           ExistingFileInfo{sst_filename, sst.encryption_meta(), sst.shared()});
         }
     }
 
     // Collect UUIDs from delvec files
-    if (target_data_version_tablet_meta->has_delvec_meta()) {
-        const auto& dest_meta = target_data_version_tablet_meta->delvec_meta();
+    if (target_tablet_meta->has_delvec_meta()) {
+        const auto& dest_meta = target_tablet_meta->delvec_meta();
         for (const auto& [_, file_meta_pb] : dest_meta.version_to_file()) {
             const auto& delvec_filename = file_meta_pb.name();
-            // Note: delvec files don't have separate encryption metas in current implementation
-            existed_filename_uuids.emplace(extract_uuid_from(delvec_filename), std::make_pair(delvec_filename, ""));
+            existed_filename_uuids.emplace(
+                    extract_uuid_from(delvec_filename),
+                    ExistingFileInfo{delvec_filename, file_meta_pb.encryption_meta(), file_meta_pb.shared()});
         }
     }
 
     // Collect UUIDs from dcg files
-    if (target_data_version_tablet_meta->has_dcg_meta()) {
-        const auto& dcg_meta = target_data_version_tablet_meta->dcg_meta();
+    if (target_tablet_meta->has_dcg_meta()) {
+        const auto& dcg_meta = target_tablet_meta->dcg_meta();
         for (const auto& [_, dcg_ver_pb] : dcg_meta.dcgs()) {
             bool has_encryption_meta = dcg_ver_pb.column_files_size() == dcg_ver_pb.encryption_metas_size();
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
                 const auto& dcg_filename = dcg_ver_pb.column_files(i);
-                if (has_encryption_meta) {
-                    existed_filename_uuids.emplace(extract_uuid_from(dcg_filename),
-                                                   std::make_pair(dcg_filename, dcg_ver_pb.encryption_metas(i)));
-                } else {
-                    existed_filename_uuids.emplace(extract_uuid_from(dcg_filename), std::make_pair(dcg_filename, ""));
-                }
+                const std::string encryption_meta = has_encryption_meta ? dcg_ver_pb.encryption_metas(i) : "";
+                const bool shared = i < dcg_ver_pb.shared_files_size() && dcg_ver_pb.shared_files(i);
+                existed_filename_uuids.emplace(extract_uuid_from(dcg_filename),
+                                               ExistingFileInfo{dcg_filename, encryption_meta, shared});
             }
         }
     }
 
     // Collect UUIDs from idg (.idx) files so a repeated full-snapshot replication reuses the
     // already-replicated .idx (and its encryption meta) instead of re-copying it.
-    if (target_data_version_tablet_meta->has_idg_meta()) {
-        const auto& idg_meta = target_data_version_tablet_meta->idg_meta();
+    if (target_tablet_meta->has_idg_meta()) {
+        const auto& idg_meta = target_tablet_meta->idg_meta();
         for (const auto& [_, idg_ver_pb] : idg_meta.idgs()) {
             for (const auto& entry : idg_ver_pb.entries()) {
                 if (!entry.has_index_file() || entry.index_file().empty()) {
                     continue;
                 }
-                existed_filename_uuids.emplace(extract_uuid_from(entry.index_file()),
-                                               std::make_pair(entry.index_file(), entry.encryption_meta()));
+                existed_filename_uuids.emplace(
+                        extract_uuid_from(entry.index_file()),
+                        ExistingFileInfo{entry.index_file(), entry.encryption_meta(), entry.shared_file()});
             }
         }
     }
@@ -790,19 +996,60 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(
 
 StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_and_build_new_tablet_meta(
         const TabletMetadataPtr& src_tablet_meta, const TabletMetadataPtr& target_tablet_meta, int64_t src_tablet_id,
-        int64_t target_tablet_id, TTransactionId txn_id, int64_t data_version, const std::string& src_data_dir,
+        int64_t target_tablet_id, TTransactionId txn_id, const std::string& src_data_dir,
         std::unordered_map<std::string, size_t>& segment_name_to_size_map,
         std::map<std::string, std::string>& file_locations,
-        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map) {
+        std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map,
+        SourceEncryptionMetaMap& source_encryption_metas) {
     VLOG(3) << "Lake replicate storage task, building new tablet meta for tablet: " << target_tablet_id
-            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id << ", data_version: " << data_version;
-    // find all files that already replicated to target storage in previous txns
-    ASSIGN_OR_RETURN(auto target_data_version_tablet_meta,
-                     _tablet_manager->get_tablet_metadata(target_tablet_id, data_version, false, 0, nullptr));
+            << ", src_tablet_id: " << src_tablet_id << ", txn_id: " << txn_id;
     // `existed_filename_uuids` represented files that already replicated to target storage in previous txns
-    // <uuid, pair<existed_filename, encryption_meta>>
-    std::unordered_map<std::string, std::pair<std::string, std::string>> existed_filename_uuids;
-    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_data_version_tablet_meta, existed_filename_uuids));
+    // <uuid, destination filename/encryption/shared ownership/segment size>. Use visible metadata so the map does not
+    // retain files that compaction and vacuum may already have removed from target storage.
+    ExistingFileMap existed_filename_uuids;
+    ExistingBundleSliceInfoMap bundle_slice_infos;
+    RETURN_IF_ERROR(build_existed_filename_uuids_map(target_tablet_meta, existed_filename_uuids, bundle_slice_infos));
+
+    const bool preserve_source_shared = src_tablet_meta->has_range() && target_tablet_meta->has_range();
+    struct SourceFileDeclaration {
+        std::string encryption_meta;
+        bool shared_or_bundled = false;
+    };
+    std::unordered_map<std::string, SourceFileDeclaration> source_file_declarations;
+    auto destination_shared = [&existed_filename_uuids, preserve_source_shared](const std::string& source_filename,
+                                                                                bool source_shared,
+                                                                                bool existed) -> StatusOr<bool> {
+        // For aligned range tablets, a source-shared segment can contain rows for multiple
+        // split children. The shared bit makes each child apply its tablet range while reading.
+        // The corresponding target children also use one physical copied file, so preserve the
+        // bit for all associated sidecars as well.
+        if (preserve_source_shared && source_shared) {
+            return true;
+        }
+        if (!existed) {
+            return false;
+        }
+        auto it = existed_filename_uuids.find(extract_uuid_from(source_filename));
+        if (it == existed_filename_uuids.end()) {
+            return Status::Corruption("Existing replicated file disappeared from the UUID map: " + source_filename);
+        }
+        return it->second.shared;
+    };
+    auto record_source_encryption_declaration =
+            [&](const std::string& source_filename, const std::string& encryption_meta, bool existed,
+                bool destination_file_shared, bool source_bundled = false) -> Status {
+        if (existed) {
+            return Status::OK();
+        }
+        auto [it, inserted] = source_file_declarations.try_emplace(
+                source_filename, SourceFileDeclaration{.encryption_meta = encryption_meta});
+        if (!inserted && it->second.encryption_meta != encryption_meta) {
+            return Status::Corruption(
+                    fmt::format("Conflicting source encryption metadata for file: {}", source_filename));
+        }
+        it->second.shared_or_bundled |= destination_file_shared || source_bundled;
+        return Status::OK();
+    };
 
     VLOG(3) << "Lake replicate storage task, found " << existed_filename_uuids.size() << " existed files";
     // make new metadata
@@ -842,20 +1089,46 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_seg_meta = new_rowset_meta->mutable_segment_metas(i);
             new_seg_meta->set_filename(final_segment_filename);
             new_seg_meta->clear_encryption_meta();
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_segment_filename, src_seg_meta.shared(), is_existed));
+            new_seg_meta->set_shared(destination_file_shared);
+            RETURN_IF_ERROR(record_source_encryption_declaration(src_segment_filename, src_seg_meta.encryption_meta(),
+                                                                 is_existed, destination_file_shared,
+                                                                 src_seg_meta.has_bundle_file_offset()));
 
             // Add encryption metadata for files
-            if (config::enable_transparent_data_encryption) {
-                if (!is_existed) {
+            if (!is_existed) {
+                if (config::enable_transparent_data_encryption) {
                     // segment file doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_segment_filename];
+                    const auto& pair = filename_map[src_segment_filename];
                     new_seg_meta->set_encryption_meta(pair.second.encryption_meta);
+                }
+            } else {
+                // segment file already exists, use the existing encryption metadata from target tablet
+                auto uuid = extract_uuid_from(src_segment_filename);
+                if (src_seg_meta.has_bundle_file_offset()) {
+                    auto uuid_it = bundle_slice_infos.find(uuid);
+                    if (uuid_it == bundle_slice_infos.end()) {
+                        return Status::Corruption(
+                                fmt::format("No existing target bundle slice metadata found for UUID {}", uuid));
+                    }
+                    auto offset_it = uuid_it->second.find(src_seg_meta.bundle_file_offset());
+                    if (offset_it == uuid_it->second.end()) {
+                        return Status::Corruption(
+                                fmt::format("No existing target bundle slice metadata found for UUID {} at offset {}",
+                                            uuid, src_seg_meta.bundle_file_offset()));
+                    }
+                    new_seg_meta->set_encryption_meta(offset_it->second.encryption_meta);
+                    if (offset_it->second.segment_size.has_value()) {
+                        new_seg_meta->set_size(offset_it->second.segment_size.value());
+                    }
                 } else {
-                    // segment file already exists, use the existing encryption metadata from target tablet
-                    auto uuid = extract_uuid_from(src_segment_filename);
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
-                        const std::string& existing_encryption_meta = it->second.second;
-                        new_seg_meta->set_encryption_meta(existing_encryption_meta);
+                        new_seg_meta->set_encryption_meta(it->second.encryption_meta);
+                        if (it->second.segment_size.has_value()) {
+                            new_seg_meta->set_size(it->second.segment_size.value());
+                        }
                     } else {
                         // should never happend
                         return Status::Corruption(fmt::format("no existing encryption metadata found for file: {}",
@@ -865,7 +1138,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             }
 
             // build segment_name_to_size_map, record the size of source segment file
-            if (src_seg_meta.has_size()) {
+            if (src_seg_meta.has_size() && !src_seg_meta.has_bundle_file_offset()) {
                 segment_name_to_size_map.emplace(src_segment_filename, src_seg_meta.size());
             }
         }
@@ -882,20 +1155,33 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             auto* new_del = new_rowset_meta->add_del_files();
             new_del->CopyFrom(src_del);
             new_del->set_name(final_del_filename);
+            // The replicated file is produced by the download, which routes .del files through
+            // build_file_converters and may re-encode the payload (DelFileStreamConverter, PK encoding
+            // V1->V2). The source checksum describes the source bytes, so keeping it would make the
+            // target reject a perfectly valid del file. Drop it unconditionally rather than trying to
+            // predict here whether this particular file gets transcoded: absent means "not recorded"
+            // and readers skip verification, same as the shared-nothing replication path.
+            new_del->clear_crc32c();
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_del_filename, src_del.shared(), is_existed));
+            new_del->set_shared(destination_file_shared);
+            RETURN_IF_ERROR(record_source_encryption_declaration(src_del_filename, src_del.encryption_meta(),
+                                                                 is_existed, destination_file_shared));
+            new_del->clear_encryption_meta();
 
-            if (config::enable_transparent_data_encryption) {
-                if (!is_existed) {
+            if (!is_existed) {
+                if (config::enable_transparent_data_encryption) {
                     // del doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_del_filename];
+                    const auto& pair = filename_map[src_del_filename];
                     new_del->set_encryption_meta(pair.second.encryption_meta);
-                } else {
-                    // del already exists, use the existing encryption metadata from target tablet
-                    auto uuid = extract_uuid_from(src_del_filename);
-                    auto it = existed_filename_uuids.find(uuid);
-                    if (it != existed_filename_uuids.end()) {
-                        const std::string& existing_encryption_meta = it->second.second;
-                        new_del->set_encryption_meta(existing_encryption_meta);
-                    }
+                }
+            } else {
+                // del already exists, use the existing encryption metadata from target tablet
+                auto uuid = extract_uuid_from(src_del_filename);
+                auto it = existed_filename_uuids.find(uuid);
+                if (it != existed_filename_uuids.end()) {
+                    const std::string& existing_encryption_meta = it->second.encryption_meta;
+                    new_del->set_encryption_meta(existing_encryption_meta);
                 }
             }
         }
@@ -907,26 +1193,34 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         dest_meta->CopyFrom(src_tablet_meta->sstable_meta());
         for (PersistentIndexSstablePB& sst_ref : *dest_meta->mutable_sstables()) {
             PersistentIndexSstablePB* sst = &sst_ref;
-            const auto& src_sst_filename = sst->filename();
+            const auto src_sst_filename = sst->filename();
+            const auto source_encryption_meta = sst->encryption_meta();
+            const bool source_shared = sst->shared();
             std::string final_sst_filename;
             ASSIGN_OR_RETURN(auto is_existed, determine_final_filename(src_sst_filename, txn_id, existed_filename_uuids,
                                                                        final_sst_filename, target_tablet_id,
                                                                        src_data_dir, file_locations, filename_map));
             sst->set_filename(final_sst_filename);
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_sst_filename, source_shared, is_existed));
+            sst->set_shared(destination_file_shared);
+            RETURN_IF_ERROR(record_source_encryption_declaration(src_sst_filename, source_encryption_meta, is_existed,
+                                                                 destination_file_shared));
+            sst->clear_encryption_meta();
 
-            if (config::enable_transparent_data_encryption) {
-                if (!is_existed) {
+            if (!is_existed) {
+                if (config::enable_transparent_data_encryption) {
                     // sst doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_sst_filename];
+                    const auto& pair = filename_map[src_sst_filename];
                     sst->set_encryption_meta(pair.second.encryption_meta);
-                } else {
-                    // sst already exists, use the existing encryption metadata from target tablet
-                    auto uuid = extract_uuid_from(src_sst_filename);
-                    auto it = existed_filename_uuids.find(uuid);
-                    if (it != existed_filename_uuids.end()) {
-                        const std::string& existing_encryption_meta = it->second.second;
-                        sst->set_encryption_meta(existing_encryption_meta);
-                    }
+                }
+            } else {
+                // sst already exists, use the existing encryption metadata from target tablet
+                auto uuid = extract_uuid_from(src_sst_filename);
+                auto it = existed_filename_uuids.find(uuid);
+                if (it != existed_filename_uuids.end()) {
+                    const std::string& existing_encryption_meta = it->second.encryption_meta;
+                    sst->set_encryption_meta(existing_encryption_meta);
                 }
             }
         }
@@ -938,6 +1232,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         dest_meta->CopyFrom(src_tablet_meta->delvec_meta());
         for (const auto& [version, file_meta_pb] : dest_meta->version_to_file()) {
             auto src_delvec_filename = file_meta_pb.name();
+            const auto source_encryption_meta = file_meta_pb.encryption_meta();
             std::string final_delvec_filename;
             ASSIGN_OR_RETURN(
                     auto is_existed,
@@ -945,20 +1240,26 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                                              target_tablet_id, src_data_dir, file_locations, filename_map));
             auto& item = (*dest_meta->mutable_version_to_file())[version];
             item.set_name(final_delvec_filename);
+            ASSIGN_OR_RETURN(auto destination_file_shared,
+                             destination_shared(src_delvec_filename, file_meta_pb.shared(), is_existed));
+            item.set_shared(destination_file_shared);
+            RETURN_IF_ERROR(record_source_encryption_declaration(src_delvec_filename, source_encryption_meta,
+                                                                 is_existed, destination_file_shared));
+            item.clear_encryption_meta();
 
-            if (config::enable_transparent_data_encryption) {
-                if (!is_existed) {
+            if (!is_existed) {
+                if (config::enable_transparent_data_encryption) {
                     // del file doesn't exist, use the newly generated encryption metadata
-                    std::pair<std::string, FileEncryptionPair> pair = filename_map[src_delvec_filename];
+                    const auto& pair = filename_map[src_delvec_filename];
                     item.set_encryption_meta(pair.second.encryption_meta);
-                } else {
-                    // del file already exists, use the existing encryption metadata from target tablet
-                    auto uuid = extract_uuid_from(src_delvec_filename);
-                    auto it = existed_filename_uuids.find(uuid);
-                    if (it != existed_filename_uuids.end()) {
-                        const std::string& existing_encryption_meta = it->second.second;
-                        item.set_encryption_meta(existing_encryption_meta);
-                    }
+                }
+            } else {
+                // del file already exists, use the existing encryption metadata from target tablet
+                auto uuid = extract_uuid_from(src_delvec_filename);
+                auto it = existed_filename_uuids.find(uuid);
+                if (it != existed_filename_uuids.end()) {
+                    const std::string& existing_encryption_meta = it->second.encryption_meta;
+                    item.set_encryption_meta(existing_encryption_meta);
                 }
             }
         }
@@ -969,6 +1270,17 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
         DeltaColumnGroupMetadataPB* dest_meta = new_metadata->mutable_dcg_meta();
         dest_meta->CopyFrom(src_tablet_meta->dcg_meta());
         for (auto& [segment_id, dcg_ver_pb] : *dest_meta->mutable_dcgs()) {
+            std::vector<bool> source_shared_files;
+            source_shared_files.reserve(dcg_ver_pb.column_files_size());
+            std::vector<std::string> source_dcg_encryption_metas;
+            source_dcg_encryption_metas.reserve(dcg_ver_pb.column_files_size());
+            for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
+                source_shared_files.emplace_back(i < dcg_ver_pb.shared_files_size() && dcg_ver_pb.shared_files(i));
+                source_dcg_encryption_metas.emplace_back(
+                        i < dcg_ver_pb.encryption_metas_size() ? dcg_ver_pb.encryption_metas(i) : "");
+            }
+            dcg_ver_pb.clear_shared_files();
+            dcg_ver_pb.clear_encryption_metas();
             for (int i = 0; i < dcg_ver_pb.column_files_size(); ++i) {
                 auto src_dcg_filename = dcg_ver_pb.column_files(i);
                 std::string final_dcg_filename;
@@ -977,30 +1289,26 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         determine_final_filename(src_dcg_filename, txn_id, existed_filename_uuids, final_dcg_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 dcg_ver_pb.set_column_files(i, final_dcg_filename);
+                ASSIGN_OR_RETURN(auto destination_file_shared,
+                                 destination_shared(src_dcg_filename, source_shared_files[i], is_existed));
+                dcg_ver_pb.add_shared_files(destination_file_shared);
+                RETURN_IF_ERROR(record_source_encryption_declaration(src_dcg_filename, source_dcg_encryption_metas[i],
+                                                                     is_existed, destination_file_shared));
 
-                if (config::enable_transparent_data_encryption) {
-                    if (!is_existed) {
-                        // dcg file doesn't exist, use the newly generated encryption metadata
-                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_dcg_filename];
-                        if (dcg_ver_pb.encryption_metas_size() > i) {
-                            dcg_ver_pb.set_encryption_metas(i, pair.second.encryption_meta);
-                        } else {
-                            dcg_ver_pb.add_encryption_metas(pair.second.encryption_meta);
-                        }
-                    } else {
-                        // dcg file already exists, use the existing encryption metadata from target tablet
-                        auto uuid = extract_uuid_from(src_dcg_filename);
-                        auto it = existed_filename_uuids.find(uuid);
-                        if (it != existed_filename_uuids.end()) {
-                            const std::string& existing_encryption_meta = it->second.second;
-                            if (dcg_ver_pb.encryption_metas_size() > i) {
-                                dcg_ver_pb.set_encryption_metas(i, existing_encryption_meta);
-                            } else {
-                                dcg_ver_pb.add_encryption_metas(existing_encryption_meta);
-                            }
-                        }
+                std::string destination_encryption_meta;
+                if (!is_existed && config::enable_transparent_data_encryption) {
+                    // dcg file doesn't exist, use the newly generated encryption metadata
+                    const auto& pair = filename_map[src_dcg_filename];
+                    destination_encryption_meta = pair.second.encryption_meta;
+                } else if (is_existed) {
+                    // dcg file already exists, use the existing encryption metadata from target tablet
+                    auto uuid = extract_uuid_from(src_dcg_filename);
+                    auto it = existed_filename_uuids.find(uuid);
+                    if (it != existed_filename_uuids.end()) {
+                        destination_encryption_meta = it->second.encryption_meta;
                     }
                 }
+                dcg_ver_pb.add_encryption_metas(destination_encryption_meta);
             }
         }
     }
@@ -1050,31 +1358,48 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                     continue;
                 }
                 const auto src_idx_filename = entry.index_file();
+                const auto source_encryption_meta = entry.encryption_meta();
+                const bool source_shared = entry.shared_file();
                 std::string final_idx_filename;
                 ASSIGN_OR_RETURN(
                         auto is_existed,
                         determine_final_filename(src_idx_filename, txn_id, existed_filename_uuids, final_idx_filename,
                                                  target_tablet_id, src_data_dir, file_locations, filename_map));
                 entry.set_index_file(final_idx_filename);
+                ASSIGN_OR_RETURN(auto destination_file_shared,
+                                 destination_shared(src_idx_filename, source_shared, is_existed));
+                entry.set_shared_file(destination_file_shared);
+                RETURN_IF_ERROR(record_source_encryption_declaration(src_idx_filename, source_encryption_meta,
+                                                                     is_existed, destination_file_shared));
                 // The source's encryption meta belongs to the source cluster; drop it and
                 // re-derive against the target (matching the segment handling above).
                 entry.clear_encryption_meta();
 
-                if (config::enable_transparent_data_encryption) {
-                    if (!is_existed) {
+                if (!is_existed) {
+                    if (config::enable_transparent_data_encryption) {
                         // .idx file doesn't exist on target, use the newly generated encryption metadata
-                        std::pair<std::string, FileEncryptionPair> pair = filename_map[src_idx_filename];
+                        const auto& pair = filename_map[src_idx_filename];
                         entry.set_encryption_meta(pair.second.encryption_meta);
-                    } else {
-                        // .idx file already replicated in a previous txn, reuse its existing encryption metadata
-                        auto uuid = extract_uuid_from(src_idx_filename);
-                        auto it = existed_filename_uuids.find(uuid);
-                        if (it != existed_filename_uuids.end()) {
-                            entry.set_encryption_meta(it->second.second);
-                        }
+                    }
+                } else {
+                    // .idx file already replicated in a previous txn, reuse its existing encryption metadata
+                    auto uuid = extract_uuid_from(src_idx_filename);
+                    auto it = existed_filename_uuids.find(uuid);
+                    if (it != existed_filename_uuids.end()) {
+                        entry.set_encryption_meta(it->second.encryption_meta);
                     }
                 }
             }
+        }
+    }
+
+    for (const auto& [source_filename, declaration] : source_file_declarations) {
+        if (declaration.shared_or_bundled) {
+            if (!declaration.encryption_meta.empty() || config::enable_transparent_data_encryption) {
+                return Status::NotSupported("Copying new encrypted shared or bundled physical files is not supported");
+            }
+        } else {
+            source_encryption_metas.emplace(source_filename, declaration.encryption_meta);
         }
     }
 
@@ -1082,8 +1407,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
 }
 
 StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
-        const std::string& src_filename, TTransactionId txn_id,
-        const std::unordered_map<std::string, std::pair<std::string, std::string>>& existed_filename_uuids,
+        const std::string& src_filename, TTransactionId txn_id, const ExistingFileMap& existed_filename_uuids,
         std::string& final_filename, const int64_t target_tablet_id, const std::string& src_data_dir,
         std::map<std::string, std::string>& file_locations,
         std::unordered_map<std::string, std::pair<std::string, FileEncryptionPair>>& filename_map) {
@@ -1091,10 +1415,18 @@ StatusOr<bool> LakeReplicationTxnManager::determine_final_filename(
     auto it = existed_filename_uuids.find(uuid);
     if (it != existed_filename_uuids.end()) {
         // UUID exists, use the existing target filename
-        final_filename = it->second.first; // pair.first is the filename
+        final_filename = it->second.filename;
         LOG(INFO) << "File: " << src_filename
                   << " already exists on target cluster, use existing target filename: " << final_filename;
         return true;
+    }
+
+    // One physical bundle object can appear as multiple logical segment slices. Register and
+    // copy it once, while every SegmentMetadataPB keeps its own bundle_file_offset and size.
+    auto pending_it = filename_map.find(src_filename);
+    if (pending_it != filename_map.end()) {
+        final_filename = pending_it->second.first;
+        return false;
     }
 
     // UUID not exists, generate new filename

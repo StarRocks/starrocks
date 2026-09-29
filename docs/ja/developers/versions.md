@@ -81,3 +81,37 @@ bugfix-only
   - 5.3 は `bugfix-only` 状態です
   - 5.2 も `bugfix-only` 状態です
   - 5.1 は `code-freeze` 状態です
+
+## JDK Support Policy
+
+StarRocks の FE、BE、CN ノードは JDK に依存して動作します。StarRocks が要求および推奨する JDK バージョンは、StarRocks のバージョン番号ではなく、[Eclipse Adoptium](https://adoptium.net/support) が公開する Java LTS カレンダーに従います。StarRocks バージョンごとの JDK バージョンについては、[環境設定](../deployment/preparation/environment_configurations.md) を参照してください。
+
+各 StarRocks マイナーバージョンは、次の 2 つの JDK バージョンを定義します。
+
+- **最小 JDK**: Adoptium がまだビルドしている最も古い Java LTS リリースです。FE はこれより古い JDK では起動しません。BE と CN はこれより古い JDK ではエラーを記録し、Java UDF や JNI ベースのコネクタなど Java に依存する機能はサポートされません。
+- **推奨 JDK**: 次の Java LTS リリースです。公式コンテナイメージに同梱される JDK であり、次回の変更時に最小 JDK になります。推奨 JDK より古い JDK で起動すると、推奨 JDK のバージョンを示す非推奨警告が出力されます。
+
+推奨 JDK より新しい Java LTS リリースは、まだこのポリシーの対象外です。通常は動作しますが、テストされていません。非 LTS の Java リリースはサポートされません。
+
+現在、最小 JDK は JDK 17、推奨 JDK は JDK 21 です。
+
+### When the minimum JDK changes
+
+- 最小 JDK は、現在の最小 JDK が Adoptium での提供終了 (End of Availability) に達したときに変更されます。その時点で、それまでの推奨 JDK が最小 JDK になり、次の Java LTS リリースが推奨 JDK になります。
+- 推奨 JDK は最小 JDK になる 1 サイクル前に公開されるため、このポリシー、JDK バージョン表、および起動時の警告を通じて約 2 年前に通知されます。
+- 変更は、その日付以降に最初にリリースされるマイナーバージョンで有効になります。ただし、前のマイナーバージョンが新しい最小 JDK に関する起動時の警告をすでに出力している場合に限ります。そうでない場合、変更は次のマイナーバージョンに繰り越されます。
+- マイナーバージョンは、そのライフサイクル全体で最小 JDK と推奨 JDK を維持します。パッチバージョンが最小 JDK を引き上げることはないため、パッチバージョンへのアップグレードで JDK のアップグレードが必要になることはありません。新しい JDK のサポートは、パッチバージョンで既存のマイナーバージョンに追加されることがあります。
+
+### Schedule
+
+| 適用開始 | 最小 JDK | 推奨 JDK | 理由 |
+| --- | --- | --- | --- |
+| 2027 年 10 月 | JDK 21 | JDK 25 | Java 17 の提供終了 |
+| 2029 年 12 月 | JDK 25 | JDK 29 | Java 21 の提供終了 |
+| 2031 年 9 月 | JDK 29 | JDK 33 | Java 25 の提供終了 |
+
+これらの日付は Adoptium が公開している提供終了日で、Adoptium は「少なくとも (at least)」この日付までと表記しています。これらの日付は固定です。Adoptium が後にある Java バージョンの提供期間を延長しても、スケジュールは変わりません。Java 29 と Java 33 は、Adoptium が引き続き 2 年ごとに LTS リリースを指定することを前提としています。
+
+### Components that run in another JVM
+
+Spark Load の DPP ライブラリ、Hive Bitmap UDF ライブラリ、および Broker は、他のシステムの JVM 内で動作します。これらは Java 8 をターゲットとし、このポリシーではなく、そのシステムの JDK 要件に従います。

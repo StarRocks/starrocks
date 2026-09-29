@@ -241,35 +241,41 @@ public class ExportJobTest {
     public void testGenScanNodeRecordsPartitionAccess(@Mocked GlobalStateMgr globalStateMgr,
                                                        @Mocked Table table,
                                                        @Mocked OlapScanNode scanNode) {
-        long dbId = 777L;
-        long tableId = 555L;
-        PartitionAccessTimeMgr accessTimeMgr = new PartitionAccessTimeMgr();
-        new Expectations() {
-            {
-                table.getType();
-                result = Table.TableType.OLAP;
-                table.getId();
-                result = tableId;
-                GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
-                result = accessTimeMgr;
-                // computePartitionInfo() has resolved these data-bearing logical partition ids.
-                scanNode.getSelectedPartitionIds();
-                result = Lists.newArrayList(100L, 200L);
-            }
-        };
+        boolean saved = Config.enable_collect_partition_access_time;
+        Config.enable_collect_partition_access_time = true;
+        try {
+            long dbId = 777L;
+            long tableId = 555L;
+            PartitionAccessTimeMgr accessTimeMgr = new PartitionAccessTimeMgr();
+            new Expectations() {
+                {
+                    table.getType();
+                    result = Table.TableType.OLAP;
+                    table.getId();
+                    result = tableId;
+                    GlobalStateMgr.getCurrentState().getPartitionAccessTimeMgr();
+                    result = accessTimeMgr;
+                    // computePartitionInfo() has resolved these data-bearing logical partition ids.
+                    scanNode.getSelectedPartitionIds();
+                    result = Lists.newArrayList(100L, 200L);
+                }
+            };
 
-        ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
-        Deencapsulation.setField(job, "exportTable", table);
-        Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
-        Deencapsulation.setField(job, "dbId", dbId);
+            ExportJob job = new ExportJob(0, UUIDUtil.genUUID());
+            Deencapsulation.setField(job, "exportTable", table);
+            Deencapsulation.setField(job, "exportTupleDesc", new TupleDescriptor(new TupleId(0)));
+            Deencapsulation.setField(job, "dbId", dbId);
 
-        long before = System.currentTimeMillis();
-        Deencapsulation.invoke(job, "genScanNode");
+            long before = System.currentTimeMillis();
+            Deencapsulation.invoke(job, "genScanNode");
 
-        // genScanNode records the export scan as a user access for exactly the selected partitions.
-        Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 100L) >= before);
-        Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 200L) >= before);
-        Assertions.assertEquals(0L, accessTimeMgr.getLastAccessTime(dbId, tableId, 300L));
+            // genScanNode records the export scan as a user access for exactly the selected partitions.
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 100L) >= before);
+            Assertions.assertTrue(accessTimeMgr.getLastAccessTime(dbId, tableId, 200L) >= before);
+            Assertions.assertEquals(0L, accessTimeMgr.getLastAccessTime(dbId, tableId, 300L));
+        } finally {
+            Config.enable_collect_partition_access_time = saved;
+        }
     }
 
     @Test

@@ -102,6 +102,7 @@ public:
     size_t byte_size(size_t from, size_t size) const override;
     void resize(size_t n) override;
     void assign(size_t n, size_t idx) override;
+    void remove_first_n_values(size_t count) override;
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
     int equals(size_t left, const Column& rhs, size_t right, bool safe_eq = true) const override;
@@ -171,9 +172,8 @@ public:
         }
     }
 
-    // Encode a single typed cell (from a typed column at a given row) into a VariantRowValue.
-    // Handles TYPE_VARIANT recursion, null checks, and VariantEncoder encoding.
-    // Used by both VariantColumn internal paths and VariantFunctions query paths.
+    // Encode one typed cell into a row-level Variant value. Complex values containing
+    // nested Variant children are traversed column-wise to avoid the legacy Datum path.
     static StatusOr<EncodedVariantResult> encode_typed_row_as_variant(const Column* typed_column, size_t typed_row,
                                                                       const TypeDescriptor& type_desc);
 

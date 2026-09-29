@@ -364,6 +364,7 @@ void PartitionedHashJoinProberImpl::reset(RuntimeState* runtime_state) {
     }
     _partition_input_channels.clear();
     _mem_tracker.release(_mem_tracker.consumption());
+    _partition_input_channels.resize(_probers.size(), PartitionChunkChannel(&_mem_tracker));
     _all_input_finished = false;
     _remain_partition_idx = 0;
 }

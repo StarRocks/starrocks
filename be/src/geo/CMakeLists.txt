@@ -42,6 +42,7 @@ endif()
 ADD_BE_LIB(Geo
     geo_common.cpp
     geo_types.cpp
+    wkb.cpp
     wkt_parse.cpp
     ${GENSRC_DIR}/geo/wkt_lex.l.cpp
     ${GENSRC_DIR}/geo/wkt_yacc.y.cpp

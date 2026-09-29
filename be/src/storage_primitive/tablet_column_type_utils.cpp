@@ -73,6 +73,11 @@ uint32_t get_tablet_column_field_length_by_type(LogicalType type, uint32_t strin
         return string_length + sizeof(uint32_t);
     case TYPE_ARRAY:
         return string_length;
+    case TYPE_GEOGRAPHY:
+    case TYPE_GEOMETRY:
+        return 0; // Native geo persistence is not supported.
+    case TYPE_FILE:
+        return 0; // FILE has no native storage.
     }
     return 0;
 }

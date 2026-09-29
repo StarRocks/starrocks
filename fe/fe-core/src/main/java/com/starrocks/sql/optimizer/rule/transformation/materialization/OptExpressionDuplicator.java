@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
@@ -572,10 +573,14 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visitLogicalLimit(OptExpression optExpression, Void context) {
             List<OptExpression> inputs = processChildren(optExpression);
-            LogicalSetOperator setOperator = (LogicalSetOperator) optExpression.getOp();
-            LogicalSetOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
-            opBuilder.withOperator(setOperator);
-            processSetOperator(setOperator, opBuilder);
+            // A limit carries only its offset and row count -- it has no output column list to
+            // remap, so copying the operator and letting processCommon rewrite the projection
+            // and predicate is the whole job. This body used to be a copy of visitLogicalUnion,
+            // which cast the operator to LogicalSetOperator and could therefore never succeed:
+            // any limit reaching the duplicator threw ClassCastException.
+            LogicalLimitOperator limitOperator = (LogicalLimitOperator) optExpression.getOp();
+            LogicalLimitOperator.Builder opBuilder = OperatorBuilderFactory.build(optExpression.getOp());
+            opBuilder.withOperator(limitOperator);
             processCommon(opBuilder);
             return OptExpression.create(opBuilder.build(), inputs);
         }

@@ -13,7 +13,7 @@ description: "Alphabetical a - c"
 - [异步物化视图指标](../metrics-materialized_view.md)
 - [存算分离仪表盘指标和 Starlet 仪表盘指标](../metrics-shared-data.md)
 
-有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../Monitor_and_Alert.md)。
+有关如何为 StarRocks 集群构建监控服务的更多信息，请参阅 [监控和告警](../monitoring.md)。
 
 :::
 
@@ -21,6 +21,27 @@ description: "Alphabetical a - c"
 
 - 单位：计数
 - 描述：Flink/Spark SQL 创建的扫描任务总数。
+
+## `ai_http_requests_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：传输层已接受的 AI HTTP attempt 总数，包含首次和重试 attempt。仅当 `AIHttpClient::submit` 成功返回时计数；等待准入和同步拒绝的提交不计数。
+
+## `ai_http_retries_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：已接受的 AI HTTP 重试 attempt 总数，不包含首次 attempt。已安排但在传输层接受前被取消的重试不计数，因此该计数器始终小于或等于 `ai_http_requests_total`。
+
+## `ai_http_timeouts_total`
+
+- 类型：Counter
+- 标签：无
+- 单位：计数
+- 描述：因传输超时或 request/query deadline 到期而结束的已接受 AI HTTP attempt 总数。每个已接受 attempt 最多计数一次。取消、关闭以及 HTTP attempt 被接受前到期的 deadline 不计数。
 
 ## `async_delta_writer_queue_count`
 
@@ -443,6 +464,21 @@ description: "Alphabetical a - c"
 
 - 单位：字节
 - 描述：合并操作使用的内存。
+
+## `zstd_compression_dict_build_fallback`
+
+- 单位：计数
+- 描述：符合压缩字典条件的列最终没有拿到字典、按普通 ZSTD 写出的累计次数。原因可能是试压页带字典后不够小（见 `zstd_compression_dict_min_gain`），也可能是字典构建失败。按“writer + Segment”计数——与 `zstd_compression_dict_pages_written` 一样，打平 JSON 列的每个打平子列各是一个 writer。只统计尝试过字典的 writer：数据页太小无法用于采样不计入本项（写入端会改用后面的页再试），根本没走到试压的列（被字典编码、或长度不够跑完试压）也不计入，因此本项与 `zstd_compression_dict_pages_written` 之和并不等于被指定的列数。该值相对于 `zstd_compression_dict_pages_written` 偏高，说明由表属性 `zstd_compression_columns` 指定的列很少真正用上压缩字典。
+
+## `zstd_compression_dict_bytes`
+
+- 单位：字节
+- 描述：写入 Segment 文件的压缩字典页的累计磁盘占用大小。将其除以 `zstd_compression_dict_pages_written` 即可得到平均字典大小，该大小受 `zstd_compression_dict_sample_bytes` 限制。
+
+## `zstd_compression_dict_pages_written`
+
+- 单位：计数
+- 描述：写入 Segment 文件的压缩字典页的累计数量。每个 Segment 的每个列 writer 最多写入一个字典页，而打平的 JSON 列会为每个打平子列各建一个 writer、各自可能写出自己的字典页。因此该指标统计的是实际用上压缩字典的 writer 数——既不是 schema 列数，也不是使用字典压缩的数据页数量。
 
 ## `consistency_mem_bytes`
 

@@ -354,7 +354,7 @@ Status NLJoinProbeOperator::_eval_nullaware_anti_conjuncts(const ChunkPtr& chunk
                 bool all_zero = false;
                 ColumnHelper::merge_two_filters(column, filter->get(), &all_zero);
                 if (all_zero) {
-                    chunk->set_num_rows(0);
+                    break;
                 }
             }
         }

@@ -38,6 +38,14 @@ class AlterTabletMetaTest : public TestBase {
 public:
     AlterTabletMetaTest() : TestBase(kTestDirectory) {
         _tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+        // generate_simple_tablet_metadata() leaves both persistent-index fields at their proto
+        // defaults (disabled / LOCAL), which no real primary-key tablet ever has:
+        // TabletManager::create_tablet sets them and then runs
+        // force_cloud_native_pk_persistent_index() before persisting. SetUp() inserts this metadata
+        // with put_tablet_metadata(), which caches it verbatim, so nothing normalizes it here
+        // either. Every other lake primary-key suite sets them explicitly (see PrimaryKeyParam).
+        _tablet_metadata->set_enable_persistent_index(true);
+        _tablet_metadata->set_persistent_index_type(PersistentIndexTypePB::CLOUD_NATIVE);
         _tablet_schema = TabletSchema::create(_tablet_metadata->schema());
         _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema));
     }
@@ -74,84 +82,6 @@ TEST_F(AlterTabletMetaTest, test_missing_txn_id) {
     auto status = handler.process_update_tablet_meta(update_tablet_meta_req);
     ASSERT_ERROR(status);
     ASSERT_EQ("txn_id not set in request", status.message());
-}
-
-TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
-    GTEST_SKIP() << "LOCAL persistent index is deprecated for shared-data primary-key tablets";
-    lake::SchemaChangeHandler handler(_tablet_mgr.get());
-    TUpdateTabletMetaInfoReq update_tablet_meta_req;
-    int64_t txn_id = next_id();
-    update_tablet_meta_req.__set_txn_id(txn_id);
-
-    TTabletMetaInfo tablet_meta_info;
-    auto tablet_id = _tablet_metadata->id();
-    tablet_meta_info.__set_tablet_id(tablet_id);
-    tablet_meta_info.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
-    tablet_meta_info.__set_enable_persistent_index(true);
-
-    update_tablet_meta_req.tabletMetaInfos.push_back(tablet_meta_info);
-    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req));
-
-    auto new_tablet_meta = publish_single_version(tablet_id, 2, txn_id);
-    ASSERT_OK(new_tablet_meta.status());
-    ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
-
-    txn_id = next_id();
-    std::vector<int> k0{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22};
-    std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 41, 44};
-    auto c0 = Int32Column::create();
-    auto c1 = Int32Column::create();
-    c0->append_numbers(k0.data(), k0.size() * sizeof(int));
-    c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
-    auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-    std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, txn_id));
-    ASSERT_OK(writer->open());
-    // write segment #1
-    ASSERT_OK(writer->write(chunk0));
-    ASSERT_OK(writer->finish());
-    // write txnlog
-    auto txn_log = std::make_shared<TxnLog>();
-    txn_log->set_tablet_id(_tablet_metadata->id());
-    txn_log->set_txn_id(txn_id);
-    auto op_write = txn_log->mutable_op_write();
-    for (const auto& f : writer->segments()) {
-        op_write->mutable_rowset()->add_segment_metas()->set_filename(f.path);
-    }
-    op_write->mutable_rowset()->set_num_rows(writer->num_rows());
-    op_write->mutable_rowset()->set_data_size(writer->data_size());
-    op_write->mutable_rowset()->set_overlapped(false);
-    ASSERT_OK(_tablet_mgr->put_txn_log(txn_log));
-    writer->close();
-    ASSERT_OK(publish_single_version(_tablet_metadata->id(), 3, txn_id).status());
-    auto data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-    ASSERT_TRUE(data_dir != nullptr);
-    ASSERT_OK(FileSystem::Default()->path_exists(data_dir->get_persistent_index_path() + "/" +
-                                                 std::to_string(tablet_id)));
-
-    int64_t txn_id2 = next_id();
-    TUpdateTabletMetaInfoReq update_tablet_meta_req2;
-    update_tablet_meta_req2.__set_txn_id(txn_id2);
-
-    TTabletMetaInfo tablet_meta_info2;
-    tablet_meta_info2.__set_tablet_id(tablet_id);
-    tablet_meta_info2.__set_meta_type(TTabletMetaType::ENABLE_PERSISTENT_INDEX);
-    tablet_meta_info2.__set_enable_persistent_index(false);
-
-    update_tablet_meta_req2.tabletMetaInfos.push_back(tablet_meta_info2);
-    ASSERT_OK(handler.process_update_tablet_meta(update_tablet_meta_req2));
-
-    auto new_tablet_meta2 = publish_single_version(tablet_id, 4, txn_id2);
-    ASSERT_OK(new_tablet_meta2.status());
-    ASSERT_EQ(false, new_tablet_meta2.value()->enable_persistent_index());
-#ifdef USE_STAROS
-    data_dir = StorageEngine::instance()->get_persistent_index_store(tablet_id);
-    ASSERT_TRUE(data_dir != nullptr);
-    ASSERT_ERROR(FileSystem::Default()->path_exists(data_dir->get_persistent_index_path() + "/" +
-                                                    std::to_string(tablet_id)));
-#endif
 }
 
 TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index_not_change) {
@@ -517,10 +447,10 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
 
         auto new_tablet_meta = publish_single_version(tablet_id, version++, txn_id);
         ASSERT_OK(new_tablet_meta.status());
+        // A shared-data primary-key tablet keeps the cloud-native index whatever the request asked
+        // for: apply_alter_meta_log ignores both index fields.
         ASSERT_EQ(true, new_tablet_meta.value()->enable_persistent_index());
-        ASSERT_TRUE(new_tablet_meta.value()->persistent_index_type() == (type == TPersistentIndexType::LOCAL)
-                            ? PersistentIndexTypePB::LOCAL
-                            : PersistentIndexTypePB::CLOUD_NATIVE);
+        ASSERT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, new_tablet_meta.value()->persistent_index_type());
     };
 
     auto write_data_fn = [&](bool rebuild_pindex) {
@@ -556,11 +486,11 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         ASSERT_OK(publish_single_version(_tablet_metadata->id(), version++, txn_id, rebuild_pindex).status());
     };
 
-    // 1. change to local index
+    // 1. ask for the local index -- the request must be ignored
     change_index_fn(true, TPersistentIndexType::LOCAL);
     ASSIGN_OR_ABORT(auto tablet_meta, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_EQ(true, tablet_meta->enable_persistent_index());
-    ASSERT_TRUE(tablet_meta->persistent_index_type() == PersistentIndexTypePB::LOCAL);
+    ASSERT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, tablet_meta->persistent_index_type());
     // 2. write data
     write_data_fn(false);
     // 3. change to cloud native index
@@ -586,13 +516,22 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
 
     ASSIGN_OR_ABORT(auto tablet_meta_d2, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
 
-    // 5. change back to local
+    // 5. ask for the local index again, now that the tablet owns sstables.
+    //
+    // This is the case that used to lose data. Applying the request planted LOCAL in the metadata, and
+    // MetaFileBuilder::finalize() then ran _sstable_meta_clean_after_alter_type(), which orphaned and
+    // cleared the whole sstable_meta whenever the metadata said LOCAL / disabled -- deleting the
+    // cloud-native index's SSTs. The next load from object storage normalized the type back to
+    // CLOUD_NATIVE and handed back a tablet whose index files were gone. So assert the SSTs survive
+    // the alter untouched, not just that the type is right.
+    const int sstables_before = tablet_meta_d2->sstable_meta().sstables_size();
+    const int orphans_before = tablet_meta_d2->orphan_files_size();
     change_index_fn(true, TPersistentIndexType::LOCAL);
     ASSIGN_OR_ABORT(auto tablet_meta4, _tablet_mgr->get_tablet_metadata(_tablet_metadata->id(), version - 1));
     ASSERT_EQ(true, tablet_meta4->enable_persistent_index());
-    ASSERT_TRUE(tablet_meta4->persistent_index_type() == PersistentIndexTypePB::LOCAL);
-    ASSERT_TRUE(tablet_meta4->sstable_meta().sstables_size() == 0);
-    ASSERT_TRUE(tablet_meta4->orphan_files_size() > 0);
+    ASSERT_EQ(PersistentIndexTypePB::CLOUD_NATIVE, tablet_meta4->persistent_index_type());
+    ASSERT_EQ(sstables_before, tablet_meta4->sstable_meta().sstables_size());
+    ASSERT_EQ(orphans_before, tablet_meta4->orphan_files_size());
 }
 
 TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {

@@ -139,7 +139,7 @@ public final class RangeColocateScanDispatch {
     public void requireAligned(Iterable<PhysicalPartition> physicalPartitions, long indexMetaId,
                                Map<Long, Integer> builtBucketSeq) {
         for (PhysicalPartition physicalPartition : physicalPartitions) {
-            MaterializedIndex selectedIndex = physicalPartition.getLatestIndex(indexMetaId);
+            MaterializedIndex selectedIndex = physicalPartition.getQueryableIndex(indexMetaId);
             Map<Long, Integer> aligned = computeBucketSeq(selectedIndex);
             if (aligned == null) {
                 throw new IllegalStateException(String.format(

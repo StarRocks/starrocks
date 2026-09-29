@@ -236,6 +236,56 @@ static void verify_typed_only_into_base_shredded_fast_path(TypedOnlyIntoBaseShre
     }
 }
 
+PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_nullable_variant) {
+    auto column = build_nullable_variant_column({"1", "2", "3"}, {0, 1, 0});
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    const auto* nullable = down_cast<const NullableColumn*>(column.get());
+    ASSERT_TRUE(nullable->is_null(0));
+    ASSERT_FALSE(nullable->is_null(1));
+    const auto* data = down_cast<const VariantColumn*>(nullable->data_column().get());
+    ASSERT_EQ(2, data->size());
+    assert_variant_row_json(data, 0, "null");
+    assert_variant_row_json(data, 1, "3");
+}
+
+PARALLEL_TEST(VariantColumnTest, test_remove_first_n_values_from_shredded_variant) {
+    auto column = build_shredded_variant_column_for_ut();
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ(2, column->metadata_column()->size());
+    ASSERT_EQ(2, column->remain_value_column()->size());
+    ASSERT_EQ(2, column->typed_column_by_index(0)->size());
+    const auto* typed = down_cast<const NullableColumn*>(column->typed_column_by_index(0));
+    ASSERT_TRUE(typed->is_null(0));
+    ASSERT_FALSE(typed->is_null(1));
+    const auto* typed_data = down_cast<const Int64Column*>(typed->data_column().get());
+    ASSERT_EQ(30, typed_data->immutable_data()[1]);
+}
+
+PARALLEL_TEST(VariantColumnTest, test_remove_values_from_const_typed_variant) {
+    auto column = VariantColumn::create();
+    auto typed_data = Int64Column::create();
+    typed_data->append(42);
+    MutableColumns typed;
+    typed.emplace_back(ConstColumn::create(std::move(typed_data), 3));
+    column->set_shredded_columns({"a"}, {TypeDescriptor(TYPE_BIGINT)}, std::move(typed), nullptr, nullptr);
+
+    column->remove_first_n_values(1);
+
+    ASSERT_EQ(2, column->size());
+    ASSERT_EQ(2, column->typed_column_by_index(0)->size());
+
+    column->remove_first_n_values(column->size());
+
+    ASSERT_EQ(0, column->size());
+    ASSERT_EQ(0, column->typed_column_by_index(0)->size());
+}
+
 // NOLINTNEXTLINE
 PARALLEL_TEST(VariantColumnTest, test_build_column) {
     // create column

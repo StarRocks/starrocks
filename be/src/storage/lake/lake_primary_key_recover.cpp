@@ -104,6 +104,16 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             }
             ASSIGN_OR_RETURN(auto read_file, fs::new_random_access_file(ropts, _tablet->tablet_mgr()->del_location(
                                                                                        _metadata->id(), del.name())));
+            // Recovery rebuilds every delvec from these deletes, so a corrupt del file that still
+            // deserializes would bake the wrong rows into the recovered delvecs -- permanently, since
+            // recovery treats the result as the new source of truth. The shared PrimaryKeyRecover
+            // consumes plain file handles (it also serves shared-nothing, which has no del checksum),
+            // so verify here before handing the handle over; it re-reads positionally from offset 0.
+            // Only pays the extra read when a checksum was actually recorded.
+            if (del.has_crc32c()) {
+                auto verified = read_and_verify_del_file(read_file.get(), del, _metadata->id());
+                RETURN_IF_ERROR(verified.status());
+            }
             del_rfs.push_back(std::move(read_file));
         }
         // Position of each del file in the merged (segments + dels) replay sequence consumed by the

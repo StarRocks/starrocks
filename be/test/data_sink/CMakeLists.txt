@@ -99,12 +99,7 @@ set(DATA_SINK_RESULT_TEST_FILES
 
 add_library(starrocks_data_sink_result_test_objs OBJECT ${DATA_SINK_RESULT_TEST_FILES})
 target_link_libraries(starrocks_data_sink_result_test_objs PRIVATE StarRocksPCH)
-if (NOT STARROCKS_JIT_ENABLE)
-    set_target_properties(starrocks_data_sink_result_test_objs PROPERTIES
-        COMPILE_FLAGS "-fno-access-control -DSTARROCKS_EXPR_TEST_NO_JIT")
-else()
-    set_target_properties(starrocks_data_sink_result_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
-endif()
+set_target_properties(starrocks_data_sink_result_test_objs PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
 add_executable(data_sink_result_test
     ../test_main.cpp
@@ -123,6 +118,7 @@ set(DATA_SINK_TABLET_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     tablet/multi_olap_table_sink_test.cpp
     tablet/range_router_test.cpp
+    tablet/tablet_sink_global_dict_words_test.cpp
     tablet/tablet_sink_index_channel_test.cpp
     tablet/tablet_sink_sender_range_test.cpp
     tablet/olap_table_sink_test.cpp

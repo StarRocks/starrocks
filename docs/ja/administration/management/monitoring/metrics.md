@@ -13,7 +13,7 @@ sidebar_position: 10
 - [非同期マテリアライズドビューのメトリクス](./metrics-materialized_view.md)
 - [共有データダッシュボードメトリクス、および Starlet ダッシュボードメトリクス](./metrics-shared-data.md)
 
-StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./Monitor_and_Alert.md)を参照してください。
+StarRocks クラスタのモニタリングサービスの構築方法については、[モニタリングとアラート](./monitoring.md)を参照してください。
 
 :::
 

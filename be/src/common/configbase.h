@@ -45,6 +45,16 @@ struct ConfigInfo {
     bool operator==(const ConfigInfo& rhs) const = default;
 };
 
+// A configured value that was rejected and replaced by the value the config was declared with.
+// Config parsing runs before logging is initialized, so the rejection cannot be reported through
+// glog where it happens; it is recorded here and drained once logging is up.
+struct ConfigFallback {
+    std::string name;
+    std::string rejected_value;
+    std::string effective_value;
+    std::string allowed_values;
+};
+
 inline std::ostream& operator<<(std::ostream& os, const ConfigInfo& info) {
     os << "ConfigInfo{"
        << "name=\"" << info.name << "\","
@@ -120,6 +130,11 @@ inline std::ostream& operator<<(std::ostream& os, const MutableString& s) {
 #define CONF_mInt64(name, defaultstr) DECLARE_FIELD(int64_t, name)
 #define CONF_mDouble(name, defaultstr) DECLARE_FIELD(double, name)
 #define CONF_mString(name, defaultstr) DECLARE_FIELD(MutableString, name)
+#define CONF_mString_enum(name, defaultstr, enums) DECLARE_FIELD(MutableString, name)
+// Same as CONF_mString_enum, except that a value read from the config file that matches no enum is
+// reported and replaced by defaultstr instead of aborting startup. A value set at runtime is still
+// rejected, because there the caller gets the error back.
+#define CONF_mString_enum_or_default(name, defaultstr, enums) DECLARE_FIELD(MutableString, name)
 
 // Initialize configurations from a config file.
 bool init(const char* filename);
@@ -134,6 +149,20 @@ Status rollback_config(const std::string& field);
 std::vector<ConfigInfo> list_configs();
 
 void TEST_clear_configs();
+
+// Records a value that was rejected in favour of the config's declared default.
+void record_config_fallback(ConfigFallback fallback);
+
+// Returns the fallbacks recorded so far and clears them, so each is reported only once.
+std::vector<ConfigFallback> take_config_fallbacks();
+
+// Replaces the value of a config that could not be applied with the value it was declared with, and
+// records the fallback. Returns false if there is no such config, or if its declared default cannot
+// be parsed either. Keeping the config variable in step matters because list_configs() publishes it
+// through information_schema.be_configs and /varz.
+// rejected_value is taken by value because callers naturally pass the config variable itself, which
+// this overwrites.
+bool fall_back_to_default(const std::string& field, std::string rejected_value, const std::string& allowed_values);
 
 } // namespace config
 } // namespace starrocks

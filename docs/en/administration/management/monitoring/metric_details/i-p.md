@@ -15,7 +15,7 @@ Metrics for materialized views and shared-data clusters are detailed in the corr
 - [Metrics for asynchronous materialized view metrics](../metrics-materialized_view.md)
 - [Metrics for Shared-data Dashboard metrics, and Starlet Dashboard metrics](../metrics-shared-data.md)
 
-For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../Monitor_and_Alert.md).
+For more information on how to build a monitoring service for your StarRocks cluster, see [Monitor and Alert](../monitoring.md).
 
 :::
 
@@ -55,37 +55,6 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Type: Cumulative
 - Labels: `compaction_type` (`manual` or `auto`)
 - Description: Total number of Iceberg compaction (`rewrite_data_files`) tasks.
-
-## `iceberg_delete_bytes`
-
-- Unit: Bytes
-- Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
-- Description: Total deleted bytes from Iceberg `DELETE` tasks. For `metadata` delete, this represents the size of deleted data files. For `position` delete, this represents the size of position delete files created.
-
-## `iceberg_delete_duration_ms_total`
-
-- Unit: Millisecond
-- Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
-- Description: Total execution time of Iceberg `DELETE` tasks in milliseconds. The duration of each task is added after it ends. `delete_type` distinguishes between two delete methods.
-
-## `iceberg_delete_rows`
-
-- Unit: Rows
-- Type: Cumulative
-- Labels: `delete_type` (`position` or `metadata`)
-- Description: Total deleted rows from Iceberg `DELETE` tasks. For `metadata` delete, this represents the number of rows in deleted data files. For `position` delete, this represents the number of position deletes created.
-
-## `iceberg_delete_total`
-
-- Unit: Count
-- Type: Cumulative
-- Labels:
-  - `status` (`success` or `failed`)
-  - `reason` (`none`, `timeout`, `oom`, `access_denied`, `unknown`)
-  - `delete_type` (`position` or `metadata`)
-- Description: Total number of `DELETE` tasks that target Iceberg tables. The metric is incremented by 1 after each task ends, regardless of success or failure. `delete_type` distinguishes between two delete methods: `position` (generates position delete files) and `metadata` (metadata-level delete).
 
 ## `iceberg_merge_bytes`
 
@@ -245,6 +214,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Bytes
 - Description: Total number of bytes allocated by the application.
 
+## `jemalloc_dirty_bytes`
+
+- Unit: Bytes
+- Description: Total number of bytes in unused dirty pages, which have not yet been `madvise`d back to the operating system and can be reused for new allocations without a page fault.
+
 ## `jemalloc_mapped_bytes`
 
 - Unit: Bytes
@@ -260,6 +234,11 @@ For more information on how to build a monitoring service for your StarRocks clu
 - Unit: Count
 - Description: Number of Transparent Huge Pages used for metadata.
 
+## `jemalloc_muzzy_bytes`
+
+- Unit: Bytes
+- Description: Total number of bytes in unused muzzy pages, an intermediate decay state between dirty and retained where the pages have been `madvise`d (for example with `MADV_FREE`) but the mapping is still retained.
+
 ## `jemalloc_resident_bytes`
 
 - Unit: Bytes
@@ -274,6 +253,12 @@ For more information on how to build a monitoring service for your StarRocks clu
 
 - Unit: Bytes
 - Description: Memory used by jit compiled function cache.
+
+## `lake_compaction_held_segment_bytes`
+
+- Unit: Bytes
+- Type: Instantaneous
+- Description: Segment metadata currently pinned by running lake compaction tasks that hold their input segments (`lake_compaction_hold_input_segments`). Unlike the metadata cache, this memory is not managed by an LRU and is released when the holding task ends, so a persistently high value indicates long-running compactions rather than a cache that needs resizing.
 
 ## `lake_compaction_failed`
 
@@ -476,6 +461,12 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 - Type: Summary
 - Description: Combined latency for the RPC request and waiting for the stream load pipe to become available.
 
+## `meta_replay_lag_second`
+
+- Unit: Seconds
+- Type: Gauge
+- Description: How far the metadata replayed by this FE lags behind the Leader's clock. The Leader FE writes a timestamp into the journal every 10 seconds, and this metric is the age of the most recent timestamp that this node has replayed. Unlike `max_journal_replay_lag`, which only the Leader reports, this metric is reported by the lagging node itself, and it keeps growing while a single journal entry is stuck in replay. The Leader FE always reports `0`, because it writes the timestamps instead of replaying them. Once this value exceeds `meta_delay_toleration_second`, the node stops serving reads from its own metadata and forwards its queries to the Leader. Two cases are exempt: reads continue while `ignore_meta_check` is `true`, and a node that has replayed nothing since the previous check keeps whatever read availability it already had, unless it has also lost contact with the Leader, because falling behind a Leader that is writing nothing says nothing about this node. This second case only stops a node from being taken out of service; it never returns one that has already stopped serving.
+
 ## `meta_request_duration`
 
 - Unit: us
@@ -585,7 +576,7 @@ Latency metrics expose percentile series such as `merge_commit_request_latency_9
 
 - Type: Counter
 - Unit: Count
-- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail.
+- Description: Total number of SST file read failures in the lake Primary Key persistent index. Incremented when SST multi-get (read) operations fail, or when compaction detects data corruption while reading input SST files.
 
 ## `pk_index_sst_write_error_total`
 

@@ -1,0 +1,68 @@
+-- name: test_multi_unnest_bounded_batching
+CREATE TABLE mub_${uuid0} (
+    `id` int(11) NOT NULL COMMENT "",
+    `a` ARRAY<int> NULL COMMENT "",
+    `b` ARRAY<int> NULL COMMENT ""
+)
+DUPLICATE KEY (id)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO mub_${uuid0}
+SELECT g, array_repeat(g, 10), array_repeat(g, 4) FROM TABLE(generate_series(1, 4)) t(g);
+-- result:
+-- !result
+SET pipeline_dop = 1;
+-- result:
+-- !result
+SET enable_profile = true;
+-- result:
+-- !result
+SET enable_async_profile = false;
+-- result:
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT count(1), sum(v1), sum(v2) FROM mub_${uuid0}, UNNEST(a, b) AS u(v1, v2);
+-- result:
+40	100	40
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+-- result:
+1
+-- !result
+SELECT count(1), sum(v) FROM mub_${uuid0}, UNNEST(a) AS u(v);
+-- result:
+40	100
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) <= 4;
+-- result:
+1
+-- !result
+SET chunk_size = 3;
+-- result:
+-- !result
+SELECT count(1), sum(v1), sum(v2) FROM mub_${uuid0}, UNNEST(a, b) AS u(v1, v2) WHERE id = 1;
+-- result:
+10	10	4
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 4;
+-- result:
+1
+-- !result
+SET chunk_size = 2;
+-- result:
+-- !result
+SELECT count(1), count(v1), count(v2) FROM mub_${uuid0} LEFT JOIN UNNEST(a, b) AS u(v1, v2) ON TRUE;
+-- result:
+40	40	16
+-- !result
+SELECT CAST(regexp_extract(get_query_profile(last_query_id()), 'TableFunctionExecCount: ([0-9]+)', 1) AS BIGINT) >= 20;
+-- result:
+1
+-- !result
+DROP TABLE mub_${uuid0};
+-- result:
+-- !result

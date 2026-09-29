@@ -22,17 +22,24 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.mv.pct.BaseToMVPartitionMapping;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.scheduler.mv.pct.PCTRefreshScope;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
+import com.starrocks.sql.common.ListPartitionDiffer;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.MethodOrderer.MethodName;
@@ -45,6 +52,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -272,6 +280,54 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 Assertions.assertEquals(1, partitions.size());
                             }
                         });
+        });
+    }
+
+    /**
+     * Collecting the base tables' partition cells reaches the connector for an external base table, so it must
+     * not run inside the mv's read lock -- that lock is taken on the mv alone and only protects the mv's own
+     * partition cells. Pinned on the property (never collected while any FE metadata lock is held) rather than
+     * on where the call sits in the source, so it keeps holding if the code moves. An OLAP base table is enough
+     * to pin it: the lock never covered the base tables either way.
+     */
+    @Test
+    public void testBaseTablePartitionsAreCollectedBeforeTakingTheLock() {
+        AtomicBoolean collected = new AtomicBoolean(false);
+        AtomicBoolean collectedUnderLock = new AtomicBoolean(false);
+        new MockUp<ListPartitionDiffer>() {
+            @Mock
+            public Map<Table, BaseToMVPartitionMapping> syncBaseTablePartitionInfos(Invocation invocation) {
+                collected.set(true);
+                if (LockHoldDepth.isUnderLock()) {
+                    collectedUnderLock.set(true);
+                }
+                return invocation.proceed();
+            }
+        };
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        starRocksAssert.withTable(T2, () -> {
+            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                            "partition by province \n" +
+                            "distributed by random \n" +
+                            "REFRESH DEFERRED MANUAL \n" +
+                            "as select dt, province, sum(age) from t2 group by dt, province;",
+                    (obj) -> {
+                        String mvName = (String) obj;
+                        MaterializedView materializedView =
+                                ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                        .getTable(testDb.getFullName(), mvName));
+                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+
+                        String insertSql = "insert into t2 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
+                        Assertions.assertNotNull(getExecPlanAfterInsert(taskRun, insertSql));
+
+                        Assertions.assertTrue(collected.get(), "the base table partitions should have been collected");
+                        Assertions.assertFalse(collectedUnderLock.get(),
+                                "collecting base table partitions goes through the connector for an external base " +
+                                        "table and must not run under the mv's lock");
+                    });
         });
     }
 
@@ -1338,6 +1394,30 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
             addListPartition(tableName, "p4", "guangdong", "2024-01-02");
         }
     }
+    /**
+     * Add the two partitions the retention tests expect to stay inside a one-month window: one for
+     * today, one for the oldest retained day.
+     *
+     * <p>The window boundary is {@code current_date() - interval 1 month}, which the planner
+     * re-evaluates on every statement, while these partitions keep whatever date they were created
+     * with. Anchoring the older partition exactly on today's boundary therefore breaks whenever the
+     * calendar day rolls over between creating it and planning the final query: it drops out of the
+     * window, the MV no longer covers the query, and the plan grows a UNION against the base table.
+     *
+     * <p>So anchor it on <em>tomorrow's</em> boundary instead, which is still inside today's. Add
+     * the day <em>before</em> subtracting the month, not after: month arithmetic clamps to the end
+     * of the shorter month, so the two orders disagree on every month end that is followed by a
+     * longer month. On 2026-09-30, {@code minusMonths(1).plusDays(1)} gives 2026-08-31 while the
+     * post-rollover boundary is 2026-09-01 -- still outside, and still flaky.
+     */
+    private void addRetainedPartitions(String tableName) {
+        LocalDateTime now = LocalDateTime.now();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+        addListPartition(tableName, "p5", "guangdong", now.format(formatter), true);
+        addListPartition(tableName, "p6", "guangdong",
+                now.plusDays(1).minusMonths(1).format(formatter), true);
+    }
+
     private void testMVRefreshWithTTLCondition(String tableName) {
         withTablePartitions(tableName);
         String mvCreateDdl = String.format("create materialized view test_mv1\n" +
@@ -1366,11 +1446,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1472,11 +1548,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     {
                         // add new partitions
-                        LocalDateTime now = LocalDateTime.now();
-                        addListPartition(tableName, "p5", "guangdong",
-                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        addListPartition(tableName, "p6", "guangdong",
-                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
+                        addRetainedPartitions(tableName);
                         String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +

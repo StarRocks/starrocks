@@ -139,6 +139,74 @@ protected:
         CHECK_OK(data_res);
         ASSERT_EQ(data_res.value(), IndexDescriptor::mark_word);
     }
+
+#ifdef WITH_TENANN
+    void check_hnsw_quantized_cosine_end_to_end(const char* quantizer, uint32_t rows) {
+        const std::string old_backend = config::vector_index_cosine_backend;
+        DeferOp restore([old_backend] { config::vector_index_cosine_backend = old_backend; });
+        config::vector_index_cosine_backend = "l2";
+
+        constexpr uint32_t kDim = 8;
+        auto tablet_index = prepare_tablet_index();
+        tablet_index->add_common_properties("index_type", "hnsw");
+        tablet_index->add_common_properties("dim", std::to_string(kDim));
+        tablet_index->add_common_properties("is_vector_normed", "false");
+        tablet_index->add_common_properties("metric_type", "cosine_similarity");
+        tablet_index->add_common_properties("index_build_threshold", "0");
+        tablet_index->add_index_properties("efconstruction", "40");
+        tablet_index->add_index_properties("m", "16");
+        tablet_index->add_index_properties("quantizer", quantizer);
+        if (std::string_view(quantizer) == "pq") {
+            tablet_index->add_index_properties("m_pq", "2");
+            tablet_index->add_index_properties("nbits_pq", "4");
+        }
+
+        auto path = test_vector_index_dir + "/" + quantizer + "_cosine_" + vector_index_name;
+        std::unique_ptr<VectorIndexWriter> writer;
+        VectorIndexWriter::create(tablet_index, path, true, &writer);
+        ASSERT_OK(writer->init());
+
+        std::mt19937 rng(/*seed=*/42);
+        std::uniform_real_distribution<float> dist(0.1f, 1.0f);
+        auto element = FixedLengthColumn<float>::create();
+        auto offsets = UInt32Column::create();
+        offsets->append(0);
+        std::vector<float> first_row(kDim);
+        for (uint32_t r = 0; r < rows; ++r) {
+            for (uint32_t d = 0; d < kDim; ++d) {
+                const float value = dist(rng);
+                if (r == 0) first_row[d] = value;
+                element->append(value);
+            }
+            offsets->append((r + 1) * kDim);
+        }
+        auto null_column = NullColumn::create(element->size(), 0);
+        auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
+        auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
+        ASSERT_OK(writer->append(*array_column));
+
+        uint64_t size = 0;
+        ASSERT_OK(writer->finish(&size));
+        ASSERT_GT(size, 0u);
+        ASSERT_TRUE(fs::path_exist(path));
+
+        ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {}));
+        EXPECT_EQ("inner_product", resolve_vector_index_cosine_backend(meta));
+        auto searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(meta);
+        searcher->ReadIndex(path);
+        ASSERT_TRUE(searcher->is_index_loaded());
+
+        tenann::PrimitiveSeqView query{.data = reinterpret_cast<uint8_t*>(first_row.data()),
+                                       .size = kDim,
+                                       .elem_type = tenann::PrimitiveType::kFloatType};
+        std::vector<int64_t> result(5, -1);
+        std::vector<float> scores(5, 0.0f);
+        searcher->AnnSearch(query, result.size(), result.data(), reinterpret_cast<uint8_t*>(scores.data()));
+        EXPECT_NE(result[0], -1) << quantizer << " cosine search returned no hit";
+        EXPECT_GT(scores[0], 0.8f) << quantizer;
+        EXPECT_LE(scores[0], 1.0f) << quantizer;
+    }
+#endif
 };
 
 TEST_F(VectorIndexWriterTest, test_write_vector_index) {
@@ -262,6 +330,33 @@ TEST_F(VectorIndexWriterTest, build_populates_index_cache_when_enabled) {
     EXPECT_TRUE(cache.cached(index_path));
 }
 
+TEST_F(VectorIndexWriterTest, resolve_cosine_backend_by_index_shape) {
+    const std::string old_backend = config::vector_index_cosine_backend;
+    DeferOp restore([old_backend] { config::vector_index_cosine_backend = old_backend; });
+
+    tenann::IndexMeta hnsw_meta;
+    hnsw_meta.SetIndexType(tenann::IndexType::kFaissHnsw);
+    hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(tenann::ScalarQuantizerType::kFlat);
+
+    tenann::IndexMeta ivfpq_meta;
+    ivfpq_meta.SetIndexType(tenann::IndexType::kFaissIvfPq);
+
+    config::vector_index_cosine_backend = "l2";
+    EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "l2");
+    EXPECT_EQ(resolve_vector_index_cosine_backend(ivfpq_meta), "l2");
+
+    for (auto quantizer :
+         {tenann::ScalarQuantizerType::kSQ4, tenann::ScalarQuantizerType::kSQ8, tenann::ScalarQuantizerType::kPQ}) {
+        hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(quantizer);
+        EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "inner_product");
+    }
+
+    config::vector_index_cosine_backend = "inner_product";
+    hnsw_meta.index_params()[index::vector::QUANTIZER] = static_cast<int>(tenann::ScalarQuantizerType::kFlat);
+    EXPECT_EQ(resolve_vector_index_cosine_backend(hnsw_meta), "inner_product");
+    EXPECT_EQ(resolve_vector_index_cosine_backend(ivfpq_meta), "inner_product");
+}
+
 // --- B1 quantizer property tests ---
 // These tests intentionally avoid asserting on individual parsed-meta fields
 // (string -> enum mapping is trivial). Instead each test exercises the path
@@ -329,6 +424,80 @@ TEST_F(VectorIndexWriterTest, hnsw_sq8_end_to_end) {
     std::vector<int64_t> result(3, -1);
     searcher->AnnSearch(q, /*k=*/3, result.data());
     EXPECT_NE(result[0], -1) << "SQ8 search returned no hit";
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_sq8_inner_product_end_to_end) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "3");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "inner_product");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "sq8");
+
+    auto path = test_vector_index_dir + "/sq8_ip_" + vector_index_name;
+    write_vector_index(path, tablet_index);
+
+    ASSIGN_OR_ABORT(auto meta, get_vector_meta(tablet_index, {}));
+    auto searcher = tenann::AnnSearcherFactory::CreateSearcherFromMeta(meta);
+    searcher->ReadIndex(path);
+    ASSERT_TRUE(searcher->is_index_loaded());
+
+    std::vector<float> query{1.0f, 2.0f, 3.0f};
+    tenann::PrimitiveSeqView q{.data = reinterpret_cast<uint8_t*>(query.data()),
+                               .size = 3,
+                               .elem_type = tenann::PrimitiveType::kFloatType};
+    std::vector<int64_t> result(3, -1);
+    std::vector<float> scores(3, 0.0f);
+    searcher->AnnSearch(q, result.size(), result.data(), reinterpret_cast<uint8_t*>(scores.data()));
+    EXPECT_EQ(result[0], 10);
+    EXPECT_GT(scores[0], 60.0f);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_sq8_cosine_end_to_end) {
+    check_hnsw_quantized_cosine_end_to_end("sq8", 64);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_sq4_cosine_end_to_end) {
+    check_hnsw_quantized_cosine_end_to_end("sq4", 64);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_pq_cosine_end_to_end) {
+    // PQ training needs (1 << nbits_pq) * 100 rows. The helper uses nbits_pq=4.
+    check_hnsw_quantized_cosine_end_to_end("pq", 2000);
+}
+
+TEST_F(VectorIndexWriterTest, hnsw_pq_accepts_16_bits) {
+    auto tablet_index = prepare_tablet_index();
+    tablet_index->add_common_properties("index_type", "hnsw");
+    tablet_index->add_common_properties("dim", "8");
+    tablet_index->add_common_properties("is_vector_normed", "false");
+    tablet_index->add_common_properties("metric_type", "l2_distance");
+    tablet_index->add_common_properties("index_build_threshold", "0");
+    tablet_index->add_index_properties("efconstruction", "40");
+    tablet_index->add_index_properties("m", "16");
+    tablet_index->add_index_properties("quantizer", "pq");
+    tablet_index->add_index_properties("m_pq", "2");
+    tablet_index->add_index_properties("nbits_pq", "16");
+
+    std::unique_ptr<VectorIndexWriter> writer;
+    VectorIndexWriter::create(tablet_index, test_vector_index_dir + "/pq16.vi", true, &writer);
+    ASSERT_OK(writer->init());
+
+    auto element = FixedLengthColumn<float>::create();
+    for (int i = 0; i < 8; ++i) {
+        element->append(static_cast<float>(i));
+    }
+    auto null_column = NullColumn::create(element->size(), 0);
+    auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
+    auto offsets = UInt32Column::create();
+    offsets->append(0);
+    offsets->append(8);
+    auto array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
+
+    ASSERT_OK(writer->append(*array_column));
 }
 
 TEST_F(VectorIndexWriterTest, hnsw_pq_end_to_end) {

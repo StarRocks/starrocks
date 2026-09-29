@@ -89,6 +89,37 @@ if starrocks_is_darwin ; then
     PARALLEL=$(starrocks_detect_parallelism)
     # Darwin thirdparty is prepared separately and validated before BE configure.
 else
+    # Resolve ARM CRC32 configuration before third-party build
+    # 1. Start with environment variable if provided, otherwise default ON
+    if [[ -z "${USE_ARM_CRC32}" ]]; then
+        RESOLVED_ARM_CRC32=ON
+    else
+        RESOLVED_ARM_CRC32="${USE_ARM_CRC32}"
+    fi
+
+    # 2. Hardware auto-detection overrides default (must have CRC on all cores)
+    if [[ -z "${USE_ARM_CRC32}" && -e /proc/cpuinfo && ("${MACHINE_TYPE}" == "aarch64" || "${MACHINE_TYPE}" == "arm64") ]]; then
+        features_count=$(grep -c '^Features' /proc/cpuinfo 2>/dev/null || true)
+        features_count=${features_count:-0}
+        crc_count=$(grep '^Features' /proc/cpuinfo 2>/dev/null | grep -E -c '\bcrc32\b' || true)
+        crc_count=${crc_count:-0}
+        if [[ ${features_count} -eq 0 || ${crc_count} -lt ${features_count} ]]; then
+            RESOLVED_ARM_CRC32=OFF
+        fi
+    fi
+
+    # 3. CLI arguments override everything
+    for arg in "$@"; do
+        if [[ "$arg" == "--without-arm-crc32" ]]; then
+            RESOLVED_ARM_CRC32=OFF
+        elif [[ "$arg" == "--with-arm-crc32" ]]; then
+            RESOLVED_ARM_CRC32=ON
+        fi
+    done
+
+    export THIRD_PARTY_BUILD_WITH_ARM_CRC="${RESOLVED_ARM_CRC32}"
+    export USE_ARM_CRC32="${RESOLVED_ARM_CRC32}"
+
     if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/llvm/lib/libLLVMInstCombine.a ]]; then
         echo "Thirdparty libraries need to be build ..."
         ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
@@ -135,6 +166,10 @@ Usage: $0 <options>
      --without-pch      build Backend without precompiled headers(default with pch)
      --without-starcache
                         build Backend without starcache library
+     --without-paimon-cpp
+                        build Backend without the paimon-cpp native reader and its
+                        shared libraries (default with paimon-cpp; forced off on macOS,
+                        where thirdparty does not build paimon-cpp)
      -j                 build Backend parallel
      --output-compile-time 
                         save a list of the compile time for every C++ file in ${ROOT}/compile_times.txt.
@@ -147,7 +182,11 @@ Usage: $0 <options>
                         build with compressing debug symbol. (default: $WITH_COMPRESS)
      --with-source-file-relative-path {ON|OFF}
                         build source file with relative path. (default: $WITH_RELATIVE_SRC_PATH)
-     --without-avx2     build Backend without avx2(instruction)    
+     --without-avx2     build Backend without avx2(instruction)
+     --without-arm-crc32
+                        build ARM64 Backend without CRC32 instructions
+     --with-arm-crc32
+                        build ARM64 Backend with CRC32 instructions
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
      --output           specify the output directory (default: $STARROCKS_HOME/output)
@@ -195,6 +234,7 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-thin-archive' \
   -l 'without-pch' \
   -l 'without-starcache' \
+  -l 'without-paimon-cpp' \
   -l 'with-brpc-keepalive' \
   -l 'use-staros' \
   -l 'enable-shared-data' \
@@ -204,6 +244,8 @@ OPTS=$(${GETOPT_BIN} \
   -l 'with-compress-debug-symbol:' \
   -l 'with-source-file-relative-path:' \
   -l 'without-avx2' \
+  -l 'without-arm-crc32' \
+  -l 'with-arm-crc32' \
   -l 'with-maven-batch-mode:' \
   -l 'output:' \
   -l 'help' \
@@ -238,6 +280,7 @@ else
     WITH_STARCACHE=ON
 fi
 WITH_PCH=ON
+WITH_PAIMON_CPP=ON
 USE_STAROS=OFF
 BUILD_JAVA_EXT=ON
 OUTPUT_COMPILE_TIME=OFF
@@ -277,6 +320,9 @@ if [[ -z ${USE_SSE4_2} ]]; then
 fi
 if [[ -z ${USE_BMI_2} ]]; then
     USE_BMI_2=ON
+fi
+if [[ -z ${USE_ARM_CRC32} ]]; then
+    USE_ARM_CRC32=ON
 fi
 if [[ -z ${ENABLE_JIT} ]]; then
     if starrocks_is_darwin; then
@@ -363,10 +409,13 @@ else
             --with-thin-archive) THIN_ARCHIVE=ON; shift ;;
             --without-pch) WITH_PCH=OFF; shift ;;
             --without-starcache) WITH_STARCACHE=OFF; shift ;;
+            --without-paimon-cpp) WITH_PAIMON_CPP=OFF; shift ;;
             --output-compile-time) OUTPUT_COMPILE_TIME=ON; shift ;;
             --without-tenann) WITH_TENANN=OFF; shift ;;
             --configure-only) CONFIGURE_ONLY=ON; shift ;;
             --without-avx2) USE_AVX2=OFF; shift ;;
+            --without-arm-crc32) USE_ARM_CRC32=OFF; shift ;;
+            --with-arm-crc32) USE_ARM_CRC32=ON; shift ;;
             --with-compress-debug-symbol) WITH_COMPRESS=$2 ; shift 2 ;;
             --with-source-file-relative-path) WITH_RELATIVE_SRC_PATH=$2 ; shift 2 ;;
             --with-maven-batch-mode) WITH_MAVEN_BATCH_MODE=$2 ; shift 2 ;;
@@ -384,6 +433,11 @@ fi
 if [[ "${BUILD_TYPE}" == "ASAN" && "${WITH_GCOV}" == "ON" ]]; then
     echo "Error: ASAN and gcov cannot be enabled at the same time. Please disable one of them."
     exit 1
+fi
+
+# paimon-cpp is not supported on macOS
+if starrocks_is_darwin; then
+    WITH_PAIMON_CPP=OFF
 fi
 
 if [[ ${HELP} -eq 1 ]]; then
@@ -428,12 +482,14 @@ echo "Get params:
     WITH_COMPRESS_DEBUG_SYMBOL  -- $WITH_COMPRESS
     THIN_ARCHIVE                -- $THIN_ARCHIVE
     WITH_STARCACHE              -- $WITH_STARCACHE
+    WITH_PAIMON_CPP             -- $WITH_PAIMON_CPP
     WITH_PCH                    -- $WITH_PCH
     ENABLE_SHARED_DATA          -- $USE_STAROS
     USE_AVX2                    -- $USE_AVX2
     USE_AVX512                  -- $USE_AVX512
     USE_SSE4_2                  -- $USE_SSE4_2
     USE_BMI_2                   -- $USE_BMI_2
+    USE_ARM_CRC32               -- $USE_ARM_CRC32
     PARALLEL                    -- $PARALLEL
     ENABLE_FAULT_INJECTION      -- $ENABLE_FAULT_INJECTION
     BUILD_JAVA_EXT              -- $BUILD_JAVA_EXT
@@ -571,6 +627,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}              \
                   -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512         \
                   -DUSE_SSE4_2=$USE_SSE4_2 -DUSE_BMI_2=$USE_BMI_2       \
+                  -DUSE_ARM_CRC32=$USE_ARM_CRC32                       \
                   -DWITH_BENCH=${WITH_BENCH}                            \
                   -DWITH_CONNECTOR_BENCHMARK=${WITH_CONNECTOR_BENCHMARK} \
                   -DWITH_CONNECTOR_ELASTICSEARCH=${WITH_CONNECTOR_ELASTICSEARCH} \
@@ -582,6 +639,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
                   -DWITH_COMPRESS=${WITH_COMPRESS}                      \
                   -DTHIN_ARCHIVE=${THIN_ARCHIVE}                        \
                   -DWITH_STARCACHE=${WITH_STARCACHE}                    \
+                  -DWITH_PAIMON_CPP=${WITH_PAIMON_CPP}                  \
                   -DWITH_PCH=${WITH_PCH}                                \
                   -DUSE_STAROS=${USE_STAROS}                            \
                   -DENABLE_FAULT_INJECTION=${ENABLE_FAULT_INJECTION}    \
@@ -684,6 +742,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/conf/hadoop_env.sh ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/core-site.xml ${STARROCKS_OUTPUT}/fe/conf/
         cp -r -p ${STARROCKS_HOME}/conf/cluster_snapshot.yaml ${STARROCKS_OUTPUT}/fe/conf/
+        cp -r -p ${STARROCKS_HOME}/conf/failpoint.btm ${STARROCKS_OUTPUT}/fe/conf/
 
         rm -rf ${STARROCKS_OUTPUT}/fe/lib/*
         cp -r -p ${STARROCKS_HOME}/fe/fe-server/target/lib/* ${STARROCKS_OUTPUT}/fe/lib/
@@ -762,6 +821,17 @@ if [ ${BUILD_BE} -eq 1 ]; then
     elif [[ -f ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ]]; then
         mv ${STARROCKS_OUTPUT}/be/lib/libmockjvm.so ${STARROCKS_OUTPUT}/be/lib/libjvm.so
     fi
+    if [ "${WITH_PAIMON_CPP}" == "ON" ]; then
+        # All paimon-cpp libraries live in be/lib/paimon-cpp-lib
+        paimon_cpp_libs=(${STARROCKS_THIRDPARTY}/installed/paimon-cpp/lib/libpaimon*.so*)
+        if (( ${#paimon_cpp_libs[@]} == 0 )); then
+            echo "Error: WITH_PAIMON_CPP=ON but no libpaimon shared libraries found under ${STARROCKS_THIRDPARTY}/installed/paimon-cpp, run thirdparty/build-thirdparty.sh paimon_cpp first"
+            exit 1
+        fi
+        mkdir -p ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib
+        cp -r -p ${STARROCKS_HOME}/be/output/lib/paimon-cpp-lib/. ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+        cp -r -p "${paimon_cpp_libs[@]}" ${STARROCKS_OUTPUT}/be/lib/paimon-cpp-lib/
+    fi
     if [[ -f ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ]]; then
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jemalloc/bin/jeprof ${STARROCKS_OUTPUT}/be/bin
     fi
@@ -806,6 +876,12 @@ if [ ${BUILD_BE} -eq 1 ]; then
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
         strip --strip-debug $BE_BIN
         objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        # The thirdparty libpaimon*.so ship with debug info (>1 GB unstripped); strip them in place.
+        for so in paimon-cpp-lib/libpaimon*.so; do
+            [[ -f ${so} ]] || continue
+            echo "Strip $so debug symbol ..."
+            strip --strip-debug $so
+        done
         popd &>/dev/null
     fi
 

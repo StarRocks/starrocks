@@ -82,7 +82,7 @@ public class TransactionStateBatch implements Writable {
                 .map(transactionState -> transactionState.getTableCommitInfo(tableId))
                 .filter(commitInfo -> commitInfo != null && commitInfo.getPartitionCommitInfo(partitionId) != null)
                 .forEach(commitInfo ->
-                        commitInfo.getPartitionCommitInfo(partitionId).getTabletStats().putAll(tabletStats));
+                        commitInfo.getPartitionCommitInfo(partitionId).putAllTabletStats(tabletStats));
     }
 
     public void putBeTablets(long partitionId, Map<ComputeNode, List<Long>> nodeToTablets)  {

@@ -186,9 +186,9 @@ Status HorizontalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void HorizontalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -216,11 +216,26 @@ void HorizontalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Pre-built tombstone sstables live at sst_location like _ssts. Del files below the SST threshold
+        // append an empty FileInfo placeholder to stay aligned with _dels, so skip empty paths.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> HorizontalGeneralTabletWriter::clone() const {
@@ -521,9 +536,9 @@ Status VerticalGeneralTabletWriter::finish(SegmentPB* segment) {
 }
 
 void VerticalGeneralTabletWriter::close() {
-    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty())) {
+    if (!_finished && !(_segments.empty() && _dels.empty() && _ssts.empty() && _del_ssts.empty())) {
         std::vector<std::string> full_paths_to_delete;
-        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size());
+        full_paths_to_delete.reserve(_segments.size() + _dels.size() + _ssts.size() + _del_ssts.size());
         for (const auto& f : _segments) {
             std::string path;
             if (_location_provider) {
@@ -551,11 +566,26 @@ void VerticalGeneralTabletWriter::close() {
             }
             full_paths_to_delete.emplace_back(path);
         }
+        // Tombstone sstables live at sst_location like _ssts; skip empty-path placeholders (see the
+        // horizontal writer). Always empty for the vertical (non-PK) writer, kept for symmetry.
+        for (const auto& f : _del_ssts) {
+            if (f.path.empty()) {
+                continue;
+            }
+            std::string path;
+            if (_location_provider) {
+                path = _location_provider->sst_location(_tablet_id, f.path);
+            } else {
+                path = _tablet_mgr->sst_location(_tablet_id, f.path);
+            }
+            full_paths_to_delete.emplace_back(path);
+        }
         delete_files_async(std::move(full_paths_to_delete));
     }
     _segments.clear();
     _dels.clear();
     _ssts.clear();
+    _del_ssts.clear();
 }
 
 StatusOr<std::shared_ptr<SegmentWriter>> VerticalGeneralTabletWriter::create_segment_writer(

@@ -41,6 +41,8 @@ public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_resident_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_mapped_bytes, MetricUnit::BYTES);
     METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jemalloc_dirty_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(jemalloc_muzzy_bytes, MetricUnit::BYTES);
 
     // MemPool metrics
     METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);

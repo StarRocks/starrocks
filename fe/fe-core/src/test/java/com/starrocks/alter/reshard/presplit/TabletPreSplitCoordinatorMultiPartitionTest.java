@@ -237,6 +237,38 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
     }
 
     @Test
+    public void preCreatesAndSplitsTemporaryPartitionForDynamicOverwrite() throws Exception {
+        AtomicInteger addPartitionsCalls = new AtomicInteger();
+        AddPartitionClause clause = new AddPartitionClause(null, null, null, true);
+        List<PartitionSamples> entries = List.of(
+                missingEntry("txn42_pNew", clause, 100, 100L * DebugUtil.MEGABYTE));
+        TabletReshardJob combinedJob = mock(TabletReshardJob.class);
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithCustomMetastore(
+                (db, name, addedClause) -> {
+                    addPartitionsCalls.incrementAndGet();
+                    Assertions.assertTrue(addedClause.isTempPartition());
+                    installExistingTempPartition("txn42_pNew", 11_002L, 21_002L, 0L);
+                });
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+            ArgumentCaptor<Map<Long, List<TabletRange>>> mapCaptor = mapCaptor();
+            factory.when(() -> SplitTabletJobFactory.forExternalBoundaries(
+                    eq(database), eq(table), mapCaptor.capture())).thenReturn(combinedJob);
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForTemporaryPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of(), 42L);
+
+            Assertions.assertInstanceOf(PreSplitOutcome.SubmittedCombined.class, outcome);
+            Assertions.assertEquals(1, addPartitionsCalls.get());
+            Assertions.assertTrue(mapCaptor.getValue().containsKey(21_002L));
+            verify(combinedJob).addCleanupExcludedTransactionId(42L);
+            verify(GlobalStateMgr.getCurrentState().getTabletReshardJobMgr())
+                    .addTabletReshardJob(combinedJob);
+        }
+    }
+
+    @Test
     public void continuesAfterPreCreateFailure() throws Exception {
         // pBad: addPartitions throws -> Skipped(PRE_CREATE_FAILED).
         // pGood: existing, eligible -> contributes to combined submit.
@@ -661,6 +693,29 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                     database, table, entries, 3, freshConnectContext(), null, Set.of());
 
             // Single non-empty partition dropped -> overall NO_USEFUL_CUTS.
+            assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
+            factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
+                    never());
+        }
+    }
+
+    @Test
+    public void resolveSkipsPartitionWithCommittedLoadButStaleRowCount() throws Exception {
+        // The final re-check under the READ lock must not trust a row count the stats sweep has not
+        // refreshed yet: a visible version past the initial one means a load already wrote rows.
+        installExistingPartition("pStale", 11_001L, 21_001L, /*rowCount*/ 0L);
+        when(table.getPartition("pStale").getDefaultPhysicalPartition().getVisibleVersion())
+                .thenReturn(PhysicalPartition.PARTITION_INIT_VERSION + 1);
+        List<PartitionSamples> entries = List.of(
+                existingEntry("pStale", 11_001L, 21_001L, 100, 100L * DebugUtil.MEGABYTE));
+
+        try (MockedStatic<GlobalStateMgr> gsm = mockGlobalStateMgrWithMgrs(null);
+                MockedStatic<SplitTabletJobFactory> factory = Mockito.mockStatic(SplitTabletJobFactory.class);
+                MockedConstruction<Locker> ignored = noopLockerCtor()) {
+
+            PreSplitOutcome outcome = TabletPreSplitCoordinator.submitForPartitionsCombined(
+                    database, table, entries, 3, freshConnectContext(), null, Set.of());
+
             assertSkippedReason(outcome, SkipReason.NO_USEFUL_CUTS);
             factory.verify(() -> SplitTabletJobFactory.forExternalBoundaries(any(), any(), any()),
                     never());
@@ -1209,6 +1264,24 @@ public class TabletPreSplitCoordinatorMultiPartitionTest {
                 .thenReturn(List.of(baseIndex));
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(table.getPartition(name)).thenReturn(partition);
+    }
+
+    private void installExistingTempPartition(String name, long physicalPartitionId,
+                                              long tabletId, long rowCount) {
+        Partition partition = mock(Partition.class);
+        PhysicalPartition physicalPartition = mock(PhysicalPartition.class);
+        when(physicalPartition.getId()).thenReturn(physicalPartitionId);
+        MaterializedIndex baseIndex = mock(MaterializedIndex.class);
+        when(baseIndex.getMetaId()).thenReturn(BASE_INDEX_META_ID);
+        Tablet tablet = mock(Tablet.class);
+        when(tablet.getId()).thenReturn(tabletId);
+        when(baseIndex.getTablets()).thenReturn(List.of(tablet));
+        when(baseIndex.getRowCount()).thenReturn(rowCount);
+        when(physicalPartition.getIndex(BASE_INDEX_META_ID)).thenReturn(baseIndex);
+        when(physicalPartition.getLatestMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE))
+                .thenReturn(List.of(baseIndex));
+        when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
+        when(table.getPartition(name, true)).thenReturn(partition);
     }
 
     /**

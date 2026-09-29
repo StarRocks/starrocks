@@ -16,18 +16,22 @@
 
 #include <butil/file_util.h>
 #include <butil/files/file_path.h>
+#include <curl/curl.h>
 
 #include <algorithm>
 #include <memory>
+#include <thread>
 
 #include "agent/agent_server.h"
 #include "base/path/file_util.h"
 #include "base/time/timezone_utils.h"
+#include "base/utility/defer_op.h"
 #include "cache/datacache.h"
 #include "common/config_cache_fwd.h"
 #include "common/config_exec_env_fwd.h"
 #include "common/config_lake_fwd.h"
 #include "common/config_path_fwd.h"
+#include "common/config_runtime_fwd.h"
 #include "common/config_storage_fwd.h"
 #include "common/glog_init.h"
 #include "common/metrics/process_metrics_registry.h"
@@ -76,6 +80,12 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
         fprintf(stderr, "error read config file. \n");
         return -1;
     }
+    const CURLcode curl_status = curl_global_init(CURL_GLOBAL_ALL);
+    if (curl_status != CURLE_OK) {
+        fprintf(stderr, "failed to initialize libcurl, curl_status=%d\n", static_cast<int>(curl_status));
+        return -1;
+    }
+    DeferOp curl_cleanup([] { curl_global_cleanup(); });
     auto fs_registry_status = fs::install_builtin_file_system_providers();
     CHECK(fs_registry_status.ok()) << fs_registry_status;
     butil::FilePath curr_dir(std::filesystem::current_path());
@@ -88,6 +98,12 @@ int init_test_env(int argc, char** argv, std::unique_ptr<SchemaScannerFactory> s
     config::l0_snapshot_size = 1048576;
     config::storage_flood_stage_left_capacity_bytes = 10485600;
     config::spill_local_storage_dir = spill_path.value();
+    // Dozens of thread pools size themselves from CpuInfo::num_cores() (global_thread_pools.cpp
+    // alone has ~10 such sites), so on a big host a unit-test process builds pools sized for the whole
+    // machine and then tears them down again -- pure overhead for tests that run almost no concurrent
+    // work. CpuInfo::init() below honours config::num_cores when it is > 0, so cap it here. Never raise
+    // it above what the host actually has.
+    config::num_cores = std::min<int32_t>(8, std::max(1U, std::thread::hardware_concurrency()));
 
     FLAGS_alsologtostderr = true;
     init_glog(argv[0], true);

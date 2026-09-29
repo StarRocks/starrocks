@@ -18,6 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
@@ -122,7 +123,11 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.ExternalBasicStatsMeta;
+import com.starrocks.statistic.ExternalHistogramStatsMeta;
+import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TIcebergColumnStats;
@@ -169,9 +174,11 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hive.HiveCatalog;
 import org.apache.iceberg.hive.HiveTableOperations;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
@@ -183,9 +190,13 @@ import org.mockito.Mockito;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -193,7 +204,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -833,10 +843,23 @@ public class IcebergMetadataTest extends TableTestBase {
             public long getNextId() {
                 return 1;
             }
+        };
+
+        // Keep the statistics cleanup off the real DML path. The DELETE would begin a transaction, and
+        // TransactionIdGenerator#getNextTransactionId writes the edit log while holding its own monitor,
+        // so a stalled journal wedges every thread that needs a transaction id - this test included.
+        // Do NOT "fix" that by handing out a private EditLog from a GlobalStateMgr mock: a class mock-up
+        // answers every thread in the JVM, and a queue no JournalWriter drains strands the leader daemons
+        // that write the journal concurrently with this test.
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName,
+                                                    String dbName, String tableName) {
+            }
 
             @Mock
-            public EditLog getEditLog() {
-                return new EditLog(new ArrayBlockingQueue<>(100));
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName,
+                                              String tableName, List<String> columnNames) {
             }
         };
 
@@ -898,6 +921,213 @@ public class IcebergMetadataTest extends TableTestBase {
         } catch (Exception e) {
             Assertions.fail();
         }
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFile() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        String missingMetadata = "File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json";
+
+        // CachingIcebergCatalog wraps the load failure, so NotFoundException only shows up as a cause.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException(missingMetadata));
+                minTimes = 1;
+
+                // FORCE was asked for, but the fallback never purges: the table's files are unknown.
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), true));
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFileNotWrapped() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // Without the caching catalog the raw NotFoundException reaches IcebergMetadata.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new NotFoundException("File does not exist: oss://bucket/db/table1/metadata/00000-abc.metadata.json");
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, "iceberg_db", "table1", false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(false,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                        "iceberg_db", "table1")), null, NodePosition.ZERO), false));
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenMetadataIsUnreadable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // Unreadable, not missing: the metadata may be intact, so dropping the entry would orphan the data.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new IOException("Access denied"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
+    }
+
+    @Test
+    public void testDropTableWithMissingMetadataFileDropsStatistics() throws AlreadyExistsException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        String dbName = "iceberg_db";
+        String tableName = "table_missing_meta";
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                return 1;
+            }
+        };
+
+        // Keep the statistics cleanup off the real DML path. The DELETE would begin a transaction, and
+        // TransactionIdGenerator#getNextTransactionId writes the edit log while holding its own monitor,
+        // so a stalled journal wedges every thread that needs a transaction id - this test included.
+        // Do NOT "fix" that by handing out a private EditLog from a GlobalStateMgr mock: a class mock-up
+        // answers every thread in the JVM, and a queue no JournalWriter drains strands the leader daemons
+        // that write the journal concurrently with this test.
+        new MockUp<StatisticExecutor>() {
+            @Mock
+            public void dropExternalTableStatistics(ConnectContext statsConnectCtx, String catalogName,
+                                                    String dbName, String tableName) {
+            }
+
+            @Mock
+            public void dropExternalHistogram(ConnectContext statsConnectCtx, String catalogName, String dbName,
+                                              String tableName, List<String> columnNames) {
+            }
+        };
+
+        new MockUp<EditLog>() {
+            @Mock
+            public void logAddAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
+                walApplier.apply(job);
+            }
+
+            @Mock
+            public void logRemoveAnalyzeJob(AnalyzeJob job, WALApplier walApplier) {
+                walApplier.apply(job);
+            }
+
+            @Mock
+            public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logRemoveExternalBasicStatsMeta(ExternalBasicStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logAddExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+
+            @Mock
+            public void logRemoveExternalHistogramStatsMeta(ExternalHistogramStatsMeta meta, WALApplier walApplier) {
+                walApplier.apply(meta);
+            }
+        };
+
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        analyzeMgr.addAnalyzeJob(new ExternalAnalyzeJob(CATALOG_NAME, dbName, tableName,
+                Lists.newArrayList(), Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN));
+        analyzeMgr.addExternalBasicStatsMeta(new ExternalBasicStatsMeta(CATALOG_NAME, dbName, tableName,
+                Lists.newArrayList(), StatsConstants.AnalyzeType.FULL, LocalDateTime.MIN, Maps.newHashMap()));
+        analyzeMgr.addExternalHistogramStatsMeta(new ExternalHistogramStatsMeta(CATALOG_NAME, dbName, tableName,
+                "c1", StatsConstants.AnalyzeType.HISTOGRAM, LocalDateTime.MIN, Maps.newHashMap()));
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, dbName, tableName);
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/t/metadata/00000-abc.metadata.json"));
+                minTimes = 1;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, dbName, tableName, false);
+                result = true;
+                times = 1;
+            }
+        };
+
+        metadata.dropTable(connectContext, new DropTableStmt(true,
+                new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME, dbName, tableName)),
+                        null, NodePosition.ZERO), true));
+
+        // A table recreated under the same name must not inherit the leftovers of the broken one.
+        Assertions.assertTrue(analyzeMgr.getAllAnalyzeJobList().stream()
+                        .noneMatch(job -> tableName.equals(((ExternalAnalyzeJob) job).getTableName())),
+                "the analyze job of the dropped table should be gone");
+        Assertions.assertTrue(analyzeMgr.getExternalBasicStatsMetaMap().keySet().stream()
+                        .noneMatch(key -> tableName.equals(key.getTableName())),
+                "the basic stats meta of the dropped table should be gone");
+        Assertions.assertTrue(analyzeMgr.getExternalHistogramStatsMetaMap().keySet().stream()
+                        .noneMatch(key -> tableName.equals(key.getTableKey().getTableName())),
+                "the histogram stats meta of the dropped table should be gone");
+    }
+
+    @Test
+    public void testDropTableKeepsFailingWhenAnotherTableMetadataIsMissing() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+
+        // The table being dropped is healthy; the missing file belongs to a table its foreign key
+        // constraint refers to, which getTable() loads too.
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getTable((ConnectContext) any, "iceberg_db", "table1");
+                result = new StarRocksConnectorException("Failed to get iceberg table",
+                        new NotFoundException("File does not exist: oss://bucket/db/other/metadata/00000-abc.metadata.json"));
+                result = mockedNativeTableA;
+
+                icebergHiveCatalog.dropTable((ConnectContext) any, anyString, anyString, anyBoolean);
+                times = 0;
+            }
+        };
+
+        Assertions.assertThrows(StarRocksConnectorException.class, () ->
+                metadata.dropTable(connectContext, new DropTableStmt(true,
+                        new TableRef(QualifiedName.of(Lists.newArrayList(CATALOG_NAME,
+                                "iceberg_db", "table1")), null, NodePosition.ZERO), true)));
     }
 
     @Test
@@ -1193,6 +1423,120 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertEquals(fileSize, dataFile.fileSizeInBytes());
         Assertions.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
         Assertions.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    // End-to-end regression for the decimal manifest bound encoding bug: BE reports raw, fixed-width
+    // Parquet statistics (little-endian INT32/INT64 for decimal32/64, sign-extended 16-byte
+    // FIXED_LEN_BYTE_ARRAY for decimal128) exactly as it does in production; this drives them through the
+    // real commit path (IcebergMetadata.finishSink -> IcebergApiConverter.buildDataFileMetrics -> a real
+    // Iceberg append/commit) and reads the committed DataFile back from a real manifest via
+    // TableScan#includeColumnStats, so it fails the same way a strict REST catalog (e.g. Unity Catalog)
+    // would if the bounds were not minimally encoded per spec Appendix D.
+    @Test
+    public void testFinishSinkDecimalManifestBoundsAreSpecCompliant() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), null);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableDecimal, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        // decimal(9,2) -> decimal32, physical type INT32
+        long d32Lower = -12345L;
+        long d32Upper = 123456L;
+        // decimal(18,5) -> decimal64, physical type INT64
+        long d64Lower = 150000L;
+        long d64Upper = 999999999999L;
+        // decimal(38,5) -> decimal128, physical type FIXED_LEN_BYTE_ARRAY(16); values match the
+        // 1.50000 / 2.50000 case from the reported Unity Catalog commit failure.
+        long d128Lower = 150000L;
+        long d128Upper = 250000L;
+
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        lowerBounds.put(2, rawLittleEndianStat(d32Lower, 4));
+        upperBounds.put(2, rawLittleEndianStat(d32Upper, 4));
+        lowerBounds.put(3, rawLittleEndianStat(d64Lower, 8));
+        upperBounds.put(3, rawLittleEndianStat(d64Upper, 8));
+        lowerBounds.put(4, rawPaddedBigEndianStat(d128Lower, 16));
+        upperBounds.put(4, rawPaddedBigEndianStat(d128Upper, 16));
+
+        TIcebergColumnStats columnStats = new TIcebergColumnStats();
+        columnStats.setColumn_sizes(new HashMap<>());
+        columnStats.setValue_counts(new HashMap<>());
+        columnStats.setNull_value_counts(new HashMap<>());
+        columnStats.setLower_bounds(lowerBounds);
+        columnStats.setUpper_bounds(upperBounds);
+
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        tIcebergDataFile.setPath(mockedNativeTableDecimal.location() + "/data/decimal-bounds.parquet");
+        tIcebergDataFile.setFormat("parquet");
+        tIcebergDataFile.setRecord_count(2);
+        tIcebergDataFile.setFile_size_in_bytes(1000);
+        tIcebergDataFile.setColumn_stats(columnStats);
+
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo), null);
+        mockedNativeTableDecimal.refresh();
+
+        TableScan scan = mockedNativeTableDecimal.newScan().includeColumnStats();
+        List<FileScanTask> fileScanTasks = Lists.newArrayList(scan.planFiles());
+        Assertions.assertEquals(1, fileScanTasks.size());
+        DataFile committed = fileScanTasks.get(0).file();
+
+        assertMinimalDecimalBound(committed.lowerBounds().get(2), 9, 2, d32Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(2), 9, 2, d32Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(3), 18, 5, d64Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(3), 18, 5, d64Upper);
+        assertMinimalDecimalBound(committed.lowerBounds().get(4), 38, 5, d128Lower);
+        assertMinimalDecimalBound(committed.upperBounds().get(4), 38, 5, d128Upper);
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal32/decimal64: the raw
+    // native-endian (little-endian) fixed-width Parquet INT32/INT64 physical statistic.
+    private static ByteBuffer rawLittleEndianStat(long unscaledValue, int width) {
+        ByteBuffer buf = ByteBuffer.allocate(width).order(ByteOrder.LITTLE_ENDIAN);
+        if (width == 4) {
+            buf.putInt((int) unscaledValue);
+        } else {
+            buf.putLong(unscaledValue);
+        }
+        buf.flip();
+        return buf;
+    }
+
+    // Mimics ParquetFileWriter::_statistics' EncodeMin/EncodeMax for decimal128: the raw, sign-extended,
+    // fixed-width big-endian Parquet FIXED_LEN_BYTE_ARRAY physical statistic.
+    private static ByteBuffer rawPaddedBigEndianStat(long unscaledValue, int width) {
+        byte[] minimal = BigInteger.valueOf(unscaledValue).toByteArray();
+        byte[] padded = new byte[width];
+        Arrays.fill(padded, (byte) (unscaledValue < 0 ? 0xFF : 0x00));
+        System.arraycopy(minimal, 0, padded, width - minimal.length, minimal.length);
+        return ByteBuffer.wrap(padded);
+    }
+
+    // Asserts a committed Iceberg manifest decimal bound follows spec Appendix D: the unscaled value as
+    // two's-complement big-endian binary using the minimum number of bytes, and decodes to the right value.
+    private static void assertMinimalDecimalBound(ByteBuffer bound, int precision, int scale, long expectedUnscaled) {
+        Assertions.assertNotNull(bound);
+        byte[] expectedMinimal = BigInteger.valueOf(expectedUnscaled).toByteArray();
+        byte[] actual = new byte[bound.remaining()];
+        bound.duplicate().get(actual);
+        Assertions.assertArrayEquals(expectedMinimal, actual,
+                "decimal(" + precision + "," + scale + ") bound must use the minimum number of bytes");
+        BigDecimal decoded = (BigDecimal) Conversions.fromByteBuffer(Types.DecimalType.of(precision, scale), bound);
+        Assertions.assertEquals(new BigDecimal(BigInteger.valueOf(expectedUnscaled), scale), decoded);
     }
 
     @Test
@@ -3512,6 +3856,19 @@ public class IcebergMetadataTest extends TableTestBase {
         return deleteFile;
     }
 
+    private TIcebergDataFile buildRewriteOutputDataFile() {
+        TIcebergDataFile dataFile = new TIcebergDataFile();
+        dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/rewritten.parquet");
+        dataFile.setFormat("parquet");
+        dataFile.setRecord_count(2);
+        dataFile.setSplit_offsets(Lists.newArrayList(4L));
+        dataFile.setPartition_path(mockedNativeTableA.location() + "/data/data_bucket=0/");
+        dataFile.setFile_size_in_bytes(512);
+        dataFile.setPartition_null_fingerprint("0");
+        dataFile.setColumn_stats(emptyColumnStats());
+        return dataFile;
+    }
+
     private TIcebergDataFile buildRowDeltaDataFile() {
         TIcebergDataFile dataFile = new TIcebergDataFile();
         dataFile.setPath(mockedNativeTableA.location() + "/data/data_bucket=0/new_after_update.parquet");
@@ -3565,6 +3922,91 @@ public class IcebergMetadataTest extends TableTestBase {
         Assertions.assertNotNull(newSnapshot, "row-delta commit must produce a snapshot");
         Assertions.assertNotEquals(baseSnapshotId, newSnapshot.snapshotId(),
                 "row-delta commit must advance the snapshot id past the plan-time base");
+    }
+
+    @Test
+    public void testCommitRewriteDetectsDeleteLandedAfterPlanTime() throws Exception {
+        // S0 - the snapshot the rewrite planned against and read FILE_A from.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long planTimeSnapshotId = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        // S1 - a concurrent UPDATE/DELETE lands a position delete over FILE_A after the
+        // rewrite planned but before it commits. Replacing FILE_A now would strand that
+        // delete on a path no longer in the table and resurrect the row it removed.
+        mockedNativeTableA.newRowDelta().addDeletes(FILE_A_DELETES).commit();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo rewriteCommit = new TSinkCommitInfo();
+        rewriteCommit.setIs_rewrite(true);
+        rewriteCommit.setIceberg_data_file(buildRewriteOutputDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        extra.setBaseSnapshotId(planTimeSnapshotId);
+
+        // Scoping validateFromSnapshot to the commit-time snapshot instead of the plan-time
+        // base makes the validation window empty, so this conflict commits silently and
+        // corrupts the table (StarRocksTest#11450 duplicates a row, #11396 resurrects one).
+        StarRocksConnectorException e = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> metadata.finishSink("iceberg_db", "iceberg_table",
+                        Lists.newArrayList(rewriteCommit), null, extra),
+                "rewrite must not commit over a delete that landed after it planned");
+        Assertions.assertTrue(e.getMessage().contains("found new delete for replaced data file"),
+                "expected Iceberg's replaced-data-file conflict error, got: " + e.getMessage());
+    }
+
+    @Test
+    public void testCommitRewriteFallsBackToCurrentSnapshotWhenBaseMissing() throws Exception {
+        // A rewrite whose sink extra carries no plan-time snapshot -- e.g. a plan that
+        // produced no IcebergScanNode to freeze one from. The commit must still scope
+        // validateFromSnapshot (falling back to the current snapshot) rather than skip it
+        // or fail, so an ordinary rewrite with nothing to conflict against still commits.
+        mockedNativeTableA.newFastAppend().appendFile(FILE_A).commit();
+        long snapshotBeforeRewrite = mockedNativeTableA.currentSnapshot().snapshotId();
+
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog(CATALOG_NAME, new Configuration(), DEFAULT_CONFIG);
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), DEFAULT_CATALOG_PROPERTIES);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", CATALOG_NAME, "resource_name", "iceberg_db",
+                "iceberg_table", "", Lists.newArrayList(), mockedNativeTableA, Maps.newHashMap());
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable((ConnectContext) any, anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        TSinkCommitInfo rewriteCommit = new TSinkCommitInfo();
+        rewriteCommit.setIs_rewrite(true);
+        rewriteCommit.setIceberg_data_file(buildRewriteOutputDataFile());
+
+        IcebergMetadata.IcebergSinkExtra extra = new IcebergMetadata.IcebergSinkExtra();
+        extra.addScannedDataFiles(Sets.newHashSet(FILE_A));
+        // deliberately no setBaseSnapshotId(...)
+
+        metadata.finishSink("iceberg_db", "iceberg_table",
+                Lists.newArrayList(rewriteCommit), null, extra);
+
+        mockedNativeTableA.refresh();
+        Snapshot newSnapshot = mockedNativeTableA.currentSnapshot();
+        Assertions.assertNotNull(newSnapshot, "rewrite commit must produce a snapshot");
+        Assertions.assertNotEquals(snapshotBeforeRewrite, newSnapshot.snapshotId(),
+                "rewrite commit must advance the snapshot id past the pre-rewrite state");
     }
 
     private long mergeCounterValue(String name, String labelKey, String labelValue) {

@@ -18,9 +18,12 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
+#include <iosfwd>
 #include <memory>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "common/logging.h"
@@ -33,14 +36,29 @@ namespace starrocks {
 /// /sys/devices)
 class CpuInfo {
 public:
-    static const int64_t SSSE3 = (1 << 1);
-    static const int64_t SSE4_1 = (1 << 2);
-    static const int64_t SSE4_2 = (1 << 3);
-    static const int64_t POPCNT = (1 << 4);
-    static const int64_t AVX = (1 << 5);
-    static const int64_t AVX2 = (1 << 6);
-    static const int64_t AVX512F = (1 << 7);
-    static const int64_t AVX512BW = (1 << 8);
+#if defined(__x86_64__) || defined(__i386__)
+    static const int64_t SSSE3 = (1LL << 1);
+    static const int64_t SSE4_1 = (1LL << 2);
+    static const int64_t SSE4_2 = (1LL << 3);
+    static const int64_t POPCNT = (1LL << 4);
+    static const int64_t AVX = (1LL << 5);
+    static const int64_t AVX2 = (1LL << 6);
+    static const int64_t AVX512F = (1LL << 7);
+    static const int64_t AVX512BW = (1LL << 8);
+#elif defined(__aarch64__)
+    // Detected at runtime via /proc/cpuinfo "Features" and getauxval(AT_HWCAP/AT_HWCAP2).
+    static const int64_t ARM_NEON = (1LL << 1);  ///< Advanced SIMD (NEON); mandatory on aarch64
+    static const int64_t ARM_CRC32 = (1LL << 2); ///< Hardware CRC-32C (__crc32cw / __crc32cd)
+    static const int64_t ARM_PMULL = (1LL << 3); ///< Polynomial multiply (vmull_p64 / PMULL)
+    static const int64_t ARM_AES = (1LL << 4);   ///< Hardware AES encryption/decryption
+    static const int64_t ARM_LSE = (1LL << 5);   ///< ARMv8.1-A Large System Extensions atomics
+    static const int64_t ARM_SVE = (1LL << 6);   ///< Scalable Vector Extension
+    static const int64_t ARM_SVE2 = (1LL << 7);  ///< Scalable Vector Extension 2
+    static const int64_t ARM_SHA1 = (1LL << 8);  ///< Hardware SHA-1
+    static const int64_t ARM_SHA2 = (1LL << 9);  ///< Hardware SHA-256
+#else
+#error "CpuInfo CPU feature detection supports only x86 or aarch64"
+#endif
 
     /// Cache enums for L1 (data), L2 and L3
     enum CacheLevel {
@@ -117,17 +135,55 @@ public:
     // Return value: the cpu instruction sets that are not supported in the current running env.
     static std::vector<std::string> unsupported_cpu_flags_from_current_env();
 
-    // For TEST only
-    static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
-
-private:
     struct FlagMapping {
-        std::string name;
+        std::string_view name;
         int64_t flag;
     };
 
+    // For TEST only
+    static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
+    static const std::vector<FlagMapping>& TEST_flag_mappings() { return _flag_mappings(); }
+    static int64_t TEST_parse_flags(const std::string& values, const std::vector<FlagMapping>& mappings) {
+        return _parse_flags(values, mappings);
+    }
+    static int64_t TEST_intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings) {
+        return _intersect_procfs_features(stream, mappings);
+    }
+#if defined(__aarch64__)
+    static int64_t TEST_init_arm_auxval(unsigned long hwcap, unsigned long hwcap2) {
+        return _init_arm_auxval(hwcap, hwcap2);
+    }
+    static int64_t TEST_init_arm_procfs(std::istream& stream) { return _init_arm_procfs(stream); }
+    static int64_t TEST_init_arm_darwin(const std::function<bool(const char*)>& check_sysctl) {
+        return _init_arm_darwin(check_sysctl);
+    }
+#endif
+    static int64_t TEST_resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags) {
+        return _resolve_arm_flags(aux_available, aux_flags, procfs_flags);
+    }
+    static bool TEST_hwcap_available(unsigned long hwcap) { return _hwcap_available(hwcap); }
+
+private:
+#if defined(__aarch64__)
+    static int64_t _init_arm_auxval(unsigned long hwcap, unsigned long hwcap2);
+    static int64_t _init_arm_procfs(std::istream& stream);
+    static int64_t _init_arm_darwin(const std::function<bool(const char*)>& check_sysctl);
+#endif
+    static int64_t _resolve_arm_flags(bool aux_available, int64_t aux_flags, int64_t procfs_flags);
+
+    // Arch-independent precedence/predicate helpers — no dependency on ARM_*/x86 constants,
+    // so they stay testable on any host regardless of which vocabulary Task 3 compiles in.
+    static bool _hwcap_available(unsigned long hwcap);
+
+    // This build's single feature vocabulary (see cpu_info.cpp). Exactly one definition exists
+    // per compiled binary -- x86 and ARM64 tokens are never in the same table.
     static const std::vector<FlagMapping>& _flag_mappings();
-    static int64_t _parse_cpu_flags(const std::string& values);
+
+    // Arch-independent parsing primitives -- table-driven so unit tests can exercise the
+    // tokenizer and multi-core-intersection algorithms on any host using synthetic data,
+    // independent of which vocabulary this binary was actually built with.
+    static int64_t _parse_flags(const std::string& values, const std::vector<FlagMapping>& mappings);
+    static int64_t _intersect_procfs_features(std::istream& stream, const std::vector<FlagMapping>& mappings);
 
     static constexpr size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
     static constexpr size_t DEFAULT_L3_CACHE_SIZE = 32 * 1024 * 1024;

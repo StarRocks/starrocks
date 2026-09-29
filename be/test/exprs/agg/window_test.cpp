@@ -18,14 +18,31 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+#include <optional>
+#include <random>
+#include <string>
+#include <vector>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/chunk.h"
 #include "column/column_builder.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/config_exec_flow_fwd.h"
+#include "common/config_exec_fwd.h"
+#include "common/runtime_profile.h"
+#include "exec/analytor.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/PlanNodes_types.h"
+#include "gen_cpp/Types_types.h"
+#include "runtime/descriptor_helper.h"
+#include "runtime/descriptors.h"
 #include "runtime/mem_pool.h"
 #include "runtime/memory/counting_allocator.h"
+#include "runtime/runtime_state.h"
 #include "testutil/function_utils.h"
 
 namespace starrocks {
@@ -913,6 +930,357 @@ TEST_F(LagWindowTest, test_lag_large_binary_non_const_default) {
         ASSERT_FALSE(lag_state->is_null) << "row=" << row;
         Slice value = AggDataTypeTraits<TYPE_VARCHAR>::get_ref(lag_state->value);
         ASSERT_EQ(expected[row], value.to_string()) << "row=" << row;
+    }
+}
+
+TEST_F(LagWindowTest, test_lag_ignore_nulls_all_null_needs_no_retention) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    const int64_t N = 8;
+    for (int i = 0; i < N; ++i) {
+        data_col->append(0);
+        null_col->append(1); // all NULL
+    }
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 1;
+
+    Columns args = build_lag_args(value_col, offset, default_col);
+    std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
+
+    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    for (int64_t row = 0; row < N; ++row) {
+        int64_t frame_start = row - offset;
+        int64_t frame_end = frame_start + 1;
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(), 0, N, frame_start,
+                                                       frame_end);
+        ASSERT_EQ(std::nullopt, lag_func->get_min_retained_position(ctx, state->state())) << "row=" << row;
+    }
+}
+
+// With regularly-occurring non-nulls the retained watermark tracks the most recent non-null (never
+// pinned to the partition start), and reset_state_for_contraction shifts it into the operator's
+// post-eviction coordinates.
+TEST_F(LagWindowTest, test_lag_ignore_nulls_watermark_tracks_recent_nonnull) {
+    auto data_col = Int32Column::create();
+    auto null_col = NullColumn::create();
+    const int64_t N = 8;
+    for (int i = 0; i < N; ++i) {
+        if (i % 2 == 0) {
+            data_col->append((i + 1) * 10);
+            null_col->append(0);
+        } else {
+            data_col->append(0);
+            null_col->append(1);
+        }
+    }
+    ColumnPtr value_col = NullableColumn::create(std::move(data_col), std::move(null_col));
+    auto default_col = ColumnHelper::create_const_column<TYPE_INT>(99, value_col->size());
+    const int64_t offset = 1;
+
+    Columns args = build_lag_args(value_col, offset, default_col);
+    std::vector<const Column*> raw_cols{args[0].get(), args[1].get(), args[2].get()};
+
+    const AggregateFunction* lag_func = get_aggregate_function("lag_in", TYPE_INT, TYPE_INT, true);
+    auto state = ManagedAggrState::create(ctx, lag_func);
+    lag_func->reset(ctx, args, state->state());
+
+    for (int64_t row = 0; row < N; ++row) {
+        int64_t frame_start = row - offset;
+        int64_t frame_end = frame_start + 1;
+        lag_func->update_batch_single_state_with_frame(ctx, state->state(), raw_cols.data(), 0, N, frame_start,
+                                                       frame_end);
+        auto* s = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/true>*>(state->state());
+        auto wm = lag_func->get_min_retained_position(ctx, state->state());
+        ASSERT_EQ(s->target_not_null_index, wm) << "row=" << row;
+        ASSERT_GE(wm.value(), row - 2) << "row=" << row; // bounded near current, not pinned to 0
+    }
+
+    auto* s = reinterpret_cast<LeadLagState<TYPE_INT, /*ignoreNulls=*/true>*>(state->state());
+    int64_t before = s->target_not_null_index;
+    lag_func->reset_state_for_contraction(ctx, state->state(), 2);
+    ASSERT_EQ(before - 2, s->target_not_null_index);
+}
+
+// ===================================================================================================
+// End-to-end correctness: drive the real Analytor operator for `lag(col, offset) IGNORE NULLS` and
+// verify the emitted output column matches an independent reference implementation, with the streaming
+// + watermark-eviction path both DISABLED (legacy materializing) and ENABLED. This is what exercises
+// Analytor::_remove_unused_rows + reset_state_for_contraction under real chunking/eviction, which the
+// function-level tests above never touch.
+// ===================================================================================================
+namespace {
+
+using OptInt = std::optional<int32_t>;
+
+TTypeDesc make_scalar_ttype(TPrimitiveType::type t) {
+    TTypeDesc desc;
+    TTypeNode node;
+    node.__set_type(TTypeNodeType::SCALAR);
+    TScalarType scalar;
+    scalar.__set_type(t);
+    node.__set_scalar_type(scalar);
+    desc.types.push_back(node);
+    return desc;
+}
+
+TExprNode make_slot_ref(TupleId tuple, SlotId slot, const TTypeDesc& ttype) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::SLOT_REF);
+    node.__set_type(ttype);
+    node.__set_num_children(0);
+    node.__set_is_nullable(true);
+    TSlotRef slot_ref;
+    slot_ref.__set_slot_id(slot);
+    slot_ref.__set_tuple_id(tuple);
+    node.__set_slot_ref(slot_ref);
+    return node;
+}
+
+TExprNode make_bigint_literal(int64_t v) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::INT_LITERAL);
+    node.__set_type(make_scalar_ttype(TPrimitiveType::BIGINT));
+    node.__set_num_children(0);
+    node.__set_is_nullable(false);
+    TIntLiteral lit;
+    lit.__set_value(v);
+    node.__set_int_literal(lit);
+    return node;
+}
+
+TExprNode make_null_literal(const TTypeDesc& ttype) {
+    TExprNode node;
+    node.__set_node_type(TExprNodeType::NULL_LITERAL);
+    node.__set_type(ttype);
+    node.__set_num_children(0);
+    node.__set_is_nullable(true);
+    return node;
+}
+
+// lag(<slot>, offset, NULL) IGNORE NULLS, ROWS UNBOUNDED PRECEDING AND <offset> PRECEDING, single partition.
+TPlanNode make_lag_tnode(TupleId in_tuple_id, SlotId col_slot_id, int64_t offset) {
+    const TTypeDesc int_type = make_scalar_ttype(TPrimitiveType::INT);
+    TExpr fn_call;
+    TExprNode agg;
+    agg.__set_node_type(TExprNodeType::AGG_EXPR);
+    agg.__set_num_children(3);
+    agg.__set_type(int_type);
+    agg.__set_has_nullable_child(true);
+    agg.__set_is_nullable(true);
+    {
+        TAggregateExpr agg_expr;
+        agg_expr.__set_is_merge_agg(false);
+        agg.__set_agg_expr(agg_expr);
+        TFunction fn;
+        TFunctionName fn_name;
+        fn_name.__set_function_name("lag");
+        fn.__set_name(fn_name);
+        fn.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        fn.__set_arg_types(std::vector<TTypeDesc>{int_type});
+        fn.__set_ret_type(int_type);
+        fn.__set_has_var_args(false);
+        fn.__set_ignore_nulls(true);
+        agg.__set_fn(fn);
+    }
+    fn_call.nodes.push_back(agg);
+    fn_call.nodes.push_back(make_slot_ref(in_tuple_id, col_slot_id, int_type));
+    fn_call.nodes.push_back(make_bigint_literal(offset));
+    fn_call.nodes.push_back(make_null_literal(int_type));
+
+    TAnalyticWindow window;
+    window.__set_type(TAnalyticWindowType::ROWS);
+    {
+        TAnalyticWindowBoundary end;
+        end.__set_type(TAnalyticWindowBoundaryType::PRECEDING);
+        end.__set_rows_offset_value(offset);
+        window.__set_window_end(end); // window_start unset => UNBOUNDED PRECEDING
+    }
+    TAnalyticNode anode;
+    anode.__set_window(window);
+    anode.__set_buffered_tuple_id(in_tuple_id);
+    anode.analytic_functions.push_back(fn_call);
+
+    TPlanNode tnode;
+    tnode.__set_node_id(0);
+    tnode.__set_node_type(TPlanNodeType::ANALYTIC_EVAL_NODE);
+    tnode.__set_limit(-1);
+    tnode.__set_analytic_node(anode);
+    return tnode;
+}
+
+// Reference: lag(x, offset) IGNORE NULLS with NULL default.
+std::vector<OptInt> ref_lag_ignore_nulls(const std::vector<OptInt>& in, int64_t offset) {
+    std::vector<OptInt> out(in.size());
+    std::vector<int32_t> seen; // non-null values strictly before current, in order
+    for (size_t i = 0; i < in.size(); ++i) {
+        if (static_cast<int64_t>(seen.size()) >= offset) {
+            out[i] = seen[seen.size() - offset];
+        } else {
+            out[i] = std::nullopt;
+        }
+        if (in[i].has_value()) {
+            seen.push_back(*in[i]);
+        }
+    }
+    return out;
+}
+
+ColumnPtr build_nullable_int_column(const std::vector<OptInt>& vals, size_t begin, size_t count) {
+    auto data = Int32Column::create();
+    auto nulls = NullColumn::create();
+    for (size_t i = 0; i < count; ++i) {
+        const OptInt& v = vals[begin + i];
+        data->append(v.has_value() ? *v : 0);
+        nulls->append(v.has_value() ? 0 : 1);
+    }
+    return NullableColumn::create(std::move(data), std::move(nulls));
+}
+
+// Drive the real Analytor and return the lag output for each input row (in input order).
+std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t offset, bool streaming,
+                                     int64_t chunk_rows) {
+    config::pipeline_analytic_enable_ignore_nulls_streaming = streaming;
+    // Small eviction batch so the streaming path actually evicts/contracts many times over the run.
+    config::pipeline_analytic_removable_chunk_num = 2;
+
+    ObjectPool pool;
+    TDescriptorTableBuilder dtb;
+    {
+        TTupleDescriptorBuilder in_tuple;
+        in_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("v").build());
+        in_tuple.build(&dtb);
+        TTupleDescriptorBuilder out_tuple;
+        out_tuple.add_slot(TSlotDescriptorBuilder().type(TYPE_INT).nullable(true).column_name("lag_v").build());
+        out_tuple.build(&dtb);
+    }
+    auto* state = pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(state, &pool, dtb.desc_tbl(), &desc_tbl, config::vector_chunk_size).ok());
+    state->set_desc_tbl(desc_tbl);
+    state->init_instance_mem_tracker();
+
+    const TupleId in_tuple_id = 0;
+    const TupleId out_tuple_id = 1;
+    const SlotId col_slot_id = desc_tbl->get_tuple_descriptor(in_tuple_id)->slots()[0]->id();
+    const SlotId res_slot_id = desc_tbl->get_tuple_descriptor(out_tuple_id)->slots()[0]->id();
+    TupleDescriptor* result_tuple = desc_tbl->get_tuple_descriptor(out_tuple_id);
+
+    TPlanNode tnode = make_lag_tnode(in_tuple_id, col_slot_id, offset);
+    RuntimeProfile profile("Analytor");
+    auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
+    CHECK(analytor->prepare(state, &pool, &profile).ok());
+    CHECK(analytor->open(state).ok());
+
+    std::vector<OptInt> out;
+    auto collect = [&](const ChunkPtr& chunk) {
+        if (chunk == nullptr) return;
+        ColumnPtr res = chunk->get_column_by_slot_id(res_slot_id);
+        for (size_t i = 0; i < res->size(); ++i) {
+            if (res->is_null(i)) {
+                out.push_back(std::nullopt);
+            } else {
+                out.push_back(static_cast<int32_t>(res->get(i).get_int32()));
+            }
+        }
+    };
+
+    size_t fed = 0;
+    while (fed < input.size()) {
+        const size_t n = std::min<size_t>(chunk_rows, input.size() - fed);
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(build_nullable_int_column(input, fed, n), col_slot_id);
+        CHECK(analytor->process(state, chunk).ok());
+        fed += n;
+        while (ChunkPtr o = analytor->poll_chunk_buffer()) collect(o);
+    }
+    CHECK(analytor->finish_process(state).ok());
+    while (ChunkPtr o = analytor->poll_chunk_buffer()) collect(o);
+    analytor->close(state);
+    return out;
+}
+
+std::vector<OptInt> pattern_column(int pattern, size_t n, uint32_t seed) {
+    std::vector<OptInt> v(n);
+    std::mt19937 rng(seed);
+    for (size_t i = 0; i < n; ++i) {
+        bool is_null;
+        switch (pattern) {
+        case 0: // all null
+            is_null = true;
+            break;
+        case 1: // dense
+            is_null = false;
+            break;
+        case 2: // sparse: one non-null every 64 rows
+            is_null = (i % 64 != 0);
+            break;
+        case 3: // head then long null tail (the watermark caveat case)
+            is_null = (i != 0);
+            break;
+        default: // random ~1/3 null
+            is_null = (rng() % 3 == 0);
+            break;
+        }
+        v[i] = is_null ? OptInt(std::nullopt) : OptInt(static_cast<int32_t>(i + 1));
+    }
+    return v;
+}
+
+void expect_equal(const std::vector<OptInt>& got, const std::vector<OptInt>& expected, const std::string& tag) {
+    ASSERT_EQ(expected.size(), got.size()) << tag;
+    for (size_t i = 0; i < expected.size(); ++i) {
+        ASSERT_EQ(expected[i].has_value(), got[i].has_value()) << tag << " null-mismatch at row " << i;
+        if (expected[i].has_value()) {
+            ASSERT_EQ(*expected[i], *got[i]) << tag << " value-mismatch at row " << i;
+        }
+    }
+}
+
+} // namespace
+
+// Streaming output must equal both the legacy (materializing) output and the independent reference,
+// across data shapes, offsets, and chunk sizes (which shift partition/eviction boundaries).
+TEST_F(LagWindowTest, e2e_streaming_matches_reference_and_legacy) {
+    const size_t n = 5000;
+    const int patterns[] = {0, 1, 2, 3, 4};
+    const int64_t offsets[] = {1, 2, 3};
+    const int64_t chunk_sizes[] = {1, 7, 256, 4096};
+
+    for (int p : patterns) {
+        const auto input = pattern_column(p, n, /*seed*/ 1000 + p);
+        for (int64_t off : offsets) {
+            const auto expected = ref_lag_ignore_nulls(input, off);
+            for (int64_t cs : chunk_sizes) {
+                const std::string tag =
+                        "p=" + std::to_string(p) + " off=" + std::to_string(off) + " chunk=" + std::to_string(cs);
+                expect_equal(run_analytor_lag(input, off, /*streaming*/ false, cs), expected, "legacy " + tag);
+                expect_equal(run_analytor_lag(input, off, /*streaming*/ true, cs), expected, "streaming " + tag);
+            }
+        }
+    }
+}
+
+// The exact column discussed for offset 2: NULL,NULL,1,NULL,1,NULL,1,1 (values distinguished so we can
+// see which physical non-null is picked). Verifies streaming and legacy agree with the reference.
+TEST_F(LagWindowTest, e2e_offset2_sparse_explicit) {
+    std::vector<OptInt> input{std::nullopt, std::nullopt, 10, std::nullopt, 20, std::nullopt, 30, 40};
+    const int64_t offset = 2;
+    const auto expected = ref_lag_ignore_nulls(input, offset);
+    // sanity-check the reference itself: 2nd-most-recent non-null strictly before each row.
+    // rows:          0    1    2      3     4      5     6     7
+    // value:         -    -    10     -     20     -     30    40
+    // non-nulls before row: {} {} {}   {10}  {10}  {10,20} {10,20} {10,20,30}
+    // 2nd-most-recent:  -    -    -      -     -      10     10     20
+    std::vector<OptInt> hand{std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, 10, 10, 20};
+    expect_equal(expected, hand, "reference-self-check");
+
+    for (int64_t cs : {1, 3, 8}) {
+        expect_equal(run_analytor_lag(input, offset, false, cs), expected, "legacy cs=" + std::to_string(cs));
+        expect_equal(run_analytor_lag(input, offset, true, cs), expected, "streaming cs=" + std::to_string(cs));
     }
 }
 

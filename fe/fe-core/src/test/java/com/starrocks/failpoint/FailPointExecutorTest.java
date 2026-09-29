@@ -52,6 +52,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class FailPointExecutorTest {
@@ -210,11 +211,16 @@ public class FailPointExecutorTest {
             @Mock
             public Future<PListFailPointResponse> listFailPointAsync(
                     TNetworkAddress address, PListFailPointRequest request) {
+                // A paused failpoint is reported as DISABLE + pause = true, matching the wire
+                // encoding; the FE renders it as PAUSE.
                 PFailPointTriggerMode mode = new PFailPointTriggerMode();
-                mode.mode = FailPointTriggerModeType.ENABLE;
+                mode.mode = FailPointTriggerModeType.DISABLE;
+                mode.pause = true;
                 PFailPointInfo info = new PFailPointInfo();
                 info.name = "fp_cn";
                 info.triggerMode = mode;
+                info.triggerCount = 7L;
+                info.pausedThreadCount = 2L;
 
                 PListFailPointResponse resp = new PListFailPointResponse();
                 resp.status = new StatusPB();
@@ -230,7 +236,111 @@ public class FailPointExecutorTest {
                 .visit(stmt, new ConnectContext());
         Assertions.assertTrue(result.next());
         Assertions.assertEquals("fp_cn", result.getString(0));
+        Assertions.assertEquals("PAUSE", result.getString(1));
+        Assertions.assertEquals("", result.getString(2));
         Assertions.assertEquals("10.0.0.2:9060", result.getString(3));
+        Assertions.assertEquals("7", result.getString(4));
+        Assertions.assertEquals("2", result.getString(5));
+    }
+
+    @Test
+    public void testShowFailPointsFromBackendWithoutPauseFields() throws Exception {
+        service.addComputeNode(aliveCn(10002, "10.0.0.2", 9060, 8060));
+
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PListFailPointResponse> listFailPointAsync(
+                    TNetworkAddress address, PListFailPointRequest request) {
+                // A BE built before this change leaves pause and both counters unset; jprotobuf maps
+                // an absent optional scalar to a null boxed value, so the FE must not dereference.
+                PFailPointTriggerMode mode = new PFailPointTriggerMode();
+                mode.mode = FailPointTriggerModeType.ENABLE;
+                PFailPointInfo info = new PFailPointInfo();
+                info.name = "fp_old_be";
+                info.triggerMode = mode;
+
+                PListFailPointResponse resp = new PListFailPointResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                resp.failPoints = Collections.singletonList(info);
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        ShowFailPointStatement stmt = new ShowFailPointStatement(
+                null, Collections.singletonList("10.0.0.2:9060"), NodePosition.ZERO);
+        ShowResultSet result = ShowExecutor.ShowExecutorVisitor.getInstance()
+                .visit(stmt, new ConnectContext());
+        Assertions.assertTrue(result.next());
+        Assertions.assertEquals("ENABLE", result.getString(1));
+        Assertions.assertEquals("0", result.getString(4));
+        Assertions.assertEquals("0", result.getString(5));
+    }
+
+    @Test
+    public void testShowFailPointsOldBackendThatReceivedAPauseIsNotRenderedAsPaused() throws Exception {
+        service.addComputeNode(aliveCn(10002, "10.0.0.2", 9060, 8060));
+
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PListFailPointResponse> listFailPointAsync(
+                    TNetworkAddress address, PListFailPointRequest request) {
+                // What an old BE reports after being sent a pause: it saw only mode = DISABLE, and
+                // because the discriminator rides on the request rather than inside trigger_mode it
+                // has nothing to echo back. The FE must therefore report DISABLE, not PAUSE -- the
+                // failpoint really is just disabled on that node.
+                PFailPointTriggerMode mode = new PFailPointTriggerMode();
+                mode.mode = FailPointTriggerModeType.DISABLE;
+                PFailPointInfo info = new PFailPointInfo();
+                info.name = "fp_old_be_pause";
+                info.triggerMode = mode;
+
+                PListFailPointResponse resp = new PListFailPointResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                resp.failPoints = Collections.singletonList(info);
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        ShowFailPointStatement stmt = new ShowFailPointStatement(
+                null, Collections.singletonList("10.0.0.2:9060"), NodePosition.ZERO);
+        ShowResultSet result = ShowExecutor.ShowExecutorVisitor.getInstance()
+                .visit(stmt, new ConnectContext());
+        Assertions.assertTrue(result.next());
+        Assertions.assertEquals("DISABLE", result.getString(1));
+        Assertions.assertEquals("0", result.getString(5));
+    }
+
+    @Test
+    public void testUpdateBackendPauseRequestEncoding() throws Exception {
+        service.addComputeNode(aliveCn(10002, "10.0.0.2", 9060, 8060));
+
+        AtomicReference<PUpdateFailPointStatusRequest> captured = new AtomicReference<>();
+        new MockUp<BackendServiceClient>() {
+            @Mock
+            public Future<PUpdateFailPointStatusResponse> updateFailPointStatusAsync(
+                    TNetworkAddress address, PUpdateFailPointStatusRequest request) {
+                captured.set(request);
+                PUpdateFailPointStatusResponse resp = new PUpdateFailPointStatusResponse();
+                resp.status = new StatusPB();
+                resp.status.statusCode = TStatusCode.OK.getValue();
+                return CompletableFuture.completedFuture(resp);
+            }
+        };
+
+        UpdateFailPointStatusStatement stmt = UpdateFailPointStatusStatement.pauseStatement(
+                "fp_test", Collections.singletonList("10.0.0.2:9060"), NodePosition.ZERO);
+        new FailPointExecutor(stmt).execute();
+
+        PUpdateFailPointStatusRequest sent = captured.get();
+        Assertions.assertNotNull(sent);
+        // Degrades safely on a BE that predates the pause field, and the discriminator stays on the
+        // request so such a BE cannot echo it back into SHOW FAILPOINTS.
+        Assertions.assertEquals(FailPointTriggerModeType.DISABLE, sent.triggerMode.mode);
+        Assertions.assertNull(sent.triggerMode.pause);
+        Assertions.assertEquals(Boolean.TRUE, sent.pause);
+        Assertions.assertTrue(sent.pauseTimeoutSecond > 0);
     }
 
     @Test

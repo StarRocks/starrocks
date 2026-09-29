@@ -85,6 +85,39 @@ public class AdminSetConfigStmtTest {
     }
 
     @Test
+    public void testSetLabelCleanIntervalSecond() throws Exception {
+        int originInterval = Config.label_clean_interval_second;
+        try {
+            String stmt = "admin set frontend config(\"label_clean_interval_second\" = \"600\");";
+            AdminSetConfigStmt adminSetConfigStmt =
+                    (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+            ConfigBase.setConfig(adminSetConfigStmt);
+            Assertions.assertEquals(600, Config.label_clean_interval_second);
+        } finally {
+            Config.label_clean_interval_second = originInterval;
+        }
+    }
+
+    @Test
+    public void testSetNonPositiveLabelCleanIntervalSecond() throws Exception {
+        int originInterval = Config.label_clean_interval_second;
+        try {
+            for (String badValue : new String[] {"0", "-1"}) {
+                String stmt = "admin set frontend config(\"label_clean_interval_second\" = \"" + badValue + "\");";
+                AdminSetConfigStmt adminSetConfigStmt =
+                        (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+                Throwable exception = assertThrows(DdlException.class, () ->
+                        ConfigBase.setConfig(adminSetConfigStmt));
+                assertThat(exception.getMessage(), containsString("must be greater than 0"));
+            }
+            // a rejected value must leave the running config untouched
+            Assertions.assertEquals(originInterval, Config.label_clean_interval_second);
+        } finally {
+            Config.label_clean_interval_second = originInterval;
+        }
+    }
+
+    @Test
     public void testSetMysqlVersion() throws Exception {
         String stmt = "admin set frontend config(\"mysql_server_version\" = \"5.1.1\");";
         AdminSetConfigStmt adminSetConfigStmt =

@@ -26,6 +26,8 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -160,6 +162,34 @@ public class ThreadPoolManagerTest {
         ThreadPoolManager.setCacheThreadPoolSize(fixedExecutor, 1);
         Assertions.assertEquals(10, fixedExecutor.getCorePoolSize());
         Assertions.assertEquals(10, fixedExecutor.getMaximumPoolSize());
+    }
+
+    @Test
+    public void testFixedThreadPoolWithAbortPolicy() {
+        ThreadPoolExecutor executor = ThreadPoolManager.newDaemonFixedThreadPoolWithAbortPolicy(
+                1, 1, "test_abort_policy_pool", false);
+        CountDownLatch occupied = new CountDownLatch(1);
+        try {
+            Assertions.assertEquals(ThreadPoolManager.FastAbortPolicy.class,
+                    executor.getRejectedExecutionHandler().getClass());
+
+            // the single thread takes the first task, the single queue slot takes the second,
+            // and the third has nowhere to go: it must fail the submission rather than wait
+            executor.execute(() -> {
+                try {
+                    occupied.await();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+            executor.execute(() -> {
+            });
+            Assertions.assertThrows(RejectedExecutionException.class, () -> executor.execute(() -> {
+            }));
+        } finally {
+            occupied.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test

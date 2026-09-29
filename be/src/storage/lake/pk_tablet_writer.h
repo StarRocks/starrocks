@@ -69,6 +69,11 @@ protected:
     Status flush_segment_writer(SegmentPB* segment = nullptr) override;
 
 private:
+    // Writes the pre-built tombstone sstable for one del file's |deletes| into |info| and |range|
+    // (see flush_del_file for when and why it is built).
+    Status build_del_tombstone_sstable(const Column& deletes, FileInfo* info,
+                                       PersistentIndexSstableRangePB* range) const;
+
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta;
     std::unique_ptr<RowsMapperBuilder> _rows_mapper_builder;
     std::unique_ptr<DefaultSSTWriter> _pk_sst_writer;

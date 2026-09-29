@@ -18,8 +18,10 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.staros.client.StarClientException;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
+import com.staros.proto.StatusCode;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -560,6 +562,7 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
     public boolean syncTableMetaInternal(Database db, OlapTable table, boolean forceDeleteData) throws DdlException {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         HashMap<Long, Set<Long>> redundantGroupToShards = new HashMap<>();
+        Set<Long> snapshotProtectedShardGroups = new HashSet<>();
         List<PhysicalPartition> physicalPartitions = new ArrayList<>();
         Locker locker = new Locker();
         // Intensive path: IS on DB + READ on this table. We only need table-scoped
@@ -602,11 +605,20 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                 for (MaterializedIndex materializedIndex :
                         physicalPartition.getAllMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     long groupId = materializedIndex.getShardGroupId();
-                    Set<Long> starmgrShardIdsSet = null;
-                    if (redundantGroupToShards.get(groupId) != null) {
-                        starmgrShardIdsSet = redundantGroupToShards.get(groupId);
-                    } else {
-                        List<Long> starmgrShardIds = starOSAgent.listShard(groupId);
+                    Set<Long> starmgrShardIdsSet = redundantGroupToShards.get(groupId);
+                    if (starmgrShardIdsSet == null) {
+                        List<Long> starmgrShardIds;
+                        try {
+                            starmgrShardIds = starOSAgent.listShard(groupId);
+                        } catch (DdlException e) {
+                            if (isShardGroupNotExist(e) && table.getPhysicalPartition(physicalPartition.getId()) == null) {
+                                LOG.debug("skip syncing removed partition {} shard group {}, because it has been removed " +
+                                                "from StarMgr",
+                                        physicalPartition.getParentId(), groupId);
+                                continue;
+                            }
+                            throw e;
+                        }
                         starmgrShardIdsSet = new HashSet<>(starmgrShardIds);
                     }
 
@@ -614,17 +626,16 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                         starmgrShardIdsSet.remove(tablet.getId());
                     }
 
-                    if (GlobalStateMgr.getCurrentState()
-                                      .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
-                                            db.getId(), table.getId(), physicalPartition.getParentId(),
-                                                physicalPartition.getId(), materializedIndex.getId())) {
-                        continue;
-                    }
-
-                    if (GlobalStateMgr.getCurrentState()
-                                      .getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
-                                            db.getId(), table.getId(), physicalPartition.getParentId(),
-                                                physicalPartition.getId(), materializedIndex.getShardGroupId())) {
+                    boolean indexInSnapshot = GlobalStateMgr.getCurrentState()
+                            .getClusterSnapshotMgr().isMaterializedIndexInClusterSnapshotInfo(
+                                    db.getId(), table.getId(), physicalPartition.getParentId(),
+                                    physicalPartition.getId(), materializedIndex.getId());
+                    boolean shardGroupInSnapshot = GlobalStateMgr.getCurrentState()
+                            .getClusterSnapshotMgr().isShardGroupIdInClusterSnapshotInfo(
+                                    db.getId(), table.getId(), physicalPartition.getParentId(),
+                                    physicalPartition.getId(), groupId);
+                    if (indexInSnapshot || shardGroupInSnapshot) {
+                        snapshotProtectedShardGroups.add(groupId);
                         continue;
                     }
                     // collect shard in starmgr but not in fe
@@ -636,6 +647,8 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
                 locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
             }
         }
+
+        redundantGroupToShards.keySet().removeAll(snapshotProtectedShardGroups);
 
         // try to delete data, if fail, still delete redundant shard meta in starmgr
         Set<Long> shardToDelete = new HashSet<>();
@@ -660,6 +673,11 @@ public class StarMgrMetaSyncer extends LeaderDaemon {
             SHARD_DELETE_COUNTER.increase((long) shardToDelete.size());
         }
         return !shardToDelete.isEmpty();
+    }
+
+    private boolean isShardGroupNotExist(DdlException e) {
+        return e.getCause() instanceof StarClientException
+                && ((StarClientException) e.getCause()).getCode() == StatusCode.NOT_EXIST;
     }
 
     private void syncTableColocationInfo(Database db, OlapTable table) throws DdlException {

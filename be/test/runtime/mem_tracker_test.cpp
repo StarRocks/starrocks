@@ -180,6 +180,103 @@ TEST_F(MemTrackerTest, release_without_root) {
     ASSERT_EQ(_process_mem_tracker->consumption(), 10);
 }
 
+TEST_F(MemTrackerTest, try_consume_without_root_reclassifies_only_non_root_trackers) {
+    _process_mem_tracker->consume(1024);
+
+    ASSERT_EQ(nullptr, _query_1->try_consume_without_root(100));
+    EXPECT_EQ(100, _query_1->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(1024, _process_mem_tracker->consumption());
+
+    ASSERT_EQ(nullptr, _query_1->try_consume_without_root(0));
+    ASSERT_EQ(nullptr, _query_1->try_consume_without_root(-1));
+    EXPECT_EQ(100, _query_1->consumption());
+    EXPECT_EQ(100, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(1024, _process_mem_tracker->consumption());
+
+    _query_1->release_without_root(100);
+    EXPECT_EQ(0, _query_1->consumption());
+    EXPECT_EQ(0, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(1024, _process_mem_tracker->consumption());
+}
+
+TEST_F(MemTrackerTest, try_consume_without_root_rejects_an_already_exceeded_root) {
+    _process_mem_tracker->consume(1025);
+
+    EXPECT_EQ(_process_mem_tracker.get(), _query_1->try_consume_without_root(1));
+    EXPECT_EQ(0, _query_1->consumption());
+    EXPECT_EQ(0, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(1025, _process_mem_tracker->consumption());
+}
+
+TEST_F(MemTrackerTest, try_consume_without_root_rolls_back_only_updated_non_root_ancestors) {
+    ASSERT_EQ(nullptr, _query_1->try_consume_without_root(120));
+    EXPECT_EQ(_query_1.get(), _query_1->try_consume_without_root(9));
+    EXPECT_EQ(120, _query_1->consumption());
+    EXPECT_EQ(120, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(0, _process_mem_tracker->consumption());
+
+    _query_pool_mem_tracker->set_limit(125);
+    EXPECT_EQ(_query_pool_mem_tracker.get(), _query_2->try_consume_without_root(6));
+    EXPECT_EQ(0, _query_2->consumption());
+    EXPECT_EQ(120, _query_pool_mem_tracker->consumption());
+    EXPECT_EQ(0, _process_mem_tracker->consumption());
+
+    _query_1->release_without_root(120);
+}
+
+TEST_F(MemTrackerTest, try_consume_without_root_rejects_unlimited_tracker_overflow_and_rolls_back_ancestors) {
+    MemTracker process(MemTrackerType::PROCESS, -1, "process");
+    MemTracker parent(-1, "parent", &process);
+    MemTracker leaf(-1, "leaf", &parent);
+    constexpr int64_t kMax = std::numeric_limits<int64_t>::max();
+
+    parent.set(1);
+    EXPECT_EQ(&parent, leaf.try_consume_without_root(kMax));
+    EXPECT_EQ(0, leaf.consumption());
+    EXPECT_EQ(1, parent.consumption());
+    EXPECT_EQ(0, process.consumption());
+
+    parent.set(0);
+    leaf.set(1);
+    EXPECT_EQ(&leaf, leaf.try_consume_without_root(kMax));
+    EXPECT_EQ(1, leaf.consumption());
+    EXPECT_EQ(0, parent.consumption()) << "the successfully updated ancestor must be rolled back exactly once";
+    EXPECT_EQ(0, process.consumption());
+    leaf.set(0);
+}
+
+TEST_F(MemTrackerTest, try_consume_without_root_on_root_only_tracker_is_a_limit_check) {
+    _process_mem_tracker->consume(1024);
+    ASSERT_EQ(1024, _process_mem_tracker->consumption());
+    ASSERT_FALSE(_process_mem_tracker->limit_exceeded());
+    ASSERT_EQ(nullptr, _process_mem_tracker->try_consume_without_root(1));
+    EXPECT_EQ(1024, _process_mem_tracker->consumption());
+
+    _process_mem_tracker->consume(1);
+    ASSERT_TRUE(_process_mem_tracker->limit_exceeded());
+    EXPECT_EQ(_process_mem_tracker.get(), _process_mem_tracker->try_consume_without_root(1));
+    EXPECT_EQ(1025, _process_mem_tracker->consumption());
+}
+
+TEST_F(MemTrackerTest, try_consume_without_root_rejects_non_process_top_level_tracker) {
+    MemTracker query_pool(MemTrackerType::QUERY_POOL, -1, "query_pool");
+    MemTracker query(MemTrackerType::QUERY, -1, "query", &query_pool);
+
+    EXPECT_EQ(&query_pool, query.try_consume_without_root(1));
+    EXPECT_EQ(0, query.consumption());
+    EXPECT_EQ(0, query_pool.consumption());
+}
+
+TEST_F(MemTrackerTest, high_water_mark_try_add_rejects_signed_overflow) {
+    RuntimeProfile::HighWaterMarkCounter counter(TUnit::BYTES);
+    CounterAccesser(&counter).set(std::numeric_limits<int64_t>::max() - 1);
+
+    EXPECT_FALSE(counter.try_add(2, std::numeric_limits<int64_t>::max()));
+    EXPECT_EQ(std::numeric_limits<int64_t>::max() - 1, counter.current_value());
+    EXPECT_EQ(std::numeric_limits<int64_t>::max() - 1, CounterAccesser(&counter).value());
+}
+
 TEST_F(MemTrackerTest, try_consume_with_limited) {
     ASSERT_EQ(_query_1->try_consume_with_limited(10, 500), nullptr);
     ASSERT_EQ(_query_2->try_consume_with_limited(10, 500), _query_pool_mem_tracker.get());

@@ -121,6 +121,16 @@ struct TStatisticData {
     15: optional binary hll
     16: optional string partitionName
     17: optional i64 collectionSize
+    // External-table statistics are stored one row per (partition, column) and read back as one
+    // aggregate per column. These two describe that aggregate's own shape, so the read side can tell how
+    // much of the table it covers and how the column's distinct values are spread over it, without
+    // depending on separately maintained metadata agreeing with the rows.
+    //   - collectedPartitionCount: how many partitions contributed rows, i.e. the denominator the
+    //     per-partition averages are over.
+    //   - perPartitionNdvSum: the per-partition distinct counts added up, which next to the merged
+    //     distinct count says whether the column's values repeat across partitions or not.
+    18: optional i64 collectedPartitionCount
+    19: optional i64 perPartitionNdvSum
 }
 
 // Result data for user variable

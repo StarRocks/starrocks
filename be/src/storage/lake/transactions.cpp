@@ -171,8 +171,17 @@ StatusOr<std::vector<TxnLogVector>> load_txn_log(TabletManager* tablet_mgr, std:
             ASSIGN_OR_RETURN(auto combined_log, tablet_mgr->get_combined_txn_log(log_path, true));
             for (const auto& log : combined_log->txn_logs()) {
                 if (log.tablet_id() == tablet_id) {
+                    if (!txn_logs.empty()) {
+                        // A combined log holds at most one entry per tablet. Under multi-node write several
+                        // nodes each produce a partial log for the same tablet and the sender folds them
+                        // into one before writing this file (see merge_multi_node_write_txn_log); a second
+                        // entry means the fold missed a node, so applying just the first would silently
+                        // drop that node's rows. Fail the publish instead.
+                        return Status::Corruption(
+                                fmt::format("combined txn log of txn {} contains more than one txn log for tablet {}",
+                                            txn_info.txn_id(), tablet_id));
+                    }
                     txn_logs.push_back(std::make_shared<TxnLogPB>(log));
-                    break;
                 }
             }
             if (txn_logs.empty()) {
@@ -266,15 +275,17 @@ static StatusOr<MutableTxnLogPtr> make_shadow_rewrite_schema_change_log(TabletMa
 
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const PublishTabletInfo& tablet_info,
                                             int64_t base_version, int64_t new_version, std::span<const TxnInfoPB> txns,
-                                            bool skip_write_tablet_metadata, int64_t fe_built_version) {
+                                            bool skip_write_tablet_metadata, int64_t fe_built_version,
+                                            InitialMetadataOrder base_version_order) {
     if (txns.size() == 1 && (txns[0].txn_id() == EMPTY_TXNLOG_TXNID || txns[0].txn_type() == TXN_TABLET_RESHARD)) {
         LOG(INFO) << "publish version tablet_info: " << tablet_info << ", txn: " << txns[0].DebugString()
                   << ", base_version: " << base_version << ", new_version: " << new_version;
         // means there is no txnlog and need to increase version number,
         // just return tablet metadata of base_version.
         DCHECK_EQ(new_version, base_version + 1);
-        ASSIGN_OR_RETURN(auto metadata,
-                         tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version));
+        ASSIGN_OR_RETURN(auto metadata, tablet_mgr->get_tablet_metadata(
+                                                tablet_info.get_tablet_id_in_metadata(), base_version, CacheOptions{},
+                                                /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order));
 
         auto new_metadata = std::make_shared<TabletMetadataPB>(*metadata);
         new_metadata->set_version(new_version);
@@ -289,8 +300,7 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
             RETURN_IF_ERROR(tablet_mgr->put_tablet_metadata(new_metadata));
         } else {
             RETURN_IF_ERROR(tablet_mgr->cache_tablet_metadata(new_metadata));
-            tablet_mgr->metacache()->cache_aggregation_partition(
-                    tablet_mgr->tablet_metadata_root_location(tablet_info.get_tablet_id_in_metadata()), true);
+            tablet_mgr->cache_bundled_metadata_partition_marker(tablet_info.get_tablet_id_in_metadata());
         }
         return new_metadata;
     }
@@ -371,7 +381,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
     // keep it from hiding inside the overall publish cost.
     auto base_metadata_or = [&] {
         TRACE_COUNTER_SCOPE_LATENCY_US("get_base_metadata_latency_us");
-        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version, false);
+        return tablet_mgr->get_tablet_metadata(tablet_info.get_tablet_id_in_metadata(), base_version,
+                                               CacheOptions{.fill_meta_cache = false, .fill_data_cache = false},
+                                               /*expected_gtid=*/0, /*fs=*/nullptr, base_version_order);
     }();
     if (base_metadata_or.status().is_not_found()) {
         return new_version_metadata_or_error(base_metadata_or.status());
@@ -667,6 +679,9 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, const Pub
         TRACE_COUNTER_SCOPE_LATENCY_US("apply_finish_latency_us");
         RETURN_IF_ERROR(log_applier->finish());
     }
+    if (skip_write_tablet_metadata) {
+        tablet_mgr->cache_bundled_metadata_partition_marker(tablet_info.get_tablet_id_in_metadata());
+    }
 
     delete_files_async(std::move(files_to_delete));
 
@@ -833,6 +848,12 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
         for (const auto& del_meta : txn_log.op_write().dels_meta()) {
             files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
         }
+        // pre-built tombstone sstables (empty name = del file had no sstable)
+        for (const auto& del_sst : txn_log.op_write().del_ssts()) {
+            if (!del_sst.name().empty()) {
+                files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+            }
+        }
         collect_vi_files(txn_log.op_write().rowset());
     }
     if (txn_log.has_op_compaction()) {
@@ -867,6 +888,11 @@ void collect_files_in_log(TabletManager* tablet_mgr, const TxnLog& txn_log, std:
             }
             for (const auto& del_meta : op_write.dels_meta()) {
                 files_to_delete->emplace_back(tablet_mgr->del_location(tablet_id, del_meta.name()));
+            }
+            for (const auto& del_sst : op_write.del_ssts()) {
+                if (!del_sst.name().empty()) {
+                    files_to_delete->emplace_back(tablet_mgr->sst_location(tablet_id, del_sst.name()));
+                }
             }
             collect_vi_files(op_write.rowset());
         }

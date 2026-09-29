@@ -75,7 +75,6 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
-#include "storage/lake/local_pk_index_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/replication_txn_manager.h"
 #include "storage/rowset/metadata_cache.h"
@@ -146,9 +145,6 @@ StorageEngine::StorageEngine(const EngineOptions& options)
         return _unused_rowsets.size();
     });
     _delta_column_group_cache_mem_tracker = std::make_unique<MemTracker>(-1, "delta_column_group_non_pk_cache");
-#ifdef USE_STAROS
-    _local_pk_index_manager = std::make_unique<lake::LocalPkIndexManager>();
-#endif
 #ifndef BE_TEST
     const int64_t process_limit = RuntimeEnv::GetInstance()->process_mem_tracker()->limit();
     const int64_t lru_cache_limit = process_limit * (int64_t)config::metadata_cache_memory_limit_percent / (int64_t)100;
@@ -295,10 +291,6 @@ Status StorageEngine::_open(const EngineOptions& options) {
                                          _segment_replicate_executor->get_thread_pool());
 
     RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
-
-#ifdef USE_STAROS
-    RETURN_IF_ERROR_WITH_WARN(_local_pk_index_manager->init(), "init LocalPkIndexManager failed");
-#endif
 
     return Status::OK();
 }
@@ -721,12 +713,6 @@ void StorageEngine::stop() {
     if (_compaction_manager) {
         _compaction_manager->stop();
     }
-
-#ifdef USE_STAROS
-    if (_local_pk_index_manager) {
-        _local_pk_index_manager->stop();
-    }
-#endif
 
     // Drain cleanup after all storage-side producers are quiesced.
     if (_storage_cleanup_executor) {

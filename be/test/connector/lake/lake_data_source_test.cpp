@@ -287,6 +287,128 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
 // scan-range count already reaches pipeline_dop -- which the plain count gate treats as "enough parallelism,
 // no split". The override is gated on enable_lake_prepared_physical_split_scan; with it off the original
 // count gate is kept verbatim.
+// A scan range naming a tablet metadata version that does not exist must not surface as a generic
+// NOT_FOUND: FE's retry classifier ignores that code, so the query fails where a re-plan against the
+// partition's current visible version would have succeeded.
+TEST_F(LakeDataSourceTest, missing_metadata_version_reports_dedicated_status) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    const int64_t missing_version = _tablet_metadata->version() + 100;
+    const int64_t partition_id = 10002;
+
+    TInternalScanRange internal_scan_range;
+    internal_scan_range.__set_tablet_id(_tablet_metadata->id());
+    internal_scan_range.__set_version(std::to_string(missing_version));
+    internal_scan_range.__set_partition_id(partition_id);
+
+    TScanRange scan_range;
+    scan_range.__set_internal_scan_range(internal_scan_range);
+
+    auto runtime_state = create_runtime_state_for_test();
+
+    // Build the descriptor table the scan open path dereferences before it reaches the metadata read.
+    TDescriptorTableBuilder desc_tbl_builder;
+    TSlotDescriptorBuilder slot_desc_builder;
+    auto slot0 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c0").column_pos(0).nullable(true).build();
+    auto slot1 = slot_desc_builder.type(LogicalType::TYPE_INT).column_name("c1").column_pos(1).nullable(true).build();
+    TTupleDescriptorBuilder tuple_desc_builder;
+    tuple_desc_builder.add_slot(slot0);
+    tuple_desc_builder.add_slot(slot1);
+    tuple_desc_builder.build(&desc_tbl_builder);
+
+    DescriptorTbl* desc_tbl = nullptr;
+    CHECK(DescriptorTbl::create(runtime_state.get(), runtime_state->obj_pool(), desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                config::vector_chunk_size)
+                  .ok());
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    TTableDescriptor tdesc;
+    tdesc.__set_id(0);
+    tdesc.__set_tableType(TTableType::OLAP_TABLE);
+    tdesc.__set_tableName("test_table");
+    tdesc.__set_dbName("test_db");
+    auto* table_desc = runtime_state->obj_pool()->add(new OlapTableDescriptor(tdesc));
+    desc_tbl->get_tuple_descriptor(0)->set_table_desc(table_desc);
+
+    TLakeScanNode lake_scan_node;
+    lake_scan_node.__set_tuple_id(0);
+    TPlanNode plan_node;
+    plan_node.__set_node_id(0);
+    plan_node.__set_lake_scan_node(lake_scan_node);
+
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+
+    pipeline::ScanMorsel morsel(plan_node.node_id, scan_range);
+    connector::LakeDataSource ds(&provider, scan_range);
+    RuntimeProfile parent_profile("LakeDataSourceTest");
+    ds.set_runtime_profile(&parent_profile);
+    ds.set_morsel(&morsel);
+    DeferOp close_guard([&] { ds.close(runtime_state.get()); });
+
+    auto st = ds.open(runtime_state.get());
+    ASSERT_TRUE(st.is_lake_meta_version_not_found()) << st.to_string();
+    // FE parses these out of the message to log which version it captured and which one it re-planned to.
+    auto message = std::string(st.message());
+    EXPECT_NE(std::string::npos, message.find("tablet_id=" + std::to_string(_tablet_metadata->id())));
+    EXPECT_NE(std::string::npos, message.find("partition_id=" + std::to_string(partition_id)));
+    EXPECT_NE(std::string::npos, message.find("version=" + std::to_string(missing_version)));
+}
+
+// The same translation on the provider-side row-count probe, which reads metadata at the scan
+// range's version too and has no directory-listing fallback to fall back on.
+TEST_F(LakeDataSourceTest, missing_metadata_version_reports_dedicated_status_from_morsel_builder) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    auto runtime_state = create_runtime_state_for_test();
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    auto scan_ranges = create_scan_ranges({_tablet_metadata.get()});
+    const int64_t missing_version = _tablet_metadata->version() + 100;
+    scan_ranges[0].scan_range.internal_scan_range.__set_version(std::to_string(missing_version));
+
+    auto builder = provider.convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, plan_node.node_id, /*pipeline_dop=*/2, /*enable_tablet_internal_parallel=*/true,
+            TTabletInternalParallelMode::type::FORCE_SPLIT, scan_ranges.size());
+    ASSERT_TRUE(builder.status().is_lake_meta_version_not_found()) << builder.status().to_string();
+    EXPECT_NE(std::string::npos, builder.status().to_string().find("version=" + std::to_string(missing_version)));
+}
+
+// Only a missing version is relabelled. A failure of any other kind must reach FE unchanged --
+// relabelling it would make FE re-plan and retry a query that is failing for a genuine reason
+// (corruption, IO), burning a retry and hiding the real error behind a version-visibility story.
+TEST_F(LakeDataSourceTest, non_not_found_metadata_failure_keeps_its_status) {
+    create_rowsets_for_testing(_tablet_metadata.get(), 2);
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([&]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    // The error point sits ahead of the metacache lookup, so this is what the metadata read returns.
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_tablet_metadata", [](void* arg) {
+        *static_cast<Status*>(arg) = Status::Corruption("bad tablet metadata");
+    });
+
+    auto runtime_state = create_runtime_state_for_test();
+    auto plan_node = create_lake_plan_node();
+    connector::LakeDataSourceProvider provider(plan_node);
+    provider.set_lake_tablet_manager(_tablet_mgr);
+    provider.set_estimated_scan_row_bytes(sizeof(int32_t));
+    provider._runtime_state = runtime_state.get();
+
+    auto scan_ranges = create_scan_ranges({_tablet_metadata.get()});
+    auto builder = provider.convert_scan_range_to_morsel_queue_builder(
+            scan_ranges, plan_node.node_id, /*pipeline_dop=*/2, /*enable_tablet_internal_parallel=*/true,
+            TTabletInternalParallelMode::type::FORCE_SPLIT, scan_ranges.size());
+    ASSERT_TRUE(builder.status().is_corruption()) << builder.status().to_string();
+    ASSERT_FALSE(builder.status().is_lake_meta_version_not_found());
+}
+
 TEST_F(LakeDataSourceTest, could_tablet_internal_parallel_skew_gate) {
     // get_tablet_num_rows sums rowset num_rows from metadata, so a rowset carrying only set_num_rows()
     // (no real segments) is enough to drive this row-count-based decision.
@@ -676,7 +798,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     vec_opts.__set_vector_slot_id(999);
     vec_opts.__set_vector_limit_k(10);
     vec_opts.__set_query_vector(std::vector<std::string>{"0.1", "0.2", "0.3"});
-    vec_opts.__set_vector_range(0.5);
+    vec_opts.__set_vector_range(-1.5);
+    vec_opts.__set_has_vector_range(true);
     vec_opts.__set_result_order(0);
     vec_opts.__set_pq_refine_factor(1.0);
     vec_opts.__set_k_factor(1.0);
@@ -792,6 +915,8 @@ TEST_F(LakeDataSourceTest, open_with_vector_search_options) {
     EXPECT_EQ(params.vector_search_option->vector_distance_column_name, "vec_distance");
     ASSERT_EQ(params.vector_search_option->query_vector.size(), 3);
     EXPECT_FLOAT_EQ(params.vector_search_option->query_vector[0], 0.1f);
+    EXPECT_TRUE(params.vector_search_option->has_vector_range);
+    EXPECT_DOUBLE_EQ(params.vector_search_option->vector_range, -1.5);
 }
 
 TEST_F(LakeDataSourceTest, test_has_all_pk_columns_selected) {
