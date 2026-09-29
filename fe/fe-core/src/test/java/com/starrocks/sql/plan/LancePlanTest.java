@@ -45,6 +45,9 @@ public class LancePlanTest extends PlanTestBase {
         String catalogName = "lance_catalog";
         Map<String, String> properties = new HashMap<>();
         properties.put("type", "lance");
+        properties.put("database", "bootstrap_db");
+        properties.put("table.nullable_rows.uri", "s3://bucket/nullable_rows");
+        properties.put("table.nullable_rows.schema", "id:int64,label:string");
         properties.put("aws.s3.access_key", "test-access");
         properties.put("aws.s3.secret_key", "test-secret");
         properties.put("aws.s3.session_token", "test-session");
@@ -70,6 +73,22 @@ public class LancePlanTest extends PlanTestBase {
         metadata.addTable("db1", new LanceTable(20002, "events", columns, "s3://bucket/events", catalogName));
 
         metadataMgr.registerMockedMetadata(catalogName, metadata);
+    }
+
+    @Test
+    public void testConfiguredNullableColumnsRetainNullPredicates() throws Exception {
+        String table = "lance_catalog.bootstrap_db.nullable_rows";
+        String isNull = getFragmentPlan("SELECT id FROM " + table + " WHERE label IS NULL");
+        assertContains(isNull, "LanceScanNode", "label IS NULL");
+        Assertions.assertFalse(isNull.contains("EMPTYSET"));
+        String isNotNull = getFragmentPlan("SELECT id FROM " + table + " WHERE label IS NOT NULL");
+        assertContains(isNotNull, "LanceScanNode", "label IS NOT NULL");
+    }
+
+    @Test
+    public void testConfiguredNullableColumnCountRetainsArgument() throws Exception {
+        String plan = getFragmentPlan("SELECT COUNT(label) FROM lance_catalog.bootstrap_db.nullable_rows");
+        assertContains(plan, "LanceScanNode", "count(2: label)");
     }
 
     @Test
