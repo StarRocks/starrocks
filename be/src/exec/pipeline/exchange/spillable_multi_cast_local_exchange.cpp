@@ -101,4 +101,8 @@ bool SpillableMultiCastLocalExchanger::is_all_sources_finished() const {
 void SpillableMultiCastLocalExchanger::enter_release_memory_mode() {
     _queue->enter_release_memory_mode();
 }
+
+bool SpillableMultiCastLocalExchanger::has_pending_io_tasks() const {
+    return _queue->has_pending_io_tasks();
+}
 } // namespace starrocks::pipeline
