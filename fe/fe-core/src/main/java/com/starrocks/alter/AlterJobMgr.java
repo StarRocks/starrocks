@@ -474,6 +474,21 @@ public class AlterJobMgr {
         // To be compatible with the old version, if the reason is empty, use the default reason
         String reason = Strings.isEmpty(log.getReason()) ? MANUAL_INACTIVE_MV_REASON : log.getReason();
         try {
+            if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(log.getStatus())
+                    && log.getBaseTableInfos() != null) {
+                // Adopt the base tables the leader activated with instead of re-analyzing the define query,
+                // which resolves every base table through the connector under this lock. Entries written by
+                // older versions carry none and take the path below.
+                Task task = GlobalStateMgr.getCurrentState().getTaskManager().getTask(mv);
+                if (task == null) {
+                    throw new SemanticException("Can not find running task for materialized view [%s]",
+                            mv.getName());
+                }
+                mv.activateOnReplay(Lists.newArrayList(log.getBaseTableInfos()));
+                // resume the mv scheduler
+                GlobalStateMgr.getCurrentState().getTaskManager().resumeTask(task, true);
+                return;
+            }
             AlterMaterializedViewStatusContext context =
                     prepareAlterMaterializedViewStatus(mv, log.getStatus(), reason, true);
             applyAlterMaterializedViewStatus(mv, context, true);
