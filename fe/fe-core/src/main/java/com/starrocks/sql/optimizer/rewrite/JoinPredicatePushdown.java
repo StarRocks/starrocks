@@ -541,6 +541,13 @@ public class JoinPredicatePushdown {
             }
         }
 
+        // For inner/cross join: derive multi-column predicates through join equal-column mappings.
+        // Example: t0.v1 = t1.v4 AND t0.v2 = t1.v5 AND (t0.v1 + t0.v2 > 2) => t1.v4 + t1.v5  > 2
+        LogicalJoinOperator join = joinOptExpression.getOp().cast();
+        if (join != null && join.isInnerOrCrossJoin()) {
+            JoinMultiColumnPredicateDeriver.derive(joinOptExpression, inputPredicates, allPredicate);
+        }
+
         if (!returnInputPredicate) {
             inputPredicates.forEach(allPredicate::remove);
         }
