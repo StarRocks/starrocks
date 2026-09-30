@@ -16,7 +16,7 @@ grant r_${uuid0} to user u2_${uuid0};
 
 -- no privilege on the table: the internal lookup query is authorized as the caller, not ROOT
 execute as u1_${uuid0} with no revert;
-select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
 execute as root with no revert;
 
 grant select on table db_${uuid0}.t_dict to user u1_${uuid0};
@@ -26,7 +26,7 @@ execute as root with no revert;
 
 -- privilege granted through a role takes effect only after the role is activated
 execute as u2_${uuid0} with no revert;
-select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k2', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
 set role r_${uuid0};
 select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
 execute as root with no revert;

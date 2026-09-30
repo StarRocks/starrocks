@@ -39,9 +39,9 @@ grant r_${uuid0} to user u2_${uuid0};
 execute as u1_${uuid0} with no revert;
 -- result:
 -- !result
-select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
 -- result:
-[REGEX].*Access denied; you need \(at least one of\) the SELECT privilege\(s\) on TABLE t_dict.*
+None
 -- !result
 execute as root with no revert;
 -- result:
@@ -62,9 +62,9 @@ execute as root with no revert;
 execute as u2_${uuid0} with no revert;
 -- result:
 -- !result
-select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
+function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k2', 'v')", "Access denied", "SELECT privilege(s) on TABLE t_dict")
 -- result:
-[REGEX].*Access denied; you need \(at least one of\) the SELECT privilege\(s\) on TABLE t_dict.*
+None
 -- !result
 set role r_${uuid0};
 -- result:
