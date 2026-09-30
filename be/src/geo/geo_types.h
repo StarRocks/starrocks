@@ -54,6 +54,12 @@ namespace starrocks {
 
 enum class GeoPointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
 
+struct GeoCartesianCentroid {
+    double x = 0;
+    double y = 0;
+    double z = 0;
+};
+
 class GeoShape {
 public:
     virtual ~GeoShape() = default;
@@ -117,6 +123,8 @@ public:
 
     GeoShapeType type() const override { return GEO_SHAPE_LINE_STRING; }
     const S2Polyline* polyline() const { return _polyline.get(); }
+    double length_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
 
     std::string as_wkt() const override;
 
@@ -162,6 +170,10 @@ public:
     bool contains(const GeoShape* rhs) const override;
     bool intersects_inclusive(const GeoPolygon& rhs) const;
     GeoPointPolygonRelation point_relation(const GeoPoint& point) const;
+    bool intersects_interior(const GeoPolygon& rhs) const;
+    double area_square_meters() const;
+    double perimeter_meters() const;
+    GeoCartesianCentroid centroid_vector() const;
     std::string as_wkt() const override;
 
 protected:

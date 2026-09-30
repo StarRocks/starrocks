@@ -1521,6 +1521,114 @@ TEST_F(geographyFunctionsTest, nativeGeoDistanceIsolatesPreparedSphericalCachePe
     ASSERT_TRUE(GeoFunctions::native_geo_distance_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoMeasurementsAndCollections) {
+    auto planar = geometry({"POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 2 1, 2 2, 1 2, 1 1))",
+                            "MULTILINESTRING ((0 0, 3 4), (10 0, 10 5))",
+                            "GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0)), "
+                            "LINESTRING (0 0, 3 4), POINT (20 20))"});
+    ColumnViewer<TYPE_DOUBLE> area(GeoFunctions::st_geometry_area(nullptr, {planar}).value());
+    ColumnViewer<TYPE_DOUBLE> length(GeoFunctions::st_geometry_length(nullptr, {planar}).value());
+    ColumnViewer<TYPE_DOUBLE> perimeter(GeoFunctions::st_geometry_perimeter(nullptr, {planar}).value());
+    EXPECT_DOUBLE_EQ(15, area.value(0));
+    EXPECT_DOUBLE_EQ(0, length.value(0));
+    EXPECT_DOUBLE_EQ(20, perimeter.value(0));
+    EXPECT_DOUBLE_EQ(0, area.value(1));
+    EXPECT_DOUBLE_EQ(10, length.value(1));
+    EXPECT_DOUBLE_EQ(0, perimeter.value(1));
+    EXPECT_DOUBLE_EQ(4, area.value(2));
+    EXPECT_DOUBLE_EQ(5, length.value(2));
+    EXPECT_DOUBLE_EQ(8, perimeter.value(2));
+
+    auto spherical = geography(
+            {"LINESTRING (0 0, 1 0)", "POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))", "POLYGON ((0 0, 0 1, 1 1, 1 0, 0 0))"});
+    ColumnViewer<TYPE_DOUBLE> spherical_length(GeoFunctions::st_geography_length(nullptr, {spherical}).value());
+    ColumnViewer<TYPE_DOUBLE> spherical_area(GeoFunctions::st_geography_area(nullptr, {spherical}).value());
+    ColumnViewer<TYPE_DOUBLE> spherical_perimeter(GeoFunctions::st_geography_perimeter(nullptr, {spherical}).value());
+    EXPECT_NEAR(111195.101177484, spherical_length.value(0), 0.001);
+    EXPECT_DOUBLE_EQ(0, spherical_area.value(0));
+    EXPECT_NEAR(12364036567.0764, spherical_area.value(1), 0.001);
+    EXPECT_NEAR(spherical_area.value(1), spherical_area.value(2), 0.001);
+    EXPECT_NEAR(444763.468727621, spherical_perimeter.value(1), 0.001);
+    EXPECT_NEAR(spherical_perimeter.value(1), spherical_perimeter.value(2), 0.001);
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoCentroidPreservesKindAndUsesHighestDimension) {
+    const auto planar_type = geometry_type();
+    std::unique_ptr<FunctionContext> planar_context(FunctionContext::create_test_context({planar_type}, planar_type));
+    auto planar = geometry({"POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))",
+                            "GEOMETRYCOLLECTION (POINT (100 100), LINESTRING (0 0, 4 0))", "GEOMETRYCOLLECTION EMPTY"});
+    auto planar_centroids = GeoFunctions::st_geometry_centroid(planar_context.get(), {planar}).value();
+    auto planar_text = GeoFunctions::st_geometry_as_text(nullptr, {planar_centroids}).value();
+    ColumnViewer<TYPE_VARCHAR> planar_values(planar_text);
+    EXPECT_EQ("POINT (2 2)", planar_values.value(0).to_string());
+    EXPECT_EQ("POINT (2 0)", planar_values.value(1).to_string());
+    EXPECT_EQ("POINT EMPTY", planar_values.value(2).to_string());
+    const Column* planar_data = planar_centroids->is_nullable()
+                                        ? down_cast<const NullableColumn*>(planar_centroids.get())->data_column().get()
+                                        : planar_centroids.get();
+    EXPECT_EQ(planar_type.geo_type, down_cast<const GeoColumn*>(planar_data)->descriptor().type);
+
+    const auto spherical_type = geography_type();
+    std::unique_ptr<FunctionContext> spherical_context(
+            FunctionContext::create_test_context({spherical_type}, spherical_type));
+    auto spherical_points = geography({"MULTIPOINT ((179 0), (-179 0))", "MULTIPOINT ((0 0), (180 0))"});
+    auto spherical_centroids = GeoFunctions::st_geography_centroid(spherical_context.get(), {spherical_points}).value();
+    auto spherical_text = GeoFunctions::st_geography_as_text(nullptr, {spherical_centroids}).value();
+    ColumnViewer<TYPE_VARCHAR> spherical_values(spherical_text);
+    EXPECT_EQ("POINT (180 0)", spherical_values.value(0).to_string());
+    EXPECT_EQ("POINT EMPTY", spherical_values.value(1).to_string());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErrors) {
+    auto planar = geometry({"POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))",
+                            "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), "
+                            "((1 1, 3 1, 3 3, 1 3, 1 1)))",
+                            "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))", "POLYGON EMPTY"});
+    ColumnViewer<TYPE_BOOLEAN> planar_valid(GeoFunctions::st_geometry_is_valid(nullptr, {planar}).value());
+    EXPECT_FALSE(planar_valid.value(0));
+    EXPECT_FALSE(planar_valid.value(1));
+    EXPECT_TRUE(planar_valid.value(2));
+    EXPECT_TRUE(planar_valid.value(3));
+
+    auto spherical = geography({"LINESTRING (0 0, 180 0)",
+                                "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), "
+                                "((1 1, 3 1, 3 3, 1 3, 1 1)))",
+                                "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"});
+    ColumnViewer<TYPE_BOOLEAN> spherical_valid(GeoFunctions::st_geography_is_valid(nullptr, {spherical}).value());
+    EXPECT_FALSE(spherical_valid.value(0));
+    EXPECT_FALSE(spherical_valid.value(1));
+    EXPECT_TRUE(spherical_valid.value(2));
+
+    auto null = GeoFunctions::st_geometry_is_valid(nullptr, {geometry({nullptr})}).value();
+    EXPECT_TRUE(null->is_null(0));
+
+    GeoColumnDescriptor unsupported_descriptor{
+            {GEO_LOGICAL_TYPE_GEOMETRY, GEO_COORDINATE_SYSTEM_CARTESIAN, GEO_EDGE_ALGORITHM_PLANAR, "EPSG:3857", 3857},
+            {GEO_ENCODING_WKB, GEO_DIMENSION_XYZ, GEO_VALIDATION_STATE_STRUCTURALLY_VALIDATED}};
+    auto unsupported = GeoColumn::create(std::move(unsupported_descriptor));
+    std::string point_wkb(21, 0);
+    point_wkb[0] = 1;
+    point_wkb[1] = 1;
+    unsupported->append_wkb(Slice(point_wkb));
+    auto rejected = GeoFunctions::st_geometry_is_valid(nullptr, {unsupported});
+    ASSERT_FALSE(rejected.ok());
+    EXPECT_TRUE(rejected.status().is_not_supported());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoUnaryLifecycleReusesPlanConstant) {
+    const auto type = geography_type();
+    auto constant = ConstColumn::create(geography({"POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))"}), 3);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type}, TypeDescriptor(TYPE_DOUBLE)));
+    context->set_constant_columns({constant});
+    ASSERT_TRUE(GeoFunctions::native_geo_unary_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto result = GeoFunctions::st_geography_area(context.get(), {constant});
+    ASSERT_TRUE(result.ok()) << result.status();
+    EXPECT_TRUE((*result)->is_constant());
+    EXPECT_EQ(3, (*result)->size());
+    ASSERT_TRUE(GeoFunctions::native_geo_unary_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
 TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     struct ExpectedFunction {
         uint64_t id;
@@ -1563,6 +1671,16 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120231, "ST_DWithin", "BOOLEAN", {"GEOMETRY", "GEOMETRY", "DOUBLE"}},
             {120240, "ST_Intersects", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
             {120241, "ST_Intersects", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
+            {120250, "ST_Area", "DOUBLE", {"GEOGRAPHY"}},
+            {120251, "ST_Area", "DOUBLE", {"GEOMETRY"}},
+            {120260, "ST_Length", "DOUBLE", {"GEOGRAPHY"}},
+            {120261, "ST_Length", "DOUBLE", {"GEOMETRY"}},
+            {120270, "ST_Perimeter", "DOUBLE", {"GEOGRAPHY"}},
+            {120271, "ST_Perimeter", "DOUBLE", {"GEOMETRY"}},
+            {120280, "ST_Centroid", "GEOGRAPHY", {"GEOGRAPHY"}},
+            {120281, "ST_Centroid", "GEOMETRY", {"GEOMETRY"}},
+            {120290, "ST_IsValid", "BOOLEAN", {"GEOGRAPHY"}},
+            {120291, "ST_IsValid", "BOOLEAN", {"GEOMETRY"}},
     };
 
     for (const auto& function : expected) {

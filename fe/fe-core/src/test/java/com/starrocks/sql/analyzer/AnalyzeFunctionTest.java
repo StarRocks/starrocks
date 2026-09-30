@@ -211,6 +211,31 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature: st_intersects");
     }
 
+    @Test
+    public void testNativeGeoMeasurementContract() {
+        String geography = "ST_GeogFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))')";
+        String geometry =
+                "ST_GeomFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))', 'EPSG:3857')";
+
+        assertFunctionContract("select ST_Area(" + geography + ")", 120250, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Area(" + geometry + ")", 120251, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Length(" + geography + ")", 120260, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Length(" + geometry + ")", 120261, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Perimeter(" + geography + ")", 120270, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Perimeter(" + geometry + ")", 120271, PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_Centroid(" + geography + ")", 120280, PrimitiveType.GEOGRAPHY);
+        assertFunctionContract("select ST_Centroid(" + geometry + ")", 120281, PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_IsValid(" + geography + ")", 120290, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_IsValid(" + geometry + ")", 120291, PrimitiveType.BOOLEAN);
+
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_Centroid(" + geometry + ")")).getQueryRelation();
+        ScalarType centroidType = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), centroidType.getGeoDescriptor());
+
+        analyzeFail("select ST_Area('POLYGON ((0 0, 1 0, 0 0))')",
+                "No matching function with signature: st_area(varchar)");
+    }
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())

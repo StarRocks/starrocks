@@ -84,6 +84,24 @@ These overloads support an XY `POINT` with a `POLYGON` or `MULTIPOLYGON`. `GEOGR
 
 These overloads support XY `POLYGON` and `MULTIPOLYGON` values. `GEOMETRY` inputs require matching descriptors. `NULL` propagates, while an `EMPTY` input returns `false`. Unsupported families, collections, and mixed native logical types are rejected. See [ST_Intersects](st_intersects.md).
 
+## Measurements and properties
+
+| Signature | Function ID | Result and units | Family behavior |
+| --- | ---: | --- | --- |
+| `ST_Area(GEOGRAPHY value)` | 120250 | `DOUBLE`, square meters | Sums polygon area recursively; holes subtract; lower dimensions contribute zero. |
+| `ST_Area(GEOMETRY value)` | 120251 | `DOUBLE`, squared input CRS units | Sums polygon area recursively; holes subtract; lower dimensions contribute zero. |
+| `ST_Length(GEOGRAPHY value)` | 120260 | `DOUBLE`, meters | Sums line length recursively; points and polygons contribute zero. |
+| `ST_Length(GEOMETRY value)` | 120261 | `DOUBLE`, input CRS units | Sums line length recursively; points and polygons contribute zero. |
+| `ST_Perimeter(GEOGRAPHY value)` | 120270 | `DOUBLE`, meters | Sums exterior and interior polygon ring lengths recursively. |
+| `ST_Perimeter(GEOMETRY value)` | 120271 | `DOUBLE`, input CRS units | Sums exterior and interior polygon ring lengths recursively. |
+| `ST_Centroid(GEOGRAPHY value)` | 120280 | `GEOGRAPHY POINT`, same descriptor | Uses the highest non-empty dimension and spherical size weighting. |
+| `ST_Centroid(GEOMETRY value)` | 120281 | `GEOMETRY POINT`, same descriptor | Uses the highest non-empty dimension and planar size weighting. |
+| `ST_IsValid(GEOGRAPHY value)` | 120290 | `BOOLEAN` | Uses spherical validity, including overlapping MultiPolygon interiors. |
+| `ST_IsValid(GEOMETRY value)` | 120291 | `BOOLEAN` | Uses robust planar topology validity. |
+
+All overloads accept the seven XY OGC families and recurse through `MULTI*` and `GEOMETRYCOLLECTION` where applicable. `NULL` propagates. Measurements return zero for `EMPTY`; `ST_Centroid` returns `POINT EMPTY`; `ST_IsValid` returns `true`. Topology-invalid readable values return `false` only from `ST_IsValid`; measurements and centroid reject them. Malformed WKB and unsupported dimensions or descriptors are errors.
+
+Spherical polygon rings are orientation-independent and normalized to their smaller region; a single ring does not represent more than a hemisphere. See [ST_Area](st_area.md), [ST_Length](st_length.md), [ST_Perimeter](st_perimeter.md), [ST_Centroid](st_centroid.md), and [ST_IsValid](st_isvalid.md).
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:

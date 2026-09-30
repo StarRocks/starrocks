@@ -103,6 +103,20 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_intersects);
     DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
+    static Status native_geo_unary_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+    static Status native_geo_unary_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+
+    DEFINE_VECTORIZED_FN(st_geography_area);
+    DEFINE_VECTORIZED_FN(st_geometry_area);
+    DEFINE_VECTORIZED_FN(st_geography_length);
+    DEFINE_VECTORIZED_FN(st_geometry_length);
+    DEFINE_VECTORIZED_FN(st_geography_perimeter);
+    DEFINE_VECTORIZED_FN(st_geometry_perimeter);
+    DEFINE_VECTORIZED_FN(st_geography_centroid);
+    DEFINE_VECTORIZED_FN(st_geometry_centroid);
+    DEFINE_VECTORIZED_FN(st_geography_is_valid);
+    DEFINE_VECTORIZED_FN(st_geometry_is_valid);
+
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,
                                              GeoShapeType shape_type);

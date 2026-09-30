@@ -345,6 +345,15 @@ GeoParseStatus GeoLine::from_coords(const GeoCoordinateList& list) {
     return to_s2polyline(list, &_polyline);
 }
 
+double GeoLine::length_meters() const {
+    return S2Earth::ToMeters(_polyline->GetLength());
+}
+
+GeoCartesianCentroid GeoLine::centroid_vector() const {
+    const S2Point centroid = _polyline->GetCentroid();
+    return {centroid.x(), centroid.y(), centroid.z()};
+}
+
 void GeoLine::encode(std::string* buf) {
     Encoder encoder;
     _polyline->Encode(&encoder);
@@ -498,6 +507,30 @@ GeoPointPolygonRelation GeoPolygon::point_relation(const GeoPoint& point) const 
         return GeoPointPolygonRelation::BOUNDARY;
     }
     return _polygon->Contains(*point.point()) ? GeoPointPolygonRelation::INSIDE : GeoPointPolygonRelation::OUTSIDE;
+}
+
+bool GeoPolygon::intersects_interior(const GeoPolygon& rhs) const {
+    return _polygon->Intersects(rhs.polygon());
+}
+
+double GeoPolygon::area_square_meters() const {
+    return S2Earth::SteradiansToSquareMeters(_polygon->GetArea());
+}
+
+double GeoPolygon::perimeter_meters() const {
+    double radians = 0;
+    for (int loop_index = 0; loop_index < _polygon->num_loops(); ++loop_index) {
+        const auto* loop = _polygon->loop(loop_index);
+        for (int vertex = 0; vertex < loop->num_vertices(); ++vertex) {
+            radians += loop->vertex(vertex).Angle(loop->vertex((vertex + 1) % loop->num_vertices()));
+        }
+    }
+    return S2Earth::RadiansToMeters(radians);
+}
+
+GeoCartesianCentroid GeoPolygon::centroid_vector() const {
+    const S2Point centroid = _polygon->GetCentroid();
+    return {centroid.x(), centroid.y(), centroid.z()};
 }
 
 GeoCircle::GeoCircle() = default;
