@@ -489,7 +489,7 @@ public class PolymorphicFunctionAnalyzer {
                         continue;
                     }
                     commonType = TypeManager.getCommonSuperType(commonType, nextType);
-                    if (commonType == null || commonType.isInvalid()) {
+                    if (commonType == null) {
                         LOGGER.warn("could not determine polymorphic type because input has non-match types");
                         return null;
                     }
