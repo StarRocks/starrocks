@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 
@@ -43,9 +44,20 @@ import java.util.Map;
  * <p>Entries are handed out at most once and dropped with the statement, like {@link PreResolvedViewBodies}:
  * a statement has one write target, and anything the analyzer did not come to collect must not be offered to
  * the next statement on this connection.
+ *
+ * <p>A CTAS target is the same case one step earlier: the table does not exist yet, so what the locked
+ * {@code CreateTableAnalyzer} asks the external catalog is whether its database exists and whether the table
+ * already does. Those two answers are handed over as a {@link CreateTarget}.
  */
 public class PreResolvedWriteTargets {
+    /**
+     * The database a CTAS creates its table in, and whether that table already existed when it was asked.
+     */
+    public record CreateTarget(Database db, boolean tableExists) {
+    }
+
     private final Map<String, Table> byQualifiedName = Maps.newHashMap();
+    private final Map<String, CreateTarget> createTargets = Maps.newHashMap();
 
     /**
      * @param tableName fully qualified, i.e. already through {@code TableName#normalization}, because that
@@ -65,12 +77,25 @@ public class PreResolvedWriteTargets {
         return byQualifiedName.remove(key(tableName));
     }
 
+    public void putCreateTarget(TableName tableName, CreateTarget target) {
+        createTargets.put(key(tableName), target);
+    }
+
+    /**
+     * @return what the pre-pass learned about this CTAS target, or null when it did not ask -- the caller then
+     *         asks the catalog itself, as it did before this existed
+     */
+    public CreateTarget takeCreateTarget(TableName tableName) {
+        return createTargets.remove(key(tableName));
+    }
+
     public boolean isEmpty() {
-        return byQualifiedName.isEmpty();
+        return byQualifiedName.isEmpty() && createTargets.isEmpty();
     }
 
     public void clear() {
         byQualifiedName.clear();
+        createTargets.clear();
     }
 
     private static String key(TableName tableName) {

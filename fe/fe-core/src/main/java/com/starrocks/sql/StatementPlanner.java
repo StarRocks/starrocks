@@ -46,6 +46,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.InsertAnalyzer;
+import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.analyzer.QueryAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -62,6 +63,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableRef;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -293,22 +295,19 @@ public class StatementPlanner {
                 }
             }
 
-            // CTAS is not an INSERT at plan time: its target table does not exist until execution, so it
-            // cannot use the deferred-lock path above. Its SELECT still needs the same treatment as an
-            // INSERT-SELECT though -- files() schema inference does an object-store LIST plus a BE
-            // get_file_schema RPC, and running that inside the PlannerMetaLock critical section stalls
-            // every db-level DDL behind the database intention lock. Pre-resolve it here; resolveTableRef
-            // reuses the already-built TableFunctionTable once the lock is held.
-            // Unwrap SUBMIT TASK as well: it carries either an INSERT (handled above) or a CTAS.
-            CreateTableAsSelectStmt ctasStmt = null;
-            if (statement instanceof CreateTableAsSelectStmt ctas) {
-                ctasStmt = ctas;
-            } else if (statement instanceof SubmitTaskStmt submitTaskStmt) {
-                ctasStmt = submitTaskStmt.getCreateTableAsSelectStmt();
-            }
-            if (ctasStmt != null && locker != null && !locker.isEmpty()
-                    && !AnalyzerUtils.collectFileTableFunctionRelation(ctasStmt.getQueryStatement()).isEmpty()) {
-                new QueryAnalyzer(session).analyzeFilesOnly(ctasStmt.getQueryStatement());
+            // Statements other than INSERT cannot use the deferred-lock path above, but their files() still
+            // needs the same treatment as an INSERT-SELECT -- files() schema inference does an object-store
+            // LIST plus a BE get_file_schema RPC, and running that inside the PlannerMetaLock critical
+            // section stalls every db-level DDL behind the database intention lock. Pre-resolve it here;
+            // resolveTableRef reuses the already-built TableFunctionTable once the lock is held.
+            QueryStatement filesQuery = queryWithFilesToPreResolve(statement);
+            if (filesQuery != null && locker != null && !locker.isEmpty()
+                    && !AnalyzerUtils.collectFileTableFunctionRelation(filesQuery).isEmpty()) {
+                if (statement instanceof CreatePipeStmt createPipeStmt) {
+                    // Keep the original error order: PipeAnalyzer rejects bad properties before the INSERT.
+                    PipeAnalyzer.analyzeBeforeInsert(createPipeStmt);
+                }
+                new QueryAnalyzer(session).analyzeFilesOnly(filesQuery);
             }
 
             if (deferredLock) {
@@ -334,6 +333,29 @@ public class StatementPlanner {
                 return false;
             }
         }
+    }
+
+    /**
+     * The SELECT whose files() the pre-pass in {@link #analyzeStatement} resolves before the lock, for a
+     * statement the INSERT branch there does not cover. A CTAS target does not exist until execution, and
+     * CREATE PIPE analyzes its INSERT from inside PipeAnalyzer, after the lock of the outer statement is
+     * already held -- so neither reaches the deferred-lock path. SUBMIT TASK carries either an INSERT
+     * (handled by that branch) or a CTAS.
+     */
+    private static QueryStatement queryWithFilesToPreResolve(StatementBase statement) {
+        if (statement instanceof QueryStatement queryStatement) {
+            return queryStatement;
+        }
+        if (statement instanceof CreateTableAsSelectStmt ctas) {
+            return ctas.getQueryStatement();
+        }
+        if (statement instanceof SubmitTaskStmt submitTaskStmt && submitTaskStmt.getCreateTableAsSelectStmt() != null) {
+            return submitTaskStmt.getCreateTableAsSelectStmt().getQueryStatement();
+        }
+        if (statement instanceof CreatePipeStmt createPipeStmt && createPipeStmt.getInsertStmt() != null) {
+            return createPipeStmt.getInsertStmt().getQueryStatement();
+        }
+        return null;
     }
 
     /**

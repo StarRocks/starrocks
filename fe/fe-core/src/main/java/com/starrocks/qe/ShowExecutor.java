@@ -495,6 +495,12 @@ public class ShowExecutor {
                             AtomicBoolean baseTableHasPrivilege = new AtomicBoolean(true);
                             mvTable.getBaseTableInfos().stream()
                                     .forEach(baseTableInfo -> {
+                                        // Only a native base table is privilege-checked below, and an external
+                                        // catalog has none; resolving one would only contact that catalog with
+                                        // the database lock held.
+                                        if (!baseTableInfo.isInternalCatalog()) {
+                                            return;
+                                        }
                                         // skip if base table not existed
                                         Optional<Table> baseTableOpt = MvUtils.getTable(baseTableInfo);
                                         if (baseTableOpt.isEmpty()) {
