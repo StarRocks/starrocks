@@ -364,7 +364,9 @@ public class ConnectProcessorTest extends DDLTestBase {
             MysqlSerializer serializer = MysqlSerializer.newInstance();
             serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
             serializer.writeInt4(stmtId);
-            MysqlChannel channel = mockChannel(serializer.toByteBuffer().order(byteOrder));
+            MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+            Mockito.when(channel.fetchOnePacket()).thenReturn(serializer.toByteBuffer().order(byteOrder));
+            Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
             ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
             PrepareStmtContext preparedStmt = new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null);
             ctx.putPreparedStmt(String.valueOf(stmtId), preparedStmt);
@@ -391,7 +393,9 @@ public class ConnectProcessorTest extends DDLTestBase {
         RequestPackage request = decoder.poll();
         Assertions.assertNotNull(request);
 
-        MysqlChannel channel = mockChannel(request.byteBuffer());
+        MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+        Mockito.when(channel.fetchOnePacket()).thenReturn(request.byteBuffer());
+        Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
         ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
         ctx.putPreparedStmt("1", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
 
