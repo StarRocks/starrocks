@@ -148,7 +148,19 @@ public abstract class ConnectorPartitionTraits {
         return traits;
     }
 
+<<<<<<< HEAD
     private static ConnectorPartitionTraits buildWithoutCache(Table table) {
+=======
+    public static ConnectorPartitionTraits build(Table table, TvrVersionRange pinnedVersionRange) {
+        return build(null, table, pinnedVersionRange);
+    }
+
+    /**
+     * Build the partition traits for the table without the query-context cache wrapper, whatever the current
+     * thread's context.
+     */
+    public static ConnectorPartitionTraits buildWithoutCache(Table table) {
+>>>>>>> 33273620d8b... [BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#64214)
         ConnectorPartitionTraits res = build(table.getType());
         res.table = table;
         return res;
