@@ -42,6 +42,7 @@ import com.starrocks.catalog.mv.MVTimelinessArbiter;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -826,11 +827,19 @@ public class MetaFunctions {
 
         String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
                 returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
+        ConnectContext caller = ConnectContext.get();
+        if (caller == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "lookup_string must be called within a user session");
+        }
         try {
             // lookup_string is folded in the optimizer during the outer query's planning; bound the
             // internal point-lookup by the outer query's remaining query_timeout (not the 1h default).
             int remaining = SimpleExecutor.outerRemainingQueryTimeoutS();
-            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql, Math.max(1, remaining));
+            // Run the lookup as the caller rather than ROOT, so the caller's privileges and access
+            // control policies apply to the table being read.
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor()
+                    .executeDQLAsCaller(sql, Math.max(1, remaining), caller);
             return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";
@@ -840,7 +849,9 @@ public class MetaFunctions {
                     root != null && root.getMessage().contains(notFoundMessage)) {
                 return ConstantOperator.NULL;
             }
-            if (root instanceof StarRocksPlannerException) {
+            // Surface planner errors and access denied from the caller's privilege check as is,
+            // instead of the generic "execute sql failed" wrapper.
+            if (root instanceof StarRocksPlannerException || root instanceof ErrorReportException) {
                 throw new SemanticException("lookup failed: " + root.getMessage(), root);
             } else {
                 throw new SemanticException("lookup failed: " + e.getMessage(), e);

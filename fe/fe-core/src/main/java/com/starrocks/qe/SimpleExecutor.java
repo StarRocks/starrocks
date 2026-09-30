@@ -143,8 +143,8 @@ public class SimpleExecutor {
     /**
      * Same as {@link #executeDQL(String)} but bounds the internal query with an explicit
      * {@code query_timeout} (seconds) instead of the default {@code statistic_collect_query_timeout}.
-     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views}
-     * or {@code lookup_string}) so they never outlive the outer user query.
+     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views})
+     * so they never outlive the outer user query.
      */
     public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
         ConnectContext prev = ConnectContext.get();
@@ -159,6 +159,42 @@ public class SimpleExecutor {
                 prev.setThreadLocalInfo();
             }
         }
+    }
+
+    /**
+     * Same as {@link #executeDQL(String, int)} but runs the internal query with the identity of
+     * {@code caller} instead of ROOT, so the caller's table/column privileges and the row filter /
+     * column masking policies of an external access controller (e.g. Ranger) apply to it. Must be
+     * used by internal queries that read user data on behalf of a user (e.g. {@code lookup_string}),
+     * otherwise any user could read tables it has no privilege on.
+     */
+    public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
+        Preconditions.checkNotNull(caller, "caller context is required");
+        ConnectContext prev = ConnectContext.get();
+        try {
+            ConnectContext context = createConnectContext();
+            inheritIdentity(context, caller);
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    /**
+     * Replace the ROOT identity set by {@link #createConnectContext()} with the caller's.
+     */
+    private static void inheritIdentity(ConnectContext context, ConnectContext caller) {
+        context.setQualifiedUser(caller.getQualifiedUser());
+        context.setCurrentUserIdentity(caller.getCurrentUserIdentity());
+        context.setCurrentRoleIds(caller.getCurrentRoleIds());
+        context.setGroups(caller.getGroups());
+        context.setDistinguishedName(caller.getDistinguishedName());
+        context.setBypassAuthorizerCheck(caller.isBypassAuthorizerCheck());
     }
 
     /**

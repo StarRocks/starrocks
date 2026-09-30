@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
@@ -204,7 +205,8 @@ public class MetaFunctionsTest extends MVTestBase {
             // normal
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
                     record.data = Lists.newArrayList("v1");
                     String json = GsonUtils.GSON.toJson(record);
@@ -220,11 +222,61 @@ public class MetaFunctionsTest extends MVTestBase {
             // record not found
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     throw new RuntimeException("query failed if record not exist in dict table");
                 }
             };
             Assertions.assertNull(lookupString("t1", "v1", "c1"));
+        }
+    }
+
+    @Test
+    public void testLookupStringRunsAsCaller() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_caller(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        UserIdentity[] innerUser = new UserIdentity[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                innerUser[0] = context.getCurrentUserIdentity();
+                return Lists.newArrayList();
+            }
+        };
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            Assertions.assertNull(lookupString("t_lookup_caller", "k", "c2"));
+            // The internal lookup query must run as the caller, never as ROOT
+            Assertions.assertEquals(testUser, innerUser[0]);
+            Assertions.assertSame(connectContext, ConnectContext.get());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            starRocksAssert.dropTable("t_lookup_caller");
+        }
+    }
+
+    @Test
+    public void testLookupStringAccessDenied() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_denied(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_denied", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            starRocksAssert.dropTable("t_lookup_denied");
         }
     }
 
