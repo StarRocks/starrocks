@@ -587,18 +587,32 @@ public class CachingIcebergCatalogTest {
 
     @Test
     public void testRefreshTableDoesNotResurrectEntryInvalidatedDuringReload(@Mocked IcebergCatalog delegate) {
-        assertRefreshDoesNotResurrectInvalidatedEntry(delegate, false);
+        assertRefreshLeavesNoEntryAfterConcurrentChange(delegate, false, false);
     }
 
     @Test
     public void testRefreshTableDoesNotResurrectEntryInvalidatedDuringReloadWhenMetadataUnchanged(
             @Mocked IcebergCatalog delegate) {
-        assertRefreshDoesNotResurrectInvalidatedEntry(delegate, true);
+        assertRefreshLeavesNoEntryAfterConcurrentChange(delegate, true, false);
     }
 
-    // A commit on this FE invalidates the table cache while a concurrent refresh is still reloading the table
-    // from the remote catalog. The reloaded table predates the commit, so the refresh must not write it back.
-    private void assertRefreshDoesNotResurrectInvalidatedEntry(IcebergCatalog delegate, boolean sameLocation) {
+    @Test
+    public void testRefreshTableInvalidatesEntryReplacedDuringReload(@Mocked IcebergCatalog delegate) {
+        assertRefreshLeavesNoEntryAfterConcurrentChange(delegate, false, true);
+    }
+
+    @Test
+    public void testRefreshTableInvalidatesEntryReplacedDuringReloadWhenMetadataUnchanged(
+            @Mocked IcebergCatalog delegate) {
+        assertRefreshLeavesNoEntryAfterConcurrentChange(delegate, true, true);
+    }
+
+    // While a refresh is still reloading the table from the remote catalog, the cache entry changes underneath it:
+    // either a commit on this FE invalidates it, or a concurrent load (e.g. a Caffeine refreshAfterWrite reload)
+    // replaces it. The refresh must not write its reloaded table back, and must leave no entry behind so the next
+    // access loads metadata at least as new as what the refresh saw.
+    private void assertRefreshLeavesNoEntryAfterConcurrentChange(IcebergCatalog delegate, boolean sameLocation,
+                                                                 boolean replaceEntry) {
         ConnectContext ctx = new ConnectContext();
         Table cachedTable = createBaseTableWithManifests(1, 1);
         Table staleReloadedTable = createBaseTableWithManifests(1, 1);
@@ -610,9 +624,13 @@ public class CachingIcebergCatalogTest {
                     .thenReturn(sharedLocation);
         }
 
+        Table concurrentlyLoadedTable = createBaseTableWithManifests(1, 1);
+
         ExecutorService executor = Executors.newSingleThreadExecutor();
         CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
                 DEFAULT_CATALOG_PROPERTIES, executor);
+        LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+        IcebergTableName key = new IcebergTableName("db1", "t1");
         AtomicInteger calls = new AtomicInteger();
         new Expectations() {
             {
@@ -622,15 +640,16 @@ public class CachingIcebergCatalogTest {
                         if (calls.getAndIncrement() == 0) {
                             return cachedTable;
                         }
-                        catalog.invalidateTableCache("db1", "t1");
+                        if (replaceEntry) {
+                            tableCache.put(key, concurrentlyLoadedTable);
+                        } else {
+                            catalog.invalidateTableCache("db1", "t1");
+                        }
                         return staleReloadedTable;
                     }
                 };
             }
         };
-
-        LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
-        IcebergTableName key = new IcebergTableName("db1", "t1");
 
         Assertions.assertSame(cachedTable, catalog.getTable(ctx, "db1", "t1"));
         catalog.refreshTable("db1", "t1", ctx, executor);

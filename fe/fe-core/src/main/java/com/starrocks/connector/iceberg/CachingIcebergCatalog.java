@@ -447,15 +447,18 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     /**
      * Swap the reloaded table into the cache only if the entry still holds the table this refresh started
      * from. `updatedTable` was loaded from the remote catalog before this call, so if the entry was
-     * invalidated meanwhile (e.g. by a commit on this FE) or replaced by a newer load, writing it back
-     * would resurrect metadata older than what the cache already moved past.
+     * invalidated meanwhile (e.g. by a commit on this FE) or replaced by a concurrent load, writing it back
+     * could resurrect metadata older than what the cache already moved past.
+     * On a lost race the entry is invalidated instead: a concurrently loaded table may itself be older than
+     * `updatedTable`, and the next access then loads metadata at least as new as what this refresh saw.
      */
     private boolean replaceCachedTable(IcebergTableName key, Table currentTable, Table updatedTable) {
         if (tables.asMap().replace(key, currentTable, updatedTable)) {
             return true;
         }
+        tables.invalidate(key);
         LOG.info("Skip refreshing iceberg caching catalog table {}.{}: cache entry was invalidated or " +
-                "replaced concurrently", key.dbName, key.tableName);
+                "replaced concurrently, invalidate it to reload on next access", key.dbName, key.tableName);
         return false;
     }
 
