@@ -238,21 +238,26 @@ public class MetaFunctionsTest extends MVTestBase {
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
         Set<String> currentGroups = connectContext.getGroups();
+        String currentRemoteIP = connectContext.getRemoteIP();
         UserIdentity[] innerUser = new UserIdentity[1];
         Set<String>[] innerGroups = new Set[1];
+        String[] innerRemoteIP = new String[1];
         new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
                 innerUser[0] = context.getCurrentUserIdentity();
                 innerGroups[0] = context.getGroups();
+                innerRemoteIP[0] = context.getRemoteIP();
                 return Lists.newArrayList();
             }
         };
         Set<String> callerGroups = Set.of("g_ranger");
+        String callerRemoteIP = "10.1.2.3";
         try {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
             connectContext.setGroups(callerGroups);
+            connectContext.setRemoteIP(callerRemoteIP);
             connectContext.setThreadLocalInfo();
             Assertions.assertNull(lookupString("t_lookup_caller", "k", "c2"));
             // The internal lookup query must run as the caller, never as ROOT
@@ -260,11 +265,15 @@ public class MetaFunctionsTest extends MVTestBase {
             // Groups must be propagated: Ranger authorization and row/column policies read
             // context.getGroups(), so dropping them would silently bypass group-based policies.
             Assertions.assertEquals(callerGroups, innerGroups[0]);
+            // Remote IP must be propagated: USER()/SESSION_USER() are folded from qualifiedUser
+            // plus remoteIP, and Ranger row-filter/masking expressions are analyzed here.
+            Assertions.assertEquals(callerRemoteIP, innerRemoteIP[0]);
             Assertions.assertSame(connectContext, ConnectContext.get());
         } finally {
             connectContext.setCurrentUserIdentity(currentUserIdentity);
             connectContext.setCurrentRoleIds(currentRoleIds);
             connectContext.setGroups(currentGroups);
+            connectContext.setRemoteIP(currentRemoteIP);
             starRocksAssert.dropTable("t_lookup_caller");
         }
     }

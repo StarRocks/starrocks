@@ -187,7 +187,10 @@ public class SimpleExecutor {
 
     /**
      * Replace the ROOT identity set by {@link #createConnectContext()} with the caller's.
-     * Only identity is copied (user, roles, groups, DN). The caller's
+     * Copies identity only: user, roles, groups, DN and remote IP. The remote IP matters
+     * because USER()/SESSION_USER() are folded from qualifiedUser plus remoteIP, and Ranger
+     * row-filter / masking expressions are analyzed in this context, so dropping it would make
+     * such policies see 'user'@% rather than the caller's actual host. The caller's
      * {@code bypassAuthorizerCheck} is deliberately NOT copied: it is a transient control-flow
      * flag that makes {@link StatementPlanner} skip {@code Authorizer.check}, so inheriting it
      * would let a lookup triggered inside an existing bypass scope skip the SELECT / Ranger
@@ -199,6 +202,7 @@ public class SimpleExecutor {
         context.setCurrentRoleIds(caller.getCurrentRoleIds());
         context.setGroups(caller.getGroups());
         context.setDistinguishedName(caller.getDistinguishedName());
+        context.setRemoteIP(caller.getRemoteIP());
     }
 
     /**
