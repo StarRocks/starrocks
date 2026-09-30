@@ -19,6 +19,7 @@ from sqlalchemy import schema as sa_schema
 from sqlalchemy.exc import StatementError
 
 from starrocks.common.params import DialectName
+from starrocks.common.types import TableDistribution
 from starrocks.engine.interfaces import ReflectedDistributionInfo, ReflectedPartitionInfo, ReflectedTableKeyInfo
 
 
@@ -367,6 +368,23 @@ class TableAttributeNormalizer:
         if not text:
             return text
         return text.replace('"', "'")
+
+
+_RANGE_DISTRIBUTION_PATTERN = re.compile(r'^\s*RANGE\b', re.IGNORECASE)
+
+
+def is_range_distribution(distribution: Union[ReflectedDistributionInfo, str, None]) -> bool:
+    """Whether a DISTRIBUTED BY value denotes range distribution.
+
+    Accepts a reflected value such as 'RANGE BUCKETS 1' or a metadata value such as 'RANGE'.
+    """
+    if not distribution:
+        return False
+    if isinstance(distribution, ReflectedDistributionInfo):
+        if distribution.type and not distribution.distribution_method:
+            return str(distribution.type).strip().upper() == TableDistribution.RANGE
+        distribution = str(distribution)
+    return bool(_RANGE_DISTRIBUTION_PATTERN.match(distribution))
 
 
 def find_matching_parenthesis(text: str, start_index: int = 0) -> int:
