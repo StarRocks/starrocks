@@ -136,8 +136,7 @@ public:
 
         std::mutex _mutex;
         std::vector<std::shared_ptr<PInternalService_RecoverableStub>> _stubs;
-        int64_t _idx = -1;
-        int64_t _selection_idx = -1;
+        int64_t _last_selected_idx = -1;
         std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> _cleanup_task;
     };
 

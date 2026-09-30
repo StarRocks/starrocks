@@ -200,12 +200,16 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_o
         const butil::EndPoint& endpoint) {
     std::lock_guard l(_mutex);
     if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
-        return _create_stub_locked(endpoint);
+        auto stub = _create_stub_locked(endpoint);
+        if (stub != nullptr) {
+            _last_selected_idx = static_cast<int64_t>(_stubs.size()) - 1;
+        }
+        return stub;
     }
-    if (++_idx >= config::brpc_max_connections_per_server) {
-        _idx = 0;
+    if (++_last_selected_idx >= static_cast<int64_t>(_stubs.size())) {
+        _last_selected_idx = 0;
     }
-    return _stubs[_idx];
+    return _stubs[static_cast<size_t>(_last_selected_idx)];
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::_create_stub_locked(
@@ -227,12 +231,12 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
     int64_t minimum = std::numeric_limits<int64_t>::max();
     const int64_t batch_bytes = std::max<int64_t>(config::max_transmit_batched_bytes, 1);
     if (size > 0) {
-        const size_t start = (_selection_idx + 1) % size;
+        const size_t start = static_cast<size_t>(_last_selected_idx + 1) % size;
         for (size_t offset = 0; offset < size; ++offset) {
             const size_t index = (start + offset) % size;
             const int64_t in_flight = _stubs[index]->num_in_flight_rpcs();
             if (in_flight == 0) {
-                _selection_idx = index;
+                _last_selected_idx = static_cast<int64_t>(index);
                 return StubSelection{.reservation = _stubs[index]->reserve_rpc(payload_bytes)};
             }
             const int64_t load = in_flight + _stubs[index]->num_in_flight_payload_bytes() / batch_bytes;
@@ -247,7 +251,7 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
     if (!at_connection_limit) {
         auto stub = _create_stub_locked(endpoint);
         if (stub != nullptr) {
-            _selection_idx = size;
+            _last_selected_idx = static_cast<int64_t>(size);
             return StubSelection{.reservation = stub->reserve_rpc(payload_bytes), .created_on_contention = size > 0};
         }
         LOG(WARNING) << "Failed to create bRPC stub on contention for endpoint: " << endpoint;
@@ -257,7 +261,7 @@ StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_lo
         return Status::ServiceUnavailable("empty bRPC stub pool");
     }
     // If no idle stub exists and the pool cannot grow, reuse the least-loaded busy stub.
-    _selection_idx = selected;
+    _last_selected_idx = static_cast<int64_t>(selected);
     return StubSelection{.reservation = _stubs[selected]->reserve_rpc(payload_bytes),
                          .selected_at_connection_limit = at_connection_limit};
 }
