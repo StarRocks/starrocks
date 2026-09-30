@@ -456,19 +456,21 @@ enum class PointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
 constexpr long double kPlanarBoundaryUlps = 32;
 
 bool planar_point_on_segment(const WkbCoordinate& point, const WkbCoordinate& lhs, const WkbCoordinate& rhs) {
-    const long double px = point.x;
-    const long double py = point.y;
-    const long double ax = lhs.x;
-    const long double ay = lhs.y;
-    const long double bx = rhs.x;
-    const long double by = rhs.y;
-    const long double scale =
-            std::max({1.0L, std::abs(px), std::abs(py), std::abs(ax), std::abs(ay), std::abs(bx), std::abs(by)});
-    const long double tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * scale;
-    const long double cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
-    if (std::abs(cross) > tolerance * scale) return false;
-    return px >= std::min(ax, bx) - tolerance && px <= std::max(ax, bx) + tolerance &&
-           py >= std::min(ay, by) - tolerance && py <= std::max(ay, by) + tolerance;
+    const long double abx = static_cast<long double>(rhs.x) - lhs.x;
+    const long double aby = static_cast<long double>(rhs.y) - lhs.y;
+    const long double apx = static_cast<long double>(point.x) - lhs.x;
+    const long double apy = static_cast<long double>(point.y) - lhs.y;
+    const long double cross_lhs = abx * apy;
+    const long double cross_rhs = aby * apx;
+    const long double cross_scale = std::abs(cross_lhs) + std::abs(cross_rhs);
+    const long double cross_tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * cross_scale;
+    if (std::abs(cross_lhs - cross_rhs) > cross_tolerance) return false;
+
+    const long double coordinate_scale = std::max({std::abs(abx), std::abs(aby), std::abs(apx), std::abs(apy)});
+    const long double coordinate_tolerance =
+            kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * coordinate_scale;
+    return apx >= std::min(0.0L, abx) - coordinate_tolerance && apx <= std::max(0.0L, abx) + coordinate_tolerance &&
+           apy >= std::min(0.0L, aby) - coordinate_tolerance && apy <= std::max(0.0L, aby) + coordinate_tolerance;
 }
 
 PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring, const WkbCoordinate& point) {
@@ -478,11 +480,11 @@ PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring
         const auto& rhs = ring[i];
         if (planar_point_on_segment(point, lhs, rhs)) return PointPolygonRelation::BOUNDARY;
         if ((lhs.y > point.y) != (rhs.y > point.y)) {
-            const long double intersection_x =
-                    static_cast<long double>(lhs.x) + (static_cast<long double>(point.y) - lhs.y) *
-                                                              (static_cast<long double>(rhs.x) - lhs.x) /
-                                                              (static_cast<long double>(rhs.y) - lhs.y);
-            if (static_cast<long double>(point.x) < intersection_x) inside = !inside;
+            const long double intersection_offset =
+                    (static_cast<long double>(lhs.x) - point.x) + (static_cast<long double>(point.y) - lhs.y) *
+                                                                          (static_cast<long double>(rhs.x) - lhs.x) /
+                                                                          (static_cast<long double>(rhs.y) - lhs.y);
+            if (intersection_offset > 0) inside = !inside;
         }
     }
     return inside ? PointPolygonRelation::INSIDE : PointPolygonRelation::OUTSIDE;

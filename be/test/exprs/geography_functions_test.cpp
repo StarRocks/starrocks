@@ -1355,6 +1355,24 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
     EXPECT_TRUE(spherical.value(6));
 }
 
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIsTranslationInvariant) {
+    const auto type = geometry_type("EPSG:3857", 3857);
+    auto left = geometry({"POLYGON ((0 0, 1 1, 0 1, 0 0))",
+                          "POLYGON ((10000000 10000000, 10000001 10000001, 10000000 10000001, 10000000 10000000))"},
+                         type);
+    auto right = geometry({"POLYGON ((0.5 0.4, 0.6 0.4, 0.6 0.3, 0.5 0.4))",
+                           "POLYGON ((10000000.5 10000000.4, 10000000.6 10000000.4, 10000000.6 10000000.3, "
+                           "10000000.5 10000000.4))"},
+                          type);
+
+    ColumnViewer<TYPE_BOOLEAN> forward(GeoFunctions::st_geometry_intersects(nullptr, {left, right}).value());
+    ColumnViewer<TYPE_BOOLEAN> reverse(GeoFunctions::st_geometry_intersects(nullptr, {right, left}).value());
+    for (size_t i = 0; i < 2; ++i) {
+        EXPECT_FALSE(forward.value(i)) << i;
+        EXPECT_FALSE(reverse.value(i)) << i;
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoIntersectsLifecycleAndThreadIsolation) {
     const auto type = geography_type();
     auto prepared_left = ConstColumn::create(geography({"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))"}), 1);
