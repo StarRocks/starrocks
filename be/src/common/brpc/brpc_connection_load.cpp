@@ -31,6 +31,8 @@ using ConnectionKey = std::tuple<std::string, std::string, int64_t>;
 
 class BrpcConnectionLoadRegistry {
 public:
+    BrpcConnectionLoadRegistry() : _cleanup_it(_loads.end()) {}
+
     std::shared_ptr<BrpcConnectionLoad> get(const butil::EndPoint& endpoint, const std::string& protocol,
                                             int64_t connection_group_seed) {
         std::ostringstream endpoint_stream;
@@ -38,25 +40,34 @@ public:
         ConnectionKey key(endpoint_stream.str(), protocol, connection_group_seed);
 
         std::lock_guard lock(_mutex);
-        for (auto it = _loads.begin(); it != _loads.end();) {
-            if (it->second.expired()) {
-                it = _loads.erase(it);
-            } else {
-                ++it;
-            }
-        }
         auto& weak_load = _loads[key];
         auto load = weak_load.lock();
         if (load == nullptr) {
             load = std::make_shared<BrpcConnectionLoad>();
             weak_load = load;
         }
+        _cleanup_expired_entries();
         return load;
     }
 
 private:
+    void _cleanup_expired_entries() {
+        // Bound work under the registry mutex. The cursor eventually visits every entry as new slots are acquired.
+        constexpr size_t kEntriesPerCleanup = 8;
+        for (size_t i = 0; i < kEntriesPerCleanup && !_loads.empty(); ++i) {
+            if (_cleanup_it == _loads.end()) {
+                _cleanup_it = _loads.begin();
+            }
+            auto current = _cleanup_it++;
+            if (current->second.expired()) {
+                _loads.erase(current);
+            }
+        }
+    }
+
     std::mutex _mutex;
     std::map<ConnectionKey, std::weak_ptr<BrpcConnectionLoad>> _loads;
+    std::map<ConnectionKey, std::weak_ptr<BrpcConnectionLoad>>::iterator _cleanup_it;
 };
 
 BrpcConnectionLoadRegistry& connection_load_registry() {
