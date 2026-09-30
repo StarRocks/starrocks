@@ -1336,13 +1336,14 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
                        "POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))",
                        "POLYGON ((-45 80, 45 80, 135 80, -135 80, -45 80))",
                        "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
-                       "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))"});
+                       "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))",
+                       "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
     auto spherical_right =
             geography({"POLYGON ((175 -5, -175 -5, -175 5, 175 5, 175 -5))",
                        "POLYGON ((-170 -10, -160 -10, -160 10, -170 10, -170 -10))",
                        "POLYGON ((-120 -5, -110 -5, -110 5, -120 5, -120 -5))",
                        "POLYGON ((-20 85, 20 85, 20 88, -20 88, -20 85))", "POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))",
-                       "POLYGON ((25 25, 26 25, 26 26, 25 26, 25 25))"});
+                       "POLYGON ((25 25, 26 25, 26 26, 25 26, 25 25))", "POLYGON ((10 5, 15 4, 15 6, 10 5))"});
     ColumnViewer<TYPE_BOOLEAN> spherical(
             GeoFunctions::st_geography_intersects(nullptr, {spherical_left, spherical_right}).value());
     EXPECT_TRUE(spherical.value(0));
@@ -1351,6 +1352,7 @@ TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
     EXPECT_TRUE(spherical.value(3));
     EXPECT_FALSE(spherical.value(4));
     EXPECT_TRUE(spherical.value(5));
+    EXPECT_TRUE(spherical.value(6));
 }
 
 TEST_F(geographyFunctionsTest, nativeGeoIntersectsLifecycleAndThreadIsolation) {
