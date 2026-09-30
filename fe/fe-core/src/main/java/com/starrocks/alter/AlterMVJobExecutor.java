@@ -33,6 +33,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
+import com.starrocks.catalog.mv.PreResolvedBaseTables;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -588,6 +589,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     private ParseNode preResolvedDefineQueryAst;
     private String preResolvedDefineSql;
     private Boolean preResolvedHasNonNativeBaseTable;
+<<<<<<< HEAD
+=======
+    private PreResolvedBaseTables preResolvedRefBaseTables;
+    private AlterJobMgr.AlterMaterializedViewStatusContext preResolvedActivateContext;
+    private RuntimeException preResolvedActivateFailure;
+    private PreResolvedBaseTables preResolvedBaseTables;
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
 
     /**
      * Everything ALTER MATERIALIZED VIEW used to resolve while holding the MV's write lock.
@@ -633,7 +641,49 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // the lock whether the AST is still current -- see takePreResolvedDefineQueryAst.
             preResolvedDefineSql = mv.getOriginalViewDefineSql();
             preResolvedDefineQueryAst = mv.initDefineQueryParseNode();
+        } else if (alterClause instanceof AlterMaterializedViewStatusClause
+                && AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(
+                        ((AlterMaterializedViewStatusClause) alterClause).getStatus())
+                && !mv.isActive()) {
+            // Re-analyzing the definition resolves every base table, and so does the relationship rebuild
+            // that follows it under the lock; both are resolved here. A failure is kept, not thrown: the
+            // visitor reports it under the lock, after the checks that come first today (MV state, whether
+            // the MV is already active), and records on the MV what it has to record -- see
+            // takePreResolvedActivate.
+            LOG.info("process change materialized view {} status to {}, isReplay: false", mv.getName(),
+                    AlterMaterializedViewStatusClause.ACTIVE);
+            preResolvedDefineSql = mv.getOriginalViewDefineSql();
+            try {
+                preResolvedActivateContext = GlobalStateMgr.getCurrentState().getAlterJobMgr()
+                        .resolveActivate(mv, "", false);
+                preResolvedBaseTables = PreResolvedBaseTables.resolve(preResolvedActivateContext.baseTableInfos());
+            } catch (RuntimeException e) {
+                preResolvedActivateFailure = e;
+            }
         }
+    }
+
+    /**
+     * The analysis of an ACTIVE transition resolved before the lock, once it is known to still apply.
+     *
+     * <p>What it depends on that the MV lock covers is the MV's definition: the base tables are derived from
+     * it, and the column-compatibility check compares it with the MV's schema, which only changes together
+     * with the definition (ADD/DROP COLUMN). If the definition moved, or the MV was still active when the
+     * statement resolved and has been inactivated since, the analysis does not describe this MV any more.
+     * Redoing it here would put the connector calls back under the lock, so the statement is rejected; for
+     * MVActiveChecker that is one failed round, and its next round resolves afresh.
+     */
+    private AlterJobMgr.AlterMaterializedViewStatusContext takePreResolvedActivate(MaterializedView mv) {
+        if ((preResolvedActivateContext == null && preResolvedActivateFailure == null)
+                || !Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())) {
+            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                    + "please retry the statement", mv.getName()));
+        }
+        if (preResolvedActivateFailure != null) {
+            AlterJobMgr.applyActivateFailure(mv, preResolvedActivateFailure);
+            throw preResolvedActivateFailure;
+        }
+        return preResolvedActivateContext;
     }
 
     /**
@@ -683,7 +733,14 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             alterPartitionTTL(properties, materializedView, tableProperty, appliers);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+<<<<<<< HEAD
             alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+=======
+            try (PreResolvedBaseTables.Scope ignored =
+                         preResolvedRefBaseTables != null ? preResolvedRefBaseTables.enter() : null) {
+                alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
+            }
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TIME_DRIFT_CONSTRAINT)) {
             alterTimeDriftConstraint(properties, materializedView, tableProperty, appliers);
@@ -1284,8 +1341,31 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
+<<<<<<< HEAD
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext =
                         alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
+=======
+                // Analyzed in resolveBeforeLock.
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext = takePreResolvedActivate(materializedView);
+                // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
+                // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
+                // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
+                // so isActive() is the only criterion covering both. Journaling first would record an
+                // activation that never happened -- the entry is durable and nothing revokes it, so a
+                // permanently broken MV grew one bogus entry per MVActiveChecker round, without bound.
+                // Captured before the rebuild so a failed journal write can restore exactly the state the
+                // statement started from.
+                String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
+                // The rebuild resolves every base table again, several times each; the external ones are
+                // answered from what resolveBeforeLock resolved.
+                try (PreResolvedBaseTables.Scope ignored = preResolvedBaseTables.enter()) {
+                    alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                }
+                if (!materializedView.isActive()) {
+                    throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
+                            materializedView.getName(), materializedView.getInactiveReason()));
+                }
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->

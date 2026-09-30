@@ -32,6 +32,7 @@ import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
+import com.starrocks.catalog.mv.PreResolvedBaseTables;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -2675,6 +2676,31 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Re-gets every external ref base table that {@link #refreshBaseTable} would re-get, so a caller about
+     * to take a metadata lock can make the connector round trips first and then run the analysis under the
+     * lock inside {@link PreResolvedBaseTables#enter()}.
+     *
+     * <p>A failed lookup is kept, not thrown: the lookup under the lock rethrows it where the original lookup
+     * would have thrown, so errors surface at the same point and in the same order as without pre-resolving.
+     */
+    public PreResolvedBaseTables preResolveRefBaseTables() {
+        Set<BaseTableInfo> baseTableInfos = Sets.newLinkedHashSet();
+        List<Optional<? extends Map<Table, ?>>> refMaps =
+                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
+        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
+            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
+                if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
+                    baseTableInfos.add(tableToBaseTableInfoCache.get(table));
+                }
+            }
+        }
+        return PreResolvedBaseTables.resolve(baseTableInfos);
+    }
+
+    /**
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
      * Since the table is cached in the Optional, needs to refresh it again for each query.
      */
     private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
@@ -2688,6 +2714,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // the newest table info.
                 // NOTE: use getTable rather getTableChecked to avoid throwing exception when table has changed/recreated.
                 // If the table has changed, MVPCTMetaRepairer will handle it rather than throwing exception here.
+<<<<<<< HEAD
+=======
+                // Answered from PreResolvedBaseTables when the caller pre-resolved it, see preResolveRefBaseTables.
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
                 Optional<Table> refreshedTableOpt = MvUtils.getTable(tableToBaseTableInfoCache.get(table));
                 // when meets a table that has been dropped, no throw exception here so that
                 if (refreshedTableOpt.isEmpty()) {
