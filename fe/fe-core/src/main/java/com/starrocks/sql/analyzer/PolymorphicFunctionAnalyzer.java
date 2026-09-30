@@ -478,8 +478,18 @@ public class PolymorphicFunctionAnalyzer {
             if (!FunctionSet.ARRAY_SORTBY.equals(fn.functionName()) &&
                     !FunctionSet.ARRAY_SORT_LAMBDA.equals(fn.functionName())) {
                 for (int i = 1; i < allRealElementType.size(); i++) {
-                    commonType = TypeManager.getCommonSuperType(commonType, allRealElementType.get(i));
-                    if (commonType == null) {
+                    Type nextType = allRealElementType.get(i);
+                    if ((commonType instanceof AnyGeographyType || commonType instanceof AnyGeometryType) &&
+                            commonType.matchesType(nextType)) {
+                        commonType = nextType;
+                        continue;
+                    }
+                    if ((nextType instanceof AnyGeographyType || nextType instanceof AnyGeometryType) &&
+                            nextType.matchesType(commonType)) {
+                        continue;
+                    }
+                    commonType = TypeManager.getCommonSuperType(commonType, nextType);
+                    if (commonType == null || commonType.isInvalid()) {
                         LOGGER.warn("could not determine polymorphic type because input has non-match types");
                         return null;
                     }
