@@ -809,9 +809,17 @@ public class MetaFunctions {
     public static ConstantOperator lookupString(ConstantOperator tableName,
                                                  ConstantOperator lookupKey,
                                                  ConstantOperator returnColumn) {
+        // Fetch and validate the caller before parsing the table name: TableName.fromString()
+        // dereferences ConnectContext.get() to resolve one- and two-part names, so a missing
+        // thread-local context must be rejected here rather than surfacing as a NullPointerException.
+        ConnectContext caller = ConnectContext.get();
+        if (caller == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
+                    "lookup_string must be called within a user session");
+        }
         TableName tableNameValue = TableName.fromString(tableName.getVarchar());
         Optional<Table> maybeTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .getTable(new ConnectContext(), tableNameValue);
+                .getTable(caller, tableNameValue);
         maybeTable.orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableNameValue));
         if (!(maybeTable.get() instanceof OlapTable)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, "must be OLAP_TABLE");
@@ -827,11 +835,6 @@ public class MetaFunctions {
 
         String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
                 returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
-        ConnectContext caller = ConnectContext.get();
-        if (caller == null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                    "lookup_string must be called within a user session");
-        }
         try {
             // lookup_string is folded in the optimizer during the outer query's planning; bound the
             // internal point-lookup by the outer query's remaining query_timeout (not the 1h default).
