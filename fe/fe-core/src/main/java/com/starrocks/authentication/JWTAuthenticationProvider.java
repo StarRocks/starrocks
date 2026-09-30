@@ -17,9 +17,12 @@ package com.starrocks.authentication;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.mysql.MysqlCodec;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
 
 public class JWTAuthenticationProvider implements AuthenticationProvider {
     public static final String JWT_JWKS_URL = "jwks_url";
@@ -44,16 +47,29 @@ public class JWTAuthenticationProvider implements AuthenticationProvider {
     public void authenticate(AccessControlContext authContext, UserIdentity userIdentity, byte[] authResponse)
             throws AuthenticationException {
         try {
-            ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
-            //1 Byte for capability mysql client
-            MysqlCodec.readInt1(authBuffer);
-            byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
+            String idToken = readIdToken(authContext, authResponse);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(idToken), userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
+            OpenIdConnectVerifier.verify(idToken, userIdentity.getUser(), jwkSet, principalFiled, requiredIssuer,
                     requiredAudience);
-            authContext.setAuthToken(new String(idToken));
+            authContext.setAuthToken(idToken);
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }
+    }
+
+    /**
+     * The capability byte and length prefix are written by the MySQL client side openid_connect plugin. A caller
+     * that declared mysql_clear_password performed no such negotiation and sent the token itself, so reading a
+     * length prefix out of its first bytes would corrupt the token rather than decode it.
+     */
+    private static String readIdToken(AccessControlContext authContext, byte[] authResponse) {
+        if (AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString().equalsIgnoreCase(authContext.getAuthPlugin())) {
+            return StringUtils.stripEnd(new String(authResponse, StandardCharsets.UTF_8), "\0");
+        }
+
+        ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
+        //1 Byte for capability mysql client
+        MysqlCodec.readInt1(authBuffer);
+        return new String(MysqlCodec.readLenEncodedString(authBuffer), StandardCharsets.UTF_8);
     }
 }
