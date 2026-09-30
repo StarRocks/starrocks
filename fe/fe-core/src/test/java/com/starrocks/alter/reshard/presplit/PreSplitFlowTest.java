@@ -22,10 +22,19 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.BrokerDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.type.DateType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
@@ -36,11 +45,16 @@ import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintColumn;
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.bigintTuple;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.brokerFileStatus;
+import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResultBatch;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -592,6 +606,89 @@ public class PreSplitFlowTest {
             coordinator.verify(() -> TabletPreSplitCoordinator.awaitCombinedJobAllowingFallback(
                     eq(LoadKind.INSERT_FROM_FILES), eq(table), eq(combinedJob), eq(shouldAbort)), times(1));
         }
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void multiPartitionDataTierSizesEachPartitionFromAllOfItsFiles() throws Exception {
+        long savedLimit = Config.tablet_pre_split_data_tier_scan_byte_limit;
+        int savedMinFiles = Config.tablet_pre_split_data_tier_min_scan_files;
+        int savedCap = Config.tablet_pre_split_max_partitions_per_load;
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 5L << 30;
+        Config.tablet_pre_split_data_tier_min_scan_files = 1;
+        Config.tablet_pre_split_max_partitions_per_load = 0;
+        try {
+            Column dt = new Column("dt", DateType.DATE);
+            List<TBrokerFileStatus> files = new ArrayList<>();
+            for (int i = 0; i < 2; i++) {
+                files.add(brokerFileStatus("s3://bucket/dt=2026-09-10/f" + i + ".parquet", 1L << 30));
+            }
+            for (int i = 0; i < 8; i++) {
+                files.add(brokerFileStatus("s3://bucket/dt=2026-09-11/f" + i + ".parquet", 1L << 30));
+            }
+            BrokerFileGroup fileGroup = mock(BrokerFileGroup.class);
+            when(fileGroup.getFileFormat()).thenReturn("parquet");
+            when(fileGroup.getColumnsFromPath()).thenReturn(List.of("dt"));
+            BrokerLoadScanContext scanContext = new BrokerLoadScanContext(new BrokerDesc(Map.of()),
+                    List.of(fileGroup), List.of(files), mock(ComputeResource.class), "UTC");
+            PreSplitFlow.Prepared prepared = new PreSplitFlow.Prepared(scanContext, List.of(bigintColumn("sort_col")),
+                    List.of(dt), 10L << 30, mock(ComputeResource.class), List.of());
+            // The lighter date keeps a whole file of its two, so it returns more sampled rows than its
+            // byte share: 6 rows against 4.
+            List<String> rows = new ArrayList<>();
+            for (int i = 0; i < 10; i++) {
+                rows.add("{\"data\":[" + i + ", \"" + (i < 6 ? "2026-09-10" : "2026-09-11") + "\"]}");
+            }
+            BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                    (sql, computeResource, timeout) -> List.of(jsonResultBatch(rows.toArray(new String[0]))));
+            Database database = mock(Database.class);
+            OlapTable table = mockTable(/*partitioned*/ true, /*automatic*/ true);
+            when(table.getPartitionInfo().getPartitionColumns(any())).thenReturn(List.of(dt));
+            ArgumentCaptor<List<PartitionSamples>> groups = ArgumentCaptor.forClass(List.class);
+
+            try (MockedStatic<TabletReshardUtils> reshardUtils = PresplitTestSupport.stubComputeNodeCount(1);
+                    MockedStatic<DefaultPreSplitPipeline> pipeline = Mockito.mockStatic(DefaultPreSplitPipeline.class);
+                    MockedStatic<AnalyzerUtils> analyzerUtils = Mockito.mockStatic(AnalyzerUtils.class);
+                    MockedConstruction<AlterTableClauseAnalyzer> analyzer =
+                            Mockito.mockConstruction(AlterTableClauseAnalyzer.class, (mockObj, ctx) -> { });
+                    MockedConstruction<Locker> locker = Mockito.mockConstruction(Locker.class);
+                    MockedStatic<TabletPreSplitCoordinator> coordinator =
+                            Mockito.mockStatic(TabletPreSplitCoordinator.class)) {
+                pipeline.when(() -> DefaultPreSplitPipeline.sampleSubqueryExecutorFor(LoadKind.BROKER_LOAD))
+                        .thenReturn(executor);
+                stubPartitionName(analyzerUtils, table, "2026-09-10", "p20260910");
+                stubPartitionName(analyzerUtils, table, "2026-09-11", "p20260911");
+                coordinator.when(() -> TabletPreSplitCoordinator.submitForPartitionsCombined(
+                                any(), any(), groups.capture(), anyInt(), any(), any(), any()))
+                        .thenReturn(new PreSplitOutcome.Skipped(SkipReason.NO_USEFUL_CUTS));
+
+                PreSplitFlow.runMultiPartitionFlow(database, table, prepared, LoadKind.BROKER_LOAD,
+                        () -> false, mock(ConnectContext.class));
+            }
+
+            List<PartitionSamples> captured = groups.getValue();
+            Assertions.assertEquals(List.of("p20260911", "p20260910"),
+                    captured.stream().map(PartitionSamples::partitionName).toList(), "heaviest by bytes first");
+            Assertions.assertEquals(List.of(8L << 30, 2L << 30),
+                    captured.stream().map(PartitionSamples::estimatedBytes).toList());
+        } finally {
+            Config.tablet_pre_split_data_tier_scan_byte_limit = savedLimit;
+            Config.tablet_pre_split_data_tier_min_scan_files = savedMinFiles;
+            Config.tablet_pre_split_max_partitions_per_load = savedCap;
+        }
+    }
+
+    private static void stubPartitionName(MockedStatic<AnalyzerUtils> analyzerUtils, OlapTable table,
+                                          String formattedValue, String partitionName) {
+        analyzerUtils.when(() -> AnalyzerUtils.getAddPartitionClauseFromPartitionValues(
+                        eq(table), eq(List.of(List.of(formattedValue))), anyBoolean(), any()))
+                .thenAnswer(invocation -> {
+                    AddPartitionClause clause = new AddPartitionClause(null, null, null, false);
+                    PartitionDesc desc = mock(PartitionDesc.class);
+                    when(desc.getPartitionName()).thenReturn(partitionName);
+                    clause.setResolvedPartitionDescList(List.of(desc));
+                    return clause;
+                });
     }
 
     // ---------- runDataTierSampler ----------
