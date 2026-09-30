@@ -53,10 +53,36 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `ST_Y(GEOMETRY point)` | 120091 | `DOUBLE`，输入 CRS 单位 | 非空 XY `POINT` | `NULL` 传递。`EMPTY`、非 `POINT` 或不支持的描述符报错。 |
 | `ST_GeometryType(GEOGRAPHY value)` | 120170 | `VARCHAR` 类型名称 | 所有受支持的 XY 类型 | `NULL` 传递。带类型的 `EMPTY` 保留其类型名称。不支持的维度或描述符报错。 |
 | `ST_GeometryType(GEOMETRY value)` | 120171 | `VARCHAR` 类型名称 | 所有受支持的 XY 类型 | `NULL` 传递。带类型的 `EMPTY` 保留其类型名称。不支持的维度或描述符报错。 |
-| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`，米 | 球面 CRS84 契约下的 XY `POINT`/`POINT` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或描述符报错。 |
-| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`，输入 CRS 单位 | 描述符匹配的 XY `POINT`/`POINT` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或不兼容描述符报错。 |
+| `ST_Distance(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120180 | `DOUBLE`，米 | 球面 CRS84 契约下的 XY `POINT`/`POINT`，或 `POINT` 与 `LINESTRING`/`MULTILINESTRING` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度、描述符或不明确的对跖线段报错。 |
+| `ST_Distance(GEOMETRY lhs, GEOMETRY rhs)` | 120181 | `DOUBLE`，输入 CRS 单位 | 描述符匹配的 XY `POINT`/`POINT`，或 `POINT` 与 `LINESTRING`/`MULTILINESTRING` | `NULL` 或 `EMPTY` 返回 `NULL`。不支持的类型、维度或不兼容描述符报错。 |
+| `ST_DWithin(GEOGRAPHY lhs, GEOGRAPHY rhs, DOUBLE distance)` | 120230 | `BOOLEAN`；`distance` 单位为米 | XY `POINT` 与 `LINESTRING`/`MULTILINESTRING`，参数顺序不限 | 阈值包含相等边界。`NULL` 传递；`EMPTY` 返回 `false`。阈值必须是有限的非负数。 |
+| `ST_DWithin(GEOMETRY lhs, GEOMETRY rhs, DOUBLE distance)` | 120231 | `BOOLEAN`；`distance` 使用输入 CRS 单位 | 描述符匹配的 XY `POINT` 与 `LINESTRING`/`MULTILINESTRING`，参数顺序不限 | 阈值包含相等边界。`NULL` 传递；`EMPTY` 返回 `false`。阈值必须是有限的非负数。 |
 
-参见 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md) 和 [ST_Distance](st_distance.md)。
+参见 [ST_X](st_x.md)、[ST_Y](st_y.md)、[ST_GeometryType](st_geometrytype.md)、[ST_Distance](st_distance.md) 和 [ST_DWithin](st_dwithin.md)。
+
+## 包含关系谓词
+
+| 签名 | 函数 ID | 边界行为 |
+| --- | ---: | --- |
+| `ST_Contains(GEOGRAPHY polygon, GEOGRAPHY point)` | 120190 | 仅当点位于多边形内部时返回 `true`。 |
+| `ST_Contains(GEOMETRY polygon, GEOMETRY point)` | 120191 | 仅当点位于多边形内部时返回 `true`。 |
+| `ST_Within(GEOGRAPHY point, GEOGRAPHY polygon)` | 120200 | `ST_Contains` 的反向关系，不包含边界。 |
+| `ST_Within(GEOMETRY point, GEOMETRY polygon)` | 120201 | `ST_Contains` 的反向关系，不包含边界。 |
+| `ST_Covers(GEOGRAPHY polygon, GEOGRAPHY point)` | 120210 | 包含外环和内环边界。 |
+| `ST_Covers(GEOMETRY polygon, GEOMETRY point)` | 120211 | 包含外环和内环边界。 |
+| `ST_CoveredBy(GEOGRAPHY point, GEOGRAPHY polygon)` | 120220 | `ST_Covers` 的反向关系，包含边界。 |
+| `ST_CoveredBy(GEOMETRY point, GEOMETRY polygon)` | 120221 | `ST_Covers` 的反向关系，包含边界。 |
+
+这些重载支持 XY `POINT` 与 `POLYGON` 或 `MULTIPOLYGON`。`GEOGRAPHY` 按球面 CRS84 边计算；`GEOMETRY` 按平面边计算并要求描述符匹配。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、维度、描述符以及混合 `GEOGRAPHY`/`GEOMETRY` 调用会被拒绝。参见 [ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md) 和 [ST_CoveredBy](st_coveredby.md)。
+
+## 相交谓词
+
+| 签名 | 函数 ID | 边界行为 |
+| --- | ---: | --- |
+| `ST_Intersects(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120240 | 球面重叠、包含和边界接触均返回 `true`。 |
+| `ST_Intersects(GEOMETRY lhs, GEOMETRY rhs)` | 120241 | 平面重叠、包含和边界接触均返回 `true`。 |
+
+这些重载支持 XY `POLYGON` 和 `MULTIPOLYGON`。`GEOMETRY` 输入必须具有匹配的描述符。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、集合以及混合的原生逻辑类型会被拒绝。参见 [ST_Intersects](st_intersects.md)。
 
 ## 旧版兼容性
 
@@ -70,6 +96,7 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `ST_AsWKT(VARCHAR)` | 120005 |
 | `ST_GeometryFromText(VARCHAR)` | 120006 |
 | `ST_GeomFromText(VARCHAR)` | 120007 |
+| `ST_Contains(VARCHAR, VARCHAR)` | 120014 |
 
 ## 升级与参考测试契约
 

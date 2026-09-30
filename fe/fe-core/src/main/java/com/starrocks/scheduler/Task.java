@@ -160,12 +160,11 @@ public class Task implements Writable, GsonPostProcessable {
     }
 
     public String getDbName() {
-        return ClusterNamespace.getNameFromFullName(dbName);
+        return dbName;
     }
 
     public void setDbName(String dbName) {
-        // compatible with old version
-        this.dbName = ClusterNamespace.getFullName(dbName);
+        this.dbName = dbName;
     }
 
     public String getDefinition() {
@@ -305,5 +304,7 @@ public class Task implements Writable, GsonPostProcessable {
         if (consecutiveFailCount == null) {
             this.consecutiveFailCount = new AtomicInteger();
         }
+        // Images and edit logs written by older versions carry the default_cluster prefix.
+        dbName = ClusterNamespace.getNameFromFullName(dbName);
     }
 }

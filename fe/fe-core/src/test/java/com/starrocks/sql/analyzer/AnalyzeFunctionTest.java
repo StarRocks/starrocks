@@ -155,6 +155,13 @@ public class AnalyzeFunctionTest {
                 PrimitiveType.DOUBLE);
         assertFunctionContract("select ST_Distance(" + geometry + ", " + geometry + ")", 120181,
                 PrimitiveType.DOUBLE);
+        assertFunctionContract("select ST_DWithin(" + geography + ", " + geography + ", 100.0)", 120230,
+                PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_DWithin(" + geometry + ", " + geometry + ", 100.0)", 120231,
+                PrimitiveType.BOOLEAN);
+
+        analyzeFail("select ST_DWithin(" + geography + ", " + geometry + ", 100.0)",
+                "No matching function with signature: st_dwithin");
 
         assertFunctionContract("select ST_X(ST_Point(1, 2))", 120001, PrimitiveType.DOUBLE);
         assertFunctionContract("select ST_Y(ST_Point(1, 2))", 120002, PrimitiveType.DOUBLE);
@@ -162,6 +169,46 @@ public class AnalyzeFunctionTest {
         assertFunctionContract("select ST_AsWKT(ST_Point(1, 2))", 120005, PrimitiveType.VARCHAR);
         assertFunctionContract("select ST_GeometryFromText('POINT (1 2)')", 120006, PrimitiveType.VARCHAR);
         assertFunctionContract("select ST_GeomFromText('POINT (1 2)')", 120007, PrimitiveType.VARCHAR);
+    }
+
+    @Test
+    public void testNativeGeoContainmentContract() {
+        String geographyPoint = "ST_GeogFromText('POINT (1 1)')";
+        String geographyPolygon = "ST_GeogFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))')";
+        String geometryPoint = "ST_GeomFromText('POINT (1 1)', 'EPSG:3857')";
+        String geometryPolygon =
+                "ST_GeomFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))', 'EPSG:3857')";
+
+        assertFunctionContract("select ST_Contains(" + geographyPolygon + ", " + geographyPoint + ")",
+                120190, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Contains(" + geometryPolygon + ", " + geometryPoint + ")",
+                120191, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Within(" + geographyPoint + ", " + geographyPolygon + ")",
+                120200, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Within(" + geometryPoint + ", " + geometryPolygon + ")",
+                120201, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Covers(" + geographyPolygon + ", " + geographyPoint + ")",
+                120210, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Covers(" + geometryPolygon + ", " + geometryPoint + ")",
+                120211, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_CoveredBy(" + geographyPoint + ", " + geographyPolygon + ")",
+                120220, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_CoveredBy(" + geometryPoint + ", " + geometryPolygon + ")",
+                120221, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Intersects(" + geographyPolygon + ", " + geographyPolygon + ")",
+                120240, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Intersects(" + geometryPolygon + ", " + geometryPolygon + ")",
+                120241, PrimitiveType.BOOLEAN);
+
+        assertFunctionContract(
+                "select ST_Contains(ST_Polygon('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'), ST_Point(1, 1))",
+                120014, PrimitiveType.BOOLEAN);
+        analyzeFail("select ST_Contains(" + geographyPolygon + ", " + geometryPoint + ")",
+                "No matching function with signature: st_contains");
+        analyzeFail("select ST_Within(" + geometryPoint + ", " + geographyPolygon + ")",
+                "No matching function with signature: st_within");
+        analyzeFail("select ST_Intersects(" + geographyPolygon + ", " + geometryPolygon + ")",
+                "No matching function with signature: st_intersects");
     }
 
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {

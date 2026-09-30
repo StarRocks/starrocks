@@ -17,6 +17,7 @@ package com.starrocks.alter.reshard.presplit;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.NullVariant;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.persist.ColumnIdExpr;
@@ -32,7 +33,9 @@ import com.starrocks.type.ScalarType;
 import com.starrocks.type.StringType;
 import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
@@ -47,6 +50,22 @@ import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.jsonResul
 import static com.starrocks.alter.reshard.presplit.PresplitTestSupport.nullableBigintColumn;
 
 class BrokerLoadSampleSubqueryExecutorTest {
+
+    private static final long GIB = 1L << 30;
+    private long savedByteLimit;
+    private int savedMinFiles;
+
+    @BeforeEach
+    void saveScanLimits() {
+        savedByteLimit = Config.tablet_pre_split_data_tier_scan_byte_limit;
+        savedMinFiles = Config.tablet_pre_split_data_tier_min_scan_files;
+    }
+
+    @AfterEach
+    void restoreScanLimits() {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = savedByteLimit;
+        Config.tablet_pre_split_data_tier_min_scan_files = savedMinFiles;
+    }
 
     @Test
     void happyPathSynthesizesFilesSqlAndDecodesRows() throws Exception {
@@ -493,6 +512,43 @@ class BrokerLoadSampleSubqueryExecutorTest {
     }
 
     @Test
+    void overlappingPartitionAndKeyRolesProjectOnceAndDecodeEveryTuple() throws Exception {
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[20260921, 11, 37]}"));
+                });
+        Column partitionAndSortKey = bigintColumn("dt");
+        SampleRequest request = new SampleRequest(
+                new BrokerLoadScanContext(
+                        new BrokerDesc(Map.of()),
+                        List.of(mockFileGroup("parquet")),
+                        List.of(List.of(brokerFileStatus("s3://b/x.parquet", 1024L))),
+                        Mockito.mock(ComputeResource.class), "UTC"),
+                List.of(partitionAndSortKey, bigintColumn("exp_id")),
+                List.of(new SecondaryIndexSpec(1001L, List.of(bigintColumn("bucket_id")))),
+                List.of(partitionAndSortKey),
+                /*sampleByteLimit=*/ Long.MAX_VALUE,
+                /*seed=*/ 0L);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(request);
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                        "SELECT `dt`, `exp_id`, `bucket_id` FROM FILES"),
+                "the overlapping partition column must be projected only once: " + capturedSql);
+        Assertions.assertFalse(capturedSql.toString().contains("`bucket_id`, `dt` FROM FILES"),
+                "the partition projection must reuse the earlier dt result: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals("20260921", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("37",
+                row.secondaryIndexTuples().get(0).values().get(0).getStringValue());
+        Assertions.assertEquals("20260921", row.partitionSourceTuple().get(0).getStringValue(),
+                "partition decoding must reuse the dt cell without changing the logical tuple contract");
+    }
+
+    @Test
     void compositeSortKeyWithNullableTrailingColumnDecodesNullVariant() throws Exception {
         // Mirrors the InsertFromFiles coverage: ORDER BY(group_id, nullable_col)
         // is valid, and null cells in the nullable column must decode to
@@ -893,6 +949,112 @@ class BrokerLoadSampleSubqueryExecutorTest {
                         List.of(List.of(brokerFileStatus("s3://b/sort_key=7/x.csv", 1024L))))));
         Assertions.assertTrue(pathThrown.getMessage().contains("columns_from_path"),
                 "error should still call out the path-supplied key column: " + pathThrown.getMessage());
+    }
+
+    @Test
+    void inputOverTheScanLimitSamplesAFileSubsetButSizesFromEveryFile() throws Exception {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 3 * GIB;
+        Config.tablet_pre_split_data_tier_min_scan_files = 1;
+        List<TBrokerFileStatus> files = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            files.add(brokerFileStatus("s3://bucket/f" + i + ".parquet", GIB));
+        }
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(bigintRequest(
+                new BrokerDesc(Map.of()), List.of(mockFileGroup("parquet")), List.of(files)));
+
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "\"path\" = \"s3://bucket/f2.parquet,s3://bucket/f5.parquet,s3://bucket/f7.parquet\""),
+                capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "rand(0) < " + AbstractSqlSampleSubqueryExecutor.pickSamplingRate(3 * GIB) + " ORDER BY"),
+                capturedSql.toString());
+        Assertions.assertEquals(10 * GIB, execution.estimates().totalBytes());
+    }
+
+    @Test
+    void pathPartitionedInputIsStratifiedAndCarriesExactPartitionBytes() throws Exception {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 5 * GIB;
+        Config.tablet_pre_split_data_tier_min_scan_files = 1;
+        List<TBrokerFileStatus> files = new ArrayList<>();
+        for (int i = 0; i < 8; i++) {
+            files.add(brokerFileStatus("s3://bucket/dt=a/f" + i + ".parquet", GIB));
+        }
+        for (int i = 0; i < 2; i++) {
+            files.add(brokerFileStatus("s3://bucket/dt=b/f" + i + ".parquet", GIB));
+        }
+        BrokerFileGroup fileGroup = mockFileGroup("parquet");
+        Mockito.when(fileGroup.getColumnsFromPath()).thenReturn(List.of("dt"));
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(partitionedRequest(
+                new BrokerDesc(Map.of()), List.of(fileGroup), List.of(files)));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://bucket/dt=a/f1.parquet,"
+                + "s3://bucket/dt=a/f2.parquet,s3://bucket/dt=a/f4.parquet,s3://bucket/dt=a/f6.parquet,"
+                + "s3://bucket/dt=b/f1.parquet\""), capturedSql.toString());
+        List<Estimates.PartitionSourceBytes> breakdown = execution.estimates().partitionSourceBytes();
+        Assertions.assertEquals(2, breakdown.size());
+        Assertions.assertEquals("a", breakdown.get(0).values().get(0).getStringValue());
+        Assertions.assertEquals(8 * GIB, breakdown.get(0).bytes());
+        Assertions.assertEquals("b", breakdown.get(1).values().get(0).getStringValue());
+        Assertions.assertEquals(2 * GIB, breakdown.get(1).bytes());
+    }
+
+    @Test
+    void aPartitionColumnReadFromTheFilesScansEveryFile() throws Exception {
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 3 * GIB;
+        Config.tablet_pre_split_data_tier_min_scan_files = 1;
+        List<TBrokerFileStatus> files = new ArrayList<>();
+        for (int i = 0; i < 10; i++) {
+            files.add(brokerFileStatus("s3://bucket/f" + i + ".parquet", GIB));
+        }
+        StringBuilder capturedSql = new StringBuilder();
+        BrokerLoadSampleSubqueryExecutor executor = new BrokerLoadSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of();
+                });
+
+        // dt is a partition source but no COLUMNS FROM PATH declares it: it is read from the files.
+        executor.execute(partitionedRequest(new BrokerDesc(Map.of()), List.of(mockFileGroup("parquet")), List.of(files)));
+
+        Assertions.assertTrue(capturedSql.toString().contains("s3://bucket/f0.parquet,s3://bucket/f1.parquet,"),
+                capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains(
+                "rand(0) < " + AbstractSqlSampleSubqueryExecutor.pickSamplingRate(10 * GIB) + " ORDER BY"));
+    }
+
+    @Test
+    void inputWithinTheScanLimitProducesTheSameSqlAsWithTheLimitDisabled() throws Exception {
+        List<TBrokerFileStatus> files = List.of(
+                brokerFileStatus("s3://bucket/a.parquet", 2L * 1024L * 1024L),
+                brokerFileStatus("s3://bucket/b.parquet", 2L * 1024L * 1024L));
+        StringBuilder sqlWithDefaultLimit = new StringBuilder();
+        StringBuilder sqlWithLimitDisabled = new StringBuilder();
+
+        new BrokerLoadSampleSubqueryExecutor((sql, cr, t) -> {
+            sqlWithDefaultLimit.append(sql);
+            return List.of();
+        }).execute(bigintRequest(new BrokerDesc(Map.of()), List.of(mockFileGroup("parquet")), List.of(files)));
+        Config.tablet_pre_split_data_tier_scan_byte_limit = 0L;
+        new BrokerLoadSampleSubqueryExecutor((sql, cr, t) -> {
+            sqlWithLimitDisabled.append(sql);
+            return List.of();
+        }).execute(bigintRequest(new BrokerDesc(Map.of()), List.of(mockFileGroup("parquet")), List.of(files)));
+
+        Assertions.assertEquals(sqlWithLimitDisabled.toString(), sqlWithDefaultLimit.toString());
     }
 
     /** Extracts the value of the FILES {@code schema} property from a captured sub-query. */

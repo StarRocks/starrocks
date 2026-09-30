@@ -410,7 +410,7 @@ Status LakeReplicationTxnManager::replicate_lake_remote_storage(const TReplicate
     std::unordered_set<std::string> bundled_segment_names;
     for (const auto& rowset : src_tablet_meta->rowsets()) {
         for (const auto& segment : rowset.segment_metas()) {
-            if (!segment.has_bundle_file_offset()) {
+            if (!is_physical_bundle_segment(segment)) {
                 continue;
             }
             bundled_segment_names.emplace(segment.filename());
@@ -907,11 +907,12 @@ Status LakeReplicationTxnManager::build_existed_filename_uuids_map(const TabletM
             const std::optional<int64_t> segment_size =
                     segment_meta.has_size() ? std::make_optional(segment_meta.size()) : std::nullopt;
             existed_filename_uuids.emplace(
-                    uuid, ExistingFileInfo{segment_name,
-                                           segment_meta.has_bundle_file_offset() ? "" : segment_meta.encryption_meta(),
-                                           segment_meta.shared(),
-                                           segment_meta.has_bundle_file_offset() ? std::nullopt : segment_size});
-            if (segment_meta.has_bundle_file_offset()) {
+                    uuid,
+                    ExistingFileInfo{segment_name,
+                                     is_physical_bundle_segment(segment_meta) ? "" : segment_meta.encryption_meta(),
+                                     segment_meta.shared(),
+                                     is_physical_bundle_segment(segment_meta) ? std::nullopt : segment_size});
+            if (is_physical_bundle_segment(segment_meta)) {
                 auto& slice_infos = bundle_slice_infos[uuid];
                 auto [it, inserted] =
                         slice_infos.emplace(segment_meta.bundle_file_offset(),
@@ -1094,7 +1095,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             new_seg_meta->set_shared(destination_file_shared);
             RETURN_IF_ERROR(record_source_encryption_declaration(src_segment_filename, src_seg_meta.encryption_meta(),
                                                                  is_existed, destination_file_shared,
-                                                                 src_seg_meta.has_bundle_file_offset()));
+                                                                 is_physical_bundle_segment(src_seg_meta)));
 
             // Add encryption metadata for files
             if (!is_existed) {
@@ -1106,7 +1107,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             } else {
                 // segment file already exists, use the existing encryption metadata from target tablet
                 auto uuid = extract_uuid_from(src_segment_filename);
-                if (src_seg_meta.has_bundle_file_offset()) {
+                if (is_physical_bundle_segment(src_seg_meta)) {
                     auto uuid_it = bundle_slice_infos.find(uuid);
                     if (uuid_it == bundle_slice_infos.end()) {
                         return Status::Corruption(
@@ -1123,6 +1124,11 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
                         new_seg_meta->set_size(offset_it->second.segment_size.value());
                     }
                 } else {
+                    if (bundle_slice_infos.contains(uuid)) {
+                        return Status::Corruption(fmt::format(
+                                "Existing target physical bundle conflicts with source standalone segment UUID {}",
+                                uuid));
+                    }
                     auto it = existed_filename_uuids.find(uuid);
                     if (it != existed_filename_uuids.end()) {
                         new_seg_meta->set_encryption_meta(it->second.encryption_meta);
@@ -1138,7 +1144,7 @@ StatusOr<std::shared_ptr<TabletMetadataPB>> LakeReplicationTxnManager::convert_a
             }
 
             // build segment_name_to_size_map, record the size of source segment file
-            if (src_seg_meta.has_size() && !src_seg_meta.has_bundle_file_offset()) {
+            if (src_seg_meta.has_size() && !is_physical_bundle_segment(src_seg_meta)) {
                 segment_name_to_size_map.emplace(src_segment_filename, src_seg_meta.size());
             }
         }

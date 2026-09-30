@@ -472,6 +472,8 @@ CONF_mInt64(max_base_compaction_num_singleton_deltas, "100");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(base_compaction_num_threads_per_disk, "1");
 CONF_mDouble(base_cumulative_delta_ratio, "0.3");
+// For lake tablets, the minimum interval since the last successful base compaction
+// before another automatic base compaction can be selected. Manual requests bypass it.
 CONF_mInt64(base_compaction_interval_seconds_since_last_operation, "86400");
 
 // cumulative compaction policy: max delta file's size unit:B

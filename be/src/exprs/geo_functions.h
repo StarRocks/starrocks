@@ -75,10 +75,33 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_y);
     DEFINE_VECTORIZED_FN(st_geography_type);
     DEFINE_VECTORIZED_FN(st_geography_distance);
+    DEFINE_VECTORIZED_FN(st_geography_dwithin);
     DEFINE_VECTORIZED_FN(st_geometry_x);
     DEFINE_VECTORIZED_FN(st_geometry_y);
     DEFINE_VECTORIZED_FN(st_geometry_type);
     DEFINE_VECTORIZED_FN(st_geometry_distance);
+    DEFINE_VECTORIZED_FN(st_geometry_dwithin);
+
+    static Status native_geo_distance_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_distance_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+
+    static Status native_geo_containment_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_containment_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+
+    DEFINE_VECTORIZED_FN(st_geography_contains);
+    DEFINE_VECTORIZED_FN(st_geometry_contains);
+    DEFINE_VECTORIZED_FN(st_geography_within);
+    DEFINE_VECTORIZED_FN(st_geometry_within);
+    DEFINE_VECTORIZED_FN(st_geography_covers);
+    DEFINE_VECTORIZED_FN(st_geometry_covers);
+    DEFINE_VECTORIZED_FN(st_geography_covered_by);
+    DEFINE_VECTORIZED_FN(st_geometry_covered_by);
+    DEFINE_VECTORIZED_FN(st_geography_intersects);
+    DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,
