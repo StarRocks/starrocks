@@ -145,7 +145,7 @@ public final class RangeColocateScanDispatch {
             if (aligned == null) {
                 throw new RangeColocateUnalignedException(String.format(
                         "range colocate group %d is in an unaligned state in physical partition %d; "
-                                + "cannot dispatch colocate join until alignment is restored",
+                                + "cannot dispatch a colocate plan until alignment is restored",
                         colocateGroupId, physicalPartition.getId()));
             }
             // Containment, not equality: builtBucketSeq is the whole-scan map and can legitimately hold
@@ -157,7 +157,7 @@ public final class RangeColocateScanDispatch {
                 throw new RangeColocateUnalignedException(String.format(
                         "range colocate group %d has a stale bucket assignment in physical partition %d "
                                 + "(the scan's built bucketSeq does not match the aligned mapping); cannot "
-                                + "dispatch colocate join until the assignment is rebuilt",
+                                + "dispatch a colocate plan until the assignment is rebuilt",
                         colocateGroupId, physicalPartition.getId()));
             }
         }
