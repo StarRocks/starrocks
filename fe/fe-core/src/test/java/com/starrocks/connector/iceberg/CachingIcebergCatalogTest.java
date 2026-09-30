@@ -586,6 +586,58 @@ public class CachingIcebergCatalogTest {
     }
 
     @Test
+    public void testRefreshTableDoesNotResurrectEntryInvalidatedDuringReload(@Mocked IcebergCatalog delegate) {
+        assertRefreshDoesNotResurrectInvalidatedEntry(delegate, false);
+    }
+
+    @Test
+    public void testRefreshTableDoesNotResurrectEntryInvalidatedDuringReloadWhenMetadataUnchanged(
+            @Mocked IcebergCatalog delegate) {
+        assertRefreshDoesNotResurrectInvalidatedEntry(delegate, true);
+    }
+
+    // A commit on this FE invalidates the table cache while a concurrent refresh is still reloading the table
+    // from the remote catalog. The reloaded table predates the commit, so the refresh must not write it back.
+    private void assertRefreshDoesNotResurrectInvalidatedEntry(IcebergCatalog delegate, boolean sameLocation) {
+        ConnectContext ctx = new ConnectContext();
+        Table cachedTable = createBaseTableWithManifests(1, 1);
+        Table staleReloadedTable = createBaseTableWithManifests(1, 1);
+        if (sameLocation) {
+            String sharedLocation = "s3://bucket/metadata/v1.metadata.json";
+            Mockito.when(((BaseTable) cachedTable).operations().current().metadataFileLocation())
+                    .thenReturn(sharedLocation);
+            Mockito.when(((BaseTable) staleReloadedTable).operations().current().metadataFileLocation())
+                    .thenReturn(sharedLocation);
+        }
+
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        CachingIcebergCatalog catalog = new CachingIcebergCatalog(CATALOG_NAME, delegate,
+                DEFAULT_CATALOG_PROPERTIES, executor);
+        AtomicInteger calls = new AtomicInteger();
+        new Expectations() {
+            {
+                delegate.getTable((ConnectContext) any, "db1", "t1");
+                result = new Delegate<Table>() {
+                    Table get(ConnectContext c, String db, String tbl) {
+                        if (calls.getAndIncrement() == 0) {
+                            return cachedTable;
+                        }
+                        catalog.invalidateTableCache("db1", "t1");
+                        return staleReloadedTable;
+                    }
+                };
+            }
+        };
+
+        LoadingCache<IcebergTableName, Table> tableCache = Deencapsulation.getField(catalog, "tables");
+        IcebergTableName key = new IcebergTableName("db1", "t1");
+
+        Assertions.assertSame(cachedTable, catalog.getTable(ctx, "db1", "t1"));
+        catalog.refreshTable("db1", "t1", ctx, executor);
+        Assertions.assertNull(tableCache.getIfPresent(key));
+    }
+
+    @Test
     public void testRestTableCacheTtlIsCapped(@Mocked IcebergRESTCatalog restCatalog,
                                               @Mocked IcebergCatalog hiveCatalog) {
         // REST catalog: the table cache hard-expiry is capped regardless of the (default 24h) meta cache

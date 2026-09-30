@@ -433,18 +433,34 @@ public class CachingIcebergCatalog implements IcebergCatalog {
             if (!currentLocation.equals(updateLocation)) {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
-                refreshTable(currentTable, updateTable, dbName, tableName, ctx, executorService);
-                LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+                if (refreshTable(currentTable, updateTable, dbName, tableName, ctx, executorService)) {
+                    LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
+                }
             } else {
                 // Metadata unchanged keeps the partition/file caches valid; still swap in the reloaded
                 // table so the cache stops serving the old (expiring) vended FileIO token.
-                tables.put(icebergTableName, updateTable);
+                replaceCachedTable(icebergTableName, currentTable, updateTable);
             }
         }
     }
 
-    private void refreshTable(BaseTable currentTable, BaseTable updatedTable,
-                              String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
+    /**
+     * Swap the reloaded table into the cache only if the entry still holds the table this refresh started
+     * from. `updatedTable` was loaded from the remote catalog before this call, so if the entry was
+     * invalidated meanwhile (e.g. by a commit on this FE) or replaced by a newer load, writing it back
+     * would resurrect metadata older than what the cache already moved past.
+     */
+    private boolean replaceCachedTable(IcebergTableName key, Table currentTable, Table updatedTable) {
+        if (tables.asMap().replace(key, currentTable, updatedTable)) {
+            return true;
+        }
+        LOG.info("Skip refreshing iceberg caching catalog table {}.{}: cache entry was invalidated or " +
+                "replaced concurrently", key.dbName, key.tableName);
+        return false;
+    }
+
+    private boolean refreshTable(BaseTable currentTable, BaseTable updatedTable,
+                                 String dbName, String tableName, ConnectContext ctx, ExecutorService executorService) {
         long baseSnapshotId = currentTable.currentSnapshot().snapshotId();
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
@@ -455,7 +471,9 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         // update tables before refresh partition cache
         // so when refreshing partition cache, `getTables` can return the latest one.
         // another way to fix is to call `delegate.getTables` when refreshing partition cache.
-        tables.put(keyWithoutSnap, updatedTable);
+        if (!replaceCachedTable(keyWithoutSnap, currentTable, updatedTable)) {
+            return false;
+        }
 
         partitionCache.invalidate(baseIcebergTableName);
         partitionCache.get(updatedIcebergTableName);
@@ -471,7 +489,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         if (manifestFiles.isEmpty()) {
             tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
-            return;
+            return true;
         }
 
         StarRocksIcebergTableScanContext scanContext = new StarRocksIcebergTableScanContext(
@@ -483,6 +501,7 @@ public class CachingIcebergCatalog implements IcebergCatalog {
 
         tableLatestRefreshTime.put(new IcebergTableName(dbName, tableName), System.currentTimeMillis());
         LOG.info("Refreshed {} iceberg manifests on the table [{}.{}]", manifestFiles.size(), dbName, tableName);
+        return true;
     }
 
     public void refreshCatalog() {
