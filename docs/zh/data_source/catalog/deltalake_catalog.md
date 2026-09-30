@@ -432,6 +432,14 @@ Delta Lake catalog 的描述。此参数是可选的。
     | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 在创建元服务账户时生成的 JSON 文件中的私钥。 |
     | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | 您要模拟的数据服务账户。       |
 
+#### 原生 ADLS 元数据 I/O
+
+设置 Catalog 属性 `"enable_delta_lake_native_adls" = "true"`，可通过 Azure SDK 读取 Delta 元数据。默认值为 `false`，使用 Hadoop。该选项影响 FE 对 `abfs://` 和 `abfss://` 表路径的目录枚举、JSON 事务日志和 Parquet checkpoint 读取，不改变 BE 数据文件读取，也不跳过优化器统计信息收集。
+
+原生路径使用存储账户的 HTTPS Blob 端点。除 DFS 端点外，还需确保 Blob 端点可访问，使用私有端点时也一样。支持 Azure 公有云、美国政府云和中国区的标准存储端点，不支持自定义端点。复用现有 ADLS2 共享密钥、固定 SAS、客户端密钥、用户分配的托管标识和工作负载标识配置。工作负载标识的 token 文件必须在每个 FE 上存在。不支持自定义 Hadoop 凭证提供程序或自定义 MSI 端点；这些配置会明确报错，不使用默认凭证链。
+
+元数据列表按页读取。每次 range 请求最多读取 1 MiB，每个请求最多尝试三次，每次尝试超时为 30 秒。在请求之间检查取消状态，正在执行的请求可能在完成后才响应取消。这些限制不约束 Delta Kernel 的 checkpoint 解码或元数据缓存内存。查询 trace `DELTA_LAKE.metadataFileIO` 显示 `azure_native` 或 `hadoop`。关闭该属性可恢复使用 Hadoop。
+
 #### MetadataUpdateParams
 
 关于 StarRocks 如何更新 Delta Lake 缓存元数据的一组参数。此参数集是可选的。
