@@ -24,6 +24,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.GlobalVariable;
@@ -72,6 +73,7 @@ import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -1843,5 +1845,45 @@ public class QueryQueueManagerTest extends SchedulerTestBase {
 
         coords.forEach(coor -> coor.cancel("Cancel by test"));
         runningCoords.forEach(DefaultCoordinator::onFinished);
+    }
+
+    @Test
+    public void testStaleRangeColocateAssignmentReleasesTheQueueSlot() throws Exception {
+        // A stale range-colocate bucket assignment fails scheduling right after the queue admitted the query and
+        // before anything is deployed; the attempt gives its slot back at once, before the statement is re-planned,
+        // so a concurrency-limited queue can admit the next query meanwhile.
+        GlobalVariable.setEnableQueryQueueSelect(true);
+        GlobalVariable.setQueryQueueConcurrencyLimit(1);
+
+        AtomicInteger externalCleanups = new AtomicInteger();
+        new MockUp<DefaultCoordinator>() {
+            @Mock
+            public void prepareExec() {
+                throw new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                        + "physical partition 2");
+            }
+
+            @Mock
+            public void clearExternalResources() {
+                externalCleanups.incrementAndGet();
+            }
+        };
+
+        DefaultCoordinator failed = getSchedulerWithQueryId("select count(1) from lineitem");
+        Assertions.assertThrows(RangeColocateUnalignedException.class, failed::execWithoutDeploy);
+        Assertions.assertEquals(LogicalSlot.State.RELEASED, failed.getSlot().getState());
+        Assertions.assertEquals(1, externalCleanups.get());
+
+        // The retry loop releases the last attempt's slots once more; that must not change the accounting.
+        failed.onReleaseSlots();
+        Assertions.assertEquals(LogicalSlot.State.RELEASED, failed.getSlot().getState());
+        Awaitility.await().atMost(5, TimeUnit.SECONDS)
+                .until(() -> GlobalStateMgr.getCurrentState().getSlotManager().getSlots().isEmpty());
+
+        // With a concurrency limit of 1 the next attempt is admitted at once.
+        DefaultCoordinator retry = getSchedulerWithQueryId("select count(1) from lineitem");
+        manager.maybeWait(connectContext, retry);
+        Assertions.assertEquals(LogicalSlot.State.ALLOCATED, retry.getSlot().getState());
+        retry.onReleaseSlots();
     }
 }

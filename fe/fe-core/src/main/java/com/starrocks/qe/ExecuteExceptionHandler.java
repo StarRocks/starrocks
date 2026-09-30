@@ -33,6 +33,11 @@ import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.RangeColocateUnalignedException;
+>>>>>>> c6ca06a ([BugFix] Re-plan a query whose range-colocate bucket assignment went stale (#79927))
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SlotId;
 import com.starrocks.rpc.RpcException;
@@ -74,6 +79,13 @@ public class ExecuteExceptionHandler {
             handleUserException((StarRocksException) e, context);
         } else if (e instanceof GlobalDictNotMatchException) {
             handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
+<<<<<<< HEAD
+=======
+        } else if (e instanceof LakeMetaVersionNotFoundException) {
+            handleLakeMetaVersionNotFound((LakeMetaVersionNotFoundException) e, context);
+        } else if (e instanceof RangeColocateUnalignedException) {
+            handleRangeColocateUnaligned((RangeColocateUnalignedException) e, context);
+>>>>>>> c6ca06a ([BugFix] Re-plan a query whose range-colocate bucket assignment went stale (#79927))
         } else {
             throw e;
         }
@@ -286,6 +298,87 @@ public class ExecuteExceptionHandler {
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(true);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * A BE could not read the lake tablet metadata object for the version one of its scan ranges carries.
+     * That version is the partition version this query captured while planning, and it is not -- and in
+     * the batch-publish case never will be -- materialized in object storage. Redelivering the existing
+     * fragments is pointless because their scan ranges still name that version, so the statement goes
+     * through the full planning flow again and picks up the partition's current visible version.
+     *
+     * <p>Whether the retry actually happens is still StmtExecutor's call: it only retries while nothing
+     * has been sent to the client yet, which is the safety gate every query retry already honours.
+     */
+    private static void handleLakeMetaVersionNotFound(LakeMetaVersionNotFoundException e, RetryContext context)
+            throws Exception {
+        OptionalLong partitionId = e.getPartitionId();
+
+        rebuildExecPlan(e, context);
+
+        // The version the fresh plan picked for the same physical partition: with the failing version
+        // gone, this is what the retry will read, so logging both ends makes a retry that keeps landing
+        // on an unreadable version distinguishable from one that moved forward.
+        OptionalLong replannedScanVersion = partitionId.isPresent()
+                ? findScanVersion(context.execPlan, partitionId.getAsLong())
+                : OptionalLong.empty();
+        // Reports the replan, which has certainly happened by this point -- not the retry, which is
+        // StmtExecutor's call afterwards and may still be refused because results are already on the
+        // wire or the statement was cancelled. Whether a retry actually followed is visible from
+        // StmtExecutor's own "retry N times" line for the same query id.
+        LOG.warn("Lake metadata version not found, replanned. status={}, queryId={}, tabletId={}, " +
+                        "partitionId={}, scanVersion={}, replannedScanVersion={}, attempt={}, error={}",
+                TStatusCode.LAKE_META_VERSION_NOT_FOUND,
+                DebugUtil.printId(context.connectContext.getExecutionId()),
+                describe(e.getTabletId()), describe(partitionId), describe(e.getScanVersion()),
+                describe(replannedScanVersion), context.retryTime + 1, e.getMessage());
+        Tracers.record(Tracers.Module.SCHEDULER, "LakeMetaVersion.REPLAN",
+                String.format("attempt=%d, partitionId=%s, scanVersion=%s, replannedScanVersion=%s",
+                        context.retryTime + 1, describe(partitionId), describe(e.getScanVersion()),
+                        describe(replannedScanVersion)));
+    }
+
+    /**
+     * Returns the version {@code execPlan} assigned to {@code physicalPartitionId}, or empty when no
+     * OlapScanNode in the plan scans that partition (it may have been pruned by the fresh plan).
+     */
+    @VisibleForTesting // package-private, not private: this JMockit version cannot fake private methods
+    static OptionalLong findScanVersion(ExecPlan execPlan, long physicalPartitionId) {
+        if (execPlan == null) {
+            return OptionalLong.empty();
+        }
+        for (ScanNode scanNode : execPlan.getScanNodes()) {
+            if (!(scanNode instanceof OlapScanNode)) {
+                continue;
+            }
+            Long version = ((OlapScanNode) scanNode).getScanPartitionVersions().get(physicalPartitionId);
+            if (version != null) {
+                return OptionalLong.of(version);
+            }
+        }
+        return OptionalLong.empty();
+    }
+
+    private static String describe(OptionalLong value) {
+        return value.isPresent() ? String.valueOf(value.getAsLong()) : "unknown";
+    }
+
+    /**
+     * A range-colocate scan's tablet-to-bucket assignment went stale between planning and scheduling (a tablet split
+     * or merge published in between). The attempt failed before anything was deployed; a new plan uses the current
+     * tablets, or a shuffle while the group is realigned. If the layout is still unaligned when the statement is
+     * re-planned, the retries fail with the same error.
+     */
+    private static void handleRangeColocateUnaligned(RangeColocateUnalignedException e, RetryContext context)
+            throws Exception {
+        rebuildExecPlan(e, context);
+        LOG.warn("Range colocate bucket assignment is stale, replanned. queryId={}, attempt={}, error={}",
+                DebugUtil.printId(context.connectContext.getExecutionId()), context.retryTime + 1, e.getMessage());
+        Tracers.record(Tracers.Module.SCHEDULER, "RangeColocate.REPLAN",
+                String.format("attempt=%d, error=%s", context.retryTime + 1, e.getMessage()));
+    }
+
+>>>>>>> c6ca06a ([BugFix] Re-plan a query whose range-colocate bucket assignment went stale (#79927))
     private static void handleRpcException(RpcException e, RetryContext context) throws Exception {
         ConnectContext connectContext = context.connectContext;
         // Log only on the first attempt to avoid duplicate entries during retries.
