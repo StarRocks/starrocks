@@ -47,11 +47,14 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.mysql.MysqlColType;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
+import com.starrocks.mysql.MysqlPackageDecoder;
 import com.starrocks.mysql.MysqlSerializer;
+import com.starrocks.mysql.RequestPackage;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.proto.PQueryStatistics;
@@ -341,6 +344,118 @@ public class ConnectProcessorTest extends DDLTestBase {
         };
 
         return context;
+    }
+
+    @Test
+    public void testStmtCloseUsesLittleEndianStatementId() throws Exception {
+        int stmtId = 0x01020304;
+        for (ByteOrder byteOrder : new ByteOrder[] {ByteOrder.BIG_ENDIAN, ByteOrder.LITTLE_ENDIAN}) {
+            MysqlSerializer serializer = MysqlSerializer.newInstance();
+            serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+            serializer.writeInt4(stmtId);
+            MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+            Mockito.when(channel.fetchOnePacket()).thenReturn(serializer.toByteBuffer().order(byteOrder));
+            Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
+            ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+            PrepareStmtContext preparedStmt = new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null);
+            ctx.putPreparedStmt(String.valueOf(stmtId), preparedStmt);
+            ctx.putPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId)), preparedStmt);
+
+            ConnectProcessor processor = new ConnectProcessor(ctx);
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)), byteOrder.toString());
+            Assertions.assertSame(preparedStmt, ctx.getPreparedStmt(String.valueOf(Integer.reverseBytes(stmtId))));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
+    }
+
+    @Test
+    public void testStmtCloseFromPackageDecoder() throws Exception {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt4(5); // three-byte payload length followed by sequence ID 0
+        serializer.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        serializer.writeInt4(1);
+        MysqlPackageDecoder decoder = new MysqlPackageDecoder();
+        decoder.consume(serializer.toByteBuffer());
+        RequestPackage request = decoder.poll();
+        Assertions.assertNotNull(request);
+
+        MysqlChannel channel = Mockito.mock(MysqlChannel.class);
+        Mockito.when(channel.fetchOnePacket()).thenReturn(request.byteBuffer());
+        Mockito.when(channel.getRemoteHostPortString()).thenReturn("127.0.0.1:12345");
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        ctx.putPreparedStmt("1", new PrepareStmtContext(createMockPrepareStmt("SELECT 1"), ctx, null));
+
+        new ConnectProcessor(ctx).processOnce(request);
+
+        Assertions.assertNull(ctx.getPreparedStmt("1"));
+        Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+        Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+    }
+
+    @Test
+    public void testStmtCloseAfterLargeExecutePacket() throws Exception {
+        int stmtId = 1;
+        String value = "x".repeat(16 * 1024);
+        MysqlSerializer execute = MysqlSerializer.newInstance();
+        execute.writeInt1(MysqlCommand.COM_STMT_EXECUTE.getCommandCode());
+        execute.writeInt4(stmtId);
+        execute.writeInt1(0); // flags
+        execute.writeInt4(1); // iteration count
+        execute.writeInt1(0); // null bitmap
+        execute.writeInt1(1); // new parameter types
+        execute.writeInt2(MysqlColType.MYSQL_TYPE_STRING.getCode());
+        execute.writeLenEncodedString(value);
+
+        MysqlSerializer close = MysqlSerializer.newInstance();
+        close.writeInt1(MysqlCommand.COM_STMT_CLOSE.getCommandCode());
+        close.writeInt4(stmtId);
+
+        MysqlSerializer packets = MysqlSerializer.newInstance();
+        for (ByteBuffer payload : new ByteBuffer[] {execute.toByteBuffer(), close.toByteBuffer()}) {
+            packets.writeInt1(payload.remaining() & 0xff);
+            packets.writeInt2(payload.remaining() >> 8);
+            packets.writeInt1(0); // each command starts a new packet sequence
+            packets.writeBytes(payload.array());
+        }
+        ByteBuffer input = packets.toByteBuffer();
+        MysqlChannel channel = Mockito.spy(new MysqlChannel(connection) {
+            @Override
+            public int realNetRead(ByteBuffer destination) {
+                if (!input.hasRemaining()) {
+                    return -1;
+                }
+                int length = Math.min(destination.remaining(), input.remaining());
+                for (int i = 0; i < length; i++) {
+                    destination.put(input.get());
+                }
+                return length;
+            }
+        });
+        Mockito.doNothing().when(channel).sendAndFlush(Mockito.any(ByteBuffer.class));
+        ConnectContext ctx = initMockContext(channel, GlobalStateMgr.getCurrentState());
+        Deencapsulation.setField(ctx.getSessionVariable(), "auditExecuteStmt", false);
+        PrepareStmt prepareStmt = (PrepareStmt) com.starrocks.sql.parser.SqlParser.parse(
+                "SELECT ?", ctx.getSessionVariable()).get(0);
+        ctx.putPreparedStmt(String.valueOf(stmtId), new PrepareStmtContext(prepareStmt, ctx, null));
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        try (MockedConstruction<StmtExecutor> executors = Mockito.mockConstruction(StmtExecutor.class)) {
+            processor.processOnce();
+            Assertions.assertFalse(ctx.getState().isError(), ctx.getState().getErrorMessage());
+            Assertions.assertEquals(1, executors.constructed().size());
+            Mockito.verify(executors.constructed().get(0)).execute();
+            Assertions.assertNotNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Mockito.clearInvocations(channel);
+
+            processor.processOnce();
+
+            Assertions.assertNull(ctx.getPreparedStmt(String.valueOf(stmtId)));
+            Assertions.assertEquals(QueryState.MysqlStateType.NOOP, ctx.getState().getStateType());
+            Mockito.verify(channel, Mockito.never()).sendAndFlush(Mockito.any(ByteBuffer.class));
+        }
     }
 
     @Test
