@@ -23,22 +23,6 @@ namespace starrocks {
 
 namespace {
 
-class LakeRpcInFlightClosure : public google::protobuf::Closure {
-public:
-    LakeRpcInFlightClosure(BrpcConnectionLoadGuard reservation, google::protobuf::Closure* done)
-            : _reservation(std::move(reservation)), _done(done) {}
-
-    void Run() override {
-        _reservation.reset();
-        _done->Run();
-        delete this;
-    }
-
-private:
-    BrpcConnectionLoadGuard _reservation;
-    google::protobuf::Closure* _done;
-};
-
 template <typename Request, typename Response>
 void call_with_accounting(LakeService_RecoverableStub* owner, const std::shared_ptr<BrpcConnectionLoad>& load,
                           void (LakeService_Stub::*method)(google::protobuf::RpcController*, const Request*, Response*,
@@ -50,7 +34,7 @@ void call_with_accounting(LakeService_RecoverableStub* owner, const std::shared_
     if (config::brpc_connection_type == "single") {
         reservation = load->reserve(brpc_request_payload_bytes(request, controller));
         if (done != nullptr) {
-            closure = new LakeRpcInFlightClosure(std::move(reservation), done);
+            closure = new BrpcInFlightClosure(std::move(reservation), done);
         }
     }
     if (done != nullptr) {

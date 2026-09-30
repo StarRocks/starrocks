@@ -18,6 +18,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
 
 #include "base/brpc/brpc.h"
 
@@ -68,6 +69,23 @@ private:
 
     std::atomic<int64_t> _num_in_flight_rpcs{0};
     std::atomic<int64_t> _in_flight_payload_bytes{0};
+};
+
+template <typename Guard>
+class BrpcInFlightClosure final : public google::protobuf::Closure {
+public:
+    BrpcInFlightClosure(Guard reservation, google::protobuf::Closure* done)
+            : _reservation(std::move(reservation)), _done(done) {}
+
+    void Run() override {
+        _reservation.reset();
+        _done->Run();
+        delete this;
+    }
+
+private:
+    Guard _reservation;
+    google::protobuf::Closure* _done;
 };
 
 // Returns the canonical accounting state for a single-connection slot. The registry retains weak references so
