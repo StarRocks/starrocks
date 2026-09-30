@@ -1309,6 +1309,145 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentNullEmptyAndRejection) {
     EXPECT_TRUE(mixed_kind.status().is_not_supported());
 }
 
+TEST_F(geographyFunctionsTest, nativeGeoIntersectsPredicates) {
+    auto planar_left = geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+                                 "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))", "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+                                 "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+                                 "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
+                                 "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))"});
+    auto planar_right =
+            geometry({"POLYGON ((5 5, 15 5, 15 15, 5 15, 5 5))", "POLYGON ((10 0, 20 0, 20 10, 10 10, 10 0))",
+                      "POLYGON ((10 10, 12 10, 12 12, 10 12, 10 10))", "POLYGON ((20 20, 30 20, 30 30, 20 30, 20 20))",
+                      "POLYGON ((2 2, 4 2, 4 4, 2 4, 2 2))", "POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))",
+                      "POLYGON ((25 25, 26 25, 26 26, 25 26, 25 25))"});
+    ColumnViewer<TYPE_BOOLEAN> planar(
+            GeoFunctions::st_geometry_intersects(nullptr, {planar_left, planar_right}).value());
+    ColumnViewer<TYPE_BOOLEAN> planar_reverse(
+            GeoFunctions::st_geometry_intersects(nullptr, {planar_right, planar_left}).value());
+    const bool expected[] = {true, true, true, false, true, false, true};
+    for (size_t i = 0; i < std::size(expected); ++i) {
+        EXPECT_EQ(expected[i], planar.value(i)) << i;
+        EXPECT_EQ(expected[i], planar_reverse.value(i)) << i;
+    }
+
+    auto spherical_left =
+            geography({"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))",
+                       "POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))",
+                       "POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))",
+                       "POLYGON ((-45 80, 45 80, 135 80, -135 80, -45 80))",
+                       "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (3 3, 7 3, 7 7, 3 7, 3 3))",
+                       "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((20 20, 30 20, 30 30, 20 30, 20 20)))",
+                       "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
+    auto spherical_right =
+            geography({"POLYGON ((175 -5, -175 -5, -175 5, 175 5, 175 -5))",
+                       "POLYGON ((-170 -10, -160 -10, -160 10, -170 10, -170 -10))",
+                       "POLYGON ((-120 -5, -110 -5, -110 5, -120 5, -120 -5))",
+                       "POLYGON ((-20 85, 20 85, 20 88, -20 88, -20 85))", "POLYGON ((4 4, 6 4, 6 6, 4 6, 4 4))",
+                       "POLYGON ((25 25, 26 25, 26 26, 25 26, 25 25))", "POLYGON ((10 5, 15 4, 15 6, 10 5))"});
+    ColumnViewer<TYPE_BOOLEAN> spherical(
+            GeoFunctions::st_geography_intersects(nullptr, {spherical_left, spherical_right}).value());
+    EXPECT_TRUE(spherical.value(0));
+    EXPECT_TRUE(spherical.value(1));
+    EXPECT_FALSE(spherical.value(2));
+    EXPECT_TRUE(spherical.value(3));
+    EXPECT_FALSE(spherical.value(4));
+    EXPECT_TRUE(spherical.value(5));
+    EXPECT_TRUE(spherical.value(6));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryIntersectsIsTranslationInvariant) {
+    const auto type = geometry_type("EPSG:3857", 3857);
+    auto left = geometry({"POLYGON ((0 0, 1 1, 0 1, 0 0))",
+                          "POLYGON ((10000000 10000000, 10000001 10000001, 10000000 10000001, 10000000 10000000))"},
+                         type);
+    auto right = geometry({"POLYGON ((0.5 0.4, 0.6 0.4, 0.6 0.3, 0.5 0.4))",
+                           "POLYGON ((10000000.5 10000000.4, 10000000.6 10000000.4, 10000000.6 10000000.3, "
+                           "10000000.5 10000000.4))"},
+                          type);
+
+    ColumnViewer<TYPE_BOOLEAN> forward(GeoFunctions::st_geometry_intersects(nullptr, {left, right}).value());
+    ColumnViewer<TYPE_BOOLEAN> reverse(GeoFunctions::st_geometry_intersects(nullptr, {right, left}).value());
+    for (size_t i = 0; i < 2; ++i) {
+        EXPECT_FALSE(forward.value(i)) << i;
+        EXPECT_FALSE(reverse.value(i)) << i;
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoIntersectsLifecycleAndThreadIsolation) {
+    const auto type = geography_type();
+    auto prepared_left = ConstColumn::create(geography({"POLYGON ((170 -10, -170 -10, -170 10, 170 10, 170 -10))"}), 1);
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+    context->set_constant_columns({prepared_left, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+
+    auto touching = ConstColumn::create(geography({"POLYGON ((-170 -10, -160 -10, -160 10, -170 10, -170 -10))"}), 1);
+    auto disjoint = ConstColumn::create(geography({"POLYGON ((-120 -5, -110 -5, -110 5, -120 5, -120 -5))"}), 1);
+    ColumnViewer<TYPE_BOOLEAN> first(
+            GeoFunctions::st_geography_intersects(context.get(), {prepared_left, touching}).value());
+    ColumnViewer<TYPE_BOOLEAN> second(
+            GeoFunctions::st_geography_intersects(context.get(), {prepared_left, disjoint}).value());
+    EXPECT_TRUE(first.value(0));
+    EXPECT_FALSE(second.value(0));
+
+    std::atomic_bool passed = true;
+    std::vector<std::thread> workers;
+    for (int worker = 0; worker < 4; ++worker) {
+        workers.emplace_back([&, worker] {
+            const char* wkt = worker % 2 == 0 ? "POLYGON ((175 -5, -175 -5, -175 5, 175 5, 175 -5))"
+                                              : "POLYGON ((-120 -5, -110 -5, -110 5, -120 5, -120 -5))";
+            const bool expected_value = worker % 2 == 0;
+            for (int iteration = 0; iteration < 50; ++iteration) {
+                auto varying = geography({wkt});
+                auto value = GeoFunctions::st_geography_intersects(context.get(), {prepared_left, varying});
+                if (!value.ok()) {
+                    passed = false;
+                    return;
+                }
+                ColumnViewer<TYPE_BOOLEAN> result(*value);
+                if (result.value(0) != expected_value) {
+                    passed = false;
+                    return;
+                }
+            }
+        });
+    }
+    for (auto& worker : workers) worker.join();
+    EXPECT_TRUE(passed);
+    ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeoIntersectsNullEmptyAndRejection) {
+    auto polygon = geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"});
+    auto null_result = GeoFunctions::st_geometry_intersects(nullptr, {polygon, geometry({nullptr})}).value();
+    EXPECT_TRUE(null_result->is_null(0));
+
+    ColumnViewer<TYPE_BOOLEAN> empty(
+            GeoFunctions::st_geometry_intersects(nullptr, {geometry({"POLYGON EMPTY"}), polygon}).value());
+    EXPECT_FALSE(empty.value(0));
+
+    auto incompatible = GeoFunctions::st_geometry_intersects(
+            nullptr, {polygon, geometry({"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"}, geometry_type("EPSG:4326", 4326))});
+    ASSERT_FALSE(incompatible.ok());
+    EXPECT_TRUE(incompatible.status().is_invalid_argument());
+
+    auto unsupported = GeoFunctions::st_geometry_intersects(nullptr, {polygon, geometry({"POINT (1 1)"})});
+    ASSERT_FALSE(unsupported.ok());
+    EXPECT_TRUE(unsupported.status().is_invalid_argument());
+
+    auto collection = GeoFunctions::st_geometry_intersects(
+            nullptr, {polygon, geometry({"GEOMETRYCOLLECTION (POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0)))"})});
+    ASSERT_FALSE(collection.ok());
+    EXPECT_TRUE(collection.status().is_invalid_argument());
+
+    auto mixed = GeoFunctions::st_geometry_intersects(nullptr,
+                                                      {polygon, geography({"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"})});
+    ASSERT_FALSE(mixed.ok());
+    EXPECT_TRUE(mixed.status().is_not_supported());
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoDistanceUsesPrepareCloseAndKeepsChunkConstantsBatchLocal) {
     const auto type = geography_type();
     auto prepared_line = ConstColumn::create(geography({"LINESTRING (-1 0, 1 0)"}), 1);
@@ -1422,6 +1561,8 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120221, "ST_CoveredBy", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
             {120230, "ST_DWithin", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY", "DOUBLE"}},
             {120231, "ST_DWithin", "BOOLEAN", {"GEOMETRY", "GEOMETRY", "DOUBLE"}},
+            {120240, "ST_Intersects", "BOOLEAN", {"GEOGRAPHY", "GEOGRAPHY"}},
+            {120241, "ST_Intersects", "BOOLEAN", {"GEOMETRY", "GEOMETRY"}},
     };
 
     for (const auto& function : expected) {

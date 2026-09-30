@@ -467,6 +467,31 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
     }
 }
 
+bool GeoPolygon::intersects_inclusive(const GeoPolygon& rhs) const {
+    if (_polygon->Intersects(rhs.polygon())) return true;
+
+    // S2Polygon::Intersects follows S2's semi-open boundary model, so polygons
+    // that only touch at an edge or vertex need an explicit boundary check.
+    constexpr double kBoundaryToleranceRadians = 1e-15;
+    for (int i = 0; i < _polygon->num_loops(); ++i) {
+        const auto* loop = _polygon->loop(i);
+        for (int j = 0; j < loop->num_vertices(); ++j) {
+            if (rhs.polygon()->GetDistanceToBoundary(loop->vertex(j)).radians() <= kBoundaryToleranceRadians) {
+                return true;
+            }
+        }
+    }
+    for (int i = 0; i < rhs.polygon()->num_loops(); ++i) {
+        const auto* loop = rhs.polygon()->loop(i);
+        for (int j = 0; j < loop->num_vertices(); ++j) {
+            if (_polygon->GetDistanceToBoundary(loop->vertex(j)).radians() <= kBoundaryToleranceRadians) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 GeoPointPolygonRelation GeoPolygon::point_relation(const GeoPoint& point) const {
     constexpr double kBoundaryToleranceRadians = 1e-15;
     if (_polygon->GetDistanceToBoundary(*point.point()).radians() <= kBoundaryToleranceRadians) {

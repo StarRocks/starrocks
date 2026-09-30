@@ -100,6 +100,8 @@ public:
     DEFINE_VECTORIZED_FN(st_geometry_covers);
     DEFINE_VECTORIZED_FN(st_geography_covered_by);
     DEFINE_VECTORIZED_FN(st_geometry_covered_by);
+    DEFINE_VECTORIZED_FN(st_geography_intersects);
+    DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,

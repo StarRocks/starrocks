@@ -195,6 +195,10 @@ public class AnalyzeFunctionTest {
                 120220, PrimitiveType.BOOLEAN);
         assertFunctionContract("select ST_CoveredBy(" + geometryPoint + ", " + geometryPolygon + ")",
                 120221, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Intersects(" + geographyPolygon + ", " + geographyPolygon + ")",
+                120240, PrimitiveType.BOOLEAN);
+        assertFunctionContract("select ST_Intersects(" + geometryPolygon + ", " + geometryPolygon + ")",
+                120241, PrimitiveType.BOOLEAN);
 
         assertFunctionContract(
                 "select ST_Contains(ST_Polygon('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))'), ST_Point(1, 1))",
@@ -203,6 +207,8 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature: st_contains");
         analyzeFail("select ST_Within(" + geometryPoint + ", " + geographyPolygon + ")",
                 "No matching function with signature: st_within");
+        analyzeFail("select ST_Intersects(" + geographyPolygon + ", " + geometryPolygon + ")",
+                "No matching function with signature: st_intersects");
     }
 
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {

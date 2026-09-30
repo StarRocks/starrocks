@@ -75,6 +75,15 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 这些重载支持 XY `POINT` 与 `POLYGON` 或 `MULTIPOLYGON`。`GEOGRAPHY` 按球面 CRS84 边计算；`GEOMETRY` 按平面边计算并要求描述符匹配。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、维度、描述符以及混合 `GEOGRAPHY`/`GEOMETRY` 调用会被拒绝。参见 [ST_Contains](st_contains.md)、[ST_Within](st_within.md)、[ST_Covers](st_covers.md) 和 [ST_CoveredBy](st_coveredby.md)。
 
+## 相交谓词
+
+| 签名 | 函数 ID | 边界行为 |
+| --- | ---: | --- |
+| `ST_Intersects(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120240 | 球面重叠、包含和边界接触均返回 `true`。 |
+| `ST_Intersects(GEOMETRY lhs, GEOMETRY rhs)` | 120241 | 平面重叠、包含和边界接触均返回 `true`。 |
+
+这些重载支持 XY `POLYGON` 和 `MULTIPOLYGON`。`GEOMETRY` 输入必须具有匹配的描述符。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、集合以及混合的原生逻辑类型会被拒绝。参见 [ST_Intersects](st_intersects.md)。
+
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：

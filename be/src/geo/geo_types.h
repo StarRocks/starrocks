@@ -160,6 +160,7 @@ public:
     const S2Polygon* polygon() const { return _polygon.get(); }
 
     bool contains(const GeoShape* rhs) const override;
+    bool intersects_inclusive(const GeoPolygon& rhs) const;
     GeoPointPolygonRelation point_relation(const GeoPoint& point) const;
     std::string as_wkt() const override;
 

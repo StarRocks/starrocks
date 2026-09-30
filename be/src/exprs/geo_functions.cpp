@@ -456,19 +456,21 @@ enum class PointPolygonRelation { OUTSIDE, BOUNDARY, INSIDE };
 constexpr long double kPlanarBoundaryUlps = 32;
 
 bool planar_point_on_segment(const WkbCoordinate& point, const WkbCoordinate& lhs, const WkbCoordinate& rhs) {
-    const long double px = point.x;
-    const long double py = point.y;
-    const long double ax = lhs.x;
-    const long double ay = lhs.y;
-    const long double bx = rhs.x;
-    const long double by = rhs.y;
-    const long double scale =
-            std::max({1.0L, std::abs(px), std::abs(py), std::abs(ax), std::abs(ay), std::abs(bx), std::abs(by)});
-    const long double tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * scale;
-    const long double cross = (bx - ax) * (py - ay) - (by - ay) * (px - ax);
-    if (std::abs(cross) > tolerance * scale) return false;
-    return px >= std::min(ax, bx) - tolerance && px <= std::max(ax, bx) + tolerance &&
-           py >= std::min(ay, by) - tolerance && py <= std::max(ay, by) + tolerance;
+    const long double abx = static_cast<long double>(rhs.x) - lhs.x;
+    const long double aby = static_cast<long double>(rhs.y) - lhs.y;
+    const long double apx = static_cast<long double>(point.x) - lhs.x;
+    const long double apy = static_cast<long double>(point.y) - lhs.y;
+    const long double cross_lhs = abx * apy;
+    const long double cross_rhs = aby * apx;
+    const long double cross_scale = std::abs(cross_lhs) + std::abs(cross_rhs);
+    const long double cross_tolerance = kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * cross_scale;
+    if (std::abs(cross_lhs - cross_rhs) > cross_tolerance) return false;
+
+    const long double coordinate_scale = std::max({std::abs(abx), std::abs(aby), std::abs(apx), std::abs(apy)});
+    const long double coordinate_tolerance =
+            kPlanarBoundaryUlps * std::numeric_limits<double>::epsilon() * coordinate_scale;
+    return apx >= std::min(0.0L, abx) - coordinate_tolerance && apx <= std::max(0.0L, abx) + coordinate_tolerance &&
+           apy >= std::min(0.0L, aby) - coordinate_tolerance && apy <= std::max(0.0L, aby) + coordinate_tolerance;
 }
 
 PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring, const WkbCoordinate& point) {
@@ -478,11 +480,11 @@ PointPolygonRelation planar_ring_relation(const std::vector<WkbCoordinate>& ring
         const auto& rhs = ring[i];
         if (planar_point_on_segment(point, lhs, rhs)) return PointPolygonRelation::BOUNDARY;
         if ((lhs.y > point.y) != (rhs.y > point.y)) {
-            const long double intersection_x =
-                    static_cast<long double>(lhs.x) + (static_cast<long double>(point.y) - lhs.y) *
-                                                              (static_cast<long double>(rhs.x) - lhs.x) /
-                                                              (static_cast<long double>(rhs.y) - lhs.y);
-            if (static_cast<long double>(point.x) < intersection_x) inside = !inside;
+            const long double intersection_offset =
+                    (static_cast<long double>(lhs.x) - point.x) + (static_cast<long double>(point.y) - lhs.y) *
+                                                                          (static_cast<long double>(rhs.x) - lhs.x) /
+                                                                          (static_cast<long double>(rhs.y) - lhs.y);
+            if (intersection_offset > 0) inside = !inside;
         }
     }
     return inside ? PointPolygonRelation::INSIDE : PointPolygonRelation::OUTSIDE;
@@ -509,6 +511,54 @@ PointPolygonRelation planar_polygon_family_relation(const WkbGeometry& polygon, 
         if (relation == PointPolygonRelation::INSIDE) result = relation;
     }
     return result;
+}
+
+long double planar_orientation(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c) {
+    return (static_cast<long double>(b.x) - a.x) * (static_cast<long double>(c.y) - a.y) -
+           (static_cast<long double>(b.y) - a.y) * (static_cast<long double>(c.x) - a.x);
+}
+
+bool planar_segments_intersect(const WkbCoordinate& a, const WkbCoordinate& b, const WkbCoordinate& c,
+                               const WkbCoordinate& d) {
+    if (planar_point_on_segment(a, c, d) || planar_point_on_segment(b, c, d) || planar_point_on_segment(c, a, b) ||
+        planar_point_on_segment(d, a, b)) {
+        return true;
+    }
+    const auto abc = planar_orientation(a, b, c);
+    const auto abd = planar_orientation(a, b, d);
+    const auto cda = planar_orientation(c, d, a);
+    const auto cdb = planar_orientation(c, d, b);
+    return (abc > 0) != (abd > 0) && (cda > 0) != (cdb > 0);
+}
+
+bool planar_polygon_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+    for (const auto& lhs_ring : lhs.rings) {
+        for (const auto& rhs_ring : rhs.rings) {
+            for (size_t i = 1; i < lhs_ring.size(); ++i) {
+                for (size_t j = 1; j < rhs_ring.size(); ++j) {
+                    if (planar_segments_intersect(lhs_ring[i - 1], lhs_ring[i], rhs_ring[j - 1], rhs_ring[j])) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+    return planar_polygon_relation(lhs, rhs.rings[0][0]) != PointPolygonRelation::OUTSIDE ||
+           planar_polygon_relation(rhs, lhs.rings[0][0]) != PointPolygonRelation::OUTSIDE;
+}
+
+bool planar_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs) {
+    const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
+    const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
+    for (size_t i = 0; i < lhs_count; ++i) {
+        const auto& lhs_polygon = lhs.type == WkbGeometryType::POLYGON ? lhs : lhs.children[i];
+        if (lhs_polygon.empty) continue;
+        for (size_t j = 0; j < rhs_count; ++j) {
+            const auto& rhs_polygon = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
+            if (!rhs_polygon.empty && planar_polygon_intersects(lhs_polygon, rhs_polygon)) return true;
+        }
+    }
+    return false;
 }
 
 Status prepare_spherical_polygon(const WkbGeometry& polygon, GeoPolygon* native_polygon) {
@@ -584,6 +634,45 @@ StatusOr<PointPolygonRelation> spherical_polygon_family_relation(const WkbGeomet
         if (relation == PointPolygonRelation::INSIDE) result = relation;
     }
     return result;
+}
+
+StatusOr<GeoPolygon*> spherical_polygon(const WkbGeometry& polygon, std::unique_ptr<GeoPolygon>* prepared,
+                                        GeoPolygon* local) {
+    if (prepared == nullptr) {
+        RETURN_IF_ERROR(prepare_spherical_polygon(polygon, local));
+        return local;
+    }
+    if (*prepared == nullptr) {
+        auto cached = std::make_unique<GeoPolygon>();
+        RETURN_IF_ERROR(prepare_spherical_polygon(polygon, cached.get()));
+        *prepared = std::move(cached);
+    }
+    return prepared->get();
+}
+
+StatusOr<bool> spherical_polygon_family_intersects(const WkbGeometry& lhs, const WkbGeometry& rhs,
+                                                   SphericalPolygonFamilyCache* lhs_cache,
+                                                   SphericalPolygonFamilyCache* rhs_cache) {
+    const size_t lhs_count = lhs.type == WkbGeometryType::POLYGON ? 1 : lhs.children.size();
+    const size_t rhs_count = rhs.type == WkbGeometryType::POLYGON ? 1 : rhs.children.size();
+    if (lhs_cache != nullptr && lhs_cache->components.empty()) lhs_cache->components.resize(lhs_count);
+    if (rhs_cache != nullptr && rhs_cache->components.empty()) rhs_cache->components.resize(rhs_count);
+    for (size_t i = 0; i < lhs_count; ++i) {
+        const auto& lhs_component = lhs.type == WkbGeometryType::POLYGON ? lhs : lhs.children[i];
+        if (lhs_component.empty) continue;
+        GeoPolygon local_lhs;
+        auto* lhs_prepared = lhs_cache == nullptr ? nullptr : &lhs_cache->components[i];
+        ASSIGN_OR_RETURN(auto* native_lhs, spherical_polygon(lhs_component, lhs_prepared, &local_lhs));
+        for (size_t j = 0; j < rhs_count; ++j) {
+            const auto& rhs_component = rhs.type == WkbGeometryType::POLYGON ? rhs : rhs.children[j];
+            if (rhs_component.empty) continue;
+            GeoPolygon local_rhs;
+            auto* rhs_prepared = rhs_cache == nullptr ? nullptr : &rhs_cache->components[j];
+            ASSIGN_OR_RETURN(auto* native_rhs, spherical_polygon(rhs_component, rhs_prepared, &local_rhs));
+            if (native_lhs->intersects_inclusive(*native_rhs)) return true;
+        }
+    }
+    return false;
 }
 
 StatusOr<const WkbGeometry*> containment_geometry(const GeoInput& input, size_t row, WkbCoordinateSemantics semantics,
@@ -715,6 +804,78 @@ StatusOr<ColumnPtr> geo_containment_predicate(FunctionContext* context, const Co
         }
         result.append(relation == PointPolygonRelation::INSIDE ||
                       (IncludeBoundary && relation == PointPolygonRelation::BOUNDARY));
+    }
+    auto output = result.build(false);
+    if (constant) return ConstColumn::create(std::move(output), size);
+    return output;
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> geo_intersects(FunctionContext* context, const Columns& columns) {
+    constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
+                                                      : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto lhs, geo_input<Type>(columns[0]));
+    ASSIGN_OR_RETURN(auto rhs, geo_input<Type>(columns[1]));
+    if constexpr (Type == TYPE_GEOMETRY) {
+        if (!is_geo_compute_compatible(lhs.data->descriptor(), rhs.data->descriptor())) {
+            return Status::InvalidArgument("ST_Intersects requires compatible GEOMETRY descriptors");
+        }
+    }
+    const bool constant = lhs.constant && rhs.constant;
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_BOOLEAN> result(rows);
+    const auto* prepared_state = context == nullptr
+                                         ? nullptr
+                                         : reinterpret_cast<const NativeGeoContainmentState*>(
+                                                   context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    NativeGeoContainmentThreadState* thread_state = nullptr;
+    if constexpr (Type == TYPE_GEOGRAPHY) {
+        if (prepared_state != nullptr) {
+            thread_state = context->get_or_create_thread_state<NativeGeoContainmentThreadState>(
+                    [] { return std::make_unique<NativeGeoContainmentThreadState>(); });
+        }
+    }
+    std::optional<WkbGeometry> constant_geometry[2];
+    SphericalPolygonFamilyCache constant_spherical_polygons[2];
+    for (size_t row = 0; row < rows; ++row) {
+        if (lhs.is_null(row) || rhs.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        WkbGeometry varying_geometry[2];
+        const auto* prepared_left = prepared_state == nullptr ? nullptr : &prepared_state->arguments[0];
+        const auto* prepared_right = prepared_state == nullptr ? nullptr : &prepared_state->arguments[1];
+        ASSIGN_OR_RETURN(const auto* left, containment_geometry(lhs, row, semantics, prepared_left,
+                                                                &constant_geometry[0], &varying_geometry[0]));
+        ASSIGN_OR_RETURN(const auto* right, containment_geometry(rhs, row, semantics, prepared_right,
+                                                                 &constant_geometry[1], &varying_geometry[1]));
+        const auto supported = [](const WkbGeometry& geometry) {
+            return geometry.type == WkbGeometryType::POLYGON || geometry.type == WkbGeometryType::MULTIPOLYGON;
+        };
+        if (!supported(*left) || !supported(*right)) {
+            return Status::InvalidArgument("ST_Intersects supports only POLYGON/MULTIPOLYGON inputs");
+        }
+        if (left->empty || right->empty) {
+            result.append(false);
+            continue;
+        }
+        if constexpr (Type == TYPE_GEOGRAPHY) {
+            const bool prepared_left_constant = prepared_state != nullptr && prepared_state->arguments[0].constant;
+            const bool prepared_right_constant = prepared_state != nullptr && prepared_state->arguments[1].constant;
+            auto* left_cache = lhs.constant ? (prepared_left_constant ? &thread_state->polygons[0]
+                                                                      : &constant_spherical_polygons[0])
+                                            : nullptr;
+            auto* right_cache = rhs.constant ? (prepared_right_constant ? &thread_state->polygons[1]
+                                                                        : &constant_spherical_polygons[1])
+                                             : nullptr;
+            ASSIGN_OR_RETURN(auto intersects,
+                             spherical_polygon_family_intersects(*left, *right, left_cache, right_cache));
+            result.append(intersects);
+        } else {
+            result.append(planar_polygon_family_intersects(*left, *right));
+        }
     }
     auto output = result.build(false);
     if (constant) return ConstColumn::create(std::move(output), size);
@@ -1296,6 +1457,14 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_covered_by(FunctionContext* conte
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_covered_by(FunctionContext* context, const Columns& columns) {
     return geo_containment_predicate<TYPE_GEOMETRY, false, true>(context, columns, "ST_CoveredBy");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geography_intersects(FunctionContext* context, const Columns& columns) {
+    return geo_intersects<TYPE_GEOGRAPHY>(context, columns);
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersects(FunctionContext* context, const Columns& columns) {
+    return geo_intersects<TYPE_GEOMETRY>(context, columns);
 }
 
 struct StContainsState {

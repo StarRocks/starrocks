@@ -75,6 +75,15 @@ See [ST_X](st_x.md), [ST_Y](st_y.md), [ST_GeometryType](st_geometrytype.md), [ST
 
 These overloads support an XY `POINT` with a `POLYGON` or `MULTIPOLYGON`. `GEOGRAPHY` evaluates spherical CRS84 edges; `GEOMETRY` evaluates planar edges and requires matching descriptors. `NULL` propagates, while an `EMPTY` input returns `false`. Unsupported families, dimensions, descriptors, and mixed `GEOGRAPHY`/`GEOMETRY` calls are rejected. See [ST_Contains](st_contains.md), [ST_Within](st_within.md), [ST_Covers](st_covers.md), and [ST_CoveredBy](st_coveredby.md).
 
+## Intersection predicate
+
+| Signature | Function ID | Boundary behavior |
+| --- | ---: | --- |
+| `ST_Intersects(GEOGRAPHY lhs, GEOGRAPHY rhs)` | 120240 | Spherical overlap, containment, and boundary contact return `true`. |
+| `ST_Intersects(GEOMETRY lhs, GEOMETRY rhs)` | 120241 | Planar overlap, containment, and boundary contact return `true`. |
+
+These overloads support XY `POLYGON` and `MULTIPOLYGON` values. `GEOMETRY` inputs require matching descriptors. `NULL` propagates, while an `EMPTY` input returns `false`. Unsupported families, collections, and mixed native logical types are rejected. See [ST_Intersects](st_intersects.md).
+
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:
