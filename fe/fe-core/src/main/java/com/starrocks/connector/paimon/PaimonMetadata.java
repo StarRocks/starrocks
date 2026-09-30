@@ -133,7 +133,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final String catalogName;
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
-    private final Map<PaimonSplitsCacheKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
+    private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
     private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
@@ -632,12 +632,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (snapshotId >= 0) {
             options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
         }
-        boolean globalIndexDisabled = readsNativeReaderOnlyColumns(paimonTable, params.getFieldNames());
-        if (globalIndexDisabled) {
-            // A global index turns splits into IndexedSplit, which only the Paimon JNI reader can read, and
-            // that reader cannot decode FILE (BLOB) or VARIANT columns. The index only prunes rows.
-            options.put(CoreOptions.GLOBAL_INDEX_ENABLED.key(), Boolean.FALSE.toString());
-        } else if (versionedPaimonTable instanceof FileStoreTable
+        if (versionedPaimonTable instanceof FileStoreTable
                 && !versionedPaimonTable.options().containsKey(CoreOptions.SCALAR_INDEX_SEARCH_MODE.key())
                 && !versionedPaimonTable.options().containsKey(CoreOptions.GLOBAL_INDEX_SEARCH_MODE.key())) {
             // Paimon's FAST default only searches indexed row IDs. FULL also scans row IDs not
@@ -653,9 +648,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
-        PaimonSplitsCacheKey splitsCacheKey = new PaimonSplitsCacheKey(filter, globalIndexDisabled);
 
-        if (!paimonSplits.containsKey(splitsCacheKey)) {
+        if (!paimonSplits.containsKey(filter)) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
@@ -673,28 +667,17 @@ public class PaimonMetadata implements ConnectorMetadata {
             traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
 
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
-            paimonSplits.put(splitsCacheKey, paimonSplitsInfo);
+            paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
                     PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(splitsCacheKey)));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
         return Lists.newArrayList(remoteFileInfo);
-    }
-
-    static boolean readsNativeReaderOnlyColumns(PaimonTable table, List<String> fieldNames) {
-        return fieldNames.stream()
-                .map(table::getColumn)
-                .anyMatch(column -> column != null
-                        && (column.getType().containsFile() || column.getType().containsVariant()));
-    }
-
-    // Planning options such as global-index.enabled change the returned splits for the same predicate.
-    private record PaimonSplitsCacheKey(PredicateSearchKey filter, boolean globalIndexDisabled) {
     }
 
     private void traceScanMetrics(PaimonMetricRegistry metricRegistry,
