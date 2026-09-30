@@ -1,0 +1,39 @@
+-- name: test_list_partition_minmax_declared_absent
+-- description: MIN/MAX(partition_col) on a LIST table must reflect the data, not the declared
+--              VALUES IN (...) extremes. PartitionColumnMinMaxRewriteRule used to answer from the
+--              largest/smallest declared list value (gated only by hasData()), so MAX returned a
+--              declared value (30) absent from the data. Must equal the rewrite-off result.
+
+CREATE DATABASE IF NOT EXISTS test_list_partition_minmax_declared_absent_db;
+USE test_list_partition_minmax_declared_absent_db;
+
+CREATE TABLE lpm (k INT) DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+  PARTITION p1 VALUES IN ('1','2','3'),
+  PARTITION p2 VALUES IN ('10','20','30')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- data omits the extreme declared values (3, 20, 30): real max=10, min=1
+INSERT INTO lpm VALUES (1), (10);
+
+SET enable_rewrite_partition_column_minmax = false;
+SELECT max(k) mx, min(k) mn FROM lpm;
+
+-- with the rewrite ON the LIST declared-values path is declined -> still 10,1 (was 30,1)
+SET enable_rewrite_partition_column_minmax = true;
+SELECT max(k) mx, min(k) mn FROM lpm;
+
+-- single-value LIST partitions: each non-empty partition holds exactly its one declared
+-- value, so the metadata rewrite is still applied and stays correct (max=15, min=5).
+CREATE TABLE lpv (k INT) DUPLICATE KEY(k)
+PARTITION BY LIST(k) (
+  PARTITION s1 VALUES IN ('5'),
+  PARTITION s2 VALUES IN ('15')
+)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO lpv VALUES (5), (15);
+SET enable_rewrite_partition_column_minmax = true;
+SELECT max(k) mx, min(k) mn FROM lpv;

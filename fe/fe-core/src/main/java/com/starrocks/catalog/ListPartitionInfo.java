@@ -173,6 +173,17 @@ public class ListPartitionInfo extends PartitionInfo {
             return CollectionUtils.isEmpty(singleColumnValues) && CollectionUtils.isEmpty(multiColumnValues);
         }
 
+        // Number of values this partition declares in its VALUES IN (...) list.
+        public int valueCount() {
+            if (singleColumnValues != null) {
+                return singleColumnValues.size();
+            }
+            if (multiColumnValues != null) {
+                return multiColumnValues.size();
+            }
+            return 0;
+        }
+
         public ListPartitionValue minValue() {
             if (singleColumnValues != null) {
                 return ListPartitionValue.of(singleColumnValues.stream().min(LiteralExpr::compareTo).get());
