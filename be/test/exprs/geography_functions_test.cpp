@@ -1060,6 +1060,59 @@ TEST_F(geographyFunctionsTest, nativeGeoContainmentPredicates) {
     EXPECT_TRUE(boundary_covers.value(0));
 }
 
+TEST_F(geographyFunctionsTest, nativeGeometryContainmentIsTranslationInvariant) {
+    constexpr const char* polygon = "POLYGON ((0 0, 1 1, 0 1, 0 0))";
+    constexpr const char* translated_polygon =
+            "POLYGON ((10000000 10000000, 10000001 10000001, 10000000 10000001, 10000000 10000000))";
+    auto polygons = geometry({polygon, polygon, polygon, translated_polygon, translated_polygon, translated_polygon});
+    // Interior, exterior, and boundary points, before and after the same EPSG:3857 translation.
+    auto points = geometry({"POINT (0.4 0.5)", "POINT (0.5 0.4)", "POINT (0.5 0.5)", "POINT (10000000.4 10000000.5)",
+                            "POINT (10000000.5 10000000.4)", "POINT (10000000.5 10000000.5)"});
+
+    ColumnViewer<TYPE_BOOLEAN> contains(GeoFunctions::st_geometry_contains(nullptr, {polygons, points}).value());
+    ColumnViewer<TYPE_BOOLEAN> within(GeoFunctions::st_geometry_within(nullptr, {points, polygons}).value());
+    ColumnViewer<TYPE_BOOLEAN> covers(GeoFunctions::st_geometry_covers(nullptr, {polygons, points}).value());
+    ColumnViewer<TYPE_BOOLEAN> covered_by(GeoFunctions::st_geometry_covered_by(nullptr, {points, polygons}).value());
+    const bool strict_expected[] = {true, false, false, true, false, false};
+    const bool inclusive_expected[] = {true, false, true, true, false, true};
+    for (size_t row = 0; row < std::size(strict_expected); ++row) {
+        EXPECT_EQ(strict_expected[row], contains.value(row)) << row;
+        EXPECT_EQ(strict_expected[row], within.value(row)) << row;
+        EXPECT_EQ(inclusive_expected[row], covers.value(row)) << row;
+        EXPECT_EQ(inclusive_expected[row], covered_by.value(row)) << row;
+    }
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryContainmentPreparedTranslationInvariant) {
+    const auto type = geometry_type();
+    auto polygon = ConstColumn::create(
+            geometry({"POLYGON ((10000000 10000000, 10000001 10000001, 10000000 10000001, 10000000 10000000))"}), 3);
+    auto points = geometry(
+            {"POINT (10000000.4 10000000.5)", "POINT (10000000.5 10000000.4)", "POINT (10000000.5 10000000.5)"});
+    const bool strict_expected[] = {true, false, false};
+    const bool inclusive_expected[] = {true, false, true};
+    for (bool polygon_first : {true, false}) {
+        std::unique_ptr<FunctionContext> context(
+                FunctionContext::create_test_context({type, type}, TypeDescriptor(TYPE_BOOLEAN)));
+        context->set_constant_columns(polygon_first ? Columns{polygon, nullptr} : Columns{nullptr, polygon});
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto strict_result = polygon_first ? GeoFunctions::st_geometry_contains(context.get(), {polygon, points})
+                                           : GeoFunctions::st_geometry_within(context.get(), {points, polygon});
+        auto inclusive_result = polygon_first ? GeoFunctions::st_geometry_covers(context.get(), {polygon, points})
+                                              : GeoFunctions::st_geometry_covered_by(context.get(), {points, polygon});
+        ASSERT_TRUE(strict_result.ok()) << strict_result.status();
+        ASSERT_TRUE(inclusive_result.ok()) << inclusive_result.status();
+        ColumnViewer<TYPE_BOOLEAN> strict(*strict_result);
+        ColumnViewer<TYPE_BOOLEAN> inclusive(*inclusive_result);
+        for (size_t row = 0; row < std::size(strict_expected); ++row) {
+            EXPECT_EQ(strict_expected[row], strict.value(row)) << "row=" << row << " polygon_first=" << polygon_first;
+            EXPECT_EQ(inclusive_expected[row], inclusive.value(row))
+                    << "row=" << row << " polygon_first=" << polygon_first;
+        }
+        ASSERT_TRUE(GeoFunctions::native_geo_containment_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoContainmentConstantPreparation) {
     const auto verify = [](bool spherical, const ColumnPtr& polygons, const ColumnPtr& points,
                            const std::vector<std::optional<bool>>& strict_expected,
