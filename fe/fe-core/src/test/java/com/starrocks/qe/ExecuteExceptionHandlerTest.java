@@ -19,6 +19,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.planner.RangeColocateUnalignedException;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -112,5 +113,34 @@ public class ExecuteExceptionHandlerTest extends PlanTestBase {
                 InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR, FeConstants.BACKEND_NODE_NOT_FOUND_ERROR), retryContext));
 
         Assertions.assertNotEquals(retryContext.getExecPlan(), execPlan);
+    }
+
+    @Test
+    public void testHandleRangeColocateUnalignedException() throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+
+        // The plan's tablet -> bucket assignment is stale; only a new plan can dispatch the query.
+        ExceptionChecker.expectThrowsNoException(() -> ExecuteExceptionHandler.handle(
+                new RangeColocateUnalignedException("range colocate group 1 has a stale bucket assignment in "
+                        + "physical partition 2"), retryContext));
+
+        Assertions.assertNotEquals(execPlan, retryContext.getExecPlan());
+    }
+
+    @Test
+    public void testOtherIllegalStateExceptionIsNotRetried() throws Exception {
+        String sql = "select * from t0";
+        StatementBase statementBase = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+        ExecPlan execPlan = getExecPlan(sql);
+        ExecuteExceptionHandler.RetryContext retryContext =
+                new ExecuteExceptionHandler.RetryContext(0, execPlan, connectContext, statementBase);
+
+        Assertions.assertThrows(IllegalStateException.class, () -> ExecuteExceptionHandler.handle(
+                new IllegalStateException("unrelated"), retryContext));
+        Assertions.assertEquals(execPlan, retryContext.getExecPlan());
     }
 }
