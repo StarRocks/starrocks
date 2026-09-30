@@ -84,6 +84,24 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 これらのオーバーロードは XY `POLYGON` と `MULTIPOLYGON` をサポートします。`GEOMETRY` 入力には一致するディスクリプタが必要です。`NULL` は伝播し、`EMPTY` 入力は `false` を返します。未対応のファミリ、コレクション、ネイティブ論理型の混在は拒否されます。[ST_Intersects](st_intersects.md) を参照してください。
 
+## 計測とプロパティ
+
+| シグネチャ | 関数 ID | 結果と単位 | Family の動作 |
+| --- | ---: | --- | --- |
+| `ST_Area(GEOGRAPHY value)` | 120250 | `DOUBLE`、平方メートル | ポリゴン面積を再帰的に合計し、穴を減算し、低次元要素は 0。 |
+| `ST_Area(GEOMETRY value)` | 120251 | `DOUBLE`、入力 CRS 単位の二乗 | ポリゴン面積を再帰的に合計し、穴を減算し、低次元要素は 0。 |
+| `ST_Length(GEOGRAPHY value)` | 120260 | `DOUBLE`、メートル | 線の長さを再帰的に合計し、点とポリゴンは 0。 |
+| `ST_Length(GEOMETRY value)` | 120261 | `DOUBLE`、入力 CRS 単位 | 線の長さを再帰的に合計し、点とポリゴンは 0。 |
+| `ST_Perimeter(GEOGRAPHY value)` | 120270 | `DOUBLE`、メートル | ポリゴンの外側および内側リング長を再帰的に合計。 |
+| `ST_Perimeter(GEOMETRY value)` | 120271 | `DOUBLE`、入力 CRS 単位 | ポリゴンの外側および内側リング長を再帰的に合計。 |
+| `ST_Centroid(GEOGRAPHY value)` | 120280 | `GEOGRAPHY POINT`、同じ descriptor | 最も高い非空次元と球面サイズの重みを使用。 |
+| `ST_Centroid(GEOMETRY value)` | 120281 | `GEOMETRY POINT`、同じ descriptor | 最も高い非空次元と平面サイズの重みを使用。 |
+| `ST_IsValid(GEOGRAPHY value)` | 120290 | `BOOLEAN` | MultiPolygon の内部重なりを含む球面妥当性を使用。 |
+| `ST_IsValid(GEOMETRY value)` | 120291 | `BOOLEAN` | 堅牢な平面トポロジ妥当性を使用。 |
+
+すべての overload は 7 種類の XY OGC family を受け付け、必要に応じて `MULTI*` と `GEOMETRYCOLLECTION` を再帰処理します。`NULL` は伝播します。`EMPTY` に対して計測は 0、`ST_Centroid` は `POINT EMPTY`、`ST_IsValid` は `true` を返します。読み取り可能でもトポロジ的に無効な値は `ST_IsValid` だけが `false` を返し、計測と重心は拒否します。不正な WKB、未対応の次元または descriptor はエラーです。
+
+球面ポリゴンのリングは向きに依存せず、小さい領域に正規化されます。1 個のリングで半球を超える領域は表現しません。[ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md)、[ST_IsValid](st_isvalid.md) を参照してください。
 ## レガシー互換性
 
 ネイティブオーバーロードは、既存の `VARCHAR` 関数を再採番または置換しません。

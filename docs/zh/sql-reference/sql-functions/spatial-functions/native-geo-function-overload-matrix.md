@@ -84,6 +84,24 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 这些重载支持 XY `POLYGON` 和 `MULTIPOLYGON`。`GEOMETRY` 输入必须具有匹配的描述符。`NULL` 传递，`EMPTY` 输入返回 `false`。不支持的类型、集合以及混合的原生逻辑类型会被拒绝。参见 [ST_Intersects](st_intersects.md)。
 
+## 度量和属性
+
+| 签名 | 函数 ID | 结果和单位 | Family 行为 |
+| --- | ---: | --- | --- |
+| `ST_Area(GEOGRAPHY value)` | 120250 | `DOUBLE`，平方米 | 递归合计面面积，扣除洞，低维分量贡献 0。 |
+| `ST_Area(GEOMETRY value)` | 120251 | `DOUBLE`，输入 CRS 单位的平方 | 递归合计面面积，扣除洞，低维分量贡献 0。 |
+| `ST_Length(GEOGRAPHY value)` | 120260 | `DOUBLE`，米 | 递归合计线长度，点和面贡献 0。 |
+| `ST_Length(GEOMETRY value)` | 120261 | `DOUBLE`，输入 CRS 单位 | 递归合计线长度，点和面贡献 0。 |
+| `ST_Perimeter(GEOGRAPHY value)` | 120270 | `DOUBLE`，米 | 递归合计面的外环和内环长度。 |
+| `ST_Perimeter(GEOMETRY value)` | 120271 | `DOUBLE`，输入 CRS 单位 | 递归合计面的外环和内环长度。 |
+| `ST_Centroid(GEOGRAPHY value)` | 120280 | `GEOGRAPHY POINT`，descriptor 不变 | 使用最高非空维度和球面尺寸权重。 |
+| `ST_Centroid(GEOMETRY value)` | 120281 | `GEOMETRY POINT`，descriptor 不变 | 使用最高非空维度和平面尺寸权重。 |
+| `ST_IsValid(GEOGRAPHY value)` | 120290 | `BOOLEAN` | 使用球面有效性，包括 MultiPolygon 内部重叠检查。 |
+| `ST_IsValid(GEOMETRY value)` | 120291 | `BOOLEAN` | 使用稳健的平面拓扑有效性。 |
+
+所有 overload 均接受七种 XY OGC family，并在适用时递归处理 `MULTI*` 和 `GEOMETRYCOLLECTION`。`NULL` 传播；度量对 `EMPTY` 返回 0，`ST_Centroid` 返回 `POINT EMPTY`，`ST_IsValid` 返回 `true`。可读取但拓扑无效的值仅由 `ST_IsValid` 返回 `false`，度量和质心会拒绝该输入。WKB 格式错误、不支持的维度或 descriptor 会返回错误。
+
+球面面环与方向无关，并归一化为较小区域；单个环不表示超过半球的区域。参见 [ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md) 和 [ST_IsValid](st_isvalid.md)。
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：

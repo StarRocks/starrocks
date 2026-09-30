@@ -1056,6 +1056,14 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
+                (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
+                        argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY)) {
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
         } else if ((FunctionSet.ST_GEOMFROMTEXT.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_GEOMFROMWKB.equalsIgnoreCase(fnName)) && argumentTypes.length == 2) {
             if (!(node.getChild(1) instanceof StringLiteral)) {
