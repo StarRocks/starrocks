@@ -44,6 +44,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -1227,7 +1228,7 @@ public class InsertSelectSourceColumnsTest {
         // The base key (k) passed inside resolve(); a rollup's key is checked separately by the
         // source with the same rule. A rollup (dt, k) is sampleable, a rollup (dt) alone is not.
         InsertSelectSourceColumns.Resolved resolved =
-                new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"));
+                new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"), Set.of());
 
         Assertions.assertTrue(InsertSelectSourceColumns.sortKeySampleable(
                 Arrays.asList(dateCol("dt"), col("k")), resolved));
