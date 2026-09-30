@@ -237,25 +237,34 @@ public class MetaFunctionsTest extends MVTestBase {
                 "properties('replication_num'='1')");
         UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
         Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        Set<String> currentGroups = connectContext.getGroups();
         UserIdentity[] innerUser = new UserIdentity[1];
+        Set<String>[] innerGroups = new Set[1];
         new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
                 innerUser[0] = context.getCurrentUserIdentity();
+                innerGroups[0] = context.getGroups();
                 return Lists.newArrayList();
             }
         };
+        Set<String> callerGroups = Set.of("g_ranger");
         try {
             connectContext.setCurrentUserIdentity(testUser);
             connectContext.setCurrentRoleIds(testUser);
+            connectContext.setGroups(callerGroups);
             connectContext.setThreadLocalInfo();
             Assertions.assertNull(lookupString("t_lookup_caller", "k", "c2"));
             // The internal lookup query must run as the caller, never as ROOT
             Assertions.assertEquals(testUser, innerUser[0]);
+            // Groups must be propagated: Ranger authorization and row/column policies read
+            // context.getGroups(), so dropping them would silently bypass group-based policies.
+            Assertions.assertEquals(callerGroups, innerGroups[0]);
             Assertions.assertSame(connectContext, ConnectContext.get());
         } finally {
             connectContext.setCurrentUserIdentity(currentUserIdentity);
             connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setGroups(currentGroups);
             starRocksAssert.dropTable("t_lookup_caller");
         }
     }
