@@ -480,6 +480,8 @@ Parameter:
 
 - `tablet_reshard_target_size`: The target size of the tablets after the SPLIT or MERGE operation. Default: 10 GB. You do not need to specify this parameter if you have explicitly specified tablet IDs.
 
+  For a manual SPLIT without tablet IDs, the target size must be positive. If the FE configuration `tablet_reshard_target_size` is `0`, specify a positive value in `PROPERTIES`; otherwise, the statement fails with `Invalid tablet_reshard_target_size: 0`. The 1.5-times split threshold below applies only to positive target sizes.
+
   - A tablet will be split if both the following conditions are met:
     - The size of the tablet is **at least** 1.5 times `tablet_reshard_target_size` (that is, `ceil(1.5 × tablet_reshard_target_size)`). With the 10 GB default, a tablet is split once it reaches 15 GB. Both automatic splitting and a manual `ALTER TABLE ... SPLIT` use this threshold: automatic splitting measures against the FE configuration `tablet_reshard_target_size`, while a manual SPLIT uses the value specified in `PROPERTIES`, or that FE configuration if none is specified. This also holds when you specify tablet IDs: a specified tablet below the threshold is not split, and if no tablet qualifies, the statement fails with `No tablets need to split in table ...`.
     - The number of tablets that are running tablet SPLIT or MERGE is less than the FE configuration `tablet_reshard_max_parallel_tablets` (Default: 10240).
