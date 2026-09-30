@@ -16,8 +16,10 @@ package com.starrocks.sql.optimizer.rule.ivm;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.JoinOperator;
 import com.starrocks.sql.common.PCellSortedSet;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
@@ -147,6 +149,14 @@ public class IvmDeltaAggregateRule extends TransformationRule {
                 .collect(Collectors.toList());
         ScalarOperator eqPredicate = IvmOpUtils.buildRowIdEqBinaryPredicateOp(
                 encodeRowIdVersion, mvRowIdRef, uniqueKeys);
+<<<<<<< HEAD
+=======
+        List<ScalarOperator> onConjuncts = Lists.newArrayList(eqPredicate);
+        if (context.getSessionVariable().isEnableIvmMvScanSortKeyJoinKeys() && keepsMvDistribution(mv, mvScan)) {
+            onConjuncts.addAll(buildSortKeyPrefixConjuncts(mv, mvColMetaToRefMap, groupingKeys,
+                    context.getTvrOptContext().getIvmGroupKeyRefIdByMvColumn()));
+        }
+>>>>>>> 50cafe6f003... [BugFix] Keep the sort-key join keys off a shuffled IVM state-merge join (#64200)
 
         // Step 6: Build LEFT OUTER JOIN (intermediate agg ⋈ MV scan)
         // Delta is preserved on the aggregate's child for subsequent iterations.
@@ -200,6 +210,83 @@ public class IvmDeltaAggregateRule extends TransformationRule {
         return List.of(result);
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * Whether the join can leave the mv scan in its own buckets, by the test {@code HashDistributionSpec} applies:
+     * one selected partition, or a stable colocate group. Otherwise the join shuffles on every equi-join key, and
+     * a runtime filter partitioned on more than one expression is not pushed into storage, the row-id one included.
+     */
+    private static boolean keepsMvDistribution(MaterializedView mv, LogicalOlapScanOperator mvScan) {
+        List<Long> partitionIds = mvScan.getSelectedPartitionId();
+        if (partitionIds.size() == 1) {
+            return true;
+        }
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        return !partitionIds.isEmpty() && colocateIndex.isColocateTable(mv.getId())
+                && !colocateIndex.isGroupUnstable(colocateIndex.getGroup(mv.getId()));
+    }
+
+    /**
+     * Equalities between the mv's leading sort-key columns and the delta's matching group keys.
+     *
+     * <p>The row-id equality already implies them — {@code __ROW_ID__} encodes the whole group key tuple —
+     * so the join matches the same rows either way. What they add is a runtime filter on a column the mv is
+     * physically ordered by, which the storage layer turns into a row-range seek. A null
+     * {@code getSortKeyIdxes()} means the sort key IS {@code __ROW_ID__}, which the join already carries.</p>
+     *
+     * <p>A partition column is deliberately not excluded. What a partition holds constant is its partition
+     * <em>key</em>: {@code PARTITION BY date_trunc('day', dt)} leaves {@code dt} itself spanning the day,
+     * measured at 86400 distinct values in one partition, where filtering on it read 7.6% of the mv and
+     * filtering on the next sort column read all of it.</p>
+     */
+    private static List<ScalarOperator> buildSortKeyPrefixConjuncts(MaterializedView mv,
+                                                                    Map<Column, ColumnRefOperator> mvColMetaToRefMap,
+                                                                    List<ColumnRefOperator> groupingKeys,
+                                                                    Map<String, Integer> groupKeyRefIdByMvColumn) {
+        MaterializedIndexMeta indexMeta = mv.getIndexMetaByMetaId(mv.getBaseIndexMetaId());
+        if (indexMeta == null || indexMeta.getSortKeyIdxes() == null) {
+            return List.of();
+        }
+        Map<Integer, ColumnRefOperator> groupKeyByRefId = Maps.newHashMap();
+        groupingKeys.forEach(groupingKey -> groupKeyByRefId.put(groupingKey.getId(), groupingKey));
+        Map<String, ColumnRefOperator> groupKeyByMvColumnName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        groupKeyRefIdByMvColumn.forEach((mvColumnName, refId) -> {
+            ColumnRefOperator groupingKey = groupKeyByRefId.get(refId);
+            if (groupingKey != null) {
+                groupKeyByMvColumnName.put(mvColumnName, groupingKey);
+            }
+        });
+        Map<String, ColumnRefOperator> mvRefByColumnName = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        mvColMetaToRefMap.forEach((column, columnRef) -> mvRefByColumnName.put(column.getName(), columnRef));
+
+        List<Column> schema = indexMeta.getSchema();
+        List<ScalarOperator> conjuncts = Lists.newArrayList();
+        for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+            if (conjuncts.size() >= MAX_SORT_KEY_JOIN_COLUMNS) {
+                break;
+            }
+            if (sortKeyIdx == null || sortKeyIdx < 0 || sortKeyIdx >= schema.size()) {
+                break;
+            }
+            String columnName = schema.get(sortKeyIdx).getName();
+            ColumnRefOperator groupKey = groupKeyByMvColumnName.get(columnName);
+            ColumnRefOperator mvColumnRef = mvRefByColumnName.get(columnName);
+            // A sort key that is not a group key is an aggregate's output: the mv holds the merged value and
+            // the delta a partial one, so equating them would drop the row; a mismatched type would go
+            // through a cast no filter is built from. Stop rather than skip: every later sort column is
+            // clustered only within this one.
+            if (groupKey == null || mvColumnRef == null || !groupKey.getType().equals(mvColumnRef.getType())) {
+                break;
+            }
+            // Null-safe: a NULL group key is a real group, and = would leave its mv row unmatched, which
+            // state_union reads as "no prior state" and overwrites that group's accumulated value.
+            conjuncts.add(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, mvColumnRef, groupKey));
+        }
+        return conjuncts;
+    }
+
+>>>>>>> 50cafe6f003... [BugFix] Keep the sort-key join keys off a shuffled IVM state-merge join (#64200)
     private LogicalAggregationOperator buildIntermediateAggOperator(
             ColumnRefFactory columnRefFactory,
             List<ColumnRefOperator> groupingKeys,
