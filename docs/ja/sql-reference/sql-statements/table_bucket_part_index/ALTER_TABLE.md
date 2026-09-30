@@ -482,6 +482,8 @@ ALTER TABLE <table_name> MERGE { TABLET | TABLETS }
 
 - `tablet_reshard_target_size`：SPLIT または MERGE 実行後の Tablet の目標サイズ。デフォルト値：10 GB。Tablet ID を明示的に指定している場合は、このパラメータを指定する必要はありません。
 
+  Tablet ID を指定しない手動 SPLIT では、目標サイズに正の値が必要です。FE 設定 `tablet_reshard_target_size` が `0` の場合は、`PROPERTIES` で正の値を指定してください。指定しないと、`Invalid tablet_reshard_target_size: 0` というエラーになります。以下の 1.5 倍の分割しきい値は、目標サイズが正の値の場合にのみ適用されます。
+
   - SPLIT が実行される条件：
     - Tablet のサイズが `tablet_reshard_target_size` の 1.5 倍（すなわち `ceil(1.5 × tablet_reshard_target_size)`）**以上**であること。デフォルトの 10 GB の場合、Tablet が 15 GB に達した時点で分割されます。このしきい値は、バックグラウンドの自動分割と手動で実行する `ALTER TABLE ... SPLIT` の両方に適用されます。自動分割では FE 設定 `tablet_reshard_target_size` を使用し、手動 SPLIT では `PROPERTIES` で指定した値を使用します（指定しない場合は同じ FE 設定を使用します）。Tablet ID を指定した場合も同様で、しきい値未満の Tablet は分割されません。条件を満たす Tablet が 1 つもない場合、ステートメントは `No tablets need to split in table ...` というエラーになります。
     - 現在 SPLIT または MERGE を実行中の Tablet 数が、FE 設定 `tablet_reshard_max_parallel_tablets`（デフォルト：10240）未満であること。
