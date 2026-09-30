@@ -32,8 +32,8 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "geo/geo_measurements.h"
-#include "geo/geos_overlay.h"
 #include "geo/geo_types.h"
+#include "geo/geos_overlay.h"
 #include "geo/wkb.h"
 #include "runtime/runtime_state.h"
 

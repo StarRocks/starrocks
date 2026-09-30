@@ -129,6 +129,11 @@ let
       md5 = "04e266ad52659480d593486a17eed804";
       sha256 = "1j8nln7rql2nxkhdlgpmx1c1dp6dyxnar1n5r7sjg0rws6i5289i";
     };
+    "geos-3.14.1.tar.bz2" = {
+      url = "https://download.osgeo.org/geos/geos-3.14.1.tar.bz2";
+      md5 = "5d76f687e19ece90b69df61e3fa8ffac";
+      sha256 = "sha256-PCCRnNqaUF2we1IWuqmAus2qBwLacVtD8Xb7B+/35xY=";
+    };
     "gflags-2.2.2.tar.gz" = {
       url = "https://github.com/gflags/gflags/archive/v2.2.2.tar.gz";
       md5 = "1a865b93bacfa963201af3f75b7bd64c";
@@ -485,6 +490,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "geos-3.14.1.tar.bz2"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -556,6 +562,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "geos-3.14.1.tar.bz2"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -626,6 +633,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "geos-3.14.1.tar.bz2"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -699,6 +707,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "GEOS"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -770,6 +779,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "GEOS"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -840,6 +850,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "GEOS"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -916,6 +927,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "geos"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -987,6 +999,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "geos"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -1057,6 +1070,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "geos"
       "bitshuffle"
       "croaringbitmap"
       "cctz"

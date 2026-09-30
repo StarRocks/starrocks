@@ -17,6 +17,8 @@ ST_Difference(GEOMETRY lhs, GEOMETRY rhs)
 
 运算以输入双精度坐标使用 GEOS 默认浮点精度。StarRocks 不请求吸附网格，也不修复无效输入；结果边界可能受浮点舍入影响。
 
+每个输入和结果 WKB 的大小上限为 64 MiB。结果超过 1,000,000 个坐标会报错；原生 WKB 编解码器还限制几何元素总数和嵌套深度。
+
 ## 示例
 
 ```SQL

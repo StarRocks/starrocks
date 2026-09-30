@@ -19,6 +19,8 @@ The result can be a point, line, polygon, multi-geometry, geometry collection, o
 
 The operation uses GEOS default floating precision on the input double coordinates. StarRocks does not request a snapping grid or repair invalid inputs; result boundaries can reflect floating-point rounding.
 
+Each input and result WKB is limited to 64 MiB. A result with more than 1,000,000 coordinates is rejected; the native WKB codec also limits total geometry elements and nesting depth.
+
 ## Example
 
 ```SQL
