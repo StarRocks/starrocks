@@ -21,6 +21,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
@@ -195,7 +196,8 @@ public class MetaFunctionsTest extends MVTestBase {
             // normal
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     MetaFunctions.LookupRecord record = new MetaFunctions.LookupRecord();
                     record.data = Lists.newArrayList("v1");
                     String json = GsonUtils.GSON.toJson(record);
@@ -211,11 +213,105 @@ public class MetaFunctionsTest extends MVTestBase {
             // record not found
             new MockUp<SimpleExecutor>() {
                 @Mock
-                public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
+                public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                              ConnectContext caller) {
                     throw new RuntimeException("query failed if record not exist in dict table");
                 }
             };
             Assertions.assertNull(lookupString("t1", "v1", "c1"));
+        }
+    }
+
+    @Test
+    public void testLookupStringRunsAsCaller() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_caller(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        Set<String> currentGroups = connectContext.getGroups();
+        String currentRemoteIP = connectContext.getRemoteIP();
+        UserIdentity[] innerUser = new UserIdentity[1];
+        Set<String>[] innerGroups = new Set[1];
+        String[] innerRemoteIP = new String[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQL(String sql, ConnectContext context) {
+                innerUser[0] = context.getCurrentUserIdentity();
+                innerGroups[0] = context.getGroups();
+                innerRemoteIP[0] = context.getRemoteIP();
+                return Lists.newArrayList();
+            }
+        };
+        Set<String> callerGroups = Set.of("g_ranger");
+        String callerRemoteIP = "10.1.2.3";
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setGroups(callerGroups);
+            connectContext.setRemoteIP(callerRemoteIP);
+            connectContext.setThreadLocalInfo();
+            Assertions.assertNull(lookupString("t_lookup_caller", "k", "c2"));
+            // The internal lookup query must run as the caller, never as ROOT
+            Assertions.assertEquals(testUser, innerUser[0]);
+            // Groups must be propagated: Ranger authorization and row/column policies read
+            // context.getGroups(), so dropping them would silently bypass group-based policies.
+            Assertions.assertEquals(callerGroups, innerGroups[0]);
+            // Remote IP must be propagated: USER()/SESSION_USER() are folded from qualifiedUser
+            // plus remoteIP, and Ranger row-filter/masking expressions are analyzed here.
+            Assertions.assertEquals(callerRemoteIP, innerRemoteIP[0]);
+            Assertions.assertSame(connectContext, ConnectContext.get());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setGroups(currentGroups);
+            connectContext.setRemoteIP(currentRemoteIP);
+            starRocksAssert.dropTable("t_lookup_caller");
+        }
+    }
+
+    @Test
+    public void testLookupStringAccessDenied() throws Exception {
+        starRocksAssert.withTable("create table t_lookup_denied(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_denied", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            starRocksAssert.dropTable("t_lookup_denied");
+        }
+    }
+
+    @Test
+    public void testLookupStringIgnoresCallerBypass() throws Exception {
+        // A lookup triggered inside an existing bypassAuthorizerCheck scope must still be
+        // authorized: the internal query must not inherit the caller's bypass flag, otherwise
+        // the SELECT / Ranger checks would be skipped again.
+        starRocksAssert.withTable("create table t_lookup_bypass(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        boolean currentBypass = connectContext.isBypassAuthorizerCheck();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setBypassAuthorizerCheck(true);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_bypass", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setBypassAuthorizerCheck(currentBypass);
+            starRocksAssert.dropTable("t_lookup_bypass");
         }
     }
 
