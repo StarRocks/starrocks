@@ -470,10 +470,11 @@ Status MemLimitedChunkQueue::_flush() {
 
 Status MemLimitedChunkQueue::_submit_flush_task() {
     auto flush_task = [this, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)](auto& yield_ctx) {
-        SCOPED_SET_TRACE_INFO(0, _state->query_id(), _state->fragment_instance_id());
-        TEST_SYNC_POINT("MemLimitedChunkQueue::before_execute_flush_task");
+        auto pending = DeferOp([this]() { _pending_io_tasks.fetch_sub(1); });
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
+        SCOPED_SET_TRACE_INFO(0, _state->query_id(), _state->fragment_instance_id());
+        TEST_SYNC_POINT("MemLimitedChunkQueue::before_execute_flush_task");
         auto defer = DeferOp([&]() {
             TEST_SYNC_POINT("MemLimitedChunkQueue::after_execute_flush_task");
             _has_flush_io_task.store(false);
@@ -488,7 +489,12 @@ Status MemLimitedChunkQueue::_submit_flush_task() {
 
     auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(flush_task));
     io_task.set_query_type(_state->query_options().query_type);
-    RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
+    _pending_io_tasks.fetch_add(1);
+    auto status = spill::IOTaskExecutor::submit(std::move(io_task));
+    if (!status.ok()) {
+        _pending_io_tasks.fetch_sub(1);
+        return status;
+    }
     return Status::OK();
 }
 
@@ -553,10 +559,11 @@ Status MemLimitedChunkQueue::_load(Block* block) {
 
 Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
     auto load_task = [this, block, guard = RESOURCE_TLS_MEMTRACER_GUARD(_state)](auto& yield_ctx) {
-        SCOPED_SET_TRACE_INFO(0, _state->query_id(), _state->fragment_instance_id());
-        TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::before_execute_load_task", block);
+        auto pending = DeferOp([this]() { _pending_io_tasks.fetch_sub(1); });
         RETURN_IF(!guard.scoped_begin(), (void)0);
         DEFER_GUARD_END(guard);
+        SCOPED_SET_TRACE_INFO(0, _state->query_id(), _state->fragment_instance_id());
+        TEST_SYNC_POINT_CALLBACK("MemLimitedChunkQueue::before_execute_load_task", block);
         auto status = _load(block);
         if (!status.ok()) {
             _update_io_task_status(status);
@@ -564,7 +571,12 @@ Status MemLimitedChunkQueue::_submit_load_task(Block* block) {
     };
     auto io_task = workgroup::ScanTask(_state->fragment_ctx()->workgroup(), std::move(load_task));
     io_task.set_query_type(_state->query_options().query_type);
-    RETURN_IF_ERROR(spill::IOTaskExecutor::submit(std::move(io_task)));
+    _pending_io_tasks.fetch_add(1);
+    auto status = spill::IOTaskExecutor::submit(std::move(io_task));
+    if (!status.ok()) {
+        _pending_io_tasks.fetch_sub(1);
+        return status;
+    }
     return Status::OK();
 }
 
