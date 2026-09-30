@@ -491,6 +491,11 @@ public class PaimonScanNode extends ScanNode {
         return true;
     }
 
+    @Override
+    protected boolean supportTopNRuntimeFilter() {
+        return true;
+    }
+
     private static final Base64.Encoder BASE64_ENCODER =
             java.util.Base64.getUrlEncoder().withoutPadding();
 
