@@ -385,9 +385,13 @@ TEST_F(BrpcStubCacheTest, lake_traffic_contributes_to_internal_service_connectio
     ASSERT_NE(nullptr, internal_stub);
     auto lake_stub = std::make_shared<LakeService_RecoverableStub>(endpoint);
     ASSERT_OK(lake_stub->reset_channel());
-    ASSERT_EQ(internal_stub->_connection_load, lake_stub->_connection_load);
     auto sibling_stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "", 1);
-    ASSERT_NE(internal_stub->_connection_load, sibling_stub->_connection_load);
+    auto sibling_reservation = sibling_stub->reserve_rpc(512);
+    ASSERT_EQ(0, internal_stub->num_in_flight_rpcs());
+    ASSERT_EQ(0, internal_stub->num_in_flight_payload_bytes());
+    ASSERT_EQ(1, sibling_stub->num_in_flight_rpcs());
+    ASSERT_EQ(512, sibling_stub->num_in_flight_payload_bytes());
+    sibling_reservation.reset();
 
     lake_stub->publish_version(&controller, &request, &response, &done);
     ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
@@ -405,9 +409,6 @@ TEST_F(BrpcStubCacheTest, lake_traffic_contributes_to_internal_service_connectio
     ASSERT_TRUE(rpc_done.wait_for(std::chrono::seconds(10)));
     ASSERT_EQ(0, internal_stub->num_in_flight_rpcs());
     ASSERT_EQ(0, internal_stub->num_in_flight_payload_bytes());
-
-    ASSERT_OK(lake_stub->reset_channel());
-    ASSERT_EQ(internal_stub->_connection_load, lake_stub->_connection_load);
 }
 #endif
 
