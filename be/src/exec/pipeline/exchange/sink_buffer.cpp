@@ -518,14 +518,16 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
-    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    const size_t params_size = request.params->ByteSizeLong();
+    const size_t payload_size = request.attachment.size() + params_size;
+    const size_t expected_iobuf_size = payload_size + sizeof(size_t) * 2;
     if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
         butil::IOBuf iobuf;
         butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
         request.params->SerializeToZeroCopyStream(&wrapper);
         // append params to iobuf
-        size_t params_size = iobuf.size();
-        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        size_t serialized_params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&serialized_params_size, sizeof(serialized_params_size));
         closure->cntl.request_attachment().append(iobuf);
         // append attachment
         size_t attachment_size = request.attachment.size();
@@ -553,7 +555,7 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         }
 
         PInternalService_RecoverableStub::RpcInFlightGuard reservation;
-        const int64_t payload_bytes = static_cast<int64_t>(request.attachment.size() + request.params->ByteSizeLong());
+        const int64_t payload_bytes = static_cast<int64_t>(payload_size);
         // _send_rpc runs under SinkContext::mutex (held by _try_to_send_rpc), so the cached pool below is race-free.
         auto& context = sink_ctx(request.fragment_instance_id.lo);
         auto* cache = _fragment_ctx->runtime_state()->query_execution_services()->rpc->brpc_stub_cache;
