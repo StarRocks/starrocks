@@ -985,6 +985,12 @@ under the License.
             <artifactId>arrow-jdbc</artifactId>
         </dependency>
 
+        <!-- zstd for the MySQL compressed protocol -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>glue</artifactId>
