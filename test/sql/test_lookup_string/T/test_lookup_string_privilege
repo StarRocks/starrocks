@@ -1,0 +1,37 @@
+-- name: test_lookup_string_privilege
+create database db_${uuid0};
+use db_${uuid0};
+create table t_dict(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
+insert into t_dict values ('k1', 'v1'), ('k2', 'v2');
+
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+
+create user if not exists u1_${uuid0};
+grant impersonate on user root to u1_${uuid0};
+create role if not exists r_${uuid0};
+grant select on table db_${uuid0}.t_dict to role r_${uuid0};
+create user if not exists u2_${uuid0};
+grant impersonate on user root to u2_${uuid0};
+grant r_${uuid0} to user u2_${uuid0};
+
+-- no privilege on the table: the internal lookup query is authorized as the caller, not ROOT
+execute as u1_${uuid0} with no revert;
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+execute as root with no revert;
+
+grant select on table db_${uuid0}.t_dict to user u1_${uuid0};
+execute as u1_${uuid0} with no revert;
+select lookup_string('db_${uuid0}.t_dict', 'k1', 'v');
+execute as root with no revert;
+
+-- privilege granted through a role takes effect only after the role is activated
+execute as u2_${uuid0} with no revert;
+select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
+set role r_${uuid0};
+select lookup_string('db_${uuid0}.t_dict', 'k2', 'v');
+execute as root with no revert;
+
+drop user u1_${uuid0};
+drop user u2_${uuid0};
+drop role r_${uuid0};
+drop database db_${uuid0} force;
