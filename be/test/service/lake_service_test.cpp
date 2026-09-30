@@ -5435,6 +5435,28 @@ TEST_F(LakeServiceTest, test_task_cleared_in_thread_pool_queue) {
     }
 
     {
+        // A vacuum task cancelled while still queued: the response carries the cancellation, named by
+        // partition so it can be paired with the FE's per-partition vacuum log, and no counters are set.
+        brpc::Controller cntl;
+        VacuumRequest request;
+        VacuumResponse response;
+        auto partition_id = next_id();
+        request.add_tablet_ids(_tablet_id);
+        request.set_partition_id(partition_id);
+        request.set_min_retain_version(1);
+        request.set_grace_timestamp(::time(nullptr));
+        _lake_service.vacuum(&cntl, &request, &response, nullptr);
+        ASSERT_FALSE(cntl.Failed()) << cntl.ErrorText();
+        ASSERT_TRUE(response.has_status());
+        ASSERT_EQ(TStatusCode::CANCELLED, response.status().status_code());
+        ASSERT_TRUE(MatchPattern(response.status().error_msgs(0),
+                                 fmt::format("*vacuum task of partition {} has been cancelled*", partition_id)))
+                << response.status().error_msgs(0);
+        ASSERT_EQ(0, response.vacuumed_files());
+        ASSERT_EQ(0, response.vacuumed_file_size());
+    }
+
+    {
         ASSERT_OK(FileSystem::Default()->path_exists(kRootLocation));
         DropTableRequest request;
         DropTableResponse response;
