@@ -25,6 +25,7 @@ import com.starrocks.connector.ConnectorMetadataRequestContext;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.CachingIcebergCatalog.IcebergTableName;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.UtFrameUtils;
@@ -33,18 +34,27 @@ import mockit.Expectations;
 import mockit.Mocked;
 import mockit.Verifications;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SnapshotSummary;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.inmemory.InMemoryCatalog;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.io.FileIO;
+import org.apache.iceberg.io.LocationProvider;
+import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -1181,5 +1191,66 @@ public class CachingIcebergCatalogTest {
         } finally {
             es.shutdownNow();
         }
+    }
+
+    @Test
+    public void testTableEntryIsWeighedByItsMetadataNotSharedWiring() {
+        InMemoryCatalog memory = new InMemoryCatalog();
+        memory.initialize("mem", new HashMap<>());
+        memory.createNamespace(Namespace.of("db"));
+        Table table = memory.createTable(TableIdentifier.of("db", "t"),
+                new Schema(Types.NestedField.required(1, "id", Types.IntegerType.get())), PartitionSpec.unpartitioned());
+        long empty = CachingIcebergCatalog.estimateTable(table);
+        for (int i = 0; i < 40; i++) {
+            table.newFastAppend().appendFile(DataFiles.builder(PartitionSpec.unpartitioned())
+                    .withPath("mem://db/t/data/f" + i + ".parquet").withFileSizeInBytes(10).withRecordCount(1).build())
+                    .commit();
+        }
+        TableMetadata metadata = ((HasTableOperations) table).operations().current();
+        long withSnapshots = CachingIcebergCatalog.estimateTable(table);
+        // 40 snapshots and their summaries cost something, nowhere near a whole cache.
+        Assertions.assertTrue(withSnapshots > empty, withSnapshots + " <= " + empty);
+        Assertions.assertTrue(withSnapshots < (1L << 20), "a 40-snapshot table weighed " + withSnapshots);
+
+        // The same metadata behind operations that also reach an 8 MiB object, standing in for the FileIO,
+        // Configuration and clients a catalog shares across its tables: the entry weighs the same.
+        byte[] sharedWiring = new byte[8 << 20];
+        TableOperations ops = new TableOperations() {
+            private final byte[] wiring = sharedWiring;
+
+            @Override
+            public TableMetadata current() {
+                return metadata;
+            }
+
+            @Override
+            public TableMetadata refresh() {
+                return metadata;
+            }
+
+            @Override
+            public void commit(TableMetadata base, TableMetadata updated) {
+                throw new UnsupportedOperationException();
+            }
+
+            @Override
+            public FileIO io() {
+                return null;
+            }
+
+            @Override
+            public String metadataFileLocation(String fileName) {
+                return fileName;
+            }
+
+            @Override
+            public LocationProvider locationProvider() {
+                return null;
+            }
+        };
+        Table wired = new BaseTable(ops, "db.t");
+        Assertions.assertEquals(withSnapshots, CachingIcebergCatalog.estimateTable(wired));
+        // Walking the whole Table object, as the weigher used to, charges that shared wiring to the entry.
+        Assertions.assertTrue(Estimator.estimate(wired) > sharedWiring.length);
     }
 }
