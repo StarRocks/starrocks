@@ -230,4 +230,65 @@ public class HashDistributionPrunerTest extends PlanTestBase {
         starRocksAssert.query("select * from test_bucket_prune where dim_dt = '2024-12-29' and dim_class_id = 1")
                 .explainContains("tabletRatio=1/8");
     }
+
+    @Test
+    public void testPruneTabletWithCompleteFilter() throws Exception {
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+        };
+
+        starRocksAssert.withTable("CREATE TABLE `test_bucket_prune_full` (\n" +
+                "  `dim_dt` date NOT NULL COMMENT \"\",\n" +
+                "  `dim_class_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `dim_week_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `deleted` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`dim_dt`, `dim_class_id`, `dim_week_id`)\n" +
+                "PARTITION BY RANGE(`dim_dt`)\n" +
+                "(PARTITION p20241229 VALUES [(\"2024-12-29\"), (\"2024-12-30\")))\n" +
+                "DISTRIBUTED BY HASH(`dim_dt`, `dim_class_id`, `dim_week_id`) BUCKETS 8 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        // All bucket columns are filtered: bucket prune is effective, the partition
+        // column predicate should be retained.
+        starRocksAssert.query("select * from test_bucket_prune_full " +
+                "where dim_dt = '2024-12-29' and dim_class_id = 1 and dim_week_id = 5")
+                .explainContains("tabletRatio=1/8", "PREDICATES: 1: dim_dt = '2024-12-29'");
+    }
+
+    @Test
+    public void testPruneTabletWithIncompleteFilter() throws Exception {
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+        };
+
+        starRocksAssert.withTable("CREATE TABLE `test_bucket_prune_partial` (\n" +
+                "  `dim_dt` date NOT NULL COMMENT \"\",\n" +
+                "  `dim_class_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `dim_week_id` int(11) NOT NULL COMMENT \"\",\n" +
+                "  `deleted` int(11) NOT NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP \n" +
+                "PRIMARY KEY(`dim_dt`, `dim_class_id`, `dim_week_id`)\n" +
+                "PARTITION BY RANGE(`dim_dt`)\n" +
+                "(PARTITION p20241229 VALUES [(\"2024-12-29\"), (\"2024-12-30\")))\n" +
+                "DISTRIBUTED BY HASH(`dim_dt`, `dim_class_id`, `dim_week_id`) BUCKETS 8 \n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");");
+
+        // Without a filter on dim_week_id, bucket prune falls back to scanning all 8
+        // buckets (tabletRatio=8/8) and the partition column predicate should be dropped.
+        String plan = starRocksAssert.query("select * from test_bucket_prune_partial " +
+                "where dim_dt = '2024-12-29' and dim_class_id = 1").explainQuery();
+        PlanTestBase.assertContains(plan, "tabletRatio=8/8");
+        PlanTestBase.assertNotContains(plan, "PREDICATES: 1: dim_dt = '2024-12-29'");
+    }
 }
