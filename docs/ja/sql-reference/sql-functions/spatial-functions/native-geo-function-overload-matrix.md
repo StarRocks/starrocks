@@ -102,6 +102,17 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 すべての overload は 7 種類の XY OGC family を受け付け、必要に応じて `MULTI*` と `GEOMETRYCOLLECTION` を再帰処理します。`NULL` は伝播します。`EMPTY` に対して計測は 0、`ST_Centroid` は `POINT EMPTY`、`ST_IsValid` は `true` を返します。読み取り可能でもトポロジ的に無効な値は `ST_IsValid` だけが `false` を返し、計測と重心は拒否します。不正な WKB、未対応の次元または descriptor はエラーです。
 
 球面ポリゴンのリングは向きに依存せず、小さい領域に正規化されます。1 個のリングで半球を超える領域は表現しません。[ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md)、[ST_IsValid](st_isvalid.md) を参照してください。
+## ポリゴンのオーバーレイ演算
+
+| シグネチャ | 関数 ID | 結果 |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY lhs, GEOMETRY rhs)` | 120300 | 平面上の共通部分。 |
+| `ST_Union(GEOMETRY lhs, GEOMETRY rhs)` | 120301 | 平面上の和集合。 |
+| `ST_Difference(GEOMETRY lhs, GEOMETRY rhs)` | 120302 | 平面上の左入力から右入力を除いた部分。 |
+| `ST_SymDifference(GEOMETRY lhs, GEOMETRY rhs)` | 120303 | 平面上の対称差。 |
+
+4 つの関数は有効な XY `POLYGON` または `MULTIPOLYGON` のみを受け取り、GEOMETRY の CRS ディスクリプタが一致する必要があります。結果は入力 CRS を保持し、再投影しません。結果は点、線、ポリゴン、マルチジオメトリ、コレクション、または空ジオメトリになり得ます。`NULL` は伝播します。無効なトポロジ、未対応の種類や次元、互換性のない CRS、GEOGRAPHY 入力は拒否されます。[ST_Intersection](st_intersection.md)、[ST_Union](st_union.md)、[ST_Difference](st_difference.md)、[ST_SymDifference](st_symdifference.md) を参照してください。
+
 ## レガシー互換性
 
 ネイティブオーバーロードは、既存の `VARCHAR` 関数を再採番または置換しません。

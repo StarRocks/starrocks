@@ -1173,6 +1173,19 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
      "GeoFunctions::native_geo_unary_close"],
 
+    [120300, "ST_Intersection", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersection", "GeoFunctions::native_geo_overlay_prepare",
+     "GeoFunctions::native_geo_overlay_close"],
+    [120301, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare",
+     "GeoFunctions::native_geo_overlay_close"],
+    [120302, "ST_Difference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_difference", "GeoFunctions::native_geo_overlay_prepare",
+     "GeoFunctions::native_geo_overlay_close"],
+    [120303, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare",
+     "GeoFunctions::native_geo_overlay_close"],
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],

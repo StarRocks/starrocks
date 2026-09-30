@@ -206,16 +206,20 @@ public class FunctionSet {
     public static final String ST_CIRCLE = "st_circle";
     public static final String ST_CENTROID = "st_centroid";
     public static final String ST_CONTAINS = "st_contains";
+    public static final String ST_DIFFERENCE = "st_difference";
     public static final String ST_DISTANCE_SPHERE = "st_distance_sphere";
     public static final String ST_GEOMETRYFROMTEXT = "st_geometryfromtext";
     public static final String ST_GEOMFROMTEXT = "st_geomfromtext";
     public static final String ST_GEOMFROMWKB = "st_geomfromwkb";
+    public static final String ST_INTERSECTION = "st_intersection";
     public static final String ST_LINEFROMTEXT = "st_linefromtext";
     public static final String ST_LINESTRINGFROMTEXT = "st_linestringfromtext";
     public static final String ST_POINT = "st_point";
     public static final String ST_POLYGON = "st_polygon";
     public static final String ST_POLYFROMTEXT = "st_polyfromtext";
     public static final String ST_POLYGONFROMTEXT = "st_polygonfromtext";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
+    public static final String ST_UNION = "st_union";
     public static final String ST_X = "st_x";
     public static final String ST_Y = "st_y";
 

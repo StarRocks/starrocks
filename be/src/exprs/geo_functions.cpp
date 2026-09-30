@@ -32,8 +32,10 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "geo/geo_measurements.h"
+#include "geo/geos_overlay.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -979,6 +981,99 @@ StatusOr<ColumnPtr> construct_geometry(FunctionContext* context, const Columns& 
     return result;
 }
 
+struct NativeGeoOverlayArgument {
+    bool constant = false;
+    Status parse_status = Status::OK();
+    std::string wkb;
+};
+
+struct NativeGeoOverlayState {
+    NativeGeoOverlayArgument arguments[2];
+};
+
+struct NativeGeoOverlayThreadState final : FunctionThreadState {
+    // Cached GEOSGeometry instances must be destroyed before their owning context.
+    GeosOverlay geos;
+    GeosGeometryPtr plan_constants[2];
+};
+
+Status prepare_overlay_constants(FunctionContext* context, NativeGeoOverlayState* state) {
+    for (size_t i = 0; i < 2; ++i) {
+        if (!context->is_constant_column(i)) continue;
+        auto& argument = state->arguments[i];
+        argument.constant = true;
+        const auto& column = context->get_constant_column(i);
+        if (column->only_null()) continue;
+        ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(column));
+        WkbGeometry geometry;
+        const Slice wkb = input.wkb(0);
+        argument.parse_status = WkbCodec::parse_wkb(wkb, &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN);
+        if (argument.parse_status.ok()) argument.wkb.assign(wkb.data, wkb.size);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> geometry_overlay(FunctionContext* context, const Columns& columns, GeosOverlayOperation operation,
+                                     const char* function_name) {
+    if (context == nullptr) return Status::InvalidArgument(std::string(function_name) + " requires a function context");
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto lhs, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto rhs, geo_input<TYPE_GEOMETRY>(columns[1]));
+    if (!is_geo_compute_compatible(lhs.data->descriptor(), rhs.data->descriptor())) {
+        return Status::InvalidArgument(std::string(function_name) + " requires compatible GEOMETRY descriptors");
+    }
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto& result_type = context->get_return_type();
+    GeoColumnDescriptor result_descriptor{
+            result_type.geo_type.value(),
+            {GEO_ENCODING_WKB, GEO_DIMENSION_XY, GEO_VALIDATION_STATE_SEMANTICALLY_VALIDATED}};
+    if (!is_geo_compute_compatible(lhs.data->descriptor(), result_descriptor)) {
+        return Status::InvalidArgument(std::string(function_name) + " result CRS does not match its inputs");
+    }
+
+    const auto* prepared = reinterpret_cast<const NativeGeoOverlayState*>(
+            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* thread_state = context->get_or_create_thread_state<NativeGeoOverlayThreadState>(
+            [] { return std::make_unique<NativeGeoOverlayThreadState>(); });
+    GeosGeometryPtr batch_constants[2];
+    const bool constant = lhs.constant && rhs.constant;
+    const size_t rows = constant ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        if (lhs.is_null(row) || rhs.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        if (context->state() != nullptr) RETURN_IF_CANCELLED(context->state());
+        const GeoInput* inputs[2] = {&lhs, &rhs};
+        GeosGeometryPtr varying[2];
+        const GEOSGeometry* geos_inputs[2] = {};
+        for (size_t i = 0; i < 2; ++i) {
+            const NativeGeoOverlayArgument* argument = prepared == nullptr ? nullptr : &prepared->arguments[i];
+            if (argument != nullptr && argument->constant) {
+                RETURN_IF_ERROR(argument->parse_status);
+                if (!thread_state->plan_constants[i]) {
+                    RETURN_IF_ERROR(thread_state->geos.read_polygon(Slice(argument->wkb.data(), argument->wkb.size()),
+                                                                    &thread_state->plan_constants[i]));
+                }
+                geos_inputs[i] = thread_state->plan_constants[i].get();
+            } else if (inputs[i]->constant) {
+                if (!batch_constants[i]) {
+                    RETURN_IF_ERROR(thread_state->geos.read_polygon(inputs[i]->wkb(row), &batch_constants[i]));
+                }
+                geos_inputs[i] = batch_constants[i].get();
+            } else {
+                RETURN_IF_ERROR(thread_state->geos.read_polygon(inputs[i]->wkb(row), &varying[i]));
+                geos_inputs[i] = varying[i].get();
+            }
+        }
+        ASSIGN_OR_RETURN(auto wkb, thread_state->geos.apply(geos_inputs[0], geos_inputs[1], operation));
+        result->append_datum(Datum(Slice(wkb)));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
 struct NativeGeoUnaryState {
     bool constant = false;
     Status parse_status = Status::OK();
@@ -1616,6 +1711,47 @@ StatusOr<ColumnPtr> GeoFunctions::st_geography_intersects(FunctionContext* conte
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersects(FunctionContext* context, const Columns& columns) {
     return geo_intersects<TYPE_GEOMETRY>(context, columns);
 }
+
+Status GeoFunctions::native_geo_overlay_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL ||
+        (!context->is_constant_column(0) && !context->is_constant_column(1))) {
+        return Status::OK();
+    }
+    const auto* lhs = context->get_arg_type(0);
+    const auto* rhs = context->get_arg_type(1);
+    if (lhs == nullptr || rhs == nullptr || lhs->type != TYPE_GEOMETRY || rhs->type != TYPE_GEOMETRY) {
+        return Status::InvalidArgument("Native GEOMETRY overlay requires two GEOMETRY arguments");
+    }
+    auto state = std::make_unique<NativeGeoOverlayState>();
+    RETURN_IF_ERROR(prepare_overlay_constants(context, state.get()));
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_overlay_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoOverlayState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersection(FunctionContext* context, const Columns& columns) {
+    return geometry_overlay(context, columns, GeosOverlayOperation::INTERSECTION, "ST_Intersection");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_union(FunctionContext* context, const Columns& columns) {
+    return geometry_overlay(context, columns, GeosOverlayOperation::UNION, "ST_Union");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_difference(FunctionContext* context, const Columns& columns) {
+    return geometry_overlay(context, columns, GeosOverlayOperation::DIFFERENCE, "ST_Difference");
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_sym_difference(FunctionContext* context, const Columns& columns) {
+    return geometry_overlay(context, columns, GeosOverlayOperation::SYMMETRIC_DIFFERENCE, "ST_SymDifference");
+}
+
 Status GeoFunctions::native_geo_unary_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
     const auto* argument_type = context->get_arg_type(0);

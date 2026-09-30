@@ -1,0 +1,5 @@
+GEOS - Geometry Engine Open Source
+Copyright (C) GEOS contributors
+Version 3.14.1: https://libgeos.org/
+Distributed under the GNU Lesser General Public License, version 2.1 or later.
+The source archive is available from https://download.osgeo.org/geos/geos-3.14.1.tar.bz2.

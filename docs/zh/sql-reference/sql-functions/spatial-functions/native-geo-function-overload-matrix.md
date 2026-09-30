@@ -102,6 +102,17 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 所有 overload 均接受七种 XY OGC family，并在适用时递归处理 `MULTI*` 和 `GEOMETRYCOLLECTION`。`NULL` 传播；度量对 `EMPTY` 返回 0，`ST_Centroid` 返回 `POINT EMPTY`，`ST_IsValid` 返回 `true`。可读取但拓扑无效的值仅由 `ST_IsValid` 返回 `false`，度量和质心会拒绝该输入。WKB 格式错误、不支持的维度或 descriptor 会返回错误。
 
 球面面环与方向无关，并归一化为较小区域；单个环不表示超过半球的区域。参见 [ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md) 和 [ST_IsValid](st_isvalid.md)。
+## 面叠加运算
+
+| 签名 | 函数 ID | 结果 |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY lhs, GEOMETRY rhs)` | 120300 | 平面交集。 |
+| `ST_Union(GEOMETRY lhs, GEOMETRY rhs)` | 120301 | 平面并集。 |
+| `ST_Difference(GEOMETRY lhs, GEOMETRY rhs)` | 120302 | 平面差集。 |
+| `ST_SymDifference(GEOMETRY lhs, GEOMETRY rhs)` | 120303 | 平面对称差集。 |
+
+四个函数只接受拓扑有效的 XY `POLYGON` 或 `MULTIPOLYGON`，两个输入的 GEOMETRY CRS 描述符必须兼容。结果保留输入 CRS，不进行重投影，结果类型可以是点、线、面、多重几何、集合或空几何。`NULL` 传递；无效拓扑、不支持的类型或维度、CRS 不兼容和 GEOGRAPHY 输入会被拒绝。参见 [ST_Intersection](st_intersection.md)、[ST_Union](st_union.md)、[ST_Difference](st_difference.md) 和 [ST_SymDifference](st_symdifference.md)。
+
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：

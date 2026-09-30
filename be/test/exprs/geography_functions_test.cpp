@@ -1726,6 +1726,191 @@ TEST_F(geographyFunctionsTest, nativeGeoUnaryLifecycleReusesPlanConstant) {
     ASSERT_TRUE(GeoFunctions::native_geo_unary_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 }
+
+TEST_F(geographyFunctionsTest, nativeGeometryOverlayContract) {
+    using Overlay = StatusOr<ColumnPtr> (*)(FunctionContext*, const Columns&);
+    const auto type = geometry_type();
+    const char* a = "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))";
+    const char* b = "POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))";
+    struct Case {
+        Overlay function;
+        double area;
+    };
+    for (const Case& test :
+         {Case{GeoFunctions::st_geometry_intersection, 1}, Case{GeoFunctions::st_geometry_union, 7},
+          Case{GeoFunctions::st_geometry_difference, 3}, Case{GeoFunctions::st_geometry_sym_difference, 6}}) {
+        std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+        auto result = test.function(context.get(), {geometry({a}), geometry({b})});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ColumnViewer<TYPE_DOUBLE> area(GeoFunctions::st_geometry_area(nullptr, {*result}).value());
+        EXPECT_DOUBLE_EQ(test.area, area.value(0));
+        const auto* output = down_cast<const NullableColumn*>((*result).get());
+        EXPECT_EQ(type.geo_type, down_cast<const GeoColumn*>(output->data_column().get())->descriptor().type);
+        if (test.function != GeoFunctions::st_geometry_difference) {
+            auto reversed = test.function(context.get(), {geometry({b}), geometry({a})});
+            ASSERT_TRUE(reversed.ok()) << reversed.status();
+            auto delta = GeoFunctions::st_geometry_sym_difference(context.get(), {*result, *reversed});
+            ASSERT_TRUE(delta.ok()) << delta.status();
+            ColumnViewer<TYPE_VARCHAR> delta_text(GeoFunctions::st_geometry_as_text(nullptr, {*delta}).value());
+            EXPECT_NE(std::string::npos, delta_text.value(0).to_string().find("EMPTY"));
+        }
+    }
+
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+    auto touching = GeoFunctions::st_geometry_intersection(
+            context.get(), {geometry({a}), geometry({"POLYGON ((2 0, 4 0, 4 2, 2 2, 2 0))"})});
+    ASSERT_TRUE(touching.ok()) << touching.status();
+    ColumnViewer<TYPE_VARCHAR> touching_text(GeoFunctions::st_geometry_as_text(nullptr, {*touching}).value());
+    EXPECT_EQ(0, touching_text.value(0).to_string().find("LINESTRING"));
+    ColumnViewer<TYPE_DOUBLE> touching_area(GeoFunctions::st_geometry_area(nullptr, {*touching}).value());
+    EXPECT_DOUBLE_EQ(0, touching_area.value(0));
+    auto corner = GeoFunctions::st_geometry_intersection(
+            context.get(), {geometry({a}), geometry({"POLYGON ((2 2, 3 2, 3 3, 2 3, 2 2))"})});
+    ASSERT_TRUE(corner.ok()) << corner.status();
+    ColumnViewer<TYPE_VARCHAR> corner_text(GeoFunctions::st_geometry_as_text(nullptr, {*corner}).value());
+    EXPECT_EQ("POINT (2 2)", corner_text.value(0).to_string());
+
+    auto empty = GeoFunctions::st_geometry_intersection(
+            context.get(), {geometry({a}), geometry({"POLYGON ((4 4, 5 4, 5 5, 4 5, 4 4))"})});
+    ASSERT_TRUE(empty.ok()) << empty.status();
+    ColumnViewer<TYPE_DOUBLE> empty_area(GeoFunctions::st_geometry_area(nullptr, {*empty}).value());
+    EXPECT_DOUBLE_EQ(0, empty_area.value(0));
+
+    auto null_result = GeoFunctions::st_geometry_union(context.get(), {geometry({nullptr}), geometry({b})});
+    ASSERT_TRUE(null_result.ok()) << null_result.status();
+    EXPECT_TRUE((*null_result)->is_null(0));
+    EXPECT_FALSE(GeoFunctions::st_geometry_union(context.get(), {geometry({"POINT (0 0)"}), geometry({b})}).ok());
+    EXPECT_FALSE(GeoFunctions::st_geometry_union(context.get(), {geography({a}), geometry({b})}).ok());
+    EXPECT_FALSE(GeoFunctions::st_geometry_union(context.get(),
+                                                 {geometry({a}), geometry({b}, geometry_type("EPSG:4326", 4326))})
+                         .ok());
+    EXPECT_FALSE(GeoFunctions::st_geometry_union(context.get(),
+                                                 {geometry({"POLYGON ((0 0, 2 2, 0 2, 2 0, 0 0))"}), geometry({b})})
+                         .ok());
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryOverlayHolesMultiAndEmpty) {
+    const auto type = geometry_type();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+    auto a = geometry({"POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 2 1, 2 2, 1 2, 1 1))"});
+    auto b = geometry({"POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))"});
+    auto area_of = [](const ColumnPtr& geo) {
+        auto measured = GeoFunctions::st_geometry_area(nullptr, {geo});
+        EXPECT_TRUE(measured.ok()) << measured.status();
+        return measured.ok() ? ColumnViewer<TYPE_DOUBLE>(*measured).value(0) : std::numeric_limits<double>::quiet_NaN();
+    };
+    auto intersection = GeoFunctions::st_geometry_intersection(context.get(), {a, b});
+    auto intersection_reverse = GeoFunctions::st_geometry_intersection(context.get(), {b, a});
+    auto united = GeoFunctions::st_geometry_union(context.get(), {a, b});
+    auto united_reverse = GeoFunctions::st_geometry_union(context.get(), {b, a});
+    auto difference = GeoFunctions::st_geometry_difference(context.get(), {a, b});
+    auto reverse_difference = GeoFunctions::st_geometry_difference(context.get(), {b, a});
+    auto symmetric = GeoFunctions::st_geometry_sym_difference(context.get(), {a, b});
+    auto symmetric_reverse = GeoFunctions::st_geometry_sym_difference(context.get(), {b, a});
+    ASSERT_TRUE(intersection.ok()) << intersection.status();
+    ASSERT_TRUE(intersection_reverse.ok()) << intersection_reverse.status();
+    ASSERT_TRUE(united.ok()) << united.status();
+    ASSERT_TRUE(united_reverse.ok()) << united_reverse.status();
+    ASSERT_TRUE(difference.ok()) << difference.status();
+    ASSERT_TRUE(reverse_difference.ok()) << reverse_difference.status();
+    ASSERT_TRUE(symmetric.ok()) << symmetric.status();
+    ASSERT_TRUE(symmetric_reverse.ok()) << symmetric_reverse.status();
+    EXPECT_DOUBLE_EQ(3, area_of(*intersection));
+    EXPECT_DOUBLE_EQ(3, area_of(*intersection_reverse));
+    EXPECT_DOUBLE_EQ(16, area_of(*united));
+    EXPECT_DOUBLE_EQ(16, area_of(*united_reverse));
+    EXPECT_DOUBLE_EQ(12, area_of(*difference));
+    EXPECT_DOUBLE_EQ(1, area_of(*reverse_difference));
+    EXPECT_DOUBLE_EQ(13, area_of(*symmetric));
+    EXPECT_DOUBLE_EQ(13, area_of(*symmetric_reverse));
+
+    auto identity = GeoFunctions::st_geometry_intersection(context.get(), {a, a});
+    auto identity_union = GeoFunctions::st_geometry_union(context.get(), {a, a});
+    auto identity_difference = GeoFunctions::st_geometry_difference(context.get(), {a, a});
+    auto identity_symmetric = GeoFunctions::st_geometry_sym_difference(context.get(), {a, a});
+    ASSERT_TRUE(identity.ok()) << identity.status();
+    ASSERT_TRUE(identity_union.ok()) << identity_union.status();
+    ASSERT_TRUE(identity_difference.ok()) << identity_difference.status();
+    ASSERT_TRUE(identity_symmetric.ok()) << identity_symmetric.status();
+    EXPECT_DOUBLE_EQ(15, area_of(*identity));
+    EXPECT_DOUBLE_EQ(15, area_of(*identity_union));
+    EXPECT_DOUBLE_EQ(0, area_of(*identity_difference));
+    EXPECT_DOUBLE_EQ(0, area_of(*identity_symmetric));
+    auto empty = geometry({"POLYGON EMPTY"});
+    auto empty_intersection = GeoFunctions::st_geometry_intersection(context.get(), {a, empty});
+    auto empty_union = GeoFunctions::st_geometry_union(context.get(), {a, empty});
+    ASSERT_TRUE(empty_intersection.ok()) << empty_intersection.status();
+    ASSERT_TRUE(empty_union.ok()) << empty_union.status();
+    EXPECT_DOUBLE_EQ(0, area_of(*empty_intersection));
+    EXPECT_DOUBLE_EQ(15, area_of(*empty_union));
+
+    auto multi =
+            geometry({"MULTIPOLYGON (((0 0, 1 0, 1 1, 0 1, 0 0)), "
+                      "((5 5, 6 5, 6 6, 5 6, 5 5)))"});
+    auto multi_intersection = GeoFunctions::st_geometry_intersection(context.get(), {multi, a});
+    ASSERT_TRUE(multi_intersection.ok()) << multi_intersection.status();
+    EXPECT_DOUBLE_EQ(1, area_of(*multi_intersection));
+
+    auto mixed = GeoFunctions::st_geometry_intersection(
+            context.get(), {geometry({"MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), ((4 0, 6 0, 6 2, 4 2, 4 0)))"}),
+                            geometry({"POLYGON ((1 0, 4 0, 4 2, 1 2, 1 0))"})});
+    ASSERT_TRUE(mixed.ok()) << mixed.status();
+    ColumnViewer<TYPE_VARCHAR> mixed_text(GeoFunctions::st_geometry_as_text(nullptr, {*mixed}).value());
+    EXPECT_EQ(0, mixed_text.value(0).to_string().find("GEOMETRYCOLLECTION"));
+    EXPECT_DOUBLE_EQ(2, area_of(*mixed));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryOverlayPlanConstantDoesNotCacheChunkConstant) {
+    const auto type = geometry_type();
+    auto plan = ConstColumn::create(geometry({"POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"}), 1);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+    context->set_constant_columns({plan, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    for (const auto& [wkt, expected] : {std::pair{"POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))", 1.0},
+                                        std::pair{"POLYGON ((3 3, 4 3, 4 4, 3 4, 3 3))", 0.0}}) {
+        auto chunk = ConstColumn::create(geometry({wkt}), 1);
+        auto result = GeoFunctions::st_geometry_intersection(context.get(), {plan, chunk});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ColumnViewer<TYPE_DOUBLE> area(GeoFunctions::st_geometry_area(nullptr, {*result}).value());
+        EXPECT_DOUBLE_EQ(expected, area.value(0));
+    }
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+TEST_F(geographyFunctionsTest, nativeGeometryOverlaySharedContextWorkers) {
+    const auto type = geometry_type();
+    auto plan = ConstColumn::create(geometry({"POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))"}), 1);
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type, type}, type));
+    context->set_constant_columns({plan, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    std::atomic<bool> passed = true;
+    std::vector<std::thread> workers;
+    for (int worker = 0; worker < 4; ++worker) {
+        workers.emplace_back([&, worker] {
+            const std::string wkt = "POLYGON ((" + std::to_string(worker) + " 0, " + std::to_string(worker + 1) +
+                                    " 0, " + std::to_string(worker + 1) + " 1, " + std::to_string(worker) + " 1, " +
+                                    std::to_string(worker) + " 0))";
+            auto polygon = geometry({wkt.c_str()});
+            for (int iteration = 0; iteration < 20; ++iteration) {
+                auto result = GeoFunctions::st_geometry_intersection(context.get(), {plan, polygon});
+                if (!result.ok()) {
+                    passed = false;
+                    return;
+                }
+                auto area = GeoFunctions::st_geometry_area(nullptr, {*result});
+                if (!area.ok() || ColumnViewer<TYPE_DOUBLE>(*area).value(0) != 1.0) {
+                    passed = false;
+                    return;
+                }
+            }
+        });
+    }
+    for (auto& worker : workers) worker.join();
+    EXPECT_TRUE(passed);
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     struct ExpectedFunction {
         uint64_t id;
@@ -1776,6 +1961,10 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120271, "ST_Perimeter", "DOUBLE", {"GEOMETRY"}},
             {120280, "ST_Centroid", "GEOGRAPHY", {"GEOGRAPHY"}},
             {120281, "ST_Centroid", "GEOMETRY", {"GEOMETRY"}},
+            {120300, "ST_Intersection", "GEOMETRY", {"GEOMETRY", "GEOMETRY"}},
+            {120301, "ST_Union", "GEOMETRY", {"GEOMETRY", "GEOMETRY"}},
+            {120302, "ST_Difference", "GEOMETRY", {"GEOMETRY", "GEOMETRY"}},
+            {120303, "ST_SymDifference", "GEOMETRY", {"GEOMETRY", "GEOMETRY"}},
             {120290, "ST_IsValid", "BOOLEAN", {"GEOGRAPHY"}},
             {120291, "ST_IsValid", "BOOLEAN", {"GEOMETRY"}},
     };

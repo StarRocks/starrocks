@@ -102,6 +102,17 @@ These overloads support XY `POLYGON` and `MULTIPOLYGON` values. `GEOMETRY` input
 All overloads accept the seven XY OGC families and recurse through `MULTI*` and `GEOMETRYCOLLECTION` where applicable. `NULL` propagates. Measurements return zero for `EMPTY`; `ST_Centroid` returns `POINT EMPTY`; `ST_IsValid` returns `true`. Topology-invalid readable values return `false` only from `ST_IsValid`; measurements and centroid reject them. Malformed WKB and unsupported dimensions or descriptors are errors.
 
 Spherical polygon rings are orientation-independent and normalized to their smaller region; a single ring does not represent more than a hemisphere. See [ST_Area](st_area.md), [ST_Length](st_length.md), [ST_Perimeter](st_perimeter.md), [ST_Centroid](st_centroid.md), and [ST_IsValid](st_isvalid.md).
+## Polygon overlay operations
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `ST_Intersection(GEOMETRY lhs, GEOMETRY rhs)` | 120300 | Planar overlap. |
+| `ST_Union(GEOMETRY lhs, GEOMETRY rhs)` | 120301 | Planar combined area. |
+| `ST_Difference(GEOMETRY lhs, GEOMETRY rhs)` | 120302 | Planar area in the left input outside the right input. |
+| `ST_SymDifference(GEOMETRY lhs, GEOMETRY rhs)` | 120303 | Planar area in exactly one input. |
+
+All four functions accept valid XY `POLYGON` or `MULTIPOLYGON` operands with compatible GEOMETRY CRS descriptors, preserve that descriptor, and do not reproject. Their result may be a point, line, polygon, multi-geometry, collection, or empty geometry. `NULL` propagates. Invalid topology, unsupported families or dimensions, incompatible CRS, and GEOGRAPHY inputs are rejected. See [ST_Intersection](st_intersection.md), [ST_Union](st_union.md), [ST_Difference](st_difference.md), and [ST_SymDifference](st_symdifference.md).
+
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:

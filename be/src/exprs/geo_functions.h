@@ -103,6 +103,15 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_intersects);
     DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
+    static Status native_geo_overlay_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_overlay_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+
+    DEFINE_VECTORIZED_FN(st_geometry_intersection);
+    DEFINE_VECTORIZED_FN(st_geometry_union);
+    DEFINE_VECTORIZED_FN(st_geometry_difference);
+    DEFINE_VECTORIZED_FN(st_geometry_sym_difference);
+
     static Status native_geo_unary_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
     static Status native_geo_unary_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
 

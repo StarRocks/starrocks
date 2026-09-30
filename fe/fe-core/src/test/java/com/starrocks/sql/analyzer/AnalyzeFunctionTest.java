@@ -236,6 +236,26 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ST_Area('POLYGON ((0 0, 1 0, 0 0))')",
                 "No matching function with signature: st_area(varchar)");
     }
+    @Test
+    public void testNativeGeometryOverlayContract() {
+        String left = "ST_GeomFromText('POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))', 'EPSG:3857')";
+        String right = "ST_GeomFromText('POLYGON ((1 1, 3 1, 3 3, 1 3, 1 1))', 'EPSG:3857')";
+        String[] names = {"ST_Intersection", "ST_Union", "ST_Difference", "ST_SymDifference"};
+        for (int i = 0; i < names.length; i++) {
+            String sql = "select " + names[i] + "(" + left + ", " + right + ")";
+            assertFunctionContract(sql, 120300 + i, PrimitiveType.GEOMETRY);
+            assertFunctionContract("select ST_Area(" + names[i] + "(" + left + ", " + right + "))",
+                    120251, PrimitiveType.DOUBLE);
+            QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+            ScalarType resultType = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+            Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), resultType.getGeoDescriptor());
+            analyzeFail("select " + names[i] + "(" + left + ", ST_GeomFromText('POLYGON EMPTY', 'EPSG:4326'))",
+                    "requires compatible GEOMETRY CRS descriptors");
+            analyzeFail("select " + names[i] + "(" + left + ", ST_GeogFromText('POLYGON EMPTY'))",
+                    "No matching function with signature");
+        }
+    }
+
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
