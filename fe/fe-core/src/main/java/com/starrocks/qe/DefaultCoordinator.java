@@ -637,22 +637,10 @@ public class DefaultCoordinator extends Coordinator {
             throw e;
         }
 
-<<<<<<< HEAD
-        try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
-            deliverExecFragments(option);
-        }
-=======
-        if (StarRocksRemoteScanSessionManager.hasPreparedRemoteScans(connectContext)) {
-            try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "StartRemoteScan")) {
-                StarRocksRemoteScanSessionManager.startPreparedRemoteScans(connectContext);
-            }
-        }
-
         try {
             try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Deploy")) {
                 deliverExecFragments(option);
             }
->>>>>>> 1f3e44a404b... [BugFix] Re-plan a query whose range-colocate bucket assignment went stale (#64046)
 
             scheduler.continueSchedule(option);
         } catch (RangeColocateUnalignedException e) {
