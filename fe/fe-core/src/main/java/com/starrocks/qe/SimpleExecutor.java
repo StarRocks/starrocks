@@ -187,6 +187,11 @@ public class SimpleExecutor {
 
     /**
      * Replace the ROOT identity set by {@link #createConnectContext()} with the caller's.
+     * Only identity is copied (user, roles, groups, DN). The caller's
+     * {@code bypassAuthorizerCheck} is deliberately NOT copied: it is a transient control-flow
+     * flag that makes {@link StatementPlanner} skip {@code Authorizer.check}, so inheriting it
+     * would let a lookup triggered inside an existing bypass scope skip the SELECT / Ranger
+     * checks this method exists to enforce. The internal context keeps its default (false).
      */
     private static void inheritIdentity(ConnectContext context, ConnectContext caller) {
         context.setQualifiedUser(caller.getQualifiedUser());
@@ -194,7 +199,6 @@ public class SimpleExecutor {
         context.setCurrentRoleIds(caller.getCurrentRoleIds());
         context.setGroups(caller.getGroups());
         context.setDistinguishedName(caller.getDistinguishedName());
-        context.setBypassAuthorizerCheck(caller.isBypassAuthorizerCheck());
     }
 
     /**
