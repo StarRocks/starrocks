@@ -81,6 +81,27 @@ TEST(JsonValueTest, ParseAcceptsNestingWithinLimit) {
     ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(bracket_string)).ok());
 }
 
+// The exact off-by-one that ParseRejectsExcessiveNestingDepth deliberately skips. With an explicit
+// small cap, a document nested to exactly the cap parses, and one level deeper fails cleanly.
+TEST(JsonValueTest, ParseNestingDepthExactBoundary) {
+    const int32_t saved = config::json_max_parse_nesting_depth;
+    DeferOp restore([&]() { config::json_max_parse_nesting_depth = saved; });
+
+    const int cap = 8;
+    config::json_max_parse_nesting_depth = cap;
+
+    // Every array from the outermost to the innermost counts as one level, so a document with
+    // exactly cap nested arrays sits right at the limit and parses.
+    std::string at_cap = std::string(cap, '[') + std::string(cap, ']');
+    ASSERT_TRUE(JsonValue::parse_json_or_string(Slice(at_cap)).ok()) << "depth " << cap;
+
+    // One level deeper is rejected as a data-quality error rather than overflowing the stack.
+    std::string over_cap = std::string(cap + 1, '[') + std::string(cap + 1, ']');
+    auto res = JsonValue::parse_json_or_string(Slice(over_cap));
+    ASSERT_FALSE(res.ok());
+    ASSERT_TRUE(res.status().is_data_quality_error()) << res.status();
+}
+
 TEST(JsonValueTest, ParseInvalidJsonReportsVelocypackError) {
     // Invalid JSON must come back as a status (never an exception escaping parse()) and keep the
     // velocypack error message, whichever parser API is in use.
