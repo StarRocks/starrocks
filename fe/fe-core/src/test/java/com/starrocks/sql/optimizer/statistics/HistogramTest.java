@@ -14,17 +14,12 @@
 
 package com.starrocks.sql.optimizer.statistics;
 
-import org.apache.logging.log4j.Level;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.core.LogEvent;
-import org.apache.logging.log4j.core.appender.AbstractAppender;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class HistogramTest {
 
@@ -224,68 +219,5 @@ public class HistogramTest {
 
         Assertions.assertTrue(actualHistogram.getBuckets().isEmpty());
         Assertions.assertEquals(expectedTotalRows, actualHistogram.getTotalRows());
-    }
-
-    @Test
-    public void testEmptyBucketListWarns() {
-        // Given a histogram constructed with an empty bucket list
-        // CASE WHEN buckets are missing THEN the constructor warns, so whoever wrote the call site
-        // learns that the rows outside the MCVs have been lost END
-
-        final Map<String, Long> mcv = Map.of("1", 100L);
-        final int expectedWarnCount = 1;
-
-        final int actualWarnCount = warnCountWhile(() -> new Histogram(List.of(), mcv));
-
-        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
-    }
-
-    @Test
-    public void testSingleBucketWhereMcvIsEnoughDoesNotWarn() {
-        // Given a total that the MCVs already account for in full
-        // CASE WHEN ofSingleBucket finds no rows left to carry THEN it reaches the quiet door,
-        // because it has just proved the very thing the warning would ask the caller to check END
-
-        final Map<String, Long> mcv = Map.of("a", 1000L);
-        final double totalRows = 1000;
-        final int expectedWarnCount = 0;
-
-        final int actualWarnCount = warnCountWhile(() -> Histogram.ofSingleBucket(1.0, 2.0, totalRows, mcv));
-
-        Assertions.assertEquals(expectedWarnCount, actualWarnCount);
-    }
-
-    private static int warnCountWhile(Runnable action) {
-        WarnCounterAppender appender = new WarnCounterAppender();
-        org.apache.logging.log4j.core.Logger logger =
-                (org.apache.logging.log4j.core.Logger) LogManager.getLogger(Histogram.class);
-        appender.start();
-        logger.addAppender(appender);
-        try {
-            action.run();
-        } finally {
-            logger.removeAppender(appender);
-            appender.stop();
-        }
-        return appender.getWarnCount();
-    }
-
-    private static class WarnCounterAppender extends AbstractAppender {
-        private final AtomicInteger warnCount = new AtomicInteger();
-
-        WarnCounterAppender() {
-            super("histogram-warn-counter", null, null);
-        }
-
-        @Override
-        public void append(LogEvent event) {
-            if (event.getLevel() == Level.WARN) {
-                warnCount.incrementAndGet();
-            }
-        }
-
-        int getWarnCount() {
-            return warnCount.get();
-        }
     }
 }

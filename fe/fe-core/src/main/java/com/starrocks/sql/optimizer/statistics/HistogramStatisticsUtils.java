@@ -19,8 +19,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.type.BooleanType;
 import org.apache.commons.math3.util.Precision;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -32,8 +30,6 @@ import java.util.Optional;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.HISTOGRAM_UNREPRESENTED_VALUE_COEFFICIENT;
 
 public class HistogramStatisticsUtils {
-    private static final Logger LOG = LogManager.getLogger(HistogramStatisticsUtils.class);
-
 
     private static class MatchedConstantsInfo {
         long totalMatchedRows;
@@ -287,10 +283,6 @@ public class HistogramStatisticsUtils {
 
 
         if (matchedInfo.matchedBucketValues.isEmpty()) {
-            if (!originalHistogram.getBuckets().isEmpty()) {
-                LOG.warn("No IN constant fell inside a histogram bucket, so the estimated histogram covers "
-                        + "its MCV rows only.");
-            }
             return new Histogram(prunedMcv);
         }
 
