@@ -99,8 +99,9 @@ public class MysqlProto {
         byte[] randomString = MysqlPassword.createRandomString();
         context.setAuthDataSalt(randomString);
 
+        boolean offerCompression = Config.mysql_service_compression_enabled;
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
-                SSLContextLoader.getSslContext() != null, randomString);
+                SSLContextLoader.getSslContext() != null, randomString, offerCompression);
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
@@ -160,6 +161,9 @@ public class MysqlProto {
         // change the capability of serializer
         context.setCapability(context.getServerCapability());
         serializer.setCapability(context.getCapability());
+        if (offerCompression) {
+            channel.setNegotiatedCompression(MysqlCompression.negotiate(authPacket));
+        }
 
         return new NegotiateResult(authPacket, NegotiateState.OK);
     }

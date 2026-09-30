@@ -1503,6 +1503,9 @@ public class ConnectProcessor {
         final MysqlChannel channel = ctx.getMysqlChannel();
         channel.setSequenceId(req.packageId());
         channel.accSequenceId();
+        if (req.compressedSequenceId() >= 0) {
+            channel.setCompressedSequenceId(req.compressedSequenceId() + 1);
+        }
 
         dispatch();
 

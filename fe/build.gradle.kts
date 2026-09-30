@@ -84,6 +84,7 @@ subprojects {
         set("thrift.version", "0.24.0")
         set("tomcat.version", "8.5.70")
         set("lz4-java.version", "1.10.1")
+        set("zstd-jni.version", "1.5.5-4")
         // var sync end
     }
 
@@ -272,6 +273,7 @@ subprojects {
             implementation("software.amazon.awssdk:url-connection-client:${project.ext["aws-v2-sdk.version"]}")
             implementation("tools.profiler:async-profiler:${project.ext["async-profiler.version"]}")
             implementation("at.yawk.lz4:lz4-java:${project.ext["lz4-java.version"]}")
+            implementation("com.github.luben:zstd-jni:${project.ext["zstd-jni.version"]}")
             // dependency sync end
         }
     }
