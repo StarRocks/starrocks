@@ -80,6 +80,7 @@ public class IcebergPartitionsTable extends MetadataTable {
                         .column("equality_delete_record_count", BIGINT)
                         .column("equality_delete_file_count", BIGINT)
                         .column("last_updated_at", DATETIME)
+                        .column("last_updated_snapshot_id", BIGINT)
                         .build(),
                 originDb,
                 originTable,
