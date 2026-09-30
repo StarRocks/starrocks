@@ -1096,6 +1096,7 @@ StatusOr<ColumnPtr> geo_centroid(FunctionContext* context, const Columns& column
     constexpr auto semantics = Type == TYPE_GEOGRAPHY ? WkbCoordinateSemantics::GEOGRAPHY_CRS84
                                                       : WkbCoordinateSemantics::GEOMETRY_CARTESIAN;
     const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
     ASSIGN_OR_RETURN(auto input, geo_input<Type>(columns[0]));
     const size_t rows = input.constant ? 1 : size;
     const auto* prepared =

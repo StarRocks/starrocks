@@ -1552,6 +1552,29 @@ TEST_F(geographyFunctionsTest, nativeGeoMeasurementsAndCollections) {
     EXPECT_NEAR(spherical_perimeter.value(1), spherical_perimeter.value(2), 0.001);
 }
 
+TEST_F(geographyFunctionsTest, nativeGeometryMeasurementsAreStableAfterLargeTranslation) {
+    const auto type = geometry_type("EPSG:3857", 3857);
+    auto polygons = geometry({"POLYGON ((0 0, 0.1 0, 0.1 0.1, 0 0.1, 0 0))",
+                              "POLYGON ((10000000 10000000, 10000000.1 10000000, "
+                              "10000000.1 10000000.1, 10000000 10000000.1, 10000000 10000000))"},
+                             type);
+
+    ColumnViewer<TYPE_DOUBLE> area(GeoFunctions::st_geometry_area(nullptr, {polygons}).value());
+    const double represented_side = 10000000.1 - 10000000.0;
+    EXPECT_NEAR(0.01, area.value(0), 1e-15);
+    EXPECT_NEAR(represented_side * represented_side, area.value(1), 1e-15);
+
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context({type}, type));
+    auto centroids = GeoFunctions::st_geometry_centroid(context.get(), {polygons});
+    ASSERT_TRUE(centroids.ok()) << centroids.status();
+    ColumnViewer<TYPE_DOUBLE> x(GeoFunctions::st_geometry_x(nullptr, {*centroids}).value());
+    ColumnViewer<TYPE_DOUBLE> y(GeoFunctions::st_geometry_y(nullptr, {*centroids}).value());
+    EXPECT_NEAR(0.05, x.value(0), 1e-15);
+    EXPECT_NEAR(0.05, y.value(0), 1e-15);
+    EXPECT_NEAR(10000000.05, x.value(1), 1e-9);
+    EXPECT_NEAR(10000000.05, y.value(1), 1e-9);
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoCentroidPreservesKindAndUsesHighestDimension) {
     const auto planar_type = geometry_type();
     std::unique_ptr<FunctionContext> planar_context(FunctionContext::create_test_context({planar_type}, planar_type));
@@ -1567,6 +1590,16 @@ TEST_F(geographyFunctionsTest, nativeGeoCentroidPreservesKindAndUsesHighestDimen
                                         ? down_cast<const NullableColumn*>(planar_centroids.get())->data_column().get()
                                         : planar_centroids.get();
     EXPECT_EQ(planar_type.geo_type, down_cast<const GeoColumn*>(planar_data)->descriptor().type);
+
+    auto constant_null = ColumnHelper::create_const_null_column(3);
+    std::unique_ptr<FunctionContext> null_context(FunctionContext::create_test_context({planar_type}, planar_type));
+    null_context->set_constant_columns({constant_null});
+    ASSERT_TRUE(GeoFunctions::native_geo_unary_prepare(null_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    auto null_centroid = GeoFunctions::st_geometry_centroid(null_context.get(), {constant_null});
+    ASSERT_TRUE(null_centroid.ok()) << null_centroid.status();
+    EXPECT_TRUE((*null_centroid)->only_null());
+    EXPECT_EQ(3, (*null_centroid)->size());
+    ASSERT_TRUE(GeoFunctions::native_geo_unary_close(null_context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 
     const auto spherical_type = geography_type();
     std::unique_ptr<FunctionContext> spherical_context(
@@ -1590,14 +1623,25 @@ TEST_F(geographyFunctionsTest, nativeGeoValiditySeparatesTopologyFromBoundaryErr
     EXPECT_TRUE(planar_valid.value(2));
     EXPECT_TRUE(planar_valid.value(3));
 
+    constexpr const char* nested_holes =
+            "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), (2 2, 8 2, 8 8, 2 8, 2 2), "
+            "(3 3, 4 3, 4 4, 3 4, 3 3))";
     auto spherical = geography({"LINESTRING (0 0, 180 0)",
                                 "MULTIPOLYGON (((0 0, 2 0, 2 2, 0 2, 0 0)), "
                                 "((1 1, 3 1, 3 3, 1 3, 1 1)))",
-                                "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))"});
+                                "POLYGON ((0 0, 2 0, 2 2, 0 2, 0 0))", nested_holes,
+                                "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0), "
+                                "(2 2, 4 2, 4 4, 2 4, 2 2), (6 6, 8 6, 8 8, 6 8, 6 6))"});
     ColumnViewer<TYPE_BOOLEAN> spherical_valid(GeoFunctions::st_geography_is_valid(nullptr, {spherical}).value());
     EXPECT_FALSE(spherical_valid.value(0));
     EXPECT_FALSE(spherical_valid.value(1));
     EXPECT_TRUE(spherical_valid.value(2));
+    EXPECT_FALSE(spherical_valid.value(3));
+    EXPECT_TRUE(spherical_valid.value(4));
+
+    auto nested_area = GeoFunctions::st_geography_area(nullptr, {geography({nested_holes})});
+    ASSERT_FALSE(nested_area.ok());
+    EXPECT_TRUE(nested_area.status().is_invalid_argument());
 
     auto null = GeoFunctions::st_geometry_is_valid(nullptr, {geometry({nullptr})}).value();
     EXPECT_TRUE(null->is_null(0));

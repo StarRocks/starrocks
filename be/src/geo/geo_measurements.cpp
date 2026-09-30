@@ -53,15 +53,37 @@ GeoParseStatus spherical_polygon(const WkbGeometry& geometry, GeoPolygon* output
     return output->from_coords(rings);
 }
 
+bool spherical_polygon_has_valid_hole_relationships(const WkbGeometry& geometry) {
+    std::vector<std::unique_ptr<GeoPolygon>> holes;
+    holes.reserve(geometry.rings.size() > 1 ? geometry.rings.size() - 1 : 0);
+    for (size_t i = 1; i < geometry.rings.size(); ++i) {
+        GeoCoordinateListList ring;
+        ring.add(new GeoCoordinateList(coordinates(geometry.rings[i])));
+        auto hole = std::make_unique<GeoPolygon>();
+        if (hole->from_coords(ring) != GEO_PARSE_OK) return false;
+        for (const auto& previous : holes) {
+            if (hole->intersects_interior(*previous)) return false;
+        }
+        holes.emplace_back(std::move(hole));
+    }
+    return true;
+}
+
 GeoParseStatus spherical_line(const WkbGeometry& geometry, GeoLine* output) {
     return output->from_coords(coordinates(geometry.coordinates));
 }
 
 long double signed_ring_area2(const std::vector<WkbCoordinate>& ring) {
+    if (ring.empty()) return 0;
+    const long double origin_x = ring[0].x;
+    const long double origin_y = ring[0].y;
     long double area2 = 0;
     for (size_t i = 1; i < ring.size(); ++i) {
-        area2 += static_cast<long double>(ring[i - 1].x) * ring[i].y -
-                 static_cast<long double>(ring[i].x) * ring[i - 1].y;
+        const long double previous_x = static_cast<long double>(ring[i - 1].x) - origin_x;
+        const long double previous_y = static_cast<long double>(ring[i - 1].y) - origin_y;
+        const long double current_x = static_cast<long double>(ring[i].x) - origin_x;
+        const long double current_y = static_cast<long double>(ring[i].y) - origin_y;
+        area2 += previous_x * current_y - current_x * previous_y;
     }
     return area2;
 }
@@ -149,7 +171,8 @@ bool spherical_valid_impl(const WkbGeometry& geometry) {
     }
     case WkbGeometryType::POLYGON: {
         GeoPolygon polygon;
-        return spherical_polygon(geometry, &polygon) == GEO_PARSE_OK;
+        return spherical_polygon(geometry, &polygon) == GEO_PARSE_OK &&
+               spherical_polygon_has_valid_hole_relationships(geometry);
     }
     case WkbGeometryType::MULTIPOINT:
     case WkbGeometryType::MULTILINESTRING:
@@ -163,7 +186,10 @@ bool spherical_valid_impl(const WkbGeometry& geometry) {
         for (const auto& child : geometry.children) {
             if (child.empty) continue;
             auto polygon = std::make_unique<GeoPolygon>();
-            if (spherical_polygon(child, polygon.get()) != GEO_PARSE_OK) return false;
+            if (spherical_polygon(child, polygon.get()) != GEO_PARSE_OK ||
+                !spherical_polygon_has_valid_hole_relationships(child)) {
+                return false;
+            }
             for (const auto& previous : polygons) {
                 if (polygon->intersects_interior(*previous)) return false;
             }
@@ -278,19 +304,25 @@ void accumulate_planar_line(const std::vector<WkbCoordinate>& line, PlanarAccumu
 }
 
 void accumulate_planar_ring_area(const std::vector<WkbCoordinate>& ring, long double sign, PlanarAccumulator* output) {
+    if (ring.empty()) return;
+    const long double origin_x = ring[0].x;
+    const long double origin_y = ring[0].y;
     long double area2 = 0;
     long double x_numerator = 0;
     long double y_numerator = 0;
     for (size_t i = 1; i < ring.size(); ++i) {
-        const long double cross = static_cast<long double>(ring[i - 1].x) * ring[i].y -
-                                  static_cast<long double>(ring[i].x) * ring[i - 1].y;
+        const long double previous_x = static_cast<long double>(ring[i - 1].x) - origin_x;
+        const long double previous_y = static_cast<long double>(ring[i - 1].y) - origin_y;
+        const long double current_x = static_cast<long double>(ring[i].x) - origin_x;
+        const long double current_y = static_cast<long double>(ring[i].y) - origin_y;
+        const long double cross = previous_x * current_y - current_x * previous_y;
         area2 += cross;
-        x_numerator += (static_cast<long double>(ring[i - 1].x) + ring[i].x) * cross;
-        y_numerator += (static_cast<long double>(ring[i - 1].y) + ring[i].y) * cross;
+        x_numerator += (previous_x + current_x) * cross;
+        y_numerator += (previous_y + current_y) * cross;
     }
     if (area2 == 0) return;
     const long double area = std::abs(area2) / 2;
-    output->add(x_numerator / (3 * area2), y_numerator / (3 * area2), sign * area);
+    output->add(origin_x + x_numerator / (3 * area2), origin_y + y_numerator / (3 * area2), sign * area);
 }
 
 void accumulate_planar(const WkbGeometry& geometry, std::array<PlanarAccumulator, 3>* output) {
