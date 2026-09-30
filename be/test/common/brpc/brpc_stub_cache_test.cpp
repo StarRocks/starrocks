@@ -22,10 +22,12 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
 #include <mutex>
 #include <thread>
 #include <unordered_set>
 
+#include "base/concurrency/countdown_latch.h"
 #include "base/failpoint/fail_point.h"
 #include "base/utility/defer_op.h"
 #include "common/config_exec_flow_fwd.h"
@@ -304,6 +306,32 @@ TEST_F(BrpcStubCacheTest, http_singleton_reinitialize_rebinds_pipeline_timer) {
 }
 
 #ifndef __APPLE__
+namespace {
+
+class HangingLakeService : public LakeService {
+public:
+    void publish_version(google::protobuf::RpcController* /*controller*/, const PublishVersionRequest* /*request*/,
+                         PublishVersionResponse* /*response*/, google::protobuf::Closure* done) override {
+        received.count_down();
+        release.wait();
+        done->Run();
+    }
+
+    CountDownLatch received{1};
+    CountDownLatch release{1};
+};
+
+class SignalClosure : public google::protobuf::Closure {
+public:
+    explicit SignalClosure(CountDownLatch* done) : _done(done) {}
+    void Run() override { _done->count_down(); }
+
+private:
+    CountDownLatch* _done;
+};
+
+} // namespace
+
 TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
     auto timer2 = std::make_unique<BthreadTimer>();
     ASSERT_OK(timer2->start());
@@ -326,6 +354,60 @@ TEST_F(BrpcStubCacheTest, lake_singleton_reinitialize_rebinds_pipeline_timer) {
     ASSERT_NE(nullptr, *rebound_stub);
 
     cache->shutdown();
+}
+
+TEST_F(BrpcStubCacheTest, lake_traffic_contributes_to_internal_service_connection_load) {
+    config::brpc_max_connections_per_server = 2;
+    PublishVersionRequest request;
+    request.add_tablet_ids(1);
+    PublishVersionResponse response;
+    brpc::Controller controller;
+    controller.request_attachment().append("lake-attachment");
+    const int64_t payload_bytes = request.ByteSizeLong() + controller.request_attachment().size();
+    CountDownLatch rpc_done(1);
+    SignalClosure done(&rpc_done);
+
+    brpc::Server server;
+    HangingLakeService service;
+    brpc::ServerOptions options;
+    ASSERT_EQ(0, server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE));
+    ASSERT_EQ(0, server.Start(0, &options));
+    DeferOp stop_server([&] {
+        service.release.count_down();
+        server.Stop(0);
+        server.Join();
+    });
+
+    BrpcStubCache cache(_timer.get());
+    const butil::EndPoint endpoint = server.listen_address();
+
+    auto internal_stub = cache.get_stub(endpoint);
+    ASSERT_NE(nullptr, internal_stub);
+    auto lake_stub = std::make_shared<LakeService_RecoverableStub>(endpoint);
+    ASSERT_OK(lake_stub->reset_channel());
+    ASSERT_EQ(internal_stub->_connection_load, lake_stub->_connection_load);
+    auto sibling_stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "", 1);
+    ASSERT_NE(internal_stub->_connection_load, sibling_stub->_connection_load);
+
+    lake_stub->publish_version(&controller, &request, &response, &done);
+    ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
+
+    ASSERT_EQ(1, internal_stub->num_in_flight_rpcs());
+    ASSERT_EQ(payload_bytes, internal_stub->num_in_flight_payload_bytes());
+
+    auto selected_or = cache.acquire_least_loaded_stub(endpoint);
+    ASSERT_OK(selected_or.status());
+    auto selected = std::move(selected_or).value();
+    ASSERT_NE(internal_stub.get(), selected.reservation.stub());
+    ASSERT_TRUE(selected.created_on_contention);
+
+    service.release.count_down();
+    ASSERT_TRUE(rpc_done.wait_for(std::chrono::seconds(10)));
+    ASSERT_EQ(0, internal_stub->num_in_flight_rpcs());
+    ASSERT_EQ(0, internal_stub->num_in_flight_payload_bytes());
+
+    ASSERT_OK(lake_stub->reset_channel());
+    ASSERT_EQ(internal_stub->_connection_load, lake_stub->_connection_load);
 }
 #endif
 
@@ -551,11 +633,20 @@ TEST_F(BrpcStubCacheTest, cached_pool_stays_usable_after_map_expiry) {
     // The retained shared_ptr keeps the pool and its stubs alive and selectable.
     auto selected = pool->acquire_least_loaded(endpoint, 0);
     ASSERT_OK(selected.status());
-    ASSERT_EQ(stub.get(), std::move(selected).value().reservation.stub());
+    auto selection = std::move(selected).value();
+    ASSERT_EQ(stub.get(), selection.reservation.stub());
+    selection.reservation.reset();
 
     // A fresh lookup re-registers a new, distinct pool for the endpoint.
     auto fresh = cache.get_or_create_pool(endpoint);
     ASSERT_NE(pool.get(), fresh.get());
+
+    // Recreated wrappers for the same connection slot share accounting with retained wrappers from the old pool.
+    auto old_reservation = stub->reserve_rpc(1024);
+    auto fresh_stub = fresh->get_or_create(endpoint);
+    ASSERT_NE(stub.get(), fresh_stub.get());
+    ASSERT_EQ(1, fresh_stub->num_in_flight_rpcs());
+    ASSERT_EQ(1024, fresh_stub->num_in_flight_payload_bytes());
 }
 
 } // namespace starrocks

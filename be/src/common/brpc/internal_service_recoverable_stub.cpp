@@ -14,7 +14,6 @@
 
 #include "common/brpc/internal_service_recoverable_stub.h"
 
-#include <limits>
 #include <memory>
 
 #include "common/config_rpc_client_fwd.h"
@@ -22,16 +21,6 @@
 namespace starrocks {
 
 namespace {
-
-int64_t request_payload_bytes(const google::protobuf::Message* request, google::protobuf::RpcController* controller) {
-    const size_t request_bytes = request != nullptr ? request->ByteSizeLong() : 0;
-    const size_t attachment_bytes = static_cast<brpc::Controller*>(controller)->request_attachment().size();
-    constexpr size_t max_payload_bytes = static_cast<size_t>(std::numeric_limits<int64_t>::max());
-    if (request_bytes > max_payload_bytes || attachment_bytes > max_payload_bytes - request_bytes) {
-        return std::numeric_limits<int64_t>::max();
-    }
-    return static_cast<int64_t>(request_bytes + attachment_bytes);
-}
 
 class RpcInFlightClosure : public google::protobuf::Closure {
 public:
@@ -64,7 +53,7 @@ public:
         PInternalService_RecoverableStub::RpcInFlightGuard reservation;
         google::protobuf::Closure* closure = done;
         if (config::brpc_connection_type == "single") {
-            reservation = _owner->reserve_rpc(request_payload_bytes(request, controller));
+            reservation = _owner->reserve_rpc(brpc_request_payload_bytes(request, controller));
             if (done != nullptr) {
                 closure = new RpcInFlightClosure(std::move(reservation), done);
             }
@@ -84,6 +73,7 @@ private:
 PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint,
                                                                    std::string protocol, int64_t connection_group_seed)
         : PInternalService_Stub(new RecoverableChannel(this), google::protobuf::Service::STUB_OWNS_CHANNEL),
+          _connection_load(get_brpc_connection_load(endpoint, protocol, connection_group_seed)),
           _endpoint(endpoint),
           _connection_group_seed(connection_group_seed),
           _protocol(std::move(protocol)) {}
@@ -92,38 +82,43 @@ PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
 PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(
         std::shared_ptr<PInternalService_RecoverableStub> stub, int64_t payload_bytes)
-        : _stub(std::move(stub)),
-          _in_flight_before(_stub->_num_in_flight_rpcs.fetch_add(1)),
-          _payload_bytes(payload_bytes) {
-    _stub->_in_flight_payload_bytes.fetch_add(_payload_bytes);
-}
+        : _stub(std::move(stub)), _load_guard(_stub->_connection_load->reserve(payload_bytes)) {}
 
 PInternalService_RecoverableStub::RpcInFlightGuard::~RpcInFlightGuard() {
     reset();
 }
 
 PInternalService_RecoverableStub::RpcInFlightGuard::RpcInFlightGuard(RpcInFlightGuard&& other) noexcept
-        : _stub(std::move(other._stub)),
-          _in_flight_before(other._in_flight_before),
-          _payload_bytes(other._payload_bytes) {}
+        : _stub(std::move(other._stub)), _load_guard(std::move(other._load_guard)) {}
 
 PInternalService_RecoverableStub::RpcInFlightGuard& PInternalService_RecoverableStub::RpcInFlightGuard::operator=(
         RpcInFlightGuard&& other) noexcept {
     if (this != &other) {
         reset();
         _stub = std::move(other._stub);
-        _in_flight_before = other._in_flight_before;
-        _payload_bytes = other._payload_bytes;
+        _load_guard = std::move(other._load_guard);
     }
     return *this;
 }
 
 void PInternalService_RecoverableStub::RpcInFlightGuard::reset() {
     if (_stub != nullptr) {
-        _stub->_num_in_flight_rpcs.fetch_sub(1);
-        _stub->_in_flight_payload_bytes.fetch_sub(_payload_bytes);
+        _load_guard.reset();
         _stub.reset();
     }
+}
+
+int64_t PInternalService_RecoverableStub::num_in_flight_rpcs() const {
+    return _connection_load->num_in_flight_rpcs();
+}
+
+int64_t PInternalService_RecoverableStub::num_in_flight_payload_bytes() const {
+    return _connection_load->num_in_flight_payload_bytes();
+}
+
+PInternalService_RecoverableStub::RpcInFlightGuard PInternalService_RecoverableStub::reserve_rpc(
+        int64_t payload_bytes) {
+    return RpcInFlightGuard(shared_from_this(), payload_bytes);
 }
 
 void PInternalService_RecoverableStub::transmit_chunk(RpcInFlightGuard reservation,

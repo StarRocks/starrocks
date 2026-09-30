@@ -101,7 +101,7 @@ TEST_F(PInternalService_RecoverableStubTest, test_get_load_replica_status) {
 
 TEST_F(PInternalService_RecoverableStubTest, rpc_in_flight_guard) {
     butil::EndPoint point;
-    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1", 8000, &point));
+    ASSERT_EQ(0, butil::str2endpoint("127.0.0.1", 18000, &point));
     auto stub = std::make_shared<starrocks::PInternalService_RecoverableStub>(point);
 
     ASSERT_EQ(0, stub->num_in_flight_rpcs());

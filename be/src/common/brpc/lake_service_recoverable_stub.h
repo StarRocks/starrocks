@@ -16,6 +16,7 @@
 
 #include "base/brpc/recoverable_closure.h"
 #include "base/status.h"
+#include "common/brpc/brpc_connection_load.h"
 #include "gen_cpp/lake_service.pb.h"
 
 namespace starrocks {
@@ -47,6 +48,7 @@ public:
 
 private:
     std::shared_ptr<starrocks::LakeService_Stub> _stub;
+    std::shared_ptr<BrpcConnectionLoad> _connection_load;
     const butil::EndPoint _endpoint;
     std::atomic<int64_t> _connection_group = 0;
     // Distinguishes stubs that share the same endpoint.
