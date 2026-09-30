@@ -299,6 +299,32 @@ public class MetaFunctionsTest extends MVTestBase {
     }
 
     @Test
+    public void testLookupStringIgnoresCallerBypass() throws Exception {
+        // A lookup triggered inside an existing bypassAuthorizerCheck scope must still be
+        // authorized: the internal query must not inherit the caller's bypass flag, otherwise
+        // the SELECT / Ranger checks would be skipped again.
+        starRocksAssert.withTable("create table t_lookup_bypass(c1 string, c2 string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        boolean currentBypass = connectContext.isBypassAuthorizerCheck();
+        try {
+            connectContext.setCurrentUserIdentity(testUser);
+            connectContext.setCurrentRoleIds(testUser);
+            connectContext.setBypassAuthorizerCheck(true);
+            connectContext.setThreadLocalInfo();
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_lookup_bypass", "k", "c2"));
+            Assertions.assertTrue(e.getMessage().contains("Access denied"), e.getMessage());
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+            connectContext.setBypassAuthorizerCheck(currentBypass);
+            starRocksAssert.dropTable("t_lookup_bypass");
+        }
+    }
+
+    @Test
     public void inspectMVRefreshInfoReturnsValidJsonForMaterializedView() throws Exception {
         starRocksAssert.withRefreshedMaterializedView("create materialized view mv1 distributed by random " +
                 "as select k1, sum(v1) from test.tbl1 group by k1");
