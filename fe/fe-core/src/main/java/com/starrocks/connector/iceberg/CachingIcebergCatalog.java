@@ -36,6 +36,7 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.HasTableOperations;
 import org.apache.iceberg.ManifestFile;
 import org.apache.iceberg.PartitionData;
 import org.apache.iceberg.PartitionSpec;
@@ -643,13 +644,28 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     private int weighTableEntry(IcebergTableName key, Table table) {
         long size = Estimator.estimate(key);
         if (table != null) {
-            size += Estimator.estimate(table);
+            size += estimateTable(table);
         }
         if (size > Integer.MAX_VALUE) {
             LOG.warn("Table cache entry size for key {} is too large: {} bytes", key, size);
             return Integer.MAX_VALUE;
         }
         return (int) size;
+    }
+
+    // What a cached table keeps alive on its own is its TableMetadata: schemas, specs, snapshots and the logs.
+    // Walking the Table object also reaches the catalog wiring every table shares (FileIO, the Hadoop
+    // Configuration, metastore clients), and the estimator multiplies a sampled element's size by its
+    // collection's length, so that shared graph was charged once per snapshot and an ordinary table could
+    // weigh more than the whole cache.
+    static long estimateTable(Table table) {
+        if (table instanceof HasTableOperations) {
+            TableMetadata metadata = ((HasTableOperations) table).operations().current();
+            if (metadata != null) {
+                return Estimator.estimate(metadata);
+            }
+        }
+        return Estimator.estimate(table);
     }
 
     // Each entry holds a whole table's partition map, which is unbounded in bytes (a table can have
