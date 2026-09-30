@@ -1,0 +1,73 @@
+-- name: test_ivm_auto_batched_join_fallback_hands_back_to_incremental @cloud
+CREATE TABLE bj_fact (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+CREATE TABLE bj_dim (k int, name varchar(8))
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO bj_dim VALUES (1,'a'),(2,'b'),(3,'c');
+-- result:
+-- !result
+INSERT INTO bj_fact VALUES ('2026-09-21',1,10),('2026-09-22',2,20),('2026-09-23',3,30);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_bj
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '1',
+            'partition_refresh_strategy' = 'strict')
+AS SELECT f.dt, f.k, f.v, d.name FROM bj_fact f JOIN bj_dim d ON f.k = d.k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bj';
+REFRESH MATERIALIZED VIEW mv_bj;
+function: wait_mv_refresh_count("${db[0]}", "mv_bj", 3)
+-- result:
+None
+-- !result
+TRUNCATE TABLE bj_fact PARTITION p20260921;
+-- result:
+-- !result
+INSERT INTO bj_fact VALUES ('2026-09-21',1,100),('2026-09-22',2,5),('2026-09-23',3,7);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_bj;
+function: wait_mv_refresh_count("${db[0]}", "mv_bj", 6)
+-- result:
+None
+-- !result
+INSERT INTO bj_fact VALUES ('2026-09-22',2,1);
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW mv_bj WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+SELECT dt, k, v, name FROM mv_bj ORDER BY dt, k, v;
+-- result:
+2026-09-21	1	100	a
+2026-09-22	2	1	b
+2026-09-22	2	5	b
+2026-09-22	2	20	b
+2026-09-23	3	7	c
+2026-09-23	3	30	c
+-- !result
+SELECT f.dt, f.k, f.v, d.name FROM bj_fact f JOIN bj_dim d ON f.k = d.k ORDER BY f.dt, f.k, f.v;
+-- result:
+2026-09-21	1	100	a
+2026-09-22	2	1	b
+2026-09-22	2	5	b
+2026-09-22	2	20	b
+2026-09-23	3	7	c
+2026-09-23	3	30	c
+-- !result

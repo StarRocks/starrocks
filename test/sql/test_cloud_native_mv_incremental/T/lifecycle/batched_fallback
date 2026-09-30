@@ -1,0 +1,38 @@
+-- A batched fallback to PCT drops the incremental baseline of the tables it moves before its first batch writes,
+-- and sets them again with its last batch. A join side it does not move keeps its baseline, so the refresh after
+-- the fallback runs incrementally and counts each row once.
+
+-- name: test_ivm_auto_batched_join_fallback_hands_back_to_incremental @cloud
+CREATE TABLE bj_fact (dt date, k int, v bigint)
+DUPLICATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+CREATE TABLE bj_dim (k int, name varchar(8))
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1 PROPERTIES ('replication_num' = '1');
+INSERT INTO bj_dim VALUES (1,'a'),(2,'b'),(3,'c');
+INSERT INTO bj_fact VALUES ('2026-09-21',1,10),('2026-09-22',2,20),('2026-09-23',3,30);
+CREATE MATERIALIZED VIEW mv_bj
+PARTITION BY dt
+DISTRIBUTED BY HASH(k) BUCKETS 1
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto', 'partition_refresh_number' = '1',
+            'partition_refresh_strategy' = 'strict')
+AS SELECT f.dt, f.k, f.v, d.name FROM bj_fact f JOIN bj_dim d ON f.k = d.k;
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_bj';
+-- An async refresh runs one partition per task run.
+REFRESH MATERIALIZED VIEW mv_bj;
+function: wait_mv_refresh_count("${db[0]}", "mv_bj", 3)
+-- Only the fact table changes: the truncate sends the next refresh to pct, and the loads make it recompute all
+-- three partitions.
+TRUNCATE TABLE bj_fact PARTITION p20260921;
+INSERT INTO bj_fact VALUES ('2026-09-21',1,100),('2026-09-22',2,5),('2026-09-23',3,7);
+REFRESH MATERIALIZED VIEW mv_bj;
+function: wait_mv_refresh_count("${db[0]}", "mv_bj", 6)
+INSERT INTO bj_fact VALUES ('2026-09-22',2,1);
+REFRESH MATERIALIZED VIEW mv_bj WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- Rewriting the base-side query to the view would compare the view with itself.
+set enable_materialized_view_rewrite = false;
+SELECT dt, k, v, name FROM mv_bj ORDER BY dt, k, v;
+SELECT f.dt, f.k, f.v, d.name FROM bj_fact f JOIN bj_dim d ON f.k = d.k ORDER BY f.dt, f.k, f.v;
