@@ -127,8 +127,8 @@ public class SimpleExecutor {
     /**
      * Same as {@link #executeDQL(String)} but bounds the internal query with an explicit
      * {@code query_timeout} (seconds) instead of the default {@code statistic_collect_query_timeout}.
-     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views}
-     * or {@code lookup_string}) so they never outlive the outer user query.
+     * Used by serving-path internal queries (e.g. filling {@code information_schema.materialized_views})
+     * so they never outlive the outer user query.
      */
     public List<TResultBatch> executeDQL(String sql, int queryTimeoutSeconds) {
         ConnectContext prev = ConnectContext.get();
@@ -143,6 +143,50 @@ public class SimpleExecutor {
                 prev.setThreadLocalInfo();
             }
         }
+    }
+
+    /**
+     * Same as {@link #executeDQL(String, int)} but runs the internal query with the identity of
+     * {@code caller} instead of ROOT, so the caller's table/column privileges and the row filter /
+     * column masking policies of an external access controller (e.g. Ranger) apply to it. Must be
+     * used by internal queries that read user data on behalf of a user (e.g. {@code lookup_string}),
+     * otherwise any user could read tables it has no privilege on.
+     */
+    public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds, ConnectContext caller) {
+        Preconditions.checkNotNull(caller, "caller context is required");
+        ConnectContext prev = ConnectContext.get();
+        try {
+            ConnectContext context = createConnectContext();
+            inheritIdentity(context, caller);
+            context.getSessionVariable().setQueryTimeoutS(queryTimeoutSeconds);
+            context.getSessionVariable().setInsertTimeoutS(queryTimeoutSeconds);
+            return executeDQL(sql, context);
+        } finally {
+            ConnectContext.remove();
+            if (prev != null) {
+                prev.setThreadLocalInfo();
+            }
+        }
+    }
+
+    /**
+     * Replace the ROOT identity set by {@link #createConnectContext()} with the caller's.
+     * Copies identity only: user, roles, groups, DN and remote IP. The remote IP matters
+     * because USER()/SESSION_USER() are folded from qualifiedUser plus remoteIP, and Ranger
+     * row-filter / masking expressions are analyzed in this context, so dropping it would make
+     * such policies see 'user'@% rather than the caller's actual host. The caller's
+     * {@code bypassAuthorizerCheck} is deliberately NOT copied: it is a transient control-flow
+     * flag that makes {@link StatementPlanner} skip {@code Authorizer.check}, so inheriting it
+     * would let a lookup triggered inside an existing bypass scope skip the SELECT / Ranger
+     * checks this method exists to enforce. The internal context keeps its default (false).
+     */
+    private static void inheritIdentity(ConnectContext context, ConnectContext caller) {
+        context.setQualifiedUser(caller.getQualifiedUser());
+        context.setCurrentUserIdentity(caller.getCurrentUserIdentity());
+        context.setCurrentRoleIds(caller.getCurrentRoleIds());
+        context.setGroups(caller.getGroups());
+        context.setDistinguishedName(caller.getDistinguishedName());
+        context.setRemoteIP(caller.getRemoteIP());
     }
 
     /**
