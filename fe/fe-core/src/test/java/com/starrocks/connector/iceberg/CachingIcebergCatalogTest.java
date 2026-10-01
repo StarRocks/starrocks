@@ -643,7 +643,7 @@ public class CachingIcebergCatalogTest {
                         if (replaceEntry) {
                             tableCache.put(key, concurrentlyLoadedTable);
                         } else {
-                            catalog.invalidateTableCache("db1", "t1");
+                            tableCache.invalidate(key);
                         }
                         return staleReloadedTable;
                     }
