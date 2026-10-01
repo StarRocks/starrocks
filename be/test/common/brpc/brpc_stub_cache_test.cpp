@@ -614,7 +614,7 @@ TEST_F(BrpcStubCacheTest, get_or_create_pool_returns_stable_pool) {
     ASSERT_EQ(stub0.get(), std::move(selected).value().reservation.stub());
 }
 
-TEST_F(BrpcStubCacheTest, cached_pool_stays_usable_after_map_expiry) {
+TEST_F(BrpcStubCacheTest, in_use_pool_survives_expiry_and_stays_shared) {
     config::brpc_stub_expire_s = 1;
     config::brpc_max_connections_per_server = 2;
     BrpcStubCache cache(_timer.get());
@@ -628,26 +628,36 @@ TEST_F(BrpcStubCacheTest, cached_pool_stays_usable_after_map_expiry) {
     auto pool = cache.get_or_create_pool(endpoint);
     ASSERT_NE(nullptr, pool);
 
-    // Let the cleanup task evict the pool from the map after the expiry window.
+    // A caller holds the pool across the expiry window. The cleanup task must not evict a referenced pool, so
+    // concurrent callers to the same endpoint keep sharing the same pool (and its load accounting).
     sleep(2);
+    auto shared = cache.get_or_create_pool(endpoint);
+    ASSERT_EQ(pool.get(), shared.get());
 
-    // The retained shared_ptr keeps the pool and its stubs alive and selectable.
+    // The retained pool stays fully usable and routes to the stub created via get_stub.
     auto selected = pool->acquire_least_loaded(endpoint, 0);
     ASSERT_OK(selected.status());
-    auto selection = std::move(selected).value();
-    ASSERT_EQ(stub.get(), selection.reservation.stub());
-    selection.reservation.reset();
+    ASSERT_EQ(stub.get(), std::move(selected).value().reservation.stub());
+}
 
-    // A fresh lookup re-registers a new, distinct pool for the endpoint.
+TEST_F(BrpcStubCacheTest, idle_pool_is_evicted_after_expiry) {
+    config::brpc_stub_expire_s = 1;
+    config::brpc_max_connections_per_server = 2;
+    BrpcStubCache cache(_timer.get());
+    TNetworkAddress address;
+    address.hostname = "127.0.0.1";
+    address.port = 123;
+
+    auto stub = cache.get_stub(address);
+    ASSERT_NE(nullptr, stub);
+    const auto endpoint = stub->endpoint();
+
+    // Hold no reference to the pool (the stub does not reference its pool). After the idle window the cleanup
+    // task evicts the map entry, so a fresh lookup rebuilds an empty pool.
+    sleep(2);
     auto fresh = cache.get_or_create_pool(endpoint);
-    ASSERT_NE(pool.get(), fresh.get());
-
-    // Recreated wrappers for the same connection slot share accounting with retained wrappers from the old pool.
-    auto old_reservation = stub->reserve_rpc(1024);
-    auto fresh_stub = fresh->get_or_create(endpoint);
-    ASSERT_NE(stub.get(), fresh_stub.get());
-    ASSERT_EQ(1, fresh_stub->num_in_flight_rpcs());
-    ASSERT_EQ(1024, fresh_stub->num_in_flight_payload_bytes());
+    ASSERT_NE(nullptr, fresh);
+    ASSERT_TRUE(fresh->_stubs.empty());
 }
 
 } // namespace starrocks
