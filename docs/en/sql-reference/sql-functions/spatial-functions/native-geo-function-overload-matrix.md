@@ -107,8 +107,8 @@ Spherical polygon rings are orientation-independent and normalized to their smal
 | Signature | Function ID | Result | Behavior |
 | --- | ---: | --- | --- |
 | `ST_SRID(GEOMETRY value)` | 120300 | `INT` or `NULL` | Reads the numeric EPSG mapping from the descriptor; does not transform coordinates. |
-| `ST_SetSRID(GEOMETRY value, INT constant)` | 120301 | `GEOMETRY`, target EPSG descriptor | Changes metadata only; WKB and coordinates are unchanged. |
-| `ST_Transform(GEOMETRY value, INT constant)` | 120302 | `GEOMETRY`, target EPSG descriptor | Reprojects XY coordinates between EPSG:4326 and EPSG:3857 using Web Mercator formulas. |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`, target EPSG descriptor | Changes metadata only; WKB and coordinates are unchanged. |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`, target EPSG descriptor | Reprojects XY coordinates between EPSG:4326 and EPSG:3857 using Web Mercator formulas. |
 
 The two target SRIDs must be FE-foldable constants equal to 4326 or 3857. Source CRS must be EPSG:4326, EPSG:3857, or OGC:CRS84. `ST_Transform` handles all seven XY OGC families and collections; `NULL` propagates and `EMPTY` stays empty. See [ST_SRID](st_srid.md), [ST_SetSRID](st_setsrid.md), and [ST_Transform](st_transform.md).
 

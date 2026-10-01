@@ -241,8 +241,8 @@ public class AnalyzeFunctionTest {
         String geometry = "ST_GeomFromText('POINT (10 20)', 'EPSG:4326')";
         String geography = "ST_GeogFromText('POINT (10 20)')";
         assertFunctionContract("select ST_SRID(" + geometry + ")", 120300, PrimitiveType.INT);
-        assertFunctionContract("select ST_SetSRID(" + geometry + ", 3857)", 120301, PrimitiveType.GEOMETRY);
-        assertFunctionContract("select ST_Transform(" + geometry + ", 3857)", 120302, PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_SetSRID(" + geometry + ", 3857)", 120305, PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_Transform(" + geometry + ", 3857)", 120310, PrimitiveType.GEOMETRY);
 
         QueryRelation relation = ((QueryStatement) analyzeSuccess(
                 "select ST_Transform(" + geometry + ", cast(4326 + 1 - 1 as int))")).getQueryRelation();

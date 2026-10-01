@@ -2004,8 +2004,8 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120290, "ST_IsValid", "BOOLEAN", {"GEOGRAPHY"}},
             {120291, "ST_IsValid", "BOOLEAN", {"GEOMETRY"}},
             {120300, "ST_SRID", "INT", {"GEOMETRY"}},
-            {120301, "ST_SetSRID", "GEOMETRY", {"GEOMETRY", "INT"}},
-            {120302, "ST_Transform", "GEOMETRY", {"GEOMETRY", "INT"}},
+            {120305, "ST_SetSRID", "GEOMETRY", {"GEOMETRY", "INT"}},
+            {120310, "ST_Transform", "GEOMETRY", {"GEOMETRY", "INT"}},
     };
 
     for (const auto& function : expected) {
