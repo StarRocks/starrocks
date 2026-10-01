@@ -1066,6 +1066,21 @@ build_s2() {
     ${BUILD_SYSTEM} install
 }
 
+# geos
+build_geos() {
+    check_if_source_exist "$GEOS_SOURCE"
+    cd "$TP_SOURCE_DIR/$GEOS_SOURCE"
+    mkdir -p "$BUILD_DIR"
+    cd "$BUILD_DIR"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "$CMAKE_CMD" -G "${CMAKE_GENERATOR}" -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF -DBUILD_BENCHMARKS=OFF \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON ..
+    "${BUILD_SYSTEM}" -j"$PARALLEL"
+    "${BUILD_SYSTEM}" install
+}
+
 # bitshuffle
 build_bitshuffle() {
     check_if_source_exist $BITSHUFFLE_SOURCE
