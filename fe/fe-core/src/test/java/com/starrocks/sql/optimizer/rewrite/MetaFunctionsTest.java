@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.ErrorReportException;
@@ -25,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.qe.SimpleExecutor;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -41,6 +43,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -160,6 +163,28 @@ public class MetaFunctionsTest extends MVTestBase {
         });
         connectContext.setCurrentUserIdentity(currentUserIdentity);
         connectContext.setCurrentRoleIds(currentRoleIds);
+    }
+
+    @Test
+    public void testInspectExternalTableResolvesWithCallerContext() {
+        // inspectExternalTable must resolve the table with the caller's context (the thread-local
+        // one), not a throwaway new ConnectContext(); external connectors read identity/warehouse
+        // from it. Assert the exact caller instance reaches MetadataMgr.getTable.
+        ConnectContext[] captured = new ConnectContext[1];
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTable(ConnectContext context, TableName tableName) {
+                captured[0] = context;
+                return Optional.empty();
+            }
+        };
+        connectContext.setThreadLocalInfo();
+        try {
+            MetaFunctions.inspectExternalTable(new TableName("test", "tbl1"));
+        } catch (Exception ignore) {
+            // orElseThrow fires on the empty result; we only care about the captured context.
+        }
+        Assertions.assertSame(connectContext, captured[0]);
     }
 
     private String lookupString(String tableName, String key, String column) {
