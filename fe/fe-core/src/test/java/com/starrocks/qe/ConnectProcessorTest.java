@@ -1349,4 +1349,11 @@ public class ConnectProcessorTest extends DDLTestBase {
             return new PrepareStmt("test_stmt", null, null);
         }
     }
+
+    private ByteBuffer createQueryPacket(String sql) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString(sql);
+        return serializer.toByteBuffer();
+    }
 }
