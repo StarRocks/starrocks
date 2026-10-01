@@ -136,22 +136,36 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectTableAccessDeniedException() {
-        assertThrows(ErrorReportException.class, () -> {
-            connectContext.setCurrentUserIdentity(testUser);
-            connectContext.setCurrentRoleIds(testUser);
-            connectContext.setThreadLocalInfo();
-            MetaFunctions.inspectTable(new TableName("test", "tbl1"));
-        });
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            assertThrows(ErrorReportException.class, () -> {
+                connectContext.setCurrentUserIdentity(testUser);
+                connectContext.setCurrentRoleIds(testUser);
+                connectContext.setThreadLocalInfo();
+                MetaFunctions.inspectTable(new TableName("test", "tbl1"));
+            });
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+        }
     }
 
     @Test
     public void testInspectExternalTableAccessDeniedException() {
-        assertThrows(ErrorReportException.class, () -> {
-            connectContext.setCurrentUserIdentity(testUser);
-            connectContext.setCurrentRoleIds(testUser);
-            connectContext.setThreadLocalInfo();
-            MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
-        });
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            assertThrows(ErrorReportException.class, () -> {
+                connectContext.setCurrentUserIdentity(testUser);
+                connectContext.setCurrentRoleIds(testUser);
+                connectContext.setThreadLocalInfo();
+                MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
+            });
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+        }
     }
 
     private String lookupString(String tableName, String key, String column) {
