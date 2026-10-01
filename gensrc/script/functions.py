@@ -1182,6 +1182,8 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_transform", "GeoFunctions::native_geo_transform_prepare",
      "GeoFunctions::native_geo_transform_close"],
 
+    # reserve 120303-120305 for future Contract 5.5 CRS function overloads
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],
