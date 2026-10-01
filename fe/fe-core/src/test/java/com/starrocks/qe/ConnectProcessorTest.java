@@ -874,7 +874,6 @@ public class ConnectProcessorTest extends DDLTestBase {
                 customQueryId.set(ctx.getCustomQueryId());
             }
 
-<<<<<<< HEAD
             @Mock
             public PQueryStatistics getQueryStatisticsForAuditLog() {
                 return null;
@@ -887,7 +886,8 @@ public class ConnectProcessorTest extends DDLTestBase {
         // customQueryId is cleared after query finished
         Assertions.assertEquals("", ctx.getCustomQueryId());
         Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
-=======
+    }
+
     @ParameterizedTest
     @MethodSource("customQueryIdCases")
     public void testAuditRecordsEffectiveCustomQueryId(String sql, String expectedCustomQueryId) throws Exception {
@@ -906,33 +906,6 @@ public class ConnectProcessorTest extends DDLTestBase {
                 Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
                 Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
                 Arguments.of("select 1", "session_id"));
-    }
-
-    @Test
-    public void testQueryWithCustomSessionName() throws Exception {
-        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
-        ctx.getSessionVariable().setCustomSessionName("session_name");
-
-        ConnectProcessor processor = new ConnectProcessor(ctx);
-
-        AtomicReference<String> customSessionName = new AtomicReference<>();
-        try (MockedConstruction<StmtExecutor> ignored = Mockito.mockConstruction(StmtExecutor.class,
-                (mock, mockCtx) -> {
-                    Mockito.doAnswer(invocation -> {
-                        customSessionName.set(ctx.getCustomSessionName());
-                        return null;
-                    }).when(mock).execute();
-                    Mockito.when(mock.getQueryStatisticsForAuditLog()).thenReturn(null);
-                })) {
-            processor.processOnce();
-            Assertions.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
-            // verify customSessionName is set during query execution
-            Assertions.assertEquals("session_name", customSessionName.get());
-            // customSessionName is NOT cleared after query finished
-            Assertions.assertEquals("session_name", ctx.getCustomSessionName());
-            Assertions.assertEquals("session_name", ctx.getSessionVariable().getCustomSessionName());
-        }
->>>>>>> 1423926 ([BugFix] Record the SET_VAR-hinted custom_query_id in the audit log (#79871))
     }
 
     @Test
@@ -1236,5 +1209,12 @@ public class ConnectProcessorTest extends DDLTestBase {
             // Return a simple mock for test purposes
             return new PrepareStmt("test_stmt", null, null);
         }
+    }
+
+    private ByteBuffer createQueryPacket(String sql) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString(sql);
+        return serializer.toByteBuffer();
     }
 }
