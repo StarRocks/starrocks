@@ -26,11 +26,21 @@ displayed_sidebar: docs
 
 **Version requirements:**
 
+<<<<<<< HEAD
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 | --------- | ------------------------ | ------------- | ---- | --------- |
 | 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
 | 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
 | 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
+=======
+| Connector | Flink                         | StarRocks     | Java | Scala     |
+|-----------|-------------------------------|---------------| ---- |-----------|
+| 1.2.16    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.15    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.14    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.12    | 1.16,1.17,1.18,1.19,1.20      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.11    | 1.15,1.16,1.17,1.18,1.19,1.20 | 2.1 and later | 8    | 2.11,2.12 |
+>>>>>>> 8b86406 ([Doc] Add Flink Connector 1.2.16 Doc (#79697))
 
 > **NOTICE**
 >
@@ -40,6 +50,103 @@ displayed_sidebar: docs
 
 ### 1.2
 
+<<<<<<< HEAD
+=======
+#### 1.2.16
+
+Release date: September 24, 2026
+
+##### Features
+
+- Derive the `json` columns header from the Flink schema. [#510](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/510)
+
+##### Improvements
+
+- Multi-table transaction: batch chunk switches to cut redundant tiny loads. [#506](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/506)
+- Skip the host probe when only one load URL is configured. [#502](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/502)
+
+##### BugFix
+
+- Multi-table transaction: never park the writer on bytes that cannot be flushed before `txnEnd`. [#512](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/)
+- Multi-table transaction: recover a lost commit response instead of hanging/failing. [#501](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/501)
+- Multi-table transaction: reconcile `flushQ` region labels to the live shared label. [#500](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/500)
+- Fix a shared-state race in the query plan visitor. [#499](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/499)
+
+#### 1.2.15
+
+Release date: June 18, 2026
+
+##### Features
+
+- Added multi-table transaction Stream Load support. [#487](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/487)
+
+##### Improvements
+
+- Merge Commit supports logging data quality error messages. [#484](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/484)
+
+##### BugFix
+
+- Fix multi-table transaction concurrency: serialize per-table loads and align cross-table commits. [#491](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/491)
+- Fallback to FE cancel API when rollback fails for PREPARE-state lingering transactions. [#488](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/488)
+- Do not quote CURRENT_TIMESTAMP in the DEFAULT clause when building column statements. [#486](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/486)
+
+#### 1.2.14
+
+Release date: February 11, 2026
+
+##### Features
+
+- Supports Merge Commit. [#474](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/474)
+
+##### Improvements
+
+- Supports setting `sink.buffer-flush.interval-ms` to lower than 1 second. [#475](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/475)
+- Supports configurable transaction Publish timeout. [#480](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/480)
+
+##### Bug Fixes
+
+The following issues have been fixed:
+
+- Fix CVE-2023-2976 by upgrading guava version to `32.0.1-jre`. [#467](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/467)
+
+#### 1.2.12
+
+Release date: September 19, 2025
+
+##### Improvements
+
+- Supports specifying a warehouse for the source. [#423](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/423)
+- Added security policy. [#434](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/434)
+- Sanitized sensitive data in the error log. [#446](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/446)
+- Supports configuring `prepared_timeout` for the Stream Load transaction interface. [#453](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/453)
+
+##### Bug Fixes
+
+The following issues have been fixed:
+
+- The source reader was not closed if the open failed. [#441](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/441)
+- False success caused by any exception in StreamLoadManagerV2.flush. [#451](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/451)
+
+#### 1.2.11
+
+Release data: June 3, 2025
+
+**Features**
+
+- Supports LZ4 compression for the CSV format. [#408](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/408)
+- Adds support for Flink 1.20. [#409](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/409)
+
+**Improvements**
+
+- Adds an option to disable wrapping JSON into JSON arrays. [#344](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/344)
+- Updated FastJSON to resolve CVE-2022-25845. [#394](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/394)
+- Removed data row metrics from warn logs to avoid exposing payload in logs. [#420](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/420)
+
+**Bug Fixes**
+
+- Wrong pushdown results caused by the shadow clone of StarRocksDynamicTableSource (After the fix, a deep copy of StarRocksDynamicTableSource will be used). [#421](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/421)
+
+>>>>>>> 8b86406 ([Doc] Add Flink Connector 1.2.16 Doc (#79697))
 #### 1.2.10
 
 **Features**
