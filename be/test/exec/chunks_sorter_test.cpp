@@ -760,6 +760,46 @@ TEST_F(ChunksSorterTest, full_sort_binary_column_with_large_offsets) {
     EXPECT_EQ(expected, result);
 }
 
+// Run ChunksSorterTopn over input whose BinaryColumn has 64-bit offsets. With max_buffered_rows = 1 every update()
+// sorts at once: the first one materializes the initial run in _hybrid_sort_first_time, and the later ones merge the
+// new rows into it in _merge_sort_common. get_next hands the output on without downgrade(), so it must stay a sorted
+// BinaryColumn.
+TEST_F(ChunksSorterTest, topn_binary_column_with_large_offsets) {
+    auto expr_varchar = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_VARCHAR), 0);
+    std::vector<bool> is_asc{true};
+    std::vector<bool> is_null_first{true};
+    std::vector<ExprContext*> sort_exprs{new ExprContext(expr_varchar.get())};
+    DeferOp defer([&]() { clear_sort_exprs(sort_exprs, _runtime_state.get()); });
+    ASSERT_OK(ExprExecutor::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(ExprExecutor::open(sort_exprs, _runtime_state.get()));
+
+    auto pool = std::make_unique<ObjectPool>();
+    constexpr size_t kLimit = 4;
+    constexpr size_t kMaxBufferedRows = 1;
+    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, kLimit,
+                            TTopNType::ROW_NUMBER, kMaxBufferedRows);
+    sorter.setup_runtime(_runtime_state.get(), pool->add(new RuntimeProfile("", false)),
+                         pool->add(new MemTracker(1L << 62, "", nullptr)));
+
+    Chunk::SlotHashMap slot_map{{0, 0}};
+    const std::vector<std::pair<std::vector<std::string>, size_t>> inputs{
+            {{"delta", "bravo", "foxtrot"}, 0}, {{"echo", "charlie"}, 0}, {{"golf", "alpha"}, 1}};
+    for (const auto& [values, num_nulls] : inputs) {
+        auto column = build_large_offsets_varchar_column(values, true, num_nulls);
+        ASSERT_OK(sorter.update(_runtime_state.get(), std::make_shared<Chunk>(Columns{std::move(column)}, slot_map)));
+    }
+    ASSERT_OK(sorter.done(_runtime_state.get()));
+
+    std::vector<std::string> result;
+    for (const auto& output : consume_pages_from_sorter(sorter)) {
+        binary_data_column(output->get_column_raw_ptr_by_index(0));
+        auto values = varchar_column_values(*output->get_column_by_index(0));
+        result.insert(result.end(), values.begin(), values.end());
+    }
+    std::vector<std::string> expected{"NULL", "alpha", "bravo", "charlie"};
+    EXPECT_EQ(expected, result);
+}
+
 // _partial_sort checks the concatenated and the sorted chunk with capacity_limit_reached(), which replaced
 // upgrade_if_overflow(). It must accept a BinaryColumn whose payload exceeds 4GB: only the row count is limited. The
 // column borrows a 1-byte buffer and is never read, so nothing close to 4GB is allocated.
