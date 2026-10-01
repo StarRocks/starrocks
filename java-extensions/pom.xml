@@ -48,9 +48,15 @@
         <commons-io.version>2.14.0</commons-io.version>
         <gcs.connector.version>3.0.13</gcs.connector.version>
         <slf4j.version>1.7.36</slf4j.version>
+<<<<<<< HEAD
         <arrow.version>17.0.0</arrow.version>
         <jackson.version>2.21.4</jackson.version>
         <!-- jackson-annotations doesn't have 2.21.4 version released -->
+=======
+        <arrow.version>18.0.0</arrow.version>
+        <jackson.version>2.21.6</jackson.version>
+        <!-- jackson-annotations doesn't have 2.21.6 version released -->
+>>>>>>> 64ad3e9 ([BugFix][CVE] bump jackson to 2.21.6 (#79947))
         <jackson-annotations.version>2.21</jackson-annotations.version>
         <guava.version>32.0.1-jre</guava.version>
         <!-- hadoop-azure requires no more than jetty10+ -->
