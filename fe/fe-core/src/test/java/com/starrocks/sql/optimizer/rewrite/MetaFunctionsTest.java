@@ -21,12 +21,7 @@ import com.starrocks.common.ErrorReportException;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.persist.gson.GsonUtils;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.QueryDetail;
-import com.starrocks.qe.QueryDetailQueue;
->>>>>>> 3c41331 ([BugFix] Run lookup_string internal query with the caller's identity (#79959))
 import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
@@ -44,6 +39,7 @@ import org.junit.jupiter.api.TestMethodOrder;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -137,22 +133,36 @@ public class MetaFunctionsTest extends MVTestBase {
 
     @Test
     public void testInspectTableAccessDeniedException() {
-        assertThrows(ErrorReportException.class, () -> {
-            connectContext.setCurrentUserIdentity(testUser);
-            connectContext.setCurrentRoleIds(testUser);
-            connectContext.setThreadLocalInfo();
-            MetaFunctions.inspectTable(new TableName("test", "tbl1"));
-        });
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            assertThrows(ErrorReportException.class, () -> {
+                connectContext.setCurrentUserIdentity(testUser);
+                connectContext.setCurrentRoleIds(testUser);
+                connectContext.setThreadLocalInfo();
+                MetaFunctions.inspectTable(new TableName("test", "tbl1"));
+            });
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+        }
     }
 
     @Test
     public void testInspectExternalTableAccessDeniedException() {
-        assertThrows(ErrorReportException.class, () -> {
-            connectContext.setCurrentUserIdentity(testUser);
-            connectContext.setCurrentRoleIds(testUser);
-            connectContext.setThreadLocalInfo();
-            MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
-        });
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        Set<Long> currentRoleIds = connectContext.getCurrentRoleIds();
+        try {
+            assertThrows(ErrorReportException.class, () -> {
+                connectContext.setCurrentUserIdentity(testUser);
+                connectContext.setCurrentRoleIds(testUser);
+                connectContext.setThreadLocalInfo();
+                MetaFunctions.inspectTable(new TableName("test", "mysql_external_table"));
+            });
+        } finally {
+            connectContext.setCurrentUserIdentity(currentUserIdentity);
+            connectContext.setCurrentRoleIds(currentRoleIds);
+        }
     }
 
     private String lookupString(String tableName, String key, String column) {
