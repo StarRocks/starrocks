@@ -86,6 +86,9 @@ import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.MockedConstruction;
 import org.mockito.Mockito;
 import org.xnio.StreamConnection;
@@ -99,6 +102,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Stream;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -1114,6 +1118,26 @@ public class ConnectProcessorTest extends DDLTestBase {
         Assertions.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
     }
 
+    @ParameterizedTest
+    @MethodSource("customQueryIdCases")
+    public void testAuditRecordsEffectiveCustomQueryId(String sql, String expectedCustomQueryId) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(createQueryPacket(sql)), GlobalStateMgr.getCurrentState());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+        ctx.getSessionVariable().setCustomQueryId("session_id");
+
+        new ConnectProcessor(ctx).processOnce();
+
+        Assertions.assertEquals(expectedCustomQueryId, ctx.getAuditEventBuilder().build().customQueryId);
+    }
+
+    private static Stream<Arguments> customQueryIdCases() {
+        return Stream.of(
+                Arguments.of("select /*+SET_VAR(custom_query_id='hinted_id')*/ 1", "hinted_id"),
+                Arguments.of("prepare s1 from 'select /*+SET_VAR(custom_query_id=\"hinted_id\")*/ 1'; execute s1", "hinted_id"),
+                Arguments.of("select 1", "session_id"));
+    }
+
     @Test
     public void testQueryWithCustomSessionName() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
@@ -1439,5 +1463,12 @@ public class ConnectProcessorTest extends DDLTestBase {
             // Return a simple mock for test purposes
             return new PrepareStmt("test_stmt", null, null);
         }
+    }
+
+    private ByteBuffer createQueryPacket(String sql) {
+        MysqlSerializer serializer = MysqlSerializer.newInstance();
+        serializer.writeInt1(3);
+        serializer.writeEofString(sql);
+        return serializer.toByteBuffer();
     }
 }
