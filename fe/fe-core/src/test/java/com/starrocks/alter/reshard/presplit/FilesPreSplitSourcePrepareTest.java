@@ -60,6 +60,7 @@ public class FilesPreSplitSourcePrepareTest {
     private static final Column GRP_ID = new Column("grp_id", IntegerType.BIGINT);
     private static final Column BUCKET_ID = new Column("bucket_id", IntegerType.BIGINT);
     private static final Column DT = new Column("dt", DateType.DATE);
+    private static final Column TS = new Column("ts", DateType.DATETIME);
 
     @Test
     public void literalFedPartitionColumnReachesTheScanContextAsAConstant() {
@@ -141,11 +142,79 @@ public class FilesPreSplitSourcePrepareTest {
         MetricRepo.hasInit = true;
         try {
             String label = SkipReason.SOURCE_MISSING_SAMPLED_COLUMN.name().toLowerCase();
+            String computed = SkipReason.UNSUPPORTED_SAMPLED_PROJECTION.name().toLowerCase();
             long before = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue();
+            long computedBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(computed).getValue();
             Assertions.assertNull(prepareCustomerStatement(List.of(new Column("ghost", IntegerType.BIGINT))));
             Assertions.assertEquals(before + 1L,
                     MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(label).getValue().longValue(),
                     "an unfed sampled column must be recorded as source_missing_sampled_column");
+            Assertions.assertEquals(computedBefore,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(computed).getValue().longValue());
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void omittedPartitionColumnRemainsAMissingSampledSourceColumn() {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String missing = SkipReason.SOURCE_MISSING_SAMPLED_COLUMN.name().toLowerCase();
+            String computed = SkipReason.UNSUPPORTED_SAMPLED_PROJECTION.name().toLowerCase();
+            long missingBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(missing).getValue();
+            long computedBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(computed).getValue();
+            Assertions.assertNull(prepareCustomerStatement(/*rollupSortKey*/ null, List.of(EXP_ID),
+                    /*dtProjection*/ null, List.of(EXP_ID, GRP_ID, BUCKET_ID)));
+            Assertions.assertEquals(missingBefore + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(missing).getValue().longValue());
+            Assertions.assertEquals(computedBefore,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(computed).getValue().longValue());
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
+    }
+
+    @Test
+    public void computedPartitionColumnHasItsOwnSkipReason() {
+        assertComputedProjectionSkip(/*rollupSortKey*/ null, List.of(EXP_ID),
+                "grp_id", "date_trunc('day', ts) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+    }
+
+    @Test
+    public void computedBaseSortKeyHasItsOwnSkipReason() {
+        assertComputedProjectionSkip(/*rollupSortKey*/ null, List.of(DT),
+                "grp_id", "date_trunc('day', ts) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+    }
+
+    @Test
+    public void computedRollupSortKeyHasItsOwnSkipReason() {
+        assertComputedProjectionSkip(List.of(GRP_ID), List.of(EXP_ID),
+                "exp_id + 1 AS grp_id", "'20260917' AS dt", List.of(EXP_ID, BUCKET_ID));
+    }
+
+    private static void assertComputedProjectionSkip(List<Column> rollupSortKey, List<Column> baseSortKey,
+                                                     String grpProjection, String dtProjection,
+                                                     List<Column> sourceColumns) {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String computed = SkipReason.UNSUPPORTED_SAMPLED_PROJECTION.name().toLowerCase();
+            String missing = SkipReason.SOURCE_MISSING_SAMPLED_COLUMN.name().toLowerCase();
+            long computedBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(computed).getValue();
+            long missingBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(missing).getValue();
+            Assertions.assertNull(prepareCustomerStatement(rollupSortKey, baseSortKey,
+                    grpProjection, dtProjection, sourceColumns));
+            Assertions.assertEquals(computedBefore + 1L,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(computed).getValue().longValue());
+            Assertions.assertEquals(missingBefore,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(missing).getValue().longValue());
         } finally {
             MetricRepo.hasInit = savedHasInit;
         }
@@ -178,14 +247,28 @@ public class FilesPreSplitSourcePrepareTest {
 
     private static PreSplitFlow.Prepared prepareCustomerStatement(
             List<Column> rollupSortKey, List<Column> baseSortKey) {
+        return prepareCustomerStatement(rollupSortKey, baseSortKey, "'20260917' AS dt",
+                List.of(EXP_ID, GRP_ID, BUCKET_ID));
+    }
+
+    private static PreSplitFlow.Prepared prepareCustomerStatement(
+            List<Column> rollupSortKey, List<Column> baseSortKey, String dtProjection,
+            List<Column> sourceColumns) {
+        return prepareCustomerStatement(rollupSortKey, baseSortKey, "grp_id", dtProjection, sourceColumns);
+    }
+
+    private static PreSplitFlow.Prepared prepareCustomerStatement(
+            List<Column> rollupSortKey, List<Column> baseSortKey, String grpProjection, String dtProjection,
+            List<Column> sourceColumns) {
         InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
-                "INSERT INTO t BY NAME SELECT exp_id, grp_id, bucket_id, '20260917' AS dt "
+                "INSERT INTO t BY NAME SELECT exp_id, " + grpProjection + ", bucket_id"
+                        + (dtProjection == null ? "" : ", " + dtProjection) + " "
                         + "FROM FILES(\"path\" = \"s3://b/dt=20260917/*\", \"format\" = \"parquet\")",
                 SqlModeHelper.MODE_DEFAULT);
         SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         FileTableFunctionRelation filesRelation = (FileTableFunctionRelation) selectRelation.getRelation();
         TableFunctionTable filesTable = mock(TableFunctionTable.class);
-        when(filesTable.getFullVisibleSchema()).thenReturn(List.of(EXP_ID, GRP_ID, BUCKET_ID));
+        when(filesTable.getFullVisibleSchema()).thenReturn(sourceColumns);
         when(filesTable.loadFileList()).thenReturn(List.of());
         filesRelation.setTable(filesTable);
 
