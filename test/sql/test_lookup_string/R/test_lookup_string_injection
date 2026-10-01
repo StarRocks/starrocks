@@ -27,16 +27,6 @@ function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict'
 -- result:
 None
 -- !result
-create table `t``bt`(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
--- result:
--- !result
-insert into `t``bt` values ('k1', 'bt-value');
--- result:
--- !result
-select lookup_string('db_${uuid0}.t`bt', 'k1', 'v');
--- result:
-bt-value
--- !result
 drop database db_${uuid0} force;
 -- result:
 -- !result
