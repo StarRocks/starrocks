@@ -2075,10 +2075,10 @@ protected:
         seg_opts.delete_predicates = cfg.delete_predicates;
 
         // Activate a global dictionary on the tag column (cid 3) when requested, so _rewrite_predicates
-        // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps and their builder must
+        // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps and their key pool must
         // outlive the synchronous iterator run below.
-        PaddedGlobalDictBuilder tag_dict_builder;
-        GlobalDictMap tag_global_dict = tag_dict_builder.build({{"red", 1}, {"blue", 2}});
+        MemPool tag_dict_key_pool;
+        GlobalDictMap tag_global_dict = PaddedGlobalDictBuilder::build(&tag_dict_key_pool, {{"red", 1}, {"blue", 2}});
         ColumnIdToGlobalDictMap tag_dictmaps;
         if (cfg.tag_global_dict) {
             tag_dictmaps.emplace(3, &tag_global_dict);
