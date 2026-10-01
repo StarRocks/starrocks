@@ -368,11 +368,14 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
         if (closingQuote < 1 || projection.charAt(0) != '`' || projection.charAt(closingQuote) != '`') {
             return false;
         }
-        for (int index = 1; index < closingQuote; index++) {
+        int index = 1;
+        while (index < closingQuote) {
             if (projection.charAt(index) == '`') {
                 if (index + 1 == closingQuote || projection.charAt(index + 1) != '`') {
                     return false;
                 }
+                index += 2;
+            } else {
                 index++;
             }
         }
