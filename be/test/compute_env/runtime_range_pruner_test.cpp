@@ -253,8 +253,8 @@ TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    MemPool dict_key_pool;
-    GlobalDictMap dict = make_padded_global_dict(&dict_key_pool, {{"apple", 100}, {"melon", 200}});
+    PaddedGlobalDictBuilder dict_builder;
+    GlobalDictMap dict = dict_builder.build({{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 
@@ -315,8 +315,8 @@ TEST_F(RuntimeRangePrunerTest, monotonic_expr_on_dict_column_falls_back) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    MemPool dict_key_pool;
-    GlobalDictMap dict = make_padded_global_dict(&dict_key_pool, {{"apple", 100}, {"melon", 200}});
+    PaddedGlobalDictBuilder dict_builder;
+    GlobalDictMap dict = dict_builder.build({{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 

@@ -16,6 +16,7 @@
 
 #include <cstring>
 #include <initializer_list>
+#include <string>
 #include <string_view>
 #include <utility>
 
@@ -27,18 +28,36 @@
 
 namespace starrocks {
 
+// Builds GlobalDictMaps from string literals for tests.
+//
 // GlobalDictMap compares keys with memequal_padded, which may read up to SLICE_MEMEQUAL_OVERFLOW_PADDING bytes
-// past each key, so keys must not point at string literals. This copies every key into padded memory owned by
-// `pool`, which must outlive the returned map.
-inline GlobalDictMap make_padded_global_dict(MemPool* pool,
-                                             std::initializer_list<std::pair<std::string_view, DictId>> entries) {
-    GlobalDictMap dict;
-    for (const auto& [value, id] : entries) {
-        uint8_t* pos = pool->allocate_with_reserve(value.size(), SLICE_MEMEQUAL_OVERFLOW_PADDING);
-        memcpy(pos, value.data(), value.size());
-        dict.emplace(Slice(pos, value.size()), id);
+// past each key, so keys must not point at string literals. The builder copies every key into padded memory it
+// owns, so it must outlive every map it builds.
+class PaddedGlobalDictBuilder {
+public:
+    using Entries = std::initializer_list<std::pair<std::string_view, DictId>>;
+
+    GlobalDictMap build(Entries entries) {
+        GlobalDictMap dict;
+        for (const auto& [value, id] : entries) {
+            uint8_t* pos = _pool.allocate_with_reserve(value.size(), SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            memcpy(pos, value.data(), value.size());
+            dict.emplace(Slice(pos, value.size()), id);
+        }
+        return dict;
     }
-    return dict;
-}
+
+    // Builds one dict per column name, all with the same version.
+    GlobalDictByNameMaps build_by_name(std::initializer_list<std::pair<std::string, Entries>> dicts, long version = 1) {
+        GlobalDictByNameMaps result;
+        for (const auto& [name, entries] : dicts) {
+            result[name] = GlobalDictsWithVersion<GlobalDictMap>{build(entries), version};
+        }
+        return result;
+    }
+
+private:
+    MemPool _pool;
+};
 
 } // namespace starrocks
