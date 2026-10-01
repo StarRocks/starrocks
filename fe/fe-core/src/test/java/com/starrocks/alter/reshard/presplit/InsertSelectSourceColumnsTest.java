@@ -19,6 +19,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.TableName;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -37,9 +38,11 @@ import com.starrocks.type.DateType;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.Type;
 import com.starrocks.type.TypeFactory;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -1228,7 +1231,7 @@ public class InsertSelectSourceColumnsTest {
         // The base key (k) passed inside resolve(); a rollup's key is checked separately by the
         // source with the same rule. A rollup (dt, k) is sampleable, a rollup (dt) alone is not.
         InsertSelectSourceColumns.Resolved resolved =
-                new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"), Set.of());
+                new InsertSelectSourceColumns.Resolved(Map.of("k", "k"), Map.of("dt", "'20260917'"), Map.of(), Set.of());
 
         Assertions.assertTrue(InsertSelectSourceColumns.sortKeySampleable(
                 Arrays.asList(dateCol("dt"), col("k")), resolved));
@@ -1264,6 +1267,181 @@ public class InsertSelectSourceColumnsTest {
             Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(
                     "SELECT " + projection + " FROM t", SqlModeHelper.MODE_DEFAULT), projection);
         }
+    }
+
+    // --- computed sampled projections (INSERT-from-FILES) ---
+
+    private static final String FILES_CALL =
+            "FILES(\"path\" = \"s3://b/d/*\", \"format\" = \"parquet\")";
+
+    /** The FILES call with computed projections admitted, folded in a context pinned to 2026-09-23 UTC. */
+    private static InsertSelectSourceColumns.Resolved resolveComputed(
+            String selectList, boolean byName, List<Column> targetCols, Column... sourceCols) {
+        return resolveComputed(selectList, byName, targetCols, computedProjectionContext(), sourceCols);
+    }
+
+    private static InsertSelectSourceColumns.Resolved resolveComputed(
+            String selectList, boolean byName, List<Column> targetCols, ConnectContext context,
+            Column... sourceCols) {
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+                "INSERT INTO t " + (byName ? "BY NAME " : "") + "SELECT " + selectList + " FROM " + FILES_CALL,
+                SqlModeHelper.MODE_DEFAULT);
+        SelectRelation rel = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
+        return InsertSelectSourceColumns.resolveUngated(
+                stmt, rel, olapTable(targetCols, targetCols, false), filesTable(sourceCols), SRC_NAME, null,
+                InsertSelectSourceColumns.SchemaPairing.PER_COLUMN, context);
+    }
+
+    private static ConnectContext computedProjectionContext() {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        ctx.getSessionVariable().setTimeZone("UTC");
+        ctx.setStartTime(Instant.parse("2026-09-23T10:00:00Z"));
+        return ctx;
+    }
+
+    private static Column datetimeCol(String name) {
+        return new Column(name, DateType.DATETIME);
+    }
+
+    @Test
+    public void filesByNameAdmitsADateTruncSortKeyAndPartitionColumn() {
+        // ORDER BY (dt, k) PARTITION BY (dt), dt = date_trunc('day', ts): the sampler evaluates the
+        // same expression over the same FILES rows and casts it to DATE, as the load does.
+        List<Column> targetCols = Arrays.asList(dateCol("dt"), col("k"));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, date_trunc('day', ts) AS dt", /*byName*/ true, targetCols, col("k"), datetimeCol("ts"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(Map.of("k", "k"), resolved.targetToSource());
+        Assertions.assertEquals(Map.of("dt", "date_trunc('day', `ts`)"), resolved.targetToExpressionSql());
+        Assertions.assertTrue(resolved.targetToConstantSql().isEmpty());
+        Assertions.assertTrue(resolved.unsupportedProjectionTargets().isEmpty());
+        Assertions.assertNull(InsertSelectSourceColumns.firstUnfedColumn(targetCols, resolved));
+        Assertions.assertTrue(InsertSelectSourceColumns.partitionColumnsSampleable(List.of(dateCol("dt")), resolved));
+        Assertions.assertEquals(List.of("CAST(date_trunc('day', `ts`) AS date)", "`k`"),
+                InsertSelectSourceColumns.projections(targetCols, resolved.targetToSource(),
+                        resolved.targetToConstantSql(), resolved.targetToExpressionSql()));
+    }
+
+    @Test
+    public void filesByPositionAdmitsAnUnaliasedComputedColumn() {
+        // By position the ordinal names the target column, so the expression needs no alias.
+        List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, date_trunc('day', ts)", /*byName*/ false, targetCols, col("k"), datetimeCol("ts"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(Map.of("dt", "date_trunc('day', `ts`)"), resolved.targetToExpressionSql());
+        Assertions.assertTrue(InsertSelectSourceColumns.sortKeySampleable(List.of(dateCol("dt")), resolved));
+    }
+
+    @Test
+    public void sortKeyOfOnlyComputedColumnsVaries() {
+        // A computed column reads a source column, so unlike a literal it is not a degenerate key --
+        // even when no other output maps a source column directly.
+        List<Column> targetCols = Collections.singletonList(dateCol("dt"));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "date_trunc('day', ts) AS dt", /*byName*/ true, targetCols, datetimeCol("ts"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertTrue(resolved.targetToSource().isEmpty());
+        Assertions.assertTrue(InsertSelectSourceColumns.sortKeySampleable(targetCols, resolved));
+    }
+
+    @Test
+    public void computedProjectionKeepsTheUsersCastUnderTheTargetCast() {
+        List<Column> targetCols = Arrays.asList(col("k"), new Column("v", TypeFactory.createVarcharType(16)));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, CAST(k * 10 AS BIGINT) AS v", /*byName*/ true, targetCols, col("k"));
+
+        Assertions.assertNotNull(resolved);
+        String projection = InsertSelectSourceColumns.projections(
+                Collections.singletonList(targetCols.get(1)), resolved.targetToSource(),
+                resolved.targetToConstantSql(), resolved.targetToExpressionSql()).get(0);
+        Assertions.assertEquals("CAST(CAST((`k` * 10) AS BIGINT) AS varchar(16))", projection);
+        // The projection is spliced into the sampling sub-query as SQL text, so it must re-parse.
+        Assertions.assertDoesNotThrow(() -> SqlParser.parseSingleStatement(
+                "SELECT " + projection + " FROM t", SqlModeHelper.MODE_DEFAULT), projection);
+    }
+
+    @Test
+    public void computedProjectionFoldsItsPlanTimeConstantsInTheUsersContext() {
+        // The ROOT sampling context has its own clock and time zone, so current_date() must reach it
+        // as the literal the INSERT folds, not as the call.
+        List<Column> targetCols = Arrays.asList(col("k"), new Column("region", TypeFactory.createVarcharType(8)));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, if(ts >= date_sub(current_date(), 1), 'recent', 'old') AS region", /*byName*/ true,
+                targetCols, col("k"), datetimeCol("ts"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(
+                "if(`ts` >= (CAST('2026-09-22 00:00:00' AS DATETIME)), 'recent', 'old')",
+                resolved.targetToExpressionSql().get("region"));
+    }
+
+    @Test
+    public void columnFreeComputedProjectionFoldsToAConstant() {
+        // current_date() AS dt reads no column: folded in the user's context it is one value for every
+        // row, i.e. a constant, and a key made only of it stays degenerate.
+        List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, current_date() AS dt", /*byName*/ true, targetCols, col("k"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(Map.of("dt", "CAST('2026-09-23' AS DATE)"), resolved.targetToConstantSql());
+        Assertions.assertTrue(resolved.targetToExpressionSql().isEmpty());
+        Assertions.assertFalse(InsertSelectSourceColumns.sortKeySampleable(List.of(dateCol("dt")), resolved));
+    }
+
+    @Test
+    public void unsafeComputedProjectionsStayUnsupported() {
+        // Each depends on something the ROOT sampling context does not share with the INSERT (session
+        // time zone, user, variables, a per-row random value), is not a vetted built-in, or yields NULL.
+        List<String> unsafe = List.of(
+                "from_unixtime(k)",
+                "unix_timestamp(ts)",
+                "convert_tz(ts, 'UTC', 'Asia/Shanghai')",
+                "concat(k, current_user())",
+                "concat(k, @suffix)",
+                "concat(k, @@time_zone)",
+                "date_add(ts, INTERVAL rand() DAY)",
+                "md5(ts)",
+                "db1.my_udf(ts)",
+                "CAST(NULL AS DATE)",
+                "uuid()");
+        List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
+        for (String expression : unsafe) {
+            InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                    "k, " + expression + " AS dt", /*byName*/ true, targetCols, col("k"), datetimeCol("ts"));
+
+            Assertions.assertNotNull(resolved, expression);
+            Assertions.assertEquals(Set.of("dt"), resolved.unsupportedProjectionTargets(), expression);
+            Assertions.assertTrue(resolved.targetToExpressionSql().isEmpty(), expression);
+            Assertions.assertTrue(resolved.targetToConstantSql().isEmpty(), expression);
+            Assertions.assertEquals("dt",
+                    InsertSelectSourceColumns.firstUnfedColumn(targetCols, resolved).getName(), expression);
+        }
+    }
+
+    @Test
+    public void subqueryInAComputedProjectionRejectsTheStatement() {
+        // A subquery reads a relation the hook never resolved or authorized: not an unsupported key,
+        // but a statement the hook must not act on at all.
+        Assertions.assertNull(resolveComputed("k, date_trunc('day', (SELECT max(ts) FROM other)) AS dt",
+                /*byName*/ true, Arrays.asList(col("k"), dateCol("dt")), col("k"), datetimeCol("ts")));
+    }
+
+    @Test
+    public void withoutAContextNoComputedProjectionIsAdmitted() {
+        // The table-source path passes no context: its sampler only projects columns and literals.
+        List<Column> targetCols = Arrays.asList(col("k"), dateCol("dt"));
+        InsertSelectSourceColumns.Resolved resolved = resolveComputed(
+                "k, date_trunc('day', ts) AS dt", /*byName*/ true, targetCols, (ConnectContext) null,
+                col("k"), datetimeCol("ts"));
+
+        Assertions.assertNotNull(resolved);
+        Assertions.assertEquals(Set.of("dt"), resolved.unsupportedProjectionTargets());
+        Assertions.assertTrue(resolved.targetToExpressionSql().isEmpty());
     }
 
     // --- matchesSource direct tests (alias branch; reused by Task 2) ---

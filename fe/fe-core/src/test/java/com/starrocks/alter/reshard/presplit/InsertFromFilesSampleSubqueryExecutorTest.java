@@ -858,6 +858,64 @@ class InsertFromFilesSampleSubqueryExecutorTest {
     }
 
     @Test
+    void computedKeysAreProjectedAsTheExpressionCastToTheColumnTypeInEveryRole() throws Exception {
+        // ORDER BY (dt, exp_id) PARTITION BY (dt), rollup (grp_id), with dt = date_trunc('day', ts) and
+        // grp_id = exp_id + 1: every role samples the value the load writes, the partition column
+        // reuses the base key's dt cell, and each cell decodes as its target column type.
+        TableFunctionTable sourceTable = mockSourceTable(
+                Map.of("path", "s3://b/c/*.parquet", "format", "parquet"),
+                List.of(brokerFileStatus("s3://b/c/a.parquet", 1024L)));
+        StringBuilder capturedSql = new StringBuilder();
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> {
+                    capturedSql.append(sql);
+                    return List.of(jsonResultBatch("{\"data\":[\"2026-09-17\", 11, 12]}"));
+                });
+        Column dt = new Column("dt", DateType.DATE);
+
+        SampleSubqueryExecutor.SampleExecution execution = executor.execute(new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("exp_id", "exp_id"), /*wherePredicateSql=*/ null, Map.of(),
+                        Map.of("dt", "date_trunc('day', `ts`)", "grp_id", "`exp_id` + 1")),
+                List.of(dt, bigintColumn("exp_id")),
+                List.of(new SecondaryIndexSpec(7L, List.of(bigintColumn("grp_id")))),
+                /*partitionSourceColumns=*/ List.of(dt),
+                /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L));
+
+        Assertions.assertTrue(capturedSql.toString().startsWith(
+                        "SELECT CAST(date_trunc('day', `ts`) AS date), `exp_id`, CAST(`exp_id` + 1 AS bigint(20)) "
+                                + "FROM FILES("),
+                "each computed key is projected as its expression under the target cast: " + capturedSql);
+        SampleRow row = Lists.newArrayList(execution.rows()).get(0);
+        Assertions.assertEquals(PrimitiveType.DATE, row.sortKeyTuple().get(0).getType().getPrimitiveType());
+        Assertions.assertEquals("2026-09-17", row.sortKeyTuple().get(0).getStringValue());
+        Assertions.assertEquals("11", row.sortKeyTuple().get(1).getStringValue());
+        Assertions.assertEquals("12", row.secondaryIndexTuples().get(0).values().get(0).getStringValue());
+        Assertions.assertEquals("2026-09-17", row.partitionSourceTuple().get(0).getStringValue());
+    }
+
+    @Test
+    void aPartitionColumnComputedFromAPathColumnKeepsTheStatementsProperties() throws Exception {
+        // CAST(file_dt AS DATE) AS dt reads a path column, but the partition value is the computed one,
+        // not the raw path value, so the files cannot be stratified by path and every file is scanned.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("path", "s3://b/*/*", "format", "parquet"),
+                tenFiles("s3://b/file_dt=2026-09-10/f"));
+        Mockito.when(sourceTable.getColumnsFromPath()).thenReturn(List.of("file_dt"));
+        StringBuilder capturedSql = new StringBuilder();
+
+        SampleSubqueryExecutor.SampleExecution execution = capturingExecutor(capturedSql).execute(
+                new SampleRequest(new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class),
+                        "UTC", Map.of("sort_key", "sort_key"), null, Map.of(), Map.of("dt", "CAST(`file_dt` AS DATE)")),
+                        List.of(bigintColumn("sort_key")), List.of(new Column("dt", DateType.DATE)),
+                        Long.MAX_VALUE, 0L));
+
+        Assertions.assertTrue(capturedSql.toString().contains("\"path\" = \"s3://b/*/*\""), capturedSql.toString());
+        Assertions.assertTrue(capturedSql.toString().contains("SELECT `sort_key`, CAST(CAST(`file_dt` AS DATE) AS date)"),
+                capturedSql.toString());
+        Assertions.assertTrue(execution.estimates().partitionSourceBytes().isEmpty());
+    }
+
+    @Test
     void projectedColumnWithNoFilesMappingThrows() {
         // Fail-safe for a metadata race between the admitting gate and sampling: never compute a
         // boundary from a column the mapping cannot account for.
@@ -871,6 +929,25 @@ class InsertFromFilesSampleSubqueryExecutorTest {
                 List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
 
         Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+    }
+
+    @Test
+    void projectedColumnWithNoMappingThrowsAlongsideConstantsAndExpressions() {
+        // The same fail-safe once constants or expressions are present: projections() cannot account
+        // for sort_key, so the sample fails rather than compute a boundary from an unrelated value.
+        TableFunctionTable sourceTable = mockSourceTable(Map.of("format", "parquet"), List.of());
+        InsertFromFilesSampleSubqueryExecutor executor = new InsertFromFilesSampleSubqueryExecutor(
+                (sql, computeResource, ignoredQueryTimeoutSeconds) -> List.of());
+
+        SampleRequest request = new SampleRequest(
+                new InsertFromFilesScanContext(sourceTable, Mockito.mock(ComputeResource.class), "UTC",
+                        Map.of("other", "other"), /*wherePredicateSql=*/ null, Map.of("dt", "'20260917'"),
+                        Map.of("grp_id", "`exp_id` + 1")),
+                List.of(bigintColumn("sort_key")), /*sampleByteLimit=*/ Long.MAX_VALUE, /*seed=*/ 0L);
+
+        StarRocksException failure = Assertions.assertThrows(StarRocksException.class, () -> executor.execute(request));
+        Assertions.assertTrue(failure.getMessage().contains("no FILES column, constant, or expression"),
+                failure.getMessage());
     }
 
     private static TableFunctionTable mockSourceTable(

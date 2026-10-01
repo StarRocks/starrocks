@@ -180,21 +180,92 @@ public class FilesPreSplitSourcePrepareTest {
     }
 
     @Test
-    public void computedPartitionColumnHasItsOwnSkipReason() {
+    public void unsafeComputedPartitionColumnHasItsOwnSkipReason() {
+        // from_unixtime reads the session time zone, which the ROOT sampling context does not share.
         assertComputedProjectionSkip(/*rollupSortKey*/ null, List.of(EXP_ID),
-                "grp_id", "date_trunc('day', ts) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+                "grp_id", "from_unixtime(exp_id) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID));
     }
 
     @Test
-    public void computedBaseSortKeyHasItsOwnSkipReason() {
+    public void unsafeComputedBaseSortKeyHasItsOwnSkipReason() {
         assertComputedProjectionSkip(/*rollupSortKey*/ null, List.of(DT),
-                "grp_id", "date_trunc('day', ts) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+                "grp_id", "from_unixtime(exp_id) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID));
     }
 
     @Test
-    public void computedRollupSortKeyHasItsOwnSkipReason() {
+    public void unsafeComputedRollupSortKeyHasItsOwnSkipReason() {
         assertComputedProjectionSkip(List.of(GRP_ID), List.of(EXP_ID),
+                "concat(exp_id, current_user()) AS grp_id", "'20260917' AS dt", List.of(EXP_ID, BUCKET_ID));
+    }
+
+    @Test
+    public void computedPartitionColumnReachesTheScanContextAsAnExpression() {
+        PreSplitFlow.Prepared prepared = assertAdmittedWithoutSkip(/*rollupSortKey*/ null, List.of(EXP_ID),
+                "grp_id", "date_trunc('day', ts) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+
+        InsertFromFilesScanContext scanContext = (InsertFromFilesScanContext) prepared.scanContext();
+        Assertions.assertEquals(Map.of("dt", "date_trunc('day', `ts`)"), scanContext.targetToExpressionSql());
+        Assertions.assertFalse(scanContext.targetToSourceColumnNames().containsKey("dt"));
+        Assertions.assertTrue(scanContext.targetToConstantSql().isEmpty());
+        Assertions.assertEquals(List.of(DT), prepared.partitionColumns());
+    }
+
+    @Test
+    public void computedBaseSortKeyIsAdmitted() {
+        PreSplitFlow.Prepared prepared = assertAdmittedWithoutSkip(/*rollupSortKey*/ null, List.of(DT, EXP_ID),
+                "grp_id", "CAST(ts AS DATE) AS dt", List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+
+        Assertions.assertEquals(Map.of("dt", "CAST(`ts` AS DATE)"),
+                ((InsertFromFilesScanContext) prepared.scanContext()).targetToExpressionSql());
+    }
+
+    @Test
+    public void computedRollupSortKeyIsAdmitted() {
+        PreSplitFlow.Prepared prepared = assertAdmittedWithoutSkip(List.of(GRP_ID), List.of(EXP_ID),
                 "exp_id + 1 AS grp_id", "'20260917' AS dt", List.of(EXP_ID, BUCKET_ID));
+
+        Assertions.assertEquals(1, prepared.secondaryIndexSpecs().size());
+        InsertFromFilesScanContext scanContext = (InsertFromFilesScanContext) prepared.scanContext();
+        Assertions.assertEquals(Map.of("grp_id", "`exp_id` + 1"), scanContext.targetToExpressionSql());
+        Assertions.assertEquals(Map.of("dt", "'20260917'"), scanContext.targetToConstantSql());
+    }
+
+    @Test
+    public void byPositionComputedPartitionColumnIsAdmitted() {
+        // No alias: by position the fourth output is dt whatever it is called.
+        PreSplitFlow.Prepared prepared = prepareStatement(
+                "INSERT INTO t SELECT exp_id, grp_id, bucket_id, date_trunc('day', ts) "
+                        + "FROM FILES(\"path\" = \"s3://b/*\", \"format\" = \"parquet\")",
+                /*rollupSortKey*/ null, List.of(EXP_ID), List.of(EXP_ID, GRP_ID, BUCKET_ID, TS));
+
+        Assertions.assertNotNull(prepared);
+        Assertions.assertEquals(Map.of("dt", "date_trunc('day', `ts`)"),
+                ((InsertFromFilesScanContext) prepared.scanContext()).targetToExpressionSql());
+    }
+
+    private static PreSplitFlow.Prepared assertAdmittedWithoutSkip(
+            List<Column> rollupSortKey, List<Column> baseSortKey, String grpProjection, String dtProjection,
+            List<Column> sourceColumns) {
+        boolean savedHasInit = MetricRepo.hasInit;
+        MetricRepo.hasInit = true;
+        try {
+            String computed = SkipReason.UNSUPPORTED_SAMPLED_PROJECTION.name().toLowerCase();
+            String missing = SkipReason.SOURCE_MISSING_SAMPLED_COLUMN.name().toLowerCase();
+            long computedBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(computed).getValue();
+            long missingBefore = MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED
+                    .getMetric(missing).getValue();
+            PreSplitFlow.Prepared prepared = prepareCustomerStatement(rollupSortKey, baseSortKey,
+                    grpProjection, dtProjection, sourceColumns);
+            Assertions.assertNotNull(prepared, "a safe computed key must be admitted");
+            Assertions.assertEquals(computedBefore,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(computed).getValue().longValue());
+            Assertions.assertEquals(missingBefore,
+                    MetricRepo.COUNTER_TABLET_PRE_SPLIT_ELIGIBILITY_SKIPPED.getMetric(missing).getValue().longValue());
+            return prepared;
+        } finally {
+            MetricRepo.hasInit = savedHasInit;
+        }
     }
 
     private static void assertComputedProjectionSkip(List<Column> rollupSortKey, List<Column> baseSortKey,
@@ -260,11 +331,16 @@ public class FilesPreSplitSourcePrepareTest {
     private static PreSplitFlow.Prepared prepareCustomerStatement(
             List<Column> rollupSortKey, List<Column> baseSortKey, String grpProjection, String dtProjection,
             List<Column> sourceColumns) {
-        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(
+        return prepareStatement(
                 "INSERT INTO t BY NAME SELECT exp_id, " + grpProjection + ", bucket_id"
                         + (dtProjection == null ? "" : ", " + dtProjection) + " "
                         + "FROM FILES(\"path\" = \"s3://b/dt=20260917/*\", \"format\" = \"parquet\")",
-                SqlModeHelper.MODE_DEFAULT);
+                rollupSortKey, baseSortKey, sourceColumns);
+    }
+
+    private static PreSplitFlow.Prepared prepareStatement(
+            String sql, List<Column> rollupSortKey, List<Column> baseSortKey, List<Column> sourceColumns) {
+        InsertStmt stmt = (InsertStmt) SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
         SelectRelation selectRelation = (SelectRelation) stmt.getQueryStatement().getQueryRelation();
         FileTableFunctionRelation filesRelation = (FileTableFunctionRelation) selectRelation.getRelation();
         TableFunctionTable filesTable = mock(TableFunctionTable.class);

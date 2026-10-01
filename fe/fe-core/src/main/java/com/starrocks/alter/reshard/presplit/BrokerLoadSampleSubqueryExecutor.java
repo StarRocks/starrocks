@@ -129,7 +129,7 @@ final class BrokerLoadSampleSubqueryExecutor extends FilesSampleSubqueryExecutor
         }
         files.report(ERROR_PREFIX);
         return new Source(filesProperties, files.totalBytes(), context.computeResource(), null, Map.of(), Map.of(),
-                files.scannedBytes(), files.partitionSourceBytes());
+                Map.of(), files.scannedBytes(), files.partitionSourceBytes());
     }
 
     private static BrokerLoadScanContext requireBrokerLoadContext(SampleRequest request) throws StarRocksException {

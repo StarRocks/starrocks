@@ -45,6 +45,11 @@ import java.util.Objects;
  * projects the literal itself, and the meta tier -- which reads only file footers -- declines a sort
  * key that contains one, so the pipeline falls back to the data tier.
  *
+ * <p>{@code targetToExpressionSql} maps each target column the SELECT feeds with an admitted
+ * computed expression over FILES columns (lower-cased target name) to the expression's SQL. The data
+ * tier evaluates it over the same FILES rows the load reads; the meta tier declines a sort key that
+ * contains one, because a footer's min/max describes a file column, not a value computed from it.
+ *
  * <p>{@code wherePredicateSql} is the statement's WHERE clause rendered back to SQL, or
  * {@code null}. The data tier copies it into its sampling sub-query; the meta tier cannot apply a
  * predicate to a footer at all and declines the request when one is present.
@@ -55,13 +60,24 @@ public record InsertFromFilesScanContext(
         String loadTimeZone,
         Map<String, String> targetToSourceColumnNames,   // lower-cased target name -> FILES column name
         String wherePredicateSql,                        // nullable
-        Map<String, String> targetToConstantSql) implements ScanContext {
+        Map<String, String> targetToConstantSql,
+        Map<String, String> targetToExpressionSql) implements ScanContext {
 
     public InsertFromFilesScanContext {
         Objects.requireNonNull(sourceTable, "sourceTable");
         Objects.requireNonNull(computeResource, "computeResource");
         Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
         Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+        Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
+    }
+
+    /** No key column is computed from FILES columns. */
+    public InsertFromFilesScanContext(
+            TableFunctionTable sourceTable, ComputeResource computeResource, String loadTimeZone,
+            Map<String, String> targetToSourceColumnNames, String wherePredicateSql,
+            Map<String, String> targetToConstantSql) {
+        this(sourceTable, computeResource, loadTimeZone, targetToSourceColumnNames, wherePredicateSql,
+                targetToConstantSql, Map.of());
     }
 
     /** Every key column is backed by a FILES column. */
