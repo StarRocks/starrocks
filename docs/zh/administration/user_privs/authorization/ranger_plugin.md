@@ -6,6 +6,7 @@ sidebar_position: 40
 # 使用 Apache Ranger 管理权限
 
 import ServiceDefLink from '../../../_assets/commonMarkdown/servicedef_link.mdx'
+import EditionSpecificRangerClusterConfig from '../../../_assets/commonMarkdown/Edition_Specific_Ranger_Cluster_Config.mdx'
 
 [Apache Ranger](https://ranger.apache.org/) 提供了一个集中式的安全管理框架，用户可以通过可视化的 Web 页面来定制各种访问策略，决定哪些角色能访问哪些数据，对 Hadoop 生态的各个组件和服务进行细粒度的数据访问控制，确保数据的安全性和合规性。
 
@@ -138,83 +139,8 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ![service](../../../_assets/ranger_added_service.png)
 
 5. 点击 **Test connection** 测试连通性，连通成功后保存。需要注意，如果您没有安装 ranger-starrocks-plugin，则可以跳过测试直接保存。
-6. 在 StarRocks 集群的每一台 FE 机器上，在 `fe/conf` 文件夹内创建 [ranger-starrocks-security.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-security.xml)，并将内容拷贝，必须修改两处内容并保存：
 
-   - `ranger.plugin.starrocks.service.name` 改为刚刚创建的 StarRocks Service 的名称。
-   - `ranger.plugin.starrocks.policy.rest.url` 改为 Ranger Admin 的地址。
-
-   如需修改其他配置也可根据 Ranger 官方文档进行对应修改。比如可以修改 `ranger.plugin.starrocks.policy.pollIntervalMs` 来更改拉取权限变更的时间。
-
-   ```SQL
-   vim ranger-starrocks-security.xml
-
-   ...
-       <property>
-           <name>ranger.plugin.starrocks.service.name</name>
-           <value>starrocks</value> --改为 StarRocks Service 的名称。
-           <description>
-               Name of the Ranger service containing policies for this StarRocks instance
-           </description>
-       </property>
-   ...
-
-
-   ...
-       <property>
-           <name>ranger.plugin.starrocks.policy.rest.url</name>
-           <value>http://localhost:6080</value> --改为 Ranger admin 的地址。
-           <description>
-               URL to Ranger Admin
-           </description>
-       </property>   
-   ...
-   ```
-
-7. （可选）如果您希望使用 Ranger 的 Audit Log 功能，则需要在 StarRocks 集群每一台 FE 机器的 `fe/conf` 文件夹内创建 [ranger-starrocks-audit.xml](https://github.com/StarRocks/starrocks/blob/main/conf/ranger/ranger-starrocks-audit.xml)。将内容拷贝，**修改 `xasecure.audit.solr.solr_url` 中的 `solr_url` 为自己的 `solr_url`**，并保存文件。
-
-8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
-
-   ```SQL
-   vim fe.conf
-   access_control=ranger 
-   ```
-
-9. 重启所有 FE。
-
-   ```SQL
-   -- 回到 FE 文件夹内
-   cd..
-
-   bin/stop_fe.sh
-   bin/start_fe.sh
-   ```
-
-## 复用其他 Service 来为外表鉴权
-
-对于 External Catalog，可以复用外部 Service（如 Hive Service）实现访问控制。StarRocks 支持对于不同的 Catalog 匹配不同的 Ranger service。用户访问外表时，会直接根据对应外表的 Service 来进行访问控制。用户权限与 Ranger 同名用户一致。
-
-1. 复制您 Hive 集群中的 Ranger 相关配置文件 [ranger-hive-security.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-security.xml) 和 [ranger-hive-audit.xml](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 拷贝至所有 FE 机器的 `fe/conf` 文件下，请确保配置文件中 Ranger 的 IP 以及端口正确。
-2. 重启所有 FE。
-3. 配置 Catalog。
-
-   - 创建 External Catalog 时，添加 PROPERTIES `"ranger.plugin.hive.service.name"`.
-
-    ```SQL
-      CREATE EXTERNAL CATALOG hive_catalog_1
-      PROPERTIES (
-          "type" = "hive",
-          "hive.metastore.type" = "hive",
-          "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-          "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
-      )
-    ```
-
-    - 也可以对已有的 External Catalog 添加该属性。将已有的 Catalog 转换为通过 Ranger 鉴权。
-
-    ```SQL
-      ALTER CATALOG hive_catalog_1
-      SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
-    ```
+<EditionSpecificRangerClusterConfig />
 
 ## 后续步骤
 
