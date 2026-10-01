@@ -1173,6 +1173,10 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
      "GeoFunctions::native_geo_unary_close"],
 
+    # reserve 120300 for ST_SRID(GEOMETRY)
+    # reserve 120301 for ST_SetSRID(GEOMETRY, INT)
+    # reserve 120302 for ST_Transform(GEOMETRY, INT)
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],
