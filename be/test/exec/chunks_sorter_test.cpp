@@ -768,7 +768,9 @@ TEST_F(ChunksSorterTest, binary_column_over_4g_within_capacity_limit) {
     config::enable_zero_copy_from_page_cache = true;
     DeferOp restore_zero_copy([old_zero_copy] { config::enable_zero_copy_from_page_cache = old_zero_copy; });
 
-    const uint64_t element_size = (Column::MAX_CAPACITY_LIMIT / 2) + 1;
+    // Copy the limit: ASSERT_GT binds its arguments by reference, which would odr-use the in-class static member.
+    const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
+    const uint64_t element_size = (capacity_limit / 2) + 1;
     auto owner = std::make_shared<std::string>("x");
     ContainerResource resource(owner, owner->data(), 2 * element_size);
     BinaryColumn::Offsets offsets;
@@ -777,7 +779,7 @@ TEST_F(ChunksSorterTest, binary_column_over_4g_within_capacity_limit) {
     offsets.emplace_back(2 * element_size);
     auto column = BinaryColumn::create(std::move(resource), std::move(offsets));
     ASSERT_TRUE(column->get_offset().is_large());
-    ASSERT_GT(column->get_immutable_bytes().size(), Column::MAX_CAPACITY_LIMIT);
+    ASSERT_GT(column->get_immutable_bytes().size(), capacity_limit);
 
     Chunk::SlotHashMap slot_map{{0, 0}};
     Chunk chunk(Columns{std::move(column)}, slot_map);
