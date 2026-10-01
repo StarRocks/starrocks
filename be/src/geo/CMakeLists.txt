@@ -41,7 +41,6 @@ endif()
 
 ADD_BE_LIB(Geo
     geo_common.cpp
-    geos_context.cpp
     geo_measurements.cpp
     geo_types.cpp
     wkb.cpp

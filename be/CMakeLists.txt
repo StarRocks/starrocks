@@ -671,8 +671,6 @@ set(STARROCKS_DEPENDENCIES
     clucene-contribs-lib
     rocksdb
     libs2
-    geos_c
-    geos
     snappy
     ${Boost_LIBRARIES}
     thrift

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 set(GEO_TEST_FILES
-    geos_context_test.cpp
     geo_types_test.cpp
     wkb_test.cpp
     wkt_parse_test.cpp

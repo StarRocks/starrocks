@@ -336,11 +336,6 @@ set_target_properties(libpulsar PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/l
 add_library(libs2 STATIC IMPORTED)
 set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libs2.a)
 
-add_library(geos_c STATIC IMPORTED)
-set_target_properties(geos_c PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgeos_c.a)
-add_library(geos STATIC IMPORTED)
-set_target_properties(geos PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgeos.a)
-
 add_library(bitshuffle STATIC IMPORTED)
 set_target_properties(bitshuffle PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libbitshuffle.a)
 
