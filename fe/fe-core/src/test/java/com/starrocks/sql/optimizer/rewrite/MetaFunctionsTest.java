@@ -258,6 +258,30 @@ public class MetaFunctionsTest extends MVTestBase {
     }
 
     @Test
+    public void testLookupStringEscapesBacktickTableName() throws Exception {
+        // A native table name may contain a backtick; it must be doubled in the qualified name,
+        // not merely surrounded by backticks, otherwise the identifier would be broken.
+        starRocksAssert.withTable("create table `t``bt`(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        String[] captured = new String[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                         ConnectContext caller) {
+                captured[0] = sql;
+                return Lists.newArrayList();
+            }
+        };
+        try {
+            Assertions.assertNull(lookupString("t`bt", "k", "v"));
+            // The embedded backtick is doubled inside the quoted identifier.
+            Assertions.assertTrue(captured[0].contains("`t``bt`"), captured[0]);
+        } finally {
+            starRocksAssert.dropTable("t`bt");
+        }
+    }
+
+    @Test
     public void testLookupStringUnknownReturnColumn() throws Exception {
         starRocksAssert.withTable("create table t_col(c1 string, v string) primary key(c1) " +
                 "properties('replication_num'='1')");

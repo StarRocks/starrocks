@@ -16,4 +16,9 @@ select lookup_string('db_${uuid0}.t_dict', 'zzz'' union select ''INJECTED'' as x
 -- a non-existent return column is rejected up front
 function: assert_query_error_contains("select lookup_string('db_${uuid0}.t_dict', 'k1', 'no_such_col')", "Unknown column 'no_such_col'")
 
+-- a legitimate table name containing a backtick must work: the backtick is doubled in the identifier
+create table `t``bt`(k string, v string) primary key(k) distributed by hash(k) buckets 1 properties('replication_num'='1');
+insert into `t``bt` values ('k1', 'bt-value');
+select lookup_string('db_${uuid0}.t`bt', 'k1', 'v');
+
 drop database db_${uuid0} force;
