@@ -182,11 +182,10 @@ private:
         TNetworkAddress dest_addrs;
 
         // Cached least-loaded stub pool for this destination (only used when brpc_connection_type=single).
-        // Resolved once and reused so the per-chunk send path avoids the process-global BrpcStubCache lock.
+        // Resolved once and held for the query's lifetime so the per-chunk send path avoids the process-global
+        // BrpcStubCache lock; the cache keeps an in-use pool alive, so this reference also pins it in the cache.
         // Only touched under `mutex`, which is held throughout _try_to_send_rpc/_send_rpc.
         std::shared_ptr<BrpcStubCache::StubPool> stub_pool;
-        // Next monotonic-ns deadline at which to re-resolve `stub_pool` to renew its expiry deadline in the cache.
-        int64_t stub_pool_next_renew_ns = 0;
     };
     phmap::flat_hash_map<int64_t, std::unique_ptr<SinkContext>, StdHash<int64_t>> _sink_ctxs;
     SinkContext& sink_ctx(int64_t instance_id) { return *_sink_ctxs[instance_id]; }

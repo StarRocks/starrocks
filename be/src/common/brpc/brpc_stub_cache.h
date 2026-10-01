@@ -80,10 +80,17 @@ public:
         }
         int64_t now_us = butil::gettimeofday_us();
         if (now_us >= _deadline) {
-            LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for " << (now_us - _deadline) / 1000
-                      << "ms past deadline";
-            _cache->_stub_map.erase(_endpoint);
-            return;
+            // Only evict once no caller outside the cache still references the entry. Hot-path callers (e.g. an
+            // exchange sink) cache the StubPool for their whole query; evicting an in-use pool would split load
+            // accounting across a freshly created one. While it is still referenced, extend the window and
+            // reschedule instead of evicting.
+            if (!_cache->is_cached_entry_in_use_locked(_endpoint)) {
+                LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for "
+                          << (now_us - _deadline) / 1000 << "ms past deadline";
+                _cache->_stub_map.erase(_endpoint);
+                return;
+            }
+            _deadline = now_us + _ttl_seconds * 1000 * 1000;
         }
         auto new_task = std::make_shared<EndpointCleanupTask<StubCacheT>>(_cache, _endpoint, _ttl_seconds);
         new_task->_deadline = _deadline;
@@ -168,6 +175,14 @@ private:
         return pool != nullptr && (*pool)->_cleanup_task.get() == task;
     }
 
+    // True while a caller outside the cache still holds the pooled StubPool (the map itself holds one reference).
+    // Hot-path callers cache the pool for their query lifetime; the cleanup task keeps such pools in the map so
+    // concurrent callers keep sharing them, and only evicts after the last external reference is dropped.
+    bool is_cached_entry_in_use_locked(const butil::EndPoint& endpoint) const {
+        auto pool = _stub_map.seek(endpoint);
+        return pool != nullptr && pool->use_count() > 1;
+    }
+
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<BrpcStubCache>> task);
 
@@ -206,6 +221,9 @@ private:
         auto entry = _stub_map.seek(endpoint);
         return entry != nullptr && entry->cleanup_task.get() == task;
     }
+
+    // HTTP stub entries are never cached outside the map, so they follow pure idle-TTL eviction.
+    bool is_cached_entry_in_use_locked(const butil::EndPoint&) const { return false; }
 
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<HttpBrpcStubCache>> task);
@@ -249,6 +267,9 @@ private:
         auto entry = _stub_map.seek(endpoint);
         return entry != nullptr && entry->cleanup_task.get() == task;
     }
+
+    // Lake stub entries are never cached outside the map, so they follow pure idle-TTL eviction.
+    bool is_cached_entry_in_use_locked(const butil::EndPoint&) const { return false; }
 
     bool replace_cleanup_task_locked(const butil::EndPoint& endpoint,
                                      std::shared_ptr<EndpointCleanupTask<LakeServiceBrpcStubCache>> task);

@@ -28,7 +28,6 @@
 #include "common/brpc/brpc_stub_cache.h"
 #include "common/brpc_helper.h"
 #include "common/config_exec_flow_fwd.h"
-#include "common/config_network_fwd.h"
 #include "common/config_rpc_client_fwd.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/fragment_context.h"
@@ -559,14 +558,12 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         // _send_rpc runs under SinkContext::mutex (held by _try_to_send_rpc), so the cached pool below is race-free.
         auto& context = sink_ctx(request.fragment_instance_id.lo);
         auto* cache = _fragment_ctx->runtime_state()->query_execution_services()->rpc->brpc_stub_cache;
-        const int64_t now_ns = MonotonicNanos();
-        if (cache != nullptr && (context.stub_pool == nullptr || now_ns >= context.stub_pool_next_renew_ns)) {
-            // Rare (throttled): take the process-global cache lock to (re-)resolve the pool and renew its expiry
-            // deadline so concurrent queries to the same endpoint keep sharing it. The per-chunk selection below
-            // then touches only the per-endpoint pool mutex.
+        if (cache != nullptr && context.stub_pool == nullptr) {
+            // Resolve the pool once (taking the process-global cache lock) and hold it for the query's lifetime.
+            // The cache keeps an in-use pool in the map so concurrent queries to the same endpoint keep sharing it
+            // and its load accounting, and only evicts it once no query references it. The per-chunk selection
+            // below then touches only the per-endpoint pool mutex, so there is nothing to renew here.
             context.stub_pool = cache->get_or_create_pool(request.brpc_stub->endpoint());
-            context.stub_pool_next_renew_ns =
-                    now_ns + static_cast<int64_t>(config::brpc_stub_expire_s) * 1000 * 1000 * 1000 / 2;
         }
         if (context.stub_pool != nullptr) {
             auto selected = context.stub_pool->acquire_least_loaded(request.brpc_stub->endpoint(), payload_bytes);

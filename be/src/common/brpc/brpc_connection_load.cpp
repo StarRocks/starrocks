@@ -23,6 +23,8 @@
 #include <tuple>
 #include <utility>
 
+#include "common/config_rpc_client_fwd.h"
+
 namespace starrocks {
 
 namespace {
@@ -114,6 +116,9 @@ void BrpcConnectionLoadGuard::reset() {
 std::shared_ptr<BrpcConnectionLoad> get_brpc_connection_load(const butil::EndPoint& endpoint,
                                                              const std::string& protocol,
                                                              int64_t connection_group_seed) {
+    if (config::brpc_connection_type != "single") {
+        return std::make_shared<BrpcConnectionLoad>();
+    }
     return connection_load_registry().get(endpoint, protocol, connection_group_seed);
 }
 
