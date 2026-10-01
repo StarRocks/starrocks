@@ -234,6 +234,45 @@ public class MetaFunctionsTest extends MVTestBase {
                 }
             };
             Assertions.assertNull(lookupString("t1", "v1", "c1"));
+            starRocksAssert.dropTable("t1");
+        }
+    }
+
+    @Test
+    public void testLookupStringEscapesArguments() throws Exception {
+        starRocksAssert.withTable("create table t_esc(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        String[] captured = new String[1];
+        new MockUp<SimpleExecutor>() {
+            @Mock
+            public List<TResultBatch> executeDQLAsCaller(String sql, int queryTimeoutSeconds,
+                                                         ConnectContext caller) {
+                captured[0] = sql;
+                return Lists.newArrayList();
+            }
+        };
+        try {
+            // A single quote in the key must be escaped (doubled), not break out of the literal.
+            Assertions.assertNull(lookupString("t_esc", "a'b", "v"));
+            Assertions.assertTrue(captured[0].contains("'a''b'"), captured[0]);
+            // Identifiers are backquoted.
+            Assertions.assertTrue(captured[0].contains("`v`"), captured[0]);
+            Assertions.assertTrue(captured[0].contains("`c1`"), captured[0]);
+        } finally {
+            starRocksAssert.dropTable("t_esc");
+        }
+    }
+
+    @Test
+    public void testLookupStringUnknownReturnColumn() throws Exception {
+        starRocksAssert.withTable("create table t_col(c1 string, v string) primary key(c1) " +
+                "properties('replication_num'='1')");
+        try {
+            SemanticException e = assertThrows(SemanticException.class,
+                    () -> lookupString("t_col", "k", "no_such_col"));
+            Assertions.assertTrue(e.getMessage().contains("Unknown column 'no_such_col'"), e.getMessage());
+        } finally {
+            starRocksAssert.dropTable("t_col");
         }
     }
 
