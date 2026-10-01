@@ -34,7 +34,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -359,12 +358,26 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
      * {@code concat('A', x)} and {@code concat('a', x)} are different values.
      */
     private static boolean sameProjection(String projected, String candidate) {
-        return QUOTED_IDENTIFIER.matcher(projected).matches() && QUOTED_IDENTIFIER.matcher(candidate).matches()
+        return isQuotedIdentifier(projected) && isQuotedIdentifier(candidate)
                 ? projected.equalsIgnoreCase(candidate)
                 : projected.equals(candidate);
     }
 
-    private static final Pattern QUOTED_IDENTIFIER = Pattern.compile("`(?:[^`]|``)*`");
+    private static boolean isQuotedIdentifier(String projection) {
+        int closingQuote = projection.length() - 1;
+        if (closingQuote < 1 || projection.charAt(0) != '`' || projection.charAt(closingQuote) != '`') {
+            return false;
+        }
+        for (int index = 1; index < closingQuote; index++) {
+            if (projection.charAt(index) == '`') {
+                if (index + 1 == closingQuote || projection.charAt(index + 1) != '`') {
+                    return false;
+                }
+                index++;
+            }
+        }
+        return true;
+    }
 
     private static String buildSampleSqlFromProjection(
             String fromClauseSql, String whereClauseSqlOrNull, List<String> projectedIdents,

@@ -217,6 +217,17 @@ class AbstractSqlSampleSubqueryExecutorTest {
     }
 
     @Test
+    void longQuotedIdentifierCanBeReusedWithoutRegexRecursion() {
+        String lower = "`" + "a".repeat(20_000) + "``b`";
+        String upper = "`" + "A".repeat(20_000) + "``B`";
+
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql("t", null,
+                List.of(lower), List.of(upper), 1.0, 10, 0L);
+
+        Assertions.assertTrue(sql.startsWith("SELECT " + lower + " FROM t WHERE"));
+    }
+
+    @Test
     void samplingRateFollowsTheScannedBytesWhileEstimatesKeepTheWholeInput() throws Exception {
         long totalBytes = 100L << 30;
         long scannedBytes = 1L << 30;
