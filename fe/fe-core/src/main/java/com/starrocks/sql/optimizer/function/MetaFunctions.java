@@ -114,9 +114,13 @@ public class MetaFunctions {
     private static final Logger LOG = LogManager.getLogger(MetaFunctions.class);
 
     public static Table inspectExternalTable(TableName tableName) {
-        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), tableName)
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
+        // Resolve the table with the caller's context, not a throwaway empty one: external
+        // connectors read identity/warehouse from it, and the privilege check below already uses
+        // the caller context, so the two must be consistent. (The empty-context form was a
+        // mechanical artifact of #57071, which added the ConnectContext parameter.)
         ConnectContext connectContext = ConnectContext.get();
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(connectContext, tableName)
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         try {
             Authorizer.checkAnyActionOnTable(connectContext, tableName);
         } catch (AccessDeniedException e) {
