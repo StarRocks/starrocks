@@ -1877,6 +1877,180 @@ TEST_P(LakeVacuumTest, test_delete_tablets_bundle_metadata_files) {
     }
 }
 
+// The drop walk follows prev_garbage_version from the highest listed version down to the LOWEST listed
+// version. Vacuum reclaims metadata contiguously from the chain bottom up, so normally nothing is missing
+// inside that range. Two things do leave a hole inside it: a version pinned by |retain_versions| survives
+// below the retain floor while everything between it and the floor is reclaimed, and a batch delete that
+// fails part-way leaves some versions of the batch deleted and others not. A hole is absent from the
+// bundle-state table. When another node did the reclaiming, this node's metacache can still hold the
+// hole's metadata (the vacuuming node erases only its own cache), so reading it through the cache
+// succeeds. The walk must stop at a hole as it would at any chain bottom: treating it as a readable
+// version lets the state lookup default-insert "every tablet is being deleted" and delete a bundled
+// segment that the surviving tablet still reads.
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_delete_tablets_stale_metacache_keeps_shared_file) {
+    const std::string shared_seg = "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat";
+    const std::string compacted_seg = "00000000000359e4_5ba1e000-0000-4000-8000-000000000002.dat";
+    create_data_file(shared_seg);
+    create_data_file(compacted_seg);
+
+    // v2: both tablets live in the shared bundle segment. It survives the vacuum below (pinned).
+    auto t900_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    auto t901_v2 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 901,
+            "version": 2,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    // v3: tablet 901 compacted the shared segment away into its own segment; v3 records the shared
+    // segment as 901's compaction input. Tablet 900 still reads it.
+    auto t900_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ]
+        }
+        )DEL");
+    auto t901_v3 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 901,
+            "version": 3,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000359e4_5ba1e000-0000-4000-8000-000000000002.dat"
+                        }
+                    ]
+                }
+            ],
+            "compaction_inputs": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat",
+                            "bundle_file_offset": 4096
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 1
+        }
+        )DEL");
+    // v4: a later publish with no garbage of its own; 901's chain points back at v3.
+    auto t900_v4 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 900,
+            "version": 4,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000259e4_5ba1e000-0000-4000-8000-000000000001.dat",
+                            "bundle_file_offset": 0
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 3
+        }
+        )DEL");
+    auto t901_v4 = json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+            "id": 901,
+            "version": 4,
+            "rowsets": [
+                {
+                    "data_size": 4096,
+                    "segment_metas": [
+                        {
+                            "filename": "00000000000359e4_5ba1e000-0000-4000-8000-000000000002.dat"
+                        }
+                    ]
+                }
+            ],
+            "prev_garbage_version": 3
+        }
+        )DEL");
+
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v2;
+    tablet_metas_v2[900] = *t900_v2;
+    tablet_metas_v2[901] = *t901_v2;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v2));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v3;
+    tablet_metas_v3[900] = *t900_v3;
+    tablet_metas_v3[901] = *t901_v3;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v3));
+    std::map<int64_t, TabletMetadataPB> tablet_metas_v4;
+    tablet_metas_v4[900] = *t900_v4;
+    tablet_metas_v4[901] = *t901_v4;
+    ASSERT_OK(_tablet_mgr->put_bundle_tablet_metadata(tablet_metas_v4));
+
+    // A query on this node read 901@3 and left it in the metacache.
+    ASSERT_OK(_tablet_mgr->get_tablet_metadata(901, 3));
+
+    // Vacuum on another node reclaimed bundle v3 (v4 is that pass's retain floor, v2 is pinned).
+    // The shared segment survived that pass because 900 still references it. This node's metacache is
+    // not told, so 901@3 is still served from it.
+    ASSERT_OK(FileSystem::Default()->delete_file(
+            join_path(join_path(kTestDir, kMetadataDirectoryName), tablet_metadata_filename(0, 3))));
+    ASSERT_FALSE(file_exist(tablet_metadata_filename(0, 3)));
+    ASSERT_OK(_tablet_mgr->get_tablet_metadata(901, 3));
+
+    // Drop 901 only. 900 stays and still references the shared segment.
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(901);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+
+    EXPECT_TRUE(file_exist(shared_seg));
+    EXPECT_FALSE(file_exist(compacted_seg));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(0, 4)));
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_delete_tablets_shared_metadata_files) {
     const std::string shared_segment = "0000000000f159e4_11111111-1111-1111-1111-1111111111a1.dat";
