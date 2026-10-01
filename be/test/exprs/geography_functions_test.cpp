@@ -1821,6 +1821,52 @@ TEST_F(geographyFunctionsTest, nativeGeoCrsWebMercatorBoundaryAndCollections) {
     EXPECT_NEAR(85.0511287798066, restored_y.value(0), 1e-9);
     ASSERT_TRUE(GeoFunctions::native_geo_transform_close(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
 }
+TEST_F(geographyFunctionsTest, nativeGeoCrsBoundaryRoundTripsStayInsideDomain) {
+    auto geographic_type = geometry_type("EPSG:4326", 4326);
+    auto projected_type = geometry_type("EPSG:3857", 3857);
+    auto projected_srid = ColumnHelper::create_const_column<TYPE_INT>(3857, 1);
+    auto geographic_srid = ColumnHelper::create_const_column<TYPE_INT>(4326, 1);
+    std::unique_ptr<FunctionContext> forward(
+            FunctionContext::create_test_context({geographic_type, TypeDescriptor(TYPE_INT)}, projected_type));
+    forward->set_constant_columns({nullptr, projected_srid});
+    ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(forward.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    std::unique_ptr<FunctionContext> inverse(
+            FunctionContext::create_test_context({projected_type, TypeDescriptor(TYPE_INT)}, geographic_type));
+    inverse->set_constant_columns({nullptr, geographic_srid});
+    ASSERT_TRUE(GeoFunctions::native_geo_transform_prepare(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+
+    for (const char* wkt :
+         {"POINT (180 0)", "POINT (-180 0)", "POINT (0 85.0511287798066)", "POINT (0 -85.0511287798066)"}) {
+        SCOPED_TRACE(wkt);
+        auto source = geometry({wkt}, geographic_type);
+        auto first = GeoFunctions::st_geometry_transform(forward.get(), {source, projected_srid});
+        ASSERT_TRUE(first.ok()) << first.status();
+        auto restored = GeoFunctions::st_geometry_transform(inverse.get(), {*first, geographic_srid});
+        ASSERT_TRUE(restored.ok()) << restored.status();
+        ColumnViewer<TYPE_DOUBLE> longitude(GeoFunctions::st_geometry_x(nullptr, {*restored}).value());
+        ColumnViewer<TYPE_DOUBLE> latitude(GeoFunctions::st_geometry_y(nullptr, {*restored}).value());
+        EXPECT_LE(std::abs(longitude.value(0)), 180.0);
+        EXPECT_LE(std::abs(latitude.value(0)), 85.0511287798066);
+        auto second = GeoFunctions::st_geometry_transform(forward.get(), {*restored, projected_srid});
+        ASSERT_TRUE(second.ok()) << second.status();
+        ColumnViewer<TYPE_DOUBLE> first_x(GeoFunctions::st_geometry_x(nullptr, {*first}).value());
+        ColumnViewer<TYPE_DOUBLE> first_y(GeoFunctions::st_geometry_y(nullptr, {*first}).value());
+        ColumnViewer<TYPE_DOUBLE> second_x(GeoFunctions::st_geometry_x(nullptr, {*second}).value());
+        ColumnViewer<TYPE_DOUBLE> second_y(GeoFunctions::st_geometry_y(nullptr, {*second}).value());
+        EXPECT_NEAR(first_x.value(0), second_x.value(0), 1e-7);
+        EXPECT_NEAR(first_y.value(0), second_y.value(0), 1e-7);
+    }
+
+    for (const char* wkt : {"POINT (180.000001 0)", "POINT (0 85.051129)"}) {
+        auto outside = geometry({wkt}, geographic_type);
+        EXPECT_FALSE(GeoFunctions::st_geometry_transform(forward.get(), {outside, projected_srid}).ok());
+    }
+    auto outside_projected = geometry({"POINT (20037508.343 0)"}, projected_type);
+    EXPECT_FALSE(GeoFunctions::st_geometry_transform(inverse.get(), {outside_projected, geographic_srid}).ok());
+    ASSERT_TRUE(GeoFunctions::native_geo_transform_close(forward.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_TRUE(GeoFunctions::native_geo_transform_close(inverse.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+}
+
 TEST_F(geographyFunctionsTest, nativeGeoCrsRejectsInvalidAndSharesPreparedContextAcrossWorkers) {
     auto source_type = geometry_type("EPSG:4326", 4326);
     auto point = geometry({"POINT (10 20)"}, source_type);

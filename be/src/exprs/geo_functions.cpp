@@ -1200,6 +1200,10 @@ Status transform_coordinate(WkbCoordinate* point, int32_t source_srid, int32_t t
         }
         point->x = point->x / kWebMercatorRadius * 180.0 / kPi;
         point->y = std::atan(std::sinh(point->y / kWebMercatorRadius)) * 180.0 / kPi;
+        // Rounding at the Web Mercator edge must not make a valid inverse result
+        // invalid as input to a subsequent forward transformation.
+        point->x = std::clamp(point->x, -180.0, 180.0);
+        point->y = std::clamp(point->y, -kWebMercatorMaxLatitude, kWebMercatorMaxLatitude);
     }
     if (!std::isfinite(point->x) || !std::isfinite(point->y)) {
         return Status::InvalidArgument("ST_Transform coordinate is outside the supported CRS domain");
