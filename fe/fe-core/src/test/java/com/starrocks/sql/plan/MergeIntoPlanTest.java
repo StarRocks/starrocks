@@ -100,6 +100,120 @@ public class MergeIntoPlanTest extends PlanTestBase {
 
 
     @Test
+    public void testMergeElidesEnforceUniqueWhenSourceDistinctKeysCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT DISTINCT id, date FROM iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertFalse(containsEnforceUnique(execPlan),
+                "MERGE should elide ENFORCE UNIQUE when source DISTINCT keys are covered by ON keys");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueWhenSourceDistinctKeysDoNotCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT DISTINCT id, data FROM iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.data";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE when ON keys do not cover source DISTINCT keys");
+    }
+
+    @Test
+    public void testMergeElidesEnforceUniqueWhenSourceGroupByKeysCoverOnKeys() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, date FROM iceberg0.unpartitioned_db.t0_v2 GROUP BY id, date) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertFalse(containsEnforceUnique(execPlan),
+                "MERGE should elide ENFORCE UNIQUE when source GROUP BY keys are covered by ON keys");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueForGroupingSetsSource() throws Exception {
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT id, date FROM iceberg0.unpartitioned_db.t0_v2 " +
+                "       GROUP BY GROUPING SETS ((id, date), (id))) AS s " +
+                "ON t.id = s.id AND t.date = s.date " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE for grouping sets source");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueWhenOnKeyTypesMismatch() throws Exception {
+        // Source DISTINCT key 'id' is STRING (aliased from data); target id is INT. The ON equality
+        // needs an implicit, non-injective cast, so distinct source values ('1', '01') can match the
+        // same target row — source uniqueness over the raw STRING does NOT imply an at-most-one match.
+        // The check must NOT be elided even though the ON key textually covers the DISTINCT key.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT DISTINCT data AS id FROM iceberg0.unpartitioned_db.t0_v2) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = s.id";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE when the ON key needs an implicit (non-injective) cast");
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueForNonSlotRefGroupByKey() throws Exception {
+        // GROUP BY is a non-SlotRef expression (abs(id)). Even though the group-by makes the output
+        // 'id' unique, uniqueness is NOT proven via fragile SQL-text matching of the expression, so the
+        // runtime duplicate check is conservatively kept.
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
+                "USING (SELECT abs(id) AS id FROM iceberg0.unpartitioned_db.t0_v2 GROUP BY abs(id)) AS s " +
+                "ON t.id = s.id " +
+                "WHEN MATCHED THEN UPDATE SET data = 'updated'";
+        ExecPlan execPlan = getMergeExecPlan(sql);
+        assertTrue(containsEnforceUnique(execPlan),
+                "MERGE must keep ENFORCE UNIQUE when source uniqueness rests on a non-SlotRef GROUP BY key");
+    }
+
+    @Test
+    public void testMergeRejectsMergeJoinImplementationOnElidePath() {
+        // Same backend limitation as testMergeRejectsMergeJoinImplementation, but on the
+        // canElideEnforceUnique path: a DISTINCT source whose unique key set is fully covered by the
+        // ON keys lets setupIcebergMergeSink skip insertEnforceUniqueRowLocatorNode (and the dedup
+        // distribution check inside it). The MERGE_JOIN_NODE rejection must still fire, otherwise an
+        // unexecutable sort-merge join reaches the BE.
+        String prevJoinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
+        try {
+            connectContext.getSessionVariable().setJoinImplementationMode("merge");
+            String sql = "MERGE INTO iceberg0.partitioned_db.t1_v2 AS t " +
+                    "USING (SELECT DISTINCT id, data, date FROM iceberg0.partitioned_db.t1_v2) AS s " +
+                    "ON t.id = s.id AND t.data = s.data AND t.date = s.date " +
+                    "WHEN MATCHED THEN UPDATE SET data = s.data";
+            Exception e = assertThrows(Exception.class, () -> getMergeExecPlan(sql));
+            assertTrue(e.getMessage() != null && e.getMessage().toLowerCase().contains("unsupported join shape"),
+                    "MERGE under join_implementation_mode=merge must be rejected even when the duplicate "
+                            + "check is elided; got: " + e.getMessage());
+        } finally {
+            connectContext.getSessionVariable().setJoinImplementationMode(prevJoinImplementationMode);
+        }
+    }
+
+    @Test
+    public void testMergeKeepsEnforceUniqueWhenSourceNameCollidesWithTarget() {
+        // Source aliased to the target's bare name collides on "t0_v2", and a target-only ON
+        // (target.id = target.id) is independent of the source. canElideEnforceUnique must not
+        // miscount the target slot as a covered source key and drop the check; with the check kept,
+        // the source-independent ON is a multi-row cross join that the dedup validation rejects.
+        // (Before the fix the check was silently elided and a corrupt plan returned.)
+        String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 " +
+                "USING (SELECT DISTINCT id FROM iceberg0.unpartitioned_db.t0_v2) AS t0_v2 " +
+                "ON iceberg0.unpartitioned_db.t0_v2.id = iceberg0.unpartitioned_db.t0_v2.id " +
+                "WHEN MATCHED THEN UPDATE SET data = 'x'";
+        Exception e = assertThrows(Exception.class, () -> getMergeExecPlan(sql));
+        assertTrue(e.getMessage() != null && e.getMessage().toLowerCase().contains("unsupported join shape"),
+                "Source/target name collision must not elide the duplicate check; the source-independent "
+                        + "ON must be rejected, not silently planned. got: " + e.getMessage());
+    }
+
+    @Test
     public void testMergePlanContainsEnforceUnique() throws Exception {
         String sql = "MERGE INTO iceberg0.unpartitioned_db.t0_v2 AS t " +
                 "USING (SELECT 1 AS id, 'new' AS data, '2024-01-01' AS date) AS s " +
