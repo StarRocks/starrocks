@@ -75,6 +75,8 @@ starrocks_set_default_packages() {
         librdkafka
         pulsar
         s2
+        sqlite3
+        proj
         bitshuffle
         croaringbitmap
         cctz

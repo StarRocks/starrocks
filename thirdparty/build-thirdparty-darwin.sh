@@ -2754,6 +2754,50 @@ build_s2() {
     sync_lib64_links
 }
 
+build_sqlite3() {
+    check_if_source_exist "${SQLITE3_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${SQLITE3_SOURCE}"
+    mkdir -p "${TP_INSTALL_DIR}/bin" "${TP_INSTALL_DIR}/include" "${TP_INSTALL_DIR}/lib"
+    "${CC}" ${CFLAGS} -O2 -fPIC -fno-omit-frame-pointer -DSQLITE_THREADSAFE=1 -DSQLITE_ENABLE_COLUMN_METADATA \
+        -c sqlite3.c -o sqlite3.o
+    "${AR}" rcs "${TP_INSTALL_DIR}/lib/libsqlite3.a" sqlite3.o
+    "${CC}" ${CFLAGS} -O2 -DSQLITE_THREADSAFE=1 shell.c "${TP_INSTALL_DIR}/lib/libsqlite3.a" \
+        -lpthread -lm -o "${TP_INSTALL_DIR}/bin/sqlite3"
+    cp sqlite3.h sqlite3ext.h "${TP_INSTALL_DIR}/include/"
+    sync_lib64_links
+}
+
+build_proj() {
+    check_if_source_exist "${PROJ_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${PROJ_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" .. -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DCMAKE_C_FLAGS="${CFLAGS} -fno-omit-frame-pointer" \
+        -DCMAKE_CXX_FLAGS="${CXXFLAGS} -fno-omit-frame-pointer" \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_APPS=OFF \
+        -DENABLE_CURL=OFF \
+        -DENABLE_TIFF=OFF \
+        -DEMBED_RESOURCE_FILES=ON \
+        -DUSE_ONLY_EMBEDDED_RESOURCE_FILES=ON \
+        -DSQLite3_INCLUDE_DIR="${TP_INSTALL_DIR}/include" \
+        -DSQLite3_LIBRARY="${TP_INSTALL_DIR}/lib/libsqlite3.a" \
+        -DEXE_SQLITE3="${TP_INSTALL_DIR}/bin/sqlite3"
+    "${CMAKE_CMD}" --build . -j "${PARALLEL}"
+    "${CMAKE_CMD}" --install .
+    mkdir -p "${TP_INSTALL_DIR}/share/licenses/proj"
+    cp "${TP_SOURCE_DIR}/${PROJ_SOURCE}/COPYING" "${TP_INSTALL_DIR}/share/licenses/proj/"
+    bash "${TP_DIR}/test-proj.sh" "${TP_INSTALL_DIR}"
+    sync_lib64_links
+}
+
 build_hadoop_src() {
     local libhdfs_dir
     local jni_platform_include
@@ -3230,6 +3274,12 @@ for package in "${packages[@]}"; do
             ;;
         s2)
             build_s2
+            ;;
+        sqlite3)
+            build_sqlite3
+            ;;
+        proj)
+            build_proj
             ;;
         fmt_shared)
             build_formula_fmt_shared

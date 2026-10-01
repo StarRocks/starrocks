@@ -56,3 +56,11 @@ Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
 This product includes cryptographic software written by Eric Young
 (eay@cryptsoft.com).  This product includes software written by Tim
 Hudson (tjh@cryptsoft.com).
+
+---------------------------
+PROJ 9.9.0 and SQLite 3.53.4
+---------------------------
+Native GEOMETRY CRS transformations use PROJ, including its embedded proj.db.
+PROJ source and bundled data are distributed under the X/MIT license; the
+license text is reproduced in thirdparty/LICENSE.txt. SQLite is public domain.
+No external PROJ grids are bundled.
