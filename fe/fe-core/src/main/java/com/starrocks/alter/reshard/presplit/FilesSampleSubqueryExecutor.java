@@ -49,20 +49,22 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
      * {@code targetToSourceColumnNames} re-points each projected target column at the FILES column
      * that backs it. An EMPTY map means the file's columns already carry the target's names.
      * {@code targetToConstantSql} carries the key columns the load feeds with a literal rather
-     * than a FILES column. {@code scannedFileBytes} is how much of {@code totalFileBytes} the
+     * than a FILES column, and {@code targetToExpressionSql} those it computes from FILES columns.
+     * {@code scannedFileBytes} is how much of {@code totalFileBytes} the
      * sample scans, and {@code partitionSourceBytes} the exact per-path-partition breakdown when a
      * file subset is sampled.
      */
     protected record Source(
             Map<String, String> filesProperties, long totalFileBytes, ComputeResource computeResource,
             String wherePredicateSqlOrNull, Map<String, String> targetToSourceColumnNames,
-            Map<String, String> targetToConstantSql, long scannedFileBytes,
-            List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql,
+            long scannedFileBytes, List<Estimates.PartitionSourceBytes> partitionSourceBytes) {
         public Source {
             Objects.requireNonNull(filesProperties, "filesProperties");
             Objects.requireNonNull(computeResource, "computeResource");
             Objects.requireNonNull(targetToSourceColumnNames, "targetToSourceColumnNames");
             Objects.requireNonNull(targetToConstantSql, "targetToConstantSql");
+            Objects.requireNonNull(targetToExpressionSql, "targetToExpressionSql");
             Objects.requireNonNull(partitionSourceBytes, "partitionSourceBytes");
             if (totalFileBytes < 0) {
                 throw new IllegalArgumentException("totalFileBytes must be non-negative, was " + totalFileBytes);
@@ -95,28 +97,30 @@ abstract class FilesSampleSubqueryExecutor extends AbstractSqlSampleSubqueryExec
         List<Column> partitionSourceColumns = request.getPartitionSourceColumns();
         Map<String, String> targetToSource = source.targetToSourceColumnNames();
         Map<String, String> targetToConstantSql = source.targetToConstantSql();
+        Map<String, String> targetToExpressionSql = source.targetToExpressionSql();
         return new SampleSpec(fromClauseSql, source.wherePredicateSqlOrNull(),
                 source.totalFileBytes(), source.computeResource(),
-                filesProjections(sortKeyColumns, targetToSource, targetToConstantSql),
-                filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql),
+                filesProjections(sortKeyColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
+                filesProjections(partitionSourceColumns, targetToSource, targetToConstantSql, targetToExpressionSql),
                 sortKeyColumns, partitionSourceColumns, 0L, false,
                 source.scannedFileBytes(), source.partitionSourceBytes());
     }
 
     /**
-     * Like {@link #filesProjectionIdents}, except that a column the load feeds with a literal is
-     * projected as that literal cast to the column type.
+     * Like {@link #filesProjectionIdents}, except that a column the load feeds with a literal or
+     * computes from FILES columns is projected as that literal or expression cast to the column type.
      */
     static List<String> filesProjections(
             List<Column> columns, Map<String, String> targetToSourceColumnNames,
-            Map<String, String> targetToConstantSql) throws StarRocksException {
-        if (targetToConstantSql.isEmpty()) {
+            Map<String, String> targetToConstantSql, Map<String, String> targetToExpressionSql)
+            throws StarRocksException {
+        if (targetToConstantSql.isEmpty() && targetToExpressionSql.isEmpty()) {
             return filesProjectionIdents(columns, targetToSourceColumnNames);
         }
         List<String> projections = InsertSelectSourceColumns.projections(
-                columns, targetToSourceColumnNames, targetToConstantSql);
+                columns, targetToSourceColumnNames, targetToConstantSql, targetToExpressionSql);
         if (projections == null) {
-            throw new StarRocksException("a projected column has neither a FILES column nor a constant");
+            throw new StarRocksException("a projected column has no FILES column, constant, or expression");
         }
         return projections;
     }

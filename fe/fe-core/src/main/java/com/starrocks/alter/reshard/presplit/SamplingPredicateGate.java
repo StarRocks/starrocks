@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.InPredicate;
 import com.starrocks.sql.ast.expression.InformationFunction;
+import com.starrocks.sql.ast.expression.NullLiteral;
 import com.starrocks.sql.ast.expression.Parameter;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.ast.expression.Subquery;
@@ -102,6 +103,23 @@ final class SamplingPredicateGate {
             return null;
         }
         return folded;
+    }
+
+    /**
+     * {@link #foldPlanTimeConstants} for a computed INSERT projection rather than a WHERE clause. A
+     * projection with no column folds as a whole, so a cast literal or {@code current_date()} reaches
+     * the sampler as the constant the INSERT writes; one with a column keeps its column-bearing nodes
+     * and folds only its column-free calls, exactly as a predicate does.
+     *
+     * @return a folded copy, or {@code null} when a column-free part does not fold to a constant or
+     *         the whole projection folds to NULL
+     */
+    static Expr foldProjection(Expr projection, ConnectContext context) {
+        if (projection.contains((Predicate<Expr>) SamplingPredicateGate::blocksFolding)) {
+            return foldInPlace(projection.clone(), context);
+        }
+        Expr folded = foldToLiteral(projection.clone(), context);
+        return folded == null || folded.getChild(0) instanceof NullLiteral ? null : folded;
     }
 
     private static Expr foldInPlace(Expr expr, ConnectContext context) {

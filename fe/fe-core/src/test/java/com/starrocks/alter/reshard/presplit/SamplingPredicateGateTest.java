@@ -327,6 +327,51 @@ public class SamplingPredicateGateTest {
         Assertions.assertFalse(safe(folded));
     }
 
+    // --- computed projections ---
+
+    private static Expr projectionOf(String expression) {
+        QueryStatement stmt = (QueryStatement) SqlParser.parseSingleStatement(
+                "SELECT " + expression + " FROM s", SqlModeHelper.MODE_DEFAULT);
+        return ((SelectRelation) stmt.getQueryRelation()).getSelectList().getItems().get(0).getExpr();
+    }
+
+    private static String foldedProjectionSql(String expression, ConnectContext ctx) {
+        Expr folded = SamplingPredicateGate.foldProjection(projectionOf(expression), ctx);
+        return folded == null ? null : SamplingPredicateGate.toSql(folded);
+    }
+
+    @Test
+    public void columnFreeProjectionFoldsAsAWholeInTheCallersContext() {
+        // Unlike a WHERE clause, a projection need not be boolean: current_date() AS dt is the value
+        // the INSERT writes, and it must be the user's day, not the ROOT sampling context's.
+        Assertions.assertEquals("CAST('2026-09-24' AS DATE)",
+                foldedProjectionSql("current_date()", contextAt("2026-09-23T20:00:00Z", "Asia/Shanghai")));
+        Assertions.assertEquals("CAST('2026-09-17' AS DATE)",
+                foldedProjectionSql("CAST('2026-09-17' AS DATE)", contextAt("2026-09-23T20:00:00Z", "UTC")));
+    }
+
+    @Test
+    public void projectionFoldingToNullIsRejected() {
+        Assertions.assertNull(foldedProjectionSql("CAST(NULL AS DATE)", contextAt("2026-09-23T10:00:00Z", "UTC")));
+    }
+
+    @Test
+    public void columnProjectionKeepsItsColumnsAndFoldsItsConstantCalls() {
+        ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");
+        Assertions.assertEquals("date_trunc('day', `ts`)", foldedProjectionSql("date_trunc('day', ts)", ctx));
+        String folded = foldedProjectionSql("if(ts >= date_sub(current_date(), 1), 'recent', 'old')", ctx);
+        Assertions.assertTrue(folded.contains("CAST('2026-09-22 00:00:00' AS DATETIME)"), folded);
+        Assertions.assertTrue(safe(projectionOf(folded)), folded);
+    }
+
+    @Test
+    public void perRowNonDeterministicProjectionDoesNotFold() {
+        ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");
+        Assertions.assertNull(foldedProjectionSql("rand()", ctx));
+        Assertions.assertNull(foldedProjectionSql("uuid()", ctx));
+        Assertions.assertNull(foldedProjectionSql("a + rand()", ctx));
+    }
+
     @Test
     public void foldKeepsSubqueryAndForeignQualifierRejections() {
         ConnectContext ctx = contextAt("2026-09-23T10:00:00Z", "UTC");

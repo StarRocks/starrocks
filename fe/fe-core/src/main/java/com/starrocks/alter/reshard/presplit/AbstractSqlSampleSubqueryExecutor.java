@@ -34,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -345,13 +346,25 @@ abstract class AbstractSqlSampleSubqueryExecutor implements SampleSubqueryExecut
 
     private static int findProjectionOrdinal(List<String> projectedIdents, String candidate) {
         for (int ordinal = 0; ordinal < projectedIdents.size(); ordinal++) {
-            // The SQL expression can contain case-sensitive string literals.
-            if (projectedIdents.get(ordinal).equals(candidate)) {
+            if (sameProjection(projectedIdents.get(ordinal), candidate)) {
                 return ordinal;
             }
         }
         return -1;
     }
+
+    /**
+     * Quoted identifiers match case-insensitively, as column names do. Any other projection -- a cast
+     * literal or a computed expression -- must match exactly: a string literal inside it is data, so
+     * {@code concat('A', x)} and {@code concat('a', x)} are different values.
+     */
+    private static boolean sameProjection(String projected, String candidate) {
+        return QUOTED_IDENTIFIER.matcher(projected).matches() && QUOTED_IDENTIFIER.matcher(candidate).matches()
+                ? projected.equalsIgnoreCase(candidate)
+                : projected.equals(candidate);
+    }
+
+    private static final Pattern QUOTED_IDENTIFIER = Pattern.compile("`(?:[^`]|``)*`");
 
     private static String buildSampleSqlFromProjection(
             String fromClauseSql, String whereClauseSqlOrNull, List<String> projectedIdents,

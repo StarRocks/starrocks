@@ -204,6 +204,19 @@ class AbstractSqlSampleSubqueryExecutorTest {
     // ---------------------------------------------------------------------------
 
     @Test
+    void partitionProjectionReusesAnIdentifierCaseInsensitivelyButAnExpressionOnlyExactly() {
+        // Column names are case-insensitive, so `k` reuses `K`; a string literal is data, so
+        // concat('A', r) must get its own cell rather than read concat('a', r)'s value.
+        String sql = AbstractSqlSampleSubqueryExecutor.buildSampleSql("t", null,
+                List.of("`K`", "CAST(concat('a', `r`) AS varchar(8))"),
+                List.of("`k`", "CAST(concat('A', `r`) AS varchar(8))", "CAST(concat('a', `r`) AS varchar(8))"),
+                1.0, 10, 0L);
+
+        Assertions.assertTrue(sql.startsWith("SELECT `K`, CAST(concat('a', `r`) AS varchar(8)), "
+                + "CAST(concat('A', `r`) AS varchar(8)) FROM t WHERE"), sql);
+    }
+
+    @Test
     void samplingRateFollowsTheScannedBytesWhileEstimatesKeepTheWholeInput() throws Exception {
         long totalBytes = 100L << 30;
         long scannedBytes = 1L << 30;
