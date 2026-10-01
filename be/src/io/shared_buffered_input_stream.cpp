@@ -16,7 +16,13 @@
 
 #include <gutil/strings/substitute.h>
 
+<<<<<<< HEAD:be/src/io/shared_buffered_input_stream.cpp
 #include "common/config.h"
+=======
+#include "base/container/raw_container.h"
+#include "common/config_scan_io_fwd.h"
+#include "common/runtime_profile.h"
+>>>>>>> a8c750a ([BugFix] Fix shared buffer reuse after failed remote reads (#79965)):be/src/cache/scan/shared_buffered_input_stream.cpp
 #include "gutil/strings/fastmem.h"
 #include "runtime/current_thread.h"
 #include "util/runtime_profile.h"
@@ -225,8 +231,21 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
             // we will count how many extra bytes we read because of alignment.
             _shared_align_io_bytes += sb.size - sb.raw_size;
         }
+<<<<<<< HEAD:be/src/io/shared_buffered_input_stream.cpp
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+=======
+        // A range larger than max_buffer_size gets a shared buffer of its own size, so sb.size is
+        // the size of a whole column chunk and is bounded only by the file. check_mem_limit() above
+        // only reports a tracker that is already over its limit; it does not account for the bytes
+        // about to be allocated here, which is what this scope adds.
+        // Publish the buffer only after the entire read succeeds. A failed read may have written
+        // partial data, which must not be reused by later reads or populated into DataCache.
+        std::vector<uint8_t> read_buffer;
+        TRY_CATCH_BAD_ALLOC(raw::stl_vector_resize_uninitialized(&read_buffer, sb.size));
+        RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, read_buffer.data(), sb.size));
+        sb.buffer.swap(read_buffer);
+>>>>>>> a8c750a ([BugFix] Fix shared buffer reuse after failed remote reads (#79965)):be/src/cache/scan/shared_buffered_input_stream.cpp
     }
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
