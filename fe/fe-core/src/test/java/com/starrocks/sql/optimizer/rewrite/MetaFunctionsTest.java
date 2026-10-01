@@ -277,7 +277,9 @@ public class MetaFunctionsTest extends MVTestBase {
             // The embedded backtick is doubled inside the quoted identifier.
             Assertions.assertTrue(captured[0].contains("`t``bt`"), captured[0]);
         } finally {
-            starRocksAssert.dropTable("t`bt");
+            // dropTable concatenates its argument into "drop table <arg>", so it needs the SQL
+            // identifier form (as used by CREATE), not the raw name passed to lookup_string.
+            starRocksAssert.dropTable("`t``bt`");
         }
     }
 
