@@ -264,6 +264,11 @@ let
       md5 = "282e54a68911f516b15d07136c78592b";
       sha256 = "19hprnr6c87490m8531vl9ygnhzbkw7whz1yy1lk09njzjq8xccj";
     };
+    "proj-9.9.0.tar.gz" = {
+      url = "https://download.osgeo.org/proj/proj-9.9.0.tar.gz";
+      md5 = "50ed234d73d68f7bf4378e9a020a40a7";
+      sha256 = "sha256-eRoGEFR+6rsXAGz9Sc29IDTzJA9H7V6IoQMYEfTivPM=";
+    };
     "protobuf-3.16.1.tar.gz" = {
       url = "https://github.com/google/protobuf/archive/v3.16.1.tar.gz";
       md5 = "6294f01dedea72a76b9e113369f55097";
@@ -318,6 +323,11 @@ let
       url = "https://github.com/google/snappy/archive/1.2.1.tar.gz";
       md5 = "dd6f9b667e69491e1dbf7419bdf68823";
       sha256 = "0wvaxdjdhrb6s8invpzs51jywpbshb96r40nndi1iz62gsjg17w6";
+    };
+    "sqlite-autoconf-3530400.tar.gz" = {
+      url = "https://www.sqlite.org/2026/sqlite-autoconf-3530400.tar.gz";
+      md5 = "ee54db5a5b04e77d4883ce0c051a1eba";
+      sha256 = "sha256-DpSDkA6SzV3o/UjRa/kgAUWmH3/VvlQqWsgdipUW65w=";
     };
     "starrocks-clucene-2026.06.23.tar.gz" = {
       url = "https://github.com/StarRocks/clucene/archive/refs/tags/starrocks-2026.06.23.tar.gz";
@@ -485,6 +495,8 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "sqlite-autoconf-3530400.tar.gz"
+      "proj-9.9.0.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -556,6 +568,8 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "sqlite-autoconf-3530400.tar.gz"
+      "proj-9.9.0.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -626,6 +640,8 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "sqlite-autoconf-3530400.tar.gz"
+      "proj-9.9.0.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -699,6 +715,8 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "SQLITE3"
+      "PROJ"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -770,6 +788,8 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "SQLITE3"
+      "PROJ"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -840,6 +860,8 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "SQLITE3"
+      "PROJ"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -916,6 +938,8 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "sqlite3"
+      "proj"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -987,6 +1011,8 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "sqlite3"
+      "proj"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -1057,6 +1083,8 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "sqlite3"
+      "proj"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
