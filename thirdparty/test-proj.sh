@@ -50,7 +50,14 @@ system_libs=(-pthread -lm)
 if [[ "$(uname -s)" != Darwin ]]; then
     system_libs+=(-ldl)
 fi
-"${CXX:-g++}" -std=c++17 -I"$prefix/include" "$tmp_dir/proj_smoke.cpp" \
+cxx="${CXX:-g++}"
+"$cxx" -std=c++17 -I"$prefix/include" "$tmp_dir/proj_smoke.cpp" \
     "$prefix/lib/libproj.a" "$prefix/lib/libsqlite3.a" "${system_libs[@]}" \
     -o "$tmp_dir/proj_smoke"
+# Rocky9 can use a newer compiler than its system libstdc++. Run the smoke
+# test against the runtime paired with the compiler that linked it.
+runtime_libstdcpp="$("$cxx" -print-file-name=libstdc++.so.6)"
+if [[ -f "$runtime_libstdcpp" ]]; then
+    export LD_LIBRARY_PATH="$(dirname "$runtime_libstdcpp"):${LD_LIBRARY_PATH:-}"
+fi
 PROJ_DATA="$tmp_dir/no-external-proj-data" PROJ_NETWORK=OFF "$tmp_dir/proj_smoke"
