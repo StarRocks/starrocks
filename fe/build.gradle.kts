@@ -63,7 +63,7 @@ subprojects {
         set("hudi.version", "1.0.2")
         set("iceberg.version", "1.10.0")
         set("io.netty.version", "4.1.137.Final")
-        set("jackson.version", "2.21.6")
+        set("jackson.version", "2.21.7")
         set("jackson-annotations.version", "2.21")
         set("jetty.version", "9.4.58.v20250814")
         set("jprotobuf-starrocks.version", "1.0.0")
