@@ -1056,6 +1056,32 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if ((FunctionSet.ST_SETSRID.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_TRANSFORM.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
+                argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {
+            Expr sridExpr = node.getChild(1);
+            if (!sridExpr.isConstant()) {
+                throw new SemanticException("%s requires a foldable constant target SRID", fnName);
+            }
+            Expr folded = ExprUtils.analyzeAndCastFold(sridExpr.clone());
+            // Check the original folded integer before narrowing LARGEINT to an INT SRID.
+            BigInteger value = toBigInteger(folded);
+            if (value == null || value.signum() <= 0 || value.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+                throw new SemanticException("%s requires a positive INT target SRID", fnName);
+            }
+            int targetSrid = value.intValueExact();
+            if (targetSrid != 4326 && targetSrid != 3857) {
+                throw new SemanticException("%s supports only EPSG:4326 and EPSG:3857", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                IntLiteral target = new IntLiteral(targetSrid, IntegerType.INT);
+                node.getParams().exprs().set(1, target);
+                node.setChild(1, target);
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
+                        GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
+            }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
                         argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY)) {

@@ -236,6 +236,45 @@ public class AnalyzeFunctionTest {
         analyzeFail("select ST_Area('POLYGON ((0 0, 1 0, 0 0))')",
                 "No matching function with signature: st_area(varchar)");
     }
+    @Test
+    public void testNativeGeoCrsContract() {
+        String geometry = "ST_GeomFromText('POINT (10 20)', 'EPSG:4326')";
+        String geography = "ST_GeogFromText('POINT (10 20)')";
+        assertFunctionContract("select ST_SRID(" + geometry + ")", 120300, PrimitiveType.INT);
+        assertFunctionContract("select ST_SetSRID(" + geometry + ", 3857)", 120301, PrimitiveType.GEOMETRY);
+        assertFunctionContract("select ST_Transform(" + geometry + ", 3857)", 120302, PrimitiveType.GEOMETRY);
+
+        QueryRelation relation = ((QueryStatement) analyzeSuccess(
+                "select ST_Transform(" + geometry + ", cast(4326 + 1 - 1 as int))")).getQueryRelation();
+        ScalarType transformedType = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:4326"), transformedType.getGeoDescriptor());
+
+        QueryRelation retagged = ((QueryStatement) analyzeSuccess(
+                "select ST_SetSRID(" + geometry + ", 3857)")).getQueryRelation();
+        ScalarType retaggedType = (ScalarType) ((SelectRelation) retagged).getOutputExpression().get(0).getType();
+        Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), retaggedType.getGeoDescriptor());
+
+        analyzeFail("select ST_Transform(" + geometry + ", cast(v1 as int)) from t0",
+                "requires a foldable constant target SRID");
+        analyzeFail("select ST_Transform(" + geometry + ", cast(null as int))",
+                "requires a positive INT target SRID");
+        analyzeFail("select ST_SetSRID(" + geometry + ", 0)",
+                "requires a positive INT target SRID");
+        for (String function : new String[] {"ST_SetSRID", "ST_Transform"}) {
+            for (String invalidSrid : new String[] {
+                    "2147483648", "18446744073709555942", "-18446744073709547290"}) {
+                analyzeFail("select " + function + "(" + geometry + ", " + invalidSrid + ")",
+                        "requires a positive INT target SRID");
+            }
+        }
+        for (String function : new String[] {"ST_SetSRID", "ST_Transform"}) {
+            analyzeFail("select " + function + "(" + geometry + ", 9895)",
+                    "supports only EPSG:4326 and EPSG:3857");
+        }
+        analyzeFail("select ST_Transform(" + geography + ", 3857)",
+                "No matching function with signature: st_transform");
+    }
+
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())

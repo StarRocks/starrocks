@@ -116,6 +116,14 @@ public:
     DEFINE_VECTORIZED_FN(st_geometry_centroid);
     DEFINE_VECTORIZED_FN(st_geography_is_valid);
     DEFINE_VECTORIZED_FN(st_geometry_is_valid);
+    DEFINE_VECTORIZED_FN(st_geometry_srid);
+    DEFINE_VECTORIZED_FN(st_geometry_set_srid);
+    DEFINE_VECTORIZED_FN(st_geometry_transform);
+
+    static Status native_geo_transform_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
+    static Status native_geo_transform_close(FunctionContext*, FunctionContext::FunctionStateScope)
+            __attribute__((used));
 
     // from wkt
     static Status st_from_wkt_prepare_common(FunctionContext*, FunctionContext::FunctionStateScope,

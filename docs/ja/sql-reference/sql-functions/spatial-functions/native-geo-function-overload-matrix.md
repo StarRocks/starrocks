@@ -102,6 +102,16 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 すべての overload は 7 種類の XY OGC family を受け付け、必要に応じて `MULTI*` と `GEOMETRYCOLLECTION` を再帰処理します。`NULL` は伝播します。`EMPTY` に対して計測は 0、`ST_Centroid` は `POINT EMPTY`、`ST_IsValid` は `true` を返します。読み取り可能でもトポロジ的に無効な値は `ST_IsValid` だけが `false` を返し、計測と重心は拒否します。不正な WKB、未対応の次元または descriptor はエラーです。
 
 球面ポリゴンのリングは向きに依存せず、小さい領域に正規化されます。1 個のリングで半球を超える領域は表現しません。[ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md)、[ST_IsValid](st_isvalid.md) を参照してください。
+## CRS メタデータと座標変換
+
+| シグネチャ | 関数 ID | 結果 | 動作 |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` または `NULL` | descriptor の数値 EPSG 対応を読み取り、座標は変換しません。 |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120301 | `GEOMETRY`、ターゲット EPSG descriptor | メタデータのみ変更し、WKB と座標は保持します。 |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120302 | `GEOMETRY`、ターゲット EPSG descriptor | Web Mercator の数式で EPSG:4326 と EPSG:3857 の間の XY 座標を再投影します。 |
+
+ターゲット SRID は FE が定数に畳み込める 4326 または 3857 に限ります。入力 CRS は EPSG:4326、EPSG:3857、または OGC:CRS84 です。`ST_Transform` は 7 種類の XY OGC family と collection を処理します。`NULL` は伝播し、`EMPTY` は空のままです。[ST_SRID](st_srid.md)、[ST_SetSRID](st_setsrid.md)、[ST_Transform](st_transform.md) を参照してください。
+
 ## レガシー互換性
 
 ネイティブオーバーロードは、既存の `VARCHAR` 関数を再採番または置換しません。
