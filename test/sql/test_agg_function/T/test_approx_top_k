@@ -514,3 +514,19 @@ SELECT L_RETURNFLAG, APPROX_TOP_K(L_LINENUMBER, 20) FROM lineitem GROUP BY L_RET
 SELECT approx_top_k(col1) FROM (VALUES (1)) AS tmp(col1);
 SELECT approx_top_k(col1) FROM (VALUES (1),(1),(1),(1),(1),(1)) AS tmp(col1);
 SELECT approx_top_k(1);
+
+-- name: test_approx_top_k_const_first_arg
+CREATE TABLE `t_const_first_arg` (
+  `c_id` INT(11) NOT NULL,
+  `c_grp` TINYINT NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`c_id`)
+DISTRIBUTED BY HASH(`c_id`) BUCKETS 4
+PROPERTIES (
+ "replication_num" = "1"
+);
+INSERT INTO `t_const_first_arg` VALUES (1,1),(2,2),(3,1),(4,2),(5,3),(6,3),(7,1),(8,2);
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT), 3, 10) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT), 3) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K(CAST(1 AS TINYINT)) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
+SELECT /*+SET_VAR(new_planner_agg_stage=2)*/ c_grp, APPROX_TOP_K('a', 3, 10) FROM t_const_first_arg GROUP BY c_grp ORDER BY c_grp;
