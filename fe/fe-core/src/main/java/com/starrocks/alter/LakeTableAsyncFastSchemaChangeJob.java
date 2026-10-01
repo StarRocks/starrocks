@@ -27,7 +27,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeMaterializedView;
@@ -448,10 +447,7 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @SuppressWarnings("rawtypes")
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-        String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && getBatchTask() != null) {
-            progress = getBatchTask().getFinishedTaskNum() + "/" + getBatchTask().getTaskNum();
-        }
+        String progress = getPartitionProgress();
 
         for (IndexSchemaInfo schemaInfo : schemaInfos) {
             List<Comparable> info = Lists.newArrayList();

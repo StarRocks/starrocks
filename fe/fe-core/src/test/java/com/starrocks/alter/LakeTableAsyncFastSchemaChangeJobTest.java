@@ -27,6 +27,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletRange;
 import com.starrocks.catalog.Tuple;
 import com.starrocks.catalog.Variant;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Range;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -204,6 +205,33 @@ public class LakeTableAsyncFastSchemaChangeJobTest extends LakeFastSchemaChangeT
         job.setIndexTabletSchema(table.getBaseIndexMetaId(),
                 table.getIndexNameByMetaId(table.getBaseIndexMetaId()), target);
         return job;
+    }
+
+    @Test
+    public void testGetInfoReportsPartitionProgress() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+        LakeTable table = createDupTableWithBuckets("t_partition_progress", 2);
+        LakeTableAsyncFastSchemaChangeJob job =
+                newJob(db, table, buildTrailingKeyTargetSchema(table, newTrailingKeyColumn(table)));
+        Assertions.assertEquals(FeConstants.NULL_STRING, progressOf(job));
+
+        job.runPendingJob();
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, job.getJobState());
+        Assertions.assertEquals("1/1", progressOf(job));
+
+        job.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
+        Assertions.assertEquals("0/1", progressOf(job));
+        Assertions.assertTrue(job.readyToPublishVersion());
+        Assertions.assertTrue(job.lakePublishVersion());
+        Assertions.assertEquals("1/1", progressOf(job));
+    }
+
+    private static Comparable progressOf(AlterJobV2 job) {
+        List<List<Comparable>> infos = new ArrayList<>();
+        job.getInfo(infos);
+        // Progress column, see SchemaChangeProcDir.TITLE_NAMES.
+        return infos.get(0).get(11);
     }
 
     @Test

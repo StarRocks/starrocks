@@ -24,6 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -203,6 +204,7 @@ public abstract class LakeFastSchemaChangeTestBase extends StarRocksTestBase {
         Assertions.assertEquals(job.getTransactionId().get(), info.get(8));
         Assertions.assertEquals(job.getJobState().name(), info.get(9));
         Assertions.assertEquals(job.errMsg, info.get(10));
+        Assertions.assertEquals(FeConstants.NULL_STRING, info.get(11));
         Assertions.assertEquals(job.getTimeoutMs() / 1000, info.get(12));
         Assertions.assertEquals("default_warehouse", info.get(13));
     }

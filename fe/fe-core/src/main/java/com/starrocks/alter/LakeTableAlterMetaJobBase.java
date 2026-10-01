@@ -78,6 +78,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
     // Package-private so same-package tests can verify the leader-handoff reset without reflection.
     AgentBatchTask batchTask = null;
     private boolean isFileBundling = false;
+    // SHOW ALTER progress, in physical partitions, of the phase that is running: the tablet meta update in
+    // PENDING or the publish in FINISHED_REWRITING. Not persisted, because a new leader restarts either
+    // phase from its first partition. Each phase has a single writer thread.
+    private volatile int progressFinishedPartitions = 0;
+    private volatile int progressTotalPartitions = 0;
 
     public LakeTableAlterMetaJobBase(JobType jobType) {
         super(jobType);
@@ -92,8 +97,9 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         if (jobState == JobState.RUNNING) {
             jobState = JobState.PENDING;
         }
-        // Recreated fresh per dispatch; a stale value only skews SHOW ALTER progress.
+        // Recreated fresh per dispatch.
         batchTask = null;
+        resetPartitionProgress(0);
         // Filled by updatePartitionTabletMeta AFTER the PENDING re-log, so the durable PENDING image has
         // it empty; the re-run refills it from the partitions that exist THEN. Keeping stale rows would
         // let a partition dropped across the demote/re-elect window resurface and fail the re-run with a
@@ -158,10 +164,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             throw new AlterCancelException("table does not exist, tableName:" + tableName);
         }
 
+        int totalPhysicalPartitions = 0;
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             partitions.addAll(table.getPartitions());
+            for (Partition partition : partitions) {
+                totalPhysicalPartitions += partition.getSubPartitions().size();
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -173,6 +183,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             persistStateChange(this, this.jobState);
         }
 
+        resetPartitionProgress(totalPhysicalPartitions);
         try {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, table, partition);
@@ -253,6 +264,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                 // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
                 updateNextVersion(table);
             });
+            // Report the publish phase as 0/N while it waits for earlier versions to become visible.
+            resetPartitionProgress(physicalPartitionIndexMap.rowKeySet().size());
 
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -359,6 +372,8 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             // 2. the table is enable `file_bundling` and this task is not change `file_bundling`
             //    to false.
             boolean useAggregatePublish = enableFileBundling() || (isFileBundling && !disableFileBundling());
+            // A retried publish starts over from the first partition.
+            resetPartitionProgress(physicalPartitionIndexMap.rowKeySet().size());
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(physicalPartitionId);
                 Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(physicalPartitionId);
@@ -377,6 +392,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
                                 null, null, computeResource, null, vectorIndexBuildInfos);
                     VectorIndexBuildScheduler.onPublishComplete(vectorIndexBuildInfos, /* fromCompaction= */ false);
                 }
+                progressFinishedPartitions++;
             }
             return true;
         } catch (Exception e) {
@@ -419,6 +435,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         for (MaterializedIndex index : indexList) {
             updateIndexTabletMeta(db, table, physicalPartition, index);
         }
+        progressFinishedPartitions++;
     }
 
     public void updateIndexTabletMeta(Database db, OlapTable table, PhysicalPartition physicalPartition,
@@ -580,8 +597,23 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    protected AgentBatchTask getBatchTask() {
-        return batchTask;
+    private void resetPartitionProgress(int totalPartitions) {
+        // Clear the count before publishing the new total, so a reader never pairs the old count with it.
+        progressFinishedPartitions = 0;
+        progressTotalPartitions = totalPartitions;
+    }
+
+    /**
+     * Returns the progress of the running phase as "finished/total" physical partitions, or NULL when no
+     * phase is in progress. The PENDING count stays complete through the brief RUNNING state.
+     */
+    protected String getPartitionProgress() {
+        int total = progressTotalPartitions;
+        if (total <= 0 || jobState.isFinalState()) {
+            return FeConstants.NULL_STRING;
+        }
+        // Sub-partitions created after the PENDING snapshot are updated too, so finished can pass total.
+        return Math.min(progressFinishedPartitions, total) + "/" + total;
     }
 
     public long getWatershedTxnId() {
@@ -724,10 +756,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         // shadow index or schema version, so the index/schema columns are filled with placeholders.
         // Numeric columns must stay numeric (not NULL_STRING) so the cross-job sort in
         // SchemaChangeHandler.getAlterJobInfosByDb does not mix String and Long comparables.
-        String progress = FeConstants.NULL_STRING;
-        if (jobState == JobState.RUNNING && getBatchTask() != null) {
-            progress = getBatchTask().getFinishedTaskNum() + "/" + getBatchTask().getTaskNum();
-        }
+        String progress = getPartitionProgress();
 
         List<Comparable> info = Lists.newArrayList();
         info.add(jobId);

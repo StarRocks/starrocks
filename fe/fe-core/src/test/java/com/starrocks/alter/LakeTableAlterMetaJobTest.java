@@ -30,6 +30,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.ListComparator;
@@ -59,6 +60,7 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.jupiter.api.AfterEach;
@@ -137,8 +139,51 @@ public class LakeTableAlterMetaJobTest {
             Thread.sleep(100);
         }
         Assertions.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
+        Assertions.assertEquals(FeConstants.NULL_STRING, progressOf(job));
 
         Assertions.assertTrue(table.enablePersistentIndex());
+    }
+
+    @Test
+    public void testPartitionProgress() throws Exception {
+        LakeTable partitionedTable = createTable(connectContext,
+                "CREATE TABLE t_progress(c0 INT, c1 DATE) PRIMARY KEY(c0, c1) PARTITION BY RANGE(c1) (" +
+                        "PARTITION p1 VALUES LESS THAN ('2024-01-01'), " +
+                        "PARTITION p2 VALUES LESS THAN ('2024-02-01'), " +
+                        "PARTITION p3 VALUES LESS THAN ('2024-03-01')) " +
+                        "DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('enable_persistent_index'='true')");
+        LakeTableAlterMetaJob progressJob = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(),
+                db.getId(), partitionedTable.getId(), partitionedTable.getName(), 60 * 1000,
+                TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
+        Assertions.assertEquals(FeConstants.NULL_STRING, progressOf(progressJob));
+
+        List<Comparable> pendingProgress = new ArrayList<>();
+        new MockUp<LakeTableAlterMetaJobBase>() {
+            @Mock
+            public void updateIndexTabletMeta(Invocation invocation, Database database, OlapTable olapTable,
+                                              PhysicalPartition physicalPartition, MaterializedIndex index) {
+                pendingProgress.add(progressOf(progressJob));
+                invocation.proceed();
+            }
+        };
+        progressJob.runPendingJob();
+        Assertions.assertEquals(List.of("0/3", "1/3", "2/3"), pendingProgress);
+        Assertions.assertEquals(AlterJobV2.JobState.RUNNING, progressJob.getJobState());
+        Assertions.assertEquals("3/3", progressOf(progressJob));
+
+        progressJob.runRunningJob();
+        Assertions.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, progressJob.getJobState());
+        Assertions.assertEquals("0/3", progressOf(progressJob));
+        Assertions.assertTrue(progressJob.readyToPublishVersion());
+        Assertions.assertTrue(progressJob.lakePublishVersion());
+        Assertions.assertEquals("3/3", progressOf(progressJob));
+    }
+
+    private static Comparable progressOf(AlterJobV2 alterJob) {
+        List<List<Comparable>> infos = new ArrayList<>();
+        alterJob.getInfo(infos);
+        // Progress column, see SchemaChangeProcDir.TITLE_NAMES.
+        return infos.get(0).get(11);
     }
 
     @Test
