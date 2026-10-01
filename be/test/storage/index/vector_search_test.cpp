@@ -84,6 +84,7 @@
 #include "storage_primitive/storage_stats.h"
 #include "storage_primitive/vector_search_option.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -2074,9 +2075,10 @@ protected:
         seg_opts.delete_predicates = cfg.delete_predicates;
 
         // Activate a global dictionary on the tag column (cid 3) when requested, so _rewrite_predicates
-        // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps must outlive
-        // the synchronous iterator run below; string literals give the Slices program lifetime.
-        GlobalDictMap tag_global_dict = {{"red", 1}, {"blue", 2}};
+        // rewrites a delete predicate on tag into a global-dict-code (INT) predicate. The maps and their key pool must
+        // outlive the synchronous iterator run below.
+        MemPool tag_dict_key_pool;
+        GlobalDictMap tag_global_dict = make_padded_global_dict(&tag_dict_key_pool, {{"red", 1}, {"blue", 2}});
         ColumnIdToGlobalDictMap tag_dictmaps;
         if (cfg.tag_global_dict) {
             tag_dictmaps.emplace(3, &tag_global_dict);

@@ -28,6 +28,7 @@
 #include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_parser.h"
 #include "testutil/exprs_test_helper.h"
+#include "testutil/global_dict_test_helper.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -252,7 +253,8 @@ TEST_F(RuntimeRangePrunerTest, dict_encoded_slot_ref_decodes_codes) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    MemPool dict_key_pool;
+    GlobalDictMap dict = make_padded_global_dict(&dict_key_pool, {{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 
@@ -313,7 +315,8 @@ TEST_F(RuntimeRangePrunerTest, monotonic_expr_on_dict_column_falls_back) {
     rf.insert(200);
     runtime_filter_desc->set_runtime_filter(&rf);
 
-    GlobalDictMap dict{{Slice("apple"), 100}, {Slice("melon"), 200}};
+    MemPool dict_key_pool;
+    GlobalDictMap dict = make_padded_global_dict(&dict_key_pool, {{"apple", 100}, {"melon", 200}});
     ColumnIdToGlobalDictMap dict_maps;
     dict_maps[0] = &dict;
 
