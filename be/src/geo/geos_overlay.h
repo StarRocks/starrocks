@@ -23,16 +23,11 @@
 #include "base/string/slice.h"
 #include "common/status.h"
 #include "common/statusor.h"
+#include "geo/geos_context.h"
 
 namespace starrocks {
 
 enum class GeosOverlayOperation { INTERSECTION, UNION, DIFFERENCE, SYMMETRIC_DIFFERENCE };
-
-struct GeosGeometryDeleter {
-    GEOSContextHandle_t context = nullptr;
-    void operator()(GEOSGeometry* geometry) const noexcept;
-};
-using GeosGeometryPtr = std::unique_ptr<GEOSGeometry, GeosGeometryDeleter>;
 
 // Owns a reentrant GEOS context for exactly one execution worker. GEOS geometry
 // objects must be destroyed before this object; callers cannot share them across workers.
@@ -47,13 +42,9 @@ public:
     StatusOr<std::string> apply(const GEOSGeometry* left, const GEOSGeometry* right, GeosOverlayOperation operation);
 
 private:
-    static void on_error(const char* message, void* user_data) noexcept;
-    Status error(const char* fallback) const;
-
-    GEOSContextHandle_t _context = nullptr;
+    GeosContext _geos;
     GEOSWKBReader* _reader = nullptr;
     GEOSWKBWriter* _writer = nullptr;
-    char _last_error[512] = {};
 };
 
 } // namespace starrocks

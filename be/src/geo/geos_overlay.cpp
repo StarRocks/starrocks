@@ -14,7 +14,6 @@
 
 #include "geo/geos_overlay.h"
 
-#include <cstdio>
 #include <exception>
 #include <memory>
 
@@ -33,37 +32,20 @@ struct GeosBytesDeleter {
 };
 } // namespace
 
-void GeosGeometryDeleter::operator()(GEOSGeometry* geometry) const noexcept {
-    if (geometry != nullptr) GEOSGeom_destroy_r(context, geometry);
-}
-
 GeosOverlay::GeosOverlay() {
-    _context = GEOS_init_r();
-    if (_context == nullptr) return;
-    GEOSContext_setErrorMessageHandler_r(_context, on_error, this);
-    _reader = GEOSWKBReader_create_r(_context);
-    _writer = GEOSWKBWriter_create_r(_context);
+    if (!_geos.ready()) return;
+    _reader = GEOSWKBReader_create_r(_geos.get());
+    _writer = GEOSWKBWriter_create_r(_geos.get());
     if (_writer != nullptr) {
-        GEOSWKBWriter_setOutputDimension_r(_context, _writer, 2);
-        GEOSWKBWriter_setByteOrder_r(_context, _writer, 1);
+        GEOSWKBWriter_setOutputDimension_r(_geos.get(), _writer, 2);
+        GEOSWKBWriter_setByteOrder_r(_geos.get(), _writer, 1);
     }
 }
 
 GeosOverlay::~GeosOverlay() {
-    if (_context == nullptr) return;
-    if (_writer != nullptr) GEOSWKBWriter_destroy_r(_context, _writer);
-    if (_reader != nullptr) GEOSWKBReader_destroy_r(_context, _reader);
-    GEOS_finish_r(_context);
-}
-
-void GeosOverlay::on_error(const char* message, void* user_data) noexcept {
-    auto* self = static_cast<GeosOverlay*>(user_data);
-    if (self != nullptr) std::snprintf(self->_last_error, sizeof(self->_last_error), "%s", message ? message : "");
-}
-
-Status GeosOverlay::error(const char* fallback) const {
-    return Status::InvalidArgument(std::string(fallback) +
-                                   (_last_error[0] == '\0' ? "" : std::string(": ") + _last_error));
+    if (!_geos.ready()) return;
+    if (_writer != nullptr) GEOSWKBWriter_destroy_r(_geos.get(), _writer);
+    if (_reader != nullptr) GEOSWKBReader_destroy_r(_geos.get(), _reader);
 }
 
 Status GeosOverlay::read_polygon(const Slice& wkb, GeosGeometryPtr* output) {
@@ -74,15 +56,15 @@ Status GeosOverlay::read_polygon(const Slice& wkb, GeosGeometryPtr* output) {
         if (geometry.type != WkbGeometryType::POLYGON && geometry.type != WkbGeometryType::MULTIPOLYGON) {
             return Status::InvalidArgument("GEOMETRY overlay supports only POLYGON/MULTIPOLYGON inputs");
         }
-        _last_error[0] = '\0';
+        _geos.clear_error();
         GeosGeometryPtr parsed(
-                GEOSWKBReader_read_r(_context, _reader, reinterpret_cast<const unsigned char*>(wkb.data), wkb.size),
-                GeosGeometryDeleter{_context});
-        if (!parsed) return error("GEOS could not read polygon WKB");
-        const char valid = GEOSisValid_r(_context, parsed.get());
+                GEOSWKBReader_read_r(_geos.get(), _reader, reinterpret_cast<const unsigned char*>(wkb.data), wkb.size),
+                GeosGeometryDeleter{_geos.get()});
+        if (!parsed) return _geos.error("GEOS could not read polygon WKB");
+        const char valid = GEOSisValid_r(_geos.get(), parsed.get());
         if (valid != 1)
-            return error(valid == 0 ? "GEOMETRY overlay requires valid polygon topology"
-                                    : "GEOS polygon validity check failed");
+            return _geos.error(valid == 0 ? "GEOMETRY overlay requires valid polygon topology"
+                                          : "GEOS polygon validity check failed");
         *output = std::move(parsed);
         return Status::OK();
     } catch (const std::exception& e) {
@@ -95,34 +77,34 @@ StatusOr<std::string> GeosOverlay::apply(const GEOSGeometry* left, const GEOSGeo
     if (_reader == nullptr || _writer == nullptr) return Status::InternalError("GEOS context initialization failed");
     if (left == nullptr || right == nullptr) return Status::InvalidArgument("GEOS overlay input is missing");
     try {
-        _last_error[0] = '\0';
+        _geos.clear_error();
         GEOSGeometry* raw = nullptr;
         switch (operation) {
         case GeosOverlayOperation::INTERSECTION:
-            raw = GEOSIntersection_r(_context, left, right);
+            raw = GEOSIntersection_r(_geos.get(), left, right);
             break;
         case GeosOverlayOperation::UNION:
-            raw = GEOSUnion_r(_context, left, right);
+            raw = GEOSUnion_r(_geos.get(), left, right);
             break;
         case GeosOverlayOperation::DIFFERENCE:
-            raw = GEOSDifference_r(_context, left, right);
+            raw = GEOSDifference_r(_geos.get(), left, right);
             break;
         case GeosOverlayOperation::SYMMETRIC_DIFFERENCE:
-            raw = GEOSSymDifference_r(_context, left, right);
+            raw = GEOSSymDifference_r(_geos.get(), left, right);
             break;
         }
-        GeosGeometryPtr result(raw, GeosGeometryDeleter{_context});
-        if (!result) return error("GEOS overlay failed");
+        GeosGeometryPtr result(raw, GeosGeometryDeleter{_geos.get()});
+        if (!result) return _geos.error("GEOS overlay failed");
 
-        const int coordinates = GEOSGetNumCoordinates_r(_context, result.get());
-        if (coordinates < 0) return error("GEOS could not inspect overlay result");
+        const int coordinates = GEOSGetNumCoordinates_r(_geos.get(), result.get());
+        if (coordinates < 0) return _geos.error("GEOS could not inspect overlay result");
         if (coordinates > kMaxOverlayCoordinates) {
             return Status::InvalidArgument("GEOS overlay result exceeds coordinate safety limit");
         }
         size_t size = 0;
         std::unique_ptr<unsigned char, GeosBytesDeleter> bytes(
-                GEOSWKBWriter_write_r(_context, _writer, result.get(), &size), GeosBytesDeleter{_context});
-        if (!bytes) return error("GEOS could not write overlay result");
+                GEOSWKBWriter_write_r(_geos.get(), _writer, result.get(), &size), GeosBytesDeleter{_geos.get()});
+        if (!bytes) return _geos.error("GEOS could not write overlay result");
         if (size > kMaxOverlayBytes) return Status::InvalidArgument("GEOS overlay result exceeds WKB safety limit");
 
         // The native codec enforces the supported XY/family/depth and allocation bounds on
