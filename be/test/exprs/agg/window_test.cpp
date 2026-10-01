@@ -1542,7 +1542,7 @@ std::vector<OptInt> run_analytor_lag(const std::vector<OptInt>& input, int64_t o
     auto analytor = std::make_shared<Analytor>(tnode, input_row_desc, result_tuple, false);
     CHECK(analytor->prepare(state, &pool, &profile).ok());
     const auto process_mode = profile.get_info_string("ProcessMode");
-    CHECK(process_mode.has_value());
+    CHECK(process_mode != nullptr);
     CHECK(streaming ? process_mode->find("Streaming/") == 0 : process_mode->find("Materializing/") == 0)
             << "lag ProcessMode=" << *process_mode << " streaming=" << streaming;
     CHECK(analytor->open(state).ok());
@@ -1615,10 +1615,11 @@ std::vector<OptInt> run_analytor_lead(const std::vector<OptInt>& input, int64_t 
 
     TPlanNode tnode = make_lead_tnode(in_tuple_id, col_slot_id, offset, part_slot_id);
     RuntimeProfile profile("Analytor");
-    auto analytor = std::make_shared<Analytor>(tnode, result_tuple, false);
+    RowDescriptor input_row_desc(*desc_tbl, std::vector<TTupleId>{in_tuple_id});
+    auto analytor = std::make_shared<Analytor>(tnode, input_row_desc, result_tuple, false);
     CHECK(analytor->prepare(state, &pool, &profile).ok());
     const auto process_mode = profile.get_info_string("ProcessMode");
-    CHECK(process_mode.has_value());
+    CHECK(process_mode != nullptr);
     CHECK(streaming ? process_mode->find("Streaming/") == 0 : process_mode->find("Materializing/") == 0)
             << "lead ProcessMode=" << *process_mode << " streaming=" << streaming;
     CHECK(analytor->open(state).ok());

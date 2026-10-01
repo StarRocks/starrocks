@@ -1065,67 +1065,6 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
     }
 }
 
-void Analytor::_materializing_process_for_range_frame(RuntimeState* state) {
-    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
-    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
-        _find_peer_group_end();
-        DCHECK(_peer_group.is_real);
-
-        if (_current_row_position == _peer_group.start) {
-            _reset_window_state();
-            const FrameRange range = _get_frame_for_range();
-            _update_window_batch(_partition.start, _partition.end, range.start, range.end);
-        }
-
-        const int64_t base = _first_global_position_of_current_chunk();
-        const int64_t start = _get_global_position(_current_row_position) - base;
-        int64_t end = _get_global_position(_peer_group.end) - base;
-        if (end > chunk_size) {
-            end = chunk_size;
-        }
-        DCHECK_GE(start, 0);
-        DCHECK_GT(end, start);
-
-        _get_window_function_result(start, end);
-        _update_current_row_position(end - start);
-    }
-}
-
-// Process growing RANGE frames such as RANGE BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING/PRECEDING.
-// The frame start is fixed at the partition start, and the finite end boundary moves monotonically forward as
-// peer groups are processed. Therefore the aggregate state can be maintained cumulatively by adding only the newly
-// exposed rows [_range_cumulative_frame_end, range.end) instead of rebuilding the whole frame for each peer group.
-// Results are still written peer-group-wise, clipped to the current output chunk when a peer group crosses chunks.
-void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* state) {
-    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
-    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
-        _find_peer_group_end();
-        DCHECK(_peer_group.is_real);
-
-        if (_current_row_position == _peer_group.start) {
-            const FrameRange range = _get_frame_for_range();
-            DCHECK_EQ(range.start, _partition.start);
-            DCHECK_GE(range.end, _range_cumulative_frame_end);
-            if (range.end > _range_cumulative_frame_end) {
-                _update_window_batch(_partition.start, _partition.end, _range_cumulative_frame_end, range.end);
-                _range_cumulative_frame_end = range.end;
-            }
-        }
-
-        const int64_t base = _first_global_position_of_current_chunk();
-        const int64_t start = _get_global_position(_current_row_position) - base;
-        int64_t end = _get_global_position(_peer_group.end) - base;
-        if (end > chunk_size) {
-            end = chunk_size;
-        }
-        DCHECK_GE(start, 0);
-        DCHECK_GT(end, start);
-
-        _get_window_function_result(start, end);
-        _update_current_row_position(end - start);
-    }
-}
-
 bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
                                          int64_t frame_end, int64_t& ready_end) const {
     int64_t common_ready_end = available_end;
