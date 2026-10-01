@@ -85,8 +85,8 @@ public:
             // accounting across a freshly created one. While it is still referenced, extend the window and
             // reschedule instead of evicting.
             if (!_cache->is_cached_entry_in_use_locked(_endpoint)) {
-                LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for "
-                          << (now_us - _deadline) / 1000 << "ms past deadline";
+                LOG(INFO) << "cleanup brpc stub, endpoint:" << _endpoint << ", idle for " << (now_us - _deadline) / 1000
+                          << "ms past deadline";
                 _cache->_stub_map.erase(_endpoint);
                 return;
             }
