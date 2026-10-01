@@ -99,7 +99,7 @@ It also supports StarRocks-specific table attributes such as:
 - `ENGINE` (OLAP)
 - Key models (`DUPLICATE KEY`, `PRIMARY KEY`, `UNIQUE KEY`, `AGGREGATE KEY`)
 - `PARTITION BY` variants (RANGE / LIST / Expression partitioning)
-- `DISTRIBUTED BY` variants (HASH / RANDOM)
+- `DISTRIBUTED BY` variants (HASH / RANDOM / RANGE)
 - `ORDER BY`
 - Table properties (e.g., `replication_num`, `storage_medium`)
 
@@ -614,6 +614,7 @@ You can directly use above command to generate the Python script for tables/view
 - Keys model changes (for example, changing DUPLICATE KEY to PRIMARY KEY) are not supported via `ALTER TABLE`; use an explicit plan (usually dropping and recreating with backfill).
 - StarRocks does not provide transactional DDL across multiple statements; review generated migrations and apply them operationally. If a migration fails midway, you may need to handle rollback **manually**.
 - For distribution, if you omit the `BUCKETS` clause, StarRocks may auto-assign bucket count; the dialect is designed to avoid noisy diffs in that case.
+- **RANGE distribution (StarRocks 4.1+):** StarRocks has no `DISTRIBUTED BY RANGE` syntax. A table gets range distribution when it declares a key type or `ORDER BY` and omits `DISTRIBUTED BY`, provided the FE configuration `enable_range_distribution` is enabled (the default in shared-data mode). Leave `starrocks_distributed_by` unset, or set it to `"RANGE"`; either way, CREATE TABLE omits the clause, and autogenerate treats a range-distributed table as unchanged. Switching an existing table between RANGE and HASH/RANDOM is not possible with `ALTER TABLE`, so autogenerate raises instead. On clusters without range distribution (before 4.1, shared-nothing, or the configuration disabled), a table marked `"RANGE"` is created with the default distribution instead and autogenerate then reports a mismatch, so for models shared across such clusters, leave `starrocks_distributed_by` unset.
 - **View and materialized view definition comparison (StarRocks < 4.0.6):** On clusters older than 4.0.6, StarRocks rewrites view definitions into a canonical form when they are stored, so the SQL you write in your model may differ syntactically from what the cluster reflects back. The dialect reconciles this by round-tripping your model SQL through a temporary view to obtain the DB's canonical form before comparison. This requires all tables and views referenced by the model definition to already exist in the database. When they do not (for example, during a forward migration that also creates those objects), the dialect falls back to a regex-based normalizer, which covers the most common rewrite patterns but may not handle every edge case.
 - **View definition drift after a cluster upgrade:** If a StarRocks cluster is upgraded while views already exist, those views were canonicalized by the old version and may not match the verbatim form the upgraded cluster would produce. Autogenerate may emit spurious view migrations in that window. Recreating the affected views (drop and re-apply the migration) resolves the drift.
 

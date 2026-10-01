@@ -99,7 +99,7 @@ StarRocks 方言支持：
 - `ENGINE` (OLAP)
 - 键模型 (`DUPLICATE KEY`, `PRIMARY KEY`, `UNIQUE KEY`, `AGGREGATE KEY`)
 - `PARTITION BY` 变体（RANGE / LIST / 表达式分区）
-- `DISTRIBUTED BY` 变体（HASH / RANDOM）
+- `DISTRIBUTED BY` 变体（HASH / RANDOM / RANGE）
 - `ORDER BY`
 - 表属性（例如，`replication_num`, `storage_medium`）
 
@@ -614,6 +614,7 @@ sqlacodegen --options include_dialect_options,keep_dialect_types \
 - 键模型更改（例如，将 DUPLICATE KEY 更改为 PRIMARY KEY）不支持通过 `ALTER TABLE`；使用明确的计划（通常是删除并重新创建并进行回填）。
 - StarRocks 不提供跨多个语句的事务性 DDL；请审查生成的迁移并在操作上应用它们。如果迁移中途失败，您可能需要 **手动** 处理回滚。
 - 对于分布，如果您省略 `BUCKETS` 子句，StarRocks 可能会自动分配桶数；方言设计为避免在这种情况下产生噪声差异。
+- **范围分布（StarRocks 4.1 及以上）：** StarRocks 没有 `DISTRIBUTED BY RANGE` 语法。当表声明了键类型或 `ORDER BY` 且省略 `DISTRIBUTED BY` 时，如果 FE 配置项 `enable_range_distribution` 已启用（存算分离模式下默认启用），该表将使用范围分布。您可以不设置 `starrocks_distributed_by`，或将其设置为 `"RANGE"`；两种方式下 CREATE TABLE 都会省略该子句，autogenerate 也会将范围分布的表视为未变更。已有表无法通过 `ALTER TABLE` 在 RANGE 与 HASH/RANDOM 之间切换，因此 autogenerate 会报错而不是生成语句。在不支持范围分布的集群上（4.1 之前的版本、存算一体模式，或该配置项被禁用），标记为 `"RANGE"` 的表会以默认分布方式创建，随后 autogenerate 会报告不一致；因此，对于在此类集群之间共享的模型，请不要设置 `starrocks_distributed_by`。
 - **视图和物化视图定义比较（StarRocks < 4.0.6）：** 在低于 4.0.6 的集群上，StarRocks 在存储视图定义时会将其改写为规范形式，因此您在模型中编写的 SQL 可能在语法上与集群返回的内容不同。方言通过将模型 SQL 经由临时视图往返以获取数据库的规范形式，再进行比较来解决此问题。这要求模型定义所引用的所有表和视图已存在于数据库中。如果不存在（例如，在同时创建这些对象的前向迁移期间），方言将回退到基于正则表达式的规范化器，该规范化器涵盖最常见的改写模式，但可能无法处理所有边缘情况。
 - **集群升级后的视图定义漂移：** 如果在视图已存在的情况下升级 StarRocks 集群，这些视图是由旧版本规范化的，可能与升级后集群产生的形式不匹配。在此窗口期间，自动生成可能会产生多余的视图迁移。重新创建受影响的视图（删除并重新应用迁移）可解决漂移问题。
 

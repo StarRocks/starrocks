@@ -118,6 +118,7 @@ Specifies the data distribution (including bucketing) strategy.
 > - Leave `starrocks_distributed_by` unset, or set it to `"RANGE"` to make the intent explicit. Either way `CREATE TABLE` is emitted without a `DISTRIBUTED BY` clause, and `autogenerate` treats a RANGE-distributed table as unchanged. A `BUCKETS` value on `RANGE` is ignored: range distribution has no bucket count (StarRocks always reports a placeholder of `1`, which is why an unsupported version shows `RANGE BUCKETS 1`).
 > - A table reflected with RANGE distribution reports `distributed_by` as `"RANGE"`.
 > - StarRocks cannot switch an existing table between RANGE and `HASH`/`RANDOM` distribution, so `autogenerate` raises an error instead of generating an `ALTER TABLE`. Recreate the table to change it.
+> - On clusters without range distribution (before 4.1, shared-nothing, or `enable_range_distribution` disabled), a table marked `"RANGE"` is created with the default distribution instead, and `autogenerate` then reports a mismatch. For models shared across such clusters, leave `starrocks_distributed_by` unset.
 
 ##### 6. `starrocks_order_by`
 
