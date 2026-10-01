@@ -43,6 +43,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.SqlUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorPartitionTraits;
@@ -833,8 +835,26 @@ public class MetaFunctions {
         }
         Column keyColumn = table.getKeyColumns().get(0);
 
-        String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
-                returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
+        // Validate the return column exists, and build the SQL from trusted, properly escaped
+        // identifiers / literals. The three arguments are user-controlled, so interpolating them
+        // raw (the previous behavior) allowed SQL injection: a backtick in the column name or a
+        // single quote in the key could break out of the identifier / string literal.
+        Column returnColumnObj = table.getColumn(returnColumn.getVarchar());
+        if (returnColumnObj == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FIELD_ERROR,
+                    returnColumn.getVarchar(), tableNameValue.toString());
+        }
+        // Backquote each identifier individually: ParseUtil.backquote doubles embedded backticks,
+        // whereas TableName.toSql() only wraps each component in backticks without escaping them.
+        // Native db/table names allow any non-NUL character, so a backtick in the name would
+        // otherwise break out of the identifier. The table is a resolved native (internal-catalog)
+        // primary-key table, so only db and table need qualifying.
+        String qualifiedTable = ParseUtil.backquote(tableNameValue.getDb()) + "."
+                + ParseUtil.backquote(tableNameValue.getTbl());
+        String sql = String.format("select cast(%s as string) from %s where %s = %s limit 1",
+                ParseUtil.backquote(returnColumnObj.getName()), qualifiedTable,
+                ParseUtil.backquote(keyColumn.getName()),
+                "'" + SqlUtils.escapeSqlString(lookupKey.getVarchar()) + "'");
         try {
             // lookup_string is folded in the optimizer during the outer query's planning; bound the
             // internal point-lookup by the outer query's remaining query_timeout (not the 1h default).
