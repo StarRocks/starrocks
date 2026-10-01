@@ -154,6 +154,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _agg_fn_types.resize(agg_size);
     _agg_states_offsets.resize(agg_size);
     _partition_size_required_function_index.resize(0);
+    _window_result_ready_function_index.clear();
 
     // Save the TFunction objects up front: close() walks _agg_fn_ctxs and indexes _fns with the same
     // index, so _fns must be filled before any error return below can leave prepare half-done.
@@ -243,11 +244,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
-                // `lag ... IGNORE NULLS` only looks backward, so it can run in streaming mode instead of
-                // materializing the whole partition.
-                // `lead ... IGNORE NULLS` and `first_value`/`last_value` IGNORE NULLS still require the full materialized data.
-                const bool is_lag_ignore_nulls = (fname == "lag");
-                if (!(is_lag_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
+                // `lag`/`lead ... IGNORE NULLS` can stream: lag only looks backward; lead waits for
+                // enough future non-nulls (see `is_window_result_ready`) then evicts finished prefixes.
+                // `first_value`/`last_value` IGNORE NULLS still materialize the whole partition.
+                const bool is_streamable_ignore_nulls = (fname == "lag" || fname == "lead");
+                if (!(is_streamable_ignore_nulls && config::pipeline_analytic_enable_ignore_nulls_streaming)) {
                     _need_partition_materializing = true;
                 }
             }
@@ -282,6 +283,11 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
         DCHECK(_agg_functions[i] != nullptr);
         _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
+        // Ask once which functions can defer a row, so the per-row streaming loop does not
+        // virtual-dispatch into every other window function.
+        if (_agg_functions[i]->needs_window_result_ready_check()) {
+            _window_result_ready_function_index.emplace_back(i);
+        }
     }
 
     // Compute agg state total size and offsets.
@@ -790,6 +796,10 @@ Status Analytor::_materializing_process(RuntimeState* state) {
 Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* state) {
     PRE_PROCESSING();
 
+    // Local to this invocation: buffer contraction cannot invalidate this bound, and it never
+    // extends beyond the partition in which it was established.
+    int64_t ready_end = _current_row_position;
+
     do {
         if (reached_limit() || state->is_cancelled()) {
             return Status::OK();
@@ -808,6 +818,18 @@ Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* 
             // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
             // if the current chunk has not reach the partition boundary, it may need more data.
             if (is_n_following_frame && !_partition.is_real && frame.end > _partition.end) {
+                return Status::OK();
+            }
+
+            // Data-dependent wait (e.g. `lead ... IGNORE NULLS`): the physical N FOLLOWING frame may
+            // already be buffered, but a function can still need more non-nulls ahead. Check every
+            // function before mutating any state; if one is not ready, leave `_current_row_position`
+            // unchanged so the next chunk resumes this row.
+            // A complete partition can never grow, so no function can still be waiting and every row
+            // below resolves to a value or to the default. For incomplete partitions, reuse the
+            // exclusive bound established by the previous successful readiness check.
+            if (!_partition.is_real && _has_window_result_ready_check() && _current_row_position >= ready_end &&
+                !_are_window_results_ready(_partition.start, _partition.end, frame.end - 1, frame.end, ready_end)) {
                 return Status::OK();
             }
 
@@ -1041,6 +1063,87 @@ void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
             _update_current_row_position(1);
         }
     }
+}
+
+void Analytor::_materializing_process_for_range_frame(RuntimeState* state) {
+    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+
+        if (_current_row_position == _peer_group.start) {
+            _reset_window_state();
+            const FrameRange range = _get_frame_for_range();
+            _update_window_batch(_partition.start, _partition.end, range.start, range.end);
+        }
+
+        const int64_t base = _first_global_position_of_current_chunk();
+        const int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
+    }
+}
+
+// Process growing RANGE frames such as RANGE BETWEEN UNBOUNDED PRECEDING AND N FOLLOWING/PRECEDING.
+// The frame start is fixed at the partition start, and the finite end boundary moves monotonically forward as
+// peer groups are processed. Therefore the aggregate state can be maintained cumulatively by adding only the newly
+// exposed rows [_range_cumulative_frame_end, range.end) instead of rebuilding the whole frame for each peer group.
+// Results are still written peer-group-wise, clipped to the current output chunk when a peer group crosses chunks.
+void Analytor::_materializing_process_for_growing_range_frame(RuntimeState* state) {
+    const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+
+        if (_current_row_position == _peer_group.start) {
+            const FrameRange range = _get_frame_for_range();
+            DCHECK_EQ(range.start, _partition.start);
+            DCHECK_GE(range.end, _range_cumulative_frame_end);
+            if (range.end > _range_cumulative_frame_end) {
+                _update_window_batch(_partition.start, _partition.end, _range_cumulative_frame_end, range.end);
+                _range_cumulative_frame_end = range.end;
+            }
+        }
+
+        const int64_t base = _first_global_position_of_current_chunk();
+        const int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
+    }
+}
+
+bool Analytor::_are_window_results_ready(int64_t partition_start, int64_t available_end, int64_t frame_start,
+                                         int64_t frame_end, int64_t& ready_end) const {
+    int64_t common_ready_end = available_end;
+    for (size_t i : _window_result_ready_function_index) {
+        // Conservative default: only the current row is ready.
+        // frame_end = current_row + _rows_end_offset + 1.
+        int64_t function_ready_end = frame_end - _rows_end_offset;
+        // These functions are always lead/lag, so the frame is not clipped to the partition.
+        if (!_agg_functions[i]->is_window_result_ready(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i],
+                    _agg_intput_columns[i], partition_start, available_end, frame_start, frame_end, _partition.is_real,
+                    &function_ready_end)) {
+            return false;
+        }
+        common_ready_end = std::min(common_ready_end, function_ready_end);
+    }
+    ready_end = common_ready_end;
+    return true;
 }
 
 void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
