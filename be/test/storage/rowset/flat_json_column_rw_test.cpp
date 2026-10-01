@@ -200,6 +200,7 @@ protected:
 protected:
     std::shared_ptr<TabletSchema> _dummy_segment_schema;
     std::shared_ptr<ColumnMetaPB> _meta;
+    MemPool _mem_pool;
 };
 
 TEST_F(FlatJsonColumnRWTest, testNormalJson) {
@@ -2567,7 +2568,6 @@ TEST_F(FlatJsonColumnRWTest, testSegmentWriterIteratorWithMixedDataTypes) {
 
 TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     // Test JSON global dictionary functionality
-    MemPool dict_key_pool;
     auto fs = std::make_shared<MemoryFileSystem>();
     const std::string file_name = "/tmp/test_json_global_dict.dat";
     ASSERT_TRUE(fs->create_dir("/tmp/").ok());
@@ -2621,8 +2621,8 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
     {
         // Create global dictionary for sub-columns
         GlobalDictByNameMaps global_dicts = PaddedGlobalDictBuilder::build_by_name(
-                &dict_key_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}}},
-                                 {"test_json.city", {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}}}});
+                &_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}}},
+                             {"test_json.city", {{"Beijing", 0}, {"Shanghai", 1}, {"Guangzhou", 2}}}});
 
         SegmentWriterOptions opts;
         opts.global_dicts = &global_dicts;
@@ -2662,8 +2662,8 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
         ASSIGN_OR_ABORT(auto wfile2, fs->new_writable_file(file_name + "_invalid"));
 
         // Create incomplete dictionary that doesn't contain all values
-        GlobalDictByNameMaps invalid_global_dicts = PaddedGlobalDictBuilder::build_by_name(
-                &dict_key_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}}}});
+        GlobalDictByNameMaps invalid_global_dicts =
+                PaddedGlobalDictBuilder::build_by_name(&_mem_pool, {{"test_json.name", {{"Alice", 0}, {"Bob", 1}}}});
 
         SegmentWriterOptions seg_opts;
         seg_opts.global_dicts = &invalid_global_dicts;
@@ -2706,7 +2706,7 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
 
         // Create global dictionary expecting consistent data types
         GlobalDictByNameMaps type_consistent_global_dicts = PaddedGlobalDictBuilder::build_by_name(
-                &dict_key_pool,
+                &_mem_pool,
                 {{"test_json.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}, {"Frank", 5}}},
                  {"test_json.age",
                   {{"30", 0}, {"25", 1}, {"28", 2}, {"35", 3}, {"29", 4}, {"33", 5}}}, // All as strings
@@ -2755,7 +2755,7 @@ TEST_F(FlatJsonColumnRWTest, test_json_global_dict) {
 
         // Create global dictionary for nested fields
         GlobalDictByNameMaps complex_global_dicts = PaddedGlobalDictBuilder::build_by_name(
-                &dict_key_pool,
+                &_mem_pool,
                 {{"test_json.user.id", {{"1001", 0}, {"1002", 1}, {"1003", 2}, {"1004", 3}, {"1005", 4}}},
                  {"test_json.user.name", {{"Alice", 0}, {"Bob", 1}, {"Charlie", 2}, {"David", 3}, {"Eve", 4}}},
                  {"test_json.user.active", {{"true", 0}, {"false", 1}}},
