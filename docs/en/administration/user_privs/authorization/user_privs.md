@@ -5,6 +5,8 @@ sidebar_position: 10
 
 # Overview of privileges
 
+import EditionSpecificPlatformRoles from '../../../_assets/commonMarkdown/Edition_Specific_Platform_Roles.mdx'
+
 This topic describes the basic concepts of StarRocks' privilege system. Privileges determine which users can perform which operations on which objects, so that you can more securely manage data and resources in a fine-grained manner.
 
 > NOTE: The privileges described in this topic are available only from v3.0. The privilege framework and syntax in v3.0 are not backward compatible with those in earlier versions. After an upgrade to v3.0, most of your original privileges are still retained except those for specific operations. For the detailed differences, see [Upgrade notes] in [Privileges supported in StarRocks](./privilege_item.md).
@@ -65,10 +67,8 @@ StarRocks provides several types of system-defined roles.
 
 ![roles](../../../_assets/privilege-role.png)
 
-- `root`: has global privileges. By default, the `root` user has the `root` role.
-   After a StarRocks cluster is created, the system automatically generates a root user with root privileges. Because the root user and role have all privileges of the system, we recommend that you create new users and roles for subsequent operations to prevent any risky operations. Keep the password of the root user properly.
-- `cluster_admin`: has cluster management privileges to perform node-related operations, such as adding or dropping nodes.
-  `cluster_admin` has the privileges to add, drop, and decommission cluster nodes. We recommend that you do not assign `cluster_admin` or any custom roles that contain this role as a default role to any user, to prevent unexpected node changes.
+<EditionSpecificPlatformRoles />
+
 - `db_admin`: has database management privileges, including the privileges to perform all operations on  catalog, database, table, view, materialized view, function, global function, resource group, and plug-ins.
 - `user_admin`: has administrative privileges on users and roles, including privileges to create users, roles, and privileges.
 
