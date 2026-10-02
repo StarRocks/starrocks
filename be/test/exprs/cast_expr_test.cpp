@@ -3073,7 +3073,8 @@ TEST_F(VectorizedCastExprTest, variant_array_cast_has_linear_payload_size) {
 // (anything outside [a-zA-Z0-9_]) must not abort the BE. CastVariantToStruct used to format
 // each field name into a "$.<name>" path string and re-parse it; the variant path parser
 // rejects such names, so the constructor threw "Failed to parse variant path: $.$currency"
-// and crashed the backend.
+// and crashed the backend (before #75355; afterwards a factory precheck rejected the cast as
+// NotSupported instead).
 // Repro SQL:
 //   SELECT CAST(CAST(PARSE_JSON('{"$currency": "USD"}') AS VARIANT) AS STRUCT<`$currency` STRING>);
 TEST_F(VectorizedCastExprTest, variant_cast_to_struct_with_special_char_field_name) {
@@ -3094,7 +3095,8 @@ TEST_F(VectorizedCastExprTest, variant_cast_to_struct_with_special_char_field_na
 }
 
 // Further non-simple struct field names: space, brackets, quote, multibyte. With the old
-// "$.<name>" + reparse approach, space/quote aborted the BE and brackets silently mis-resolved.
+// "$.<name>" + reparse approach, space/quote failed to parse (aborting the BE before #75355,
+// NotSupported after it) and brackets silently mis-resolved as an array index.
 TEST_F(VectorizedCastExprTest, variant_cast_to_struct_more_special_field_names) {
     constexpr size_t kInputSize = 2;
     {
@@ -3149,6 +3151,30 @@ TEST_F(VectorizedCastExprTest, variant_cast_non_object_to_struct_returns_null) {
             EXPECT_TRUE(result->is_null(i)) << "json: " << json << " row " << i;
         }
     }
+}
+
+// A non-constant, non-nullable variant column mixing object and non-object rows. CAST(... AS VARIANT)
+// returns such a column whenever a chunk has no NULL, so the NULL rows produced by the cast itself
+// must still be marked NULL on the result, aligned with the object rows around them.
+TEST_F(VectorizedCastExprTest, variant_cast_mixed_rows_non_nullable_input_to_struct) {
+    auto variant_column = VariantColumn::create();
+    for (const std::string& json : {std::string(R"({"x":1})"), std::string(R"([1,2])"), std::string(R"({"x":3})"),
+                                    std::string("5")}) {
+        variant_column->append(make_variant_row_from_json(json));
+    }
+    ColumnPtr input = std::move(variant_column);
+    ASSERT_FALSE(input->is_nullable());
+    ASSERT_FALSE(input->is_constant());
+
+    auto result = cast_from_variant(gen_struct_type_desc({TPrimitiveType::INT}, {"x"}), input);
+    ASSERT_EQ(4, result->size());
+    ASSERT_TRUE(result->is_nullable());
+    EXPECT_FALSE(result->is_null(0));
+    EXPECT_EQ("{x:1}", result->debug_item(0));
+    EXPECT_TRUE(result->is_null(1));
+    EXPECT_FALSE(result->is_null(2));
+    EXPECT_EQ("{x:3}", result->debug_item(2));
+    EXPECT_TRUE(result->is_null(3));
 }
 
 // Recursion: a nested struct field with a non-simple ('$') field name must work at every
