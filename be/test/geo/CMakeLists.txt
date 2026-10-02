@@ -14,6 +14,7 @@
 
 set(GEO_TEST_FILES
     geo_types_test.cpp
+    geo_overlay_core_test.cpp
     wkb_test.cpp
     wkt_parse_test.cpp
 )
