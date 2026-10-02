@@ -194,6 +194,12 @@ description: "Alphabetical s"
 - Type: Cumulative
 - Description: Total number of times `HyperJsonTransformer` is re-initialized for compaction input with a different flat JSON schema than the previous input. A high rate indicates schema churn across segments being compacted.
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- Unit: Count
+- Type: Cumulative
+- Description: Number of flat JSON compactions, counted in `starrocks_be_flat_json_compaction_total`, that wrote their output as it arrived instead of buffering the whole output segment. It happens when the buffered input exceeds one eighth of `compaction_memory_limit_per_worker` and all of it shares one flat layout.
+
 ## `starrocks_be_flat_json_compaction_total`
 
 - Unit: Count

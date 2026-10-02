@@ -188,6 +188,12 @@ description: "Alphabetical s"
 - タイプ: 累積値
 - 説明: コンパクション中に入力の flat JSON スキーマが前のものと異なり、`HyperJsonTransformer` が再初期化された回数。値が高い場合はコンパクション対象のセグメント間でスキーマが頻繁に変化していることを示す。
 
+## `starrocks_be_flat_json_compaction_streaming_total`
+
+- 単位: カウント
+- タイプ: 累積値
+- 説明: `starrocks_be_flat_json_compaction_total` に計上されるフラット JSON コンパクションのうち、出力セグメント全体をバッファせず入力を受け取り次第書き出した回数。バッファ済みの入力が `compaction_memory_limit_per_worker` の 8 分の 1 を超え、そのすべてが同じフラットレイアウトを持つ場合に発生します。
+
 ## `starrocks_be_flat_json_compaction_total`
 
 - 単位: カウント
