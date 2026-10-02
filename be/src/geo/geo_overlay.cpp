@@ -76,7 +76,8 @@ bool same_point(const OverlayPoint& a, const OverlayPoint& b) {
 
 StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMultiPolygon& left,
                                             const OverlayMultiPolygon& right, const OverlayMultiPolygon& areas,
-                                            WkbCoordinate origin, const std::function<Status()>& check) {
+                                            const OverlayMultiPolygon& rounded_areas, WkbCoordinate origin,
+                                            const std::function<Status()>& check) {
     // Polygon output alone omits shared edges and isolated vertex contacts.
     // Clip boundary overlaps against the area, then remove covered/duplicate points.
     auto a = boundary(left), b = boundary(right);
@@ -92,7 +93,8 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
     for (auto& line : lines) line.erase(std::unique(line.begin(), line.end(), same_point), line.end());
     lines.erase(std::remove_if(lines.begin(), lines.end(), [](const auto& line) { return line.size() < 2; }),
                 lines.end());
-    if (bg::num_points(lines) + coordinate_count(area) > kGeoOverlayMaxOutputCoordinates) {
+    const auto non_point_coordinates = bg::num_points(lines) + coordinate_count(area);
+    if (non_point_coordinates > kGeoOverlayMaxOutputCoordinates) {
         return Status::InvalidArgument("Polygon intersection result exceeds coordinate limit");
     }
     OverlayMultiPoint points;
@@ -102,16 +104,6 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
         return std::pair{x.x(), x.y()} < std::pair{y.x(), y.y()};
     });
     points.erase(std::unique(points.begin(), points.end(), same_point), points.end());
-    points.erase(std::remove_if(points.begin(), points.end(),
-                                [&](const auto& point) {
-                                    return (!areas.empty() && bg::covered_by(point, areas)) ||
-                                           (!lines.empty() && bg::covered_by(point, lines));
-                                }),
-                 points.end());
-    RETURN_IF_ERROR(check());
-    if (bg::num_points(lines) + points.size() + coordinate_count(area) > kGeoOverlayMaxOutputCoordinates) {
-        return Status::InvalidArgument("Polygon intersection result exceeds coordinate limit");
-    }
 
     auto coordinate = [&](const OverlayPoint& point) -> StatusOr<WkbCoordinate> {
         WkbCoordinate result{static_cast<double>(point.x() + origin.x), static_cast<double>(point.y() + origin.y)};
@@ -131,18 +123,20 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
     if (!area.empty) parts.emplace_back(std::move(area));
     if (!lines.empty()) {
         std::vector<WkbGeometry> children;
-        for (const auto& line : lines) {
+        for (auto& line : lines) {
             RETURN_IF_ERROR(check());
             WkbGeometry child;
             child.type = WkbGeometryType::LINESTRING;
             PlanarLine rounded;
-            for (const auto& point : line) {
+            for (auto& point : line) {
                 ASSIGN_OR_RETURN(auto value, coordinate(point));
                 if (!child.coordinates.empty() && child.coordinates.back() == value) {
                     return Status::InvalidArgument("Polygon intersection line loses topology at double precision");
                 }
                 child.coordinates.emplace_back(value);
                 rounded.emplace_back(value.x, value.y);
+                point = OverlayPoint(static_cast<long double>(value.x) - origin.x,
+                                     static_cast<long double>(value.y) - origin.y);
             }
             if (!bg::is_valid(rounded)) {
                 return Status::InvalidArgument("Polygon intersection produced an invalid line");
@@ -156,6 +150,17 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
         for (const auto& point : points) {
             RETURN_IF_ERROR(check());
             ASSIGN_OR_RETURN(auto value, coordinate(point));
+            // Independent Boost crossings can differ before rounding. Classify
+            // against the coordinates actually emitted in WKB, in the local frame.
+            const OverlayPoint rounded(static_cast<long double>(value.x) - origin.x,
+                                       static_cast<long double>(value.y) - origin.y);
+            if ((!rounded_areas.empty() && bg::covered_by(rounded, rounded_areas)) ||
+                (!lines.empty() && bg::covered_by(rounded, lines))) {
+                continue;
+            }
+            if (non_point_coordinates + children.size() >= kGeoOverlayMaxOutputCoordinates) {
+                return Status::InvalidArgument("Polygon intersection result exceeds coordinate limit");
+            }
             WkbGeometry child;
             child.type = WkbGeometryType::POINT;
             child.coordinates.emplace_back(value);
@@ -168,7 +173,7 @@ StatusOr<WkbGeometry> intersection_contacts(WkbGeometry area, const OverlayMulti
         if (std::adjacent_find(rounded.begin(), rounded.end()) != rounded.end()) {
             return Status::InvalidArgument("Polygon intersection points lose topology at double precision");
         }
-        parts.emplace_back(group(WkbGeometryType::MULTIPOINT, std::move(children)));
+        if (!children.empty()) parts.emplace_back(group(WkbGeometryType::MULTIPOINT, std::move(children)));
     }
     if (parts.empty()) {
         WkbGeometry result;
@@ -321,11 +326,13 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
         }
         // A valid extended-precision result can collapse on serialization to double.
         // Reject it rather than silently repairing, snapping, or dropping components.
-        if (!valid(to_overlay_model(result, origin))) {
+        auto rounded_output = to_overlay_model(result, origin);
+        if (!valid(rounded_output)) {
             return Status::InvalidArgument("Polygon overlay result loses topology at double precision");
         }
         if (kind == GeoOverlayKind::INTERSECTION) {
-            return intersection_contacts(std::move(result), _impl->polygons, right_model, output, origin, check);
+            return intersection_contacts(std::move(result), _impl->polygons, right_model, output, rounded_output,
+                                         origin, check);
         }
         return result;
     } catch (const std::bad_alloc&) {

@@ -421,6 +421,29 @@ TEST(GeoOverlayCoreTest, IntersectionAreaAndAllPolygonFamilyPairs) {
     intersection_both_orders(empty, empty, empty);
     intersection_both_orders(square, "POLYGON ((8 0,9 0,9 1,8 1,8 0))", empty);
 }
+TEST(GeoOverlayCoreTest, IntersectionCrossingContactsAreCoveredAfterWkbRounding) {
+    const char* a = "POLYGON ((0 0,8 -7,6 2,0 0))";
+    const char* b = "POLYGON ((-2 0,0 0,8 2,-2 0))";
+    // Independent segment crossings: (3,1), (116/19,29/19), (286/47,76/47).
+    const char* expected =
+            "POLYGON ((3 1,0 0,6.105263157894737 1.5263157894736843,"
+            "6.085106382978723 1.6170212765957446,3 1))";
+    for (bool left_multi : {false, true})
+        for (bool right_multi : {false, true}) {
+            const auto left = left_multi ? multi(a) : a, right = right_multi ? multi(b) : b;
+            intersection_both_orders(left.c_str(), right.c_str(), expected);
+        }
+}
+TEST(GeoOverlayCoreTest, IntersectionRetainsIsolatedContactOneUlpOutsideArea) {
+    // The contact is one representable double step beyond the area boundary.
+    // Classification must not introduce a distance tolerance or snap it away.
+    intersection_both_orders(
+            "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),"
+            "((4.000000000000001 2,5 2,5 3,4.000000000000001 2)))",
+            "MULTIPOLYGON (((2 0,4 0,4 4,2 4,2 0)),"
+            "((4.000000000000001 2,5 1,5 1.5,4.000000000000001 2)))",
+            "GEOMETRYCOLLECTION (POLYGON ((2 0,4 0,4 4,2 4,2 0)),POINT (4.000000000000001 2))");
+}
 TEST(GeoOverlayCoreTest, IntersectionRetainsEdgesVerticesAndClosedHoleBoundary) {
     intersection_both_orders(square, "POLYGON ((4 0,8 0,8 4,4 4,4 0))", "LINESTRING (4 0,4 4)");
     intersection_both_orders(square, "POLYGON ((4 4,5 4,5 5,4 5,4 4))", "POINT (4 4)");
