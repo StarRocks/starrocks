@@ -1273,7 +1273,6 @@ function: wait_refresh_dictionary_finish("test_dictionary_show_create_table_gen_
 -- result:
 None
 -- !result
-<<<<<<< HEAD
 CREATE TABLE `t_dictionary_show_create_table_gen_col_2` (
   `k` BIGINT NOT NULL COMMENT "",
   `v` BIGINT AS dictionary_get("test_dictionary_show_create_table_gen_col", k)[1] COMMENT ""
@@ -1349,8 +1348,6 @@ function: wait_refresh_dictionary_finish("test_dictionary_null_if_not_exist", "F
 -- result:
 None
 -- !result
-=======
->>>>>>> cbc1213 ([UT] SQL-Tester: delete two R blocks that nothing can run (#80005))
 INSERT INTO t_dictionary_null_if_not_exist VALUES (2,2),(4,4);
 -- result:
 -- !result
@@ -1388,11 +1385,7 @@ E: (1064, "Getting analyzing error. Detail message: Column 'xxxx' cannot be reso
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "true") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
-<<<<<<< HEAD
 [REGEX]E: \(1064, .*invalid parameter.*
-=======
-E: (1064, "Getting analyzing error. Detail message: dictionary: test_dictionary_null_if_not_exist has invalid parameter for `null_if_not_exist` invalid parameter: 'true'.")
->>>>>>> cbc1213 ([UT] SQL-Tester: delete two R blocks that nothing can run (#80005))
 -- !result
 SELECT k, dictionary_get("test_dictionary_null_if_not_exist", k, "false") FROM t_dictionary_null_if_not_exist ORDER BY k;
 -- result:
