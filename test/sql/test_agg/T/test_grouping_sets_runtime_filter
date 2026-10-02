@@ -29,3 +29,13 @@ SELECT /*+SET_VAR(chunk_size=64)*/ c0, c1, count(*) FROM t0 GROUP BY GROUPING SE
 -- Null-safe join runtime filter: IN (NULL, 1) keeps the grand total above the repeat.
 SELECT a.c0, a.cnt FROM (SELECT c0, count(*) cnt FROM t0 GROUP BY ROLLUP (c0)) a JOIN [broadcast] r ON a.c0 <=> r.k ORDER BY 1;
 SELECT a.c0, a.cnt FROM (SELECT c0, count(*) cnt FROM t0 GROUP BY ROLLUP (c0)) a JOIN [broadcast] r ON a.c0 = r.k ORDER BY 1;
+
+-- Shuffle join runtime filter on c0 is partitioned by (c0, c1). Below the repeat c1 is still the real
+-- value instead of the NULL of the (c0) subtotal, so rows were probed against the wrong partition.
+-- The probe is an expression so the filter is evaluated by the operator rather than pushed to storage.
+CREATE TABLE r2 (k1 BIGINT NULL, k2 BIGINT NULL)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO r2 SELECT generate_series * 4, NULL FROM TABLE(generate_series(1, 1024));
+SELECT /*+SET_VAR(enable_multicolumn_global_runtime_filter=true)*/ count(*), sum(a.cnt) FROM (SELECT v1, v2, count(*) cnt FROM (SELECT c0 + 0 v1, c1 + 0 v2 FROM t0) s GROUP BY GROUPING SETS ((v1, v2), (v1))) a JOIN [shuffle] r2 ON a.v1 = r2.k1 AND a.v2 <=> r2.k2;

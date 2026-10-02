@@ -50,3 +50,16 @@ SELECT a.c0, a.cnt FROM (SELECT c0, count(*) cnt FROM t0 GROUP BY ROLLUP (c0)) a
 -- result:
 1	2
 -- !result
+CREATE TABLE r2 (k1 BIGINT NULL, k2 BIGINT NULL)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO r2 SELECT generate_series * 4, NULL FROM TABLE(generate_series(1, 1024));
+-- result:
+-- !result
+SELECT /*+SET_VAR(enable_multicolumn_global_runtime_filter=true)*/ count(*), sum(a.cnt) FROM (SELECT v1, v2, count(*) cnt FROM (SELECT c0 + 0 v1, c1 + 0 v2 FROM t0) s GROUP BY GROUPING SETS ((v1, v2), (v1))) a JOIN [shuffle] r2 ON a.v1 = r2.k1 AND a.v2 <=> r2.k2;
+-- result:
+1024	2048
+-- !result
