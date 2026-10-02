@@ -24,6 +24,7 @@ set(EXEC_FILES
         ./exec/pipeline/multi_cast_local_exchange_test.cpp
         ./exec/pipeline/fetch_task_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/data_sinks/iceberg_encryption_signal_test.cpp
         ./formats/parquet/decrypt_metadata_module_test.cpp
         ./formats/parquet/encrypted_file_reader_test.cpp
         ./exec/data_sinks/pipeline_sink_builder_test.cpp

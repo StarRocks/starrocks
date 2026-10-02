@@ -26,6 +26,7 @@
 #include <parquet/api/writer.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
+#include <parquet/encryption/encryption.h>
 #include <parquet/exception.h>
 #include <parquet/file_writer.h>
 #include <parquet/platform.h>
