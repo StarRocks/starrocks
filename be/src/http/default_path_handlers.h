@@ -30,16 +30,10 @@ class MemTracker;
 
 // Adds a set of default path handlers to the webserver to display
 // logs and configuration flags
-<<<<<<< HEAD
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker);
-=======
-void add_default_path_handlers(WebPageHandler* web_page_handler, const RuntimeEnv& runtime_env);
 
 // Handles "/varz": lists every config and its value, as config::list_configs() reports them.
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
-
-void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
->>>>>>> c9fa825 ([BugFix] Mask object storage credentials in BE /varz and information_schema.be_configs (#80040))
 
 // Validates the `opts` /memz was asked for against the set malloc_stats_print() understands,
 // and returns what to hand it. `requested` being absent means the caller did not ask, which

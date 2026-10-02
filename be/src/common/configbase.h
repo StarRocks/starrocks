@@ -24,11 +24,7 @@
 #include <map>
 #include <set>
 #include <string>
-<<<<<<< HEAD
-=======
 #include <string_view>
-#include <utility>
->>>>>>> c9fa825 ([BugFix] Mask object storage credentials in BE /varz and information_schema.be_configs (#80040))
 #include <vector>
 
 #ifdef __IN_CONFIGBASE_CPP__
