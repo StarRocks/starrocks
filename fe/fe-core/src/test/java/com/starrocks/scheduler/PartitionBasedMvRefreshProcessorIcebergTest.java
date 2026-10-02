@@ -28,7 +28,6 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
-import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
@@ -40,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Invocation;
 import mockit.Mock;
@@ -56,8 +56,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 @TestMethodOrder(MethodName.class)
@@ -736,6 +734,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                 "\"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
+<<<<<<< HEAD
         Thread testThread = Thread.currentThread();
         AtomicInteger calls = new AtomicInteger();
         AtomicBoolean resolvedUnderLock = new AtomicBoolean(false);
@@ -748,6 +747,16 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
                     resolvedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
                 }
                 return invocation.proceed(baseTableInfo);
+=======
+        LockProbe probe = LockProbe.onCurrentThread();
+        // Probed at the connector: under the lock MvUtils.getTable is still called, but answered from the
+        // tables pre-resolved before it (PreResolvedBaseTables) without reaching the connector.
+        new MockUp<MockIcebergMetadata>() {
+            @Mock
+            public Table getTable(Invocation invocation, ConnectContext context, String dbName, String tblName) {
+                probe.record("getTable");
+                return invocation.proceed(context, dbName, tblName);
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
             }
         };
         try {
@@ -760,8 +769,7 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
             Assertions.assertEquals("date_trunc('day', ts) >= current_date() - interval 1 year",
                     mv.getTableProperty().getPartitionRetentionCondition());
             Assertions.assertTrue(mv.getRetentionConditionExpr().isPresent());
-            Assertions.assertTrue(calls.get() > 0, "the iceberg base table was never re-got, so the check below is vacuous");
-            Assertions.assertFalse(resolvedUnderLock.get(),
+            probe.assertReachedOutsideTheLock("getTable",
                     "ALTER MV SET partition_retention_condition re-got the iceberg base table under the MV's lock");
         } finally {
             starRocksAssert.dropMaterializedView(mvName);

@@ -14,6 +14,10 @@
 
 package com.starrocks.scheduler.mv;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.catalog.BaseTableInfo;
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -32,6 +36,7 @@ import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -132,6 +137,7 @@ public class MVRefreshLockParamsTest extends MVTestBase {
      * through a connector (AnalyzerUtils#isCopySafe), hence the MV over a hive table.
      */
     @Test
+<<<<<<< HEAD
     public void testRefreshPlanningTakesNoUnboundedLock() throws Exception {
         Thread refresher = Thread.currentThread();
         List<String> unbounded = new CopyOnWriteArrayList<>();
@@ -166,5 +172,24 @@ public class MVRefreshLockParamsTest extends MVTestBase {
                 "the refresh did not plan its INSERT off copies, so this is not testing it");
         Assertions.assertTrue(unbounded.isEmpty(), "an MV refresh waited on the planner lock without a bound: "
                 + unbounded);
+=======
+    public void testExternalBaseTablesAreResolvedBeforeTheLock() throws Exception {
+        LockProbe resolved = LockProbe.onAnyThread();
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Optional<Table> getTableWithIdentifier(Invocation invocation, ConnectContext context,
+                                                          BaseTableInfo baseTableInfo) {
+                resolved.record(baseTableInfo.getTableName());
+                return invocation.proceed(context, baseTableInfo);
+            }
+        };
+
+        buildRefreshProcessor("lock_params_mixed_mv").collectBaseTableSnapshotInfos();
+
+        resolved.assertReachedOutsideTheLock("lineitem_par",
+                "an external base table is resolved through the connector and must not be resolved under the lock");
+        Assertions.assertTrue(resolved.everUnderLock("lock_params_tbl"),
+                "an internal base table must stay resolved under the lock that protects its snapshot");
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
     }
 }

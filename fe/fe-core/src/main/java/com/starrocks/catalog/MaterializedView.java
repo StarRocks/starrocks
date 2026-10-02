@@ -2937,6 +2937,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * <p>A failed lookup is kept, not thrown: refreshBaseTable rethrows it where the original lookup would
      * have thrown, so errors surface at the same point and in the same order as without pre-resolving.
      */
+<<<<<<< HEAD
     public PreResolvedRefBaseTables preResolveRefBaseTables() {
         Map<BaseTableInfo, RefreshedBaseTable> resolved = Maps.newHashMap();
         RefBaseTablePartitionInfo info = refBaseTablePartitionInfo;
@@ -2951,6 +2952,16 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     resolved.put(baseTableInfo, new RefreshedBaseTable(MvUtils.getTable(baseTableInfo), null));
                 } catch (RuntimeException e) {
                     resolved.put(baseTableInfo, new RefreshedBaseTable(null, e));
+=======
+    public PreResolvedBaseTables preResolveRefBaseTables() {
+        Set<BaseTableInfo> baseTableInfos = Sets.newLinkedHashSet();
+        List<Optional<? extends Map<Table, ?>>> refMaps =
+                List.of(refBaseTablePartitionExprsOpt, refBaseTablePartitionSlotsOpt, refBaseTablePartitionColumnsOpt);
+        for (Optional<? extends Map<Table, ?>> refMap : refMaps) {
+            for (Table table : refMap.map(Map::keySet).orElse(Set.of())) {
+                if (isRefreshedPerQuery(table)) {
+                    baseTableInfos.add(tableToBaseTableInfoCache.get(table));
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
                 }
             }
         }
@@ -2994,6 +3005,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+     * Whether a cached ref base table is re-got from its catalog for each query ({@link #refreshBaseTable}); the
+     * pre-resolve ({@link #preResolveRefBaseTables}) must cover exactly these.
+     */
+    private static boolean isRefreshedPerQuery(Table table) {
+        return table instanceof IcebergTable || table instanceof DeltaLakeTable;
+    }
+
+    /**
      * Since the table is cached in the Optional, needs to refresh it again for each query.
      */
     private static <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached,
@@ -3003,7 +3022,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         for (Map.Entry<Table, K> e : cached.entrySet()) {
             Table table = e.getKey();
             if (isRefreshedPerQuery(table)) {
+<<<<<<< HEAD
                 Preconditions.checkState(tableToBaseTableInfo.containsKey(table));
+=======
+                Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
                 // TODO: get table from current context rather than metadata catalog
                 // it's fine to re-get table from metadata catalog again since metadata catalog should cache
                 // the newest table info.

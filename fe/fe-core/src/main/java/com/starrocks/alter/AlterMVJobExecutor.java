@@ -583,6 +583,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     /**
+<<<<<<< HEAD
      * What a constraint analysis of this MV is resolved against: the names it qualifies the constraint's columns
      * with, and the columns themselves. Each can only change under the MV's write lock -- RENAME, a database rename,
      * ADD/DROP COLUMN -- which resolveBeforeLock does not hold; the analysis is only applied if all are unchanged.
@@ -609,6 +610,35 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     // ACTIVE: the MV's status epoch the analysis was made at.
     private long preResolvedActivateStatusEpoch;
     private PreResolvedBaseTables preResolvedBaseTables;
+=======
+     * SET PROPERTIES: the properties as written, cloned before the constraint analyzers consumed their keys; the
+     * appliers those analyzers produced; and the ref base tables of a retention condition, null without one.
+     */
+    private record PreResolvedProperties(Map<String, String> propClone, List<Runnable> appliers,
+                                         PreResolvedBaseTables refBaseTables) {
+    }
+
+    /**
+     * ADD/DROP COLUMN: the define-query AST, and the definition it was built from.
+     */
+    private record PreResolvedDefineQuery(String defineSql, ParseNode ast) {
+    }
+
+    /**
+     * ACTIVE: the definition the analysis was made from, and either the analysis with the base tables that the
+     * relationship rebuild resolves, or the failure the analysis ended with.
+     */
+    private record PreResolvedActivate(String defineSql, AlterJobMgr.AlterMaterializedViewStatusContext statusContext,
+                                       PreResolvedBaseTables baseTables, RuntimeException failure) {
+    }
+
+    // Resolved by resolveBeforeLock, consumed by the clause visitors below. One statement has one clause, so at
+    // most one of these is set; null when the clause is of another kind, or needs nothing resolved.
+    private PreResolvedProperties preResolvedProperties;
+    private Boolean preResolvedHasNonNativeBaseTable;
+    private PreResolvedDefineQuery preResolvedDefineQuery;
+    private PreResolvedActivate preResolvedActivate;
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
 
     /**
      * Everything ALTER MATERIALIZED VIEW used to resolve while holding the MV's write lock.
@@ -630,24 +660,31 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // The clone has to be taken before the analyzers run, because they consume the keys they
             // handle -- whatever is left over at the end is treated as session variables -- while the
             // editlog has to carry the properties as written.
+<<<<<<< HEAD
             preResolvedPropClone = Maps.newHashMap(properties);
             preResolvedAppliers = new ArrayList<>();
             preResolvedConstraintBasis = properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
                     ? ConstraintBasis.of(db, mv) : null;
+=======
+            Map<String, String> propClone = Maps.newHashMap(properties);
+            List<Runnable> appliers = new ArrayList<>();
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
-                alterUniqueConstraint(properties, mv, preResolvedAppliers);
+                alterUniqueConstraint(properties, mv, appliers);
             }
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
-                alterForeignKeyConstraint(properties, preResolvedPropClone, mv, preResolvedAppliers);
+                alterForeignKeyConstraint(properties, propClone, mv, appliers);
             }
+            PreResolvedBaseTables refBaseTables = null;
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
                 // Analyzing the condition re-gets the external ref base table (iceberg / delta lake) from its
                 // connector, from several places (partition-expr adjust map, partition selector, the MV's
                 // retention analysis). Only the lookups move here; the analysis itself stays under the lock.
                 // No "still current" check is owed: the lock never covers external tables.
-                preResolvedRefBaseTables = mv.preResolveRefBaseTables();
+                refBaseTables = mv.preResolveRefBaseTables();
             }
+            preResolvedProperties = new PreResolvedProperties(propClone, appliers, refBaseTables);
         } else if (alterClause instanceof RefreshSchemeClause) {
             // Mirrors the condition in visitRefreshSchemeClause exactly. Resolving unconditionally
             // would change behaviour rather than just its timing: getTableChecked throws when a base
@@ -662,8 +699,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         } else if (alterClause instanceof AddMVColumnClause || alterClause instanceof DropMVColumnClause) {
             // The definition the AST is built from is captured with it, so the visitor can tell under
             // the lock whether the AST is still current -- see takePreResolvedDefineQueryAst.
-            preResolvedDefineSql = mv.getOriginalViewDefineSql();
-            preResolvedDefineQueryAst = mv.initDefineQueryParseNode();
+            String defineSql = mv.getOriginalViewDefineSql();
+            preResolvedDefineQuery = new PreResolvedDefineQuery(defineSql, mv.initDefineQueryParseNode());
         } else if (alterClause instanceof AlterMaterializedViewStatusClause
                 && AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(
                         ((AlterMaterializedViewStatusClause) alterClause).getStatus())
@@ -675,16 +712,20 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // takePreResolvedActivate.
             LOG.info("process change materialized view {} status to {}, isReplay: false", mv.getName(),
                     AlterMaterializedViewStatusClause.ACTIVE);
+<<<<<<< HEAD
             preResolvedDefineSql = mv.getOriginalViewDefineSql();
             // Read before the analysis, so that an inactivation landing while it runs is seen under the lock.
             preResolvedActivateStatusEpoch = mv.getStatusSnapshot().epoch();
+=======
+            String defineSql = mv.getOriginalViewDefineSql();
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
             try {
-                preResolvedActivateContext = GlobalStateMgr.getCurrentState().getAlterJobMgr()
-                        .resolveActivate(mv, "", false);
-                preResolvedBaseTables = PreResolvedBaseTables.resolveForActivation(
-                        preResolvedActivateContext.baseTableInfos());
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext = GlobalStateMgr.getCurrentState()
+                        .getAlterJobMgr().resolveActivate(mv, "", false);
+                preResolvedActivate = new PreResolvedActivate(defineSql, statusContext,
+                        PreResolvedBaseTables.resolveForActivation(statusContext.baseTableInfos()), null);
             } catch (RuntimeException e) {
-                preResolvedActivateFailure = e;
+                preResolvedActivate = new PreResolvedActivate(defineSql, null, null, e);
             }
         }
     }
@@ -702,18 +743,25 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      * Redoing it here would put the connector calls back under the lock, so the statement is rejected; for
      * MVActiveChecker that is one failed round, and its next round resolves afresh.
      */
+<<<<<<< HEAD
     private AlterJobMgr.AlterMaterializedViewStatusContext takePreResolvedActivate(MaterializedView mv) {
         if ((preResolvedActivateContext == null && preResolvedActivateFailure == null)
                 || !Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())
                 || mv.getStatusSnapshot().epoch() != preResolvedActivateStatusEpoch) {
             throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
                     + "please retry the statement", mv.getName()));
+=======
+    private PreResolvedActivate takePreResolvedActivate(MaterializedView mv) {
+        if (preResolvedActivate == null) {
+            throw alteredConcurrently(mv);
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
         }
-        if (preResolvedActivateFailure != null) {
-            AlterJobMgr.applyActivateFailure(mv, preResolvedActivateFailure);
-            throw preResolvedActivateFailure;
+        checkDefinitionUnchanged(mv, preResolvedActivate.defineSql());
+        if (preResolvedActivate.failure() != null) {
+            AlterJobMgr.applyActivateFailure(mv, preResolvedActivate.failure());
+            throw preResolvedActivate.failure();
         }
-        return preResolvedActivateContext;
+        return preResolvedActivate;
     }
 
     /**
@@ -735,11 +783,23 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
      * keeps the critical section free of the connector call that rebuilding the AST would make.
      */
     private ParseNode takePreResolvedDefineQueryAst(MaterializedView mv) {
-        if (!Objects.equals(preResolvedDefineSql, mv.getOriginalViewDefineSql())) {
-            throw new AlterJobException(String.format("Materialized view %s was altered concurrently, "
-                    + "please retry the statement", mv.getName()));
+        checkDefinitionUnchanged(mv, preResolvedDefineQuery == null ? null : preResolvedDefineQuery.defineSql());
+        return preResolvedDefineQuery == null ? null : preResolvedDefineQuery.ast();
+    }
+
+    /**
+     * Rejects the statement when what resolveBeforeLock resolved no longer describes the MV, because the
+     * definition it was resolved from has been replaced since.
+     */
+    private static void checkDefinitionUnchanged(MaterializedView mv, String resolvedDefineSql) {
+        if (!Objects.equals(resolvedDefineSql, mv.getOriginalViewDefineSql())) {
+            throw alteredConcurrently(mv);
         }
-        return preResolvedDefineQueryAst;
+    }
+
+    private static AlterJobException alteredConcurrently(MaterializedView mv) {
+        return new AlterJobException(String.format("Materialized view %s was altered concurrently, "
+                + "please retry the statement", mv.getName()));
     }
 
     @Override
@@ -758,10 +818,11 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
         // consumed their keys, and the appliers they produced are carried over. Constraint appliers
         // therefore run first rather than in property order, which is immaterial -- each applier
         // writes a different property.
-        Map<String, String> propClone = preResolvedPropClone != null
-                ? preResolvedPropClone : Maps.newHashMap(properties);
-        List<Runnable> appliers = preResolvedAppliers != null
-                ? new ArrayList<>(preResolvedAppliers) : new ArrayList<>();
+        Map<String, String> propClone = preResolvedProperties != null
+                ? preResolvedProperties.propClone() : Maps.newHashMap(properties);
+        List<Runnable> appliers = preResolvedProperties != null
+                ? new ArrayList<>(preResolvedProperties.appliers()) : new ArrayList<>();
+        PreResolvedBaseTables refBaseTables = preResolvedProperties != null ? preResolvedProperties.refBaseTables() : null;
         TableProperty tableProperty = materializedView.getTableProperty();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             alterPartitionTTLNumber(properties, materializedView, tableProperty, appliers);
@@ -770,8 +831,13 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             alterPartitionTTL(properties, materializedView, tableProperty, appliers);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+<<<<<<< HEAD
             try (MaterializedView.PreResolvedRefBaseTables.Scope ignored =
                          preResolvedRefBaseTables != null ? preResolvedRefBaseTables.enter() : null) {
+=======
+            try (PreResolvedBaseTables.Scope ignored =
+                         refBaseTables != null ? refBaseTables.enter() : null) {
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
                 alterPartitionRetentionCondition(properties, materializedView, tableProperty, appliers, context);
             }
         }
@@ -1375,7 +1441,30 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
                 AlterJobMgr alterJobMgr = GlobalStateMgr.getCurrentState().getAlterJobMgr();
                 // Analyzed in resolveBeforeLock.
+<<<<<<< HEAD
                 AlterJobMgr.AlterMaterializedViewStatusContext statusContext = takePreResolvedActivate(materializedView);
+=======
+                PreResolvedActivate activate = takePreResolvedActivate(materializedView);
+                AlterJobMgr.AlterMaterializedViewStatusContext statusContext = activate.statusContext();
+                // Rebuild the relationship BEFORE journaling, and journal only once the MV is really
+                // active. fixRelationship() swallows its own failure and just leaves the MV inactive, and
+                // checkIsActiveOnLoadBlocking() reports a clean negative verdict without throwing at all,
+                // so isActive() is the only criterion covering both. Journaling first would record an
+                // activation that never happened -- the entry is durable and nothing revokes it, so a
+                // permanently broken MV grew one bogus entry per MVActiveChecker round, without bound.
+                // Captured before the rebuild so a failed journal write can restore exactly the state the
+                // statement started from.
+                String inactiveReasonBeforeActivate = materializedView.getInactiveReason();
+                // The rebuild resolves every base table again, several times each; the external ones are
+                // answered from what resolveBeforeLock resolved.
+                try (PreResolvedBaseTables.Scope ignored = activate.baseTables().enter()) {
+                    alterJobMgr.rebuildRelationshipForActivate(materializedView, statusContext);
+                }
+                if (!materializedView.isActive()) {
+                    throw new AlterJobException(String.format("Can not active materialized view [%s]: %s",
+                            materializedView.getName(), materializedView.getInactiveReason()));
+                }
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
                 // Journal the base tables the activation settled on, so replay can adopt them instead of

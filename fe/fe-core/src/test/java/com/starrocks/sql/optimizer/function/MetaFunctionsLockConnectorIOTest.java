@@ -35,9 +35,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.LockProbe;
+<<<<<<< HEAD
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
+=======
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -45,9 +48,12 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Collection;
 import java.util.List;
+<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+=======
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
 
 /**
  * {@code inspect_mv_refresh_info} takes a READ lock on (db, mv) and then, for every base table, resolves
@@ -172,6 +178,20 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
                     .getTable(DB_NAME, "mv_raced");
             BaseTableInfo hiveTable = mv.getBaseTableInfos().get(0);
 
+<<<<<<< HEAD
+=======
+            // Baseline: the same statement with nothing racing it. Measured rather than hard-coded --
+            // the block hoisted out of this lock before this change resolves base tables too, so the
+            // absolute call count is not this test's business; the delta is.
+            installProbe();
+            MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
+            int undisturbedCalls = probe.lock.calls(LockProbeHiveMetadata.GET_TABLE);
+            Assertions.assertFalse(probe.lock.anyUnderLock(),
+                    "connector metadata was fetched while an FE metadata lock was held");
+
+            // Now commit a refresh in the window: the probe swaps the MV's refresh scheme on the first
+            // connector call, which is where the gathering is in flight and the lock is not yet held.
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
             installProbe();
             AtomicInteger commits = new AtomicInteger();
             probe.onGetTable = () -> {
@@ -186,10 +206,18 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
                     MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
 
             Assertions.assertNotNull(result);
+<<<<<<< HEAD
             Assertions.assertTrue(commits.get() > 0, "no connector call was made");
             Assertions.assertFalse(result.getVarchar().contains("p_commit_" + commits.get() + "_"),
                     result.getVarchar());
             probe.lock.assertNothingUnderTheLock("connector metadata was fetched while an FE metadata lock was held");
+=======
+            Assertions.assertTrue(probe.lock.calls(LockProbeHiveMetadata.GET_TABLE) > undisturbedCalls,
+                    "the refresh-scheme swap went unnoticed, so the report mixes two moments");
+            Assertions.assertTrue(probe.lock.anyUnderLock(),
+                    "the redo is supposed to happen under the lock; if it did not, this test is not "
+                            + "exercising the branch it claims to");
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
         } finally {
             starRocksAssert.dropMaterializedView("mv_raced");
         }

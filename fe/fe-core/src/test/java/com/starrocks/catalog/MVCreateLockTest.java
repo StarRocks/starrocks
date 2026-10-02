@@ -15,7 +15,10 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.common.MaterializedViewExceptions;
+=======
+>>>>>>> b443cdd84c9... [Refactor] De-duplicate the FE pre-resolve-before-lock machinery (#64265)
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
