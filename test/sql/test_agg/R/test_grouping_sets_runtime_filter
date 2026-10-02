@@ -1,0 +1,52 @@
+-- name: test_grouping_sets_runtime_filter
+CREATE TABLE t0 (
+    c0 BIGINT NULL,
+    c1 BIGINT NULL
+)
+DUPLICATE KEY(c0)
+DISTRIBUTED BY HASH(c0) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO t0 SELECT generate_series, 4096 - generate_series FROM TABLE(generate_series(1, 4096));
+-- result:
+-- !result
+INSERT INTO t0 SELECT * FROM t0;
+-- result:
+-- !result
+CREATE TABLE r (k BIGINT NULL)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO r VALUES (NULL), (1);
+-- result:
+-- !result
+SELECT /*+SET_VAR(chunk_size=64)*/ c0, count(*) FROM t0 GROUP BY ROLLUP (c0) ORDER BY 1 ASC LIMIT 3;
+-- result:
+None	8192
+1	2
+2	2
+-- !result
+SELECT /*+SET_VAR(chunk_size=64)*/ c0, count(*) FROM t0 GROUP BY CUBE (c0) ORDER BY 1 ASC LIMIT 3;
+-- result:
+None	8192
+1	2
+2	2
+-- !result
+SELECT /*+SET_VAR(chunk_size=64)*/ c0, c1, count(*) FROM t0 GROUP BY GROUPING SETS ((c0, c1), (c0)) ORDER BY 1, 2 LIMIT 3;
+-- result:
+1	None	2
+1	4095	2
+2	None	2
+-- !result
+SELECT a.c0, a.cnt FROM (SELECT c0, count(*) cnt FROM t0 GROUP BY ROLLUP (c0)) a JOIN [broadcast] r ON a.c0 <=> r.k ORDER BY 1;
+-- result:
+None	8192
+1	2
+-- !result
+SELECT a.c0, a.cnt FROM (SELECT c0, count(*) cnt FROM t0 GROUP BY ROLLUP (c0)) a JOIN [broadcast] r ON a.c0 = r.k ORDER BY 1;
+-- result:
+1	2
+-- !result

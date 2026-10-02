@@ -848,4 +848,48 @@ public class GroupingSetsTest extends PlanTestBase {
             connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(old);
         }
     }
+
+    // The verbose plan from the REPEAT_NODE to the end of its fragment, i.e. the nodes below the repeat.
+    private static String belowRepeat(String plan) {
+        int start = plan.indexOf("REPEAT_NODE");
+        Assertions.assertTrue(start >= 0, plan);
+        int end = plan.indexOf("PLAN FRAGMENT", start);
+        return end < 0 ? plan.substring(start) : plan.substring(start, end);
+    }
+
+    @Test
+    public void testAggRuntimeFilterNotPushedBelowRepeatOnNulledKey() throws Exception {
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        // Below the repeat a row still has its real v1, but above it the row is also copied into the
+        // grouping set () with v1 = NULL. Filtering on v1 under the repeat drops that copy too, so the
+        // grand-total row of the ROLLUP undercounts.
+        // TOPN_FILTER from `order by v1 limit n`
+        String plan = getVerboseExplain("select v1, count(*) from t0 group by rollup(v1) order by v1 limit 3");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+        // AGG_IN_FILTER from `group by ... limit n`
+        plan = getVerboseExplain("select v1, count(*) from t0 group by rollup(v1) limit 3");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+        // v1 is kept by every grouping set, so filtering on it below the repeat stays correct.
+        plan = getVerboseExplain("select v1, v2, count(*) from t0 group by grouping sets ((v1, v2), (v1)) "
+                + "order by v1 limit 3");
+        assertContains(belowRepeat(plan), "probe runtime filters");
+    }
+
+    @Test
+    public void testNullSafeJoinRuntimeFilterNotPushedBelowRepeatOnNulledKey() throws Exception {
+        // `<=>` lets NULL through, so the filter keeps the grand-total row above the repeat while dropping
+        // the rows it is built from below it.
+        String plan = getVerboseExplain("select a.v1, a.cnt from "
+                + "(select v1, count(*) cnt from t0 group by rollup(v1)) a "
+                + "join [broadcast] t1 on a.v1 <=> t1.v4");
+        assertContains(plan, "build runtime filters");
+        assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+        // A plain `=` rejects the NULL-keyed rows anyway, so pushing below the repeat is still fine.
+        plan = getVerboseExplain("select a.v1, a.cnt from "
+                + "(select v1, count(*) cnt from t0 group by rollup(v1)) a "
+                + "join [broadcast] t1 on a.v1 = t1.v4");
+        assertContains(belowRepeat(plan), "probe runtime filters");
+    }
 }
