@@ -2740,6 +2740,7 @@ build_h3() {
     "${CMAKE_CMD}" -S .. -B . -G "${CMAKE_GENERATOR}" \
         -DCMAKE_BUILD_TYPE=Release \
         -DBUILD_SHARED_LIBS=OFF \
+        -DH3_ALLOC_PREFIX=starrocks_h3_ \
         -DBUILD_TESTING=OFF \
         -DBUILD_BENCHMARKS=OFF \
         -DBUILD_FUZZERS=OFF \

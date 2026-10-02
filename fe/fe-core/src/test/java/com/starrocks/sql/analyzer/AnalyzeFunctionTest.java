@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
 import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -273,6 +274,40 @@ public class AnalyzeFunctionTest {
         }
         analyzeFail("select ST_Transform(" + geography + ", 3857)",
                 "No matching function with signature: st_transform");
+    }
+
+    @Test
+    public void testH3Contract() {
+        String point = "ST_GeogFromText('POINT (0 0)')";
+        String polygon = "ST_GeogFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')";
+        assertFunctionContract("select H3_FromGeo(" + point + ", 3)", 120320, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_GridDisk(617700169958293503, 1)", 120321);
+        assertFunctionContract("select H3_ToParent(617700169958293503, 2)", 120322, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_ToChildren(617700169958293503, 4)", 120323);
+        assertFunctionContract("select H3_Resolution(617700169958293503)", 120324, PrimitiveType.INT);
+        assertH3ArrayContract("select H3_PolygonToCells(" + polygon + ", 3)", 120326);
+
+        QueryStatement statement = (QueryStatement) analyzeSuccess(
+                "select H3_ToBoundary(617700169958293503)");
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(120325, call.getFn().getFunctionId());
+        ScalarType type = (ScalarType) call.getType();
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, type.getPrimitiveType());
+        Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                "OGC:CRS84", 4326), type.getGeoDescriptor());
+        analyzeFail("select H3_FromGeo(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 3)",
+                "No matching function with signature: h3_fromgeo");
+    }
+
+    private static void assertH3ArrayContract(String sql, long functionId) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
+        Assertions.assertTrue(call.getType().isArrayType(), sql);
+        Assertions.assertEquals(PrimitiveType.BIGINT, ((ArrayType) call.getType()).getItemType().getPrimitiveType(), sql);
     }
 
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {

@@ -119,6 +119,16 @@ public:
     DEFINE_VECTORIZED_FN(st_geometry_srid);
     DEFINE_VECTORIZED_FN(st_geometry_set_srid);
     DEFINE_VECTORIZED_FN(st_geometry_transform);
+    DEFINE_VECTORIZED_FN(h3_from_geo);
+    DEFINE_VECTORIZED_FN(h3_grid_disk);
+    DEFINE_VECTORIZED_FN(h3_to_parent);
+    DEFINE_VECTORIZED_FN(h3_to_children);
+    DEFINE_VECTORIZED_FN(h3_resolution);
+    DEFINE_VECTORIZED_FN(h3_to_boundary);
+    DEFINE_VECTORIZED_FN(h3_polygon_to_cells);
+
+    static Status h3_prepare(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
+    static Status h3_close(FunctionContext*, FunctionContext::FunctionStateScope) __attribute__((used));
 
     static Status native_geo_transform_prepare(FunctionContext*, FunctionContext::FunctionStateScope)
             __attribute__((used));

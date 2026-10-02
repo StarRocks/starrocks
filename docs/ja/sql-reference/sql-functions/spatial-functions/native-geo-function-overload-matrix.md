@@ -131,3 +131,17 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 ローリングアップグレードでは、FE より先に BE をアップグレードしてください。これらの関数は通常の安定した関数 ID ディスパッチを使用し、独立した GEO バージョンゲートは導入しません。新しい FE と古い BE の組み合わせは、サポートされるアップグレード順序ではありません。
 
 この契約は、オーバーロード解決、戻り型、レガシー互換性、関数 ID を確認する FE analyzer テストと、各ネイティブ ID を確認する BE registry テストで検証されます。既存の BE 関数テストは、定数、Nullable、可変入力、`EMPTY`、不正入力、ファミリ、次元、CRS、ディスクリプタの動作を網羅します。
+
+## H3 セル関数
+
+ジオメトリ引数にはネイティブ XY CRS84 GEOGRAPHY が必要です。セル ID は符号付き BIGINT です。有効性、NULL/EMPTY、近似フィル、制限については [H3 関数](h3-functions.md) を参照してください。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120320 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120321 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120322 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120323 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120324 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120325 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120326 | `ARRAY<BIGINT>` |

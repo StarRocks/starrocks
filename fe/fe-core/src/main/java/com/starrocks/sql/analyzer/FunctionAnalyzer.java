@@ -1082,6 +1082,15 @@ public class FunctionAnalyzer {
                 fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
                         GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
             }
+        } else if (FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName) && argumentTypes.length == 1) {
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+            }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
                         argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY)) {

@@ -2598,4 +2598,12 @@ CONF_mDouble(predicate_sampling_trigger_selectivity_threshold, "0.2");
 // behavior - including the behavior change this carries, namely that a THEN or ELSE which would raise
 // an error is no longer evaluated when no row selects it.
 CONF_mInt32(case_when_selective_eval_ratio, "2");
+// Limits for one H3 function row/worker; all values must be positive.
+CONF_mInt64(h3_max_cells_per_row, "100000");
+CONF_mInt32(h3_max_grid_disk_k, "128");
+CONF_mInt64(h3_max_polygon_vertices, "10000");
+CONF_mInt32(h3_max_polygon_components, "256");
+CONF_mInt64(h3_max_working_bytes, "67108864");
+CONF_mInt64(h3_max_estimated_work_per_row, "10000000");
+
 } // namespace starrocks::config

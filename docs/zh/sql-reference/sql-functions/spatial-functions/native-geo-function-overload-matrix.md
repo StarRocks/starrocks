@@ -131,3 +131,17 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 滚动升级时，应先升级 BE，再升级 FE。这些函数使用普通的稳定函数 ID 分发，不引入单独的 GEO 版本门控。不支持新 FE 与旧 BE 的升级顺序。
 
 该契约由聚焦的 FE analyzer 测试验证重载解析、返回类型、旧版兼容性和函数 ID，并由 BE registry 测试验证每个原生 ID。现有 BE 函数测试覆盖常量、Nullable、变化输入、`EMPTY`、格式错误输入、类型、维度、CRS 和描述符行为。
+
+## H3 网格函数
+
+几何参数需要原生 XY CRS84 GEOGRAPHY；网格索引是有符号 BIGINT。有效性、NULL/EMPTY、填充近似和限制见 [H3 函数](h3-functions.md)。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120320 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120321 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120322 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120323 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120324 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120325 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120326 | `ARRAY<BIGINT>` |

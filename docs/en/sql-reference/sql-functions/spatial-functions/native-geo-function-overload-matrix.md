@@ -131,3 +131,17 @@ The native overloads do not renumber or replace the existing `VARCHAR` functions
 For a rolling upgrade, upgrade BEs before FEs. These functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. A newer FE with an older BE is not a supported upgrade order.
 
 The contract is enforced by focused FE analyzer tests for overload resolution, return types, legacy compatibility, and function IDs, and by BE registry tests for every native ID. Existing BE function tests cover constant, nullable, varying, `EMPTY`, malformed-input, family, dimension, CRS, and descriptor behavior.
+
+## H3 cell functions
+
+These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the cell is a signed BIGINT. See [H3 functions](h3-functions.md) for validity, NULL/EMPTY, fill approximation, and limits.
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120320 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120321 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120322 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120323 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120324 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120325 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120326 | `ARRAY<BIGINT>` |
