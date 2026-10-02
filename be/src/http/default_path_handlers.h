@@ -33,6 +33,9 @@ class MemTracker;
 // logs and configuration flags
 void add_default_path_handlers(WebPageHandler* web_page_handler, const RuntimeEnv& runtime_env);
 
+// Handles "/varz": lists every config and its value, with credential configs masked.
+void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
+
 void proc_profile_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
 
 // Validates the `opts` /memz was asked for against the set malloc_stats_print() understands,

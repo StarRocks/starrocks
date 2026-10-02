@@ -93,13 +93,29 @@ void logs_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* ou
     (*output) << "<br/>Couldn't open INFO log file: ";
 }
 
+// Configs whose value is a credential. /varz prints them masked; the access key id is masked along
+// with the secret because together they are a usable credential, matching how the FE masks AK/SK in
+// SHOW CREATE CATALOG and SHOW STORAGE VOLUMES.
+static constexpr std::string_view kSensitiveConfigs[] = {
+        "object_storage_access_key_id",
+        "object_storage_secret_access_key",
+};
+static constexpr std::string_view kSensitiveConfigMask = "******";
+
 // Registered to handle "/varz", and prints out all command-line flags and their values
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     std::vector<config::ConfigInfo> configs = config::list_configs();
     (*output) << "<h2>Configurations</h2>";
     (*output) << "<pre>";
     for (const auto& cfg : configs) {
-        (*output) << cfg.name << '=' << cfg.value << '\n';
+        bool sensitive = std::find(std::begin(kSensitiveConfigs), std::end(kSensitiveConfigs), cfg.name) !=
+                         std::end(kSensitiveConfigs);
+        // An empty value stays empty, so the page still tells an unset credential from a set one.
+        if (sensitive && !cfg.value.empty()) {
+            (*output) << cfg.name << '=' << kSensitiveConfigMask << '\n';
+        } else {
+            (*output) << cfg.name << '=' << cfg.value << '\n';
+        }
     }
     (*output) << "</pre>";
 }
