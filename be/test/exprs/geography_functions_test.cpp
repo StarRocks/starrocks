@@ -2087,9 +2087,8 @@ TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
     auto boundary = GeoFunctions::h3_to_boundary(boundary_context.get(), {cell});
     ASSERT_TRUE(boundary.ok()) << boundary.status();
     EXPECT_TRUE((*boundary)->is_constant());
-    const auto* nullable =
-            down_cast<const NullableColumn*>(down_cast<const ConstColumn*>((*boundary).get())->data_column().get());
-    const auto* data = down_cast<const GeoColumn*>(nullable->data_column().get());
+    const auto* data =
+            down_cast<const GeoColumn*>(down_cast<const ConstColumn*>((*boundary).get())->data_column().get());
     WkbGeometry geometry;
     ASSERT_TRUE(WkbCodec::parse_wkb(data->get_wkb(0), &geometry).ok());
     ASSERT_EQ(WkbGeometryType::POLYGON, geometry.type);
