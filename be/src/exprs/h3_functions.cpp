@@ -37,7 +37,7 @@
 #include "column/const_column.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "geo/geo_measurements.h"
 #include "geo/wkb.h"
 #include "runtime/runtime_state.h"

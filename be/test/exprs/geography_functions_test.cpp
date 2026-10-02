@@ -30,7 +30,7 @@
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
-#include "common/config.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
