@@ -26,6 +26,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <string_view>
 
 #include "common/configbase_impl.h"
 #include "common/status.h"
@@ -291,14 +292,34 @@ Status rollback_config(const std::string& field) {
     return Status::OK();
 }
 
+// Configs whose value is a credential. The access key id is listed along with the secret because together
+// they are a usable credential, matching how the FE masks AK/SK in SHOW CREATE CATALOG and SHOW STORAGE VOLUMES.
+static constexpr std::string_view kSensitiveConfigs[] = {
+        "object_storage_access_key_id",
+        "object_storage_secret_access_key",
+};
+
+bool is_sensitive_config(std::string_view name) {
+    return std::find(std::begin(kSensitiveConfigs), std::end(kSensitiveConfigs), name) != std::end(kSensitiveConfigs);
+}
+
+// An empty value stays empty, so the output still tells an unset credential from a set one.
+static std::string mask_if_sensitive(std::string_view name, std::string value) {
+    if (is_sensitive_config(name) && !value.empty()) {
+        return std::string(kSensitiveConfigMask);
+    }
+    return value;
+}
+
 std::vector<ConfigInfo> list_configs() {
     std::vector<ConfigInfo> infos;
     for (const auto& [name, field] : Field::fields()) {
         auto& info = infos.emplace_back();
         info.name = name;
-        info.value = field->value();
+        // Match on the field's own name rather than the map key, so an alias of a credential is masked too.
+        info.value = mask_if_sensitive(field->name(), field->value());
         info.type = field->type();
-        info.defval = field->defval();
+        info.defval = mask_if_sensitive(field->name(), field->defval());
         info.valmutable = field->valmutable();
     }
     return infos;
