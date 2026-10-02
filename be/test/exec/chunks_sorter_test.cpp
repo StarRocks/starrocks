@@ -642,20 +642,6 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     EXPECT_EQ(permutation, result);
 }
 
-// Re-store the offsets of |column| in 64-bit storage without changing their values. This is how a BinaryColumn
-// looks after its payload has crossed 4GB, but it only holds a few bytes, so tests can cover the 64-bit offset
-// paths without allocating gigabytes.
-static void force_large_offsets(BinaryColumn* column) {
-    const auto& offsets = column->get_offset();
-    AdaptiveOffsets::Large large_offsets;
-    large_offsets.resize(offsets.size());
-    for (size_t i = 0; i < offsets.size(); ++i) {
-        large_offsets[i] = offsets[i];
-    }
-    column->get_offset().set_large_buffer(std::move(large_offsets));
-    column->invalidate_slice_cache();
-}
-
 // Build a VARCHAR column from |values| whose BinaryColumn has 64-bit offsets. A nullable column gets |num_nulls| NULLs
 // appended after the values; appending keeps the offsets 64-bit.
 static MutableColumnPtr build_large_offsets_varchar_column(const std::vector<std::string>& values, bool nullable,
@@ -664,7 +650,7 @@ static MutableColumnPtr build_large_offsets_varchar_column(const std::vector<std
     for (const auto& value : values) {
         data->append(Slice(value));
     }
-    force_large_offsets(data.get());
+    ColumnTestHelper::force_large_offsets(data.get());
     if (!nullable) {
         return data;
     }
@@ -711,7 +697,7 @@ TEST_F(ChunksSorterTest, sort_binary_column_with_large_offsets) {
             auto sorted = chunk->clone_empty_with_slot(chunk->num_rows());
             auto* sorted_data =
                     down_cast<BinaryColumn*>(ColumnHelper::get_data_column(sorted->get_column_raw_ptr_by_index(0)));
-            force_large_offsets(sorted_data);
+            ColumnTestHelper::force_large_offsets(sorted_data);
             materialize_by_permutation_single(sorted.get(), chunk, perm);
             ASSERT_TRUE(sorted_data->get_offset().is_large());
 
