@@ -32,6 +32,9 @@ class MemTracker;
 // logs and configuration flags
 void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* process_mem_tracker);
 
+// Handles "/varz": lists every config and its value, as config::list_configs() reports them.
+void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output);
+
 // Validates the `opts` /memz was asked for against the set malloc_stats_print() understands,
 // and returns what to hand it. `requested` being absent means the caller did not ask, which
 // yields the page's default of "a" -- omit the per-arena statistics.

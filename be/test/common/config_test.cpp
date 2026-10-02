@@ -23,6 +23,7 @@
 #include <gtest/gtest.h>
 
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <streambuf>
 #include <thread>
@@ -311,6 +312,38 @@ TEST_F(ConfigTest, test_list_configs) {
     for (int i = 0, sz = configs.size(); i < sz; ++i) {
         EXPECT_EQ(exp_configs[i], configs[i]);
     }
+}
+
+TEST_F(ConfigTest, test_list_configs_masks_credentials) {
+    CONF_String(object_storage_access_key_id, "");
+    CONF_String(object_storage_secret_access_key, "default-secret");
+    CONF_Alias(object_storage_secret_access_key, object_storage_secret_access_key_alias);
+    CONF_String(object_storage_endpoint, "");
+
+    std::stringstream ss;
+    ss << "object_storage_secret_access_key=wJalrXUtnFEMI/K7MDENG\n"
+       << "object_storage_endpoint=http://127.0.0.1:9000\n";
+    ASSERT_TRUE(config::init(ss));
+    // The config variable still holds the real value; only what list_configs() reports is masked.
+    ASSERT_EQ("wJalrXUtnFEMI/K7MDENG", object_storage_secret_access_key);
+
+    EXPECT_TRUE(config::is_sensitive_config("object_storage_access_key_id"));
+    EXPECT_TRUE(config::is_sensitive_config("object_storage_secret_access_key"));
+    EXPECT_FALSE(config::is_sensitive_config("object_storage_endpoint"));
+
+    std::map<std::string, ConfigInfo> by_name;
+    for (auto& info : config::list_configs()) {
+        by_name[info.name] = info;
+    }
+    // Set credential: value and non-empty default are masked, alias included.
+    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key"].value);
+    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key"].defval);
+    EXPECT_EQ(kSensitiveConfigMask, by_name["object_storage_secret_access_key_alias"].value);
+    // Unset credential stays empty, so it is still visible that none is configured.
+    EXPECT_EQ("", by_name["object_storage_access_key_id"].value);
+    EXPECT_EQ("", by_name["object_storage_access_key_id"].defval);
+    // Other configs are reported as is.
+    EXPECT_EQ("http://127.0.0.1:9000", by_name["object_storage_endpoint"].value);
 }
 
 TEST_F(ConfigTest, test_empty_list) {

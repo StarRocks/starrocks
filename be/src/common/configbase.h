@@ -24,6 +24,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #ifdef __IN_CONFIGBASE_CPP__
@@ -331,6 +332,15 @@ Status set_config(const std::string& field, const std::string& value);
 
 Status rollback_config(const std::string& field);
 
+// The mask list_configs() reports in place of a credential config's value.
+inline constexpr std::string_view kSensitiveConfigMask = "******";
+
+// Whether `name` is a config whose value is a credential.
+bool is_sensitive_config(std::string_view name);
+
+// Lists every config, aliases included. This is what /varz and information_schema.be_configs show, so
+// a credential config's value and default are reported as kSensitiveConfigMask when non-empty; read the
+// config variable itself for the real value.
 std::vector<ConfigInfo> list_configs();
 
 void TEST_clear_configs();
