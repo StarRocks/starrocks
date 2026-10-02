@@ -569,8 +569,8 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
 
 template <typename T>
 vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
-    std::vector<uint8_t> byteArray(sizeof(value));
-    memcpy(byteArray.data(), &value, sizeof(value));
+    uint8_t raw[sizeof(T)];
+    memcpy(raw, &value, sizeof(T));
     if (value < 0) {
         value = ~value;
     }
@@ -579,9 +579,14 @@ vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
         value >>= 1;
         bitLength++;
     }
-    // Convert the integer to its byte representation (Big Endian)
-    byteArray.resize(bitLength / 8 + 1);
-    std::reverse(byteArray.begin(), byteArray.end());
+    // Convert the integer to its minimal two's-complement byte representation (Big Endian).
+    // Clamp the length to sizeof(T) so the bound is visible to the compiler; otherwise
+    // GCC 14 reports a false -Wstringop-overflow on the vector resize + reverse path.
+    const size_t len = std::min<size_t>(bitLength / 8 + 1, sizeof(T));
+    std::vector<uint8_t> byteArray(len);
+    for (size_t i = 0; i < len; ++i) {
+        byteArray[i] = raw[len - 1 - i];
+    }
     return byteArray;
 }
 
