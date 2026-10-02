@@ -3158,8 +3158,8 @@ TEST_F(VectorizedCastExprTest, variant_cast_non_object_to_struct_returns_null) {
 // must still be marked NULL on the result, aligned with the object rows around them.
 TEST_F(VectorizedCastExprTest, variant_cast_mixed_rows_non_nullable_input_to_struct) {
     auto variant_column = VariantColumn::create();
-    for (const std::string& json : {std::string(R"({"x":1})"), std::string(R"([1,2])"), std::string(R"({"x":3})"),
-                                    std::string("5")}) {
+    for (const std::string& json :
+         {std::string(R"({"x":1})"), std::string(R"([1,2])"), std::string(R"({"x":3})"), std::string("5")}) {
         variant_column->append(make_variant_row_from_json(json));
     }
     ColumnPtr input = std::move(variant_column);
