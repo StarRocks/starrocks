@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "base/simd/simd.h"
 #include "base/string/slice.h"
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -140,7 +141,6 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     ColumnViewer<TYPE_VARIANT> viewer(column);
     const auto* variant_data_column = down_cast<const VariantColumn*>(ColumnHelper::get_data_column(column.get()));
     NullColumn::MutablePtr null_column = NullColumn::create();
-    bool has_non_object_row = false;
 
     // 1. Cast struct fields to variant columns.
     const size_t field_size = _type.children.size();
@@ -171,7 +171,6 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
         const VariantValue& value = row_ref.get_value();
         if (value.type() != VariantType::OBJECT) {
             APPEND_NULL(variant_columns, null_column);
-            has_non_object_row = true;
             continue;
         }
 
@@ -211,7 +210,9 @@ StatusOr<ColumnPtr> CastVariantToStruct::evaluate_checked(ExprContext* context, 
     // 4. Build struct column.
     MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
-    if (column->is_nullable() || has_non_object_row) {
+    // The cast itself yields NULL rows (non-object root, unreadable row), so a non-nullable input
+    // can still produce NULLs. Wrap whenever any row was marked NULL, not only for nullable input.
+    if (column->is_nullable() || SIMD::contain_nonzero(null_column->get_data())) {
         res = NullableColumn::create(std::move(res), std::move(null_column));
     }
     if (column->is_constant()) {
