@@ -97,6 +97,16 @@ struct ParquetWriterOptions : FileWriterOptions {
     // key: column name, value: whether to enable dictionary encoding
     // Columns not in this map use the global default behavior
     std::unordered_map<std::string, bool> column_dictionary_enabled;
+    // Parquet Modular Encryption (PME) - for Iceberg encrypted tables.
+    // BE generates a fresh per-file DEK; FE only signals that encryption is on and
+    // which algorithm to use (Iceberg "encryption v0": footer key + algorithm only).
+    bool encryption_enabled = false;
+    std::string encryption_algorithm; // "AES_GCM_V1" or "AES_GCM_CTR_V1"
+    // Bytes: 16, 24 or 32, from the Iceberg table property encryption.data-key-length. 0 means
+    // "not supplied" and is REJECTED when encryption is on -- deliberately not defaulted. Silently
+    // picking a length would write a key weaker than the table's declared policy with nothing
+    // surfaced, so an absent length has to fail the write instead.
+    int encryption_dek_length = 0;
 
     inline static std::string USE_LEGACY_DECIMAL_ENCODING = "use_legacy_decimal_encoding";
     inline static std::string USE_INT96_TIMESTAMP_ENCODING = "use_int96_timestamp_encoding";
@@ -151,6 +161,11 @@ private:
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<parquet::ChunkWriter> _rowgroup_writer;
     const std::function<void()> _rollback_action;
+
+    // Per-file PME material generated in init() when encryption is enabled; the raw
+    // DEK is returned to FE at commit (and zeroized when this writer is destroyed).
+    std::string _file_dek;
+    std::string _aad_prefix;
 };
 
 class ParquetFileWriterFactory : public FileWriterFactory {

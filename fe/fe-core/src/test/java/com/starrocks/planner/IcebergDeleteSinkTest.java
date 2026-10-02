@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 import com.starrocks.type.IntegerType;
 import com.starrocks.type.VarcharType;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -365,5 +366,135 @@ public class IcebergDeleteSinkTest {
             TIcebergTableSink icebergSink = tDataSink.getIceberg_table_sink();
             assertEquals(TCompressionType.LZ4, icebergSink.getDelete_compression_type());
         }
+    }
+
+    /**
+     * DELETE writes position-delete files, which carry the row positions and file paths of the rows
+     * being removed. On an encrypted table those must be encrypted like any other file: an unencrypted
+     * delete file beside encrypted data still discloses which rows were deleted. Until the signal was
+     * derived in one place only INSERT set it, and DELETE wrote plaintext with nothing surfacing it.
+     */
+    @Test
+    public void testEncryptedTableSendsTheEncryptionSignalToTheBackend() {
+        TupleDescriptor desc = deleteTuple();
+
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.location()).thenReturn("/tmp/iceberg");
+        when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put("encryption.key-id", "my-kms-key");
+        properties.put("encryption.data-key-length", "32");
+        when(nativeTable.properties()).thenReturn(properties);
+        // Stubbed explicitly. An unstubbed encryption() returns null, and `null instanceof
+        // PlaintextEncryptionManager` is false, so the refusal gate would be skipped and this test
+        // would prove nothing about it -- it would pass even on a catalog that cannot encrypt.
+        when(nativeTable.encryption()).thenReturn(new StubEncryptionManager());
+
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        sink.init();
+
+        TIcebergTableSink icebergSink = sink.toThrift().getIceberg_table_sink();
+        assertTrue(icebergSink.isSetParquet_encryption_info(),
+                "a DELETE on an encrypted table must tell the BE to encrypt its position-delete files");
+        assertEquals(32, icebergSink.getParquet_encryption_info().getDek_length());
+        assertEquals("AES_GCM_V1", icebergSink.getParquet_encryption_info().getEncryption_algorithm());
+        // The BE generates its own per-file DEK and returns it at commit; the FE never ships key material.
+        assertFalse(icebergSink.getParquet_encryption_info().isSetFile_dek());
+    }
+
+    @Test
+    public void testUnencryptedTableSendsNoEncryptionSignal() {
+        TupleDescriptor desc = deleteTuple();
+
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.location()).thenReturn("/tmp/iceberg");
+        when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+        when(nativeTable.properties()).thenReturn(new HashMap<>());
+        when(nativeTable.encryption()).thenReturn(PlaintextEncryptionManager.instance());
+
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        sink.init();
+
+        assertFalse(sink.toThrift().getIceberg_table_sink().isSetParquet_encryption_info());
+    }
+
+    /**
+     * A table declaring encryption while the catalog hands back a plaintext manager must fail at
+     * planning. Asserted here, not only on IcebergEncryption, so the gate is known to be reachable
+     * from this call site -- until this existed, no test anywhere covered a sink refusing.
+     */
+    @Test
+    public void testDeclaredEncryptionWithAPlaintextManagerIsRefusedAtPlanning() {
+        TupleDescriptor desc = deleteTuple();
+
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.location()).thenReturn("/tmp/iceberg");
+        when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+        Map<String, String> properties = new HashMap<>();
+        properties.put("encryption.key-id", "my-kms-key");
+        when(nativeTable.properties()).thenReturn(properties);
+        when(nativeTable.encryption()).thenReturn(PlaintextEncryptionManager.instance());
+
+        StarRocksConnectorException e = assertThrows(StarRocksConnectorException.class,
+                () -> new IcebergDeleteSink(icebergTable, desc, new SessionVariable()));
+        assertTrue(e.getMessage().contains("refusing to write"), e.getMessage());
+    }
+
+    /** Non-plaintext, non-standard manager: stands in for a catalog that does apply encryption. */
+    private static class StubEncryptionManager implements org.apache.iceberg.encryption.EncryptionManager {
+        @Override
+        public org.apache.iceberg.io.InputFile decrypt(org.apache.iceberg.encryption.EncryptedInputFile encrypted) {
+            throw new UnsupportedOperationException("not reached");
+        }
+
+        @Override
+        public org.apache.iceberg.encryption.EncryptedOutputFile encrypt(org.apache.iceberg.io.OutputFile rawOutput) {
+            throw new UnsupportedOperationException("not reached");
+        }
+    }
+
+    /**
+     * A mocked table leaves both encryption() and properties() unstubbed, i.e. null. That is also a real
+     * shape -- properties() is null before the metadata is loaded -- and resolving the DEK length before
+     * establishing that the table declares encryption threw NPE straight out of this constructor, which
+     * would fail every DELETE at planning.
+     */
+    @Test
+    public void testTableWithNoPropertiesPlansWithoutEncryption() {
+        TupleDescriptor desc = deleteTuple();
+
+        IcebergTable icebergTable = mock(IcebergTable.class);
+        org.apache.iceberg.Table nativeTable = mock(org.apache.iceberg.Table.class);
+        when(icebergTable.getNativeTable()).thenReturn(nativeTable);
+        when(nativeTable.location()).thenReturn("/tmp/iceberg");
+        when(icebergTable.getUUID()).thenReturn("iceberg_catalog.db.table");
+
+        IcebergDeleteSink sink = new IcebergDeleteSink(icebergTable, desc, new SessionVariable());
+        sink.init();
+
+        assertFalse(sink.toThrift().getIceberg_table_sink().isSetParquet_encryption_info());
+    }
+
+    private static TupleDescriptor deleteTuple() {
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0), "DeleteTuple");
+
+        Column fileColumn = new Column(IcebergTable.FILE_PATH, VarcharType.VARCHAR);
+        SlotDescriptor fileSlot = new SlotDescriptor(new SlotId(0), desc);
+        fileSlot.setColumn(fileColumn);
+        desc.addSlot(fileSlot);
+
+        Column posColumn = new Column(IcebergTable.ROW_POSITION, IntegerType.BIGINT);
+        SlotDescriptor posSlot = new SlotDescriptor(new SlotId(1), desc);
+        posSlot.setColumn(posColumn);
+        desc.addSlot(posSlot);
+
+        return desc;
     }
 }

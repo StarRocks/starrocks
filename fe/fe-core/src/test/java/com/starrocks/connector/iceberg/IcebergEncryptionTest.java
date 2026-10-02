@@ -16,6 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.iceberg.Table;
@@ -30,11 +31,13 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT;
 import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 /**
  * The state under test is a table whose properties declare encryption while the catalog hands back a
- * plaintext manager -- reachable on any catalog Iceberg 1.11.0 has not wired, REST included.
+ * plaintext manager -- reachable on any catalog Iceberg 1.11.0 has not wired, REST included. Both gates
+ * share one predicate, so each case is asserted on both to keep read and write from drifting.
  */
 public class IcebergEncryptionTest {
 
@@ -65,11 +68,15 @@ public class IcebergEncryptionTest {
     }
 
     @Test
-    public void testDeclaredEncryptionWithPlaintextManagerIsRefused(@Mocked Table nativeTable) {
-        // The whole point: key-id present, manager plaintext. No data key can be recovered, so the scan
-        // must not proceed as though the table were plaintext.
+    public void testDeclaredEncryptionWithPlaintextManagerIsRefusedOnBothPaths(@Mocked Table nativeTable) {
+        // The whole point: key-id present, manager plaintext. Writing would commit cleartext into a
+        // table configured to be encrypted, with nothing surfacing it.
         stub(nativeTable, PlaintextEncryptionManager.instance(),
                 ImmutableMap.of(ENCRYPTION_TABLE_KEY, "my-kms-key"));
+
+        StarRocksConnectorException w = Assertions.assertThrows(StarRocksConnectorException.class,
+                () -> IcebergEncryption.checkWriteSupported(nativeTable, "db.t"));
+        Assertions.assertTrue(w.getMessage().contains("refusing to write"), w.getMessage());
 
         StarRocksConnectorException r = Assertions.assertThrows(StarRocksConnectorException.class,
                 () -> IcebergEncryption.checkReadSupported(nativeTable, "db.t"));
@@ -82,6 +89,7 @@ public class IcebergEncryptionTest {
         // otherwise; on its own it just means the table is not encrypted.
         stub(nativeTable, PlaintextEncryptionManager.instance(), ImmutableMap.of());
 
+        IcebergEncryption.checkWriteSupported(nativeTable, "db.t");
         IcebergEncryption.checkReadSupported(nativeTable, "db.t");
     }
 
@@ -90,6 +98,7 @@ public class IcebergEncryptionTest {
         // A wired catalog: key-id set and a non-plaintext manager. Nothing to refuse.
         stub(nativeTable, new StubEncryptionManager(), ImmutableMap.of(ENCRYPTION_TABLE_KEY, "my-kms-key"));
 
+        IcebergEncryption.checkWriteSupported(nativeTable, "db.t");
         IcebergEncryption.checkReadSupported(nativeTable, "db.t");
     }
 
@@ -100,6 +109,7 @@ public class IcebergEncryptionTest {
         // encryption() is neither plaintext nor standard.
         stub(nativeTable, new StubEncryptionManager(), ImmutableMap.of());
 
+        IcebergEncryption.checkWriteSupported(nativeTable, "db.t");
         IcebergEncryption.checkReadSupported(nativeTable, "db.t");
     }
 
@@ -109,6 +119,68 @@ public class IcebergEncryptionTest {
         // mean refusing tables for a reason unrelated to encryption.
         stub(nativeTable, PlaintextEncryptionManager.instance(), null);
 
+        IcebergEncryption.checkWriteSupported(nativeTable, "db.t");
         IcebergEncryption.checkReadSupported(nativeTable, "db.t");
+    }
+
+    @Test
+    public void testWriteSignalCarriesPolicyAndNoKeyMaterial(@Mocked Table nativeTable) {
+        // All three write sinks -- IcebergTableSink (INSERT), IcebergDeleteSink (DELETE) and
+        // IcebergRowDeltaSink (UPDATE/MERGE) -- derive their signal here. When only the INSERT sink
+        // built one, DELETE/UPDATE/MERGE wrote plaintext data and plaintext position-delete files into
+        // encrypted tables. This is the single point that keeps them consistent.
+        stub(nativeTable, new StubEncryptionManager(),
+                ImmutableMap.of(ENCRYPTION_TABLE_KEY, "k", "encryption.data-key-length", "32"));
+
+        TParquetEncryptionInfo enc = IcebergEncryption.writeSignalOrNull(nativeTable, "db.t");
+
+        Assertions.assertNotNull(enc);
+        Assertions.assertEquals(32, enc.getDek_length());
+        Assertions.assertEquals("AES_GCM_V1", enc.getEncryption_algorithm());
+        Assertions.assertFalse(enc.isSetFile_dek(), "FE must never send key material on the write path");
+        Assertions.assertFalse(enc.isSetAad_prefix(), "FE must not send an AAD prefix on the write path");
+    }
+
+    @Test
+    public void testWriteSignalDefaultsKeyLengthToIcebergsDefault(@Mocked Table nativeTable) {
+        stub(nativeTable, new StubEncryptionManager(), ImmutableMap.of(ENCRYPTION_TABLE_KEY, "k"));
+
+        TParquetEncryptionInfo enc = IcebergEncryption.writeSignalOrNull(nativeTable, "db.t");
+
+        Assertions.assertNotNull(enc);
+        Assertions.assertEquals(ENCRYPTION_DEK_LENGTH_DEFAULT, enc.getDek_length());
+        Assertions.assertTrue(enc.isSetDek_length(), "dek_length must always be populated when encryption is on");
+    }
+
+    @Test
+    public void testWriteSignalIsNullForAnUnencryptedTable(@Mocked Table nativeTable) {
+        // The common case: no signal at all, so the BE writes plaintext as before.
+        stub(nativeTable, PlaintextEncryptionManager.instance(), ImmutableMap.of());
+
+        Assertions.assertNull(IcebergEncryption.writeSignalOrNull(nativeTable, "db.t"));
+    }
+
+    @Test
+    public void testWriteSignalIsNullWhenNoKeyIdIsDeclaredWhateverTheManagerIs(@Mocked Table nativeTable) {
+        // No encryption.key-id, but the catalog handed back some manager that is not the plaintext one.
+        // Keying the signal off the manager's type would tell the BE to encrypt here, while
+        // IcebergMetadata.encryptionKeyMetadata -- which gates on the property -- would commit the file
+        // with no key_metadata. The DEK would exist only in the BE process that made it, so the data
+        // would be unreadable by StarRocks or anything else, permanently and without an error.
+        stub(nativeTable, new StubEncryptionManager(), ImmutableMap.of("write.format.default", "parquet"));
+
+        Assertions.assertNull(IcebergEncryption.writeSignalOrNull(nativeTable, "db.t"),
+                "a table that does not declare encryption must never be signalled as encrypted");
+    }
+
+    @Test
+    public void testWriteSignalTreatsNullPropertiesAsNoDeclaration(@Mocked Table nativeTable) {
+        // properties() is null for a table whose metadata has not been loaded, and for every
+        // Mockito-mocked table in the sink tests. Reading the DEK length before establishing that the
+        // table declares encryption threw NPE out of the sink constructors, which is a planning-time
+        // failure for DELETE/UPDATE/MERGE against any such table.
+        stub(nativeTable, new StubEncryptionManager(), null);
+
+        Assertions.assertNull(IcebergEncryption.writeSignalOrNull(nativeTable, "db.t"));
     }
 }
