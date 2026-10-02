@@ -567,10 +567,16 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+// GCC 14 cannot infer that bitLength / 8 + 1 <= sizeof(T), so it keeps the growth path of resize()
+// and reports a false -Wstringop-overflow on the vectorized std::reverse below.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 template <typename T>
 vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
-    uint8_t raw[sizeof(T)];
-    memcpy(raw, &value, sizeof(T));
+    std::vector<uint8_t> byteArray(sizeof(value));
+    memcpy(byteArray.data(), &value, sizeof(value));
     if (value < 0) {
         value = ~value;
     }
@@ -579,16 +585,14 @@ vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
         value >>= 1;
         bitLength++;
     }
-    // Convert the integer to its minimal two's-complement byte representation (Big Endian).
-    // Clamp the length to sizeof(T) so the bound is visible to the compiler; otherwise
-    // GCC 14 reports a false -Wstringop-overflow on the vector resize + reverse path.
-    const size_t len = std::min<size_t>(bitLength / 8 + 1, sizeof(T));
-    std::vector<uint8_t> byteArray(len);
-    for (size_t i = 0; i < len; ++i) {
-        byteArray[i] = raw[len - 1 - i];
-    }
+    // Convert the integer to its byte representation (Big Endian)
+    byteArray.resize(bitLength / 8 + 1);
+    std::reverse(byteArray.begin(), byteArray.end());
     return byteArray;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 template vector<uint8_t> MathFunctions::int_to_byte_array<int32_t>(int32_t value);
 template vector<uint8_t> MathFunctions::int_to_byte_array<int64_t>(int64_t value);
