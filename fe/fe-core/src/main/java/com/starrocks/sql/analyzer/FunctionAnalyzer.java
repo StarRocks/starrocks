@@ -1056,7 +1056,8 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
-        } else if ((FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
+        } else if ((FunctionSet.ST_INTERSECTION.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_DIFFERENCE.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_SYMDIFFERENCE.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
                 ((argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY &&

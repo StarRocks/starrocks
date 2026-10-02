@@ -134,10 +134,13 @@ The contract is enforced by focused FE analyzer tests for overload resolution, r
 
 ## Polygon overlays
 
-Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in both 4326 and 3857. NULL propagates. One component returns POLYGON, multiple return MULTIPOLYGON, empty returns POLYGON EMPTY. Invalid topology is an error. See the linked pages for precision and resource limits.
+Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in both 4326 and 3857. NULL propagates. For `ST_Union`, `ST_Difference`, and `ST_SymDifference`, one component returns POLYGON, multiple return MULTIPOLYGON, and empty returns POLYGON EMPTY. Invalid topology is an error. See the linked pages for precision and resource limits.
+
+`ST_Intersection` also preserves shared edges and isolated contact points, returning line or point families when no area is present, or GEOMETRYCOLLECTION for mixed dimensions. Parts covered by higher-dimensional output are not repeated; disjoint inputs return POLYGON EMPTY.
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
 | `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
 | `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
 | `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |

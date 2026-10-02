@@ -395,8 +395,8 @@ TEST(GeoOverlayTest, PreparedConstantsAreImmutableAndOtherConstantsStayBatchLoca
         }
 }
 
-TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesIntersection) {
-    for (uint64_t id : {120351, 120361, 120371}) {
+TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesGeography) {
+    for (uint64_t id : {120341, 120351, 120361, 120371}) {
         const auto* descriptor = BuiltinFunctions::find_builtin_function(id);
         ASSERT_NE(nullptr, descriptor);
         EXPECT_EQ(2, descriptor->args_nums);
@@ -411,7 +411,7 @@ TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesIntersection) {
         ASSERT_TRUE(descriptor->close_function(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
         EXPECT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     }
-    for (uint64_t id : {120340, 120341, 120350, 120360, 120370}) {
+    for (uint64_t id : {120340, 120350, 120360, 120370}) {
         EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(id));
     }
 }
@@ -426,14 +426,14 @@ TEST(GeoOverlayTest, CancellationAndQueryMemoryLimit) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_context(&state, nullptr, type, {type, type}));
     auto a = geometries({square}), b = geometries({shifted});
     state.set_is_cancelled(true);
-    for (auto fn : functions) {
+    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
         auto result = fn(ctx.get(), {a, b});
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_cancelled());
     }
     state.set_is_cancelled(false);
     ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "overlay test").is_mem_limit_exceeded());
-    for (auto fn : functions) {
+    for (auto fn : {functions[0], functions[1], functions[2], GeoFunctions::st_geometry_intersection}) {
         auto result = fn(ctx.get(), {a, b});
         ASSERT_FALSE(result.ok());
         EXPECT_TRUE(result.status().is_mem_limit_exceeded());
@@ -561,72 +561,77 @@ TEST(GeoOverlayTest, OutputCoordinateLimitDoesNotTruncate) {
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_invalid_argument());
     EXPECT_NE(std::string::npos, result.status().to_string().find("result exceeds coordinate limit"));
+    auto intersection = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION);
+    ASSERT_FALSE(intersection.ok());
+    EXPECT_NE(std::string::npos, intersection.status().to_string().find("result exceeds coordinate limit"));
     auto symmetric = (*a)->overlay(**b, GeoOverlayKind::SYMMETRIC_DIFFERENCE);
     ASSERT_FALSE(symmetric.ok());
     EXPECT_NE(std::string::npos, symmetric.status().to_string().find("intermediate exceeds coordinate limit"));
 }
 
 TEST(GeoOverlayTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpOnce) {
-    class Operand final : public MockExpr {
-    public:
-        Operand(const TExprNode& node, ColumnPtr value, bool constant)
-                : MockExpr(node, std::move(value)), _constant(constant) {}
-        bool is_constant() const override { return _constant; }
-        ColumnPtr next;
-        StatusOr<ColumnPtr> evaluate_checked(ExprContext* ctx, Chunk* chunk) override {
-            return next ? StatusOr<ColumnPtr>(next) : MockExpr::evaluate_checked(ctx, chunk);
-        }
+    for (uint64_t id : {120341, 120351}) {
+        class Operand final : public MockExpr {
+        public:
+            Operand(const TExprNode& node, ColumnPtr value, bool constant)
+                    : MockExpr(node, std::move(value)), _constant(constant) {}
+            bool is_constant() const override { return _constant; }
+            ColumnPtr next;
+            StatusOr<ColumnPtr> evaluate_checked(ExprContext* ctx, Chunk* chunk) override {
+                return next ? StatusOr<ColumnPtr>(next) : MockExpr::evaluate_checked(ctx, chunk);
+            }
 
-    private:
-        bool _constant;
-    };
-    RuntimeState state;
-    state.init_instance_mem_tracker();
-    TExprNode node;
-    node.__set_node_type(TExprNodeType::FUNCTION_CALL);
-    node.__set_type(geo_type().to_thrift());
-    node.__set_num_children(2);
-    TFunction function;
-    TFunctionName name;
-    name.__set_function_name("ST_Union");
-    function.__set_name(name);
-    function.__set_binary_type(TFunctionBinaryType::BUILTIN);
-    function.__set_fid(120351);
-    function.__set_arg_types({geo_type().to_thrift(), geo_type().to_thrift()});
-    function.__set_ret_type(geo_type().to_thrift());
-    function.__set_has_var_args(false);
-    node.__set_fn(function);
-    VectorizedFunctionCallExpr expr(node);
-    TExprNode operand_node;
-    operand_node.__set_node_type(TExprNodeType::SLOT_REF);
-    operand_node.__set_type(geo_type().to_thrift());
-    operand_node.__set_num_children(0);
-    operand_node.__set_is_nullable(true);
-    Operand left(operand_node, ConstColumn::create(geometries({square}), 1), true);
-    Operand right(operand_node, geometries({shifted}), false);
-    expr.add_child(&left);
-    expr.add_child(&right);
-    ExprContext owner(&expr);
-    ASSERT_TRUE(owner.prepare(&state).ok());
-    ASSERT_TRUE(owner.open(&state).ok());
-    const auto* prepared = owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL);
-    ASSERT_NE(nullptr, prepared);
-    ObjectPool pool;
-    ExprContext* clone = nullptr;
-    ASSERT_TRUE(owner.clone(&state, &pool, &clone).ok());
-    EXPECT_EQ(prepared, clone->fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    auto result = expr.evaluate_checked(clone, nullptr);
-    ASSERT_TRUE(result.ok()) << result.status();
-    expect_geometry(*result, "POLYGON ((0 0,6 0,6 4,0 4,0 0))");
-    clone->close(&state);
-    EXPECT_EQ(prepared, owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    right.next = geometries({empty});
-    auto second = expr.evaluate_checked(&owner, nullptr);
-    ASSERT_TRUE(second.ok()) << second.status();
-    expect_geometry(*second, square);
-    owner.close(&state);
-    EXPECT_EQ(nullptr, owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    owner.close(&state);
+        private:
+            bool _constant;
+        };
+        RuntimeState state;
+        state.init_instance_mem_tracker();
+        TExprNode node;
+        node.__set_node_type(TExprNodeType::FUNCTION_CALL);
+        node.__set_type(geo_type().to_thrift());
+        node.__set_num_children(2);
+        TFunction function;
+        TFunctionName name;
+        name.__set_function_name(id == 120341 ? "ST_Intersection" : "ST_Union");
+        function.__set_name(name);
+        function.__set_binary_type(TFunctionBinaryType::BUILTIN);
+        function.__set_fid(id);
+        function.__set_arg_types({geo_type().to_thrift(), geo_type().to_thrift()});
+        function.__set_ret_type(geo_type().to_thrift());
+        function.__set_has_var_args(false);
+        node.__set_fn(function);
+        VectorizedFunctionCallExpr expr(node);
+        TExprNode operand_node;
+        operand_node.__set_node_type(TExprNodeType::SLOT_REF);
+        operand_node.__set_type(geo_type().to_thrift());
+        operand_node.__set_num_children(0);
+        operand_node.__set_is_nullable(true);
+        Operand left(operand_node, ConstColumn::create(geometries({square}), 1), true);
+        Operand right(operand_node, geometries({shifted}), false);
+        expr.add_child(&left);
+        expr.add_child(&right);
+        ExprContext owner(&expr);
+        ASSERT_TRUE(owner.prepare(&state).ok());
+        ASSERT_TRUE(owner.open(&state).ok());
+        const auto* prepared = owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL);
+        ASSERT_NE(nullptr, prepared);
+        ObjectPool pool;
+        ExprContext* clone = nullptr;
+        ASSERT_TRUE(owner.clone(&state, &pool, &clone).ok());
+        EXPECT_EQ(prepared, clone->fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        auto result = expr.evaluate_checked(clone, nullptr);
+        ASSERT_TRUE(result.ok()) << result.status();
+        expect_geometry(*result, id == 120341 ? "POLYGON ((2 0,4 0,4 4,2 4,2 0))" : "POLYGON ((0 0,6 0,6 4,0 4,0 0))");
+        clone->close(&state);
+        EXPECT_EQ(prepared, owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        right.next = geometries({empty});
+        auto second = expr.evaluate_checked(&owner, nullptr);
+        ASSERT_TRUE(second.ok()) << second.status();
+        expect_geometry(*second, id == 120341 ? empty : square);
+        owner.close(&state);
+        EXPECT_EQ(nullptr, owner.fn_context(0)->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        owner.close(&state);
+    }
 }
 
 TEST(GeoOverlayTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
@@ -649,4 +654,87 @@ TEST(GeoOverlayTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
     EXPECT_EQ(3, checkpoints);
 }
 
+TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
+    auto fn = GeoFunctions::st_geometry_intersection;
+    auto ctx = context();
+    expect_geometry(run(fn, square, shifted), "POLYGON ((2 0,4 0,4 4,2 4,2 0))");
+    expect_geometry(run(fn, square, empty), empty);
+    auto edge = run(fn, square, "POLYGON ((4 0,8 0,8 4,4 4,4 0))");
+    auto line = decoded(edge);
+    ASSERT_EQ(WkbGeometryType::LINESTRING, line.type);
+    ASSERT_EQ(2, line.coordinates.size());
+    EXPECT_EQ(4, line.coordinates[0].x);
+    EXPECT_EQ(4, line.coordinates[1].x);
+    EXPECT_EQ(4, std::abs(line.coordinates[1].y - line.coordinates[0].y));
+    auto point = run(fn, square, "POLYGON ((4 4,5 4,5 5,4 5,4 4))");
+    ASSERT_EQ(WkbGeometryType::POINT, decoded(point).type);
+    EXPECT_EQ((std::vector<WkbCoordinate>{{4, 4}}), decoded(point).coordinates);
+    for (const auto& type : {geo_type(), geo_type("EPSG:4326")}) {
+        auto typed_ctx = context(type);
+        auto result = fn(typed_ctx.get(), {geometries({square}, type), geometries({shifted}, type)});
+        ASSERT_TRUE(result.ok()) << result.status();
+        const auto* data = down_cast<const GeoColumn*>(ColumnHelper::get_data_column(*result));
+        EXPECT_EQ(type.geo_type.value(), data->descriptor().type);
+        EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
+    }
+}
+TEST(GeoOverlayTest, IntersectionMixedCollectionFeedsMeasurements) {
+    auto result =
+            run(GeoFunctions::st_geometry_intersection,
+                "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),((10 0,12 0,12 2,10 2,10 0)),((20 0,22 0,22 2,20 2,20 0)))",
+                "MULTIPOLYGON (((2 0,6 0,6 4,2 4,2 0)),((12 0,14 0,14 2,12 2,12 0)),((22 2,24 2,24 4,22 4,22 2)))");
+    ASSERT_EQ(WkbGeometryType::GEOMETRYCOLLECTION, decoded(result).type);
+    ASSERT_EQ(3, decoded(result).children.size());
+    auto area = GeoFunctions::st_geometry_area(nullptr, {result});
+    auto length = GeoFunctions::st_geometry_length(nullptr, {result});
+    auto valid = GeoFunctions::st_geometry_is_valid(nullptr, {result});
+    ASSERT_TRUE(area.ok());
+    ASSERT_TRUE(length.ok());
+    ASSERT_TRUE(valid.ok());
+    EXPECT_DOUBLE_EQ(8, ColumnViewer<TYPE_DOUBLE>(*area).value(0));
+    EXPECT_DOUBLE_EQ(2, ColumnViewer<TYPE_DOUBLE>(*length).value(0));
+    EXPECT_TRUE(ColumnViewer<TYPE_BOOLEAN>(*valid).value(0));
+}
+TEST(GeoOverlayTest, IntersectionPreparedConstantsAcrossNullableAndBothConstantBatches) {
+    auto fn = GeoFunctions::st_geometry_intersection;
+    for (size_t side : {0, 1}) {
+        auto ctx = context();
+        auto fixed = ConstColumn::create(geometries({square}), 3);
+        ctx->set_constant_columns(side == 0 ? Columns{fixed, nullptr} : Columns{nullptr, fixed});
+        ASSERT_TRUE(GeoFunctions::native_geo_overlay_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+        auto batch = geometries({shifted, "POLYGON ((4 0,8 0,8 4,4 4,4 0))", nullptr});
+        auto result = fn(ctx.get(), side == 0 ? Columns{fixed, batch} : Columns{batch, fixed});
+        ASSERT_TRUE(result.ok()) << result.status();
+        ASSERT_EQ(3, (*result)->size());
+        EXPECT_TRUE((*result)->is_null(2));
+        EXPECT_EQ(WkbGeometryType::POLYGON, decoded(*result, 0).type);
+        EXPECT_EQ(WkbGeometryType::LINESTRING, decoded(*result, 1).type);
+        auto moving = ConstColumn::create(geometries({shifted}), 3);
+        auto constant = fn(ctx.get(), side == 0 ? Columns{fixed, moving} : Columns{moving, fixed});
+        ASSERT_TRUE(constant.ok()) << constant.status();
+        EXPECT_TRUE((*constant)->is_constant());
+        EXPECT_EQ(3, (*constant)->size());
+        expect_geometry(*constant, "POLYGON ((2 0,4 0,4 4,2 4,2 0))");
+        ASSERT_TRUE(GeoFunctions::native_geo_overlay_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    }
+}
+TEST(GeoOverlayTest, IntersectionPreservesNullPolicyAndRejectsInvalidInputsAndCrs) {
+    auto fn = GeoFunctions::st_geometry_intersection;
+    auto ctx = context();
+    auto rows = fn(ctx.get(), {geometries({nullptr, square}), geometries({square, nullptr})});
+    ASSERT_TRUE(rows.ok());
+    EXPECT_TRUE((*rows)->is_null(0));
+    EXPECT_TRUE((*rows)->is_null(1));
+    auto bad = ConstColumn::create(geometries({"POINT (0 0)"}), 1);
+    ctx->set_constant_columns({bad, nullptr});
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    auto skipped = fn(ctx.get(), {bad, ColumnHelper::create_const_null_column(1)});
+    ASSERT_TRUE(skipped.ok());
+    EXPECT_TRUE((*skipped)->only_null());
+    EXPECT_FALSE(fn(ctx.get(), {bad, geometries({square})}).ok());
+    ASSERT_TRUE(GeoFunctions::native_geo_overlay_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    for (const char* input : {"LINESTRING (0 0,1 1)", "GEOMETRYCOLLECTION EMPTY", "POLYGON ((0 0,4 4,0 4,4 0,0 0))"})
+        EXPECT_FALSE(fn(ctx.get(), {geometries({input}), geometries({empty})}).ok());
+    EXPECT_FALSE(fn(ctx.get(), {geometries({square}), geometries({square}, geo_type("EPSG:4326"))}).ok());
+}
 } // namespace starrocks
