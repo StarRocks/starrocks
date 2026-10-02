@@ -14,6 +14,7 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "base/coding.h"
 #include "base/simd/gather.h"
 #include "base/simd/simd.h"
 #include "cache/scan/shared_buffered_input_stream.h"
@@ -272,6 +273,10 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             CompoundNodeType pred_relation,
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
+    // On a Parquet Modular Encryption file the ColumnIndex and OffsetIndex are encrypted as their own
+    // modules (kColumnIndex / kOffsetIndex). Both are decrypted below, under the module AAD for this row
+    // group and column, before the thrift parser sees them, so encrypted scans prune pages like
+    // plaintext ones.
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     // ColumnIndex min/max is undefined for GEO too; do not read or prune from it.
     if (get_column_parquet_field() != nullptr && has_geo_annotation(get_column_parquet_field()->schema_element)) {
@@ -288,8 +293,20 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     uint32_t column_index_length = chunk_meta->column_index_length;
 
     std::vector<uint8_t> page_index_data;
-    page_index_data.reserve(column_index_length);
+    page_index_data.resize(column_index_length);
     RETURN_IF_ERROR(_opts.file->read_at_fully(column_index_offset, page_index_data.data(), column_index_length));
+
+    // PME encrypts the column index as its own module, so decrypt before parsing on an encrypted
+    // file. The plaintext replaces the buffer so the deserialization below is shared.
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        std::string plaintext;
+        RETURN_IF_ERROR(decrypt_metadata_module(*_opts.file_meta_data, _opts.parquet_encryption_info,
+                                                kPmeModuleColumnIndex, _opts.row_group_ordinal,
+                                                static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                                page_index_data.data(), column_index_length, &plaintext));
+        page_index_data.assign(plaintext.begin(), plaintext.end());
+        column_index_length = static_cast<uint32_t>(page_index_data.size());
+    }
 
     tparquet::ColumnIndex column_index;
     RETURN_IF_ERROR(deserialize_thrift_msg(page_index_data.data(), &column_index_length, TProtocolType::COMPACT,
@@ -361,7 +378,31 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     return true;
 }
 
+Status RawColumnReader::_init_encrypted_column_bloom_filter(int offset, BloomFilter& bloom_filter) const {
+    // The work lives in metadata.cpp as a free function so it can be tested without a column reader:
+    // StarRocks' writer emits no bloom filters, so this path is only reachable on a file another
+    // engine wrote and a writer round trip cannot reach it at all.
+    return read_encrypted_bloom_filter(_opts.file, offset, *_opts.file_meta_data, _opts.parquet_encryption_info,
+                                       _opts.row_group_ordinal,
+                                       static_cast<int16_t>(get_column_parquet_field()->physical_column_index),
+                                       _bloom_filter_has_null_byte(), &bloom_filter);
+}
+
+// Whether to tell the bloom filter this column may contain nulls, so that `col IS NULL` is not
+// filtered away. Shared by the plaintext and encrypted paths.
+char RawColumnReader::_bloom_filter_has_null_byte() const {
+    if (get_chunk_metadata()->meta_data.__isset.statistics &&
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        return get_chunk_metadata()->meta_data.statistics.null_count > 0 ? 1 : 0;
+    }
+    // Default to "has null" so a nullable column is not wrongly pruned.
+    return get_column_parquet_field()->is_nullable ? 1 : 0;
+}
+
 Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter& bloom_filter) const {
+    if (_opts.file_meta_data != nullptr && _opts.file_meta_data->is_encrypted()) {
+        return _init_encrypted_column_bloom_filter(offset, bloom_filter);
+    }
     std::vector<char> bloom_filter_data;
     tparquet::BloomFilterHeader header;
     uint32_t header_len = SBBF_HEADER_SIZE_ESTIMATE;
@@ -381,18 +422,7 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(
                 _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
     }
-    if (get_chunk_metadata()->meta_data.__isset.statistics &&
-        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
-        if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
-            bloom_filter_data.back() = 1;
-        } else {
-            bloom_filter_data.back() = 0;
-        }
-    } else if (get_column_parquet_field()->is_nullable) {
-        bloom_filter_data.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
-    } else {
-        bloom_filter_data.back() = 0;
-    }
+    bloom_filter_data.back() = _bloom_filter_has_null_byte();
 
     return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, Hasher::HashStrategy::XXHASH64,
                              0);
