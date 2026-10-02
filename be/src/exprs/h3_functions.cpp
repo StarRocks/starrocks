@@ -105,6 +105,7 @@ StatusOr<H3Limits> h3_limits() {
 
 Status h3_checkpoint(FunctionContext* context) {
     if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
         RETURN_IF_ERROR(context->state()->check_query_state("H3 function"));
         RETURN_IF_ERROR(context->state()->check_mem_limit("H3 function"));
     }

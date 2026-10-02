@@ -36,6 +36,7 @@
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -2128,6 +2129,21 @@ TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
     auto empty_result = GeoFunctions::h3_polygon_to_cells(nullptr, {empty, res3});
     ASSERT_TRUE(empty_result.ok()) << empty_result.status();
     EXPECT_TRUE((*empty_result)->get(0).get_array().empty());
+}
+
+TEST_F(geographyFunctionsTest, h3PolygonToCellsCancelled) {
+    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
+    auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
+            &state, nullptr, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)),
+            {geography_type(), TypeDescriptor(TYPE_INT)}));
+
+    state.set_is_cancelled(true);
+    auto result = GeoFunctions::h3_polygon_to_cells(context.get(), {polygon, resolution});
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_cancelled()) << result.status();
 }
 
 TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
