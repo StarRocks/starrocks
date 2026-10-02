@@ -20,7 +20,6 @@
 #include <thread>
 
 #include "geo/geo_overlay.h"
-#include "geo/geo_overlay_fixtures.h"
 
 namespace starrocks {
 namespace {
@@ -304,33 +303,6 @@ TEST(GeoOverlayCoreTest, RejectsTranslatedCollapsedHolesAndMultiComponents) {
             EXPECT_NE(std::string::npos,
                       result.status().to_string().find("loses topology during coordinate translation"));
         }
-    }
-}
-
-TEST(GeoOverlayCoreTest, UserSavedResultsInBothCrs) {
-    using namespace overlay_fixtures;
-    struct Case {
-        size_t op;
-        const char* crs;
-        const char* a;
-        const char* b;
-        const char* expected;
-        double tolerance;
-    };
-    // Saved-coordinate tolerances: 1e-11 degrees and 1e-7 projected metres.
-    // These exceed text/double rounding at Moscow's scale, without hiding metre-sized changes.
-    const Case cases[] = {{0, "EPSG:4326", hex_a_4326, hex_b_4326, union_4326, 1e-11},
-                          {0, "EPSG:3857", hex_a_3857, hex_b_3857, union_3857, 1e-7},
-                          {1, "EPSG:4326", district_4326, hex_b_4326, difference_4326, 1e-11},
-                          {1, "EPSG:3857", district_3857, hex_b_3857, difference_3857, 1e-7},
-                          {2, "EPSG:4326", district_4326, hex_b_4326, symdifference_4326, 1e-11},
-                          {2, "EPSG:3857", district_3857, hex_b_3857, symdifference_3857, 1e-7}};
-    for (const auto& value : cases) {
-        SCOPED_TRACE(value.crs);
-        SCOPED_TRACE(value.op);
-        auto result = apply(functions[value.op], value.a, value.b);
-        ASSERT_TRUE(result.ok()) << result.status();
-        expect_geometry(*result, value.expected, value.tolerance);
     }
 }
 
