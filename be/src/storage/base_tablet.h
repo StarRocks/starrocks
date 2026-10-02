@@ -127,7 +127,6 @@ public:
 protected:
     virtual void on_shutdown() {}
 
-protected:
     void _gen_tablet_path();
 
     TabletState _state = TABLET_NOTREADY;
