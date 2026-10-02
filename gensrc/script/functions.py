@@ -1185,19 +1185,6 @@ vectorized_functions = [
      "GeoFunctions::native_geo_transform_close"],
 
     # reserve 120311-120314 for future ST_Transform overloads
-    # Contract 5.3 polygon overlays: base slot reserved for future GEOGRAPHY overloads.
-    # Reserved 120340: ST_Intersection(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
-    # Reserved 120341: ST_Intersection(GEOMETRY, GEOMETRY) -> GEOMETRY (full intersection follow-up).
-    # Reserved 120350: ST_Union(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
-    [120351, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
-     "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
-    # Reserved 120360: ST_Difference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
-    [120361, "ST_Difference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
-     "GeoFunctions::st_geometry_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
-    # Reserved 120370: ST_SymDifference(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
-    [120371, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
-     "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
-
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],

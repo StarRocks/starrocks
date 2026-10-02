@@ -131,13 +131,3 @@ The native overloads do not renumber or replace the existing `VARCHAR` functions
 For a rolling upgrade, upgrade BEs before FEs. These functions use the ordinary stable function-ID dispatch and do not introduce a separate GEO version gate. A newer FE with an older BE is not a supported upgrade order.
 
 The contract is enforced by focused FE analyzer tests for overload resolution, return types, legacy compatibility, and function IDs, and by BE registry tests for every native ID. Existing BE function tests cover constant, nullable, varying, `EMPTY`, malformed-input, family, dimension, CRS, and descriptor behavior.
-
-## Polygon overlays
-
-Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in both 4326 and 3857. NULL propagates. One component returns POLYGON, multiple return MULTIPOLYGON, empty returns POLYGON EMPTY. Invalid topology is an error. See the linked pages for precision and resource limits.
-
-| Signature | Function ID | Reference |
-| --- | ---: | --- |
-| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
-| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
-| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |

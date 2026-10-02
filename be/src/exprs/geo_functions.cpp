@@ -15,7 +15,6 @@
 #include "exprs/geo_functions.h"
 
 #include <algorithm>
-#include <array>
 #include <charconv>
 #include <cmath>
 #include <limits>
@@ -33,10 +32,8 @@
 #include "column/nullable_column.h"
 #include "common/logging.h"
 #include "geo/geo_measurements.h"
-#include "geo/geo_overlay.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -908,84 +905,6 @@ StatusOr<MutableColumnPtr> create_geometry_result(FunctionContext* context) {
     auto data = GeoColumn::create(std::move(descriptor));
     RETURN_IF_ERROR(check_geometry_boundary(*data));
     return NullableColumn::create(std::move(data), NullColumn::create());
-}
-
-Status overlay_checkpoint(FunctionContext* context) {
-    if (context != nullptr && context->state() != nullptr) {
-        RETURN_IF_CANCELLED(context->state());
-        RETURN_IF_ERROR(context->state()->check_query_state("Polygon overlay"));
-        RETURN_IF_ERROR(context->state()->check_mem_limit("Polygon overlay"));
-    }
-    return Status::OK();
-}
-
-struct NativeGeoOverlayArgument {
-    bool constant = false;
-    Status status = Status::OK();
-    std::unique_ptr<PreparedGeoPolygon> polygon;
-};
-
-struct NativeGeoOverlayState {
-    std::array<NativeGeoOverlayArgument, 2> arguments;
-};
-
-StatusOr<const PreparedGeoPolygon*> overlay_polygon(const GeoInput& input, size_t row,
-                                                    const NativeGeoOverlayArgument* prepared,
-                                                    std::unique_ptr<PreparedGeoPolygon>* batch_constant,
-                                                    std::unique_ptr<PreparedGeoPolygon>* varying) {
-    if (prepared != nullptr && prepared->constant) {
-        RETURN_IF_ERROR(prepared->status);
-        return prepared->polygon.get();
-    }
-    auto* target = input.constant ? batch_constant : varying;
-    if (!input.constant || *target == nullptr) {
-        ASSIGN_OR_RETURN(*target, PreparedGeoPolygon::prepare(input.wkb(row)));
-    }
-    return target->get();
-}
-
-StatusOr<ColumnPtr> geo_overlay(FunctionContext* context, const Columns& columns, GeoOverlayKind kind) {
-    RETURN_IF_ERROR(overlay_checkpoint(context));
-    if (context == nullptr) return Status::InvalidArgument("Polygon overlay requires a function context");
-    const size_t size = columns[0]->size();
-    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
-    ASSIGN_OR_RETURN(auto left, geo_input<TYPE_GEOMETRY>(columns[0]));
-    ASSIGN_OR_RETURN(auto right, geo_input<TYPE_GEOMETRY>(columns[1]));
-    if (!is_geo_compute_compatible(left.data->descriptor(), right.data->descriptor())) {
-        return Status::InvalidArgument("Polygon overlay requires compatible GEOMETRY CRS descriptors");
-    }
-    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
-    const auto* output =
-            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
-    if (!is_geo_compute_compatible(left.data->descriptor(), output->descriptor())) {
-        return Status::InvalidArgument("Polygon overlay return CRS does not match its inputs");
-    }
-    const auto* prepared = reinterpret_cast<const NativeGeoOverlayState*>(
-            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    std::array<std::unique_ptr<PreparedGeoPolygon>, 2> batch_constants;
-    const bool constant = left.constant && right.constant;
-    const size_t rows = constant ? 1 : size;
-    for (size_t row = 0; row < rows; ++row) {
-        RETURN_IF_ERROR(overlay_checkpoint(context));
-        if (left.is_null(row) || right.is_null(row)) {
-            result->append_nulls(1);
-            continue;
-        }
-        std::array<std::unique_ptr<PreparedGeoPolygon>, 2> varying;
-        ASSIGN_OR_RETURN(const auto* a, overlay_polygon(left, row, prepared ? &prepared->arguments[0] : nullptr,
-                                                        &batch_constants[0], &varying[0]));
-        ASSIGN_OR_RETURN(const auto* b, overlay_polygon(right, row, prepared ? &prepared->arguments[1] : nullptr,
-                                                        &batch_constants[1], &varying[1]));
-        RETURN_IF_ERROR(overlay_checkpoint(context));
-        ASSIGN_OR_RETURN(auto geometry, a->overlay(*b, kind, [&]() { return overlay_checkpoint(context); }));
-        RETURN_IF_ERROR(overlay_checkpoint(context));
-        std::string wkb;
-        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
-        result->append_datum(Datum(Slice(wkb)));
-        RETURN_IF_ERROR(overlay_checkpoint(context));
-    }
-    if (constant) return ConstColumn::create(std::move(result), size);
-    return result;
 }
 
 template <LogicalType InputType>
@@ -2117,49 +2036,6 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_transform(FunctionContext* context
     }
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;
-}
-
-Status GeoFunctions::native_geo_overlay_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope != FunctionContext::FRAGMENT_LOCAL ||
-        (!context->is_constant_column(0) && !context->is_constant_column(1)))
-        return Status::OK();
-    RETURN_IF_ERROR(overlay_checkpoint(context));
-    auto state = std::make_unique<NativeGeoOverlayState>();
-    for (size_t argument = 0; argument < 2; ++argument) {
-        auto& prepared = state->arguments[argument];
-        prepared.constant = context->is_constant_column(argument);
-        if (!prepared.constant) continue;
-        const auto& column = context->get_constant_column(argument);
-        if (column->only_null()) continue;
-        // Defer constant input errors until a non-NULL row actually uses this operand.
-        auto input = geo_input<TYPE_GEOMETRY>(column);
-        prepared.status = input.status();
-        if (!prepared.status.ok()) continue;
-        auto polygon = PreparedGeoPolygon::prepare(input->wkb(0));
-        prepared.status = polygon.status();
-        if (prepared.status.ok()) prepared.polygon = std::move(polygon.value());
-        RETURN_IF_ERROR(overlay_checkpoint(context));
-    }
-    context->set_function_state(scope, state.release());
-    return Status::OK();
-}
-
-Status GeoFunctions::native_geo_overlay_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        delete reinterpret_cast<NativeGeoOverlayState*>(context->get_function_state(scope));
-        context->set_function_state(scope, nullptr);
-    }
-    return Status::OK();
-}
-
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_union(FunctionContext* context, const Columns& columns) {
-    return geo_overlay(context, columns, GeoOverlayKind::UNION);
-}
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_difference(FunctionContext* context, const Columns& columns) {
-    return geo_overlay(context, columns, GeoOverlayKind::DIFFERENCE);
-}
-StatusOr<ColumnPtr> GeoFunctions::st_geometry_sym_difference(FunctionContext* context, const Columns& columns) {
-    return geo_overlay(context, columns, GeoOverlayKind::SYMMETRIC_DIFFERENCE);
 }
 
 } // namespace starrocks
