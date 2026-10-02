@@ -1,0 +1,50 @@
+-- name: test_native_geo_polygon_overlays
+
+SELECT ST_Area(ST_Union(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857'))), ST_SRID(ST_Union(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')));
+-- result:
+24	3857
+-- !result
+SELECT ST_AsText(ST_Union(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857')));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_AsText(ST_Union(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), NULL));
+-- result:
+None
+-- !result
+SELECT ST_Area(ST_Difference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857'))), ST_SRID(ST_Difference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')));
+-- result:
+8	3857
+-- !result
+SELECT ST_AsText(ST_Difference(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857')));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_AsText(ST_Difference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), NULL));
+-- result:
+None
+-- !result
+SELECT ST_Area(ST_SymDifference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857'))), ST_SRID(ST_SymDifference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')));
+-- result:
+16	3857
+-- !result
+SELECT ST_AsText(ST_SymDifference(ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'), ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857')));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_AsText(ST_SymDifference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), NULL));
+-- result:
+None
+-- !result
+SELECT ST_GeometryType(ST_SymDifference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')));
+-- result:
+ST_MultiPolygon
+-- !result
+SELECT ST_GeometryType(ST_Union(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((2 0,6 0,6 4,2 4,2 0))', 'EPSG:3857')));
+-- result:
+ST_Polygon
+-- !result
+SELECT ST_AsText(ST_Difference(ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((0 0,4 0,4 4,0 4,0 0))', 'EPSG:3857')));
+-- result:
+POLYGON EMPTY
+-- !result

@@ -131,3 +131,13 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 ローリングアップグレードでは、FE より先に BE をアップグレードしてください。これらの関数は通常の安定した関数 ID ディスパッチを使用し、独立した GEO バージョンゲートは導入しません。新しい FE と古い BE の組み合わせは、サポートされるアップグレード順序ではありません。
 
 この契約は、オーバーロード解決、戻り型、レガシー互換性、関数 ID を確認する FE analyzer テストと、各ネイティブ ID を確認する BE registry テストで検証されます。既存の BE 関数テストは、定数、Nullable、可変入力、`EMPTY`、不正入力、ファミリ、次元、CRS、ディスクリプタの動作を網羅します。
+
+## ポリゴン overlay
+
+互換性のある CRS を持つネイティブ XY ポリゴンとマルチポリゴンを処理します。4326 と 3857 はどちらも直交座標の意味を持ちます。NULL は NULL を返します。成分が 1 つの場合は POLYGON、複数の場合は MULTIPOLYGON、空の場合は POLYGON EMPTY です。無効なトポロジーはエラーです。精度とリソース制限はリンク先に記載しています。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
+| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
+| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
