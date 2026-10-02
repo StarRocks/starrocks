@@ -678,6 +678,33 @@ TEST(GeoOverlayTest, IntersectionReturnsAreaLinePointAndEmptyWithInputCrs) {
         EXPECT_EQ(GEO_DIMENSION_XY, data->descriptor().storage.dimension);
     }
 }
+TEST(GeoOverlayTest, IntersectionCrossingsRemainPolygonForDownstreamOverlays) {
+    const char* a = "POLYGON ((0 0,8 -7,6 2,0 0))";
+    const char* b = "POLYGON ((-2 0,0 0,8 2,-2 0))";
+    const char* expected =
+            "POLYGON ((3 1,0 0,6.105263157894737 1.5263157894736843,"
+            "6.085106382978723 1.6170212765957446,3 1))";
+    for (bool reverse : {false, true})
+        for (bool prepared : {false, true}) {
+            auto ctx = context();
+            Columns inputs{geometries({reverse ? b : a}), geometries({reverse ? a : b})};
+            if (prepared) {
+                for (auto& column : inputs) column = ConstColumn::create(column, 1);
+                ctx->set_constant_columns(inputs);
+                ASSERT_TRUE(GeoFunctions::native_geo_overlay_prepare(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+            }
+            auto result = GeoFunctions::st_geometry_intersection(ctx.get(), inputs);
+            ASSERT_TRUE(result.ok()) << result.status();
+            expect_geometry(*result, expected);
+            auto union_ctx = context();
+            auto united = GeoFunctions::st_geometry_union(union_ctx.get(), {*result, geometries({empty})});
+            EXPECT_TRUE(united.ok()) << united.status();
+            if (united.ok()) expect_geometry(*united, expected);
+            if (prepared) {
+                ASSERT_TRUE(GeoFunctions::native_geo_overlay_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+            }
+        }
+}
 TEST(GeoOverlayTest, IntersectionMixedCollectionFeedsMeasurements) {
     auto result =
             run(GeoFunctions::st_geometry_intersection,

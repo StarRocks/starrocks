@@ -40,3 +40,11 @@ WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,8 0,8 8,0 8,0 0
 -- result:
 ST_LineString	16.0	0.0
 -- !result
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((0 0,8 -7,6 2,0 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((-2 0,0 0,8 2,-2 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_GeometryType(ST_Union(g, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'))) FROM t;
+-- result:
+ST_Polygon	ST_Polygon
+-- !result
+WITH t AS (SELECT ST_Intersection(ST_GeomFromText('POLYGON ((-2 0,0 0,8 2,-2 0))', 'EPSG:3857'), ST_GeomFromText('POLYGON ((0 0,8 -7,6 2,0 0))', 'EPSG:3857')) AS g) SELECT ST_GeometryType(g), ST_GeometryType(ST_Union(g, ST_GeomFromText('POLYGON EMPTY', 'EPSG:3857'))) FROM t;
+-- result:
+ST_Polygon	ST_Polygon
+-- !result
