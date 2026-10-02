@@ -14,10 +14,12 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "cache/cache_options.h"
 #include "cache/mem_cache/page_handle_fwd.h"
+#include "common/bloom_filter.h"
 #include "common/status.h"
 #include "formats/parquet/schema.h"
 #include "formats/scan_context.h"
@@ -28,6 +30,10 @@
 namespace starrocks {
 class StoragePageCache;
 } // namespace starrocks
+
+namespace starrocks {
+class TParquetEncryptionInfo;
+}
 
 namespace starrocks::parquet {
 
@@ -104,14 +110,100 @@ public:
 
     const ApplicationVersion& writer_version() const { return _writer_version; }
 
+    // Immutable Parquet Modular Encryption essentials for this file, populated when
+    // the footer was encrypted (Iceberg encrypted table). Each reader builds its own
+    // decryptor from these (the parquet Decryptor mutates AAD per page and must not be shared).
+    //
+    // Deliberately holds NO key material. This object is inserted into the process-wide
+    // metadata cache (FileMetaDataParser::get_file_metadata), keyed only by path, mtime and
+    // size -- so caching the DEK here would (a) retain plaintext key material in a shared,
+    // LRU-evicted, never-zeroized cache for every encrypted file ever scanned, and (b) let a
+    // cache hit skip the "no decryption key was provided by the planner" refusal, which lives
+    // on the cache-miss path. The DEK travels per scan range instead and is read from
+    // ColumnReaderOptions::parquet_encryption_info at decryptor-build time, so that check is
+    // unconditional. Everything below is already recoverable from the file itself.
+    struct EncryptionContext {
+        std::string key_metadata;    // file's footer key metadata (from FileCryptoMetaData)
+        std::string aad_file_unique; // file AAD token (from FileCryptoMetaData)
+        std::string aad_prefix;      // effective prefix: stored in the file, or supplied by FE
+        int32_t algorithm = 0;       // parquet::ParquetCipher::type as int
+    };
+    bool is_encrypted() const { return _encryption_ctx.has_value(); }
+    const std::optional<EncryptionContext>& encryption_ctx() const { return _encryption_ctx; }
+    void set_encryption_ctx(EncryptionContext ctx) { _encryption_ctx = std::move(ctx); }
+
 private:
     tparquet::FileMetaData _t_metadata;
     uint64_t _num_rows{0};
     SchemaDescriptor _schema;
     ApplicationVersion _writer_version;
+    std::optional<EncryptionContext> _encryption_ctx;
 };
 
 using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
+
+// The few FileCryptoMetaData fields the reader needs, parsed out of the PLAINTEXT crypto footer.
+//
+// Declared here so it can be tested directly: this parser reads the one part of an encrypted file
+// that sits OUTSIDE the AEAD, so a corrupt or hostile footer reaches it with nothing authenticated
+// yet. Its bounds -- struct nesting depth, list length, and every read against the buffer end -- are
+// the only thing between a bad file and the scan thread.
+struct ParsedCryptoMetadata {
+    int32_t algorithm = 0; // ::parquet::ParquetCipher::type as int
+    std::string aad_prefix;
+    // True when the writer deliberately kept the AAD prefix OUT of the file, so the reader must
+    // supply it. Iceberg's standard writer does this and records the prefix in key_metadata instead;
+    // that is what makes whole-file substitution detectable.
+    bool supply_aad_prefix = false;
+    std::string aad_file_unique;
+    std::string key_metadata;
+    size_t consumed = 0;
+};
+
+// Parses `n` bytes of FileCryptoMetaData. Returns Corruption rather than throwing or crashing on any
+// malformed input.
+Status parse_file_crypto_metadata(const uint8_t* data, size_t n, ParsedCryptoMetadata* out);
+
+// Parquet Modular Encryption module types, mirroring arrow's encryption_internal.h. Duplicated as
+// plain constants so callers can name a module without including arrow's private encryption headers
+// (these values are fixed by parquet-format; they are part of the on-disk AAD, not an arrow detail).
+constexpr int8_t kPmeModuleColumnIndex = 6;
+constexpr int8_t kPmeModuleOffsetIndex = 7;
+constexpr int8_t kPmeModuleBloomFilterHeader = 8;
+constexpr int8_t kPmeModuleBloomFilterBitset = 9;
+
+// Reads and decrypts a PME-encrypted Parquet bloom filter into `bloom_filter`.
+//
+// A bloom filter is TWO independently encrypted modules laid out back to back, each framed as
+// [4-byte ciphertext length][nonce][ciphertext][tag]. The header module must be decrypted first
+// because its plaintext carries numBytes, and its own length prefix is what locates the bitset
+// module. Those prefixes sit OUTSIDE the AEAD, so each is bounded before it is used to size
+// anything, and the decrypted bitset length is checked against the numBytes the (authenticated)
+// header declares.
+//
+// A free function rather than a RawColumnReader member so it can be tested directly: StarRocks' own
+// writer emits no bloom filters, so this path is only reachable by reading a file another engine
+// wrote, and a writer round trip cannot exercise it at all.
+//
+// `has_null_byte` is the trailing byte BloomFilter::init expects, carrying "this column has nulls".
+Status read_encrypted_bloom_filter(RandomAccessFile* file, int64_t offset, const FileMetaData& file_metadata,
+                                   const TParquetEncryptionInfo* encryption_info, int16_t row_group_ordinal,
+                                   int16_t column_ordinal, char has_null_byte, BloomFilter* bloom_filter);
+
+// Decrypt one Parquet Modular Encryption *metadata* module of this file -- the page index
+// (kColumnIndex / kOffsetIndex) or a bloom filter part -- into `plaintext`.
+//
+// Each module carries its own AAD, derived from (module type, row group, column, page). Metadata
+// modules use the file's footer key with GCM even in a GCM_CTR file, and pass kNonPageOrdinal, so
+// they cannot be decrypted with the page-data decryptor. arrow writes them length-prefixed
+// ([4-byte len][nonce][ciphertext][tag]) and `ciphertext_len` is the whole module, which the
+// ColumnChunk metadata gives exactly (column_index_length / offset_index_length).
+//
+// Declared here, next to EncryptionContext, so callers do not need the private arrow encryption
+// headers; the DEK comes from the scan range because it is deliberately not cached with the footer.
+Status decrypt_metadata_module(const FileMetaData& file_metadata, const TParquetEncryptionInfo* encryption_info,
+                               int8_t module_type, int16_t row_group_ordinal, int16_t column_ordinal,
+                               const uint8_t* ciphertext, size_t ciphertext_len, std::string* plaintext);
 
 // FileMetaDataParser parse FileMetaData through below way:
 // 1. try to reuse SplitContext's FileMetaData
@@ -130,7 +222,12 @@ public:
 private:
     Status _parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);
     StatusOr<uint32_t> _get_footer_read_size() const;
-    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
+    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff, bool* is_encrypted) const;
+    // Decrypt and deserialize an encrypted (PARE) Parquet footer using the per-file
+    // DEK supplied by FE on the scan range. footer_len is the combined length of the
+    // FileCryptoMetaData plus the encrypted FileMetaData (the value before the magic).
+    Status _decrypt_and_deserialize_footer(const std::vector<char>& footer_buffer, uint32_t footer_len,
+                                           FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);
     RandomAccessFile* _file = nullptr;
     const FormatScanContext* _scanner_ctx = nullptr;
     StoragePageCache* _cache = nullptr;

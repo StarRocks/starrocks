@@ -51,6 +51,7 @@ import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TIcebergDeleteFile;
 import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TParquetEncryptionInfo;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
@@ -65,6 +66,9 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
+import org.apache.iceberg.encryption.EncryptionManager;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.ContentFileUtil;
 import org.apache.iceberg.util.StructLikeWrapper;
@@ -315,6 +319,15 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
             target.setFull_path(deleteFile.path().toString());
             target.setFile_content(TIcebergFileContent.POSITION_DELETES);
             target.setLength(deleteFile.fileSizeInBytes());
+            // A position-delete file in an encrypted table is itself encrypted, with its own
+            // per-file key. It cannot reuse the data file's key, so carry its key material
+            // separately or the BE has no way to open it.
+            if (deleteFile.keyMetadata() != null && deleteFile.keyMetadata().remaining() > 0) {
+                TParquetEncryptionInfo deleteEncInfo = buildEncryptionInfo(deleteFile);
+                if (deleteEncInfo != null) {
+                    target.setParquet_encryption_info(deleteEncInfo);
+                }
+            }
             posDeleteFiles.add(target);
         }
 
@@ -435,6 +448,21 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         if (firstRowId != null) {
             hdfsScanRange.setFirst_row_id(firstRowId);
+        }
+
+        // Table-level gate FIRST, unconditionally. It must not sit inside the key-metadata branch
+        // below: the case it exists to catch is a table that declares encryption while the catalog
+        // supplies a plaintext manager, and such a table's files are written WITHOUT key metadata --
+        // so they would skip the branch and be served silently, which is the exact fail-open the
+        // gate is for.
+        IcebergEncryption.checkReadSupported(table.getNativeTable(), table.getName());
+
+        // Attach encryption info if the file has key metadata (encrypted file)
+        if (file.keyMetadata() != null && file.keyMetadata().remaining() > 0) {
+            TParquetEncryptionInfo encInfo = buildEncryptionInfo(file);
+            if (encInfo != null) {
+                hdfsScanRange.setParquet_encryption_info(encInfo);
+            }
         }
 
         return hdfsScanRange;
@@ -648,4 +676,51 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
         return tableLocation;
     }
+
+    /**
+     * Recover the per-file data key for an encrypted Iceberg file and hand it to BE.
+     *
+     * <p>The key is read straight out of {@code StandardKeyMetadata}. It deliberately does not go
+     * through {@code EncryptionManager.decrypt()}: the standard manager returns a
+     * {@code StandardDecryptedInputFile}, which implements {@code NativeEncryptionInputFile} and
+     * <b>not</b> {@code NativelyEncryptedFile}, and exposes no {@code nativeCryptoParameters()} --
+     * so there is no file key to take from it. That is the shape of the API in Iceberg 1.11, not a
+     * gap in an older version.
+     *
+     * <p>No KMS call and no cache are needed here: in this mode the key is already present in
+     * {@code key_metadata}. Its confidentiality rests on Iceberg encrypting the manifest that
+     * carries it.
+     *
+     * <p>Fails the query rather than returning null if the key cannot be recovered: an encrypted
+     * file must never be handed to BE as though it were plaintext.
+     */
+    private TParquetEncryptionInfo buildEncryptionInfo(ContentFile<?> file) {
+        // The table-level gate runs in buildScanRange, before any per-file test -- see there for why
+        // it cannot live here.
+        EncryptionManager encMgr = table.getNativeTable().encryption();
+        if (encMgr instanceof PlaintextEncryptionManager) {
+            return null;
+        }
+        try {
+            StarRocksKeyMetadata.Parsed parsed = StarRocksKeyMetadata.parse(file.keyMetadata());
+            if (parsed.dek == null || parsed.dek.length == 0) {
+                throw new StarRocksConnectorException(
+                        "Iceberg key_metadata carries no data key for encrypted file " + file.path());
+            }
+            TParquetEncryptionInfo encInfo = new TParquetEncryptionInfo();
+            encInfo.setFile_dek(parsed.dek);
+            // v1 carries an AAD prefix that v0 does not. BE needs it whenever the file itself does
+            // not store one (supply_aad_prefix).
+            if (parsed.aadPrefix != null && parsed.aadPrefix.length > 0) {
+                encInfo.setAad_prefix(parsed.aadPrefix);
+            }
+            return encInfo;
+        } catch (StarRocksConnectorException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new StarRocksConnectorException(
+                    "failed to read Iceberg encryption key metadata for " + file.path(), e);
+        }
+    }
+
 }

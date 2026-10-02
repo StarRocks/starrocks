@@ -53,6 +53,7 @@
 #include "common/thread/threadpool.h"
 #include "common/util/misc.h"
 #include "common/util/thrift_client_cache.h"
+#include "common/util/thrift_key_redaction.h"
 #include "common/util/thrift_util.h"
 #include "compute_env/global_dict/fragment_dict_state.h"
 #include "exec/exec_env.h"
@@ -327,7 +328,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     TReportExecStatusResult res;
     Status rpc_status;
 
-    VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+    VLOG_ROW << "debug: reportExecStatus params is " << redacted_debug_string(params);
 
     rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
             _coord_addr.hostname, _coord_addr.port,
@@ -748,7 +749,7 @@ std::vector<TUniqueId> FragmentMgr::report_fragments(
             TBatchReportExecStatusResult res;
             Status rpc_status;
 
-            VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+            VLOG_ROW << "debug: reportExecStatus params is " << redacted_debug_string(params);
             rpc_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
                     fragment_exec_state->coord_addr(),
                     [&res, &report_batch](FrontendServiceConnection& client) {
