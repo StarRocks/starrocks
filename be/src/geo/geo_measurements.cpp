@@ -27,19 +27,13 @@
 #include <boost/geometry/geometries/geometries.hpp>
 #include <boost/geometry/geometries/point_xy.hpp>
 
+#include "geo/geo_planar.h"
 #include "geo/geo_types.h"
 
 namespace starrocks {
 namespace {
 
 namespace bg = boost::geometry;
-using PlanarPoint = bg::model::d2::point_xy<double>;
-using PlanarLine = bg::model::linestring<PlanarPoint>;
-using PlanarPolygon = bg::model::polygon<PlanarPoint, false, true>;
-using PlanarMultiPoint = bg::model::multi_point<PlanarPoint>;
-using PlanarMultiLine = bg::model::multi_linestring<PlanarLine>;
-using PlanarMultiPolygon = bg::model::multi_polygon<PlanarPolygon>;
-
 GeoCoordinateList coordinates(const std::vector<WkbCoordinate>& input) {
     GeoCoordinateList result;
     result.list.reserve(input.size());
@@ -71,42 +65,6 @@ bool spherical_polygon_has_valid_hole_relationships(const WkbGeometry& geometry)
 
 GeoParseStatus spherical_line(const WkbGeometry& geometry, GeoLine* output) {
     return output->from_coords(coordinates(geometry.coordinates));
-}
-
-long double signed_ring_area2(const std::vector<WkbCoordinate>& ring) {
-    if (ring.empty()) return 0;
-    const long double origin_x = ring[0].x;
-    const long double origin_y = ring[0].y;
-    long double area2 = 0;
-    for (size_t i = 1; i < ring.size(); ++i) {
-        const long double previous_x = static_cast<long double>(ring[i - 1].x) - origin_x;
-        const long double previous_y = static_cast<long double>(ring[i - 1].y) - origin_y;
-        const long double current_x = static_cast<long double>(ring[i].x) - origin_x;
-        const long double current_y = static_cast<long double>(ring[i].y) - origin_y;
-        area2 += previous_x * current_y - current_x * previous_y;
-    }
-    return area2;
-}
-
-void append_ring(const std::vector<WkbCoordinate>& input, bool ccw, PlanarPolygon::ring_type* output) {
-    const bool input_ccw = signed_ring_area2(input) > 0;
-    output->reserve(input.size());
-    if (input_ccw == ccw) {
-        for (const auto& coordinate : input) output->emplace_back(coordinate.x, coordinate.y);
-    } else {
-        for (auto it = input.rbegin(); it != input.rend(); ++it) output->emplace_back(it->x, it->y);
-    }
-}
-
-PlanarPolygon to_planar_polygon(const WkbGeometry& geometry) {
-    PlanarPolygon result;
-    if (geometry.rings.empty()) return result;
-    append_ring(geometry.rings[0], true, &result.outer());
-    result.inners().resize(geometry.rings.size() - 1);
-    for (size_t i = 1; i < geometry.rings.size(); ++i) {
-        append_ring(geometry.rings[i], false, &result.inners()[i - 1]);
-    }
-    return result;
 }
 
 PlanarLine to_planar_line(const WkbGeometry& geometry) {
