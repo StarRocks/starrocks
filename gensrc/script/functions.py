@@ -1173,6 +1173,19 @@ vectorized_functions = [
      "GeoFunctions::st_geometry_is_valid", "GeoFunctions::native_geo_unary_prepare",
      "GeoFunctions::native_geo_unary_close"],
 
+    [120300, "ST_SRID", False, False, "INT", ["GEOMETRY"],
+     "GeoFunctions::st_geometry_srid"],
+    # reserve 120301-120304 for future ST_SRID overloads
+    [120305, "ST_SetSRID", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_set_srid", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+    # reserve 120306-120309 for future ST_SetSRID overloads
+    [120310, "ST_Transform", False, False, "GEOMETRY", ["GEOMETRY", "INT"],
+     "GeoFunctions::st_geometry_transform", "GeoFunctions::native_geo_transform_prepare",
+     "GeoFunctions::native_geo_transform_close"],
+
+    # reserve 120311-120314 for future ST_Transform overloads
+
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
     [130001, 'percentile_empty', True, False, 'PERCENTILE', [], 'PercentileFunctions::percentile_empty'],

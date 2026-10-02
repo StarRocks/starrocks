@@ -102,6 +102,16 @@ These overloads support XY `POLYGON` and `MULTIPOLYGON` values. `GEOMETRY` input
 All overloads accept the seven XY OGC families and recurse through `MULTI*` and `GEOMETRYCOLLECTION` where applicable. `NULL` propagates. Measurements return zero for `EMPTY`; `ST_Centroid` returns `POINT EMPTY`; `ST_IsValid` returns `true`. Topology-invalid readable values return `false` only from `ST_IsValid`; measurements and centroid reject them. Malformed WKB and unsupported dimensions or descriptors are errors.
 
 Spherical polygon rings are orientation-independent and normalized to their smaller region; a single ring does not represent more than a hemisphere. See [ST_Area](st_area.md), [ST_Length](st_length.md), [ST_Perimeter](st_perimeter.md), [ST_Centroid](st_centroid.md), and [ST_IsValid](st_isvalid.md).
+## CRS metadata and transformation
+
+| Signature | Function ID | Result | Behavior |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` or `NULL` | Reads the numeric EPSG mapping from the descriptor; does not transform coordinates. |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`, target EPSG descriptor | Changes metadata only; WKB and coordinates are unchanged. |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`, target EPSG descriptor | Reprojects XY coordinates between EPSG:4326 and EPSG:3857 using Web Mercator formulas. |
+
+The two target SRIDs must be FE-foldable constants equal to 4326 or 3857. Source CRS must be EPSG:4326, EPSG:3857, or OGC:CRS84. `ST_Transform` handles all seven XY OGC families and collections; `NULL` propagates and `EMPTY` stays empty. See [ST_SRID](st_srid.md), [ST_SetSRID](st_setsrid.md), and [ST_Transform](st_transform.md).
+
 ## Legacy compatibility
 
 The native overloads do not renumber or replace the existing `VARCHAR` functions:
