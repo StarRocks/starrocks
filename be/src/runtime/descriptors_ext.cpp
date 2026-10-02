@@ -515,4 +515,19 @@ std::string JDBCTableDescriptor::debug_string() const {
     return out.str();
 }
 
+ADBCTableDescriptor::ADBCTableDescriptor(const TTableDescriptor& tdesc, std::pmr::memory_resource* mr)
+        : TableDescriptor(tdesc, mr) {
+    if (tdesc.__isset.adbcTable) {
+        const auto& t = tdesc.adbcTable;
+        if (t.__isset.driver) _driver = t.driver;
+        if (t.__isset.adbc_options) _adbc_options = t.adbc_options;
+    }
+}
+
+std::string ADBCTableDescriptor::debug_string() const {
+    std::stringstream ss;
+    ss << "ADBCTableDescriptor{driver=" << _driver << " options_count=" << _adbc_options.size() << "}";
+    return ss.str();
+}
+
 } // namespace starrocks

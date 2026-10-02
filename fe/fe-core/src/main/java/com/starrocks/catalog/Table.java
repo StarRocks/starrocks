@@ -107,6 +107,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         HUDI,
         @SerializedName("JDBC")
         JDBC,
+        @SerializedName("ADBC")
+        ADBC,
         @SerializedName("MATERIALIZED_VIEW")
         MATERIALIZED_VIEW,
         @SerializedName("LAKE") // for backward and rollback compatibility
@@ -476,6 +478,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return type == TableType.JDBC;
     }
 
+    public boolean isADBCTable() {
+        return type == TableType.ADBC;
+    }
+
     public boolean isTableFunctionTable() {
         return type == TableType.TABLE_FUNCTION;
     }
@@ -681,6 +687,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             return "Elasticsearch";
         } else if (this instanceof JDBCTable) {
             return "JDBC";
+        } else if (type == TableType.ADBC) {
+            return "ADBC";
         } else if (this instanceof FileTable) {
             return "File";
         } else {

@@ -69,8 +69,8 @@ public class ProfilingExecPlanTest {
     public void testNormalizeName() throws Exception {
         Set<String> names =
                 Sets.newHashSet("REPEAT", "UNION", "HDFS_SCAN", "EXCEPT", "NEST_LOOP_JOIN", "DELTA_LAKE_SCAN",
-                        "MERGE_JOIN", "FILE_TABLE_SCAN", "JDBC_SCAN", "DECODE", "BINLOG_SCAN", "INTERSECT", "SORT",
-                        "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
+                        "MERGE_JOIN", "FILE_TABLE_SCAN", "JDBC_SCAN", "ADBC_SCAN", "DECODE", "BINLOG_SCAN", "INTERSECT",
+                        "SORT", "STREAM_AGG", "STREAM_JOIN", "PROJECT", "PAIMON_SCAN", "TABLE_FUNCTION", "MYSQL_SCAN",
                         "EMPTY_SET", "HUDI_SCAN", "HASH_JOIN", "ES_SCAN", "SCHEMA_SCAN", "ASSERT_NUM_ROWS", "SELECT",
                         "STREAM_LOAD_SCAN", "ANALYTIC_EVAL", "ICEBERG_SCAN", "AGGREGATION", "FILE_SCAN", "EXCHANGE",
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN",

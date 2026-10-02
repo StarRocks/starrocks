@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.sql.optimizer.rule.implementation.ADBCScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.AIProjectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.BenchmarkScanImplementationRule;
@@ -210,6 +211,7 @@ public class RuleSet {
             new MetaScanImplementationRule(),
             new CacheStatsScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new ADBCScanImplementationRule(),
             new BenchmarkScanImplementationRule(),
             new TableFunctionTableScanImplementationRule(),
             new HashAggImplementationRule(),

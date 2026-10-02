@@ -25,3 +25,5 @@ sidebar_position: 10
 - [q - r](./metric_details/q-r.md)
 - [s](./metric_details/s.md)
 - [t - z](./metric_details/t-z.md)
+
+ADBC 查询在现有的 FE Catalog 查询计数器和延迟直方图，以及 BE/CN 扫描字节数和行数计数器上使用 `catalog_type="adbc"` 标签，以区分 ADBC 与内部 Catalog 的查询。请参阅 [ADBC Catalog](../../../data_source/catalog/adbc_catalog.md)。
