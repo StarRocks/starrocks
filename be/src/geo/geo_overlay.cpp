@@ -117,6 +117,12 @@ StatusOr<WkbGeometry> PreparedGeoPolygon::overlay(const PreparedGeoPolygon& righ
             point.x(point.x() + dx);
             point.y(point.y() + dy);
         });
+        // Translation can collapse a ring or component even in long double.
+        // Validate before overlay: final-result validity cannot reveal a dropped input.
+        if (!valid(right_model)) {
+            return Status::InvalidArgument("Polygon overlay operand loses topology during coordinate translation");
+        }
+        RETURN_IF_ERROR(check());
         OverlayMultiPolygon output;
         switch (kind) {
         case GeoOverlayKind::UNION:

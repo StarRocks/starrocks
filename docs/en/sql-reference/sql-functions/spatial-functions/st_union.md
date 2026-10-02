@@ -21,7 +21,7 @@ Both arguments must be native XY `POLYGON` or `MULTIPOLYGON` values with compati
 
 These are Cartesian operations even for EPSG:4326 (straight edges in degrees). EPSG:3857 uses projected coordinates in metres. Coordinates are never implicitly transformed. `GEOGRAPHY`, points, lines, collections, Z/M coordinates, incompatible CRS descriptors, aggregate/array forms and precision-grid arguments are unsupported.
 
-Calculations use floating-point arithmetic without snapping or integer rescaling. WKB output uses double coordinates. Ring orientation, start vertex and component order can change. If rounding makes the output invalid, the function reports an error instead of repairing it.
+Calculations use floating-point arithmetic without snapping or integer rescaling. WKB output uses double coordinates. Ring orientation, start vertex and component order can change. If translating an operand to the common local origin or rounding the output loses topology, the function reports an error instead of repairing or dropping geometry.
 
 Each input is limited to 256 KiB WKB and 5,000 coordinates, including ring-closing coordinates. For counts `n` and `m`, the function also requires `n*n + m*m + n*m <= 25,000,000`. Output and each symmetric-difference intermediate are limited to 5,000 coordinates; the intermediate pair also obeys the same work bound. Exceeding a limit produces an error, without truncation. Query memory limits apply to the input models and temporary allocations. Cancellation is checked between rows and around overlay calls; a single Boost call has no cancellation callback. These bounds are not a fixed peak-memory or wall-clock guarantee.
 

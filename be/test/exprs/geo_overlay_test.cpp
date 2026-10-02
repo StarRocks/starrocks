@@ -253,6 +253,49 @@ TEST(GeoOverlayTest, PreservesNarrowGapsSliversAndLargeCoordinates) {
                     2e-9);
 }
 
+TEST(GeoOverlayTest, RejectsTopologyLossFromCommonOriginTranslation) {
+    const char* remote =
+            "POLYGON ((100000000000000000000 0,100000000000000100000 0,"
+            "100000000000000100000 100000,100000000000000000000 100000,100000000000000000000 0))";
+    const char* combined =
+            "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),"
+            "((100000000000000000000 0,100000000000000100000 0,100000000000000100000 100000,"
+            "100000000000000000000 100000,100000000000000000000 0)))";
+    // Both operands are valid independently; translating the small one by -1e20
+    // collapses its X coordinates even in the extended-precision working model.
+    expect_geometry(run(functions[0], remote, empty), remote);
+    expect_geometry(run(functions[0], square, empty), square);
+    for (size_t op = 0; op < 3; ++op) {
+        auto ctx = context();
+        auto result = functions[op](ctx.get(), {geometries({remote}), geometries({square})});
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_invalid_argument());
+        EXPECT_NE(std::string::npos, result.status().to_string().find("loses topology during coordinate translation"));
+        // The reverse order does not collapse either model and preserves the
+        // two disjoint components for union and symmetric difference.
+        expect_geometry(run(functions[op], square, remote), op == 1 ? square : combined);
+    }
+}
+
+TEST(GeoOverlayTest, RejectsTranslatedCollapsedHolesAndMultiComponents) {
+    const char* remote =
+            "POLYGON ((100000000000000000000 0,100000000000000100000 0,"
+            "100000000000000100000 100000,100000000000000000000 100000,100000000000000000000 0))";
+    const char* with_hole = "POLYGON ((0 0,32 0,32 32,0 32,0 0),(1 1,1 3,3 3,3 1,1 1))";
+    const char* multipart = "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),((32 0,64 0,64 32,32 32,32 0)))";
+    for (const char* value : {with_hole, multipart}) {
+        expect_geometry(run(functions[0], value, empty), value);
+        for (auto fn : functions) {
+            auto ctx = context();
+            auto result = fn(ctx.get(), {geometries({remote}), geometries({value})});
+            ASSERT_FALSE(result.ok());
+            EXPECT_TRUE(result.status().is_invalid_argument());
+            EXPECT_NE(std::string::npos,
+                      result.status().to_string().find("loses topology during coordinate translation"));
+        }
+    }
+}
+
 TEST(GeoOverlayTest, UserSavedResultsInBothCrs) {
     using namespace overlay_fixtures;
     struct Case {
@@ -408,8 +451,11 @@ TEST(GeoOverlayTest, RegistryUsesPrepareAndCloseAndReservesIntersection) {
 }
 
 TEST(GeoOverlayTest, CancellationAndQueryMemoryLimit) {
-    RuntimeState state;
-    state.init_instance_mem_tracker();
+    RuntimeState state(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr);
+    state.init_mem_trackers(TUniqueId());
+    ASSERT_NE(nullptr, state.runtime_profile());
+    ASSERT_NE(nullptr, state.query_mem_tracker_ptr());
+    ASSERT_EQ(state.query_mem_tracker_ptr().get(), state.instance_mem_tracker()->parent());
     auto type = geo_type();
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_context(&state, nullptr, type, {type, type}));
     auto a = geometries({square}), b = geometries({shifted});
@@ -420,8 +466,12 @@ TEST(GeoOverlayTest, CancellationAndQueryMemoryLimit) {
         EXPECT_TRUE(result.status().is_cancelled());
     }
     state.set_is_cancelled(false);
-    state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "overlay test");
-    for (auto fn : functions) EXPECT_FALSE(fn(ctx.get(), {a, b}).ok());
+    ASSERT_TRUE(state.set_mem_limit_exceeded(state.instance_mem_tracker(), 1, "overlay test").is_mem_limit_exceeded());
+    for (auto fn : functions) {
+        auto result = fn(ctx.get(), {a, b});
+        ASSERT_FALSE(result.ok());
+        EXPECT_TRUE(result.status().is_mem_limit_exceeded());
+    }
 }
 
 TEST(GeoOverlayTest, CoordinateAndPairWorkLimits) {
@@ -553,7 +603,8 @@ TEST(GeoOverlayTest, OutputCoordinateLimitDoesNotTruncate) {
 TEST(GeoOverlayTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpOnce) {
     class Operand final : public MockExpr {
     public:
-        Operand(ColumnPtr value, bool constant) : MockExpr(geo_type(), std::move(value)), _constant(constant) {}
+        Operand(const TExprNode& node, ColumnPtr value, bool constant)
+                : MockExpr(node, std::move(value)), _constant(constant) {}
         bool is_constant() const override { return _constant; }
         ColumnPtr next;
         StatusOr<ColumnPtr> evaluate_checked(ExprContext* ctx, Chunk* chunk) override {
@@ -580,8 +631,13 @@ TEST(GeoOverlayTest, ExpressionOwnerAndCloneShareImmutablePreparationAndCleanUpO
     function.__set_has_var_args(false);
     node.__set_fn(function);
     VectorizedFunctionCallExpr expr(node);
-    Operand left(ConstColumn::create(geometries({square}), 1), true);
-    Operand right(geometries({shifted}), false);
+    TExprNode operand_node;
+    operand_node.__set_node_type(TExprNodeType::SLOT_REF);
+    operand_node.__set_type(geo_type().to_thrift());
+    operand_node.__set_num_children(0);
+    operand_node.__set_is_nullable(true);
+    Operand left(operand_node, ConstColumn::create(geometries({square}), 1), true);
+    Operand right(operand_node, geometries({shifted}), false);
     expr.add_child(&left);
     expr.add_child(&right);
     ExprContext owner(&expr);
@@ -618,12 +674,13 @@ TEST(GeoOverlayTest, SymmetricDifferenceChecksCancellationBetweenPrimitives) {
     ASSERT_TRUE(left.ok());
     ASSERT_TRUE(right.ok());
     size_t checkpoints = 0;
+    // Entry and post-translation checks precede the first difference.
     auto result = (*left)->overlay(**right, GeoOverlayKind::SYMMETRIC_DIFFERENCE, [&]() {
-        return ++checkpoints == 2 ? Status::Cancelled("cancel after first difference") : Status::OK();
+        return ++checkpoints == 3 ? Status::Cancelled("cancel after first difference") : Status::OK();
     });
     ASSERT_FALSE(result.ok());
     EXPECT_TRUE(result.status().is_cancelled());
-    EXPECT_EQ(2, checkpoints);
+    EXPECT_EQ(3, checkpoints);
 }
 
 } // namespace starrocks
