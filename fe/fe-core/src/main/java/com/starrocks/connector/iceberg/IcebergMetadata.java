@@ -144,6 +144,7 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.encryption.StarRocksKeyMetadata;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
@@ -163,6 +164,7 @@ import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.iceberg.util.TableScanUtil;
@@ -172,6 +174,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -212,6 +215,9 @@ import static java.util.Comparator.comparing;
 import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.DELETE_ISOLATION_LEVEL_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL;
 import static org.apache.iceberg.TableProperties.MERGE_ISOLATION_LEVEL_DEFAULT;
 import static org.apache.iceberg.TableProperties.UPDATE_ISOLATION_LEVEL;
@@ -2673,6 +2679,42 @@ public class IcebergMetadata implements ConnectorMetadata {
             org.apache.iceberg.Table nativeTbl = table.getNativeTable();
             Transaction transaction = nativeTbl.newTransaction();
 
+            // Validate the whole file set before any file is built or committed.
+            //
+            // These are refusals, not commit failures, so commitWithCleanup never sees them -- and it
+            // is the only thing that calls deleteUncommittedDataFiles. Throwing straight out of the
+            // build loops therefore left the BE's output on object storage forever, unreferenced by
+            // any snapshot: for an encrypted table, permanent plaintext copies of exactly the rows
+            // the refusal was protecting. So refuse here, and delete what the BE wrote.
+            //
+            // The equality-delete check needs a full pass because the flag scan below short-circuits
+            // on `break` and would miss a delete that is not first.
+            for (TIcebergDataFile dataFile : dataFiles) {
+                if (dataFile.isSetFile_content() &&
+                        dataFile.getFile_content() == TIcebergFileContent.EQUALITY_DELETES) {
+                    // The dispatch below is a two-way split on POSITION_DELETES, so an equality
+                    // delete falls into the data-file arm and would be committed through
+                    // buildDataFile as a DataFile -- its rows ADDED to the table instead of deleting
+                    // anything, silently. StarRocks emits none today; this makes that an enforced
+                    // invariant. On an encrypted table it would also carry the literal column values
+                    // that table encryption exists to protect.
+                    refuseAndDeleteUncommitted(dataFiles, dbName, tableName,
+                            "Refusing to commit %s into %s: equality-delete files are not supported. " +
+                                    "Committing one would add its rows to the table rather than delete " +
+                                    "them, and on an encrypted table would expose the column values it " +
+                                    "matches on.",
+                            dataFile.path, nativeTbl.name());
+                }
+            }
+            try {
+                for (TIcebergDataFile dataFile : dataFiles) {
+                    validateFileEncryption(dataFile, nativeTbl);
+                }
+            } catch (StarRocksConnectorException e) {
+                deleteUncommittedQuietly(dataFiles, dbName, tableName);
+                throw e;
+            }
+
             boolean hasPositionDeletes = false;
             boolean hasDataFiles = false;
             for (TIcebergDataFile dataFile : dataFiles) {
@@ -2878,6 +2920,115 @@ public class IcebergMetadata implements ConnectorMetadata {
         return dataFile.isSetFile_content() && dataFile.getFile_content() == TIcebergFileContent.POSITION_DELETES;
     }
 
+    // The AAD prefix length BE generates for every encrypted file (ParquetFileWriter). Fixed rather than
+    // configurable, so a commit can check it exactly.
+    private static final int AAD_PREFIX_LENGTH = 16;
+
+    /**
+     * Refuses this file if the table declares encryption but the file was not encrypted to the
+     * table's policy. Split out from {@link #encryptionKeyMetadata} so {@code finishSink} can run it
+     * over the whole file set <em>before</em> anything is built or committed: the throw has to happen
+     * somewhere that can still delete what the BE wrote, and the build loops cannot.
+     */
+    private void validateFileEncryption(TIcebergDataFile file, org.apache.iceberg.Table nativeTbl) {
+        // The same predicate the sinks used to decide whether BE should encrypt (writeSignalOrNull), so the
+        // plan and the commit cannot disagree about which tables are encrypted.
+        boolean tableIsEncrypted = IcebergEncryption.declaresEncryption(nativeTbl.properties());
+        if (!tableIsEncrypted) {
+            // The other direction matters as much: a file BE encrypted reaching a commit that would record no
+            // key. The commit re-reads the table, so if encryption.key-id was removed after planning, the key
+            // would be dropped here and the encrypted file committed with nothing able to decrypt it -- the
+            // data lost for good. Refuse instead; finishSink then deletes what BE wrote.
+            if (file.isSetFile_dek()) {
+                throw new StarRocksConnectorException(
+                        "Refusing to commit %s into %s: the file was written encrypted but the table no longer " +
+                                "declares encryption (%s), so its data key would not be recorded and the file " +
+                                "could never be read. Retry the statement.",
+                        file.path, nativeTbl.name(), ENCRYPTION_TABLE_KEY);
+            }
+            return;
+        }
+        if (!file.isSetFile_dek()) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s into encrypted table %s: the backend returned no data " +
+                            "encryption key, which means the file was written unencrypted. This usually " +
+                            "means the BE does not support Iceberg table encryption; check that FE and BE " +
+                            "are the same version.",
+                    file.path, nativeTbl.name());
+        }
+        // The key BE returned must be the length the table's policy asked for. Nothing else checks
+        // this: BE picks the length from what FE sent, and a mismatch would commit a file encrypted
+        // below the table's declared strength with no error anywhere.
+        int expectedDekLength = PropertyUtil.propertyAsInt(
+                nativeTbl.properties(), ENCRYPTION_DEK_LENGTH, ENCRYPTION_DEK_LENGTH_DEFAULT);
+        int actualDekLength = file.getFile_dek().length;
+        if (actualDekLength != expectedDekLength) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s: it was encrypted with a %d-byte data key but the table's " +
+                            "encryption.data-key-length is %d. Committing would record a file weaker " +
+                            "than the table's encryption policy.",
+                    file.path, actualDekLength, expectedDekLength);
+        }
+        // BE withholds the AAD prefix from the file (disable_aad_prefix_storage), so the copy recorded in
+        // key_metadata is the only one. Committing without it, or with a wrong-sized one, records a file whose
+        // module AADs no reader can rebuild: GCM verification then fails on every read, forever.
+        if (!file.isSetAad_prefix() || file.getAad_prefix().length != AAD_PREFIX_LENGTH) {
+            throw new StarRocksConnectorException(
+                    "Refusing to commit %s: the backend returned %s AAD prefix, but an encrypted file needs its " +
+                            "%d-byte prefix recorded in key_metadata to be readable.",
+                    file.path, file.isSetAad_prefix() ? "a " + file.getAad_prefix().length + "-byte" : "no",
+                    AAD_PREFIX_LENGTH);
+        }
+    }
+
+    /**
+     * Deletes files the BE already wrote, for a refusal that never reaches
+     * {@link #commitWithCleanup} (the only other caller of
+     * {@code deleteUncommittedDataFiles}). Best-effort: a cleanup failure must not mask the refusal
+     * that caused it, so it is logged and the original exception still propagates.
+     */
+    private void deleteUncommittedQuietly(List<TIcebergDataFile> dataFiles, String dbName, String tableName) {
+        try {
+            icebergCatalog.deleteUncommittedDataFiles(
+                    dataFiles.stream().map(TIcebergDataFile::getPath).collect(Collectors.toList()));
+        } catch (Exception cleanupFailure) {
+            LOG.warn("Failed to delete uncommitted data files for {}.{} after refusing the commit; " +
+                    "they remain on storage and must be removed manually", dbName, tableName, cleanupFailure);
+        }
+    }
+
+    /** Deletes what the BE wrote, then refuses. See {@link #deleteUncommittedQuietly}. */
+    private void refuseAndDeleteUncommitted(List<TIcebergDataFile> dataFiles, String dbName, String tableName,
+                                            String message, Object... args) {
+        deleteUncommittedQuietly(dataFiles, dbName, tableName);
+        throw new StarRocksConnectorException(message, args);
+    }
+
+    /**
+     * The Iceberg {@code key_metadata} for a file BE just wrote, or null when the table is not
+     * encrypted.
+     *
+     * <p>Shared by the data-file and position-delete builders. Every file in an encrypted table needs
+     * its own key recorded, and having one implementation means the delete path cannot quietly omit
+     * what the data path enforces.
+     *
+     * <p>The requirement is driven by the TABLE, not by what BE happened to send. Keying it off
+     * {@code isSetFile_dek()} fails OPEN: a BE that does not implement encryption ignores the unknown
+     * optional thrift field, writes plaintext, and returns no key -- so the check would be skipped and
+     * the plaintext file committed into an encrypted table. That is reachable during a rolling upgrade
+     * with a new FE and an old BE.
+     */
+    private ByteBuffer encryptionKeyMetadata(TIcebergDataFile file, org.apache.iceberg.Table nativeTbl) {
+        // Re-checked rather than assumed: this is the last point before the key is recorded, and the
+        // helper is called from the data-file and delete-file builders independently of finishSink's
+        // pre-pass. Keeping the check here means a new caller cannot skip it.
+        validateFileEncryption(file, nativeTbl);
+        if (!IcebergEncryption.declaresEncryption(nativeTbl.properties())) {
+            return null;
+        }
+        return StarRocksKeyMetadata.serialize(file.getFile_dek(), file.getAad_prefix());
+    }
+
     private org.apache.iceberg.DeleteFile buildPositionDeleteFile(
             TIcebergDataFile dataFile, PartitionSpec partitionSpec, org.apache.iceberg.Table nativeTbl,
             Map<String, DataFile> otherSpecDataFiles) {
@@ -2912,6 +3063,12 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (dataFile.isSetReferenced_data_file()) {
             builder.withReferencedDataFile(dataFile.getReferenced_data_file());
         }
+        // A position-delete file in an encrypted table carries its own per-file key, exactly like a
+        // data file. Omitting this wrote encrypted delete files that no reader could ever open.
+        ByteBuffer keyMetadata = encryptionKeyMetadata(dataFile, nativeTbl);
+        if (keyMetadata != null) {
+            builder.withEncryptionKeyMetadata(keyMetadata);
+        }
         return builder.build();
     }
 
@@ -2925,6 +3082,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .withRecordCount(dataFile.record_count)
                 .withFileSizeInBytes(dataFile.file_size_in_bytes)
                 .withSplitOffsets(dataFile.split_offsets);
+
+        ByteBuffer keyMetadata = encryptionKeyMetadata(dataFile, nativeTbl);
+        if (keyMetadata != null) {
+            builder.withEncryptionKeyMetadata(keyMetadata);
+        }
 
         if (partitionSpec.isPartitioned()) {
             String nullFingerprint = dataFile.isSetPartition_null_fingerprint() ?

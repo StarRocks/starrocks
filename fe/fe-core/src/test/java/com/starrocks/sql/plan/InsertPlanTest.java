@@ -59,6 +59,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SortOrder;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.encryption.PlaintextEncryptionManager;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.types.Types;
 import org.junit.jupiter.api.Assertions;
@@ -973,6 +974,15 @@ public class InsertPlanTest extends PlanTestBase {
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
                 minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
+                minTimes = 0;
             }
         };
 
@@ -1091,6 +1101,15 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.spec();
                 result = PartitionSpec.unpartitioned();
+                minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
                 minTimes = 0;
             }
         };
@@ -1555,6 +1574,15 @@ public class InsertPlanTest extends PlanTestBase {
 
                 nativeTable.schema();
                 result = icebergSchema;
+                minTimes = 0;
+                // IcebergTableSink's constructor calls nativeTable.encryption() to decide whether to
+                // signal Parquet Modular Encryption to the BE. These fixtures build
+                // `new BaseTable(null, null)`, and BaseTable.encryption() is exactly `ops.encryption()`,
+                // so without this stub the real method NPEs on the null TableOperations before the
+                // plan is ever produced. Table.encryption() is abstract in Iceberg (no default), and a
+                // catalog-backed table always has operations, so plaintext is the faithful stub here.
+                nativeTable.encryption();
+                result = PlaintextEncryptionManager.instance();
                 minTimes = 0;
             }
         };

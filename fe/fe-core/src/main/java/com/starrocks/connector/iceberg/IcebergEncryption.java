@@ -15,12 +15,20 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TParquetEncryptionInfo;
+import com.starrocks.thrift.TReportExecStatusParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.encryption.EncryptionManager;
 import org.apache.iceberg.encryption.PlaintextEncryptionManager;
+import org.apache.iceberg.util.PropertyUtil;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH;
+import static org.apache.iceberg.TableProperties.ENCRYPTION_DEK_LENGTH_DEFAULT;
 import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
 
 /**
@@ -39,6 +47,16 @@ import static org.apache.iceberg.TableProperties.ENCRYPTION_TABLE_KEY;
  * <p>Deliberately expressed as a state, not a version or a catalog list: the gates read the manager
  * the library actually handed back, so when a catalog gains encryption support its tables start
  * passing with no change here.
+ *
+ * <p>Without a gate the write path fails <b>open</b>: {@code initEncryption} sees a plaintext manager,
+ * skips encryption, and commits cleartext data files into a table whose properties promise encryption
+ * -- no error anywhere. This is not specific to StarRocks; {@code OutputFileFactory.build()} and
+ * {@code EncryptingFileIO.combine()} both take the manager from {@code table.encryption()}, so any
+ * engine on an unwired catalog does the same. It is specific to us only in that we can refuse.
+ *
+ * <p>Read and write share one predicate on purpose. Letting them drift is how a table gets written in
+ * a mode the read path will not serve, and the symmetry should be structural rather than two call
+ * sites happening to agree.
  */
 public final class IcebergEncryption {
     private IcebergEncryption() {}
@@ -49,7 +67,7 @@ public final class IcebergEncryption {
      * {@link PlaintextEncryptionManager} exactly when {@code encryption.key-id} is absent. Reading the
      * property rather than the manager is what makes the mismatch below detectable at all.
      */
-    private static boolean declaresEncryption(Map<String, String> tableProperties) {
+    public static boolean declaresEncryption(Map<String, String> tableProperties) {
         return tableProperties != null && tableProperties.get(ENCRYPTION_TABLE_KEY) != null;
     }
 
@@ -67,13 +85,34 @@ public final class IcebergEncryption {
     }
 
     /**
+     * Refuse to <b>write</b> a table that declares encryption the library will not apply.
+     *
+     * <p>Called from {@code IcebergTableSink.initEncryption}, i.e. at planning, so the statement fails
+     * before any fragment reaches a BE and no file is produced. Writing anyway is the actual harm here:
+     * the data lands in cleartext under a table configured to protect it, and nothing surfaces it.
+     */
+    public static void checkWriteSupported(Table nativeTable, String tableName) {
+        if (!declaredButNotEnforced(nativeTable.encryption(), nativeTable.properties())) {
+            return;
+        }
+        throw new StarRocksConnectorException(
+                "refusing to write Iceberg table %s: the table declares encryption (%s is set) but the " +
+                        "catalog supplied a plaintext encryption manager (%s), so the data files would be " +
+                        "written unencrypted into a table configured to be encrypted. This means the " +
+                        "catalog in use does not implement Iceberg table encryption; use a catalog that " +
+                        "does.",
+                tableName, ENCRYPTION_TABLE_KEY, PlaintextEncryptionManager.class.getSimpleName());
+    }
+
+    /**
      * Refuse to <b>read</b> a table that declares encryption the library will not honour.
      *
-     * <p>Reading is not a confidentiality problem in itself -- whatever is on disk is already there --
-     * but the two outcomes are both wrong to serve quietly: if the files really are encrypted the scan
-     * gets no key and fails deep in the BE with a decryption error that names nothing useful, and if
-     * they are plaintext then the query silently succeeds against data the table promised was
-     * protected. Failing here says which of those is happening.
+     * <p>Gated on the same predicate as writing, so the two cannot diverge. Reading is not a
+     * confidentiality problem in itself -- whatever is on disk is already there -- but the two outcomes
+     * are both wrong to serve quietly: if the files really are encrypted the scan gets no key and fails
+     * deep in the BE with a decryption error that names nothing useful, and if they are plaintext then
+     * the query silently succeeds against data the table promised was protected. Failing here says
+     * which of those is happening.
      */
     public static void checkReadSupported(Table nativeTable, String tableName) {
         if (!declaredButNotEnforced(nativeTable.encryption(), nativeTable.properties())) {
@@ -85,5 +124,86 @@ public final class IcebergEncryption {
                         "This means the catalog in use does not implement Iceberg table encryption; use a " +
                         "catalog that does.",
                 tableName, ENCRYPTION_TABLE_KEY, PlaintextEncryptionManager.class.getSimpleName());
+    }
+
+    /** Parquet cipher for Iceberg Standard/PME data files. */
+    private static final String DEFAULT_ALGORITHM = "AES_GCM_V1";
+
+    /**
+     * The FE→BE write signal for this table, or null when the table is not encrypted.
+     *
+     * <p>Every sink that writes files into an Iceberg table must use this, and there are three:
+     * {@code IcebergTableSink} (INSERT), {@code IcebergDeleteSink} (DELETE) and
+     * {@code IcebergRowDeltaSink} (UPDATE / MERGE). Deriving the signal in one place is the point --
+     * when only the INSERT sink set it, DELETE/UPDATE/MERGE on an encrypted table wrote plaintext data
+     * and plaintext position-delete files and committed them, with nothing surfacing it. A per-sink
+     * copy of this logic is exactly how that recurs.
+     *
+     * <p>Carries the algorithm and the key length only, never key material: the BE generates a fresh
+     * per-file DEK and returns it at commit so the FE can build the per-file {@code key_metadata}.
+     * The length is resolved here because the FE is the only side that can see the table properties,
+     * and it uses Iceberg's own constant and default so a StarRocks-written file matches what any other
+     * Iceberg engine would produce.
+     *
+     * <p>Also runs {@link #checkWriteSupported} first, so an unsupported catalog fails the statement at
+     * planning rather than writing cleartext into a table configured to protect it.
+     *
+     * <p>Keyed on the declaration, not on the manager's type, and it has to be: the commit path
+     * ({@code IcebergMetadata.encryptionKeyMetadata}) builds {@code key_metadata} only when
+     * {@code encryption.key-id} is present. Signalling on "the manager is not the plaintext one" instead
+     * would send a signal for a table with no key-id whose catalog returned some other manager -- the BE
+     * would encrypt, the commit would record no key, and the files would be unreadable by anything,
+     * forever. The two sides must agree on which tables are encrypted, so both read the property.
+     */
+    public static TParquetEncryptionInfo writeSignalOrNull(Table nativeTable, String tableName) {
+        checkWriteSupported(nativeTable, tableName);
+
+        Map<String, String> tableProperties = nativeTable.properties();
+        if (!declaresEncryption(tableProperties)) {
+            return null;
+        }
+
+        TParquetEncryptionInfo encInfo = new TParquetEncryptionInfo();
+        encInfo.setEncryption_algorithm(DEFAULT_ALGORITHM);
+        encInfo.setDek_length(
+                PropertyUtil.propertyAsInt(tableProperties, ENCRYPTION_DEK_LENGTH, ENCRYPTION_DEK_LENGTH_DEFAULT));
+        return encInfo;
+    }
+
+    private static final byte[] REDACTED = "<redacted>".getBytes(StandardCharsets.UTF_8);
+
+    /**
+     * What to log in place of a status report: the report itself, or, when it carries Iceberg per-file
+     * keys, a copy with every {@code file_dek} and {@code aad_prefix} replaced by {@code <redacted>}.
+     *
+     * <p>The BE returns each written file's DEK to the FE in
+     * {@code sink_commit_infos[].iceberg_data_file}, and thrift's {@code toString()} hex-prints binary
+     * fields, so logging the report as-is writes every key the statement produced into fe.log. The BE
+     * redacts its own dumps of the same struct ({@code redacted_debug_string}); this is the FE side.
+     * The caller's object is never modified.
+     */
+    public static Object redactKeysForLog(TReportExecStatusParams params) {
+        if (params == null || !params.isSetSink_commit_infos() || params.getSink_commit_infos().stream()
+                .noneMatch(info -> info.isSetIceberg_data_file() && hasKey(info.getIceberg_data_file()))) {
+            return params;
+        }
+        TReportExecStatusParams copy = params.deepCopy();
+        for (TSinkCommitInfo info : copy.getSink_commit_infos()) {
+            if (!info.isSetIceberg_data_file()) {
+                continue;
+            }
+            TIcebergDataFile file = info.getIceberg_data_file();
+            if (file.isSetFile_dek()) {
+                file.setFile_dek(REDACTED);
+            }
+            if (file.isSetAad_prefix()) {
+                file.setAad_prefix(REDACTED);
+            }
+        }
+        return copy;
+    }
+
+    private static boolean hasKey(TIcebergDataFile file) {
+        return file.isSetFile_dek() || file.isSetAad_prefix();
     }
 }

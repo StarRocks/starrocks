@@ -288,7 +288,8 @@ symbols entirely.
 4. **REST catalogs get no encryption, and upstream fails silently at it** — an upstream gap, not one
    this change can close. StarRocks refuses such a table rather than inheriting the silence; what
    cannot be fixed here is making encryption *work* on those catalogs. Iceberg 1.11.0 wires the
-   client side for Hive only:
+   client side for Hive only, and 1.12.0 is unchanged (Hadoop, JDBC, Glue and Nessie have no encryption
+   wiring either):
    - `RESTTableOperations` never overrides `encryption()`, so `table.encryption()` returns
      `PlaintextEncryptionManager`
    - `EncryptionUtil.createEncryptionManager` and `createKmsClient` have exactly one caller each,
@@ -311,3 +312,10 @@ symbols entirely.
    the table's declaration against the manager `table.encryption()` returned, so today a REST-catalog
    table declaring `encryption.key-id` is refused on both paths; once such a catalog supplies a real
    manager the refusal stops and the declaration alone drives encryption. Only the dependency moves.
+5. **Spilled rows are not encrypted.** Under memory pressure the connector sink spills buffered rows to
+   BE spill storage (`enable_connector_sink_spill`, on by default) before the encrypting Parquet writer
+   sees them, and they are written there in plaintext. This is not specific to the sink: every StarRocks
+   spill is plaintext, including a join or aggregation over an encrypted table on the read side, and
+   Spark behaves the same. Iceberg table encryption protects data at rest in the table's storage; BE
+   spill storage is outside that boundary, so deployments that need it covered must protect it at the
+   disk or volume level.
