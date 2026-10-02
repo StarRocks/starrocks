@@ -2173,6 +2173,8 @@ TEST_F(VecMathFunctionsTest, intToByteArray) {
     ASSERT_EQ(Bytes({0xF9, 0xE3}), MathFunctions::int_to_byte_array<int64_t>(-1565));
     ASSERT_EQ(Bytes({0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
               MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::min()));
+    ASSERT_EQ(Bytes({0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}),
+              MathFunctions::int_to_byte_array<int64_t>(std::numeric_limits<int64_t>::max()));
 
     ASSERT_EQ(Bytes({0x01, 0x00}), MathFunctions::int_to_byte_array<int128_t>(256));
     Bytes int128_min(16, 0x00);
