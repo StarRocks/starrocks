@@ -1084,6 +1084,28 @@ build_s2() {
     ${BUILD_SYSTEM} install
 }
 
+# H3
+build_h3() {
+    check_if_source_exist $H3_SOURCE
+    cd $TP_SOURCE_DIR/$H3_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_BENCHMARKS=OFF \
+        -DBUILD_FUZZERS=OFF \
+        -DBUILD_FILTERS=OFF \
+        -DBUILD_GENERATORS=OFF \
+        -DENABLE_DOCS=OFF \
+        -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+        -DCMAKE_INSTALL_LIBDIR=lib ..
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
 # bitshuffle
 build_bitshuffle() {
     check_if_source_exist $BITSHUFFLE_SOURCE

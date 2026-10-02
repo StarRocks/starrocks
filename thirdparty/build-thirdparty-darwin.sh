@@ -2753,6 +2753,27 @@ build_re2() {
     sync_lib64_links
 }
 
+build_h3() {
+    check_if_source_exist "${H3_SOURCE}"
+    cd "${TP_SOURCE_DIR}/${H3_SOURCE}"
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+    "${CMAKE_CMD}" -S .. -B . -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_TESTING=OFF \
+        -DBUILD_BENCHMARKS=OFF \
+        -DBUILD_FUZZERS=OFF \
+        -DBUILD_FILTERS=OFF \
+        -DBUILD_GENERATORS=OFF \
+        -DENABLE_DOCS=OFF \
+        -DCMAKE_INSTALL_PREFIX="${TP_INSTALL_DIR}" \
+        -DCMAKE_INSTALL_LIBDIR=lib
+    "${BUILD_SYSTEM}" -j"${PARALLEL}" install
+    sync_lib64_links
+}
+
 build_s2() {
     check_if_source_exist "${S2_SOURCE}"
     cd "${TP_SOURCE_DIR}/${S2_SOURCE}"
@@ -3249,6 +3270,9 @@ for package in "${packages[@]}"; do
             ;;
         pulsar)
             build_formula_pulsar
+            ;;
+        h3)
+            build_h3
             ;;
         s2)
             build_s2

@@ -159,6 +159,11 @@ let
       md5 = "92559743e7b5d3f67486c4c0de2f5cbe";
       sha256 = "1p6xbaq3y3z28zq3l50q3bjjp0f74my93h1fm6plvslwd4624iwn";
     };
+    "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz" = {
+      url = "https://codeload.github.com/uber/h3/tar.gz/1b536c34225191ba24a75a840f634d4a48c3b206";
+      md5 = "f30096c74df021de1ee15f0e03d083fe";
+      sha256 = "sha256-hfO6CN5qb4slJkaUhzjuCmj75KO2EDIgZbA0fJBx8oA=";
+    };
     "hadoop-3.4.3-src.tar.gz" = {
       url = "https://archive.apache.org/dist/hadoop/common/hadoop-3.4.3/hadoop-3.4.3-src.tar.gz";
       md5 = "c5ac53ca70cc667189ec824c6048914a";
@@ -485,6 +490,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -556,6 +562,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -626,6 +633,7 @@ let
       "brotli-1.0.9.tar.gz"
       "zstd-1.5.7.tar.gz"
       "s2geometry-0.9.0.tar.gz"
+      "h3-4.5.0-1b536c34225191ba24a75a840f634d4a48c3b206.tar.gz"
       "bitshuffle-0.5.1.tar.gz"
       "CRoaring-4.2.1.tar.gz"
       "jemalloc-5.3.0.tar.bz2"
@@ -699,6 +707,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "H3"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -770,6 +779,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "H3"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -840,6 +850,7 @@ let
       "BROTLI"
       "ZSTD"
       "S2"
+      "H3"
       "BITSHUFFLE"
       "CROARINGBITMAP"
       "JEMALLOC"
@@ -916,6 +927,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "h3"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -987,6 +999,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "h3"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
@@ -1057,6 +1070,7 @@ let
       "librdkafka"
       "pulsar"
       "s2"
+      "h3"
       "bitshuffle"
       "croaringbitmap"
       "cctz"
