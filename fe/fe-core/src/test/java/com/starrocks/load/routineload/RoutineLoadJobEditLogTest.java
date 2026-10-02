@@ -16,6 +16,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -27,10 +28,15 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
+import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -744,6 +750,225 @@ public class RoutineLoadJobEditLogTest {
         ColumnSeparator followerSeparator = ((KafkaRoutineLoadJob) followerJob).getColumnSeparator();
         Assertions.assertNotNull(followerSeparator);
         Assertions.assertEquals(",", followerSeparator.getColumnSeparator());
+    }
+
+    // A CREATE statement whose COLUMNS / WHERE expressions only mean what they mean with their parentheses.
+    private static final String PAREN_CREATE_STMT = "CREATE ROUTINE LOAD %s ON test_table "
+            + "COLUMNS(k, ts, r = floor((ts + 32400) / 86400)), WHERE (a + b) * 2 > 10 "
+            + "PROPERTIES (\"desired_concurrent_number\"=\"1\") FROM KAFKA (\"kafka_topic\" = \"t\")";
+
+    private RoutineLoadJob replayCreateAndAlterOnFollower(long jobId) throws Exception {
+        RoutineLoadMgr followerRoutineLoadMgr = new RoutineLoadMgr();
+        RoutineLoadJob replayCreateJob = (RoutineLoadJob) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_ROUTINE_LOAD_JOB_V2);
+        followerRoutineLoadMgr.replayCreateRoutineLoadJob(replayCreateJob);
+        AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) UtFrameUtils
+                .PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_ROUTINE_LOAD_JOB);
+        followerRoutineLoadMgr.replayAlterRoutineLoadJob(log);
+        RoutineLoadJob followerJob = followerRoutineLoadMgr.getJob(jobId);
+        Assertions.assertNotNull(followerJob);
+        return followerJob;
+    }
+
+    @Test
+    public void testModifyJobWithReservedNameSurvivesReplayAndImage() throws Exception {
+        long jobId = 10014L;
+        RoutineLoadJob job = createRoutineLoadJob(jobId, "order", 20017L, 20018L);
+        job.setOrigStmt(new OriginStatementInfo(String.format(PAREN_CREATE_STMT, "`order`"), 0));
+        job.gsonPostProcess();
+        masterRoutineLoadMgr.addRoutineLoadJob(job, "test_db_reserved_name");
+        RoutineLoadDesc original = CreateRoutineLoadStmt.getLoadDesc(job.getOrigStmt(), job.getSessionVariables());
+        OriginStatementInfo alterStmt = new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR `order` COLUMNS TERMINATED BY ';'", 0);
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(alterStmt, job.getSessionVariables());
+
+        job.modifyJob(alter, null, null, alterStmt);
+
+        Assertions.assertTrue(job.getOrigStmt().originStmt.startsWith("CREATE ROUTINE LOAD `order` ON "));
+        RoutineLoadJob follower = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(job.getOrigStmt().originStmt, follower.getOrigStmt().originStmt);
+        KafkaRoutineLoadJob restored = GsonUtils.GSON.fromJson(
+                GsonUtils.GSON.toJson(follower, KafkaRoutineLoadJob.class), KafkaRoutineLoadJob.class);
+        Assertions.assertEquals(";", restored.getColumnSeparator().getColumnSeparator());
+        Assertions.assertTrue(original.hasSameExpressions(
+                CreateRoutineLoadStmt.getLoadDesc(restored.getOrigStmt(), restored.getSessionVariables())));
+        Assertions.assertEquals(job.getColumnDescs().get(2).getExpr(), restored.getColumnDescs().get(2).getExpr());
+    }
+
+    @Test
+    public void testModifyJobRejectsDifferentReplaySqlModeBeforeLogging() throws Exception {
+        RoutineLoadJob job = createRoutineLoadJob(10015L, "mode_job", 20019L, 20020L);
+        job.setOrigStmt(new OriginStatementInfo(String.format(PAREN_CREATE_STMT, "mode_job"), 0));
+        job.getSessionVariables().put(SessionVariable.SQL_MODE, "0");
+        job.gsonPostProcess();
+        String originalSql = job.getOrigStmt().originStmt;
+        List<?> originalColumns = job.getColumnDescs();
+        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        OriginStatementInfo alterStmt = new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR mode_job COLUMNS(raw, result = raw || '-suffix')", 0);
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(alterStmt,
+                Map.of(SessionVariable.SQL_MODE, Long.toString(SqlModeHelper.MODE_PIPES_AS_CONCAT)));
+
+        DdlException error = Assertions.assertThrows(DdlException.class,
+                () -> job.modifyJob(alter, null, null, alterStmt));
+
+        Assertions.assertTrue(error.getMessage().contains("replayed"), error.getMessage());
+        Assertions.assertEquals(originalSql, job.getOrigStmt().originStmt);
+        Assertions.assertSame(originalColumns, job.getColumnDescs());
+        Exception emptyJournal = Assertions.assertThrows(Exception.class,
+                () -> UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_ALTER_ROUTINE_LOAD_JOB));
+        Assertions.assertTrue(emptyJournal.getMessage().contains("queue is empty"), emptyJournal.getMessage());
+
+        // An unambiguous spelling remains valid even when the ALTER session has a different SQL mode.
+        masterRoutineLoadMgr.addRoutineLoadJob(job, "test_db_modes");
+        OriginStatementInfo explicitAlter = new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR mode_job COLUMNS(raw, result = concat(raw, '-suffix'))", 0);
+        RoutineLoadDesc explicitDesc = CreateRoutineLoadStmt.getLoadDesc(explicitAlter,
+                Map.of(SessionVariable.SQL_MODE, Long.toString(SqlModeHelper.MODE_PIPES_AS_CONCAT)));
+        job.modifyJob(explicitDesc, null, null, explicitAlter);
+        RoutineLoadJob follower = replayCreateAndAlterOnFollower(job.getId());
+        Assertions.assertEquals(job.getColumnDescs().get(1).getExpr(), follower.getColumnDescs().get(1).getExpr());
+        Assertions.assertEquals(job.getOrigStmt().originStmt, follower.getOrigStmt().originStmt);
+    }
+
+    // The parser keeps the case the user wrote for function names and the printer lower-cases them. The
+    // persistence check must still accept the job; otherwise every load-property ALTER on a job created with
+    // FROM_UNIXTIME(...) would be refused.
+    @Test
+    public void testModifyJobAcceptsUpperCaseFunctionNames() throws Exception {
+        String dbName = "test_db_upper_case_fn";
+        String jobName = "test_upper_case_fn_job";
+        long jobId = 10016L;
+        RoutineLoadJob routineLoadJob = createRoutineLoadJob(jobId, jobName, 20021L, 20022L);
+        routineLoadJob.setOrigStmt(new OriginStatementInfo("CREATE ROUTINE LOAD " + jobName + " ON test_table "
+                + "COLUMNS(k, ts, d = FROM_UNIXTIME(FLOOR((ts + 32400) / 86400) * 86400)), "
+                + "WHERE Get_Json_String(k, '$.x') IS NOT NULL "
+                + "PROPERTIES (\"desired_concurrent_number\"=\"1\") FROM KAFKA (\"kafka_topic\" = \"t\")", 0));
+        routineLoadJob.gsonPostProcess();
+        masterRoutineLoadMgr.addRoutineLoadJob(routineLoadJob, dbName);
+        RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
+        Assertions.assertNotNull(job);
+        RoutineLoadDesc original = CreateRoutineLoadStmt.getLoadDesc(job.getOrigStmt(), null);
+
+        OriginStatementInfo alterStmt = new OriginStatementInfo("ALTER ROUTINE LOAD FOR " + dbName + "." + jobName
+                + " COLUMNS TERMINATED BY ';'", 0);
+        job.modifyJob(CreateRoutineLoadStmt.getLoadDesc(alterStmt, null), null, null, alterStmt);
+
+        String persisted = job.getOrigStmt().originStmt;
+        Assertions.assertTrue(persisted.contains("`d` = from_unixtime(floor((`ts` + 32400) / 86400) * 86400)"), persisted);
+        Assertions.assertTrue(persisted.contains("WHERE get_json_string(`k`, '$.x') IS NOT NULL"), persisted);
+        RoutineLoadJob followerJob = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(persisted, followerJob.getOrigStmt().originStmt);
+        // what the FE reads back differs from the user's definition only in the case of the function names
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(followerJob.getOrigStmt(), null);
+        Assertions.assertTrue(original.hasSameExpressions(reparsed));
+    }
+
+    // An ALTER that only sets PROPERTIES arrives with an empty desc (the analyzer builds one from an empty load
+    // property list, and so does the follower from the ALTER's own statement). Neither side may regenerate
+    // the persisted statement from it: that rewrite is what turned floor((ts + 32400) / 86400) into
+    // floor(ts + 32400 / 86400) in production.
+    @Test
+    public void testModifyJobKafkaPropertiesOnlyKeepsOriginStatement() throws Exception {
+        String dbName = "test_db_modify_kafka_props_only";
+        String jobName = "test_modify_kafka_props_only_job";
+        long jobId = 10011L;
+        String createStmt = String.format(PAREN_CREATE_STMT, jobName);
+
+        RoutineLoadJob routineLoadJob = createRoutineLoadJob(jobId, jobName, 20011L, 20012L);
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(createStmt, 0));
+        routineLoadJob.gsonPostProcess();
+        masterRoutineLoadMgr.addRoutineLoadJob(routineLoadJob, dbName);
+        RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
+        Assertions.assertNotNull(job);
+        Expr columnExpr = job.getColumnDescs().get(2).getExpr();
+
+        Map<String, String> jobProperties = new HashMap<>();
+        jobProperties.put(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY, "5");
+        OriginStatementInfo alterStmt = new OriginStatementInfo("ALTER ROUTINE LOAD FOR " + dbName + "." + jobName
+                + " PROPERTIES (\"desired_concurrent_number\"=\"5\")", 0);
+        RoutineLoadDesc emptyDesc = CreateRoutineLoadStmt.getLoadDesc(alterStmt, null);
+        Assertions.assertTrue(emptyDesc.isEmpty());
+        job.modifyJob(emptyDesc, jobProperties, null, alterStmt);
+
+        Assertions.assertEquals(createStmt, job.getOrigStmt().originStmt);
+        Assertions.assertSame(columnExpr, job.getColumnDescs().get(2).getExpr());
+        Assertions.assertEquals(5, (int) Deencapsulation.getField(job, "desireTaskConcurrentNum"));
+
+        RoutineLoadJob followerJob = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(createStmt, followerJob.getOrigStmt().originStmt);
+        Assertions.assertEquals(5, (int) Deencapsulation.getField(followerJob, "desireTaskConcurrentNum"));
+        // the definition the follower uses after its own restart is still the user's
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(followerJob.getOrigStmt(), null);
+        Assertions.assertEquals(columnExpr, reparsed.getColumnsInfo().getColumns().get(2).getExpr());
+    }
+
+    // An ALTER that replaces COLUMNS / WHERE persists them with their parentheses, on the leader and on replay.
+    @Test
+    public void testModifyJobKafkaRoutineLoadDescKeepsExpressionParentheses() throws Exception {
+        String dbName = "test_db_modify_kafka_parens";
+        String jobName = "test_modify_kafka_parens_job";
+        long jobId = 10012L;
+
+        RoutineLoadJob routineLoadJob = createRoutineLoadJob(jobId, jobName, 20013L, 20014L);
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(String.format(PAREN_CREATE_STMT, jobName), 0));
+        masterRoutineLoadMgr.addRoutineLoadJob(routineLoadJob, dbName);
+        RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
+        Assertions.assertNotNull(job);
+
+        OriginStatementInfo alterStmt = new OriginStatementInfo("ALTER ROUTINE LOAD FOR " + dbName + "." + jobName
+                + " COLUMNS(k, ts, r = floor((ts + 32400) / 86400) * 86400), WHERE a - (b - c) > 0", 0);
+        RoutineLoadDesc alterDesc = CreateRoutineLoadStmt.getLoadDesc(alterStmt, null);
+        job.modifyJob(alterDesc, null, null, alterStmt);
+
+        String expected = String.format("CREATE ROUTINE LOAD `%s` ON `unknown` "
+                + "COLUMNS(`k`, `ts`, `r` = floor((`ts` + 32400) / 86400) * 86400), "
+                + "WHERE (`a` - (`b` - `c`)) > 0 "
+                + "PROPERTIES (\"desired_concurrent_number\"=\"1\") "
+                + "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", jobName);
+        Assertions.assertEquals(expected, job.getOrigStmt().originStmt);
+
+        RoutineLoadJob followerJob = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(expected, followerJob.getOrigStmt().originStmt);
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(followerJob.getOrigStmt(), null);
+        Assertions.assertTrue(alterDesc.hasSameExpressions(reparsed));
+        Assertions.assertEquals(followerJob.getColumnDescs().get(2).getExpr(),
+                reparsed.getColumnsInfo().getColumns().get(2).getExpr());
+        Assertions.assertEquals(followerJob.getWhereExpr(), reparsed.getWherePredicate().getExpr());
+    }
+
+    // The ALTER that broke the production job: FROM KAFKA(...) only, for a broker / SASL switch. The analyzer
+    // hands modifyJob a non-null but empty desc together with the data source properties; neither the leader
+    // nor the follower may regenerate the persisted statement from it.
+    @Test
+    public void testModifyJobKafkaDataSourceOnlyKeepsOriginStatement() throws Exception {
+        String dbName = "test_db_modify_kafka_ds_only";
+        String jobName = "test_modify_kafka_ds_only_job";
+        long jobId = 10013L;
+        String createStmt = String.format(PAREN_CREATE_STMT, jobName);
+
+        RoutineLoadJob routineLoadJob = createRoutineLoadJob(jobId, jobName, 20015L, 20016L);
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(createStmt, 0));
+        routineLoadJob.gsonPostProcess();
+        masterRoutineLoadMgr.addRoutineLoadJob(routineLoadJob, dbName);
+        RoutineLoadJob job = masterRoutineLoadMgr.getJob(jobId);
+        Assertions.assertNotNull(job);
+
+        String alterSql = "ALTER ROUTINE LOAD FOR " + dbName + "." + jobName + " FROM KAFKA ("
+                + "\"kafka_broker_list\" = \"192.168.1.2:9093\", \"property.security.protocol\" = \"SASL_PLAINTEXT\")";
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(alterSql,
+                UtFrameUtils.createDefaultCtx());
+        Assertions.assertNotNull(stmt.getRoutineLoadDesc());
+        Assertions.assertTrue(stmt.getRoutineLoadDesc().isEmpty());
+        job.modifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(), stmt.getDataSourceProperties(),
+                new OriginStatementInfo(alterSql, 0));
+
+        Assertions.assertEquals(createStmt, job.getOrigStmt().originStmt);
+        Assertions.assertEquals("192.168.1.2:9093", ((KafkaRoutineLoadJob) job).getBrokerList());
+
+        RoutineLoadJob followerJob = replayCreateAndAlterOnFollower(jobId);
+        Assertions.assertEquals(createStmt, followerJob.getOrigStmt().originStmt);
+        Assertions.assertEquals("192.168.1.2:9093", ((KafkaRoutineLoadJob) followerJob).getBrokerList());
     }
 
     @Test

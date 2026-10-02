@@ -112,6 +112,7 @@ import com.starrocks.common.proc.SchemaChangeProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
@@ -124,6 +125,7 @@ import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.ExportMgr;
+import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.pipe.Pipe;
 import com.starrocks.load.pipe.PipeManager;
 import com.starrocks.load.routineload.RoutineLoadFunctionalExprProvider;
@@ -1637,9 +1639,11 @@ public class ShowExecutor {
                 List<ImportColumnDesc> descs = routineLoadJob.getColumnDescs();
                 for (int i = 0; i < descs.size(); i++) {
                     ImportColumnDesc desc = descs.get(i);
-                    createRoutineLoadSql.append(desc.getColumnName());
+                    // Backquote the target column too: a reserved word such as `from` is a legal column
+                    // name, and this DDL is meant to be run again as is.
+                    createRoutineLoadSql.append(ParseUtil.backquote(desc.getColumnName()));
                     if (desc.getExpr() != null) {
-                        createRoutineLoadSql.append("=").append(ExprToSql.toSql(desc.getExpr()));
+                        createRoutineLoadSql.append("=").append(RoutineLoadDesc.exprToSql(desc.getExpr()));
                     }
 
                     if (descs.size() == 1 || i == descs.size() - 1) {
@@ -1657,7 +1661,7 @@ public class ShowExecutor {
             }
             if (routineLoadJob.getWhereExpr() != null) {
                 createRoutineLoadSql.append(hasLoadProperty ? ",\nWHERE " : "\nWHERE ");
-                createRoutineLoadSql.append(ExprToSql.toSql(routineLoadJob.getWhereExpr()));
+                createRoutineLoadSql.append(RoutineLoadDesc.exprToSql(routineLoadJob.getWhereExpr()));
                 hasLoadProperty = true;
             }
 

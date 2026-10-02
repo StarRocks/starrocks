@@ -48,3 +48,43 @@ SHOW CREATE ROUTINE LOAD testherbavro;
 STOP ROUTINE LOAD for testherbavro;
 -- result:
 -- !result
+-- name: test_show_create_routine_load_expr_parentheses
+create database test_show_create_routine_load_parens;
+-- result:
+-- !result
+use test_show_create_routine_load_parens;
+-- result:
+-- !result
+create table paren_tbl (k int, ts bigint, r bigint)
+DUPLICATE KEY(k)
+DISTRIBUTED BY HASH(k) BUCKETS 1
+PROPERTIES ( "replication_num" = "1" );
+-- result:
+-- !result
+CREATE ROUTINE LOAD test_show_create_routine_load_parens.paren_job on paren_tbl
+COLUMNS (k, ts, r = floor((ts + 32400) / 86400)),
+WHERE (k + 1) * 2 > 10
+PROPERTIES (
+"desired_concurrent_number"="1",
+"format"="json")
+FROM KAFKA (
+"kafka_broker_list"="172.26.194.239:9092",
+"kafka_topic"="paren-topic",
+"kafka_partitions"="0",
+"kafka_offsets"="OFFSET_BEGINNING"
+);
+-- result:
+-- !result
+SHOW CREATE ROUTINE LOAD paren_job;
+-- result:
+[REGEX](?s)paren_job\tCREATE ROUTINE LOAD test_show_create_routine_load_parens\.paren_job on paren_tbl
+COLUMNS \(`k`, `ts`, `r`=floor\(\(`ts` \+ 32400\) / 86400\)\),
+WHERE \(\(`k` \+ 1\) \* 2\) > 10
+PROPERTIES
+\(.*\)
+FROM KAFKA
+\(.*\);
+-- !result
+STOP ROUTINE LOAD for paren_job;
+-- result:
+-- !result

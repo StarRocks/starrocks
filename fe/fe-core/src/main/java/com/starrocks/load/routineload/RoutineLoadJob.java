@@ -99,7 +99,6 @@ import com.starrocks.sql.ast.PartitionRef;
 import com.starrocks.sql.ast.RoutineLoadDataSourceProperties;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TRoutineLoadJobInfo;
@@ -1877,7 +1876,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("partitions", partitions == null ? STAR_STRING
                 : partitions.getPartitionNames().stream().map(ParseUtil::backquote).collect(Collectors.joining(",")));
         jobProperties.put("columnToColumnExpr", columnDescs == null ? STAR_STRING : columnDescsToSql(columnDescs));
-        jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : ExprToSql.toSql(whereExpr));
+        jobProperties.put("whereExpr", whereExpr == null ? STAR_STRING : RoutineLoadDesc.exprToSql(whereExpr));
         if (getFormat().equalsIgnoreCase("json")) {
             jobProperties.put("dataFormat", "json");
         } else {
@@ -1906,7 +1905,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             ImportColumnDesc desc = columnDescs.get(i);
             sb.append(ParseUtil.backquote(desc.getColumnName()));
             if (desc.getExpr() != null) {
-                sb.append("=").append(ExprToSql.toSql(desc.getExpr()));
+                sb.append("=").append(RoutineLoadDesc.exprToSql(desc.getExpr()));
             }
         }
         return sb.toString();
@@ -2058,6 +2057,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         writeLock();
         try {
+            if (routineLoadDesc != null && !routineLoadDesc.isEmpty()) {
+                // Replay first: a sql_mode mismatch would also fail the round-trip check, with a message
+                // that does not say what to do about it.
+                checkAlterStatementReplay(routineLoadDesc, originStatement);
+                checkOriginStatementRoundTrip(routineLoadDesc);
+            }
             AlterRoutineLoadJobOperationLog log = new AlterRoutineLoadJobOperationLog(id,
                     jobProperties, dataSourceProperties, originStatement);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterRoutineLoadJob(log,
@@ -2070,7 +2075,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     private void applyModifyJob(RoutineLoadDesc routineLoadDesc,
                                 Map<String, String> jobProperties,
                                 RoutineLoadDataSourceProperties dataSourceProperties) {
-        if (routineLoadDesc != null) {
+        // An ALTER that only changes PROPERTIES / FROM <source> still carries a non-null desc with every
+        // clause null (the parser returns an empty load property list, not null). There is nothing to
+        // apply from it, and regenerating origStmt from it would replace the statement the user wrote
+        // with a printed copy of the in-memory definition for no reason.
+        if (routineLoadDesc != null && !routineLoadDesc.isEmpty()) {
             setRoutineLoadDesc(routineLoadDesc);
             mergeLoadDescToOriginStatement(routineLoadDesc);
         }
@@ -2107,7 +2116,63 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (origStmt == null) {
             return;
         }
+        origStmt = new OriginStatementInfo(buildOriginStatement(mergeLoadDesc(routineLoadDesc)), 0);
+    }
 
+    /**
+     * origStmt is the only persisted copy of the load definition (COLUMNS, WHERE, ...): the FE re-parses it
+     * when it loads the job from an image (see gsonPostProcess). A regenerated statement that does not
+     * parse back to the same definition therefore redefines the job silently, and only after the next
+     * restart. Refuse the ALTER instead, before anything is written to the edit log.
+     */
+    private void checkOriginStatementRoundTrip(RoutineLoadDesc routineLoadDesc) throws DdlException {
+        if (origStmt == null) {
+            return;
+        }
+        RoutineLoadDesc merged = mergeLoadDesc(routineLoadDesc);
+        String sql = buildOriginStatement(merged);
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(sql, 0), sessionVariables);
+        if (reparsed == null) {
+            throw new DdlException("The regenerated routine load statement cannot be parsed, "
+                    + "refusing to persist it: " + sql);
+        }
+        Optional<String> difference = merged.findExpressionDifference(reparsed);
+        if (difference.isPresent()) {
+            throw new DdlException("The regenerated routine load statement does not preserve the COLUMNS/WHERE "
+                    + "expressions (" + difference.get() + "), refusing to persist it: " + sql);
+        }
+    }
+
+    /**
+     * The edit log stores the ALTER statement itself, not the regenerated CREATE statement, and followers
+     * re-parse it with the job's saved session variables (see RoutineLoadMgr#replayAlterRoutineLoadJob),
+     * whereas the leader parsed it with the ALTER session's. Under a different sql_mode the same text can be
+     * a different expression ({@code a || b} is concat() with PIPES_AS_CONCAT and OR without), so the leader
+     * would apply one definition and every follower another. Parse the ALTER the way the followers will and
+     * refuse it if the result differs.
+     */
+    private void checkAlterStatementReplay(RoutineLoadDesc routineLoadDesc,
+                                          OriginStatementInfo originStatement) throws DdlException {
+        String savedSqlMode = sessionVariables.get(SessionVariable.SQL_MODE);
+        RoutineLoadDesc replayed = CreateRoutineLoadStmt.getLoadDesc(originStatement, sessionVariables);
+        if (replayed == null) {
+            throw new DdlException("The ALTER ROUTINE LOAD statement cannot be parsed with the job's saved sql_mode ("
+                    + savedSqlMode + "), which is how it is replayed");
+        }
+        Optional<String> difference = routineLoadDesc.findExpressionDifference(replayed);
+        if (difference.isPresent()) {
+            throw new DdlException("The ALTER ROUTINE LOAD statement would be replayed with different COLUMNS/WHERE "
+                    + "expressions under the job's saved sql_mode (" + savedSqlMode + "): " + difference.get()
+                    + ". Set the session sql_mode to that value or write the expression unambiguously, "
+                    + "e.g. concat(a, b) instead of a || b");
+        }
+    }
+
+    /**
+     * The load definition the job will persist once {@code routineLoadDesc} is applied: the current
+     * origStmt re-parsed, with every clause the ALTER specified replacing the existing one.
+     */
+    private RoutineLoadDesc mergeLoadDesc(RoutineLoadDesc routineLoadDesc) {
         RoutineLoadDesc originLoadDesc = CreateRoutineLoadStmt.getLoadDesc(origStmt, sessionVariables);
         if (originLoadDesc == null) {
             originLoadDesc = new RoutineLoadDesc();
@@ -2130,7 +2195,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (routineLoadDesc.getMetadata() != null) {
             originLoadDesc.setMetadata(routineLoadDesc.getMetadata());
         }
+        return originLoadDesc;
+    }
 
+    private String buildOriginStatement(RoutineLoadDesc loadDesc) {
         String tableName = null;
         try {
             tableName = getTableName();
@@ -2148,9 +2216,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
                         " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
                         " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
-                ParseUtil.backquote(name), ParseUtil.backquote(tableName), originLoadDesc.toSql());
+                ParseUtil.backquote(name), ParseUtil.backquote(tableName), loadDesc.toSql());
         LOG.debug("merge result: {}", sql);
-        origStmt = new OriginStatementInfo(sql, 0);
+        return sql;
     }
 
     protected abstract void checkDataSourceProperties(RoutineLoadDataSourceProperties dataSourceProperties)

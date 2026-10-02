@@ -1220,16 +1220,20 @@ public class KafkaRoutineLoadJobTest {
         // (a`b -> `a``b`), otherwise the rendered SQL is malformed.
         columnDescs.add(new ImportColumnDesc("a`b"));
         Deencapsulation.setField(job, "columnDescs", columnDescs);
+        // WHERE is rendered by the same printer: parentheses that matter are kept
+        Deencapsulation.setField(job, "whereExpr", SqlParser.parseSqlToExpr("(a + b) * 2 > 10", 0));
 
         String jobProperties = Deencapsulation.invoke(job, "jobPropertiesToJsonString");
         // The expr must be rendered as readable SQL, not a Java object reference like
         // com.starrocks.sql.ast.ImportColumnDesc@19e02a72
         Assertions.assertFalse(jobProperties.contains("ImportColumnDesc@"), jobProperties);
         // column names are backtick-wrapped (embedded backticks doubled), mapping column rendered
-        // as "`name`=<exprSql>"
+        // as "`name`=<exprSql>"; the expr is rendered by RoutineLoadDesc.exprToSql, which backquotes
+        // column references as well
         Assertions.assertTrue(
-                jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=col1 + 1,`a,b`,`a``b`\""),
+                jobProperties.contains("\"columnToColumnExpr\":\"`col1`,`col2`=`col1` + 1,`a,b`,`a``b`\""),
                 jobProperties);
+        Assertions.assertTrue(jobProperties.contains("\"whereExpr\":\"((`a` + `b`) * 2) > 10\""), jobProperties);
     }
 
 

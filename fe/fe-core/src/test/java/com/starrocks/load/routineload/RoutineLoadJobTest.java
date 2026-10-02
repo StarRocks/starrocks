@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionNames;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -53,6 +54,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.OriginStatementInfo;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -63,6 +65,8 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.ast.expression.BinaryPredicate;
 import com.starrocks.sql.ast.expression.BinaryType;
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprToSql;
 import com.starrocks.sql.ast.expression.IntLiteral;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
@@ -1187,6 +1191,170 @@ public class RoutineLoadJobTest {
                 "AND (substring(`d`, 1, 5) = 'cefd') " +
                 "PROPERTIES (\"desired_concurrent_number\"=\"1\") " +
                 "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+    }
+
+    // A CREATE statement whose COLUMNS / WHERE expressions only mean what they mean with their parentheses.
+    private static final String PAREN_CREATE_STMT = "CREATE ROUTINE LOAD job ON t "
+            + "COLUMNS(k, ts, r = floor((ts + 32400) / 86400), `__op` = if((k + 1) * 2 > 10, 1, 0)), "
+            + "WHERE (a + b) * 2 > 10 "
+            + "PROPERTIES (\"desired_concurrent_number\"=\"1\") "
+            + "FROM KAFKA (\"kafka_topic\" = \"my_topic\")";
+
+    private static KafkaRoutineLoadJob jobWithOrigStmt(String stmt) {
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "job",
+                2L, 3L, "192.168.1.2:10000", "topic");
+        routineLoadJob.setOrigStmt(new OriginStatementInfo(stmt, 0));
+        return routineLoadJob;
+    }
+
+    // Regenerating origStmt (what any ALTER with a load property does) must keep the parentheses of the
+    // COLUMNS / WHERE expressions, otherwise the re-parse on FE restart redefines the job.
+    @Test
+    public void testMergeLoadDescToOriginStatementKeepsExpressionParentheses() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        RoutineLoadDesc original = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+
+        // an ALTER of an unrelated clause regenerates the whole statement from the parsed definition
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(new OriginStatementInfo(
+                "ALTER ROUTINE LOAD FOR job COLUMNS TERMINATED BY ';'", 0), null);
+        routineLoadJob.mergeLoadDescToOriginStatement(alter);
+
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` "
+                + "COLUMNS TERMINATED BY ';', "
+                + "COLUMNS(`k`, `ts`, `r` = floor((`ts` + 32400) / 86400), `__op` = if(((`k` + 1) * 2) > 10, 1, 0)), "
+                + "WHERE ((`a` + `b`) * 2) > 10 "
+                + "PROPERTIES (\"desired_concurrent_number\"=\"1\") "
+                + "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        // what the FE does on restart: the regenerated statement must describe the same load
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed);
+        Assertions.assertTrue(original.hasSameExpressions(reparsed));
+        Assertions.assertEquals(original.getColumnsInfo().getColumns().get(2).getExpr(),
+                reparsed.getColumnsInfo().getColumns().get(2).getExpr());
+        Assertions.assertEquals(original.getWherePredicate().getExpr(), reparsed.getWherePredicate().getExpr());
+    }
+
+    // An ALTER that only changes PROPERTIES or FROM KAFKA(...) carries an empty desc. It must leave both the
+    // in-memory definition and the persisted statement alone (this is the ALTER that broke the production job).
+    @Test
+    public void testModifyJobWithoutLoadPropertiesKeepsOriginStatement() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        routineLoadJob.gsonPostProcess();
+        List<ImportColumnDesc> columnDescs = routineLoadJob.getColumnDescs();
+        Expr whereExpr = routineLoadJob.getWhereExpr();
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+
+        String[] alters = {
+                "alter routine load for db.job properties (\"desired_concurrent_number\" = \"3\")",
+                "alter routine load for db.job FROM KAFKA (\"kafka_broker_list\" = \"192.168.1.2:9093\", "
+                        + "\"property.security.protocol\" = \"SASL_PLAINTEXT\")",
+        };
+        for (String alter : alters) {
+            AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(alter, connectContext);
+            Assertions.assertNotNull(stmt.getRoutineLoadDesc(), alter);
+            Assertions.assertTrue(stmt.getRoutineLoadDesc().isEmpty(), alter);
+
+            routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                    stmt.getDataSourceProperties());
+
+            Assertions.assertEquals(PAREN_CREATE_STMT, routineLoadJob.getOrigStmt().originStmt, alter);
+            Assertions.assertSame(columnDescs, routineLoadJob.getColumnDescs(), alter);
+            Assertions.assertSame(whereExpr, routineLoadJob.getWhereExpr(), alter);
+        }
+        Assertions.assertEquals(3, (int) Deencapsulation.getField(routineLoadJob, "desireTaskConcurrentNum"));
+        Assertions.assertEquals("192.168.1.2:9093", routineLoadJob.getBrokerList());
+    }
+
+    // An ALTER that replaces COLUMNS / WHERE persists the new expressions with their parentheses.
+    @Test
+    public void testModifyLoadDescKeepsExpressionParentheses() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter routine load for db.job COLUMNS(k, ts, r = floor((ts + 32400) / 86400) * 86400), "
+                        + "WHERE a - (b - c) > 0", connectContext);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
+
+        Assertions.assertEquals("CREATE ROUTINE LOAD `job` ON `unknown` "
+                + "COLUMNS(`k`, `ts`, `r` = floor((`ts` + 32400) / 86400) * 86400), "
+                + "WHERE (`a` - (`b` - `c`)) > 0 "
+                + "PROPERTIES (\"desired_concurrent_number\"=\"1\") "
+                + "FROM KAFKA (\"kafka_topic\" = \"my_topic\")", routineLoadJob.getOrigStmt().originStmt);
+
+        RoutineLoadDesc reparsed = CreateRoutineLoadStmt.getLoadDesc(routineLoadJob.getOrigStmt(), null);
+        Assertions.assertNotNull(reparsed);
+        Assertions.assertTrue(stmt.getRoutineLoadDesc().hasSameExpressions(reparsed));
+        // the in-memory definition is the ALTER's tree, and the restart re-parse agrees with it
+        Assertions.assertEquals(routineLoadJob.getColumnDescs().get(2).getExpr(),
+                reparsed.getColumnsInfo().getColumns().get(2).getExpr());
+        Assertions.assertEquals(routineLoadJob.getWhereExpr(), reparsed.getWherePredicate().getExpr());
+    }
+
+    // The incident path: ALTER, checkpoint (GSON image), FE restart (gsonPostProcess re-parses origStmt).
+    @Test
+    public void testImageRoundTripAfterModifyJobKeepsExpressions() throws Exception {
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        routineLoadJob.gsonPostProcess();
+        Expr columnExpr = routineLoadJob.getColumnDescs().get(2).getExpr();
+        Expr opExpr = routineLoadJob.getColumnDescs().get(3).getExpr();
+        Expr whereExpr = routineLoadJob.getWhereExpr();
+
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt) UtFrameUtils.parseStmtWithNewParser(
+                "alter routine load for db.job COLUMNS TERMINATED BY ';'", connectContext);
+        routineLoadJob.replayModifyJob(stmt.getRoutineLoadDesc(), stmt.getAnalyzedJobProperties(),
+                stmt.getDataSourceProperties());
+        Assertions.assertNotEquals(PAREN_CREATE_STMT, routineLoadJob.getOrigStmt().originStmt);
+
+        String image = GsonUtils.GSON.toJson(routineLoadJob, KafkaRoutineLoadJob.class);
+        KafkaRoutineLoadJob loaded = GsonUtils.GSON.fromJson(image, KafkaRoutineLoadJob.class);
+
+        Assertions.assertEquals(columnExpr, loaded.getColumnDescs().get(2).getExpr());
+        Assertions.assertEquals(opExpr, loaded.getColumnDescs().get(3).getExpr());
+        Assertions.assertEquals(whereExpr, loaded.getWhereExpr());
+        Assertions.assertEquals("floor((`ts` + 32400) / 86400)",
+                RoutineLoadDesc.exprToSql(loaded.getColumnDescs().get(2).getExpr()));
+        Assertions.assertEquals(";", loaded.getColumnSeparator().getOriSeparator());
+    }
+
+    // If the regenerated statement would not re-parse to the same load, the ALTER is refused before it is
+    // logged. Simulated with the lossy printer this change replaces.
+    @Test
+    public void testModifyJobRejectsOriginStatementThatDoesNotRoundTrip() throws Exception {
+        new MockUp<RoutineLoadDesc>() {
+            @Mock
+            public String exprToSql(Expr expr) {
+                return ExprToSql.toSql(expr);
+            }
+        };
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        OriginStatementInfo alterStmt = new OriginStatementInfo("ALTER ROUTINE LOAD FOR job COLUMNS TERMINATED BY ';'", 0);
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(alterStmt, null);
+
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> routineLoadJob.modifyJob(alter, null, null, alterStmt));
+        Assertions.assertTrue(e.getMessage().contains("does not preserve the COLUMNS/WHERE expressions"), e.getMessage());
+        Assertions.assertEquals(PAREN_CREATE_STMT, routineLoadJob.getOrigStmt().originStmt);
+    }
+
+    @Test
+    public void testModifyJobRejectsOriginStatementThatCannotBeReparsed() throws Exception {
+        new MockUp<RoutineLoadDesc>() {
+            @Mock
+            public String exprToSql(Expr expr) {
+                return "(" + ExprToSql.toSql(expr);
+            }
+        };
+        KafkaRoutineLoadJob routineLoadJob = jobWithOrigStmt(PAREN_CREATE_STMT);
+        OriginStatementInfo alterStmt = new OriginStatementInfo("ALTER ROUTINE LOAD FOR job COLUMNS TERMINATED BY ';'", 0);
+        RoutineLoadDesc alter = CreateRoutineLoadStmt.getLoadDesc(alterStmt, null);
+
+        DdlException e = Assertions.assertThrows(DdlException.class,
+                () -> routineLoadJob.modifyJob(alter, null, null, alterStmt));
+        Assertions.assertTrue(e.getMessage().contains("cannot be parsed"), e.getMessage());
+        Assertions.assertEquals(PAREN_CREATE_STMT, routineLoadJob.getOrigStmt().originStmt);
     }
 
     @Test
