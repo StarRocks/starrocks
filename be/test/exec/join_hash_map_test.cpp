@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <vector>
 
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
@@ -2306,6 +2307,156 @@ TEST_F(JoinHashMapTest, BinaryColumnWithLargeOffsetsJoinHashTable) {
 
         hash_table.close();
     }
+}
+
+static MutableColumnPtr build_varchar_column(const std::vector<std::string>& values) {
+    auto column = BinaryColumn::create();
+    for (const auto& value : values) {
+        column->append(Slice(value));
+    }
+    return column;
+}
+
+static std::vector<std::string> varchar_column_values(const Column& column) {
+    const auto* binary = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(&column));
+    std::vector<std::string> values;
+    for (size_t i = 0; i < binary->size(); i++) {
+        values.push_back(binary->get_slice(i).to_string());
+    }
+    return values;
+}
+
+// With enable_hash_join_serialize_fixed_size_string, short VARCHAR build keys are encoded as fixed-size integers.
+// _get_binary_column_max_size used to skip a LargeBinaryColumn key, so a build key over 4GB can only take this path
+// now. Give the build and key columns 64-bit offsets, check that the fixed-size path is chosen, and probe with strings
+// that match, that are absent, that are longer than every build key or that end with '\0'; the last two are encoded
+// as 0xFF and must never match.
+TEST_F(JoinHashMapTest, FixedSizeStringKeyWithLargeOffsetsJoinHashTable) {
+    TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
+    query_options.__set_enable_hash_join_serialize_fixed_size_string(true);
+    auto state = std::make_shared<RuntimeState>(TUniqueId(), query_options, TQueryGlobals(), nullptr);
+    state->init_instance_mem_tracker();
+
+    // Build rows are ("i", "1i", "2i") for i in [0, 10), so the build keys are at most 1 and 2 bytes long.
+    const std::string trailing_zero("1\0", 2);
+    const std::vector<std::string> probe_col0{"1", "x", "2", "123456", trailing_zero, "3"};
+    const std::vector<std::string> probe_col1{"11", "11", "12", "11", "11", "123456"};
+    const std::vector<std::string> probe_col2{"p0", "p1", "p2", "p3", "p4", "p5"};
+
+    for (size_t num_keys : {1, 2}) {
+        SCOPED_TRACE("num_keys=" + std::to_string(num_keys));
+        TDescriptorTableBuilder row_desc_builder;
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+        auto probe_record_desc = create_probe_desc(&row_desc_builder);
+        auto build_record_desc = create_build_desc(&row_desc_builder);
+
+        HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+        for (size_t i = 0; i < num_keys; i++) {
+            param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+        }
+        param.probe_record_desc = probe_record_desc.get();
+        param.build_record_desc = build_record_desc.get();
+
+        JoinHashTable hash_table;
+        hash_table.create(param);
+
+        auto build_chunk = create_binary_build_chunk(10, false);
+        auto probe_chunk = std::make_shared<Chunk>();
+        probe_chunk->append_column(build_varchar_column(probe_col0), 0);
+        probe_chunk->append_column(build_varchar_column(probe_col1), 1);
+        probe_chunk->append_column(build_varchar_column(probe_col2), 2);
+        Columns build_key_columns;
+        Columns probe_key_columns;
+        for (size_t i = 0; i < num_keys; i++) {
+            build_key_columns.emplace_back(build_chunk->columns()[i]);
+            probe_key_columns.emplace_back(probe_chunk->columns()[i]);
+        }
+        hash_table.append_chunk(build_chunk, build_key_columns);
+        for (auto& column : hash_table.get_build_chunk()->columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        for (auto& column : hash_table.get_key_columns()) {
+            ColumnTestHelper::force_large_offsets(column->as_mutable_raw_ptr());
+            ASSERT_TRUE(down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column.get()))
+                                ->get_offset()
+                                .is_large());
+        }
+        ASSERT_OK(hash_table.build(state.get()));
+
+        const std::vector<uint32_t> expected_key_bytes =
+                num_keys == 1 ? std::vector<uint32_t>{1} : std::vector<uint32_t>{1, 2};
+        EXPECT_EQ(expected_key_bytes, hash_table.table_items()->serialized_fixed_size_key_bytes);
+
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        bool eos = false;
+        ASSERT_OK(hash_table.probe(state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+        // "x" is absent, "123456" is longer than every build key and "1\0" ends with '\0', so only "1", "2" and,
+        // with one key, "3" match. With two keys, ("3", "123456") does not match because its second key is too long.
+        std::vector<std::vector<std::string>> expected{{"1", "2", "3"}, {"11", "12", "123456"}, {"p0", "p2", "p5"},
+                                                       {"1", "2", "3"}, {"11", "12", "13"},     {"21", "22", "23"}};
+        if (num_keys == 2) {
+            for (auto& values : expected) {
+                values.pop_back();
+            }
+        }
+        ASSERT_EQ(result_chunk->num_columns(), 6);
+        for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+            SCOPED_TRACE("slot_id=" + std::to_string(slot_id));
+            EXPECT_EQ(expected[slot_id], varchar_column_values(*result_chunk->get_column_by_slot_id(slot_id)));
+        }
+
+        hash_table.close();
+    }
+}
+
+// With column_view_concat_rows_limit enabled, the hash table keeps its non-key VARCHAR build columns as ColumnView.
+// Building checks the build chunk with capacity_limit_reached(), which ColumnView used to throw from. Check that the
+// build succeeds and that the probe copies the referenced rows out of the views into plain BinaryColumn.
+TEST_F(JoinHashMapTest, ColumnViewBuildColumnJoinHashTable) {
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+    add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+    auto probe_record_desc = create_probe_desc(&row_desc_builder);
+    auto build_record_desc = create_build_desc(&row_desc_builder);
+
+    HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+    param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+    param.probe_record_desc = probe_record_desc.get();
+    param.build_record_desc = build_record_desc.get();
+    // 0 keeps every view as is and never concatenates it.
+    param.column_view_concat_rows_limit = 0;
+
+    JoinHashTable hash_table;
+    hash_table.create(param);
+
+    auto build_chunk = create_binary_build_chunk(10, false);
+    auto probe_chunk = create_binary_probe_chunk(5, 1, false);
+    Columns build_key_columns{build_chunk->columns()[0]};
+    Columns probe_key_columns{probe_chunk->columns()[0]};
+    hash_table.append_chunk(build_chunk, build_key_columns);
+    for (const auto& column : hash_table.get_build_chunk()->columns()) {
+        ASSERT_TRUE(column->is_view());
+    }
+    ASSERT_OK(hash_table.build(_runtime_state.get()));
+
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+    ASSERT_OK(hash_table.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+    ASSERT_EQ(result_chunk->num_columns(), 6);
+    for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+        const ColumnPtr& column = result_chunk->get_column_by_slot_id(slot_id);
+        EXPECT_FALSE(column->is_view());
+        EXPECT_TRUE(column->is_binary());
+        check_binary_column(column, 5, (slot_id % 3) * 10 + 1);
+    }
+
+    hash_table.close();
 }
 
 // NOLINTNEXTLINE
