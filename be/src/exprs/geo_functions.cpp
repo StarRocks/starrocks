@@ -1165,6 +1165,83 @@ StatusOr<ColumnPtr> serialize_geo(const Columns& columns, bool text) {
     return output;
 }
 
+struct NativeGeoCrsState {
+    std::string source;
+    std::string target;
+};
+
+constexpr double kPi = 3.141592653589793238462643383279502884;
+constexpr double kWebMercatorRadius = 6378137.0;
+constexpr double kWebMercatorMaxLatitude = 85.0511287798066;
+constexpr double kWebMercatorMaxCoordinate = kWebMercatorRadius * kPi + 1e-7;
+
+StatusOr<int32_t> supported_transform_srid(std::string_view crs) {
+    if (crs == "EPSG:4326" || crs == "OGC:CRS84") return 4326;
+    if (crs == "EPSG:3857") return 3857;
+    return Status::NotSupported("ST_Transform supports only EPSG:4326 and EPSG:3857");
+}
+
+Status transform_coordinate(WkbCoordinate* point, int32_t source_srid, int32_t target_srid) {
+    if (!std::isfinite(point->x) || !std::isfinite(point->y)) {
+        return Status::InvalidArgument("ST_Transform coordinate is not finite");
+    }
+    if (source_srid == target_srid) return Status::OK();
+    if (source_srid == 4326) {
+        if (std::abs(point->x) > 180.0 || std::abs(point->y) > kWebMercatorMaxLatitude) {
+            return Status::InvalidArgument("ST_Transform coordinate is outside the EPSG:4326 Web Mercator domain");
+        }
+        const double longitude = point->x * kPi / 180.0;
+        const double latitude = point->y * kPi / 180.0;
+        point->x = kWebMercatorRadius * longitude;
+        point->y = kWebMercatorRadius * std::asinh(std::tan(latitude));
+    } else {
+        if (std::abs(point->x) > kWebMercatorMaxCoordinate || std::abs(point->y) > kWebMercatorMaxCoordinate) {
+            return Status::InvalidArgument("ST_Transform coordinate is outside the EPSG:3857 Web Mercator domain");
+        }
+        point->x = point->x / kWebMercatorRadius * 180.0 / kPi;
+        point->y = std::atan(std::sinh(point->y / kWebMercatorRadius)) * 180.0 / kPi;
+        // Rounding at the Web Mercator edge must not make a valid inverse result
+        // invalid as input to a subsequent forward transformation.
+        point->x = std::clamp(point->x, -180.0, 180.0);
+        point->y = std::clamp(point->y, -kWebMercatorMaxLatitude, kWebMercatorMaxLatitude);
+    }
+    if (!std::isfinite(point->x) || !std::isfinite(point->y)) {
+        return Status::InvalidArgument("ST_Transform coordinate is outside the supported CRS domain");
+    }
+    return Status::OK();
+}
+
+Status transform_geometry_coordinates(WkbGeometry* geometry, int32_t source_srid, int32_t target_srid) {
+    auto transform_point = [source_srid, target_srid](WkbCoordinate* point) -> Status {
+        return transform_coordinate(point, source_srid, target_srid);
+    };
+    for (auto& coordinate : geometry->coordinates) RETURN_IF_ERROR(transform_point(&coordinate));
+    for (auto& ring : geometry->rings) {
+        for (auto& coordinate : ring) RETURN_IF_ERROR(transform_point(&coordinate));
+    }
+    for (auto& child : geometry->children) {
+        RETURN_IF_ERROR(transform_geometry_coordinates(&child, source_srid, target_srid));
+    }
+    return Status::OK();
+}
+
+StatusOr<int32_t> checked_target_srid(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2 || !columns[1]->is_constant() || columns[1]->only_null()) {
+        return Status::InvalidArgument("Target SRID must be a non-NULL constant INT");
+    }
+    ColumnViewer<TYPE_INT> target(columns[1]);
+    if (target.is_null(0) || target.value(0) <= 0) {
+        return Status::InvalidArgument("Target SRID must be a positive INT");
+    }
+    const int32_t value = target.value(0);
+    const auto& type = context->get_return_type();
+    if (type.type != TYPE_GEOMETRY || !type.geo_type.has_value() ||
+        type.geo_type->crs != "EPSG:" + std::to_string(value) || type.geo_type->srid != value) {
+        return Status::InvalidArgument("Target SRID conflicts with GEOMETRY result descriptor");
+    }
+    return value;
+}
+
 } // namespace
 
 struct StConstructState {
@@ -1824,6 +1901,141 @@ Status GeoFunctions::st_line_prepare(FunctionContext* ctx, FunctionContext::Func
 
 Status GeoFunctions::st_polygon_prepare(FunctionContext* ctx, FunctionContext::FunctionStateScope scope) {
     return st_from_wkt_prepare_common(ctx, scope, GEO_SHAPE_POLYGON);
+}
+
+Status GeoFunctions::native_geo_transform_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) return Status::OK();
+    if (context == nullptr || !context->is_constant_column(1)) {
+        return Status::InvalidArgument("Native GEOMETRY CRS functions require a constant target SRID");
+    }
+    const auto* source_type = context->get_arg_type(0);
+    const auto& result_type = context->get_return_type();
+    if (source_type == nullptr || source_type->type != TYPE_GEOMETRY || !source_type->geo_type.has_value() ||
+        result_type.type != TYPE_GEOMETRY || !result_type.geo_type.has_value()) {
+        return Status::InvalidArgument("Native GEOMETRY CRS functions require semantic type metadata");
+    }
+    auto target_column = context->get_constant_column(1);
+    if (target_column == nullptr || target_column->only_null()) {
+        return Status::InvalidArgument("Target SRID must be a non-NULL constant INT");
+    }
+    ColumnViewer<TYPE_INT> target(target_column);
+    if (target.is_null(0) || target.value(0) <= 0) {
+        return Status::InvalidArgument("Target SRID must be a positive INT");
+    }
+    const std::string target_crs = "EPSG:" + std::to_string(target.value(0));
+    if (result_type.geo_type->crs != target_crs || result_type.geo_type->srid != target.value(0)) {
+        return Status::InvalidArgument("Target SRID conflicts with GEOMETRY result descriptor");
+    }
+    auto state = std::make_unique<NativeGeoCrsState>();
+    state->source = source_type->geo_type->crs;
+    state->target = target_crs;
+    if (state->source.empty() || source_type->geo_type->srid != derive_srid(state->source)) {
+        return Status::InvalidArgument("Source GEOMETRY CRS is missing or conflicts with SRID metadata");
+    }
+    ASSIGN_OR_RETURN(const int32_t source_srid, supported_transform_srid(state->source));
+    ASSIGN_OR_RETURN(const int32_t target_srid, supported_transform_srid(state->target));
+    (void)source_srid;
+    (void)target_srid;
+    context->set_function_state(scope, state.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_transform_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoCrsState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_srid(FunctionContext*, const Columns& columns) {
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    const bool constant = columns[0]->is_constant();
+    const Column* source =
+            constant ? down_cast<const ConstColumn*>(columns[0].get())->data_column().get() : columns[0].get();
+    const auto* nullable = source->is_nullable() ? down_cast<const NullableColumn*>(source) : nullptr;
+    const auto* geo = down_cast<const GeoColumn*>(nullable ? nullable->data_column().get() : source);
+    RETURN_IF_ERROR(check_geometry_boundary(*geo));
+    const size_t rows = constant ? 1 : size;
+    ColumnBuilder<TYPE_INT> result(rows);
+    for (size_t row = 0; row < rows; ++row) {
+        if ((nullable != nullptr && nullable->is_null(row)) || !geo->descriptor().type.srid.has_value()) {
+            result.append_null();
+        } else {
+            result.append(geo->descriptor().type.srid.value());
+        }
+    }
+    auto output = result.build(false);
+    if (constant) return ConstColumn::create(std::move(output), size);
+    return output;
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_set_srid(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(const int32_t target_srid, checked_target_srid(context, columns));
+    const auto* state =
+            reinterpret_cast<const NativeGeoCrsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state == nullptr || state->target != "EPSG:" + std::to_string(target_srid)) {
+        return Status::InvalidArgument("ST_SetSRID requires prepared CRS metadata");
+    }
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    if (input.data->descriptor().type.crs != state->source) {
+        return Status::InvalidArgument("Source GEOMETRY CRS differs from prepared descriptor");
+    }
+    const bool constant = ColumnHelper::is_all_const(columns);
+    const size_t rows = constant ? 1 : size;
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        WkbGeometry geometry;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        // Re-tag the existing WKB; ST_SetSRID never changes its coordinate bytes.
+        result->append_datum(Datum(input.wkb(row)));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_transform(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(const int32_t target_srid, checked_target_srid(context, columns));
+    const auto* state =
+            reinterpret_cast<const NativeGeoCrsState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (state == nullptr || state->target != "EPSG:" + std::to_string(target_srid)) {
+        return Status::InvalidArgument("ST_Transform requires prepared CRS metadata");
+    }
+    const size_t size = columns[0]->size();
+    if (columns[0]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    if (input.data->descriptor().type.crs != state->source) {
+        return Status::InvalidArgument("Source GEOMETRY CRS differs from prepared descriptor");
+    }
+    ASSIGN_OR_RETURN(const int32_t source_srid, supported_transform_srid(state->source));
+    ASSIGN_OR_RETURN(const int32_t prepared_target_srid, supported_transform_srid(state->target));
+    if (prepared_target_srid != target_srid) {
+        return Status::InvalidArgument("Target SRID differs from prepared GEOMETRY CRS");
+    }
+    const bool constant = ColumnHelper::is_all_const(columns);
+    const size_t rows = constant ? 1 : size;
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    for (size_t row = 0; row < rows; ++row) {
+        if (input.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        WkbGeometry geometry;
+        RETURN_IF_ERROR(WkbCodec::parse_wkb(input.wkb(row), &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        RETURN_IF_ERROR(transform_geometry_coordinates(&geometry, source_srid, target_srid));
+        std::string wkb;
+        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        result->append_datum(Datum(Slice(wkb)));
+    }
+    if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
 }
 
 } // namespace starrocks

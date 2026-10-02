@@ -218,9 +218,6 @@ Status ChunksSorterTopn::_do_get_next(ChunkPtr* chunk, bool* eos) {
     size_t chunk_size = _state->chunk_size();
     MergedRun& run = _merged_runs.front();
     *chunk = run.steal_chunk(chunk_size);
-    if (*chunk != nullptr) {
-        RETURN_IF_ERROR((*chunk)->downgrade());
-    }
     if (run.empty()) {
         _merged_runs.pop_front();
     }
@@ -625,7 +622,7 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
 
         materialize_by_permutation(big_chunk.get(), chunks, merged_perm);
 
-        RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
+        RETURN_IF_ERROR(big_chunk->capacity_limit_reached());
         ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
         dst->push_back(std::move(run));
     }
@@ -721,7 +718,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
     new_permutation.resize(rows_to_keep);
     materialize_by_permutation(big_chunk.get(), chunks, new_permutation);
 
-    RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
+    RETURN_IF_ERROR(big_chunk->capacity_limit_reached());
     ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
     _merged_runs.push_back(std::move(run));
 

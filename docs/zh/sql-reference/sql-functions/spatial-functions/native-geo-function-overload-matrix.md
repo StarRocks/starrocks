@@ -102,6 +102,16 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 所有 overload 均接受七种 XY OGC family，并在适用时递归处理 `MULTI*` 和 `GEOMETRYCOLLECTION`。`NULL` 传播；度量对 `EMPTY` 返回 0，`ST_Centroid` 返回 `POINT EMPTY`，`ST_IsValid` 返回 `true`。可读取但拓扑无效的值仅由 `ST_IsValid` 返回 `false`，度量和质心会拒绝该输入。WKB 格式错误、不支持的维度或 descriptor 会返回错误。
 
 球面面环与方向无关，并归一化为较小区域；单个环不表示超过半球的区域。参见 [ST_Area](st_area.md)、[ST_Length](st_length.md)、[ST_Perimeter](st_perimeter.md)、[ST_Centroid](st_centroid.md) 和 [ST_IsValid](st_isvalid.md)。
+## CRS 元数据与坐标转换
+
+| 签名 | 函数 ID | 结果 | 行为 |
+| --- | ---: | --- | --- |
+| `ST_SRID(GEOMETRY value)` | 120300 | `INT` 或 `NULL` | 从描述符读取数字 EPSG 映射，不转换坐标。 |
+| `ST_SetSRID(GEOMETRY value, INT constant)` | 120305 | `GEOMETRY`，目标 EPSG 描述符 | 只修改元数据；WKB 和坐标保持不变。 |
+| `ST_Transform(GEOMETRY value, INT constant)` | 120310 | `GEOMETRY`，目标 EPSG 描述符 | 使用 Web Mercator 公式在 EPSG:4326 和 EPSG:3857 之间重投影 XY 坐标。 |
+
+两个目标 SRID 都必须是可由 FE 折叠为常量的 4326 或 3857。源 CRS 必须是 EPSG:4326、EPSG:3857 或 OGC:CRS84。`ST_Transform` 处理七种 XY OGC 几何类型及集合；`NULL` 传播，`EMPTY` 保持为空。参见 [ST_SRID](st_srid.md)、[ST_SetSRID](st_setsrid.md) 和 [ST_Transform](st_transform.md)。
+
 ## 旧版兼容性
 
 原生重载不会重新编号或替换现有的 `VARCHAR` 函数：
