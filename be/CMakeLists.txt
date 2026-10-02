@@ -964,6 +964,13 @@ set (BENCH_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+# arrow_testing is Arrow's test-support library: its gtest_util.cc references GoogleTest, which only
+# TEST_LINK_LIBS and BENCH_LINK_LIBS carry. On the production link it leaves starrocks_be with
+# undefined testing::* symbols. Test targets are unaffected because they link gtest, so only a
+# release build shows it. Removed here, after TEST_LINK_LIBS and BENCH_LINK_LIBS have been built
+# from STARROCKS_LINK_LIBS, so only the production link loses it.
+list(REMOVE_ITEM STARROCKS_LINK_LIBS arrow_testing)
+
 # Only build static libs
 set(BUILD_SHARED_LIBS OFF)
 

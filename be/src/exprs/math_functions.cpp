@@ -567,6 +567,12 @@ StatusOr<ColumnPtr> MathFunctions::iceberg_bucket_timestamptz_datetime(FunctionC
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+// GCC 14 cannot infer that bitLength / 8 + 1 <= sizeof(T), so it keeps the growth path of resize()
+// and reports a false -Wstringop-overflow on the vectorized std::reverse below.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 template <typename T>
 vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
     std::vector<uint8_t> byteArray(sizeof(value));
@@ -584,6 +590,9 @@ vector<uint8_t> MathFunctions::int_to_byte_array(T value) {
     std::reverse(byteArray.begin(), byteArray.end());
     return byteArray;
 }
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 template vector<uint8_t> MathFunctions::int_to_byte_array<int32_t>(int32_t value);
 template vector<uint8_t> MathFunctions::int_to_byte_array<int64_t>(int64_t value);
