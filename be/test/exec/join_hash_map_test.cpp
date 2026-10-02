@@ -16,7 +16,11 @@
 
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "base/testutil/assert.h"
+#include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "common/config_exec_fwd.h"
 #include "exec/join/join_hash_map.hpp"
 #include "exec/join/join_hash_map_helper.h"
@@ -2243,6 +2247,78 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     check_binary_column(column6, 5, 21);
 
     hash_table.close();
+}
+
+// Re-store the offsets of the BinaryColumn under |column| in 64-bit storage without changing their values. This is
+// how a BinaryColumn looks after its payload has crossed 4GB, but it only holds a few bytes.
+static void force_large_offsets(Column* column) {
+    auto* binary = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(column));
+    const auto& offsets = binary->get_offset();
+    AdaptiveOffsets::Large large_offsets;
+    large_offsets.resize(offsets.size());
+    for (size_t i = 0; i < offsets.size(); ++i) {
+        large_offsets[i] = offsets[i];
+    }
+    binary->get_offset().set_large_buffer(std::move(large_offsets));
+    binary->invalidate_slice_cache();
+}
+
+// The hash table used to convert a build chunk whose binary payload crossed 4GB to LargeBinaryColumn, and to downgrade
+// the probe output again. Now it keeps the BinaryColumn, whose offsets are 64-bit past 4GB. Give the build and key
+// columns of the hash table 64-bit offsets after append_chunk, and check that a one-key and a serialized two-key join
+// still match and that the output columns are BinaryColumn.
+TEST_F(JoinHashMapTest, BinaryColumnWithLargeOffsetsJoinHashTable) {
+    for (size_t num_keys : {1, 2}) {
+        SCOPED_TRACE("num_keys=" + std::to_string(num_keys));
+        TDescriptorTableBuilder row_desc_builder;
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+        add_tuple_descriptor(&row_desc_builder, LogicalType::TYPE_VARCHAR, false);
+
+        auto probe_record_desc = create_probe_desc(&row_desc_builder);
+        auto build_record_desc = create_build_desc(&row_desc_builder);
+
+        HashTableParam param = create_table_param(TJoinOp::INNER_JOIN, 6);
+        for (size_t i = 0; i < num_keys; i++) {
+            param.join_keys.emplace_back(JoinKeyDesc{&_varchar_type, false, nullptr});
+        }
+        param.probe_record_desc = probe_record_desc.get();
+        param.build_record_desc = build_record_desc.get();
+
+        JoinHashTable hash_table;
+        hash_table.create(param);
+
+        auto build_chunk = create_binary_build_chunk(10, false);
+        auto probe_chunk = create_binary_probe_chunk(5, 1, false);
+        Columns build_key_columns;
+        Columns probe_key_columns;
+        for (size_t i = 0; i < num_keys; i++) {
+            build_key_columns.emplace_back(build_chunk->columns()[i]);
+            probe_key_columns.emplace_back(probe_chunk->columns()[i]);
+        }
+        hash_table.append_chunk(build_chunk, build_key_columns);
+        for (auto& column : hash_table.get_build_chunk()->columns()) {
+            force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        for (auto& column : hash_table.get_key_columns()) {
+            force_large_offsets(column->as_mutable_raw_ptr());
+        }
+        ASSERT_OK(hash_table.build(_runtime_state.get()));
+
+        ChunkPtr result_chunk = std::make_shared<Chunk>();
+        bool eos = false;
+        ASSERT_OK(hash_table.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos));
+
+        ASSERT_EQ(result_chunk->num_columns(), 6);
+        for (SlotId slot_id = 0; slot_id < 6; slot_id++) {
+            const ColumnPtr& column = result_chunk->get_column_by_slot_id(slot_id);
+            const Column* data_column = ColumnHelper::get_data_column(column.get());
+            EXPECT_TRUE(data_column->is_binary());
+            EXPECT_FALSE(data_column->is_large_binary());
+            check_binary_column(column, 5, (slot_id % 3) * 10 + 1);
+        }
+
+        hash_table.close();
+    }
 }
 
 // NOLINTNEXTLINE
