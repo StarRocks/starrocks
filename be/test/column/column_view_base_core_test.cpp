@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_view/column_view.h"
+#include "column/const_column.h"
 #include "column/nullable_column.h"
 #include "gutil/casts.h"
 
@@ -110,12 +111,14 @@ TEST(ColumnViewBaseCoreTest, CapacityLimitReached) {
     EXPECT_EQ("b", slice_to_string(concat_dst->get_slice(1)));
 }
 
-// The row count of a view is counted on append, before the deferred tasks read the source, so a view over a tiny
-// source can claim more rows than the uint32_t positions can address. The view is never read, so no row is touched.
+// Reach the row limit of a view without allocating it: the source is a ConstColumn that holds one binary value but
+// reports MAX_CAPACITY_LIMIT rows, so both appends stay within the source. The view is never read.
 TEST(ColumnViewBaseCoreTest, CapacityLimitReachedRejectsTooManyRows) {
     const uint64_t capacity_limit = Column::MAX_CAPACITY_LIMIT;
-    auto src = BinaryColumn::create();
-    src->append("a");
+    auto value = BinaryColumn::create();
+    value->append("a");
+    auto src = ConstColumn::create(std::move(value), capacity_limit);
+    ASSERT_OK(src->capacity_limit_reached());
 
     auto view = ColumnView::create(BinaryColumn::create(), 0, -1);
     view->append(*src, 0, capacity_limit);
