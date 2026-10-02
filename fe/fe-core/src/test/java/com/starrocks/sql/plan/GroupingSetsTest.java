@@ -892,4 +892,28 @@ public class GroupingSetsTest extends PlanTestBase {
                 + "join [broadcast] t1 on a.v1 = t1.v4");
         assertContains(belowRepeat(plan), "probe runtime filters");
     }
+
+    @Test
+    public void testPartitionedRuntimeFilterNotPushedBelowRepeatOnNulledPartitionKey() throws Exception {
+        boolean old = connectContext.getSessionVariable().isEnableMultiColumnsOnGlobbalRuntimeFilter();
+        connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(true);
+        try {
+            // The v1 filter itself is safe (v1 is kept by every grouping set), but the shuffle partitions it
+            // by (v1, v2). Below the repeat v2 is still the real value instead of the NULL of the (v1)
+            // subtotal, so the row would be probed against the wrong partition.
+            String plan = getVerboseExplain("select a.v1 from "
+                    + "(select v1, v2, count(*) cnt from t0 group by grouping sets ((v1, v2), (v1))) a "
+                    + "join [shuffle] t1 on a.v1 = t1.v4 and a.v2 <=> t1.v5");
+            assertContains(plan, "build runtime filters");
+            assertNotContains(belowRepeat(plan), "probe runtime filters");
+
+            // Neither v1 nor v2 is ever nulled, so both filters may still be pushed below the repeat.
+            plan = getVerboseExplain("select a.v1 from "
+                    + "(select v1, v2, v3, count(*) cnt from t0 group by grouping sets ((v1, v2, v3), (v1, v2))) a "
+                    + "join [shuffle] t1 on a.v1 = t1.v4 and a.v2 = t1.v5");
+            assertContains(belowRepeat(plan), "probe runtime filters");
+        } finally {
+            connectContext.getSessionVariable().setEnableMultiColumnsOnGlobbalRuntimeFilter(old);
+        }
+    }
 }

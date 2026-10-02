@@ -161,22 +161,30 @@ public class RepeatNode extends PlanNode {
         // Dropping the row on such a key here therefore also drops it from those NULL-keyed groups.
         // That is only harmless when the filter would have rejected the NULL-keyed copy as well;
         // otherwise e.g. the ROLLUP grand-total row silently loses rows.
-        if (mayKeepNulledCopies(context.getDescription(), probeExpr)) {
+        if (mayPassNull(context.getDescription()) && usesNulledSlot(probeExpr)) {
+            return false;
+        }
+        // A partitioned (shuffle) filter picks the partition to probe by hashing partitionByExprs. On a
+        // nulled key that hash differs between the real value seen here and the NULL a copy carries above,
+        // so a row can be probed against the wrong partition and dropped regardless of the filter's NULL
+        // policy.
+        if (partitionByExprs.stream().anyMatch(this::usesNulledSlot)) {
             return false;
         }
         return super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
     }
 
-    private boolean mayKeepNulledCopies(RuntimeFilterDescription description, Expr probeExpr) {
+    private static boolean mayPassNull(RuntimeFilterDescription description) {
         // TOPN_FILTER and AGG_IN_FILTER are built from the aggregation's own groups, so they can keep a
         // NULL-keyed group (NULLS FIRST, or a NULL group among the first LIMIT groups).
-        boolean mayPassNull = description.runtimeFilterType().isTopNFilter()
+        return description.runtimeFilterType().isTopNFilter()
                 || description.runtimeFilterType().isAggInFilter()
                 || description.getEqualForNull();
-        if (!mayPassNull) {
-            return false;
-        }
-        for (int slotId : ExprUtils.getUsedSlotIds(probeExpr)) {
+    }
+
+    // Whether expr uses a grouping key that some grouping set replaces with NULL.
+    private boolean usesNulledSlot(Expr expr) {
+        for (int slotId : ExprUtils.getUsedSlotIds(expr)) {
             boolean grouped = repeatSlotIdList.stream().anyMatch(s -> s.contains(slotId));
             boolean nulled = repeatSlotIdList.stream().anyMatch(s -> !s.contains(slotId));
             if (grouped && nulled) {
