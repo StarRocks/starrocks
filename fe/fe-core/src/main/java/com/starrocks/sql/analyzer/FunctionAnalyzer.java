@@ -1056,6 +1056,24 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if ((FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_DIFFERENCE.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_SYMDIFFERENCE.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
+                ((argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY &&
+                        (argumentTypes[1].isNull() || argumentTypes[1].getPrimitiveType() == PrimitiveType.GEOMETRY)) ||
+                        (argumentTypes[0].isNull() && argumentTypes[1].getPrimitiveType() == PrimitiveType.GEOMETRY))) {
+            Type resultType = argumentTypes[0].isNull() ? argumentTypes[1] : argumentTypes[0];
+            GeoTypeDescriptor left = ((ScalarType) resultType).getGeoDescriptor();
+            GeoTypeDescriptor right = argumentTypes[1].isNull() ? left :
+                    ((ScalarType) argumentTypes[1]).getGeoDescriptor();
+            if (left == null || right == null || !left.isSemanticallyCompatible(right)) {
+                throw new SemanticException("%s requires compatible GEOMETRY CRS descriptors", fnName);
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(resultType);
+            }
         } else if ((FunctionSet.ST_SETSRID.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_TRANSFORM.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
                 argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {
