@@ -19,13 +19,9 @@
 
 #include <gtest/gtest.h>
 
-<<<<<<< HEAD
+#include "common/config.h"
 #include "runtime/exec_env.h"
-=======
-#include "base/utility/defer_op.h"
-#include "common/config_object_storage_fwd.h"
-#include "exec/exec_env.h"
->>>>>>> c9fa825 ([BugFix] Mask object storage credentials in BE /varz and information_schema.be_configs (#80040))
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -73,50 +69,6 @@ TEST_F(DefaultPathHandlersTest, jemalloc_stats_opts) {
     EXPECT_FALSE(parse_jemalloc_stats_opts("J").has_value());
     EXPECT_FALSE(parse_jemalloc_stats_opts("Jgmdablxeh").has_value());
 }
-<<<<<<< HEAD
-=======
-
-TEST_F(DefaultPathHandlersTest, mem_tracker_with_non_numeric_upper_level) {
-    WebPageHandler::ArgumentMap args;
-    args["upper_level"] = "abc";
-    const auto& runtime_env = *RuntimeEnv::GetInstance();
-    auto* mem_tracker = runtime_env.process_mem_tracker();
-
-    std::stringstream output;
-    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
-
-    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
-    // The page still renders, with the default two levels.
-    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
-    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
-}
-
-TEST_F(DefaultPathHandlersTest, mem_tracker_with_negative_upper_level) {
-    WebPageHandler::ArgumentMap args;
-    args["upper_level"] = "-1";
-    const auto& runtime_env = *RuntimeEnv::GetInstance();
-    auto* mem_tracker = runtime_env.process_mem_tracker();
-
-    std::stringstream output;
-    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
-
-    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
-    ASSERT_TRUE(output.str().find("<tr><td>1</td><td>process</td><td>") != std::string::npos);
-    ASSERT_TRUE(output.str().find("<tr><td>2</td><td>update</td>") != std::string::npos);
-}
-
-TEST_F(DefaultPathHandlersTest, mem_tracker_does_not_echo_upper_level) {
-    WebPageHandler::ArgumentMap args;
-    args["upper_level"] = "<script>alert(1)</script>";
-    const auto& runtime_env = *RuntimeEnv::GetInstance();
-    auto* mem_tracker = runtime_env.process_mem_tracker();
-
-    std::stringstream output;
-    MemTrackerWebPageHandler::handle(runtime_env, mem_tracker, args, &output);
-
-    ASSERT_TRUE(output.str().find("Invalid upper_level") != std::string::npos);
-    ASSERT_TRUE(output.str().find("<script>") == std::string::npos);
-}
 
 TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials) {
     std::string old_ak = config::object_storage_access_key_id;
@@ -141,5 +93,4 @@ TEST_F(DefaultPathHandlersTest, config_handler_masks_object_storage_credentials)
     // Non-credential configs are still printed as is.
     EXPECT_NE(std::string::npos, page.find("\nobject_storage_endpoint=" + config::object_storage_endpoint + "\n"));
 }
->>>>>>> c9fa825 ([BugFix] Mask object storage credentials in BE /varz and information_schema.be_configs (#80040))
 } // namespace starrocks
