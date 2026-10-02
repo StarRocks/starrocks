@@ -38,7 +38,7 @@ Status ColumnViewBase::capacity_limit_reached() const {
     // Rows of a view are addressed by uint32_t positions (_habitat_idx, _row_idx and the indexes of
     // append_selective_to), and _num_rows is counted eagerly on append, so this holds before the deferred tasks run.
     if (_num_rows > Column::MAX_CAPACITY_LIMIT) {
-        return Status::CapacityLimitExceed(strings::Substitute("Row count of column view exceed the limit: $0",
+        return Status::CapacityLimitExceed(strings::Substitute("Row count of column view exceeds the limit: $0",
                                                                std::to_string(Column::MAX_CAPACITY_LIMIT)));
     }
     // Once concatenated, every read goes to _concat_column, so check it like a materialized column. Do not call
