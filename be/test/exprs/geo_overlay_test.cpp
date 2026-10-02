@@ -30,9 +30,9 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/geo_functions.h"
-#include "geo/geo_overlay_fixtures.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_measurements.h"
+#include "geo/geo_overlay_fixtures.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 
