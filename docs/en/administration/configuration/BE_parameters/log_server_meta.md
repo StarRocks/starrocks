@@ -258,6 +258,15 @@ This topic introduces the following types of BE configurations:
   The choice affects per-socket buffering behavior and can influence `Socket.Write` failures (EOVERCROWDED) when unwritten bytes exceed socket limits.
 - Introduced in: v3.2.5
 
+### brpc_failed_channel_reset_interval_s
+
+- Default: 10
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description: The interval at which the BE checks its cached bRPC stubs and resets the stubs whose connection has failed. bRPC health-checks a failed connection every few seconds until the connection is released, and logs `Fail to wait EPOLLOUT` on every check against an unreachable address, such as the old IP address of a restarted BE pod in Kubernetes. Resetting a stub releases the failed connection, and the stub opens a new connection for its next RPC. A value less than or equal to `0` disables the check.
+- Introduced in: -
+
 ### brpc_max_body_size
 
 - Default: 2147483648

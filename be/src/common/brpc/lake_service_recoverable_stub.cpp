@@ -63,6 +63,17 @@ Status LakeService_RecoverableStub::reset_channel(int64_t next_connection_group)
     return Status::OK();
 }
 
+bool LakeService_RecoverableStub::reset_channel_if_failed() {
+    // Read the epoch before the check, so that the reset is a no-op if RecoverableClosure resets the channel first.
+    const int64_t next_connection_group = _connection_group.load() + 1;
+    auto current = stub();
+    auto* channel = current == nullptr ? nullptr : dynamic_cast<brpc::ChannelBase*>(current->channel());
+    if (channel == nullptr || channel->CheckHealth() == 0) {
+        return false;
+    }
+    return reset_channel(next_connection_group).ok();
+}
+
 void LakeService_RecoverableStub::publish_version(::google::protobuf::RpcController* controller,
                                                   const ::starrocks::PublishVersionRequest* request,
                                                   ::starrocks::PublishVersionResponse* response,
