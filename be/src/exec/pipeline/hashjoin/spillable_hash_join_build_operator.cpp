@@ -288,9 +288,10 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
     _join_builder->hash_join_builder()->visitHt(
             [this](JoinHashTable* ht) { _build_chunks.push_back(ht->get_build_chunk()); });
 
+    // The spill can run before JoinHashTable::build, so the build chunks may not have been checked yet.
     for (auto& build_chunk : _build_chunks) {
         DCHECK_GT(build_chunk->num_rows(), 0);
-        RETURN_IF_ERROR(build_chunk->upgrade_if_overflow());
+        RETURN_IF_ERROR(build_chunk->capacity_limit_reached());
     }
 
     // The build chunks are now snapshotted as shared_ptr, so neither the async spill iterator below
@@ -326,7 +327,6 @@ StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_c
         }
 
         ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(get_factory()->runtime_state()->chunk_size());
-        RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());
         return chunk;
