@@ -202,6 +202,17 @@ public class FileTable extends Table {
     public void onReload() {
     }
 
+    /**
+     * Not a lock target, although it lives in an internal database. The data is in the file system, and
+     * nothing writes to a published FileTable: ALTER TABLE rejects it and listing files caches nothing on the
+     * object. So the reference a query resolves is already a consistent snapshot, and planning -- which lists
+     * the files for statistics and scan ranges -- runs without the lock.
+     */
+    @Override
+    public boolean isMetaLockTarget() {
+        return false;
+    }
+
     @Override
     public boolean isSupported() {
         return true;
