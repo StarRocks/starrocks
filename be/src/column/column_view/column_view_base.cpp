@@ -18,6 +18,8 @@
 #include <column/column_view/column_view.h>
 #include <column/column_view/column_view_base.h>
 
+#include "gutil/strings/substitute.h"
+
 namespace starrocks {
 
 MutableColumnPtr ColumnViewBase::clone() const {
@@ -30,6 +32,22 @@ MutableColumnPtr ColumnViewBase::clone() const {
     c->_row_idx = _row_idx;
     c->_concat_column = _concat_column;
     return copy;
+}
+
+Status ColumnViewBase::capacity_limit_reached() const {
+    // Rows of a view are addressed by uint32_t positions (_habitat_idx, _row_idx and the indexes of
+    // append_selective_to), and _num_rows is counted eagerly on append, so this holds before the deferred tasks run.
+    if (_num_rows > Column::MAX_CAPACITY_LIMIT) {
+        return Status::CapacityLimitExceed(strings::Substitute("Row count of column view exceed the limit: $0",
+                                                               std::to_string(Column::MAX_CAPACITY_LIMIT)));
+    }
+    // Once concatenated, every read goes to _concat_column, so check it like a materialized column. Do not call
+    // _to_view() here: a capacity check must not force the deferred concatenation.
+    if (_concat_column != nullptr) {
+        return _concat_column->capacity_limit_reached();
+    }
+    // The habitats are upstream columns that the view only references and never appends to.
+    return Status::OK();
 }
 
 size_t ColumnViewBase::container_memory_usage() const {
