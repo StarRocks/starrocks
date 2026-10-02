@@ -27,14 +27,13 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.LockProbe;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * {@code inspect_mv_refresh_info} takes a READ lock on (db, mv) and then, for every base table, resolves
@@ -65,33 +64,17 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
     }
 
     private static class LockProbeHiveMetadata extends MockedHiveMetadata {
-        /** The thread that installed the probe; see the class comment for why the others are ignored. */
-        private final Thread owner = Thread.currentThread();
-        private final AtomicBoolean underLock = new AtomicBoolean(false);
-        private final AtomicInteger calls = new AtomicInteger();
-        private final AtomicInteger getTableCalls = new AtomicInteger();
+        private static final String GET_TABLE = "getTable";
+        /** Confined to the thread that installed the probe; see the class comment for why. */
+        private final LockProbe lock = LockProbe.onCurrentThread();
         /** Runs on every getTable, so a test can interleave something at a point it controls. */
         private Runnable onGetTable;
 
-        private boolean isObserved() {
-            return Thread.currentThread() == owner;
-        }
-
-        private void sample() {
-            calls.incrementAndGet();
-            if (LockHoldDepth.isUnderLock()) {
-                underLock.set(true);
-            }
-        }
-
         @Override
         public Table getTable(ConnectContext context, String dbName, String tblName) {
-            if (isObserved()) {
-                sample();
-                getTableCalls.incrementAndGet();
-                if (onGetTable != null) {
-                    onGetTable.run();
-                }
+            lock.record(GET_TABLE);
+            if (lock.isProbedThread() && onGetTable != null) {
+                onGetTable.run();
             }
             return super.getTable(context, dbName, tblName);
         }
@@ -99,17 +82,13 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
         @Override
         public List<String> listPartitionNames(String dbName, String tableName,
                                                ConnectorMetadataRequestContext requestContext) {
-            if (isObserved()) {
-                sample();
-            }
+            lock.record("listPartitionNames");
             return super.listPartitionNames(dbName, tableName, requestContext);
         }
 
         @Override
         public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
-            if (isObserved()) {
-                sample();
-            }
+            lock.record("getPartitions");
             return super.getPartitions(table, partitionNames);
         }
     }
@@ -140,10 +119,7 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
         installProbe();
         ConstantOperator result = MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(mvName));
         Assertions.assertNotNull(result);
-        Assertions.assertTrue(probe.calls.get() > 0,
-                "the probe never saw the connector, so this test proves nothing");
-        Assertions.assertFalse(probe.underLock.get(),
-                "connector metadata was fetched while an FE metadata lock was held");
+        probe.lock.assertNothingUnderTheLock("connector metadata was fetched while an FE metadata lock was held");
     }
 
     @Test
@@ -185,8 +161,8 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
             // absolute call count is not this test's business; the delta is.
             installProbe();
             MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
-            int undisturbedCalls = probe.getTableCalls.get();
-            Assertions.assertFalse(probe.underLock.get(),
+            int undisturbedCalls = probe.lock.calls(LockProbeHiveMetadata.GET_TABLE);
+            Assertions.assertFalse(probe.lock.anyUnderLock(),
                     "connector metadata was fetched while an FE metadata lock was held");
 
             // Now commit a refresh in the window: the probe swaps the MV's refresh scheme on the first
@@ -205,9 +181,9 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
                     MetaFunctions.inspectMVRefreshInfo(ConstantOperator.createVarchar(DB_NAME + ".mv_raced"));
 
             Assertions.assertNotNull(result);
-            Assertions.assertTrue(probe.getTableCalls.get() > undisturbedCalls,
+            Assertions.assertTrue(probe.lock.calls(LockProbeHiveMetadata.GET_TABLE) > undisturbedCalls,
                     "the refresh-scheme swap went unnoticed, so the report mixes two moments");
-            Assertions.assertTrue(probe.underLock.get(),
+            Assertions.assertTrue(probe.lock.anyUnderLock(),
                     "the redo is supposed to happen under the lock; if it did not, this test is not "
                             + "exercising the branch it claims to");
         } finally {
@@ -233,7 +209,7 @@ public class MetaFunctionsLockConnectorIOTest extends MVTestBase {
             String json = result.getVarchar();
             Assertions.assertTrue(json.contains("lineitem_par"), json);
             Assertions.assertTrue(json.contains("mixed_base"), json);
-            Assertions.assertFalse(probe.underLock.get(),
+            Assertions.assertFalse(probe.lock.anyUnderLock(),
                     "connector metadata was fetched while an FE metadata lock was held");
         } finally {
             starRocksAssert.dropMaterializedView("mv_mixed");

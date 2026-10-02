@@ -213,8 +213,7 @@ public class StatementPlanner {
             // consume (a view behind a branch that was never reached, a body the "still current" check
             // rejected) must not be offered to the next one. Same for a write target the analyzer did not
             // come to collect -- a statement that failed before it reached its target, say.
-            session.getPreResolvedViewBodies().clear();
-            session.getPreResolvedWriteTargets().clear();
+            session.getPreResolvedState().clear();
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
         }
 

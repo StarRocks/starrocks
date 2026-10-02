@@ -312,6 +312,15 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
         return !CatalogMgr.isExternalCatalog(getCatalogName());
     }
 
+    /**
+     * The object a query plans on. Planning writes to the table it works on, so a table that is planned without
+     * the meta lock while one object is shared by every query (see {@link #isMetaLockTarget}) hands out a private
+     * copy; everything else plans on itself.
+     */
+    public Table forQueryPlanning() {
+        return this;
+    }
+
     public String getResourceName() {
         throw new NotImplementedException();
     }
