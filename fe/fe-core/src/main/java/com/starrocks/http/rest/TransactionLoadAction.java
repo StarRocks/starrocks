@@ -38,6 +38,8 @@ import com.codahale.metrics.Histogram;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LabelAlreadyUsedException;
@@ -65,6 +67,7 @@ import com.starrocks.metric.Metric;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -212,7 +215,8 @@ public class TransactionLoadAction extends RestBaseAction {
     }
 
     @Override
-    public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
+    public void executeWithoutPassword(BaseRequest request, BaseResponse response)
+            throws DdlException, AccessDeniedException {
         OpMetrics opMetrics = null;
         long startTime = System.currentTimeMillis();
         try {
@@ -227,6 +231,9 @@ public class TransactionLoadAction extends RestBaseAction {
                 opMetrics.opRunningNum.increase(1L);
             }
             executeTransaction(request, response);
+        } catch (AccessDeniedException e) {
+            // let RestBaseAction map this to the proper unauthorized response
+            throw e;
         } catch (Exception e) {
             TransactionResult resp = new TransactionResult();
             if (e instanceof LabelAlreadyUsedException) {
@@ -247,8 +254,10 @@ public class TransactionLoadAction extends RestBaseAction {
         }
     }
 
-    protected void executeTransaction(BaseRequest request, BaseResponse response) throws StarRocksException {
+    protected void executeTransaction(BaseRequest request, BaseResponse response)
+            throws StarRocksException, AccessDeniedException {
         TransactionOperationParams txnOperationParams = toTxnOperationParams(request);
+        checkTransactionPrivilege(txnOperationParams);
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String label = txnOperationParams.getLabel();
 
@@ -325,6 +334,25 @@ public class TransactionLoadAction extends RestBaseAction {
     /**
      * Resolve and validate request, and wrap params it as {@link TransactionOperationParams} object.
      */
+    // Every other db/table-scoped load endpoint declares a privilege (LoadAction checks INSERT
+    // unconditionally, CancelStreamLoadAction/GetStreamLoadState via requireDbInsertIfHttpAuthEnabled);
+    // the transaction API documented to require INSERT (docs/en/loading/Stream_Load_transaction_interface.md)
+    // must enforce it too. BEGIN/LOAD check the addressed table; PREPARE/COMMIT/ROLLBACK are addressed
+    // by (db, label) and act on the loading state of the database, so the db-level INSERT check applies.
+    private void checkTransactionPrivilege(TransactionOperationParams params) throws AccessDeniedException {
+        TransactionOperation txnOperation = params.getTxnOperation();
+        String dbName = params.getDbName();
+        if (txnOperation == TransactionOperation.TXN_BEGIN || txnOperation == TransactionOperation.TXN_LOAD) {
+            String tableName = params.getTableName();
+            if (tableName != null) {
+                Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
+            }
+            return;
+        }
+
+        Authorizer.checkActionInDb(ConnectContext.get(), dbName, PrivilegeType.INSERT);
+    }
+
     private static TransactionOperationParams toTxnOperationParams(BaseRequest request) throws StarRocksException {
         String dbName = request.getRequest().headers().get(DB_KEY);
         if (StringUtils.isBlank(dbName)) {
