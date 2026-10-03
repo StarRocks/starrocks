@@ -122,8 +122,8 @@ public final class MVRefreshSchemaChecker {
         // "No matching function with signature" covers FunctionAnalyzer rejections after a
         // base column type changes (e.g. bitand(int,int) → bitand(bigint,int) no longer resolves).
         return msg.contains("cannot be resolved")
-                || msg.contains("column schema not compatible")
-                || msg.contains("base table schema changed for columns")
+                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_NOT_COMPATIBLE_MARKER)
+                || msg.contains(MaterializedViewExceptions.MV_SCHEMA_COLUMN_CHANGED_MARKER)
                 || msg.contains("No matching function with signature")
                 // IVM re-derive incompatibility (row-id strategy flip / no longer IVM-rewritable) is a
                 // drop-and-recreate condition -- inactivate with the reason, don't retry forever.
