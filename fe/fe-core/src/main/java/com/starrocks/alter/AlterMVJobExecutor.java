@@ -1288,8 +1288,26 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         alterJobMgr.prepareAlterMaterializedViewStatus(materializedView, status, "", false);
                 AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
                         materializedView.getId(), status, "");
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
                         alterJobMgr.applyAlterMaterializedViewStatus(materializedView, statusContext, false));
+=======
+                // Journal the base tables the rebuild settled on, so replay can adopt them instead of
+                // re-analyzing the define query under the MV lock, see replayAlterMaterializedViewStatus.
+                log.setBaseTableInfos(Lists.newArrayList(materializedView.getBaseTableInfos()));
+                try {
+                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log, wal ->
+                            alterJobMgr.resumeTaskForActivate(statusContext, false));
+                } catch (Throwable t) {
+                    // The rebuild already ran setActive(), which republishes the MV to the query-rewrite
+                    // cache. A journal write that never commits means the activation did not happen, so
+                    // undo it: otherwise this leader would keep rewriting queries with an MV that is
+                    // active in memory only, and whose refresh task was never resumed either -- so it
+                    // would never be refreshed again. setInactiveAndReason evicts the rewrite cache.
+                    materializedView.setInactiveAndReason(inactiveReasonBeforeActivate);
+                    throw t;
+                }
+>>>>>>> ad8cce9ebcd... [BugFix] Replay MV activation without re-analyzing its definition under the MV lock (#64204)
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedViewRefreshType.MANUAL) {
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
