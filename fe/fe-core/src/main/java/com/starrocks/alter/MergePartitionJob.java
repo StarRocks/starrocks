@@ -46,6 +46,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.load.PartitionUtils;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.ConnectContext;
@@ -683,9 +684,21 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
         // nothing to do
     }
 
-    protected boolean hasCommittedNotVisible(long partitionId) {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .existCommittedTxns(dbId, tableId, partitionId);
+    /**
+     * Find the transactions that may still write to the given partition, see
+     * {@link PartitionUtils#getConflictingIngestionTxnIds(long, long, Partition)}.
+     * Must be called while holding the table write lock. Overridable for testability.
+     */
+    protected List<Long> getConflictingTxnIds(Partition partition) {
+        return PartitionUtils.getConflictingIngestionTxnIds(dbId, tableId, partition);
+    }
+
+    /**
+     * Whether the rewritten data of the given temp partition is published, see
+     * {@link PartitionUtils#hasCommittedNotVisibleTxn(long, long, Partition)}. Overridable for testability.
+     */
+    protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+        return PartitionUtils.hasCommittedNotVisibleTxn(dbId, tableId, partition);
     }
 
     private void onFinished(Database db, OlapTable targetTable) throws AlterCancelException {
@@ -708,22 +721,45 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     )
             );
 
+            // Ingestion that is concurrent with this job would be silently dropped by the replacement
+            // below, so a source partition that any transaction can still write to must not be replaced.
+            // The visible version covers already published transactions, the conflicting transaction ids
+            // cover the ones that are committed but not published yet, and the in flight ones.
+            Map<String, List<Long>> partitionConflictingTxnIds = Maps.newHashMap();
+            tempPartitionNameToSourcePartitionNames.asMap().forEach((tempPartitionName, sourcePartitionNames) -> {
+                List<Long> conflictingTxnIds = Lists.newArrayList();
+                for (String sourcePartitionName : sourcePartitionNames) {
+                    Partition sourcePartition = targetTable.getPartition(sourcePartitionName);
+                    if (sourcePartition != null) {
+                        conflictingTxnIds.addAll(getConflictingTxnIds(sourcePartition));
+                    }
+                }
+                partitionConflictingTxnIds.put(tempPartitionName, conflictingTxnIds);
+            });
+
             boolean hasFailedTask = false;
             String errMsg = "";
             for (OptimizeTask rewriteTask : rewriteTasks) {
-                if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED
-                            || partitionLastVersion.get(rewriteTask.getTempPartitionName()) != rewriteTask.getLastVersion()) {
-                    LOG.info("merge partitions job {} rewrite task {} state {} failed or partition {} version {} change to {}",
+                String tempPartitionName = rewriteTask.getTempPartitionName();
+                List<Long> conflictingTxnIds =
+                        partitionConflictingTxnIds.getOrDefault(tempPartitionName, Lists.newArrayList());
+                boolean versionChanged = partitionLastVersion.get(tempPartitionName) != rewriteTask.getLastVersion();
+                boolean hasIngestion = versionChanged || !conflictingTxnIds.isEmpty();
+
+                if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED || hasIngestion) {
+                    LOG.info("merge partitions job {} rewrite task {} state {} failed or partition {} version {} "
+                                    + "change to {}, conflicting txns {}",
                                 jobId, rewriteTask.getName(), rewriteTask.getOptimizeTaskState(),
-                                rewriteTask.getTempPartitionName(), rewriteTask.getLastVersion(),
-                                partitionLastVersion.get(rewriteTask.getTempPartitionName()));
-                    tempPartitionNameToSourcePartitionNames.removeAll(rewriteTask.getTempPartitionName());
-                    targetTable.dropTempPartition(rewriteTask.getTempPartitionName(), true);
+                                tempPartitionName, rewriteTask.getLastVersion(),
+                                partitionLastVersion.get(tempPartitionName), conflictingTxnIds);
+                    tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);
+                    targetTable.dropTempPartition(tempPartitionName, true);
                     hasFailedTask = true;
-                    if (rewriteTask.getOptimizeTaskState() == Constants.TaskRunState.FAILED) {
-                        errMsg += rewriteTask.getTempPartitionName() + " rewrite task execute failed, ";
+                    if (hasIngestion) {
+                        errMsg += tempPartitionName + " has ingestion during merge partitions"
+                                + PartitionUtils.formatConflictingTxnIds(conflictingTxnIds) + ", ";
                     } else {
-                        errMsg += rewriteTask.getTempPartitionName() + " has ingestion during optimize, ";
+                        errMsg += tempPartitionName + " rewrite task execute failed, ";
                     }
                 }
             }
@@ -737,7 +773,7 @@ public class MergePartitionJob extends AlterJobV2 implements GsonPostProcessable
                     errMsg += tempPartitionName + " temp partition missing, ";
                     continue;
                 }
-                if (hasCommittedNotVisible(tempPartition.getId())) {
+                if (hasCommittedNotVisibleTxn(tempPartition)) {
                     LOG.warn("merge partitions job {} temp partition {} has committed transactions not visible, drop it",
                             jobId, tempPartitionName);
                     tempPartitionNameToSourcePartitionNames.removeAll(tempPartitionName);

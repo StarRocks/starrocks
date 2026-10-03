@@ -34,8 +34,8 @@ public class MergePartitionJobTest {
         String tempPartitionName = "tmp_p1";
         MergePartitionJob job = new MergePartitionJob(1L, 2L, 3L, "tbl", 1000L) {
             @Override
-            protected boolean hasCommittedNotVisible(long partitionId) {
-                return partitionId == 100L;
+            protected boolean hasCommittedNotVisibleTxn(Partition partition) {
+                return partition.getId() == 100L;
             }
         };
 
