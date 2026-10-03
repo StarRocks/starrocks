@@ -17,6 +17,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.Pair;
@@ -40,6 +41,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -55,6 +58,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 public class ArrowFlightSqlSessionManagerTest {
@@ -112,6 +116,16 @@ public class ArrowFlightSqlSessionManagerTest {
                     if (contextRef != null) {
                         contextRef.set((ArrowFlightSqlConnectContext) ctx);
                     }
+                    return null;
+                });
+    }
+
+    private void mockAuthenticationWithToken(MockedStatic<AuthenticationHandler> mockedAuth) {
+        mockedAuth.when(() -> AuthenticationHandler.authenticateWithToken(any(), any(), any(), any()))
+                .thenAnswer(invocation -> {
+                    ConnectContext ctx = invocation.getArgument(0);
+                    ctx.setCurrentUserIdentity(null);
+                    ctx.setQualifiedUser("testUser");
                     return null;
                 });
     }
@@ -411,6 +425,169 @@ public class ArrowFlightSqlSessionManagerTest {
             String tokenWithoutProxy = sessionManager.initializeSession("testUser", "127.0.0.1", "testPassword");
             assertNotNull(tokenWithoutProxy);
             assertEquals(mockUUID.toString(), tokenWithoutProxy, "Token should be plain UUID when proxy disabled");
+        }
+    }
+
+    @Test
+    public void testInitializeSession_jwtCredential_usesTokenAuthentication() throws Exception {
+        String jwtLikeCredential = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.c2lnbmF0dXJl";
+
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockAuthenticationWithToken(mockedAuth);
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", jwtLikeCredential);
+            assertNotNull(token);
+
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithToken(
+                    any(), any(), any(), any()));
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(
+                    any(), any(), any(), any()), never());
+        }
+    }
+
+    @Test
+    public void testInitializeSession_plainPassword_usesClearPasswordAuthentication() throws Exception {
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockAuthentication(mockedAuth);
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", "plainOldPassword");
+            assertNotNull(token);
+
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(
+                    any(), any(), any(), any()));
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithToken(
+                    any(), any(), any(), any()), never());
+        }
+    }
+
+    private static String buildUnsignedJwtLikeCredential(String payloadJson) {
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        return encoder.encodeToString("{\"alg\":\"RS256\"}".getBytes(StandardCharsets.UTF_8)) + "."
+                + encoder.encodeToString(payloadJson.getBytes(StandardCharsets.UTF_8)) + "."
+                + encoder.encodeToString("signature".getBytes(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    public void testInitializeSession_jwtShapedPassword_fallsBackToClearPasswordAuthentication() throws Exception {
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockAuthentication(mockedAuth);
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithToken(any(), any(), any(), any()))
+                    .thenThrow(new AuthenticationException("not a valid JWT"));
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            // a plain password that happens to look like a JWT must still work
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", "abc.def.ghi");
+            assertNotNull(token);
+
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithToken(
+                    any(), any(), any(), any()));
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(
+                    any(), any(), any(), any()));
+        }
+    }
+
+    @Test
+    public void testValidateToken_expiredJwtSessionIsInvalidated() throws Exception {
+        long expiredAtSeconds = System.currentTimeMillis() / 1000 - 60;
+        String expiredJwt = buildUnsignedJwtLikeCredential(
+                "{\"sub\":\"testUser\",\"exp\":" + expiredAtSeconds + "}");
+
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockAuthenticationWithToken(mockedAuth);
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", expiredJwt);
+
+            assertThrows(FlightRuntimeException.class, () -> sessionManager.validateToken(token));
+            // the session is gone after the first rejection
+            assertThrows(IllegalArgumentException.class, () -> sessionManager.validateToken(token));
+        }
+    }
+
+    @Test
+    public void testValidateToken_unexpiredJwtSessionIsValid() throws Exception {
+        long expiresAtSeconds = System.currentTimeMillis() / 1000 + 3600;
+        String validJwt = buildUnsignedJwtLikeCredential(
+                "{\"sub\":\"testUser\",\"exp\":" + expiresAtSeconds + "}");
+
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockAuthenticationWithToken(mockedAuth);
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", validJwt);
+            assertDoesNotThrow(() -> sessionManager.validateToken(token));
         }
     }
 }
