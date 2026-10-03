@@ -18,6 +18,8 @@ import com.starrocks.qe.GlobalVariable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 public class ReduceCastVarcharPlanTest extends PlanTestBase {
 
     private final boolean previousLengthInheritance =
@@ -51,6 +53,25 @@ public class ReduceCastVarcharPlanTest extends PlanTestBase {
         String descTbl = getDescTbl(sql);
 
         assertContains(descTbl, "TScalarType(type:VARCHAR, len:20)");
+    }
+
+    @Test
+    public void testFullOuterJoinUsingKeepsJoinKeyLength() throws Exception {
+        GlobalVariable.setEnableReduceCastVarcharLengthInheritance(true);
+        GlobalVariable.setEnableReduceCastVarcharExprSyncType(true);
+
+        starRocksAssert.withTables(List.of(
+                        "CREATE TABLE foj_left (id INT, region VARCHAR(64)) DUPLICATE KEY(id) " +
+                                "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')",
+                        "CREATE TABLE foj_right (id INT, region VARCHAR(255)) DUPLICATE KEY(id) " +
+                                "DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1')"),
+                () -> {
+                    String sql = "select region from foj_left full outer join foj_right using(region)";
+                    String plan = getVerboseExplain(sql);
+                    // The COALESCE the transformer synthesizes must not retype the join key.
+                    assertContains(plan, "equal join conjunct: [2: region, VARCHAR(64), true] = " +
+                            "[4: region, VARCHAR(255), true]");
+                });
     }
 
     @Test
