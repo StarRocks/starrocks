@@ -18,13 +18,14 @@
 #include <memory>
 #include <numeric>
 
+#include "column/column_helper.h"
 #include "compute_env/spill/input_stream.h"
 #include "compute_env/spill/mem_tracker_guard.h"
 #include "compute_env/spill/spill_components.h"
 #include "compute_env/spill/spiller.hpp"
-#include "exec/cross_join_node.h"
+#include "exec/pipeline/nljoin/nljoin_runtime_filter.h"
 #include "exec_primitive/pipeline/runtime_filter_hub.h"
-#include "exprs/expr.h"
+#include "exec_primitive/runtime_filter/runtime_filter_descriptor.h"
 #include "fmt/format.h"
 #include "runtime/chunk_accumulator.h"
 #include "runtime/runtime_state.h"
@@ -167,20 +168,35 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
             num_rows += chunk_ptr->num_rows();
         }
     }
-    // build runtime filter for cross join
+
+    // 1. Range conjuncts (single-row and multi-row builds alike): fold the build
+    // side into min/max boundaries and rewrite them into local in-filters.
+    std::vector<NLJoinRangeFilterCandidate> candidates = make_range_filter_candidates(_rf_descs, _rf_conjuncts_ctx);
+    RETURN_IF_ERROR(compute_build_side_boundaries(candidates, _build_chunks, _is_build_chunk_invalid));
+    auto* pool = state->obj_pool();
+    ASSIGN_OR_RETURN(auto rfs, build_local_range_filters(pool, candidates));
+
+    // 2. Non-range conjuncts (e.g. LIKE): they have no foldable boundary, but a
+    // single-row build can rewrite them by inlining the only build value.
     if (num_rows == 1) {
         DCHECK(one_row_chunk != nullptr);
-        auto* pool = state->obj_pool();
-        ASSIGN_OR_RETURN(auto rfs, CrossJoinNode::rewrite_runtime_filter(pool, _rf_descs, one_row_chunk.get(),
-                                                                         _rf_conjuncts_ctx));
-        RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
-        _rf_hub->set_collector(_plan_node_id,
-                               std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
-    } else {
-        // notify cross join left child
-        _rf_hub->set_collector(_plan_node_id, std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{},
-                                                                                       RuntimeMembershipFilterList{}));
+        ASSIGN_OR_RETURN(auto non_range_rfs, build_local_non_range_filters(pool, _rf_descs, candidates,
+                                                                           one_row_chunk.get(), _rf_conjuncts_ctx));
+        rfs.splice(rfs.end(), non_range_rfs);
     }
+    // 3. Hand the in-filters to the hub to notify the left child; this must
+    // happen even when rfs is empty, or local probe-side operators would wait
+    // on this build forever.
+    RETURN_IF_ERROR(RuntimeFilterCollector::prepare_runtime_in_filters(state, rfs));
+    _rf_hub->set_collector(_plan_node_id,
+                           std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeMembershipFilterList{}));
+
+    // 4. Global channel: publish MinMax filters of the range candidates to
+    // remote consumers.
+    for (auto* rf_desc : _rf_descs) {
+        rf_desc->set_is_pipeline(true);
+    }
+    RETURN_IF_ERROR(publish_global_range_filters(state, candidates));
     return Status::OK();
 }
 
