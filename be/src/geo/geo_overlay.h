@@ -22,7 +22,7 @@
 
 namespace starrocks {
 
-enum class GeoOverlayKind { UNION, DIFFERENCE, SYMMETRIC_DIFFERENCE };
+enum class GeoOverlayKind { UNION, DIFFERENCE, SYMMETRIC_DIFFERENCE, INTERSECTION };
 
 // Fixed scalar limits bound validation and candidate work, not elapsed time or peak bytes.
 inline constexpr size_t kGeoOverlayMaxCoordinates = 5'000;

@@ -349,4 +349,174 @@ TEST(GeoOverlayCoreTest, ImmutablePreparedModelsSupportConcurrentReaders) {
         });
     for (auto& worker : workers) worker.join();
 }
+
+namespace {
+void intersection_leaves(const WkbGeometry& geometry, std::vector<const WkbGeometry*>* out) {
+    if (geometry.empty) return;
+    if (geometry.children.empty()) out->push_back(&geometry);
+    for (const auto& child : geometry.children) intersection_leaves(child, out);
+}
+bool path_matches(const std::vector<WkbCoordinate>& a, const std::vector<WkbCoordinate>& b) {
+    auto directed = [](const auto& source, const auto& target) {
+        for (size_t i = 1; i < source.size(); ++i) {
+            for (auto point :
+                 {source[i - 1], source[i],
+                  WkbCoordinate{(source[i - 1].x + source[i].x) / 2, (source[i - 1].y + source[i].y) / 2}}) {
+                double distance = std::numeric_limits<double>::infinity();
+                for (size_t j = 1; j < target.size(); ++j)
+                    distance = std::min(distance, segment_distance(point, target[j - 1], target[j]));
+                if (distance > 1e-12) return false;
+            }
+        }
+        return true;
+    };
+    return directed(a, b) && directed(b, a);
+}
+void expect_intersection(const WkbGeometry& actual, const char* text) {
+    WkbGeometry expected;
+    ASSERT_TRUE(WkbCodec::parse_wkt(text, &expected, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    EXPECT_EQ(expected.type, actual.type);
+    EXPECT_EQ(expected.empty, actual.empty);
+    std::vector<const WkbGeometry*> a, b;
+    intersection_leaves(actual, &a);
+    intersection_leaves(expected, &b);
+    ASSERT_EQ(a.size(), b.size());
+    std::vector<bool> matched(b.size());
+    for (const auto* part : a) {
+        bool found = false;
+        for (size_t j = 0; j < b.size(); ++j) {
+            if (matched[j] || part->type != b[j]->type) continue;
+            bool equal = part->type == WkbGeometryType::POLYGON
+                                 ? polygon_match(*part, *b[j], 1e-12)
+                                 : part->type == WkbGeometryType::LINESTRING
+                                           ? path_matches(part->coordinates, b[j]->coordinates)
+                                           : part->coordinates == b[j]->coordinates;
+            if (equal) {
+                found = matched[j] = true;
+                break;
+            }
+        }
+        EXPECT_TRUE(found);
+    }
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(actual, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    WkbGeometry roundtrip;
+    ASSERT_TRUE(WkbCodec::parse_wkb(Slice(wkb), &roundtrip, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    EXPECT_EQ(actual.type, roundtrip.type);
+}
+void intersection_both_orders(const char* a, const char* b, const char* expected) {
+    expect_intersection(run(GeoOverlayKind::INTERSECTION, a, b), expected);
+    expect_intersection(run(GeoOverlayKind::INTERSECTION, b, a), expected);
+}
+} // namespace
+
+TEST(GeoOverlayCoreTest, IntersectionAreaAndAllPolygonFamilyPairs) {
+    for (bool left_multi : {false, true})
+        for (bool right_multi : {false, true}) {
+            const auto a = left_multi ? multi(square) : square, b = right_multi ? multi(shifted) : shifted;
+            intersection_both_orders(a.c_str(), b.c_str(), "POLYGON ((2 0,4 0,4 4,2 4,2 0))");
+        }
+    intersection_both_orders(square, square, square);
+    intersection_both_orders(square, empty, empty);
+    intersection_both_orders(empty, empty, empty);
+    intersection_both_orders(square, "POLYGON ((8 0,9 0,9 1,8 1,8 0))", empty);
+}
+TEST(GeoOverlayCoreTest, IntersectionCrossingContactsAreCoveredAfterWkbRounding) {
+    const char* a = "POLYGON ((0 0,8 -7,6 2,0 0))";
+    const char* b = "POLYGON ((-2 0,0 0,8 2,-2 0))";
+    // Independent segment crossings: (3,1), (116/19,29/19), (286/47,76/47).
+    const char* expected =
+            "POLYGON ((3 1,0 0,6.105263157894737 1.5263157894736843,"
+            "6.085106382978723 1.6170212765957446,3 1))";
+    for (bool left_multi : {false, true})
+        for (bool right_multi : {false, true}) {
+            const auto left = left_multi ? multi(a) : a, right = right_multi ? multi(b) : b;
+            intersection_both_orders(left.c_str(), right.c_str(), expected);
+        }
+}
+TEST(GeoOverlayCoreTest, IntersectionRetainsIsolatedContactOneUlpOutsideArea) {
+    // The contact is one representable double step beyond the area boundary.
+    // Classification must not introduce a distance tolerance or snap it away.
+    intersection_both_orders(
+            "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),"
+            "((4.000000000000001 2,5 2,5 3,4.000000000000001 2)))",
+            "MULTIPOLYGON (((2 0,4 0,4 4,2 4,2 0)),"
+            "((4.000000000000001 2,5 1,5 1.5,4.000000000000001 2)))",
+            "GEOMETRYCOLLECTION (POLYGON ((2 0,4 0,4 4,2 4,2 0)),POINT (4.000000000000001 2))");
+}
+TEST(GeoOverlayCoreTest, IntersectionRetainsEdgesVerticesAndClosedHoleBoundary) {
+    intersection_both_orders(square, "POLYGON ((4 0,8 0,8 4,4 4,4 0))", "LINESTRING (4 0,4 4)");
+    intersection_both_orders(square, "POLYGON ((4 4,5 4,5 5,4 5,4 4))", "POINT (4 4)");
+    intersection_both_orders("POLYGON ((0 0,8 0,8 8,0 8,0 0),(2 2,2 6,6 6,6 2,2 2))", "POLYGON ((2 2,6 2,6 6,2 6,2 2))",
+                             "LINESTRING (2 2,6 2,6 6,2 6,2 2)");
+}
+TEST(GeoOverlayCoreTest, IntersectionMultipleIsolatedPointsAndLines) {
+    const char* a = "MULTIPOLYGON (((0 0,2 0,2 2,0 2,0 0)),((10 0,12 0,12 2,10 2,10 0)))";
+    intersection_both_orders(a, "MULTIPOLYGON (((2 2,4 2,4 4,2 4,2 2)),((12 2,14 2,14 4,12 4,12 2)))",
+                             "MULTIPOINT ((2 2),(12 2))");
+    intersection_both_orders(a, "MULTIPOLYGON (((2 0,4 0,4 2,2 2,2 0)),((12 0,14 0,14 2,12 2,12 0)))",
+                             "MULTILINESTRING ((2 0,2 2),(12 0,12 2))");
+}
+TEST(GeoOverlayCoreTest, IntersectionMixedAreaLineAndPoint) {
+    intersection_both_orders(
+            "MULTIPOLYGON (((0 0,4 0,4 4,0 4,0 0)),((10 0,12 0,12 2,10 2,10 0)),((20 0,22 0,22 2,20 2,20 0)))",
+            "MULTIPOLYGON (((2 0,6 0,6 4,2 4,2 0)),((12 0,14 0,14 2,12 2,12 0)),((22 2,24 2,24 4,22 4,22 2)))",
+            "GEOMETRYCOLLECTION (POLYGON ((2 0,4 0,4 4,2 4,2 0)),LINESTRING (12 0,12 2),POINT (22 2))");
+}
+TEST(GeoOverlayCoreTest, IntersectionPreservesSubdividedContactAndNarrowArea) {
+    intersection_both_orders(square, "POLYGON ((4 0,8 0,8 4,4 4,4 3,4 2,4 1,4 0))", "LINESTRING (4 0,4 4)");
+    intersection_both_orders(square, "POLYGON ((3.9999999999 0,6 0,6 4,3.9999999999 4,3.9999999999 0))",
+                             "POLYGON ((3.9999999999 0,4 0,4 4,3.9999999999 4,3.9999999999 0))");
+}
+TEST(GeoOverlayCoreTest, IntersectionCancellationBetweenContactPrimitives) {
+    auto a = prepare(square), b = prepare("POLYGON ((4 0,8 0,8 4,4 4,4 0))");
+    ASSERT_TRUE(a.ok());
+    ASSERT_TRUE(b.ok());
+    size_t checks = 0;
+    auto cancelled = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION, [&]() {
+        return ++checks == 4 ? Status::Cancelled("cancel after boundary intersection") : Status::OK();
+    });
+    ASSERT_FALSE(cancelled.ok());
+    EXPECT_TRUE(cancelled.status().is_cancelled());
+    EXPECT_EQ(4, checks);
+    auto again = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION);
+    ASSERT_TRUE(again.ok()) << again.status();
+    expect_intersection(*again, "LINESTRING (4 0,4 4)");
+}
+TEST(GeoOverlayCoreTest, IntersectionRejectsPrecisionLossDuringOperandTranslation) {
+    auto a =
+            prepare("POLYGON ((100000000000000000000 0,100000000000000100000 0,100000000000000100000 "
+                    "100000,100000000000000000000 100000,100000000000000000000 0))");
+    auto b = prepare(square);
+    ASSERT_TRUE(a.ok());
+    ASSERT_TRUE(b.ok());
+    auto result = (*a)->overlay(**b, GeoOverlayKind::INTERSECTION);
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_invalid_argument());
+}
+
+TEST(GeoOverlayCoreTest, IntersectionIndependentRectangleOracle) {
+    auto point = [](int x, int y) { return std::to_string(x) + " " + std::to_string(y); };
+    auto box = [&](int x, int y, int w, int h) {
+        return "POLYGON ((" + point(x, y) + "," + point(x + w, y) + "," + point(x + w, y + h) + "," + point(x, y + h) +
+               "," + point(x, y) + "))";
+    };
+    for (int x = -2; x <= 6; x += 2)
+        for (int y = -2; y <= 6; y += 2)
+            for (int width : {2, 4, 6})
+                for (int height : {2, 4, 6}) {
+                    const int x0 = std::max(0, x), x1 = std::min(4, x + width);
+                    const int y0 = std::max(0, y), y1 = std::min(4, y + height);
+                    std::string expected;
+                    if (x0 > x1 || y0 > y1)
+                        expected = "POLYGON EMPTY";
+                    else if (x0 == x1 && y0 == y1)
+                        expected = "POINT (" + point(x0, y0) + ")";
+                    else if (x0 == x1 || y0 == y1)
+                        expected = "LINESTRING (" + point(x0, y0) + "," + point(x1, y1) + ")";
+                    else
+                        expected = box(x0, y0, x1 - x0, y1 - y0);
+                    intersection_both_orders(square, box(x, y, width, height).c_str(), expected.c_str());
+                }
+}
 } // namespace starrocks
