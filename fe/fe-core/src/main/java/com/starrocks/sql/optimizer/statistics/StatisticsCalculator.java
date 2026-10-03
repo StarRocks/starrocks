@@ -827,28 +827,13 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private Void computeLanceScanNode(Operator node, ExpressionContext context, Table table,
                                       Map<ColumnRefOperator, Column> columnRefOperatorColumnMap) {
         if (context.getStatistics() == null) {
-            Statistics stats = null;
-            try {
-                stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
-                        optimizerContext, table.getCatalogName(), table, columnRefOperatorColumnMap, null,
-                        node.getPredicate(), -1, TvrTableSnapshot.empty());
-            } catch (Exception e) {
-                LOG.warn("Failed to get Lance table statistics for {}: {}", table.getName(), e.getMessage());
-            }
-            if (!hasValidOutputRowCount(stats)) {
-                return computeNormalExternalTableScanNode(node, context, table, columnRefOperatorColumnMap,
-                        Config.default_statistics_output_row_count);
-            }
+            Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
+                    optimizerContext, table.getCatalogName(), table, columnRefOperatorColumnMap, null,
+                    node.getPredicate(), -1, TvrTableSnapshot.empty());
             context.setStatistics(stats);
         }
 
         return visitOperator(node, context);
-    }
-
-    static boolean hasValidOutputRowCount(Statistics statistics) {
-        return statistics != null
-                && Double.isFinite(statistics.getOutputRowCount())
-                && statistics.getOutputRowCount() >= 0;
     }
 
     @Override
