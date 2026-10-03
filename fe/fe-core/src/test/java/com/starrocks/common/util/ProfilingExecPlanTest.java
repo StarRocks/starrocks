@@ -76,7 +76,7 @@ public class ProfilingExecPlanTest {
                         "META_SCAN", "OLAP_SCAN", "ODPS_SCAN", "ICEBERG_METADATA_SCAN", "KUDU_SCAN",
                         "CAPTURE_VERSION", "ICEBERG_EQUALITY_DELETE_SCAN", "RAW_VALUES", "FETCH", "LOOK_UP",
                         "BENCHMARK_SCAN", "ICEBERG_METADATA_DELETE", "CACHE_STATS_SCAN",
-                        "ENFORCE_UNIQUE_ROW_LOCATOR");
+                        "ENFORCE_UNIQUE_ROW_LOCATOR", "LANCE_SCAN");
 
         Method method = ProfilingExecPlan.class.getDeclaredMethod("normalizeNodeName", Class.class);
         method.setAccessible(true);
