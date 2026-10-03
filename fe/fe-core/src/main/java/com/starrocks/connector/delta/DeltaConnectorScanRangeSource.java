@@ -162,6 +162,12 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
     }
 
+    public void stopPrefetch() {
+        if (remoteFileInfoSource instanceof DeltaLakePrefetchSource prefetch) {
+            prefetch.close();
+        }
+    }
+
     public int selectedPartitionCount() {
         return partitionKeys.size();
     }

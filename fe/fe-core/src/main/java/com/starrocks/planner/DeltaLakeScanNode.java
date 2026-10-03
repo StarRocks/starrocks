@@ -113,6 +113,9 @@ public class DeltaLakeScanNode extends ScanNode {
     @Override
     public void setReachLimit() {
         reachLimit = true;
+        if (scanRangeSource != null) {
+            scanRangeSource.stopPrefetch();
+        }
     }
 
     @Override
