@@ -17,6 +17,7 @@
 
 package com.starrocks.service.arrow.flight.sql;
 
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.Pair;
@@ -40,6 +41,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -52,9 +55,11 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 public class ArrowFlightSqlSessionManagerTest {
@@ -411,6 +416,57 @@ public class ArrowFlightSqlSessionManagerTest {
             String tokenWithoutProxy = sessionManager.initializeSession("testUser", "127.0.0.1", "testPassword");
             assertNotNull(tokenWithoutProxy);
             assertEquals(mockUUID.toString(), tokenWithoutProxy, "Token should be plain UUID when proxy disabled");
+        }
+    }
+
+    /**
+     * A JWT in the password field goes to the JWT entry point and is never retried as a password.
+     */
+    @Test
+    public void testInitializeSession_jwtAsPassword() throws Exception {
+        Base64.Encoder encoder = Base64.getUrlEncoder().withoutPadding();
+        String jwt = encoder.encodeToString("{\"alg\":\"RS256\"}".getBytes(StandardCharsets.UTF_8)) + "."
+                + encoder.encodeToString("{\"sub\":\"testUser\"}".getBytes(StandardCharsets.UTF_8)) + "."
+                + encoder.encodeToString("signature".getBytes(StandardCharsets.UTF_8));
+
+        try (MockedStatic<ExecuteEnv> mockedEnv = mockStatic(ExecuteEnv.class);
+                MockedStatic<UUIDUtil> mockedUUID = mockStatic(UUIDUtil.class);
+                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class);
+                MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<AuthenticationHandler> mockedAuth = mockStatic(AuthenticationHandler.class)) {
+
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(false);
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithJwt(any(), any(), any(), any()))
+                    .thenAnswer(invocation -> {
+                        ConnectContext ctx = invocation.getArgument(0);
+                        ctx.setCurrentUserIdentity(null);
+                        ctx.setQualifiedUser("testUser");
+                        return null;
+                    });
+
+            ExecuteEnv mockEnv = mock(ExecuteEnv.class);
+            mockedEnv.when(ExecuteEnv::getInstance).thenReturn(mockEnv);
+            when(mockEnv.getScheduler()).thenReturn(mockScheduler);
+            when(mockScheduler.getNextConnectionId()).thenReturn(123);
+            when(mockScheduler.registerConnection(any())).thenReturn(Pair.create(true, ""));
+
+            mockedUUID.when(UUIDUtil::genUUID).thenReturn(mockUUID);
+            mockedUUID.when(() -> UUIDUtil.toTUniqueId(mockUUID)).thenReturn(mockTUniqueId);
+
+            mockGlobalStateMgr(mockedGlobalState);
+
+            String token = sessionManager.initializeSession("testUser", "127.0.0.1", jwt);
+            assertEquals(mockUUID.toString(), token);
+            assertDoesNotThrow(() -> sessionManager.validateToken(token));
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithJwt(any(), eq("testUser"), eq("127.0.0.1"), eq(jwt)));
+
+            // A rejected token fails the login; the password entry point is never tried.
+            mockedAuth.when(() -> AuthenticationHandler.authenticateWithJwt(any(), any(), any(), any()))
+                    .thenThrow(new AuthenticationException("JWT expired"));
+            FlightRuntimeException error = assertThrows(FlightRuntimeException.class,
+                    () -> sessionManager.initializeSession("testUser", "127.0.0.1", jwt));
+            assertEquals(CallStatus.UNAUTHENTICATED.code(), error.status().code());
+            mockedAuth.verify(() -> AuthenticationHandler.authenticateWithClearPassword(any(), any(), any(), any()), never());
         }
     }
 }

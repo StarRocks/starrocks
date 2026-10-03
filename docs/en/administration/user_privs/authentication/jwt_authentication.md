@@ -74,3 +74,32 @@ Example:
 ```Bash
 mysql -h 127.0.0.1 -P 9030 --authentication-openid-connect-client-id-token-file=/path/to/token/file -u tom
 ```
+
+## Connect via Arrow Flight SQL with JWT
+
+To connect to StarRocks via Arrow Flight SQL using JWT, specify the username as usual and pass the token as the password. When the password has the structure of a signed JWT, StarRocks verifies it as a token instead of comparing it as a password. The value of the `principal_field` in the token must be identical with the username.
+
+For instructions on how to enable Arrow Flight SQL and create a client, see [Interact with StarRocks via Arrow Flight SQL](../../../unloading/arrow_flight.md).
+
+Example:
+
+```Python
+FE_HOST = "127.0.0.1"
+FE_PORT = 9408
+
+with open("/path/to/token/file") as f:
+    token = f.read().strip()
+
+conn = flight_sql.connect(
+    uri=f"grpc://{FE_HOST}:{FE_PORT}",
+    db_kwargs={
+        adbc_driver_manager.DatabaseOptions.USERNAME.value: "tom",
+        adbc_driver_manager.DatabaseOptions.PASSWORD.value: token,
+    }
+)
+```
+
+:::note
+- A password that has the structure of a signed JWT is always treated as a token. If the token is rejected, StarRocks does not retry it as a password.
+- Passing the JWT in the `Authorization: Bearer` header is not supported.
+:::

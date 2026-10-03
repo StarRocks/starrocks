@@ -28,6 +28,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.expression.InformationFunction;
@@ -866,5 +867,151 @@ public class SecurityIntegrationTest {
 
         Assertions.assertEquals(List.of("a", "b"), si.getGroupProviderName());
         Assertions.assertTrue(si.getGroupAllowedLoginList().isEmpty());
+    }
+
+    private void createJwtSecurityIntegration(String name, String principalField) {
+        GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY, "authentication_jwt");
+        properties.put(JWTAuthenticationProvider.JWT_JWKS_URL, "jwks.json");
+        properties.put(JWTAuthenticationProvider.JWT_PRINCIPAL_FIELD, principalField);
+        authenticationMgr.replayCreateSecurityIntegration(name, properties);
+    }
+
+    /**
+     * A JWT sent where a password would be (Arrow Flight Basic handshake) logs in the same users the
+     * MySQL protocol's JWT plugin does.
+     */
+    @Test
+    public void testAuthenticateWithJwtBySecurityIntegration() throws Exception {
+        String[] originalChain = Config.authentication_chain;
+        String[] originalGroupProvider = Config.group_provider;
+        try {
+            AuthenticationHandler.invalidateRejectedCredentialCache();
+            createJwtSecurityIntegration("oidc_basic", "preferred_username");
+            Config.authentication_chain = new String[] {"native", "oidc_basic"};
+            Config.group_provider = new String[] {};
+
+            String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+            ConnectContext connectContext = new ConnectContext();
+            UserIdentity user = AuthenticationHandler.authenticateWithJwt(connectContext, "harbor", "127.0.0.1", idToken);
+
+            Assertions.assertEquals("harbor", user.getUser());
+            Assertions.assertTrue(user.isEphemeral());
+            Assertions.assertEquals("oidc_basic", connectContext.getSecurityIntegration());
+            Assertions.assertEquals(idToken, connectContext.getAccessControlContext().getAuthToken());
+
+            // The token must name the user that is logging in.
+            AuthenticationException e = Assertions.assertThrows(AuthenticationException.class,
+                    () -> AuthenticationHandler.authenticateWithJwt(new ConnectContext(), "tina", "127.0.0.1", idToken));
+            Assertions.assertTrue(e.getMessage().contains("Login name tina is not matched"), e.getMessage());
+
+            // Bad signature.
+            String fakeToken = mockTokenUtils.getOpenIdConnect("fake-oidc.json");
+            e = Assertions.assertThrows(AuthenticationException.class,
+                    () -> AuthenticationHandler.authenticateWithJwt(new ConnectContext(), "harbor", "127.0.0.1", fakeToken));
+            Assertions.assertTrue(e.getMessage().contains("is invalid"), e.getMessage());
+
+            // Expired.
+            String expiredToken = mockTokenUtils.generateTestOIDCToken(-3600 * 1000);
+            e = Assertions.assertThrows(AuthenticationException.class, () -> AuthenticationHandler
+                    .authenticateWithJwt(new ConnectContext(), "harbor", "127.0.0.1", expiredToken));
+            Assertions.assertTrue(e.getMessage().contains("JWT expired"), e.getMessage());
+        } finally {
+            Config.authentication_chain = originalChain;
+            Config.group_provider = originalGroupProvider;
+        }
+    }
+
+    @Test
+    public void testAuthenticateWithJwtByNativeUser() throws Exception {
+        String originalJwksUrl = Config.jwt_jwks_url;
+        String originalPrincipalField = Config.jwt_principal_field;
+        String[] originalChain = Config.authentication_chain;
+        String[] originalGroupProvider = Config.group_provider;
+        try {
+            GlobalStateMgr.getCurrentState().setJwkMgr(new MockTokenUtils.MockJwkMgr());
+            Config.jwt_jwks_url = "jwks.json";
+            Config.jwt_principal_field = "preferred_username";
+            Config.authentication_chain = new String[] {"native"};
+            Config.group_provider = new String[] {};
+
+            CreateUserStmt createUserStmt = (CreateUserStmt) SqlParser
+                    .parse("create user harbor identified with authentication_jwt", 32).get(0);
+            Analyzer.analyze(createUserStmt, ctx);
+            authenticationMgr.createUser(createUserStmt);
+
+            String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+            UserIdentity user =
+                    AuthenticationHandler.authenticateWithJwt(new ConnectContext(), "harbor", "127.0.0.1", idToken);
+            Assertions.assertEquals("harbor", user.getUser());
+            Assertions.assertFalse(user.isEphemeral());
+
+            String fakeToken = mockTokenUtils.getOpenIdConnect("fake-oidc.json");
+            Assertions.assertThrows(AuthenticationException.class,
+                    () -> AuthenticationHandler.authenticateWithJwt(new ConnectContext(), "harbor", "127.0.0.1", fakeToken));
+        } finally {
+            Config.jwt_jwks_url = originalJwksUrl;
+            Config.jwt_principal_field = originalPrincipalField;
+            Config.authentication_chain = originalChain;
+            Config.group_provider = originalGroupProvider;
+        }
+    }
+
+    /**
+     * A token is only ever checked by a JWT provider. A native user of another kind is refused before its
+     * own provider sees the token: OAuth2 would answer OK without verifying anything, and LDAP would bind
+     * with the token as a password.
+     */
+    @Test
+    public void testAuthenticateWithJwtRejectsNonJwtNativeUser() throws Exception {
+        String[] originalChain = Config.authentication_chain;
+        String[] originalGroupProvider = Config.group_provider;
+        try {
+            AuthenticationHandler.invalidateRejectedCredentialCache();
+            createJwtSecurityIntegration("oidc_basic", "preferred_username");
+            Config.authentication_chain = new String[] {"native", "oidc_basic"};
+            Config.group_provider = new String[] {};
+            String idToken = mockTokenUtils.generateTestOIDCToken(3600 * 1000);
+
+            for (String identifiedWith : List.of("identified with authentication_oauth2",
+                    "identified with authentication_ldap_simple", "identified by '123456'")) {
+                authenticationMgr = new AuthenticationMgr();
+                GlobalStateMgr.getCurrentState().setAuthenticationMgr(authenticationMgr);
+                createJwtSecurityIntegration("oidc_basic", "preferred_username");
+
+                CreateUserStmt createUserStmt =
+                        (CreateUserStmt) SqlParser.parse("create user harbor " + identifiedWith, 32).get(0);
+                Analyzer.analyze(createUserStmt, ctx);
+                authenticationMgr.createUser(createUserStmt);
+
+                ConnectContext connectContext = new ConnectContext();
+                AuthenticationException e = Assertions.assertThrows(AuthenticationException.class,
+                        () -> AuthenticationHandler.authenticateWithJwt(connectContext, "harbor", "127.0.0.1", idToken),
+                        identifiedWith);
+                Assertions.assertTrue(e.getMessage().contains("Access denied for user 'harbor'"), e.getMessage());
+                // Refused before any provider was picked for the user.
+                Assertions.assertNull(connectContext.getAuthenticationProvider(), identifiedWith);
+            }
+        } finally {
+            Config.authentication_chain = originalChain;
+            Config.group_provider = originalGroupProvider;
+        }
+    }
+
+    @Test
+    public void testIsJwt() throws Exception {
+        Assertions.assertTrue(OpenIdConnectVerifier.isJwt(mockTokenUtils.generateTestOIDCToken(3600 * 1000)));
+        // Shape only: a forged or expired token is still a token, not a password.
+        Assertions.assertTrue(OpenIdConnectVerifier.isJwt(mockTokenUtils.getOpenIdConnect("fake-oidc.json")));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt(null));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt(""));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt("p@ssw0rd"));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt("a.b.c"));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt("fe.example.com"));
+        // Unsigned ("alg":"none") and missing-signature tokens are not signed JWTs.
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt("eyJhbGciOiJub25lIn0.e30."));
+        Assertions.assertFalse(OpenIdConnectVerifier.isJwt("eyJhbGciOiJSUzI1NiJ9.e30."));
     }
 }
