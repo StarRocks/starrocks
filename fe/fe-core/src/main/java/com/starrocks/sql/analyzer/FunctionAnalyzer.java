@@ -1067,7 +1067,8 @@ public class FunctionAnalyzer {
                 fn = fn.copy();
                 fn.setRetType(argumentTypes[0]);
             }
-        } else if ((FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
+        } else if ((FunctionSet.ST_INTERSECTION.equalsIgnoreCase(fnName) ||
+                FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_DIFFERENCE.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_SYMDIFFERENCE.equalsIgnoreCase(fnName)) && argumentTypes.length == 2 &&
                 ((argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY &&

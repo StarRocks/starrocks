@@ -134,10 +134,13 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 
 ## ポリゴン overlay
 
-互換性のある CRS を持つネイティブ XY ポリゴンとマルチポリゴンを処理します。4326 と 3857 はどちらも直交座標の意味を持ちます。NULL は NULL を返します。成分が 1 つの場合は POLYGON、複数の場合は MULTIPOLYGON、空の場合は POLYGON EMPTY です。無効なトポロジーはエラーです。精度とリソース制限はリンク先に記載しています。
+互換性のある CRS を持つネイティブ XY ポリゴンとマルチポリゴンを処理します。4326 と 3857 はどちらも直交座標の意味を持ちます。NULL は NULL を返します。`ST_Union`、`ST_Difference`、`ST_SymDifference` は、成分が 1 つの場合は POLYGON、複数の場合は MULTIPOLYGON、空の場合は POLYGON EMPTY を返します。無効なトポロジーはエラーです。精度とリソース制限はリンク先に記載しています。
+
+`ST_Intersection` は共有辺と孤立した接触点も保持します。面積がない場合は線または点のファミリ、複数の次元がある場合は GEOMETRYCOLLECTION を返します。より高い次元の結果に覆われる部分は重複して返しません。交差しない入力は POLYGON EMPTY を返します。
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
 | `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
 | `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
 | `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |

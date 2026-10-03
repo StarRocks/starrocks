@@ -267,8 +267,8 @@ public class AnalyzeFunctionTest {
     public void testNativeGeoPolygonOverlayContract() {
         String geometry = "ST_GeomFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))', 'EPSG:3857')";
         String geography = "ST_GeogFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))')";
-        String[] functions = {"ST_Union", "ST_Difference", "ST_SymDifference"};
-        long[] ids = {120351, 120361, 120371};
+        String[] functions = {"ST_Intersection", "ST_Union", "ST_Difference", "ST_SymDifference"};
+        long[] ids = {120341, 120351, 120361, 120371};
         for (int i = 0; i < functions.length; ++i) {
             String function = functions[i];
             String sql = "select " + function + "(" + geometry + ", " + geometry + ")";
@@ -299,8 +299,9 @@ public class AnalyzeFunctionTest {
             analyzeFail("select " + function + "(" + geometry + ", " + geometry + ", 0)",
                     "No matching function with signature");
         }
-        analyzeFail("select ST_Intersection(" + geometry + ", " + geometry + ")",
-                "No matching function with signature");
+        analyzeSuccess("select ST_Area(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_AsText(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_Transform(ST_Intersection(" + geometry + ", " + geometry + "), 4326)");
     }
 
     @Test

@@ -1187,7 +1187,8 @@ vectorized_functions = [
     # reserve 120311-120314 for future ST_Transform overloads
     # Contract 5.3 polygon overlays: base slot reserved for future GEOGRAPHY overloads.
     # Reserved 120340: ST_Intersection(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
-    # Reserved 120341: ST_Intersection(GEOMETRY, GEOMETRY) -> GEOMETRY (full intersection follow-up).
+    [120341, "ST_Intersection", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
+     "GeoFunctions::st_geometry_intersection", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
     # Reserved 120350: ST_Union(GEOGRAPHY, GEOGRAPHY) -> GEOGRAPHY.
     [120351, "ST_Union", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
      "GeoFunctions::st_geometry_union", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
