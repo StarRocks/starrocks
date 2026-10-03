@@ -36,7 +36,7 @@ from starrocks.common.params import (
     TableKind,
     TableObjectInfoKey,
 )
-from starrocks.common.types import PartitionType, TableEngine
+from starrocks.common.types import PartitionType, TableDistribution, TableEngine
 from starrocks.common.utils import SQLParseError, TableAttributeNormalizer
 
 from .common import utils
@@ -496,6 +496,16 @@ class StarRocksTableDefinitionParser(object):
         Get distribution from information_schema.tables_config table.
         It returns ReflectedDistributionInfo representation of distribution option.
         """
+        distribute_type = table_config.get(TableConfigKey.DISTRIBUTE_TYPE)
+        if str(distribute_type or '').strip().upper() == TableDistribution.RANGE:
+            # Range distribution has no bucketing key or bucket count: StarRocks reports a
+            # placeholder of 1 (RangeDistributionInfo.getBucketNum), so keep just the method.
+            return ReflectedDistributionInfo(
+                type=TableDistribution.RANGE,
+                columns=None,
+                distribution_method=TableDistribution.RANGE,
+                buckets=None,
+            )
         return ReflectedDistributionInfo(
             type=table_config.get(TableConfigKey.DISTRIBUTE_TYPE),
             columns=table_config.get(TableConfigKey.DISTRIBUTE_KEY),

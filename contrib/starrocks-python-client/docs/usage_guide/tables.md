@@ -113,6 +113,13 @@ Specifies the data distribution (including bucketing) strategy.
 
 > **Note on Buckets**: If you specify a distribution method (e.g., `HASH(user_id)`) but omit the `BUCKETS` clause, StarRocks will automatically assign a bucket count. Alembic's `autogenerate` feature is designed to handle this: if the distribution method in your metadata matches the one in the database and you haven't specified a bucket count, no changes will be detected. This prevents unnecessary `ALTER TABLE` statements when the bucket count is automatically managed by the system.
 
+> **Note on RANGE distribution**: StarRocks 4.1+ supports range-based distribution, and in shared-data mode it is the default for a table that declares a key type (or `ORDER BY`) but no `DISTRIBUTED BY` clause. StarRocks has no `DISTRIBUTED BY RANGE` syntax, so range distribution is obtained by *omitting* the clause:
+>
+> - Leave `starrocks_distributed_by` unset, or set it to `"RANGE"` to make the intent explicit. Either way `CREATE TABLE` is emitted without a `DISTRIBUTED BY` clause, and `autogenerate` treats a RANGE-distributed table as unchanged. A `BUCKETS` value on `RANGE` is ignored: range distribution has no bucket count (StarRocks always reports a placeholder of `1`, which is why an unsupported version shows `RANGE BUCKETS 1`).
+> - A table reflected with RANGE distribution reports `distributed_by` as `"RANGE"`.
+> - StarRocks cannot switch an existing table between RANGE and `HASH`/`RANDOM` distribution, so `autogenerate` raises an error instead of generating an `ALTER TABLE`. Recreate the table to change it.
+> - On clusters without range distribution (before 4.1, shared-nothing, or `enable_range_distribution` disabled), a table marked `"RANGE"` is created with the default distribution instead, and `autogenerate` then reports a mismatch. For models shared across such clusters, leave `starrocks_distributed_by` unset.
+
 ##### 6. `starrocks_order_by`
 
 Specifies the sorting columns.
