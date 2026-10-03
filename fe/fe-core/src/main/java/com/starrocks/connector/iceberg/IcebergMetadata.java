@@ -81,6 +81,7 @@ import com.starrocks.metric.ConnectorMetricsMgr;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableClause;
@@ -174,6 +175,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.SerializationUtil;
 import org.apache.iceberg.util.SnapshotUtil;
 import org.apache.iceberg.util.TableScanUtil;
+import org.apache.iceberg.view.RefreshState;
 import org.apache.iceberg.view.View;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -458,8 +460,11 @@ public class IcebergMetadata implements ConnectorMetadata {
                 catalogName, dbName, mvName, statement.getComment(), columns, statement.getInlineViewDef());
         icebergCatalog.createMaterializedViewStorageView(context, catalogName, viewDefinition, storageIdent, true);
 
-        // TODO(mechanism-c): register a refresh Task keyed by the IRC identifier (catalog.db.name) and wire the
-        // transient-hydration seam in MVTaskRunProcessor.prepare(). C.0 scaffolding creates the IRC objects only.
+        // 3. register the refresh Task (keyed by the IRC identifier catalog.db.name; no local MaterializedView)
+        String insertSql = String.format("INSERT OVERWRITE `%s`.`%s`.`%s` %s",
+                catalogName, dbName, storageTable, statement.getInlineViewDef());
+        TaskBuilder.registerIcebergMvTask(catalogName, dbName, mvName, insertSql, statement.getInlineViewDef(),
+                statement.getBaseTableInfos(), statement.getRefreshSchemeDesc());
     }
 
     @Override
@@ -472,7 +477,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         } finally {
             icebergCatalog.dropTable(context, dbName, IcebergMVStorage.storageTableName(mvName), true);
         }
-        // TODO(mechanism-c): delete the local refresh Task + freshness cache.
+        // delete the refresh Task (run-history in task_runs is retained by TTL).
+        TaskBuilder.dropIcebergMvTask(catalogName, dbName, mvName);
     }
 
     @Override
@@ -490,7 +496,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         // catalog renameView path is available (not guaranteed atomic with the table rename).
         icebergCatalog.renameTable(context, dbName,
                 IcebergMVStorage.storageTableName(oldMvName), IcebergMVStorage.storageTableName(newMvName));
-        // TODO(mechanism-c): update the local refresh Task binding to the new IRC identifier.
+        // rebind the refresh Task to the new identifier + storage table (schedule preserved).
+        TaskBuilder.renameIcebergMvTask(catalogName, dbName, oldMvName, newMvName,
+                IcebergMVStorage.storageTableName(newMvName));
     }
 
     @Override
@@ -3320,6 +3328,13 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite, isRewrite);
 
+        // Mechanism C: stamp the Iceberg RefreshState into this overwrite's snapshot summary when an Iceberg-catalog
+        // MV refresh set it on the context. Only the IRC-MV refresh sets this, so normal Iceberg writes are
+        // unaffected.
+        if (context != null && context.getIcebergMVRefreshState() != null) {
+            batchWrite.setSnapshotSummary(RefreshState.REFRESH_STATE_SUMMARY_KEY, context.getIcebergMVRefreshState());
+        }
+
         if (branch != null) {
             batchWrite.toBranch(branch);
         }
@@ -3468,6 +3483,18 @@ public class IcebergMetadata implements ConnectorMetadata {
             SnapshotUpdate<?> update = getSnapshotUpdate();
             if (update != null) {
                 IcebergMetadata.updateCommitInfo(update, engineName, engineVersion, user);
+            }
+        }
+
+        /**
+         * Set an arbitrary snapshot-summary property on the pending commit. Snapshot summaries are immutable once
+         * committed, so this must be called before {@link #commit()}. Used by Mechanism-C MV refresh to stamp the
+         * Iceberg RefreshState into the &lt;mv&gt;__storage overwrite snapshot.
+         */
+        default void setSnapshotSummary(String key, String value) {
+            SnapshotUpdate<?> update = getSnapshotUpdate();
+            if (update != null && key != null && value != null) {
+                update.set(key, value);
             }
         }
     }

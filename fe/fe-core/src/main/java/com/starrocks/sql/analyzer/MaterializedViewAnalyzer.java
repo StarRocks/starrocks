@@ -685,9 +685,9 @@ public class MaterializedViewAnalyzer {
             List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
             statement.setMvColumnItems(mvColumns);
             IcebergMVStorage.validateIcebergSchema(mvColumns);
-            // TODO(mechanism-c): refresh Task registration (keyed by the IRC identifier catalog.db.name) and the
-            // transient hydration seam in MVTaskRunProcessor.prepare() are wired in a later step. The DDL executor
-            // routes CREATE to IcebergMetadata.createMaterializedView, which creates the IRC View + storage table.
+            // The DDL executor routes CREATE to IcebergMetadata.createMaterializedView, which creates the IRC View +
+            // <mv>__storage table and registers the refresh Task (TaskSource.ICEBERG_MV); refresh is driven by
+            // IcebergMVRefreshProcessor. No local MaterializedView is persisted.
         }
 
         /**
