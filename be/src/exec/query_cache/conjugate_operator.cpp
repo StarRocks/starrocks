@@ -79,6 +79,26 @@ Status ConjugateOperator::set_finishing(RuntimeState* state) {
     return _sink_op->set_finishing(state);
 }
 
+bool ConjugateOperator::pending_finish() const {
+    return _sink_op->pending_finish() || _source_op->pending_finish();
+}
+
+bool ConjugateOperator::supports_intermediate_wakeup() const {
+    return _sink_op->supports_intermediate_wakeup() || _source_op->supports_intermediate_wakeup();
+}
+
+pipeline::BlockReason ConjugateOperator::block_reason() const {
+    auto reason = _sink_op->block_reason();
+    if (reason != pipeline::BlockReason::NONE) {
+        return reason;
+    }
+    return _source_op->block_reason();
+}
+
+uint32_t ConjugateOperator::covered_wakeups() const {
+    return _sink_op->covered_wakeups() | _source_op->covered_wakeups();
+}
+
 Status ConjugateOperator::set_finished(RuntimeState* state) {
     auto sink_status = _sink_op->set_finished(state);
     auto source_status = _source_op->set_finished(state);
@@ -150,6 +170,14 @@ RuntimeFilterProbeCollector* ConjugateOperatorFactory::get_runtime_bloom_filters
 
 const RuntimeFilterProbeCollector* ConjugateOperatorFactory::get_runtime_bloom_filters() const {
     return _source_op_factory->get_runtime_bloom_filters();
+}
+
+bool ConjugateOperatorFactory::support_event_scheduler() const {
+    return _sink_op_factory->support_event_scheduler() && _source_op_factory->support_event_scheduler();
+}
+
+bool ConjugateOperatorFactory::supports_intermediate_wakeup() const {
+    return _sink_op_factory->supports_intermediate_wakeup() || _source_op_factory->supports_intermediate_wakeup();
 }
 
 pipeline::OperatorPtr ConjugateOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

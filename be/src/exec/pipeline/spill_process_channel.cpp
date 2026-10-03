@@ -15,6 +15,7 @@
 #include "exec/pipeline/spill_process_channel.h"
 
 #include "compute_env/spill/spiller.h"
+#include "exec/pipeline/context_with_dependency.h"
 
 namespace starrocks {
 
@@ -67,7 +68,7 @@ bool SpillProcessChannel::add_spill_task(SpillProcessTask&& task) {
         if (!ok) {
             return false;
         }
-        spiller_copy = _spiller;
+        spiller_copy = this->spiller();
     }
     // Callers enqueue directly (aggregator, sorter, hash joiner) without going
     // through execute(), so the enqueue itself must wake the spill-process
@@ -89,7 +90,7 @@ bool SpillProcessChannel::add_last_task(SpillProcessTask&& task) {
         if (!ok) {
             return false;
         }
-        spiller_copy = _spiller;
+        spiller_copy = this->spiller();
     }
     if (spiller_copy != nullptr) {
         spiller_copy->notify_source_observers();
@@ -107,6 +108,60 @@ SpillProcessChannelPtr SpillProcessChannelFactory::get_or_create(int32_t sequenc
         _channels[sequence] = std::make_shared<SpillProcessChannel>();
     }
     return _channels[sequence];
+}
+
+void SpillProcessChannel::set_guarded_context(pipeline::ContextWithDependency* context) {
+    std::lock_guard guard(_mutex);
+    if (_is_closed) {
+        return;
+    }
+    DCHECK(_guarded_context == nullptr);
+    DCHECK(context != nullptr);
+    context->ref();
+    _guarded_context = context;
+}
+
+std::shared_ptr<spill::Spiller> SpillProcessChannel::spiller() const {
+    // Event callbacks inspect the spiller, including from tasks run under the channel mutex.
+    // Pin its lifetime without acquiring that mutex or racing delayed producer initialization.
+    return std::atomic_load_explicit(&_spiller, std::memory_order_acquire);
+}
+
+void SpillProcessChannel::set_spiller(std::shared_ptr<spill::Spiller> spiller) {
+    RuntimeState* state = nullptr;
+    pipeline::PipelineObserver* observer = nullptr;
+    {
+        std::lock_guard guard(_mutex);
+        if (_is_closed) {
+            return;
+        }
+        DCHECK(this->spiller() == nullptr);
+        std::atomic_store_explicit(&_spiller, spiller, std::memory_order_release);
+        state = _source_state;
+        observer = _source_observer;
+    }
+    // Do not nest the channel mutex and observable lock: a notification can inspect this channel.
+    // The producer cannot enqueue work until set_spiller() and its operator preparation return.
+    if (state != nullptr) {
+        spiller->observable().subscribe_source(state, observer);
+    }
+}
+
+void SpillProcessChannel::prepare_source(RuntimeState* state, pipeline::PipelineObserver* observer) {
+    std::shared_ptr<spill::Spiller> spiller_copy;
+    {
+        std::lock_guard guard(_mutex);
+        if (_is_closed) {
+            return;
+        }
+        DCHECK(_source_state == nullptr);
+        _source_state = state;
+        _source_observer = observer;
+        spiller_copy = this->spiller();
+    }
+    if (spiller_copy != nullptr) {
+        spiller_copy->observable().subscribe_source(state, observer);
+    }
 }
 
 Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
@@ -132,7 +187,7 @@ Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
             _add_last_task_locked(std::move(task_builder.final_task()));
             // Enqueue (and the terminal flag) are now published under the lock;
             // wake the pump via a spiller copy, notifying outside the lock.
-            notify_spiller = _spiller;
+            notify_spiller = spiller();
         } else {
             // Inline branch: not working yet, run tasks synchronously. No
             // queueing, no notify.
@@ -157,7 +212,8 @@ Status SpillProcessChannel::execute(SpillProcessTasksBuilder& task_builder) {
     return res;
 }
 
-void SpillProcessChannel::close() {
+void SpillProcessChannel::close(RuntimeState* state) {
+    pipeline::ContextWithDependency* context = nullptr;
     std::shared_ptr<spill::Spiller> spiller_copy;
     {
         std::lock_guard guard(_mutex);
@@ -185,10 +241,13 @@ void SpillProcessChannel::close() {
         // happen on the cancel path too: a sink driver in another pipeline
         // parks on has_task() through its WAIT_CHANNEL block, and nobody else
         // clears the count once this source is torn down.
+        _current_task.reset();
         _task_count.store(0);
 
-        spiller_copy = std::move(_spiller);
+        spiller_copy =
+                std::atomic_exchange_explicit(&_spiller, std::shared_ptr<spill::Spiller>{}, std::memory_order_acq_rel);
         _is_closed = true;
+        context = std::exchange(_guarded_context, nullptr);
     }
     // Wake the sink-side waiters outside the lock: the count is already
     // published at zero, so an OUTPUT_FULL driver woken here observes
@@ -196,6 +255,11 @@ void SpillProcessChannel::close() {
     if (spiller_copy != nullptr) {
         spiller_copy->notify_sink_observers();
         spiller_copy->notify_source_observers();
+    }
+    // Context close may free the aggregator/join state and reenter other spill paths.
+    // All task captures have been released, and the channel lock must not be held here.
+    if (context != nullptr) {
+        context->unref(state);
     }
 }
 

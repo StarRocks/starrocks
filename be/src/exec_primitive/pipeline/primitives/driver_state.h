@@ -41,7 +41,14 @@ enum DriverState : uint32_t {
     // in the working thread other than moving the driver frequently between ready queue and pending queue, which
     // will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
     // We can enable this optimization by overriding SourceOperator::is_mutable to return true.
-    LOCAL_WAITING = 10
+    LOCAL_WAITING = 10,
+    // INTERMEDIATE_BLOCK means the driver made no progress this round, both edges (source/sink) are still
+    // open, but an intermediate operator pair is blocked: an intermediate curr_op has no output (and is not
+    // finished), or an intermediate next_op does not need input. Without this state such a driver would
+    // classify as READY and spin through the ready queue. A driver in this state is blocked on an
+    // intermediate predicate that flips from another thread (e.g. spiller IO completion), so it must be
+    // parked / event-driven instead of spun.
+    INTERMEDIATE_BLOCK = 11
 };
 
 [[maybe_unused]] static inline std::string ds_to_string(DriverState ds) {
@@ -68,6 +75,8 @@ enum DriverState : uint32_t {
         return "PENDING_FINISH";
     case LOCAL_WAITING:
         return "LOCAL_WAITING";
+    case INTERMEDIATE_BLOCK:
+        return "INTERMEDIATE_BLOCK";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";

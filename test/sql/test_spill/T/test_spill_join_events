@@ -1,0 +1,57 @@
+-- name: test_spill_join_events @sequential
+-- Force-spill shuffle hash-join (join on a NON-distribution key), plus a cancel-during-spill scenario.
+--
+-- Coverage and LIMITATIONS (documented, deliberate):
+--   * enable_spill_join_events is a MUTABLE BE config (CONF_mBool, default false). This test runs on the
+--     default mode (events OFF) only and does not flip it. In that mode the interior parking is gated on
+--     the operator declaration, not the config, so the poller world PARKS the spilled join instead of
+--     spinning it; the event-scheduler path (events ON) is exercised only by the BE unit tests
+--     (spillable_hash_join_probe_event_test, spillable_hash_join_build_event_test, intermediate_block_*,
+--     wakeup_table_test) and by an explicit benchmark, not here.
+--   * What IS covered e2e: (1) a forced-spill shuffle self-join on a non-distribution key produces correct
+--     results, and (2) a cancel landing mid-spill (drop task -> wait_util_no_queries, the framework's KILL
+--     idiom; KILL QUERY needs a live connection_id this runner does not expose for a backgrounded task) frees
+--     the drivers and the backend stays healthy, so a second identical query after the cancel still returns
+--     the correct result. Backend liveness post-cancel is the regression guard for the parked-driver release.
+set enable_spill=true;
+set spill_mode="force";
+set pipeline_dop=1;
+
+create table t0 (
+    c0 INT,
+    c1 BIGINT
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- c1 == c0, so the join on c1 is 1:1; c1 is NOT the distribution key (c0 is), forcing a shuffle join.
+insert into t0 SELECT generate_series, generate_series FROM TABLE(generate_series(1, 40960));
+
+-- make sure each load brings in a single partition so the probe actually round-trips through spill.
+set spill_operator_max_bytes=0;
+set spill_mem_table_size=1024;
+
+-- Force-spill shuffle self-join on the non-distribution key c1. Deterministic 1:1 join.
+select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+
+-- Cancel-during-spill: slow the restore so the spilling join is genuinely in flight, background it as a task,
+-- then drop it. The drivers must release (no hang in PENDING_FINISH) and the backend must stay up.
+admin enable failpoint 'spill_restore_sleep';
+[UC]submit task etl_${uuid0}
+PROPERTIES (
+    "session.pipeline_dop"= "1",
+    "session.enable_spill"="true",
+    "session.spill_mode"="force",
+    "session.spill_operator_max_bytes"="0",
+    "session.spill_mem_table_size"="1024"
+)
+as CREATE table tmp as select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+shell: sleep 1
+drop task etl_${uuid0};
+function: wait_util_no_queries()
+admin disable failpoint 'spill_restore_sleep';
+
+-- Post-cancel correctness: the same forced-spill shuffle join still returns the right result, proving the
+-- cancel freed the parked drivers cleanly and the backend is healthy.
+select count(*), sum(l.c0), sum(r.c0) from t0 l join [shuffle] t0 r on l.c1 = r.c1;
+
+CLEANUP {
+  admin disable failpoint 'spill_restore_sleep';
+} END CLEANUP

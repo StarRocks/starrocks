@@ -254,6 +254,15 @@ This topic introduces the following types of BE configurations:
 - Description: Whether to enable memory cache for ordinal index. Ordinal index is a mapping from row IDs to data page positions, and it can be used to accelerate scans.
 - Introduced in: -
 
+### enable_spill_join_events
+
+- Default: false
+- Type: Boolean
+- Unit: -
+- Is mutable: Yes
+- Description: Enables the pipeline event scheduler for the spilling hash-join build and probe operators instead of poll-spinning.
+- Introduced in: -
+
 ### enable_spill_sort_events
 
 - Default: false

@@ -13,6 +13,12 @@ set(EXEC_FILES
         ./compute_env/spill/spill_observable_test.cpp
         ./exec/pipeline/spill_process_channel_test.cpp
         ./exec/pipeline/block_reason_test.cpp
+        ./exec/pipeline/block_reason_join_test.cpp
+        ./exec/pipeline/spillable_hash_join_probe_event_test.cpp
+        ./exec/pipeline/spillable_probe_cancel_test.cpp
+        ./exec/pipeline/spillable_hash_join_build_event_test.cpp
+        ./exec/pipeline/intermediate_block_event_test.cpp
+        ./exec/pipeline/intermediate_block_driver_test.cpp
         ./exec/pipeline/spillable_sort_source_lockstep_test.cpp
         ./exec/pipeline/spillable_sort_observer_wakeup_test.cpp
         ./exec/pipeline/schedule/pipeline_timer_test.cpp
@@ -44,6 +50,7 @@ set(EXEC_FILES
         ./exec/pipeline/scan/physical_split_morsel_queue_test.cpp
         ./storage/tablet_schema_helper.cpp
         ./exec/pipeline/scan/split_morsel_ticket_checker_test.cpp
+        ./exec/query_cache/cache_wrapper_forwarding_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/sink/connector_sink_operator_test.cpp

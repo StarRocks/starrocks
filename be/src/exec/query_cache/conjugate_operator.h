@@ -48,6 +48,13 @@ public:
     bool has_output() const override;
     bool need_input() const override;
     bool is_finished() const override;
+    // Forwarded for the driver-side aggregations (is_still_pending_finish, the wakeable-intermediate
+    // registry, the park-time BlockReason check), which see this wrapper in PipelineDriver::_operators
+    // when query cache conjugates a pre-cache sink/source pair. Same reason as MultilaneOperator.
+    bool pending_finish() const override;
+    bool supports_intermediate_wakeup() const override;
+    pipeline::BlockReason block_reason() const override;
+    uint32_t covered_wakeups() const override;
     Status set_finished(RuntimeState* state) override;
     Status set_finishing(RuntimeState* state) override;
     Status set_cancelled(RuntimeState* state) override;
@@ -70,6 +77,9 @@ public:
     const pipeline::LocalRFWaitingSet& rf_waiting_set() const override;
     RuntimeFilterProbeCollector* get_runtime_bloom_filters() override;
     const RuntimeFilterProbeCollector* get_runtime_bloom_filters() const override;
+    // Forwarded for the fragment gate, same reason as MultilaneOperatorFactory.
+    bool support_event_scheduler() const override;
+    bool supports_intermediate_wakeup() const override;
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
