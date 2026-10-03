@@ -28,6 +28,7 @@
 #include "runtime/chunk_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "storage_primitive/column_predicate_factory.h"
 #include "storage_primitive/predicate_tree/predicate_tree.h"
 
 namespace starrocks::formats {
@@ -60,7 +61,7 @@ Status visit_position_delete_rows(const ChunkPtr& chunk, const IcebergPositionDe
 
 Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_size, const std::string& timezone,
                          const FormatScannerOptions& options, FormatScannerStats* stats,
-                         const IcebergPositionDeleteReader::RowCallback& cb) {
+                         const IcebergPositionDeleteReader::RowCallback& cb, const std::string* pushdown_file_path_eq) {
     std::unique_ptr<parquet::FileReader> reader;
     try {
         reader = std::make_unique<parquet::FileReader>(chunk_size, file, length);
@@ -94,8 +95,18 @@ Status read_parquet_rows(RandomAccessFile* file, int64_t length, int32_t chunk_s
     iceberg_schema.__set_fields(schema_fields);
 
     std::atomic<int32_t> lazy_column_coalesce_counter = 0;
-    // TODO: Remove this empty placeholder once FileReader supports a null predicate tree for predicate-free scans.
-    PredicateTree predicate_tree;
+
+    // Push `file_path == pushdown_file_path_eq` down so row-group/page zonemap stats can skip ranges
+    // that can't match. Not row-exact, so `visit_position_delete_rows` below still re-checks each row.
+    std::unique_ptr<ColumnPredicate> file_path_eq_pred;
+    PredicateAndNode predicate_root;
+    if (pushdown_file_path_eq != nullptr) {
+        file_path_eq_pred.reset(new_column_eq_predicate(get_type_info(TYPE_VARCHAR),
+                                                        IcebergDeleteFileMeta::get_delete_file_path_slot().id(),
+                                                        Slice(*pushdown_file_path_eq)));
+        predicate_root.add_child(PredicateColumnNode{file_path_eq_pred.get()});
+    }
+    PredicateTree predicate_tree = PredicateTree::create(std::move(predicate_root));
     FormatScanContext format_scan_context;
     format_scan_context.timezone = timezone;
     format_scan_context.materialized_columns = std::move(columns);
@@ -161,15 +172,17 @@ Status read_orc_rows(RandomAccessFile* file, const std::string& path, int64_t le
 Status IcebergPositionDeleteReader::read_rows(RandomAccessFile* file, const std::string& path, int64_t length,
                                               const std::string& format, int32_t chunk_size,
                                               const std::string& timezone, const FormatScannerOptions& options,
-                                              FormatScannerStats* stats, const RowCallback& cb) {
+                                              FormatScannerStats* stats, const RowCallback& cb,
+                                              const std::string* pushdown_file_path_eq) {
     FormatScannerStats local_stats;
     if (stats == nullptr) {
         stats = &local_stats;
     }
     if (format == PARQUET) {
-        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, cb);
+        return read_parquet_rows(file, length, chunk_size, timezone, options, stats, cb, pushdown_file_path_eq);
     }
     if (format == ORC) {
+        // TODO: push the same predicate down via ORC's SearchArgument once available.
         return read_orc_rows(file, path, length, chunk_size, timezone, cb);
     }
     return Status::NotSupported(strings::Substitute("unsupported iceberg position-delete file format: $0", format));
@@ -210,11 +223,13 @@ Status IcebergDeleteBuilder::build(const TIcebergDeleteFile& delete_file, const 
 
     RETURN_IF_ERROR(IcebergPositionDeleteReader::read_rows(
             file.get(), delete_file.full_path, delete_file.length, format, _ctx.chunk_size, _ctx.scan_context->timezone,
-            _ctx.scan_context->options, &app_stats, [this](const Slice& file_path, int64_t pos) {
+            _ctx.scan_context->options, &app_stats,
+            [this](const Slice& file_path, int64_t pos) {
                 if (file_path == _ctx.data_file_path) {
                     _deletion_bitmap->add_value(pos);
                 }
-            }));
+            },
+            &_ctx.data_file_path));
     update_delete_file_io_counter(_ctx.runtime_profile, app_stats, fs_stats, cache_input_stream,
                                   shared_buffered_input_stream);
     return Status::OK();
