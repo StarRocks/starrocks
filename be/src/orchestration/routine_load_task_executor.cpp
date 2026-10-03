@@ -39,9 +39,11 @@
 #include <thread>
 
 #include "base/concurrency/stopwatch.hpp"
+#include "base/testutil/sync_point.h"
 #include "base/uid_util.h"
 #include "base/utility/defer_op.h"
 #include "common/logging.h"
+#include "common/process_exit.h"
 #include "common/status.h"
 #include "compute_env/load/load_stream_mgr.h"
 #include "compute_env/load/stream_load_context.h"
@@ -315,12 +317,18 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
 Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     std::unique_lock<std::mutex> l(_lock);
     if (_task_map.find(task.id) != _task_map.end()) {
-        // already submitted
         LOG(INFO) << "routine load task " << UniqueId(task.id) << " has already been submitted";
         return Status::OK();
     }
 
-    // create the context
+    // Drain-visible before the admission check so wait_for_finish cannot sample 0 while
+    // this RPC is still in submit_task / queued.
+    inc_shutdown_work();
+    if (!should_accept_new_request()) {
+        dec_shutdown_work();
+        return Status::ServiceUnavailable("Service is shutting down, please retry later!");
+    }
+
     auto* ctx = new StreamLoadContext(_exec_env->load_stream_mgr());
     ctx->load_type = TLoadType::ROUTINE_LOAD;
     ctx->load_src_type = task.type;
@@ -342,7 +350,6 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         ctx->max_batch_size = task.max_batch_size;
     }
 
-    // set execute plan params
     TStreamLoadPutResult put_result;
     TStatus tstatus;
     tstatus.status_code = TStatusCode::OK;
@@ -353,8 +360,6 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     if (task.__isset.format) {
         ctx->format = task.format;
     }
-    // the routine load task'txn has alreay began in FE.
-    // so it need to rollback if encounter error.
     set_need_rollback(ctx, _stream_load_executor);
     if (task.__isset.max_filter_ratio) {
         ctx->max_filter_ratio = task.max_filter_ratio;
@@ -362,13 +367,9 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
         ctx->max_filter_ratio = 1.0;
     }
 
-    // set source related params
     switch (task.type) {
     case TLoadSourceType::KAFKA:
         ctx->kafka_info = std::make_unique<KafkaLoadInfo>(task.kafka_load_info);
-        // Make the kafka topic/partitions/offsets visible to the fragment's
-        // RuntimeState so rejected_records.source_info points back at the
-        // real source instead of the SequentialFile placeholder name.
         ctx->put_result.params.query_options.__set_routine_load_source_info(
                 build_kafka_source_info(task.kafka_load_info));
         break;
@@ -380,15 +381,14 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     default:
         LOG(WARNING) << "unknown load source type: " << task.type;
         delete ctx;
+        dec_shutdown_work();
         return Status::InternalError("unknown load source type");
     }
 
     VLOG(2) << "receive a new routine load task: " << ctx->brief();
-    // register the task
     ctx->ref();
     _task_map[ctx->id] = ctx;
 
-    // offer the task to thread pool
     if (!_thread_pool
                  ->submit_func([this, ctx, capture0 = &_data_consumer_pool,
                                 capture1 =
@@ -401,23 +401,31 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
                                             if (ctx->unref()) {
                                                 delete ctx;
                                             }
-                                        }] { exec_task(ctx, capture0, capture1); })
+                                            dec_shutdown_work();
+                                        }] {
+                     bool skip_exec = false;
+                     TEST_SYNC_POINT_CALLBACK("RoutineLoadTaskExecutor::submit_task:before_exec", &skip_exec);
+                     if (skip_exec) {
+                         capture1(ctx);
+                     } else {
+                         exec_task(ctx, capture0, capture1, true);
+                     }
+                 })
                  .ok()) {
-        // failed to submit task, clear and return
         LOG(WARNING) << "failed to submit routine load task: " << ctx->brief();
         _task_map.erase(ctx->id);
         if (ctx->unref()) {
             delete ctx;
         }
+        dec_shutdown_work();
         return Status::InternalError("failed to submit routine load task");
-    } else {
-        LOG(INFO) << "submit a new routine load task: " << ctx->brief() << ", current tasks num: " << _task_map.size();
-        return Status::OK();
     }
+    LOG(INFO) << "submit a new routine load task: " << ctx->brief() << ", current tasks num: " << _task_map.size();
+    return Status::OK();
 }
 
 void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool* consumer_pool,
-                                        const ExecFinishCallback& cb) {
+                                        const ExecFinishCallback& cb, bool admission_already_granted) {
 #define HANDLE_ERROR(stmt, err_msg)                                       \
     do {                                                                  \
         Status _status_ = (stmt);                                         \
@@ -473,7 +481,8 @@ void RoutineLoadTaskExecutor::exec_task(StreamLoadContext* ctx, DataConsumerPool
     HANDLE_ERROR(_exec_env->load_stream_mgr()->put(ctx->id, pipe), "failed to add pipe")
 
     // execute plan fragment, async
-    HANDLE_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx), "failed to execute plan fragment")
+    HANDLE_ERROR(_stream_load_orchestrator->execute_plan_fragment(ctx, admission_already_granted),
+                 "failed to execute plan fragment")
 
     // start to consume, this may block a while
     HANDLE_ERROR(consumer_grp->start_all(ctx), "consuming failed")
