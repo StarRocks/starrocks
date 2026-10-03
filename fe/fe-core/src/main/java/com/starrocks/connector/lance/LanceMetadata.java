@@ -19,11 +19,19 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,6 +130,20 @@ public class LanceMetadata implements ConnectorMetadata {
                 .filter(t -> t.getName().equalsIgnoreCase(tblName))
                 .findFirst()
                 .orElse(null);
+    }
+
+    @Override
+    public Statistics getTableStatistics(OptimizerContext session,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit,
+                                         TvrVersionRange versionRange) {
+        // Dataset statistics are not available yet. Leave predicate and LIMIT evaluation to the optimizer.
+        return StatisticsCalcUtils.estimateScanColumns(table, columns, session)
+                .setOutputRowCount(Config.default_statistics_output_row_count)
+                .build();
     }
 
     // Helpers for unit tests to register metadata manually in Phase 1 (local catalogs)

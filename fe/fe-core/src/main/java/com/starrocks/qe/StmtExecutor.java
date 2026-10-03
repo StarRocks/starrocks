@@ -791,6 +791,8 @@ public class StmtExecutor {
                 return "odps";
             case KUDU:
                 return "kudu";
+            case LANCE:
+                return "lance";
             case ELASTICSEARCH:
                 return "elasticsearch";
             default:
