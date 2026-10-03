@@ -67,6 +67,22 @@ public class OpenIdConnectVerifier {
         }
     }
 
+    /**
+     * Whether the string has the structure of a signed JWT: three base64url segments whose first one decodes
+     * to a JOSE header. Says nothing about the signature; it only tells a token apart from a password.
+     */
+    public static boolean isJwt(String token) {
+        if (token == null) {
+            return false;
+        }
+        try {
+            SignedJWT.parse(token);
+            return true;
+        } catch (ParseException e) {
+            return false;
+        }
+    }
+
     private static SignedJWT verifyJWT(String jwt, JWKSet jwkSet) throws AuthenticationException, ParseException, JOSEException {
         Preconditions.checkNotNull(jwt);
 

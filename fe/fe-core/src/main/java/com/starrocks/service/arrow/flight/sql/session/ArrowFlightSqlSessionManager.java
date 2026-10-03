@@ -23,6 +23,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.cache.RemovalNotification;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.OpenIdConnectVerifier;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UUIDUtil;
@@ -71,8 +72,14 @@ public class ArrowFlightSqlSessionManager {
         ctx.setRemoteIP(remoteIP);
 
         try {
-            // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
-            AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            if (OpenIdConnectVerifier.isJwt(password)) {
+                // A JWT sent in the password field. Its shape decides: a token that is rejected is not
+                // retried as a password.
+                AuthenticationHandler.authenticateWithJwt(ctx, username, remoteIP, password);
+            } else {
+                // The Arrow Flight Basic handshake carries a cleartext password, like HTTP Basic.
+                AuthenticationHandler.authenticateWithClearPassword(ctx, username, remoteIP, password);
+            }
         } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED
                     .withDescription("Access denied for user: " + username)

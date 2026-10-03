@@ -22,12 +22,14 @@ import com.starrocks.catalog.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -120,6 +122,51 @@ public class AuthenticationHandler {
         AuthenticationProvider provider = context.getAuthenticationProvider();
         if (provider != null) {
             provider.checkLoginSuccess(context.getConnectionId(), context.getAccessControlContext());
+        }
+        return authenticatedUser;
+    }
+
+    /**
+     * Authenticate a request that carries a JWT where a password would normally be, e.g. the password field
+     * of the Arrow Flight Basic handshake.
+     *
+     * <p>This is the MySQL-protocol JWT login: declaring {@code authentication_openid_connect_client} makes
+     * the chain match JWT users and JWT security integrations, which then check that the token is valid and
+     * that its principal claim names {@code user}.
+     *
+     * @param context    the context to authenticate onto
+     * @param user       username sent by the client
+     * @param remoteHost remote host address
+     * @param jwt        the serialized token
+     * @return authenticated user identity
+     * @throws AuthenticationException when authentication fails
+     */
+    public static UserIdentity authenticateWithJwt(ConnectContext context, String user, String remoteHost, String jwt)
+            throws AuthenticationException {
+        context.setAuthPlugin(AuthPlugin.Client.AUTHENTICATION_OPENID_CONNECT_CLIENT.toString());
+
+        // The MySQL protocol switches the client to the plugin of the user it names, so a token only ever
+        // reaches a JWT provider there. Nothing does that here, and native users are not matched against the
+        // declared plugin: without this check the token would be bound against LDAP as a password, and an
+        // OAuth2 user would be let in, since OAuth2AuthenticationProvider answers OK to any other plugin.
+        if (user != null && !user.isEmpty()) {
+            Map.Entry<UserIdentity, UserAuthenticationInfo> nativeUser = GlobalStateMgr.getCurrentState()
+                    .getAuthenticationMgr().getBestMatchedUserIdentityForLogin(user, remoteHost);
+            if (nativeUser != null
+                    && !AuthPlugin.Server.AUTHENTICATION_JWT.name().equalsIgnoreCase(nativeUser.getValue().getAuthPlugin())) {
+                throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
+            }
+        }
+
+        // The providers expect the token the way the MySQL client plugin sends it.
+        ByteArrayOutputStream authResponse = new ByteArrayOutputStream();
+        MysqlCodec.writeInt1(authResponse, 1);
+        MysqlCodec.writeLenEncodedString(authResponse, jwt);
+        UserIdentity authenticatedUser = authenticate(context, user, remoteHost, authResponse.toByteArray());
+
+        // Whatever accepted the login must have verified the token.
+        if (Config.enable_auth_check && !(context.getAuthenticationProvider() instanceof JWTAuthenticationProvider)) {
+            throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, "YES");
         }
         return authenticatedUser;
     }
