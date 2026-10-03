@@ -101,7 +101,13 @@ Status S3OutputStream::create_multipart_upload() {
     req.SetBucket(_bucket);
     req.SetKey(_object);
     req.SetContentType(_content_type);
+    MonotonicStopWatch _s3_op_watch;
+    _s3_op_watch.start();
     Aws::S3::Model::CreateMultipartUploadOutcome outcome = _client->CreateMultipartUpload(req);
+    if (int64_t _us = _s3_op_watch.elapsed_time() / 1000; _us >= 100000) {
+        LOG(WARNING) << "S3_OP_LAT op=CreateMultipartUpload bucket=" << _bucket << " key=" << _object << " us=" << _us
+                     << " ok=" << outcome.IsSuccess();
+    }
     if (outcome.IsSuccess()) {
         _upload_id = outcome.GetResult().GetUploadId();
         return Status::OK();
@@ -119,7 +125,13 @@ Status S3OutputStream::singlepart_upload() {
     req.SetContentType(_content_type);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+    MonotonicStopWatch _s3_op_watch;
+    _s3_op_watch.start();
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
+    if (int64_t _us = _s3_op_watch.elapsed_time() / 1000; _us >= 100000) {
+        LOG(WARNING) << "S3_OP_LAT op=PutObject bucket=" << _bucket << " key=" << _object << " bytes=" << _buffer.size()
+                     << " us=" << _us << " ok=" << outcome.IsSuccess();
+    }
     if (!outcome.IsSuccess()) {
         std::string error_msg =
                 fmt::format("S3: Fail to put object {}/{}, msg: {}", _bucket, _object, outcome.GetError().GetMessage());
@@ -141,7 +153,14 @@ Status S3OutputStream::multipart_upload() {
     req.SetUploadId(_upload_id);
     req.SetContentLength(static_cast<int64_t>(_buffer.size()));
     req.SetBody(Aws::MakeShared<S3ZeroCopyIOStream>(AWS_ALLOCATE_TAG, _buffer.data(), _buffer.size()));
+    MonotonicStopWatch _s3_op_watch;
+    _s3_op_watch.start();
     auto outcome = _client->UploadPart(req);
+    if (int64_t _us = _s3_op_watch.elapsed_time() / 1000; _us >= 100000) {
+        LOG(WARNING) << "S3_OP_LAT op=UploadPart bucket=" << _bucket << " key=" << _object
+                     << " bytes=" << _buffer.size() << " part=" << (_etags.size() + 1) << " us=" << _us
+                     << " ok=" << outcome.IsSuccess();
+    }
     if (outcome.IsSuccess()) {
         _etags.push_back(outcome.GetResult().GetETag());
         return Status::OK();
