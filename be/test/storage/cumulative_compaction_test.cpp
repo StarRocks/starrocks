@@ -787,6 +787,60 @@ TEST_F(CumulativeCompactionTest, test_delete_version) {
     }
 }
 
+TEST_F(CumulativeCompactionTest, test_parallel_compaction_delete_statistics) {
+    const bool saved_parallel = config::enable_compaction_parallel_merge_init;
+    const int32_t saved_buffers = config::compaction_merge_child_buffers;
+    DeferOp restore_config([&]() {
+        config::enable_compaction_parallel_merge_init = saved_parallel;
+        config::compaction_merge_child_buffers = saved_buffers;
+    });
+    create_tablet_schema(DUP_KEYS);
+    auto tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    constexpr int kInputs = 8;
+    for (int i = 0; i < kInputs; ++i) {
+        write_new_version(tablet_meta);
+    }
+    // Each input has eight batches of keys [0, 128), so DELETE k1 = 0 removes
+    // eight rows per input. The remaining rows must satisfy compaction's row-count check.
+    write_delete_version(tablet_meta, _version++);
+    auto tablet = Tablet::create_tablet_from_meta(tablet_meta, StorageEngine::instance()->get_stores()[0]);
+    ASSERT_OK(tablet->init());
+    auto schema = ChunkHelper::convert_schema(_tablet_schema);
+
+    for (bool parallel : {false, true}) {
+        for (int buffers : {1, 3}) {
+            config::enable_compaction_parallel_merge_init = parallel;
+            config::compaction_merge_child_buffers = buffers;
+            TabletReader reader(tablet, Version(0, _version - 1), schema);
+            ASSERT_OK(reader.prepare());
+            TabletReaderParams params;
+            params.reader_type = READER_BASE_COMPACTION;
+            params.chunk_size = 32; // Exercise the pump repeatedly, beyond the initial prefill.
+            ASSERT_OK(reader.open(params));
+            auto chunk = ChunkFactory::new_chunk(schema, params.chunk_size);
+            int64_t rows = 0;
+            while (true) {
+                chunk->reset();
+                auto st = reader.get_next(chunk.get());
+                if (st.is_end_of_file()) {
+                    break;
+                }
+                ASSERT_OK(st);
+                for (size_t i = 0; i < chunk->num_rows(); ++i) {
+                    ASSERT_NE(0, chunk->get_column_by_index(0)->get(i).get_int32());
+                }
+                rows += chunk->num_rows();
+            }
+            EXPECT_EQ(kInputs * 8, reader.stats().rows_del_filtered);
+            EXPECT_EQ(kInputs * 1024, rows + reader.merged_rows() + reader.stats().rows_del_filtered);
+            reader.close();
+            EXPECT_EQ(kInputs * 8, reader.stats().rows_del_filtered); // Closing must not count twice.
+        }
+    }
+}
+
 TEST_F(CumulativeCompactionTest, test_missed_and_delete_version) {
     LOG(INFO) << "test_missed_two_version";
     create_tablet_schema(UNIQUE_KEYS);

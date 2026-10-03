@@ -78,6 +78,9 @@ struct LakeIOOptions {
     // them all, which is CPU-bound and proportional to the column count.
     bool hold_segments = false;
     bool use_page_cache = false;
+    // Compaction prefetch: route coalesce-enabled columns through a shared stream so adjacent
+    // column ranges can share a prefetched buffer. The underlying file keeps its data-cache policy.
+    bool coalesce_across_columns = false;
     bool cache_file_only = false; // only used for CACHE SELECT
     // Callback to warmup SST files, invoked at most once per tablet during CACHE SELECT.
     // Protected by sst_warmup_done (CAS guard) to ensure single execution across segments.

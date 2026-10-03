@@ -116,6 +116,12 @@ struct CompactionTaskStats {
     int64_t io_ns_write_remote = 0;
     int64_t pk_sst_merge_ns = 0;
     int64_t input_file_size = 0;
+    // Prefetch effectiveness: a compaction that reads its inputs concurrently can outrun the
+    // prefetcher, and the difference shows up as extra remote reads. Without these it is not
+    // possible to tell a lost prefetch from genuinely more data.
+    int64_t prefetch_hit_count = 0;
+    int64_t prefetch_wait_finish_ns = 0;
+    int64_t prefetch_pending_ns = 0;
 
     void collect(const OlapReaderStatistics& reader_stats);
     void collect(const OlapWriterStatistics& writer_stats);

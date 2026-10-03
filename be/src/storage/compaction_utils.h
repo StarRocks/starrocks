@@ -61,6 +61,18 @@ public:
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
 
+    // Read buffer size for one (segment, column) stream, derived from how much of that column
+    // actually lives in one segment. A fixed size is wrong at both ends:
+    //   too large  -- every column stream pulls a full buffer to reach its own slice, so the same
+    //                 segment is fetched over and over. A 1.92GB table read 35.7GB at 1MB, and
+    //                 93.5GB at 8MB, where the buffers alone reached 16.3GB of memory.
+    //   too small  -- once it is no longer larger than a data page the underlying stream bypasses
+    //                 the buffer entirely and every page costs its own round trip.
+    // Memory is bounded by segments * columns_in_group * buffer, which this makes proportional to
+    // the input bytes of the column group rather than to the segment count.
+    static int64_t get_read_buffer_size(int64_t input_size, int64_t segment_count, int64_t num_columns,
+                                        int64_t max_buffer_size);
+
     static void split_column_into_groups(size_t num_columns, const std::vector<ColumnId>& sort_key_idxes,
                                          int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
