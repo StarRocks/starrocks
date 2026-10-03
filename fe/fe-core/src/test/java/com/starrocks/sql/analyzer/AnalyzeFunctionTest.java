@@ -323,18 +323,18 @@ public class AnalyzeFunctionTest {
     public void testH3Contract() {
         String point = "ST_GeogFromText('POINT (0 0)')";
         String polygon = "ST_GeogFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')";
-        assertFunctionContract("select H3_FromGeo(" + point + ", 3)", 120320, PrimitiveType.BIGINT);
-        assertH3ArrayContract("select H3_GridDisk(617700169958293503, 1)", 120321);
-        assertFunctionContract("select H3_ToParent(617700169958293503, 2)", 120322, PrimitiveType.BIGINT);
-        assertH3ArrayContract("select H3_ToChildren(617700169958293503, 4)", 120323);
-        assertFunctionContract("select H3_Resolution(617700169958293503)", 120324, PrimitiveType.INT);
-        assertH3ArrayContract("select H3_PolygonToCells(" + polygon + ", 3)", 120326);
+        assertFunctionContract("select H3_FromGeo(" + point + ", 3)", 120500, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_GridDisk(617700169958293503, 1)", 120501);
+        assertFunctionContract("select H3_ToParent(617700169958293503, 2)", 120502, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_ToChildren(617700169958293503, 4)", 120503);
+        assertFunctionContract("select H3_Resolution(617700169958293503)", 120504, PrimitiveType.INT);
+        assertH3ArrayContract("select H3_PolygonToCells(" + polygon + ", 3)", 120506);
 
         QueryStatement statement = (QueryStatement) analyzeSuccess(
                 "select H3_ToBoundary(617700169958293503)");
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                 .getOutputExpression().get(0);
-        Assertions.assertEquals(120325, call.getFn().getFunctionId());
+        Assertions.assertEquals(120505, call.getFn().getFunctionId());
         ScalarType type = (ScalarType) call.getType();
         Assertions.assertEquals(PrimitiveType.GEOGRAPHY, type.getPrimitiveType());
         Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,

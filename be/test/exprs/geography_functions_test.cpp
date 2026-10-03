@@ -2014,13 +2014,13 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120300, "ST_SRID", "INT", {"GEOMETRY"}},
             {120305, "ST_SetSRID", "GEOMETRY", {"GEOMETRY", "INT"}},
             {120310, "ST_Transform", "GEOMETRY", {"GEOMETRY", "INT"}},
-            {120320, "H3_FromGeo", "BIGINT", {"GEOGRAPHY", "INT"}},
-            {120321, "H3_GridDisk", "ARRAY_BIGINT", {"BIGINT", "INT"}},
-            {120322, "H3_ToParent", "BIGINT", {"BIGINT", "INT"}},
-            {120323, "H3_ToChildren", "ARRAY_BIGINT", {"BIGINT", "INT"}},
-            {120324, "H3_Resolution", "INT", {"BIGINT"}},
-            {120325, "H3_ToBoundary", "GEOGRAPHY", {"BIGINT"}},
-            {120326, "H3_PolygonToCells", "ARRAY_BIGINT", {"GEOGRAPHY", "INT"}},
+            {120500, "H3_FromGeo", "BIGINT", {"GEOGRAPHY", "INT"}},
+            {120501, "H3_GridDisk", "ARRAY_BIGINT", {"BIGINT", "INT"}},
+            {120502, "H3_ToParent", "BIGINT", {"BIGINT", "INT"}},
+            {120503, "H3_ToChildren", "ARRAY_BIGINT", {"BIGINT", "INT"}},
+            {120504, "H3_Resolution", "INT", {"BIGINT"}},
+            {120505, "H3_ToBoundary", "GEOGRAPHY", {"BIGINT"}},
+            {120506, "H3_PolygonToCells", "ARRAY_BIGINT", {"GEOGRAPHY", "INT"}},
     };
 
     for (const auto& function : expected) {

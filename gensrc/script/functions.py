@@ -1200,19 +1200,20 @@ vectorized_functions = [
 
 
     # Contract 5.6: H3 cells are signed SQL BIGINT values.
-    [120320, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
+    # Start H3 IDs at 120500 to leave room for future ST_ functions.
+    [120500, "H3_FromGeo", False, False, "BIGINT", ["GEOGRAPHY", "INT"],
      "GeoFunctions::h3_from_geo", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120321, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+    [120501, "H3_GridDisk", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
      "GeoFunctions::h3_grid_disk", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120322, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
+    [120502, "H3_ToParent", False, False, "BIGINT", ["BIGINT", "INT"],
      "GeoFunctions::h3_to_parent", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120323, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
+    [120503, "H3_ToChildren", False, False, "ARRAY_BIGINT", ["BIGINT", "INT"],
      "GeoFunctions::h3_to_children", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120324, "H3_Resolution", False, False, "INT", ["BIGINT"],
+    [120504, "H3_Resolution", False, False, "INT", ["BIGINT"],
      "GeoFunctions::h3_resolution", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120325, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
+    [120505, "H3_ToBoundary", False, False, "GEOGRAPHY", ["BIGINT"],
      "GeoFunctions::h3_to_boundary", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
-    [120326, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
+    [120506, "H3_PolygonToCells", False, False, "ARRAY_BIGINT", ["GEOGRAPHY", "INT"],
      "GeoFunctions::h3_polygon_to_cells", "GeoFunctions::h3_prepare", "GeoFunctions::h3_close"],
 
     # percentile function

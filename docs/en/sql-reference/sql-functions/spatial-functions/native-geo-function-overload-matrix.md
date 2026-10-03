@@ -148,10 +148,10 @@ These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the ce
 
 | Signature | Function ID | Result |
 | --- | ---: | --- |
-| `H3_FromGeo(GEOGRAPHY, INT)` | 120320 | `BIGINT` |
-| `H3_GridDisk(BIGINT, INT)` | 120321 | `ARRAY<BIGINT>` |
-| `H3_ToParent(BIGINT, INT)` | 120322 | `BIGINT` |
-| `H3_ToChildren(BIGINT, INT)` | 120323 | `ARRAY<BIGINT>` |
-| `H3_Resolution(BIGINT)` | 120324 | `INT` |
-| `H3_ToBoundary(BIGINT)` | 120325 | `GEOGRAPHY` |
-| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120326 | `ARRAY<BIGINT>` |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
