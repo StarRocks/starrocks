@@ -185,20 +185,20 @@ void RuntimeFilterProbeCollector::close(RuntimeState* state) {
 
 // do_evaluate is reentrant, can be called concurrently by multiple operators that shared the same
 // RuntimeFilterProbeCollector.
-void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
+Status RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
     if (eval_context.mode == RuntimeMembershipFilterEvalContext::Mode::M_ONLY_TOPN) {
-        update_selectivity(chunk, eval_context);
-        return;
+        RETURN_IF_ERROR(update_selectivity(chunk, eval_context));
+        return Status::OK();
     } else {
         if ((eval_context.input_chunk_nums++ & 31) == 0) {
-            update_selectivity(chunk, eval_context);
-            return;
+            RETURN_IF_ERROR(update_selectivity(chunk, eval_context));
+            return Status::OK();
         }
     }
 
     auto& seletivity_map = eval_context.selectivity;
     if (seletivity_map.empty()) {
-        return;
+        return Status::OK();
     }
 
     auto& selection = eval_context.running_context.selection;
@@ -230,10 +230,10 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFil
         }
 
         auto* ctx = rf_desc->probe_expr_ctx();
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
 
         // for colocate grf
-        compute_hash_values(chunk, column.get(), rf_desc, eval_context);
+        RETURN_IF_ERROR(compute_hash_values(chunk, column.get(), rf_desc, eval_context));
 
         filter->evaluate(column.get(), &eval_context.running_context);
 
@@ -242,15 +242,16 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeMembershipFil
 
         if (true_count == 0) {
             chunk->set_num_rows(0);
-            return;
+            return Status::OK();
         } else {
             chunk->filter(selection);
         }
     }
+    return Status::OK();
 }
 
-void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
-                                                            RuntimeMembershipFilterEvalContext& eval_context) {
+Status RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk,
+                                                              RuntimeMembershipFilterEvalContext& eval_context) {
     auto& selection = eval_context.running_context.selection;
     eval_context.running_context.use_merged_selection = false;
     eval_context.running_context.compatibility =
@@ -297,9 +298,9 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
             continue;
         }
 
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(probe_expr, probe_expr->root(), partial_chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, probe_expr->evaluate(partial_chunk));
         // for colocate grf
-        compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context);
+        RETURN_IF_ERROR(compute_hash_values(partial_chunk, column.get(), rf_desc, eval_context));
         filter->evaluate(column.get(), &eval_context.running_context);
 
         auto true_count = SIMD::count_nonzero(selection);
@@ -307,11 +308,12 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
 
         if (true_count == 0) {
             partial_chunk->set_num_rows(0);
-            return;
+            return Status::OK();
         } else {
             partial_chunk->filter(selection);
         }
     }
+    return Status::OK();
 }
 
 void RuntimeFilterProbeCollector::init_counter() {
@@ -325,56 +327,58 @@ void RuntimeFilterProbeCollector::init_counter() {
             ADD_COUNTER(_runtime_profile, "JoinRuntimeFilterEvaluate", TUnit::UNIT);
 }
 
-void RuntimeFilterProbeCollector::evaluate(Chunk* chunk) {
-    if (_descriptors.empty()) return;
+Status RuntimeFilterProbeCollector::evaluate(Chunk* chunk) {
+    if (_descriptors.empty()) return Status::OK();
     if (_eval_context.join_runtime_filter_timer == nullptr) {
         init_counter();
     }
-    evaluate(chunk, _eval_context);
+    return evaluate(chunk, _eval_context);
 }
 
-void RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
-    if (_descriptors.empty()) return;
+Status RuntimeFilterProbeCollector::evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
+    if (_descriptors.empty()) return Status::OK();
     size_t before = chunk->num_rows();
-    if (before == 0) return;
+    if (before == 0) return Status::OK();
 
     {
         SCOPED_TIMER(eval_context.join_runtime_filter_timer);
         COUNTER_UPDATE(eval_context.join_runtime_filter_input_counter, before);
         eval_context.run_filter_nums = 0;
-        do_evaluate(chunk, eval_context);
+        RETURN_IF_ERROR(do_evaluate(chunk, eval_context));
         size_t after = chunk->num_rows();
         COUNTER_UPDATE(eval_context.join_runtime_filter_output_counter, after);
         COUNTER_UPDATE(eval_context.join_runtime_filter_eval_counter, eval_context.run_filter_nums);
     }
+    return Status::OK();
 }
 
-void RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
-                                                         RuntimeMembershipFilterEvalContext& eval_context) {
-    if (_descriptors.empty()) return;
+Status RuntimeFilterProbeCollector::evaluate_partial_chunk(Chunk* partial_chunk,
+                                                           RuntimeMembershipFilterEvalContext& eval_context) {
+    if (_descriptors.empty()) return Status::OK();
     size_t before = partial_chunk->num_rows();
-    if (before == 0) return;
+    if (before == 0) return Status::OK();
 
     {
         SCOPED_TIMER(eval_context.join_runtime_filter_timer);
         COUNTER_UPDATE(eval_context.join_runtime_filter_input_counter, before);
         eval_context.run_filter_nums = 0;
-        do_evaluate_partial_chunk(partial_chunk, eval_context);
+        RETURN_IF_ERROR(do_evaluate_partial_chunk(partial_chunk, eval_context));
         size_t after = partial_chunk->num_rows();
         COUNTER_UPDATE(eval_context.join_runtime_filter_output_counter, after);
         COUNTER_UPDATE(eval_context.join_runtime_filter_eval_counter, eval_context.run_filter_nums);
     }
+    return Status::OK();
 }
 
-void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column* column,
-                                                      RuntimeFilterProbeDescriptor* rf_desc,
-                                                      RuntimeMembershipFilterEvalContext& eval_context) {
+Status RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column* column,
+                                                        RuntimeFilterProbeDescriptor* rf_desc,
+                                                        RuntimeMembershipFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
     const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
-        return;
+        return Status::OK();
     }
 
     // Set exchange_hash_function_version from RuntimeState query_options
@@ -393,15 +397,16 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, const Column
         Columns column_holders;
         std::vector<const Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
-            ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
+            ASSIGN_OR_RETURN(ColumnPtr partition_column, partition_ctx->evaluate(chunk));
             partition_by_columns.push_back(partition_column.get());
             column_holders.emplace_back(std::move(partition_column));
         }
         filter->compute_partition_index(rf_desc->layout(), partition_by_columns, &eval_context.running_context);
     }
+    return Status::OK();
 }
 
-void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
+Status RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context) {
     size_t chunk_size = chunk->num_rows();
     auto& merged_selection = eval_context.running_context.merged_selection;
     auto& use_merged_selection = eval_context.running_context.use_merged_selection;
@@ -446,9 +451,9 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
                                   ? eval_context.running_context.merged_selection
                                   : eval_context.running_context.selection;
         auto ctx = rf_desc->probe_expr_ctx();
-        ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate(chunk));
         // for colocate grf
-        compute_hash_values(chunk, column.get(), rf_desc, eval_context);
+        RETURN_IF_ERROR(compute_hash_values(chunk, column.get(), rf_desc, eval_context));
         // true count is not accummulated, it is evaluated for each RF respectively
         filter->evaluate(column.get(), &eval_context.running_context);
         auto true_count = SIMD::count_nonzero(selection);
@@ -459,7 +464,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
                 seletivity_map.clear();
                 seletivity_map.emplace(selectivity, rf_desc);
                 chunk->filter(selection);
-                return;
+                return Status::OK();
             }
 
             // Only choose three most selective runtime filters
@@ -491,6 +496,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeMember
     if (!seletivity_map.empty()) {
         chunk->filter(merged_selection);
     }
+    return Status::OK();
 }
 
 std::string RuntimeFilterProbeCollector::debug_string() const {

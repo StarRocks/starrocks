@@ -80,8 +80,8 @@ public:
     bool empty() { return _hash_set->empty(); }
     size_t size() { return _hash_set->size(); }
 
-    void build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
-                   BufferState* buffer_state);
+    Status build_set(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
+                     BufferState* buffer_state);
 
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
                                BufferState* buffer_state);
@@ -91,9 +91,9 @@ public:
     int64_t mem_usage(BufferState* buffer_state);
 
 private:
-    size_t _get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
-    void _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size,
-                            BufferState* buffer_state);
+    StatusOr<size_t> _get_max_serialize_size(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
+    Status _serialize_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size,
+                              BufferState* buffer_state);
 
     // Serializing a whole chunk at once needs max_one_row_size * chunk_size bytes, which one very wide
     // row blows up out of all proportion to the data: a single ARRAY<ARRAY<BIGINT>> of 5M sub-arrays
@@ -103,15 +103,15 @@ private:
     static constexpr size_t kMaxBatchSerializeSize = std::numeric_limits<int32_t>::max();
 
     // Evaluates the key exprs once for the whole chunk; the caller then walks rows.
-    Columns _evaluate_key_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
+    StatusOr<Columns> _evaluate_key_columns(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs);
     // Serializes row `idx` into buffer_state->buffer and returns its length. Byte-for-byte identical
     // to what _serialize_columns writes for that row, so the two paths may be mixed across chunks.
     size_t _serialize_one_row(const Columns& key_columns, size_t idx, BufferState* buffer_state);
 
-    void _build_set_by_rows(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
-                            size_t chunk_size, BufferState* buffer_state);
-    void _erase_duplicate_row_by_rows(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, size_t chunk_size,
-                                      BufferState* buffer_state);
+    Status _build_set_by_rows(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs, MemPool* pool,
+                              size_t chunk_size, BufferState* buffer_state);
+    Status _erase_duplicate_row_by_rows(const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
+                                        size_t chunk_size, BufferState* buffer_state);
 
 private:
     std::unique_ptr<HashSet> _hash_set;

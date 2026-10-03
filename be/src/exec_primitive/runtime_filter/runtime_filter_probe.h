@@ -177,14 +177,14 @@ public:
     Status open(RuntimeState* state);
     void close(RuntimeState* state);
 
-    void compute_hash_values(Chunk* chunk, const Column* column, RuntimeFilterProbeDescriptor* rf_desc,
-                             RuntimeMembershipFilterEvalContext& eval_context);
+    Status compute_hash_values(Chunk* chunk, const Column* column, RuntimeFilterProbeDescriptor* rf_desc,
+                               RuntimeMembershipFilterEvalContext& eval_context);
     // only used in no-pipeline mode (deprecated)
-    void evaluate(Chunk* chunk);
+    Status evaluate(Chunk* chunk);
 
-    void evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    Status evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
     // evaluate partial chunk that may not contain slots referenced by runtime filter
-    void evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    Status evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
     void add_descriptor(RuntimeFilterProbeDescriptor* desc);
     std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() { return _descriptors; }
     const std::map<int32_t, RuntimeFilterProbeDescriptor*>& descriptors() const { return _descriptors; }
@@ -208,10 +208,9 @@ public:
     }
 
 private:
-    void update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
-    // TODO: return a funcion call status
-    void do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
-    void do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    Status update_selectivity(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    Status do_evaluate(Chunk* chunk, RuntimeMembershipFilterEvalContext& eval_context);
+    Status do_evaluate_partial_chunk(Chunk* partial_chunk, RuntimeMembershipFilterEvalContext& eval_context);
     // mapping from filter id to runtime filter descriptor.
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;

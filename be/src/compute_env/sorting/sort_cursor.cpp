@@ -33,28 +33,27 @@ bool SimpleChunkSortCursor::is_data_ready() {
     return true;
 }
 
-std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
+StatusOr<std::pair<ChunkUniquePtr, Columns>> SimpleChunkSortCursor::try_get_next() {
     DCHECK(_data_ready);
     DCHECK(_sort_exprs);
 
     if (_eos) {
-        return {nullptr, Columns{}};
+        return std::pair<ChunkUniquePtr, Columns>{nullptr, Columns{}};
     }
     ChunkUniquePtr chunk = nullptr;
     if (!_chunk_provider(&chunk, &_eos) || !chunk) {
-        return {nullptr, Columns{}};
+        return std::pair<ChunkUniquePtr, Columns>{nullptr, Columns{}};
     }
     if (!chunk || chunk->is_empty()) {
-        return {nullptr, Columns{}};
+        return std::pair<ChunkUniquePtr, Columns>{nullptr, Columns{}};
     }
 
     Columns sort_columns;
     for (ExprContext* expr : *_sort_exprs) {
-        // TODO: handle the error correctly
-        auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
-        sort_columns.push_back(column);
+        ASSIGN_OR_RETURN(auto column, expr->evaluate(chunk.get()));
+        sort_columns.push_back(std::move(column));
     }
-    return {std::move(chunk), std::move(sort_columns)};
+    return std::pair{std::move(chunk), std::move(sort_columns)};
 }
 
 bool SimpleChunkSortCursor::is_eos() {
