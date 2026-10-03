@@ -33,6 +33,8 @@ import io.delta.kernel.Table;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.defaults.engine.fileio.FileIO;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -90,6 +92,15 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
                 .build();
     }
 
+    FileIO createFileIO(String path, Configuration snapshotConf) {
+        if (properties.isEnableDeltaLakeNativeAdls() && (path.startsWith("abfs://") || path.startsWith("abfss://"))) {
+            Tracers.record(EXTERNAL, "DELTA_LAKE.metadataFileIO", "azure_native");
+            return new AzureDeltaFileIO(path, snapshotConf);
+        }
+        Tracers.record(EXTERNAL, "DELTA_LAKE.metadataFileIO", "hadoop");
+        return new HadoopFileIO(snapshotConf);
+    }
+
     @Override
     public String getCatalogName() {
         return catalogName;
@@ -125,7 +136,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         if (metastoreTable.getCloudConfiguration() != null) {
             metastoreTable.getCloudConfiguration().applyToConfiguration(snapshotConf);
         }
-        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(snapshotConf, properties, checkpointCache, jsonCache);
+        DeltaLakeEngine deltaLakeEngine =
+                DeltaLakeEngine.create(createFileIO(path, snapshotConf), properties, checkpointCache, jsonCache);
         SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
