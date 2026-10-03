@@ -99,9 +99,10 @@ public class ColumnGsonSerializationTest {
         Assertions.assertNotNull(restored.getDefaultExpr());
         Assertions.assertTrue(restored.getDefaultExpr().hasArgs(),
                 "hasArguments must persist across Gson roundtrip");
-        // VARY rather than CONST: precision-bearing time functions are not 'empty' generators.
-        Assertions.assertEquals(Column.DefaultValueType.VARY, restored.getDefaultValueType(),
-                "current_timestamp(N) must stay classified as VARY after roundtrip");
+        // CONST, not VARY: precision-bearing time functions are stable within a statement (every row
+        // sees the same value), so the precision argument does not make them volatile.
+        Assertions.assertEquals(Column.DefaultValueType.CONST, restored.getDefaultValueType(),
+                "current_timestamp(N) must be classified as CONST after roundtrip");
     }
 
     @Test
@@ -123,7 +124,7 @@ public class ColumnGsonSerializationTest {
         Assertions.assertEquals("current_timestamp(3)", restored.getDefaultExpr().getExpr());
         Assertions.assertTrue(restored.getDefaultExpr().hasArgs(),
                 "legacy persisted current_timestamp(3) must recover hasArguments via gsonPostProcess");
-        Assertions.assertEquals(Column.DefaultValueType.VARY, restored.getDefaultValueType());
+        Assertions.assertEquals(Column.DefaultValueType.CONST, restored.getDefaultValueType());
 
         // An empty-arg form persisted under the same legacy schema must stay empty.
         FunctionCallExpr emptyExpr = new FunctionCallExpr("current_timestamp", Lists.newArrayList());
