@@ -1355,6 +1355,13 @@ FROM test;
 * 类型：String
 * 引入版本：v4.2
 
+### paimon_global_index_scan_stage
+
+* 描述：控制 StarRocks 使用 Paimon Global Index 的方式。有效值为 `0`、`1` 和 `2`。`0` 表示禁用 Global Index，使用常规 Paimon Split 规划；`1` 表示由 Paimon Java SDK 在 Split 规划阶段计算索引；`2` 表示由 StarRocks 使用两阶段分布式计划计算索引，并在规划数据 Split 时将结果传给 Paimon。分布式索引计算失败时，StarRocks 会回退到常规 Paimon Split 规划，不改变查询语义。
+* 默认值：1
+* 类型：Integer
+* 引入版本：v4.2
+
 ### parallel_exchange_instance_num
 
 用于设置执行计划中，一个上层节点接收下层节点数据所使用的 exchange node 数量。默认为 -1，即表示 exchange node 数量等于下层节点执行实例的个数（默认行为）。当设置大于 0，并且小于下层节点执行实例的个数，则 exchange node 数量等于设置值。

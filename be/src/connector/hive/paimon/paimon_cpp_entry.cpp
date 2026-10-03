@@ -16,8 +16,13 @@
 // into starrocks_be.
 
 #include "connector/hive/paimon/paimon_cpp_shim_api.h"
+#include "connector/hive/paimon/paimon_global_index_scanner.h"
 #include "connector/hive/paimon/paimon_scanner.h"
 
 extern "C" starrocks::HdfsScanner* starrocks_paimon_create_scanner() {
     return new starrocks::PaimonScanner();
+}
+
+extern "C" starrocks::HdfsScanner* starrocks_paimon_create_global_index_scanner() {
+    return new starrocks::PaimonGlobalIndexScanner();
 }
