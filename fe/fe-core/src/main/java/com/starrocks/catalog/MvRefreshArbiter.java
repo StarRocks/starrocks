@@ -232,9 +232,32 @@ public class MvRefreshArbiter {
             Map<String, MaterializedView.BasePartitionInfo> versionMap =
                     mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableRefreshInfo(baseTableInfo);
 
+<<<<<<< HEAD
             if (MapUtils.isEmpty(versionMap)) {
                 return false;
             }
+=======
+    /** Whether the mv holds a refreshed partition version for any partition of {@code table}. */
+    public static boolean tracksPartitionVersions(MaterializedView mv, Table table) {
+        return !MapUtils.isEmpty(getTrackedPartitionVersions(mv, table));
+    }
+
+    /** Olap base tables are tracked in a table-id keyed map, external ones in a {@link BaseTableInfo} keyed map. */
+    private static Map<String, MaterializedView.BasePartitionInfo> getTrackedPartitionVersions(
+            MaterializedView mv, Table table) {
+        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
+        if (table.isNativeTableOrMaterializedView()) {
+            return context.getBaseTableVisibleVersionMap().getOrDefault(table.getId(), Maps.newHashMap());
+        }
+        // matchTable compares the whole identity; an identifier alone repeats across catalogs and databases and would
+        // hand back another table's version map.
+        return mv.getBaseTableInfos().stream()
+                .filter(info -> info.matchTable(table))
+                .findFirst()
+                .map(context::getBaseTableRefreshInfo)
+                .orElseGet(Maps::newHashMap);
+    }
+>>>>>>> 33273620d8b... [BugFix] Keep MV refresh change detection, plan build and partition add off connector I/O under FE metadata locks (#64214)
 
             // Check if any previously refreshed partitions no longer exist
             Set<String> currentPartitions = latestPartitionInfo.keySet();
