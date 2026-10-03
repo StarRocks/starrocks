@@ -1198,6 +1198,13 @@ vectorized_functions = [
     [120371, "ST_SymDifference", False, False, "GEOMETRY", ["GEOMETRY", "GEOMETRY"],
      "GeoFunctions::st_geometry_sym_difference", "GeoFunctions::native_geo_overlay_prepare", "GeoFunctions::native_geo_overlay_close"],
 
+    # Contract 5.4 scalar ID reservations; comments do not register overloads.
+    # Reserved 120400: ST_Buffer / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    # Reserved 120401: ST_Buffer / 2 (GEOMETRY, DOUBLE) -> GEOMETRY.
+    # Reserved 120410: ST_SimplifyPreserveTopology / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
+    # Reserved 120411: ST_SimplifyPreserveTopology / 2 (GEOMETRY, DOUBLE) -> GEOMETRY.
+    # Window ST_CoverageSimplify reservations belong to FunctionSet's analytic section.
+
 
     # percentile function
     [130000, 'percentile_hash', True, False, 'PERCENTILE', ['DOUBLE'], 'PercentileFunctions::percentile_hash'],
