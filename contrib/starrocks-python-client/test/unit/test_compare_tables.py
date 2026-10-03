@@ -1556,6 +1556,50 @@ class TestEnableStatisticCollectOnFirstLoad:
         assert not any(self.PROP in k for k in prop_keys)
 
 
+class TestBucketSize:
+    """Tests for the `bucket_size` property of RANDOM-distributed tables.
+
+    Its default is the FE config `default_automatic_bucket_size`, which StarRocks lowered from
+    4294967296 to 1073741824 in 4.0 (#63168); a table keeps its value across upgrades. An
+    unmanaged `bucket_size` must therefore never be implicitly reset to a hardcoded default.
+    """
+
+    PROP = "bucket_size"
+    GIB_1 = "1073741824"
+    GIB_4 = "4294967296"
+
+    _run = TestEnableStatisticCollectOnFirstLoad._run
+
+    @pytest.mark.parametrize("conn_value", [GIB_1, GIB_4, "2147483648"])
+    def test_meta_absent_no_implicit_reset(self, conn_value):
+        """The reported bug: a 4.0+ table reports 1 GiB, the model omits it -> no reset."""
+        result = self._run(conn_props={self.PROP: conn_value, "replication_num": "3"},
+                           meta_props={"replication_num": "3"})
+        assert len(result) == 0
+
+    def test_meta_absent_other_props_still_reset(self):
+        """The exemption is scoped to bucket_size: other unmanaged properties still reset."""
+        result = self._run(conn_props={self.PROP: self.GIB_1, "replication_num": "2"}, meta_props={})
+        assert len(result) == 1
+        prop_keys = set(result[0].properties)
+        assert any("replication_num" in k for k in prop_keys)
+        assert not any(self.PROP in k for k in prop_keys)
+
+    @pytest.mark.parametrize("conn_value, meta_value", [(GIB_1, GIB_4), (GIB_4, GIB_1), (GIB_1, "2147483648")])
+    def test_explicit_change_detected(self, conn_value, meta_value):
+        """A bucket_size set in the model is still managed."""
+        result = self._run(conn_props={self.PROP: conn_value}, meta_props={self.PROP: meta_value})
+        assert len(result) == 1
+        from starrocks.alembic.ops import AlterTablePropertiesOp
+        assert isinstance(result[0], AlterTablePropertiesOp)
+        assert result[0].properties.get(self.PROP) == meta_value
+
+    @pytest.mark.parametrize("value", [GIB_1, GIB_4])
+    def test_explicit_same_no_change(self, value):
+        result = self._run(conn_props={self.PROP: value}, meta_props={self.PROP: value})
+        assert len(result) == 0
+
+
 class TestORMTableObjects:
     """Tests using real SQLAlchemy ORM Table objects with __table_args__."""
 

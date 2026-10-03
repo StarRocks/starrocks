@@ -3,6 +3,7 @@ Version history
 
 **Unreleased**
 
+- Stop autogenerate from resetting an unmanaged `bucket_size` on RANDOM-distributed tables to a hardcoded 4 GiB default; StarRocks 4.0+ defaults to 1 GiB (by @chris-celerdata)
 - Reflect `TIME` and `VARIANT` columns instead of returning `NullType` (#77259 by @rad-pat)
 - Add the `starrocks_temp_view_schema` Alembic option (`context.configure(...)`) to designate
   the schema in which the transient view used to canonicalize view/MV definitions is created.
