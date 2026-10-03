@@ -20,6 +20,9 @@
 #include <paimon/table/source/split.h>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <thread>
@@ -29,11 +32,134 @@
 #include "base/url_coding.h"
 #include "cache/datacache.h"
 #include "cache/disk_cache/test_cache_utils.h"
+#include "connector/hive/paimon/paimon_query_allocator.h"
 #include "formats/scan_context.h"
 #include "fs/fs.h"
 #include "fs/fs_memory.h"
+#include "io/seekable_input_stream.h"
+#include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks {
+namespace {
+
+struct StreamObservations {
+    std::atomic<MemTracker*> last_operation{nullptr};
+    std::atomic<MemTracker*> destroyed{nullptr};
+    std::atomic<int> active_reads{0};
+    std::atomic<int> max_active_reads{0};
+};
+
+struct AllocatorObservations {
+    std::atomic<MemTracker*> destroyed{nullptr};
+};
+
+bool g_paimon_lifecycle_test_env_initialized = false;
+MemTracker* g_paimon_lifecycle_test_process_tracker = nullptr;
+
+bool paimon_lifecycle_test_env_initialized() {
+    return g_paimon_lifecycle_test_env_initialized;
+}
+
+MemTracker* paimon_lifecycle_test_process_tracker() {
+    return g_paimon_lifecycle_test_process_tracker;
+}
+
+class QueryOwnedObject {
+public:
+    explicit QueryOwnedObject(AllocatorObservations* observations) : _observations(observations) {}
+    ~QueryOwnedObject() { _observations->destroyed = CurrentThread::mem_tracker(); }
+
+private:
+    AllocatorObservations* _observations;
+};
+
+class RecordingSeekableInputStream final : public io::SeekableInputStream {
+public:
+    RecordingSeekableInputStream(std::string data, StreamObservations* observations)
+            : _data(std::move(data)), _observations(observations) {}
+
+    ~RecordingSeekableInputStream() override { _observations->destroyed = CurrentThread::mem_tracker(); }
+
+    StatusOr<int64_t> read(void* data, int64_t count) override {
+        auto result = read_at(_position, data, count);
+        if (result.ok()) {
+            _position += result.value();
+        }
+        return result;
+    }
+
+    Status seek(int64_t position) override {
+        _observations->last_operation = CurrentThread::mem_tracker();
+        _position = position;
+        return Status::OK();
+    }
+
+    StatusOr<int64_t> position() override {
+        _observations->last_operation = CurrentThread::mem_tracker();
+        return _position;
+    }
+
+    StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t count) override {
+        return _read_at(offset, data, count);
+    }
+
+    Status read_at_fully(int64_t offset, void* data, int64_t count) override {
+        auto result = _read_at(offset, data, count);
+        if (!result.ok()) {
+            return result.status();
+        }
+        if (result.value() != count) {
+            return Status::IOError("short injected read");
+        }
+        return Status::OK();
+    }
+
+    StatusOr<int64_t> get_size() override {
+        _observations->last_operation = CurrentThread::mem_tracker();
+        return static_cast<int64_t>(_data.size());
+    }
+
+private:
+    StatusOr<int64_t> _read_at(int64_t offset, void* data, int64_t count) {
+        _observations->last_operation = CurrentThread::mem_tracker();
+        const int active = _observations->active_reads.fetch_add(1) + 1;
+        int maximum = _observations->max_active_reads.load();
+        while (active > maximum && !_observations->max_active_reads.compare_exchange_weak(maximum, active)) {
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        if (offset < 0 || count < 0 || offset > static_cast<int64_t>(_data.size()) ||
+            count > static_cast<int64_t>(_data.size()) - offset) {
+            _observations->active_reads.fetch_sub(1);
+            return Status::IOError("injected read outside file");
+        }
+        std::memcpy(data, _data.data() + offset, count);
+        _observations->active_reads.fetch_sub(1);
+        return count;
+    }
+
+    std::string _data;
+    StreamObservations* _observations;
+    int64_t _position = 0;
+};
+
+class RecordingMemoryFileSystem final : public MemoryFileSystem {
+public:
+    RecordingMemoryFileSystem(std::string data, StreamObservations* observations)
+            : _data(std::move(data)), _observations(observations) {}
+
+    StatusOr<std::unique_ptr<RandomAccessFile>> new_random_access_file(const RandomAccessFileOptions&,
+                                                                       const std::string& path) override {
+        auto stream = std::make_shared<RecordingSeekableInputStream>(_data, _observations);
+        return std::make_unique<RandomAccessFile>(std::move(stream), path);
+    }
+
+private:
+    std::string _data;
+    StreamObservations* _observations;
+};
+
+} // namespace
 
 class PaimonFileSystemTest : public ::testing::Test {
 protected:
@@ -64,6 +190,28 @@ protected:
     const std::string _content = "abcdefghij";
     FileSystem* _local_fs = nullptr;
     std::shared_ptr<BlockCache> _block_cache;
+};
+
+class PaimonInputStreamLifecycleTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        g_paimon_lifecycle_test_env_initialized = true;
+        g_paimon_lifecycle_test_process_tracker = &_process_tracker;
+        tls_mem_tracker = nullptr;
+        CurrentThread::set_mem_tracker_source(paimon_lifecycle_test_env_initialized,
+                                              paimon_lifecycle_test_process_tracker);
+    }
+
+    void TearDown() override {
+        tls_thread_status.set_mem_tracker(nullptr);
+        CurrentThread::set_mem_tracker_source(nullptr, nullptr);
+        tls_mem_tracker = nullptr;
+        g_paimon_lifecycle_test_env_initialized = false;
+        g_paimon_lifecycle_test_process_tracker = nullptr;
+    }
+
+private:
+    MemTracker _process_tracker;
 };
 
 TEST_F(PaimonFileSystemTest, OpenReadSeekAndReadAsync) {
@@ -160,6 +308,148 @@ TEST_F(PaimonFileSystemTest, OpenReadSeekAndReadAsync) {
     auto missing_result = file_system.Open("/missing.bin");
     EXPECT_FALSE(missing_result.ok());
     EXPECT_TRUE(missing_result.status().IsIOError()) << missing_result.status().ToString();
+}
+
+TEST_F(PaimonInputStreamLifecycleTest, RestoresCallerTrackerAndReleasesOnWorker) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    std::weak_ptr<MemTracker> weak_owner = owner;
+    MemTracker* owner_address = owner.get();
+    StreamObservations observations;
+    RecordingMemoryFileSystem recording_fs("abcdefghij", &observations);
+    auto file_system = std::make_unique<PaimonFileSystem>(&recording_fs, DataCacheOptions{}, owner);
+
+    std::unique_ptr<paimon::InputStream> input;
+    {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+        auto open_result = file_system->Open("/recording.bin");
+        ASSERT_TRUE(open_result.ok()) << open_result.status().ToString();
+        input = std::move(open_result).value();
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    }
+    file_system.reset();
+    owner.reset();
+    ASSERT_FALSE(weak_owner.expired());
+
+    std::thread worker([&] {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+        char sequential[4];
+        auto read_result = input->Read(sequential, sizeof(sequential));
+        ASSERT_TRUE(read_result.ok()) << read_result.status().ToString();
+        EXPECT_EQ("abcd", std::string(sequential, sizeof(sequential)));
+        EXPECT_EQ(owner_address, observations.last_operation.load());
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+
+        int error_callbacks = 0;
+        input->ReadAsync(sequential, sizeof(sequential), 20, [&](paimon::Status status) {
+            ++error_callbacks;
+            EXPECT_FALSE(status.ok());
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        });
+        EXPECT_EQ(1, error_callbacks);
+
+        char async_data[4];
+        int callbacks = 0;
+        input->ReadAsync(async_data, sizeof(async_data), 4, [&](paimon::Status status) {
+            ++callbacks;
+            EXPECT_TRUE(status.ok()) << status.ToString();
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+            char nested[4];
+            auto nested_result = input->Read(nested, sizeof(nested), 0);
+            ASSERT_TRUE(nested_result.ok()) << nested_result.status().ToString();
+            EXPECT_EQ("abcd", std::string(nested, sizeof(nested)));
+            EXPECT_TRUE(input->Close().ok());
+            EXPECT_EQ(owner_address, observations.destroyed.load());
+            EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+        });
+        EXPECT_EQ(1, callbacks);
+        EXPECT_EQ("efgh", std::string(async_data, sizeof(async_data)));
+        EXPECT_TRUE(input->Close().ok());
+        input.reset();
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    });
+    worker.join();
+
+    EXPECT_EQ(owner_address, observations.last_operation.load());
+    EXPECT_EQ(owner_address, observations.destroyed.load());
+    EXPECT_TRUE(weak_owner.expired());
+}
+
+TEST_F(PaimonInputStreamLifecycleTest, QueryAllocatorOwnsCrossThreadFinalRelease) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    std::weak_ptr<MemTracker> weak_owner = owner;
+    MemTracker* owner_address = owner.get();
+    AllocatorObservations observations;
+    auto object = std::allocate_shared<QueryOwnedObject>(PaimonQueryAllocator<QueryOwnedObject>(owner), &observations);
+    owner.reset();
+    ASSERT_FALSE(weak_owner.expired());
+
+    std::thread worker([&] {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+        object.reset();
+        EXPECT_EQ(caller.get(), CurrentThread::mem_tracker());
+    });
+    worker.join();
+
+    EXPECT_EQ(owner_address, observations.destroyed.load());
+    EXPECT_TRUE(weak_owner.expired());
+}
+
+TEST_F(PaimonInputStreamLifecycleTest, SerializesPositionalAndAsyncReads) {
+    auto owner = std::make_shared<MemTracker>();
+    auto caller = std::make_shared<MemTracker>();
+    StreamObservations observations;
+    RecordingMemoryFileSystem recording_fs("0123456789abcdef", &observations);
+    PaimonFileSystem file_system(&recording_fs, DataCacheOptions{}, owner);
+    auto open_result = file_system.Open("/recording.bin");
+    ASSERT_TRUE(open_result.ok()) << open_result.status().ToString();
+    auto input = std::move(open_result).value();
+
+    constexpr int kThreads = 8;
+    std::atomic<int> ready{0};
+    std::atomic<bool> start{false};
+    std::atomic<int> failures{0};
+    std::vector<std::thread> workers;
+    workers.reserve(kThreads);
+    for (int i = 0; i < kThreads; ++i) {
+        workers.emplace_back([&, i] {
+            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(caller.get());
+            ready.fetch_add(1);
+            while (!start.load()) {
+                std::this_thread::yield();
+            }
+            char data[2];
+            if ((i & 1) == 0) {
+                auto result = input->Read(data, sizeof(data), i);
+                if (!result.ok()) {
+                    failures.fetch_add(1);
+                }
+            } else {
+                input->ReadAsync(data, sizeof(data), i, [&](paimon::Status status) {
+                    if (!status.ok() || CurrentThread::mem_tracker() != caller.get()) {
+                        failures.fetch_add(1);
+                    }
+                });
+            }
+        });
+    }
+    while (ready.load() != kThreads) {
+        std::this_thread::yield();
+    }
+    start = true;
+    for (auto& worker : workers) {
+        worker.join();
+    }
+
+    EXPECT_EQ(0, failures.load());
+    EXPECT_EQ(0, observations.active_reads.load());
+    EXPECT_EQ(1, observations.max_active_reads.load());
+    EXPECT_EQ(owner.get(), observations.last_operation.load());
+    const auto stats = file_system.get_stats();
+    EXPECT_EQ(kThreads / 2, stats.positional_read_count);
+    EXPECT_EQ(kThreads / 2, stats.async_read_count);
+    EXPECT_TRUE(input->Close().ok());
 }
 
 TEST_F(PaimonFileSystemTest, ReadsThroughDataCache) {

@@ -376,6 +376,19 @@ struct TPaimonDeletionFile {
     3: optional i64 length
 }
 
+// Versioned request for one Paimon Global Index shard. Keep this typed instead
+// of adding loosely related fields directly to THdfsScanRange so FE/BE skew is
+// detected before an index reader is opened.
+struct TPaimonGlobalIndexScanRange {
+    1: optional i32 protocol_version
+    2: optional i32 shard_id
+    3: optional i64 range_from
+    4: optional i64 range_to
+    5: optional string query_json
+    6: optional string table_path
+    7: optional i64 snapshot_id
+}
+
 // refer to https://github.com/delta-io/delta/blob/master/PROTOCOL.md#deletion-vector-descriptor-schema
 struct TDeletionVectorDescriptor {
   1: optional string storageType
@@ -522,6 +535,9 @@ struct THdfsScanRange {
 
     // split info serialized by org.apache.paimon.table.source.DataSplit.serialize
     45: optional binary paimon_split_info_binary
+
+    // Paimon Global Index shard evaluation request.
+    46: optional TPaimonGlobalIndexScanRange paimon_global_index_scan_range
 }
 
 struct TBinlogScanRange {

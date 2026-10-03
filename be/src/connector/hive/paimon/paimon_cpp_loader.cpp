@@ -46,9 +46,14 @@ std::string shim_library_path() {
 // is never dlclose()d: BE code holds vtables and code pointers into it for the
 // process lifetime.
 std::atomic<StarRocksPaimonCreateScannerFn> _create_scanner_fn{nullptr};
+std::atomic<StarRocksPaimonCreateGlobalIndexScannerFn> _create_global_index_scanner_fn{nullptr};
 std::mutex _load_mutex;
+void* _shim_handle = nullptr;
 
 Status load_shim_locked() {
+    if (_shim_handle != nullptr) {
+        return Status::OK();
+    }
     const std::string path = shim_library_path();
 
     void* handle = nullptr;
@@ -68,6 +73,22 @@ Status load_shim_locked() {
         return st;
     }
     _create_scanner_fn.store(reinterpret_cast<StarRocksPaimonCreateScannerFn>(create_sym), std::memory_order_release);
+    _shim_handle = handle;
+    return Status::OK();
+}
+
+Status load_global_index_symbol_locked() {
+    RETURN_IF_ERROR(load_shim_locked());
+    void* create_global_index_sym = nullptr;
+    if (Status st = dynamic_lookup(_shim_handle, STARROCKS_PAIMON_CREATE_GLOBAL_INDEX_SCANNER_SYMBOL,
+                                   &create_global_index_sym);
+        !st.ok()) {
+        return Status::NotSupported(
+                fmt::format("Paimon Global Index requires a newer libstarrocks_paimon shim: {}", st.message()));
+    }
+    _create_global_index_scanner_fn.store(
+            reinterpret_cast<StarRocksPaimonCreateGlobalIndexScannerFn>(create_global_index_sym),
+            std::memory_order_release);
     return Status::OK();
 }
 
@@ -83,6 +104,19 @@ StatusOr<HdfsScanner*> create_paimon_cpp_scanner() {
             // be/lib and retry without restarting the BE.
             RETURN_IF_ERROR(load_shim_locked());
             fn = _create_scanner_fn.load(std::memory_order_acquire);
+        }
+    }
+    return fn();
+}
+
+StatusOr<HdfsScanner*> create_paimon_global_index_scanner() {
+    auto fn = _create_global_index_scanner_fn.load(std::memory_order_acquire);
+    if (fn == nullptr) {
+        std::lock_guard<std::mutex> guard(_load_mutex);
+        fn = _create_global_index_scanner_fn.load(std::memory_order_acquire);
+        if (fn == nullptr) {
+            RETURN_IF_ERROR(load_global_index_symbol_locked());
+            fn = _create_global_index_scanner_fn.load(std::memory_order_acquire);
         }
     }
     return fn();

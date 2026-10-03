@@ -30,6 +30,10 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.tvr.TvrTableDeltaTrait;
 import com.starrocks.common.tvr.TvrTableSnapshot;
 import com.starrocks.common.tvr.TvrVersionRange;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexShard;
+import com.starrocks.connector.index.ConnectorIndexType;
+import com.starrocks.connector.index.IndexTable;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.connector.metadata.MetadataTableType;
@@ -119,6 +123,17 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     }
 
     @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table) {
+        return normal.getIndexMetadata(table);
+    }
+
+    @Override
+    public List<ConnectorIndexShard> getIndexShards(
+            Table table, long snapshotId, Map<String, ConnectorIndexType> requiredIndexes) {
+        return normal.getIndexShards(table, snapshotId, requiredIndexes);
+    }
+
+    @Override
     public List<String> listDbNames(ConnectContext context) {
         return ImmutableList.<String>builder()
                 .addAll(this.normal.listDbNames(context))
@@ -146,6 +161,14 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public Table getTable(ConnectContext context, String dbName, String tblName) {
+        if (getTableType() == Table.TableType.PAIMON && tblName.endsWith(IndexTable.INDEX_TABLE_SUFFIX)) {
+            String baseTableName = tblName.substring(0,
+                    tblName.length() - IndexTable.INDEX_TABLE_SUFFIX.length());
+            Table baseTable = normal.getTable(context, dbName, baseTableName);
+            if (baseTable != null) {
+                return new IndexTable(baseTable);
+            }
+        }
         ConnectorMetadata metadata = metadataOfTable(tblName);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
@@ -204,6 +227,9 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
     public TvrVersionRange getTableVersionRange(String dbName, Table table,
                                                 Optional<ConnectorTableVersion> startVersion,
                                                 Optional<ConnectorTableVersion> endVersion) {
+        if (table instanceof IndexTable) {
+            table = ((IndexTable) table).getInnerTable();
+        }
         ConnectorMetadata metadata = metadataOfTable(table);
         if (metadata == null) {
             metadata = metadataOfDb(dbName);
@@ -224,6 +250,13 @@ public class CatalogConnectorMetadata implements ConnectorMetadata, DelegatingCo
 
     @Override
     public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        if (getTableType() == Table.TableType.PAIMON && tblName.endsWith(IndexTable.INDEX_TABLE_SUFFIX)) {
+            String baseTableName = tblName.substring(0,
+                    tblName.length() - IndexTable.INDEX_TABLE_SUFFIX.length());
+            if (normal.tableExists(context, dbName, baseTableName)) {
+                return true;
+            }
+        }
         ConnectorMetadata metadata = metadataOfDb(dbName);
         return metadata.tableExists(context, dbName, tblName);
     }
