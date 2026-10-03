@@ -83,8 +83,12 @@ import com.starrocks.sql.ast.CreateTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropTemporaryTableStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRef;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.expression.Subquery;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -843,6 +847,15 @@ public class MetadataMgr {
             } else if (session.getSessionVariable().disableTableStatsFromMetadataForSingleTable() &&
                     session.getSourceTablesCount() == 1) {
                 return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+            } else if (canSkipDeltaLakeFileStatistics(session, table, predicate, limit)) {
+                // Delta's metadata statistics enumerate every file before incremental execution can start.
+                // Estimate only this bounded scan request, without caching it as the table's cardinality.
+                // File enumeration remains uncapped: empty files and deletion vectors require BE feedback.
+                Tracers.record(Tracers.Module.EXTERNAL, "DELTA_LAKE.limitStatistics", "default");
+                return Statistics.buildFrom(StatisticsUtils.buildDefaultStatistics(columns.keySet()))
+                        .setOutputRowCount(limit)
+                        .setTableRowCountMayInaccurate(true)
+                        .build();
             } else {
                 Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
                 Statistics connectorBasicStats = connectorMetadata.map(metadata -> metadata.getTableStatistics(
@@ -873,6 +886,23 @@ public class MetadataMgr {
             session.setObtainedFromInternalStatistics(true);
             return internalStatistics;
         }
+    }
+
+    private boolean canSkipDeltaLakeFileStatistics(OptimizerContext session, Table table,
+                                                    ScalarOperator predicate, long limit) {
+        if (table.getType() != Table.TableType.DELTALAKE || limit < 0 || predicate != null
+                || !session.getSessionVariable().isEnableConnectorIncrementalScanRanges()
+                || session.getSessionVariable().enableDeltaLakeColumnStatistics()
+                || !(session.getStatement() instanceof QueryStatement statement)
+                || !(statement.getQueryRelation() instanceof SelectRelation select)) {
+            return false;
+        }
+        // limit is the scan's pushed limit, not just the query's outer LIMIT. Keep the fast path
+        // confined to direct SELECTs, so joins, aggregates, windows, and ordered queries retain statistics.
+        return select.getRelation() instanceof TableRelation relation && relation.getTable() == table
+                && !select.hasWhereClause() && !select.hasOrderByClause() && !select.hasAggregation()
+                && !select.hasAnalyticInfo() && !select.hasHavingClause() && !select.hasWithClause()
+                && select.getOutputExpression().stream().noneMatch(expr -> expr.contains(Subquery.class));
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
