@@ -57,6 +57,14 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.LockHoldDepth;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.epack.warehouse.LocalWarehouse;
+>>>>>>> a43031e3c4d... [BugFix] Keep Spark load ETL clean-up and ALTER MV retention analysis off FE metadata locks (#64202)
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
@@ -85,6 +93,8 @@ import com.starrocks.type.VarcharType;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import mockit.Expectations;
 import mockit.Injectable;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -93,6 +103,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -625,5 +638,48 @@ public class SparkLoadJobTest {
         Deencapsulation.setField(job, "tableToLoadPartitions", Maps.newHashMap());
         ExceptionChecker.expectThrowsWithMsg(LoadException.class, "No rows were imported from upstream",
                 () -> Deencapsulation.invoke(job, "submitPushTasks"));
+    }
+
+    @Test
+    public void testAfterVisibleDeletesEtlOutputOutsideThePublishLock(@Mocked GlobalStateMgr globalStateMgr,
+                                                                      @Injectable String originStmt,
+                                                                      @Injectable Database db) throws Exception {
+        // afterVisible() runs inside DatabaseTransactionMgr.finishTransaction's critical section, and the ETL
+        // output deletion is a broker/HDFS round trip. Sample the lock depth where the real transport would be
+        // contacted. OR-accumulated so a later lock-free call cannot erase a locked one.
+        AtomicBoolean deletedUnderLock = new AtomicBoolean(false);
+        CountDownLatch deleted = new CountDownLatch(1);
+        new MockUp<SparkEtlJobHandler>() {
+            @Mock
+            public void deleteEtlOutputPath(String outputPath, BrokerDesc brokerDesc) {
+                deletedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
+                deleted.countDown();
+            }
+        };
+        LockManager lockManager = new LockManager();
+        new Expectations() {
+            {
+                globalStateMgr.getLockManager();
+                result = lockManager;
+                globalStateMgr.getLocalMetastore().getDb(dbId);
+                result = db;
+            }
+        };
+
+        SparkLoadJob job = getEtlStateJob(originStmt);
+        job.state = JobState.LOADING;
+        Locker locker = new Locker();
+        locker.lock(dbId, LockType.WRITE);
+        try {
+            job.afterVisible(new TransactionState());
+        } finally {
+            locker.release(dbId, LockType.WRITE);
+        }
+
+        Assertions.assertEquals(JobState.FINISHED, job.getState());
+        Assertions.assertTrue(deleted.await(30, TimeUnit.SECONDS),
+                "the etl output was never deleted, so the check below is vacuous");
+        Assertions.assertFalse(deletedUnderLock.get(),
+                "SparkLoadJob.afterVisible deleted the etl output while holding an FE metadata lock");
     }
 }
