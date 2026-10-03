@@ -74,7 +74,7 @@ This topic introduces the following types of FE configurations:
 ### `proc_profile_collect_time_s`
 
 - Default: 120
-- Type: Int
+- Type: Long
 - Unit: Seconds
 - Is mutable: Yes
 - Description: Duration in seconds for a single process profile collection. When `proc_profile_cpu_enable` or `proc_profile_mem_enable` is set to `true`, AsyncProfiler is started, the collector thread sleeps for this duration, then the profiler is stopped and the profile is written. Larger values increase sample coverage and file size but prolong profiler runtime and delay subsequent collections; smaller values reduce overhead but may produce insufficient samples. Ensure this value aligns with retention settings such as `proc_profile_file_retained_days` and `proc_profile_file_retained_size_bytes`.
