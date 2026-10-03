@@ -51,6 +51,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -81,6 +82,25 @@ public class TransactionStateTest {
         Assertions.assertEquals(transactionState.getCoordinator().ip, readTransactionState.getCoordinator().ip);
         Assertions.assertEquals("persistent reason", readTransactionState.getReason());
         Assertions.assertFalse(json.contains("temporary reason"));
+    }
+
+    @Test
+    public void testTableIdListKeepsItsTypeThroughSerDe() {
+        TransactionState transactionState = new TransactionState(1000L, Lists.newArrayList(20000L, 20001L),
+                3000, "label123", UUIDUtil.genTUniqueId(),
+                LoadJobSourceType.BACKEND_STREAMING, new TxnCoordinator(TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+
+        String json = GsonUtils.GSON.toJson(transactionState);
+        TransactionState readTransactionState = GsonUtils.GSON.fromJson(json, TransactionState.class);
+
+        // Every image load and edit log replay rebuilds the list through Gson, so it has to come back as the
+        // thread safe type rather than a plain ArrayList.
+        Assertions.assertInstanceOf(CopyOnWriteArrayList.class, readTransactionState.getTableIdList());
+        Assertions.assertEquals(List.of(20000L, 20001L), readTransactionState.getTableIdList());
+        readTransactionState.addTableIdIfAbsent(20001L);
+        readTransactionState.addTableIdIfAbsent(20002L);
+        Assertions.assertEquals(List.of(20000L, 20001L, 20002L), readTransactionState.getTableIdList());
     }
 
     @Test

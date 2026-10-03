@@ -1377,9 +1377,9 @@ public class ExplicitTxnTest {
             Assertions.assertNotNull(explicit);
             new MockUp<TransactionState>() {
                 @Mock
-                public void addTableIdList(Invocation invocation, Long tableId) {
+                public void addTableIdIfAbsent(Invocation invocation, long tableId) {
                     TransactionState invokedState = invocation.getInvokedInstance();
-                    if (invokedState == state && tableId.equals(table1.getId())
+                    if (invokedState == state && tableId == table1.getId()
                             && blockActivation.compareAndSet(true, false)) {
                         activationEntered.countDown();
                         awaitLatch(releaseActivation, "activation was not released");
@@ -1439,13 +1439,13 @@ public class ExplicitTxnTest {
             dbTxnMgr.activateTransactionTable(txnId, table1.getId());
             new MockUp<TransactionState>() {
                 @Mock
-                public List<Long> getTableIdList(Invocation invocation) {
+                public boolean intersectsTableIds(Invocation invocation, List<Long> candidateTableIds) {
                     TransactionState invokedState = invocation.getInvokedInstance();
                     if (invokedState == state && blockWatermark.compareAndSet(true, false)) {
                         watermarkEntered.countDown();
                         awaitLatch(releaseWatermark, "watermark was not released");
                     }
-                    return invocation.proceed();
+                    return invocation.proceed(candidateTableIds);
                 }
             };
 
