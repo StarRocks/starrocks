@@ -342,8 +342,8 @@ cat >> /etc/security/limits.conf << EOF
 * hard nproc 65535
 * soft nofile 655350
 * hard nofile 655350
-* soft stack unlimited
-* hard stack unlimited
+* soft stack 8192
+* hard stack 8192
 * hard memlock unlimited
 * soft memlock unlimited
 EOF
@@ -353,6 +353,12 @@ cat >> /etc/security/limits.d/20-nproc.conf << EOF
 root       soft    nproc     65535
 EOF
 ```
+
+:::note
+
+Set both stack limits to `8192` KiB (8 MiB). With glibc/NPTL, the soft stack limit at process startup determines the default stack size of new threads unless an explicit thread stack size is specified. An `unlimited` soft limit uses an architecture-specific default instead (2 MiB on x86-64), which can increase the risk of stack overflow. For details, see [pthread_create(3)](https://man7.org/linux/man-pages/man3/pthread_create.3.html).
+
+:::
 
 ## File system configuration
 
