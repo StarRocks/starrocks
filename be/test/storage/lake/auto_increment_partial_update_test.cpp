@@ -19,6 +19,7 @@
 #include "base/testutil/assert.h"
 #include "base/testutil/id_generator.h"
 #include "base/testutil/sync_point.h"
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
 #include "column/chunk_factory.h"
 #include "column/datum_tuple.h"
@@ -30,6 +31,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -117,7 +119,7 @@ public:
         remove_test_dir_or_die();
     }
 
-    Chunk generate_data(int chunk_size, bool partial) {
+    Chunk generate_data(int chunk_size, bool partial, int key_shift = 0) {
         std::vector<int> v0(chunk_size);
         std::vector<int64_t> v1(chunk_size);
         std::vector<int64_t> v2(chunk_size);
@@ -130,7 +132,7 @@ public:
         }
 
         for (int i = 0; i < chunk_size; i++) {
-            v0[i] = i;
+            v0[i] = i + key_shift;
         }
 
         auto c0 = Int32Column::create();
@@ -415,6 +417,93 @@ TEST_F(LakeAutoIncrementPartialUpdateTest, test_resolve_conflict) {
 
     SyncPoint::GetInstance()->ClearAllCallBacks();
     SyncPoint::GetInstance()->DisableProcessing();
+}
+
+// Publish reads base segments through the segment metacache, but the auto-increment branch reads this
+// transaction's own partial segment through a schema restricted to the partial-update columns. Such a
+// Segment must never reach the cache: it has no column reader for the columns the schema leaves out,
+// and a later reader that hit it would silently get their default values instead of the stored data.
+TEST_F(LakeAutoIncrementPartialUpdateTest, test_partial_segment_stays_out_of_metacache) {
+    recreate_schema(1);
+    auto chunk0 = generate_data(kChunkSize, false);
+    // Shifting the keys leaves half of them absent from the base rowset. Those new rows are what makes
+    // publish read the auto-increment column out of the transaction's own segment.
+    auto chunk1 = generate_data(kChunkSize, true, kChunkSize / 2);
+    std::vector<uint32_t> indexes(kChunkSize);
+    std::iota(indexes.begin(), indexes.end(), 0);
+
+    int64_t version = 1;
+    const auto tablet_id = _tablet_metadata->id();
+    {
+        const auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+    }
+
+    ASSIGN_OR_ABORT(auto base_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSERT_EQ(1, base_metadata->rowsets_size());
+    ASSERT_EQ(1, base_metadata->rowsets(0).segment_metas_size());
+    const auto base_segment_key =
+            _tablet_mgr->segment_location(tablet_id, base_metadata->rowsets(0).segment_metas(0).filename());
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearAllCallBacks();
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("StorageEngine::get_next_increment_id_interval.1", [](void* arg) {
+        auto& meta = *(std::shared_ptr<AutoIncrementMeta>*)(arg);
+        meta->min = 1;
+        meta->max = kChunkSize * 2;
+    });
+
+    const auto txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_slot_descriptors(&_slot_pointers)
+                                               .set_miss_auto_increment_column(true)
+                                               .set_table_id(next_id())
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    ASSIGN_OR_ABORT(auto txn_log, _tablet_mgr->get_txn_log(tablet_id, txn_id));
+    ASSERT_GT(txn_log->op_write().rowset().segment_metas_size(), 0);
+    std::vector<std::string> partial_segment_keys;
+    for (const auto& segment_meta : txn_log->op_write().rowset().segment_metas()) {
+        partial_segment_keys.emplace_back(_tablet_mgr->segment_location(tablet_id, segment_meta.filename()));
+    }
+
+    _tablet_mgr->prune_metacache();
+    ASSERT_OK(publish_single_version(tablet_id, ++version, txn_id).status());
+
+    // The base segment read is the one that benefits from the cache, and it is in there.
+    EXPECT_NE(nullptr, _tablet_mgr->metacache()->lookup_segment(base_segment_key));
+    // The transaction's own partial segment is not.
+    for (const auto& key : partial_segment_keys) {
+        EXPECT_EQ(nullptr, _tablet_mgr->metacache()->lookup_segment(key)) << key;
+    }
+
+    // Half the keys are new, so the tablet ends up with 1.5 chunks worth of rows.
+    EXPECT_EQ(kChunkSize + kChunkSize / 2, check(version, [](int c0, int c1, int c2) { return c1 > 0; }));
 }
 
 } // namespace starrocks::lake
