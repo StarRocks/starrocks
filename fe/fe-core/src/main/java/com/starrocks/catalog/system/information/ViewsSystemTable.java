@@ -251,9 +251,7 @@ public class ViewsSystemTable extends SystemTable {
         if (params.isSetCurrent_user_ident()) {
             UserIdentityUtils.setAuthInfoFromThrift(context, params.getCurrent_user_ident());
         } else {
-            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
-            context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            UserIdentityUtils.setAuthInfoFromThrift(context, params.user, params.user_ip);
         }
         String tableNameParam = params.isSetTable_name() ? params.getTable_name() : null;
         boolean listingViews = params.isSetType() && TTableType.VIEW.equals(params.getType());
