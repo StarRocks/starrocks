@@ -22,6 +22,9 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.type.ScalarType;
+import com.starrocks.type.Type;
+import com.starrocks.type.TypeFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -317,5 +320,25 @@ public class ClickhouseSchemaResolverTest {
 
         long count = resolver.getTableRowCount(connection, "testdb", "tbl1");
         Assertions.assertEquals(-1L, count, "Should return -1 when total_rows is NULL (e.g. Distributed engine)");
+    }
+
+    @Test
+    public void testConvertColumnTypeVarchar() {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        Type type = resolver.convertColumnType(Types.VARCHAR, "String", 0, 0);
+        Assertions.assertTrue(type instanceof ScalarType);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), ((ScalarType) type).getLength());
+    }
+
+    @Test
+    public void testConvertColumnTypeTimeWithTimezone() {
+        ClickhouseSchemaResolver resolver = new ClickhouseSchemaResolver(properties);
+        Type timeTzType = resolver.convertColumnType(Types.TIME_WITH_TIMEZONE, "DateTime64", 0, 0);
+        Assertions.assertTrue(timeTzType instanceof ScalarType);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), ((ScalarType) timeTzType).getLength());
+
+        Type timestampTzType = resolver.convertColumnType(Types.TIMESTAMP_WITH_TIMEZONE, "DateTime64", 0, 0);
+        Assertions.assertTrue(timestampTzType instanceof ScalarType);
+        Assertions.assertEquals(TypeFactory.getOlapMaxVarcharLength(), ((ScalarType) timestampTzType).getLength());
     }
 }
