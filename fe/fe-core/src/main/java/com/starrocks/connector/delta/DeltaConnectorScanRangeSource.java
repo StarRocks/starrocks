@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Paths;
@@ -53,6 +54,7 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final RemoteFileInfoSource remoteFileInfoSource;
     private final RemoteFileInputFormat remoteFileInputFormat;
     private final PartitionIdGenerator partitionIdGenerator;
+    private final boolean unityCatalogTable;
 
     private Map<PartitionKey, Long> partitionKeys = new HashMap<>();
     private Map<Long, DescriptorTable.ReferencedPartitionInfo> referencedPartitions = new HashMap<>();
@@ -64,6 +66,7 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.remoteFileInputFormat = DeltaUtils.getRemoteFileFormat(table.getDeltaMetadata().getFormat().getProvider());
         this.partitionIdGenerator = partitionIdGenerator;
+        this.unityCatalogTable = table.isUnityCatalogTable();
     }
 
     @VisibleForTesting
@@ -80,7 +83,9 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
 
         long partitionId = partitionIdGenerator.getOrGenerate(partitionKey);
         FileStatus fileStatus = fileScanTask.getFileStatus();
-        Path filePath = new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8));
+        Path filePath = !unityCatalogTable
+                ? new Path(URLDecoder.decode(fileStatus.getPath(), StandardCharsets.UTF_8))
+                : new Path(UnityCatalogProperties.validateStorageLocation(fileStatus.getPath()));
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo =
                 new DescriptorTable.ReferencedPartitionInfo(partitionId, partitionKey,
                         filePath.getParent().toString());
@@ -92,6 +97,11 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
 
     private TScanRangeLocations toScanRange(FileScanTask fileScanTask) {
         FileStatus fileStatus = fileScanTask.getFileStatus();
+        if (unityCatalogTable) {
+            // Table-vended credentials must only be used for files inside their table root.
+            UnityCatalogProperties.requireDescendant(table.getTableLocation(), fileStatus.getPath());
+            validateDeletionVector(fileScanTask);
+        }
 
         long partitionId = -1;
         try {
@@ -102,7 +112,11 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         DescriptorTable.ReferencedPartitionInfo referencedPartitionInfo = referencedPartitions.get(partitionId);
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
         THdfsScanRange hdfsScanRange = new THdfsScanRange();
-        if (fileStatus.getPath().contains(table.getTableLocation())) {
+        if (unityCatalogTable) {
+            URI file = UnityCatalogProperties.validateStorageLocation(fileStatus.getPath());
+            // Avoid joining an escaped table root to a decoded relative path in the worker.
+            hdfsScanRange.setFull_path(new Path(file).toString());
+        } else if (fileStatus.getPath().contains(table.getTableLocation())) {
             hdfsScanRange.setRelative_path(URLDecoder.decode("/" + Paths.get(table.getTableLocation()).
                     relativize(Paths.get(fileStatus.getPath())), StandardCharsets.UTF_8));
         } else {
@@ -119,7 +133,17 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         if (fileScanTask.getDv() != null) {
             TDeletionVectorDescriptor dv = new TDeletionVectorDescriptor();
             dv.setStorageType(fileScanTask.getDv().getStorageType());
-            dv.setPathOrInlineDv(fileScanTask.getDv().getPathOrInlineDv());
+            String dvPath = fileScanTask.getDv().getPathOrInlineDv();
+            if (unityCatalogTable && !"i".equals(fileScanTask.getDv().getStorageType())) {
+                if ("p".equals(fileScanTask.getDv().getStorageType())) {
+                    dvPath = new Path(UnityCatalogProperties.validateStorageLocation(dvPath)).toString();
+                } else {
+                    String root = new Path(UnityCatalogProperties.validateStorageLocation(table.getTableLocation())).toString();
+                    dvPath = new Path(fileScanTask.getDv().getAbsolutePath(root)).toString();
+                }
+                dv.setStorageType("p");
+            }
+            dv.setPathOrInlineDv(dvPath);
             dv.setOffset(fileScanTask.getDv().getOffset().orElse(0));
             dv.setSizeInBytes(fileScanTask.getDv().getSizeInBytes());
             dv.setCardinality(fileScanTask.getDv().getCardinality());
@@ -132,6 +156,28 @@ public class DeltaConnectorScanRangeSource extends ConnectorScanRangeSource {
         TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
         scanRangeLocations.addToLocations(scanRangeLocation);
         return scanRangeLocations;
+    }
+
+    private void validateDeletionVector(FileScanTask task) {
+        if (task.getDv() == null || "i".equals(task.getDv().getStorageType())) {
+            return;
+        }
+        String root = table.getTableLocation();
+        String encoded = task.getDv().getPathOrInlineDv();
+        if ("p".equals(task.getDv().getStorageType())) {
+            UnityCatalogProperties.requireDescendant(root, encoded);
+        } else if ("u".equals(task.getDv().getStorageType()) && encoded != null && encoded.length() >= 20) {
+            // Validate the prefix before Kernel's path construction can normalize traversal.
+            String prefix = encoded.substring(0, encoded.length() - 20);
+            if (!prefix.isEmpty()) {
+                UnityCatalogProperties.requireDescendant(root, root + "/" + prefix + "/deletion_vector.bin");
+            }
+            String decodedRoot = new Path(UnityCatalogProperties.validateStorageLocation(root)).toString();
+            UnityCatalogProperties.requireDescendant(root,
+                    new Path(task.getDv().getAbsolutePath(decodedRoot)).toUri().toASCIIString());
+        } else {
+            throw new StarRocksConnectorException("Invalid Delta deletion vector storage location");
+        }
     }
 
     @Override
