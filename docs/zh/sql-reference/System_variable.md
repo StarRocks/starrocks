@@ -875,6 +875,15 @@ FROM test;
 * **类型**: long
 * **单位**: 毫秒
 
+### enable_percentile_compact_intermediate (global)
+
+* **范围**: 仅 Global。使用 `SET GLOBAL enable_percentile_compact_intermediate = true` 或 `false` 设置。
+* **默认值**: false
+* **数据类型**: boolean
+* **描述**: 在 exchange 和 spill 中，为 `percentile_approx`、`percentile_approx_weighted` 及其数组形式启用紧凑的直通记录。持久化聚合状态仍使用包含完整信息的格式。
+
+  滚动升级期间请保持关闭。仅在所有 FE、BE 和 CN 节点均支持紧凑格式后启用。每条语句在开始执行时读取全局设置，包括已有连接上的新语句。正在执行的语句保留原设置。将工作节点降级到不支持紧凑格式的版本之前，必须先关闭此选项，并等待所有在启用状态下启动的语句执行完毕。
+
 ### enable_query_cache
 
 * 描述：是否开启 Query Cache。取值范围：true 和 false。true 表示开启，false 表示关闭（默认值）。开启该功能后，只有当查询满足[Query Cache](../using_starrocks/caching/query_cache.md#应用场景) 所述条件时，才会启用 Query Cache。

@@ -78,6 +78,23 @@ public class VariableMgrTest {
     }
 
     @Test
+    public void testPercentileCompactRefreshesExistingSessions() throws Exception {
+        VariableMgr variableMgr = new VariableMgr();
+        SessionVariable admin = variableMgr.newSessionVariable();
+        SessionVariable existing = variableMgr.newSessionVariable();
+        for (boolean enabled : new boolean[] {true, false}) {
+            SystemVariable variable = new SystemVariable(SetType.GLOBAL,
+                    SessionVariable.ENABLE_PERCENTILE_COMPACT_INTERMEDIATE, new StringLiteral(Boolean.toString(enabled)));
+            SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(variable)), null);
+            variableMgr.setSystemVariable(admin, variable, false);
+            Assertions.assertEquals(!enabled, existing.isEnablePercentileCompactIntermediate());
+            existing.refreshPercentileCompactIntermediate(variableMgr);
+            Assertions.assertEquals(enabled, existing.isEnablePercentileCompactIntermediate());
+            Assertions.assertEquals(enabled, existing.toThrift().isEnable_percentile_compact_intermediate());
+        }
+    }
+
+    @Test
     public void testAITopNHybridVariablesVisibility() {
         VariableMgr variableMgr = new VariableMgr();
         for (SetType scope : List.of(SetType.SESSION, SetType.GLOBAL)) {
