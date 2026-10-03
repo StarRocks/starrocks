@@ -49,6 +49,7 @@ TEST(MemhookTest, test_should_report_large_memory_alloc) {
 extern std::atomic<int64_t> g_mem_usage;
 #endif
 
+#include "geo/geo_buffer.h"
 #include "geo/geo_overlay.h"
 #include "runtime/current_thread.h"
 
@@ -77,6 +78,38 @@ TEST(MemhookTest, polygonOverlayPreparedAllocationsAreAccountedAndReleased) {
     ASSERT_TRUE(prepared.ok()) << prepared.status();
     EXPECT_GT(consumed(), before);
     prepared.value().reset();
+    EXPECT_EQ(before, consumed());
+}
+
+TEST(MemhookTest, bufferPreparedAndScratchAllocationsAreAccountedAndReleased) {
+    WkbGeometry polygon;
+    ASSERT_TRUE(
+            WkbCodec::parse_wkt("POLYGON ((0 0,4 0,4 4,0 4,0 0))", &polygon, WkbCoordinateSemantics::GEOMETRY_CARTESIAN)
+                    .ok());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    {
+        auto warmup = PreparedGeoBuffer::prepare(Slice(wkb));
+        ASSERT_TRUE(warmup.ok());
+        ASSERT_TRUE(warmup.value()->buffer(1).ok());
+    }
+#ifdef BE_TEST
+    auto consumed = [] { return ::g_mem_usage.load(); };
+#else
+    MemTracker tracker(-1, "buffer");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    auto consumed = [] { return tls_thread_status.get_consumed_bytes(); };
+#endif
+    const auto before = consumed();
+    {
+        auto input = PreparedGeoBuffer::prepare(Slice(wkb));
+        ASSERT_TRUE(input.ok()) << input.status();
+        EXPECT_GT(consumed(), before);
+        for (double distance : {1.0, -1.0, 0.0}) {
+            auto result = input.value()->buffer(distance);
+            ASSERT_TRUE(result.ok()) << result.status();
+        }
+    }
     EXPECT_EQ(before, consumed());
 }
 
