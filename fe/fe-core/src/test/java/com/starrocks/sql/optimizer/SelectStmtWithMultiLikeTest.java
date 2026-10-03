@@ -16,6 +16,16 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.optimizer.rewrite.scalar.ConsolidateLikesRule;
+import com.starrocks.type.VarcharType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.jupiter.api.Assertions;
@@ -25,6 +35,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.StringJoiner;
@@ -80,6 +92,64 @@ public class SelectStmtWithMultiLikeTest {
         List<String> patterns = Lists.newArrayList(
                 "PREDICATES: NOT (1: region REGEXP '^((.*ABC.*)|(.*DEF.*))$'), NOT (3: site LIKE '%ABC%')");
         test(sql, patterns);
+    }
+
+    @Test
+    public void testLikePredicateConsolidateByteLimit() {
+        ColumnRefOperator region = new ColumnRefOperator(1, VarcharType.VARCHAR, "region", false);
+        String cjk = "甲".repeat(2663);
+
+        ScalarOperator atLimit = applyConsolidateLikes(CompoundPredicateOperator.or(
+                like(region, "%" + cjk + "aa%"), like(region, "%" + cjk + "aaa%")));
+        LikePredicateOperator regexp = getOnlyRegexp(atLimit);
+        String anchoredRegexp = Utils.mustCast(regexp.getChild(1), ConstantOperator.class).getVarchar();
+        Assertions.assertEquals(16_000, anchoredRegexp.getBytes(StandardCharsets.UTF_8).length);
+        Assertions.assertTrue(anchoredRegexp.length() < 16_000);
+
+        ScalarOperator overLimit = applyConsolidateLikes(CompoundPredicateOperator.or(
+                like(region, "%" + cjk + "aa%"), like(region, "%" + cjk + "aaaa%")));
+        assertRegexpCount(overLimit, 0);
+        assertRawLikeCount(overLimit, 2);
+
+        List<ScalarOperator> doiLikeOps = new ArrayList<>();
+        for (int i = 0; i < 259; i++) {
+            doiLikeOps.add(like(region, "%" + "x".repeat(80) + "-" + i + "%"));
+        }
+        ScalarOperator doiResult = applyConsolidateLikes(CompoundPredicateOperator.or(doiLikeOps));
+        assertRegexpCount(doiResult, 0);
+        assertRawLikeCount(doiResult, 259);
+    }
+
+    @Test
+    public void testOversizedLikeGroupDoesNotPartiallyConsolidate() {
+        ColumnRefOperator region = new ColumnRefOperator(1, VarcharType.VARCHAR, "region", false);
+        String first = "%" + "a".repeat(5326) + "%";
+        String second = "%" + "b".repeat(5326) + "%";
+        String third = "%" + "c".repeat(5325) + "%";
+
+        ScalarOperator nestedOr = CompoundPredicateOperator.or(
+                CompoundPredicateOperator.or(like(region, first), like(region, second)), like(region, third));
+        ScalarOperator rewrittenOr = applyConsolidateLikes(nestedOr);
+        assertRegexpCount(rewrittenOr, 0);
+        assertRawLikeCount(rewrittenOr, 3);
+
+        ScalarOperator nestedAnd = CompoundPredicateOperator.and(
+                CompoundPredicateOperator.and(CompoundPredicateOperator.not(like(region, first)),
+                        CompoundPredicateOperator.not(like(region, second))),
+                CompoundPredicateOperator.not(like(region, third)));
+        ScalarOperator rewrittenAnd = applyConsolidateLikes(nestedAnd);
+        assertRegexpCount(rewrittenAnd, 0);
+        assertRawLikeCount(rewrittenAnd, 3);
+        Assertions.assertEquals(3, Utils.extractConjuncts(rewrittenAnd).stream()
+                .filter(ScalarOperatorUtil::isSimpleNotLike).count());
+    }
+
+    @Test
+    public void testLikePatternsWithinConsolidationByteLimit() throws Exception {
+        test("select count(1) from t0 where region like '%suffix' or region like '%other'",
+                Lists.newArrayList("1: region REGEXP '^((.*suffix)|(.*other))$'"));
+        test("select count(1) from t0 where region like '%needle%' or region like '%value%'",
+                Lists.newArrayList("1: region REGEXP '^((.*needle.*)|(.*value.*))$'"));
     }
 
     private static Stream<Arguments> multiLikeTestCases() {
@@ -281,5 +351,49 @@ public class SelectStmtWithMultiLikeTest {
         joiner.add(patterns.toString());
         joiner.add(plan);
         Assertions.assertTrue(patterns.stream().allMatch(plan::contains), joiner.toString());
+    }
+
+    private LikePredicateOperator like(ColumnRefOperator column, String pattern) {
+        return new LikePredicateOperator(column, ConstantOperator.createVarchar(pattern));
+    }
+
+    private ScalarOperator applyConsolidateLikes(ScalarOperator root) {
+        ConnectContext previousContext = ConnectContext.get();
+        int previousMin = starRocksAssert.getCtx().getSessionVariable().getLikePredicateConsolidateMin();
+        ConnectContext.set(starRocksAssert.getCtx());
+        try {
+            starRocksAssert.getCtx().getSessionVariable().setLikePredicateConsolidateMin(2);
+            return ConsolidateLikesRule.INSTANCE.apply(root, new ScalarOperatorRewriteContext());
+        } finally {
+            starRocksAssert.getCtx().getSessionVariable().setLikePredicateConsolidateMin(previousMin);
+            if (previousContext == null) {
+                ConnectContext.remove();
+            } else {
+                ConnectContext.set(previousContext);
+            }
+        }
+    }
+
+    private LikePredicateOperator getOnlyRegexp(ScalarOperator operator) {
+        assertRegexpCount(operator, 1);
+        return ScalarOperatorUtil.getStream(operator)
+                .filter(child -> child instanceof LikePredicateOperator &&
+                        ((LikePredicateOperator) child).isRegexp())
+                .map(child -> (LikePredicateOperator) child)
+                .findFirst()
+                .orElseThrow();
+    }
+
+    private void assertRegexpCount(ScalarOperator operator, long expected) {
+        long actual = ScalarOperatorUtil.getStream(operator)
+                .filter(child -> child instanceof LikePredicateOperator &&
+                        ((LikePredicateOperator) child).isRegexp())
+                .count();
+        Assertions.assertEquals(expected, actual, operator.toString());
+    }
+
+    private void assertRawLikeCount(ScalarOperator operator, long expected) {
+        long actual = ScalarOperatorUtil.getStream(operator).filter(ScalarOperatorUtil::isSimpleLike).count();
+        Assertions.assertEquals(expected, actual, operator.toString());
     }
 }
