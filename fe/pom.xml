@@ -94,6 +94,7 @@ under the License.
         <commons-beanutils.version>1.11.0</commons-beanutils.version>
         <hbase.version>2.6.2</hbase.version>
         <lz4-java.version>1.10.1</lz4-java.version>
+        <zstd-jni.version>1.5.7-6</zstd-jni.version>
         <async-profiler.version>4.0</async-profiler.version>
         <maven.surefire.plugin.version>3.2.5</maven.surefire.plugin.version>
         <!-- Stay on 1.49.4: the hazendaz 2.2.0+ line regresses @Mocked on some third-party classes
@@ -1791,6 +1792,13 @@ under the License.
                 <groupId>at.yawk.lz4</groupId>
                 <artifactId>lz4-java</artifactId>
                 <version>${lz4-java.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.github.luben/zstd-jni -->
+            <dependency>
+                <groupId>com.github.luben</groupId>
+                <artifactId>zstd-jni</artifactId>
+                <version>${zstd-jni.version}</version>
             </dependency>
 
         </dependencies>
