@@ -670,6 +670,31 @@ public class DatabaseTransactionMgrTest {
     }
 
     @Test
+    public void testRemoveExpiredTxnsAfterFinalStateIsUpsertedTwice() throws AnalysisException {
+        DatabaseTransactionMgr masterDbTransMgr =
+                masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
+        int finishedBefore = masterDbTransMgr.getFinishedTxnNums();
+
+        TransactionState single = makeVisibleBatchTxn(900001L, List.of(GlobalStateMgrTestUtil.testTableId1));
+        single.setTransactionStatus(TransactionStatus.VISIBLE);
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", single);
+        Deencapsulation.invoke(masterDbTransMgr, "unprotectUpsertTransactionState", single);
+
+        TransactionState batched = makeVisibleBatchTxn(900002L, List.of(GlobalStateMgrTestUtil.testTableId1));
+        batched.setTransactionStatus(TransactionStatus.VISIBLE);
+        masterDbTransMgr.unprotectSetTransactionStateBatch(new TransactionStateBatch(List.of(batched)));
+        masterDbTransMgr.unprotectSetTransactionStateBatch(new TransactionStateBatch(List.of(batched)));
+
+        assertEquals(finishedBefore + 2, masterDbTransMgr.getFinishedTxnNums());
+
+        Config.label_keep_max_second = -1;
+        masterDbTransMgr.removeExpiredTxns(System.currentTimeMillis());
+        assertEquals(0, masterDbTransMgr.getFinishedTxnNums());
+        assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(single.getLabel()));
+        assertNull(masterDbTransMgr.unprotectedGetTxnIdsByLabel(batched.getLabel()));
+    }
+
+    @Test
     public void testGetTableTransInfo() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
