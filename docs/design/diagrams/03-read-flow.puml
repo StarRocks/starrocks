@@ -1,0 +1,100 @@
+@startuml
+' Source of truth for 03-read-flow.png -- see ../README.md to regenerate.
+skinparam defaultFontName Helvetica
+skinparam shadowing false
+autonumber
+title Read (decrypt) flow
+
+participant "SQL client" as C
+participant "FE\n(StarRocks)" as FE
+participant "Iceberg lib\n(in the FE process)" as ICE
+participant "KMS" as KMS
+participant "BE" as BE
+participant "Object store" as OBJ
+
+C -> FE : SELECT from an encrypted iceberg table
+note over FE
+  Gate first, in buildScanRange, before any per-file test: a table
+  that declares encryption.key-id while the catalog supplied a
+  PlaintextEncryptionManager is refused. Such a table's files carry
+  NO key metadata, so a per-file check would skip them and serve
+  them silently -- the exact fail-open the gate exists for.
+end note
+
+== Planning: reach the data file's key_metadata ==
+FE -> ICE : plan files for the snapshot
+ICE -> OBJ : read metadata.json (NOT encrypted)
+note over ICE
+  snapshot.key-id gives the KEK_ID; encryption-keys holds the
+  wrapped KEK and the encrypted manifest-list key metadata
+end note
+ICE -> KMS : unwrap the KEK with the table master key
+KMS --> ICE : plaintext KEK
+note over ICE
+  decrypt the manifest-list key metadata with the KEK
+  (AAD = KEK creation timestamp) -> manifest-list key
+end note
+ICE -> OBJ : read manifest list as AES-GCM stream (AGS1)
+ICE -> OBJ : read manifest as AES-GCM stream (AGS1)
+ICE --> FE : data files + their key_metadata
+note over KMS : one KMS call per KEK, not per file
+
+== Recover the per-file key ==
+note over FE
+  Parse StandardKeyMetadata directly for the DEK and AAD prefix.
+  NOT via EncryptionManager.decrypt(): that returns a
+  StandardDecryptedInputFile, which implements
+  NativeEncryptionInputFile and NOT NativelyEncryptedFile, and
+  exposes no nativeCryptoParameters() -- so there is no file key
+  to take from it. No KMS round-trip and no DEK cache here.
+  Failure to recover a key fails the query; never plaintext.
+end note
+
+== Data file ==
+FE -> BE : scan range with PLAINTEXT file_dek + aad_prefix
+BE -> OBJ : read encrypted footer
+note over BE
+  footer key = DEK, file_aad = aad_prefix + aad_file_unique.
+  Caches an immutable EncryptionContext on the FileMetaData --
+  algorithm, AAD inputs, key_metadata. NOT the DEK: that object
+  goes into the process-wide footer cache, so caching the key
+  would both retain it there and let a cache hit skip the
+  "no key from the planner" refusal. The key comes from the
+  scan range on every scan instead.
+end note
+BE -> OBJ : read encrypted page headers and page data
+note over BE
+  per-reader decryptor built from that context -- the parquet
+  Decryptor mutates AAD per page and must not be shared --
+  with per-page AAD recomputed via CreateModuleAad
+end note
+note over BE
+  Page index and bloom filters are separate PME modules, each
+  decrypted under its own AAD (module type, row group, column,
+  kNonPageOrdinal) with the footer key under GCM. So pruning
+  works on encrypted files too. A wrong module type or ordinal
+  FAILS authentication rather than returning a structure that
+  would then be used to index another.
+end note
+note over BE
+  Page AAD uses the file's REAL page index, so the page-index
+  skip path stays decryptable: a counter of headers read would
+  desync the moment a page is skipped.
+end note
+
+== Delete files (each has its OWN key) ==
+note over FE
+  A delete file in an encrypted table is itself encrypted and
+  carries its own per-file DEK. It CANNOT reuse the data file's
+  key, so its key material travels separately.
+end note
+FE -> BE : position deletes: TIcebergDeleteFile.parquet_encryption_info
+FE -> BE : equality deletes: their own scan range, encrypted like a data file
+BE -> OBJ : read + decrypt the delete files
+note over BE
+  Only Parquet position deletes can be decrypted; an encrypted
+  ORC position-delete file is rejected rather than misread.
+end note
+
+BE --> C : decrypted rows
+@enduml
