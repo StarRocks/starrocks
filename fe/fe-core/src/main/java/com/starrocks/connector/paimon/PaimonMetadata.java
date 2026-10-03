@@ -44,6 +44,13 @@ import com.starrocks.connector.PredicateSearchKey;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.index.ConnectorIndexCoverage;
+import com.starrocks.connector.index.ConnectorIndexDescriptor;
+import com.starrocks.connector.index.ConnectorIndexMetadata;
+import com.starrocks.connector.index.ConnectorIndexOperation;
+import com.starrocks.connector.index.ConnectorIndexTableType;
+import com.starrocks.connector.index.ConnectorIndexType;
+import com.starrocks.connector.index.VectorIndexMetric;
 import com.starrocks.connector.statistics.ConnectorNdvEstimator;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
@@ -73,17 +80,22 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
-import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.globalindex.bitmap.BitmapGlobalIndexerFactory;
+import org.apache.paimon.globalindex.btree.BTreeGlobalIndexerFactory;
+import org.apache.paimon.index.GlobalIndexMeta;
+import org.apache.paimon.index.IndexFileMeta;
+import org.apache.paimon.manifest.IndexManifestEntry;
 import org.apache.paimon.metrics.Gauge;
 import org.apache.paimon.metrics.Metric;
 import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.schema.TableSchema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.table.DataTable;
+import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.sink.BatchTableCommit;
-import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
@@ -91,9 +103,12 @@ import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypeChecks;
+import org.apache.paimon.types.DataTypeRoot;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.types.VectorType;
 import org.apache.paimon.utils.DateTimeUtils;
+import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.PartitionPathUtils;
 import org.apache.paimon.utils.SnapshotManager;
 import org.apache.paimon.utils.StringUtils;
@@ -101,6 +116,8 @@ import org.apache.paimon.utils.TagManager;
 import org.apache.paimon.view.View;
 import org.apache.paimon.view.ViewImpl;
 
+import java.io.FileNotFoundException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -111,7 +128,10 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -126,6 +146,7 @@ import static org.apache.paimon.catalog.Identifier.DEFAULT_MAIN_BRANCH;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
+    private static final long INDEX_METADATA_FAILURE_LOG_INTERVAL_MS = Duration.ofMinutes(1).toMillis();
 
     public static final List<String> PARTITION_NULL_VALUES = ImmutableList.of("__DEFAULT_PARTITION__", "null");
     private static final String VIEW_DIALECTS_KEY = "starrocks";
@@ -136,15 +157,24 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
+    private final PaimonIndexMetadataCache indexMetadataCache;
+    private final AtomicLong lastIndexMetadataFailureLogTimeMs = new AtomicLong(Long.MIN_VALUE);
     private final Map<Identifier, Map<String, Partition>> partitionInfos = new ConcurrentHashMap<>();
-    private final ThreadLocal<String> branch = ThreadLocal.withInitial(() -> DEFAULT_MAIN_BRANCH);
+    private final ThreadLocal<Map<String, String>> branches = new ThreadLocal<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
+        this(catalogName, hdfsEnvironment, paimonNativeCatalog, properties,
+                new PaimonIndexMetadataCache(Duration.ofMinutes(10), 1000L));
+    }
+
+    PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
+                   ConnectorProperties properties, PaimonIndexMetadataCache indexMetadataCache) {
         this.paimonNativeCatalog = paimonNativeCatalog;
         this.hdfsEnvironment = hdfsEnvironment;
         this.catalogName = catalogName;
         this.properties = properties;
+        this.indexMetadataCache = indexMetadataCache;
     }
 
     @Override
@@ -200,9 +230,11 @@ public class PaimonMetadata implements ConnectorMetadata {
         try {
             if (paimonTable.isPaimonView()) {
                 paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
+                indexMetadataCache.invalidateTable(catalogName, dbName, tableName);
                 return;
             }
             paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
+            indexMetadataCache.invalidateTable(catalogName, dbName, tableName);
         } catch (Exception e) {
             throw new StarRocksConnectorException(
                     String.format("Paimon dropTable error for %s.%s", dbName, tableName), e);
@@ -473,13 +505,13 @@ public class PaimonMetadata implements ConnectorMetadata {
                     //if branch, format like branch:b_1, return the latest snapshot of the branch
                     String[] tableFullName = table.fullName().split("\\.");
                     Identifier identifier = new Identifier(tableFullName[0], tableFullName[1], refNameParts[1]);
-                    branch.set(identifier.getBranchNameOrDefault());
                     try {
                         paimonTable = paimonNativeCatalog.getTable(identifier);
                     } catch (Catalog.TableNotExistException e) {
                         throw new StarRocksConnectorException("%s does not include branch: %s",
                                 table.fullName(), refNameParts[1]);
                     }
+                    setRequestedBranch(table, identifier.getBranchNameOrDefault());
                     snapshotId = paimonTable.latestSnapshot().isPresent() ? paimonTable.latestSnapshot().get().id() : -1L;
                 } else {
                     //if tag, format like tag:t_1, return the snapshot that the tag referenced
@@ -612,8 +644,7 @@ public class PaimonMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
         long snapshotId = -1L;
-        String currentBranch = branch.get();
-        branch.remove();
+        String currentBranch = consumeRequestedBranch(paimonTable);
         Identifier identifier = new Identifier(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), currentBranch);
         if (!new Identifier(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName()).isSystemTable()) {
@@ -627,11 +658,22 @@ public class PaimonMetadata implements ConnectorMetadata {
         TvrVersionRange tvrVersionRange = params.getTableVersionRange();
         snapshotId = tvrVersionRange.end().isPresent() ? tvrVersionRange.end().get() : -1L;
 
+        org.apache.paimon.table.Table versionedPaimonTable = getNativeTable(paimonTable.getNativeTable(),
+                tvrVersionRange);
         Map<String, String> options = new HashMap<>();
-        options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        if (snapshotId >= 0) {
+            options.put(CoreOptions.SCAN_SNAPSHOT_ID.key(), String.valueOf(snapshotId));
+        }
+        if (versionedPaimonTable instanceof FileStoreTable
+                && !versionedPaimonTable.options().containsKey(CoreOptions.SCALAR_INDEX_SEARCH_MODE.key())
+                && !versionedPaimonTable.options().containsKey(CoreOptions.GLOBAL_INDEX_SEARCH_MODE.key())) {
+            // Paimon's FAST default only searches indexed row IDs. FULL also scans row IDs not
+            // covered by an index, preserving SQL correctness while an index is being refreshed.
+            options.put(CoreOptions.SCALAR_INDEX_SEARCH_MODE.key(),
+                    CoreOptions.GlobalIndexSearchMode.FULL.toString());
+        }
 
-        org.apache.paimon.table.Table paimonNativeTable = getNativeTable(paimonTable.getNativeTable(),
-                tvrVersionRange).copy(options);
+        org.apache.paimon.table.Table paimonNativeTable = versionedPaimonTable.copy(options);
 
         GetRemoteFilesParams copyParams = params.copy();
         copyParams.setTableVersionRange(TvrTableSnapshot.of(snapshotId));
@@ -639,7 +681,8 @@ public class PaimonMetadata implements ConnectorMetadata {
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), copyParams);
 
-        if (!paimonSplits.containsKey(filter)) {
+        PaimonSplitsInfo cachedSplits = paimonSplits.get(filter);
+        if (cachedSplits == null) {
             ReadBuilder readBuilder = paimonNativeTable.newReadBuilder();
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
@@ -668,6 +711,564 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
 
         return Lists.newArrayList(remoteFileInfo);
+    }
+
+    private void setRequestedBranch(org.apache.paimon.table.Table table, String requestedBranch) {
+        Map<String, String> requestedBranches = branches.get();
+        if (requestedBranches == null) {
+            requestedBranches = new HashMap<>();
+            branches.set(requestedBranches);
+        }
+        requestedBranches.put(tableBranchKey(table), requestedBranch);
+    }
+
+    private String consumeRequestedBranch(PaimonTable table) {
+        Map<String, String> requestedBranches = branches.get();
+        if (requestedBranches == null) {
+            return DEFAULT_MAIN_BRANCH;
+        }
+        String requestedBranch = requestedBranches.remove(tableBranchKey(table));
+        if (requestedBranches.isEmpty()) {
+            branches.remove();
+        }
+        return requestedBranch == null ? DEFAULT_MAIN_BRANCH : requestedBranch;
+    }
+
+    private String getRequestedBranch(PaimonTable table) {
+        Map<String, String> requestedBranches = branches.get();
+        return requestedBranches == null
+                ? DEFAULT_MAIN_BRANCH
+                : requestedBranches.getOrDefault(tableBranchKey(table), DEFAULT_MAIN_BRANCH);
+    }
+
+    @Override
+    public ConnectorIndexMetadata getIndexMetadata(Table table, TvrVersionRange versionRange) {
+        if (!(table instanceof PaimonTable)) {
+            return ConnectorIndexMetadata.empty();
+        }
+        PaimonTable paimonTable = (PaimonTable) table;
+        if (versionRange != null && versionRange.end().isPresent() && versionRange.end().get() < 0) {
+            return ConnectorIndexMetadata.empty();
+        }
+        org.apache.paimon.table.Table nativeTable = paimonTable.getNativeTable();
+        String currentBranch = getRequestedBranch(paimonTable);
+        if (!DEFAULT_MAIN_BRANCH.equals(currentBranch)) {
+            try {
+                nativeTable = paimonNativeCatalog.getTable(new Identifier(
+                        paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), currentBranch));
+            } catch (Catalog.TableNotExistException e) {
+                LOG.warn("Cannot resolve Paimon branch {} for index metadata on {}.{}",
+                        currentBranch, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
+                return ConnectorIndexMetadata.empty();
+            }
+        }
+        if (!(nativeTable instanceof FileStoreTable)) {
+            return ConnectorIndexMetadata.empty();
+        }
+
+        FileStoreTable fileStoreTable = (FileStoreTable) nativeTable;
+        currentBranch = resolveIndexBranch(fileStoreTable.options(), currentBranch);
+        // A row-id result cannot describe an incremental-between scan. A delta whose start is
+        // unbounded is still a snapshot read and is therefore safe to discover against its end.
+        if (versionRange instanceof TvrTableDelta
+                && versionRange.start().isPresent() && versionRange.end().isPresent()) {
+            return ConnectorIndexMetadata.empty();
+        }
+
+        Optional<Snapshot> snapshot = resolveIndexSnapshot(fileStoreTable, versionRange);
+        if (snapshot.isEmpty()) {
+            return ConnectorIndexMetadata.empty();
+        }
+
+        Snapshot resolvedSnapshot = snapshot.get();
+        long snapshotId = resolvedSnapshot.id();
+        PaimonIndexMetadataCacheKey cacheKey = new PaimonIndexMetadataCacheKey(
+                catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(),
+                String.valueOf(fileStoreTable.location()), currentBranch, snapshotId,
+                resolvedSnapshot.timeMillis(), resolvedSnapshot.indexManifest());
+        try {
+            ConnectorIndexMetadata metadata = indexMetadataCache.get(cacheKey,
+                    () -> loadIndexMetadata(fileStoreTable, resolvedSnapshot));
+            return bindCurrentSchema(metadata, fileStoreTable);
+        } catch (RuntimeException e) {
+            // Caffeine does not cache loader exceptions, so a transient catalog/object-store
+            // failure can be retried by the next query instead of becoming an empty cached result.
+            if (shouldLogIndexMetadataFailure(lastIndexMetadataFailureLogTimeMs, System.currentTimeMillis())) {
+                LOG.warn("Failed to load Paimon index metadata for {}.{}.{} at snapshot {}",
+                        catalogName, paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName(), snapshotId, e);
+            }
+            return ConnectorIndexMetadata.empty();
+        }
+    }
+
+    static boolean shouldLogIndexMetadataFailure(AtomicLong lastLogTimeMs, long nowMs) {
+        long previous = lastLogTimeMs.get();
+        if (previous != Long.MIN_VALUE && nowMs >= previous
+                && nowMs - previous < INDEX_METADATA_FAILURE_LOG_INTERVAL_MS) {
+            return false;
+        }
+        return lastLogTimeMs.compareAndSet(previous, nowMs);
+    }
+
+    static String resolveIndexBranch(Map<String, String> nativeOptions, String requestedBranch) {
+        if (nativeOptions == null) {
+            return requestedBranch;
+        }
+        String optionBranch = CoreOptions.branch(nativeOptions);
+        // getRemoteFiles consumes the ThreadLocal after replacing the PaimonTable's native table.
+        // In that production order the branch embedded in the actual native table is authoritative.
+        // Before getRemoteFiles, keep an explicit non-main request even if a catalog implementation
+        // does not expose the branch option on the copied table.
+        if (optionBranch != null
+                && (!DEFAULT_MAIN_BRANCH.equals(optionBranch) || DEFAULT_MAIN_BRANCH.equals(requestedBranch))) {
+            return optionBranch;
+        }
+        return requestedBranch;
+    }
+
+    private Optional<Snapshot> resolveIndexSnapshot(FileStoreTable table, TvrVersionRange versionRange) {
+        try {
+            if (versionRange != null && versionRange.end().isPresent()) {
+                long snapshotId = versionRange.end().get();
+                if (snapshotId < 0) {
+                    return Optional.empty();
+                }
+                try {
+                    return Optional.of(table.snapshotManager().tryGetSnapshot(snapshotId));
+                } catch (FileNotFoundException e) {
+                    // An expired snapshot can still be retained by a tag after its ordinary
+                    // snapshot file has been removed.
+                    if (table instanceof DataTable) {
+                        return ((DataTable) table).tagManager().taggedSnapshots().stream()
+                                .filter(taggedSnapshot -> taggedSnapshot.id() == snapshotId)
+                                .findFirst();
+                    }
+                    return Optional.empty();
+                }
+            }
+            return Optional.ofNullable(table.snapshotManager().latestSnapshot());
+        } catch (Exception e) {
+            LOG.warn("Cannot resolve Paimon snapshot for index metadata: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private static String tableBranchKey(PaimonTable table) {
+        return table.getCatalogDBName() + "." + table.getCatalogTableName();
+    }
+
+    private static String tableBranchKey(org.apache.paimon.table.Table table) {
+        String[] names = table.fullName().split("\\.");
+        return names.length < 2 ? table.fullName() : names[names.length - 2] + "." + names[names.length - 1];
+    }
+
+    private static ConnectorIndexMetadata bindCurrentSchema(
+            ConnectorIndexMetadata metadata, FileStoreTable table) {
+        Map<String, Integer> currentFields = table.rowType().getFields().stream()
+                .collect(Collectors.toMap(DataField::name, DataField::id));
+        Map<Integer, String> currentFieldNames = currentFields.entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getValue, Map.Entry::getKey));
+        Set<Integer> currentFieldIds = new HashSet<>(currentFields.values());
+        Set<Integer> partitionFields = table.partitionKeys().stream()
+                .map(currentFields::get)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        List<ConnectorIndexDescriptor> currentDescriptors = metadata.getDescriptors().stream()
+                .filter(descriptor -> currentFieldIds.contains(descriptor.getFieldId()))
+                .map(descriptor -> descriptor.withColumnName(currentFieldNames.get(descriptor.getFieldId())))
+                .collect(Collectors.toList());
+        return ConnectorIndexMetadata.of(metadata.getSnapshotId(), metadata.getTableType(),
+                currentDescriptors, currentFields, partitionFields);
+    }
+
+    private ConnectorIndexMetadata loadIndexMetadata(FileStoreTable fileStoreTable, Snapshot snapshot) {
+        Set<ConnectorIndexDescriptor> descriptors = new LinkedHashSet<>();
+        TableSchema snapshotSchema = fileStoreTable.schemaManager().schema(snapshot.schemaId());
+        if (snapshotSchema == null) {
+            throw new StarRocksConnectorException(
+                    "Cannot resolve Paimon schema %s for index metadata at snapshot %s",
+                    snapshot.schemaId(), snapshot.id());
+        }
+        ConnectorIndexTableType tableType = toConnectorIndexTableType(snapshotSchema);
+        List<IndexManifestEntry> entries;
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "ScanIndexFileEntries")) {
+            entries = fileStoreTable.store().newIndexFileHandler().scan(snapshot, ignoredEntry -> true);
+        }
+        Map<String, VectorDescriptorCandidate> vectorCandidates = new LinkedHashMap<>();
+        Set<String> invalidVectorCandidates = new HashSet<>();
+        for (IndexManifestEntry entry : entries) {
+            IndexFileMeta indexFile = entry == null ? null : entry.indexFile();
+            if (indexFile == null) {
+                continue;
+            }
+            GlobalIndexMeta globalIndex = indexFile.globalIndexMeta();
+            String provider = indexFile.indexType();
+            ConnectorIndexType indexType = toConnectorIndexType(provider);
+            if (globalIndex == null || indexType == null) {
+                continue;
+            }
+            DataField field = snapshotSchema.idToFieldMap().get(globalIndex.indexFieldId());
+            if (field == null) {
+                LOG.warn("Ignore Paimon {} index with unknown field id {} at snapshot {}",
+                        provider, globalIndex.indexFieldId(), snapshot.id());
+                continue;
+            }
+            if (fileStoreTable.partitionKeys().contains(field.name())) {
+                // Partition predicates have already participated in partition pruning. Keeping
+                // them out of the global-index condition also prevents an executor from treating
+                // partition-only filters as row-id coverage requirements.
+                continue;
+            }
+
+            Map<String, String> options = indexOptions(snapshotSchema.options(), field.name(), provider);
+            if (indexType == ConnectorIndexType.VECTOR) {
+                Optional<VectorCapability> capability = resolveVectorCapability(
+                        provider, globalIndex.indexMeta(), snapshotSchema, field, tableType);
+                String candidateKey = field.id() + ":" + provider.toLowerCase(Locale.ROOT);
+                if (capability.isEmpty()) {
+                    invalidVectorCandidates.add(candidateKey);
+                    continue;
+                }
+                options.put(ConnectorIndexDescriptor.OPTION_METRIC, capability.get().metric.name());
+                options.put(ConnectorIndexDescriptor.OPTION_DIMENSION,
+                        String.valueOf(capability.get().dimension));
+                VectorDescriptorCandidate candidate = new VectorDescriptorCandidate(
+                        provider, field, options, capability.get());
+                VectorDescriptorCandidate previous = vectorCandidates.putIfAbsent(candidateKey, candidate);
+                if (previous != null && !previous.capability.equals(candidate.capability)) {
+                    LOG.warn("Ignore inconsistent Paimon {} vector index metadata for field {} at snapshot {}",
+                            provider, field.name(), snapshot.id());
+                    invalidVectorCandidates.add(candidateKey);
+                }
+                continue;
+            }
+            descriptors.add(newIndexDescriptor(indexType, provider, field, options));
+        }
+        vectorCandidates.forEach((key, candidate) -> {
+            if (!invalidVectorCandidates.contains(key)) {
+                descriptors.add(newIndexDescriptor(
+                        ConnectorIndexType.VECTOR, candidate.provider, candidate.field, candidate.options));
+            }
+        });
+        return ConnectorIndexMetadata.of(snapshot.id(), tableType, new ArrayList<>(descriptors));
+    }
+
+    private static ConnectorIndexDescriptor newIndexDescriptor(
+            ConnectorIndexType indexType, String provider, DataField field, Map<String, String> options) {
+        DataType dataType = field.type();
+        boolean elementNullable = false;
+        if (dataType instanceof org.apache.paimon.types.ArrayType) {
+            elementNullable = ((org.apache.paimon.types.ArrayType) dataType).getElementType().isNullable();
+        } else if (dataType instanceof VectorType) {
+            elementNullable = ((VectorType) dataType).getElementType().isNullable();
+        }
+        return new ConnectorIndexDescriptor(indexType, provider, field.id(), field.name(),
+                dataType.isNullable(), elementNullable, options,
+                supportedOperations(indexType, dataType), ConnectorIndexCoverage.UNKNOWN);
+    }
+
+    private static Map<String, String> indexOptions(Map<String, String> tableOptions,
+                                                     String columnName, String provider) {
+        Map<String, String> result = new HashMap<>();
+        String fieldPrefix = "fields." + columnName + ".";
+        String normalizedProvider = provider.toLowerCase(Locale.ROOT);
+        String providerPrefix = normalizedProvider + ".";
+        boolean luminaProvider = isLuminaVectorProvider(normalizedProvider);
+        tableOptions.forEach((key, value) -> {
+            String normalizedKey = key.toLowerCase(Locale.ROOT);
+            if (normalizedKey.startsWith(fieldPrefix.toLowerCase(Locale.ROOT))
+                    || normalizedKey.startsWith(providerPrefix)
+                    || (luminaProvider && normalizedKey.startsWith("lumina."))) {
+                result.put(key, value);
+            }
+        });
+        return result;
+    }
+
+    static Optional<VectorIndexMetric> vectorMetric(
+            Map<String, String> options, String columnName, String provider, ConnectorIndexTableType tableType) {
+        String normalizedProvider = provider.toLowerCase(Locale.ROOT);
+        List<String> keys;
+        if (isNativeVectorProvider(normalizedProvider)) {
+            // Match NativeVectorGlobalIndexerFactory: field options override index-type options,
+            // and the canonical aliases win over their compatibility aliases.
+            keys = List.of(
+                    "fields." + columnName + ".metric",
+                    "fields." + columnName + ".distance.metric",
+                    normalizedProvider + ".metric",
+                    normalizedProvider + ".distance.metric");
+        } else if (isLuminaVectorProvider(normalizedProvider)) {
+            keys = List.of(
+                    "fields." + columnName + ".distance.metric",
+                    "fields." + columnName + ".metric",
+                    normalizedProvider + ".distance.metric",
+                    normalizedProvider + ".metric",
+                    "lumina.distance.metric");
+        } else {
+            keys = List.of(
+                    "fields." + columnName + ".distance.metric",
+                    "fields." + columnName + ".metric",
+                    normalizedProvider + ".distance.metric",
+                    normalizedProvider + ".metric");
+        }
+        for (String key : keys) {
+            Optional<String> value = optionIgnoreCase(options, key);
+            if (value.isPresent()) {
+                // A malformed more-specific option must not silently fall back to a less-specific one.
+                return VectorIndexMetric.fromOption(value.get());
+            }
+        }
+        return Optional.of(VectorIndexMetric.INNER_PRODUCT);
+    }
+
+    private static Optional<VectorCapability> resolveVectorCapability(
+            String provider, byte[] indexMeta, TableSchema schema, DataField field,
+            ConnectorIndexTableType tableType) {
+        String normalizedProvider = provider.toLowerCase(Locale.ROOT);
+        Map<String, String> fileMetadata = Collections.emptyMap();
+        boolean hasPersistedMetadata = indexMeta != null && indexMeta.length > 0;
+        if (hasPersistedMetadata) {
+            try {
+                fileMetadata = JsonSerdeUtil.parseJsonMap(
+                        new String(indexMeta, StandardCharsets.UTF_8), String.class);
+            } catch (RuntimeException e) {
+                // A malformed persisted payload is not the same as an absent payload. Falling
+                // back here could advertise a metric which differs from the bytes on disk.
+                LOG.warn("Ignore Paimon {} vector index for field {} because its metadata is invalid",
+                        provider, field.name(), e);
+                return Optional.empty();
+            }
+        }
+
+        Map<String, String> fallbackOptions = schema.options();
+        Optional<VectorIndexMetric> fallbackMetric;
+        if (tableType == ConnectorIndexTableType.PRIMARY_KEY && isNativeVectorProvider(normalizedProvider)) {
+            try {
+                CoreOptions coreOptions = new CoreOptions(schema.options());
+                if (!coreOptions.primaryKeyVectorIndexColumns().contains(field.name())
+                        || !normalizedProvider.equals(
+                        coreOptions.primaryKeyVectorIndexType(field.name()).toLowerCase(Locale.ROOT))) {
+                    return Optional.empty();
+                }
+                fallbackMetric = VectorIndexMetric.fromOption(
+                        coreOptions.primaryKeyVectorDistanceMetric(field.name()));
+                fallbackOptions = coreOptions.primaryKeyVectorIndexOptions(field.name()).toMap();
+            } catch (RuntimeException e) {
+                LOG.warn("Cannot resolve Paimon primary-key vector options for field {}", field.name(), e);
+                return Optional.empty();
+            }
+        } else {
+            fallbackMetric = vectorMetric(schema.options(), field.name(), provider, tableType);
+        }
+
+        Optional<String> persistedMetric = firstOptionIgnoreCase(fileMetadata,
+                "distance.metric", "metric");
+        Optional<String> persistedDimension = firstOptionIgnoreCase(
+                fileMetadata, "index.dimension", "dimension");
+        if (hasPersistedMetadata
+                && (normalizedProvider.equals("lumina") || normalizedProvider.equals("lumina-vector-ann"))
+                && (persistedMetric.isEmpty() || persistedDimension.isEmpty())) {
+            // LuminaIndexMeta requires both keys. Treat a partial payload as corrupt rather
+            // than accidentally pairing on-disk data with today's table defaults.
+            return Optional.empty();
+        }
+        Optional<VectorIndexMetric> metric = persistedMetric.isPresent()
+                ? VectorIndexMetric.fromOption(persistedMetric.get())
+                : fallbackMetric;
+        if (metric.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Optional<Integer> metadataDimension = persistedDimension.flatMap(PaimonMetadata::parsePositiveInteger);
+        if (persistedDimension.isPresent() && metadataDimension.isEmpty()) {
+            return Optional.empty();
+        }
+        int dimension;
+        if (metadataDimension.isPresent()) {
+            dimension = metadataDimension.get();
+        } else if (field.type() instanceof VectorType) {
+            dimension = ((VectorType) field.type()).getLength();
+        } else {
+            // Both Paimon native-vector and Lumina use 128 when an ARRAY vector has no
+            // explicit dimension. The provider/field precedence mirrors their factories.
+            dimension = vectorDimension(fallbackOptions, field.name(), provider).orElse(128);
+        }
+        return dimension > 0 ? Optional.of(new VectorCapability(metric.get(), dimension)) : Optional.empty();
+    }
+
+    static Optional<Integer> vectorDimension(
+            Map<String, String> options, String columnName, String provider) {
+        String normalizedProvider = provider.toLowerCase(Locale.ROOT);
+        List<String> keys;
+        if (isNativeVectorProvider(normalizedProvider)) {
+            keys = List.of(
+                    "fields." + columnName + ".dimension",
+                    "fields." + columnName + ".index.dimension",
+                    normalizedProvider + ".dimension",
+                    normalizedProvider + ".index.dimension");
+        } else if (isLuminaVectorProvider(normalizedProvider)) {
+            keys = List.of(
+                    "fields." + columnName + ".index.dimension",
+                    "fields." + columnName + ".dimension",
+                    normalizedProvider + ".index.dimension",
+                    normalizedProvider + ".dimension",
+                    "lumina.index.dimension");
+        } else {
+            keys = List.of(
+                    "fields." + columnName + ".index.dimension",
+                    "fields." + columnName + ".dimension",
+                    normalizedProvider + ".index.dimension",
+                    normalizedProvider + ".dimension");
+        }
+        for (String key : keys) {
+            Optional<String> value = optionIgnoreCase(options, key);
+            if (value.isPresent()) {
+                return parsePositiveInteger(value.get());
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<String> optionIgnoreCase(Map<String, String> options, String key) {
+        return options.entrySet().stream()
+                .filter(entry -> entry.getKey().equalsIgnoreCase(key))
+                .map(Map.Entry::getValue)
+                .findFirst();
+    }
+
+    private static Optional<String> firstOptionIgnoreCase(Map<String, String> options, String... keys) {
+        for (String key : keys) {
+            Optional<String> value = optionIgnoreCase(options, key);
+            if (value.isPresent()) {
+                return value;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Integer> parsePositiveInteger(String value) {
+        if (value == null) {
+            return Optional.empty();
+        }
+        try {
+            int parsed = Integer.parseInt(value);
+            return parsed > 0 ? Optional.of(parsed) : Optional.empty();
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
+
+    private static boolean isNativeVectorProvider(String provider) {
+        return provider.equals("ivf-flat") || provider.equals("ivf-pq")
+                || provider.equals("ivf-sq") || provider.equals("ivf-rq")
+                || provider.equals("diskann");
+    }
+
+    private static boolean isLuminaVectorProvider(String provider) {
+        return provider.equals("lumina") || provider.equals("lumina-vector-ann");
+    }
+
+    static ConnectorIndexTableType toConnectorIndexTableType(TableSchema schema) {
+        if (!schema.primaryKeys().isEmpty()) {
+            return ConnectorIndexTableType.PRIMARY_KEY;
+        }
+        return Boolean.parseBoolean(schema.options().getOrDefault(
+                CoreOptions.DATA_EVOLUTION_ENABLED.key(), Boolean.FALSE.toString()))
+                ? ConnectorIndexTableType.DATA_EVOLUTION
+                : ConnectorIndexTableType.APPEND_ONLY;
+    }
+
+    static Set<ConnectorIndexOperation> supportedOperations(
+            ConnectorIndexType indexType, DataType fieldType) {
+        if ((indexType == ConnectorIndexType.BITMAP || indexType == ConnectorIndexType.RANGE)
+                && fieldType.isAnyOf(DataTypeRoot.FLOAT, DataTypeRoot.DOUBLE)) {
+            return Collections.emptySet();
+        }
+        switch (indexType) {
+            case BITMAP:
+                return Set.of(ConnectorIndexOperation.EQUAL, ConnectorIndexOperation.NOT_EQUAL,
+                        ConnectorIndexOperation.IN, ConnectorIndexOperation.NOT_IN,
+                        ConnectorIndexOperation.IS_NULL,
+                        ConnectorIndexOperation.IS_NOT_NULL);
+            case RANGE:
+                return Set.of(ConnectorIndexOperation.EQUAL, ConnectorIndexOperation.NOT_EQUAL,
+                        ConnectorIndexOperation.LESS_THAN, ConnectorIndexOperation.LESS_THAN_OR_EQUAL,
+                        ConnectorIndexOperation.GREATER_THAN, ConnectorIndexOperation.GREATER_THAN_OR_EQUAL,
+                        ConnectorIndexOperation.IN, ConnectorIndexOperation.NOT_IN,
+                        ConnectorIndexOperation.IS_NULL,
+                        ConnectorIndexOperation.IS_NOT_NULL, ConnectorIndexOperation.STARTS_WITH);
+            case VECTOR:
+                return Set.of(ConnectorIndexOperation.VECTOR_TOP_N);
+            case FULL_TEXT:
+            default:
+                return Collections.emptySet();
+        }
+    }
+
+    static ConnectorIndexType toConnectorIndexType(String indexType) {
+        if (indexType == null) {
+            return null;
+        }
+        switch (indexType.toLowerCase(Locale.ROOT)) {
+            case BitmapGlobalIndexerFactory.IDENTIFIER:
+                return ConnectorIndexType.BITMAP;
+            case BTreeGlobalIndexerFactory.IDENTIFIER:
+                return ConnectorIndexType.RANGE;
+            case "lumina":
+            case "lumina-vector-ann":
+            case "ivf-flat":
+            case "ivf-pq":
+            case "ivf-sq":
+            case "ivf-rq":
+            case "diskann":
+                return ConnectorIndexType.VECTOR;
+            case "full-text":
+                return ConnectorIndexType.FULL_TEXT;
+            default:
+                return null;
+        }
+    }
+
+    private static final class VectorCapability {
+        private final VectorIndexMetric metric;
+        private final int dimension;
+
+        private VectorCapability(VectorIndexMetric metric, int dimension) {
+            this.metric = metric;
+            this.dimension = dimension;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof VectorCapability)) {
+                return false;
+            }
+            VectorCapability that = (VectorCapability) o;
+            return dimension == that.dimension && metric == that.metric;
+        }
+
+        @Override
+        public int hashCode() {
+            return java.util.Objects.hash(metric, dimension);
+        }
+    }
+
+    private static final class VectorDescriptorCandidate {
+        private final String provider;
+        private final DataField field;
+        private final Map<String, String> options;
+        private final VectorCapability capability;
+
+        private VectorDescriptorCandidate(String provider, DataField field, Map<String, String> options,
+                                          VectorCapability capability) {
+            this.provider = provider;
+            this.field = field;
+            this.options = options;
+            this.capability = capability;
+        }
     }
 
     private void traceScanMetrics(PaimonMetricRegistry metricRegistry,
@@ -718,8 +1319,8 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         AtomicLong resultedTableFilesSize = new AtomicLong(0);
         for (Split split : splits) {
-            List<DataFileMeta> dataFileMetas = ((DataSplit) split).dataFiles();
-            dataFileMetas.forEach(dataFileMeta -> resultedTableFilesSize.addAndGet(dataFileMeta.fileSize()));
+            PaimonSplitUtils.getDataSplit(split).ifPresent(dataSplit -> dataSplit.dataFiles()
+                    .forEach(dataFileMeta -> resultedTableFilesSize.addAndGet(dataFileMeta.fileSize())));
         }
         Tracers.record(EXTERNAL, prefix + tableName + "." + "resultedDataFilesSize", resultedTableFilesSize.get() + " B");
     }
@@ -967,6 +1568,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                     dbName, tableName, e.getMessage());
         }
 
+        indexMetadataCache.invalidateTable(catalogName, dbName, tableName);
+
         Table table = tables.get(identifier);
         if (table != null) {
             refreshTable(dbName, table, null, true);
@@ -1031,6 +1634,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         String tableName = table.getCatalogTableName();
         Identifier identifier = new Identifier(srDbName, tableName);
+        indexMetadataCache.invalidateTable(catalogName, srDbName, tableName);
         paimonNativeCatalog.invalidateTable(identifier);
         try {
             ((PaimonTable) table).setPaimonNativeTable(paimonNativeCatalog.getTable(identifier));

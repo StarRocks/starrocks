@@ -418,6 +418,7 @@ StarRocks caches Paimon metadata and refreshes it in the background. These optio
 | Parameter                              | Default value | Description                                                  |
 | -------------------------------------- | ------------- | ------------------------------------------------------------ |
 | paimon_meta_cache_ttl_sec              | 86400         | How long a cached entry lives, in seconds. |
+| paimon_index_metadata_cache_max_entries | 1000          | The maximum number of snapshot-bound global-index metadata entries cached by this catalog. The value must be greater than `0`. Supported from v4.2.0 onwards. |
 | paimon_table_cache_refresh_interval_sec | 60            | The minimum interval, in seconds, between two refreshes of the same table triggered by a query that read a newer snapshot. The refresh runs in the background and the query does not wait for it. Set to `0` to only refresh in the periodic background round. Supported from v4.2.0 onwards. |
 
 ### Examples
