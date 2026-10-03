@@ -16,7 +16,6 @@ package com.starrocks.connector.iceberg.procedure;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
 import com.starrocks.connector.iceberg.IcebergUtil;
@@ -24,6 +23,7 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.type.DateType;
 import com.starrocks.type.VarcharType;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LocatedFileStatus;
@@ -162,7 +162,7 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
 
         validFileNames.add("version-hint.text");
 
-        scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.hdfsEnvironment());
+        scanAndDeleteInvalidFiles(location, olderThanMillis, validFileNames, context.storageConfiguration());
         return null;
     }
 
@@ -235,10 +235,10 @@ public class RemoveOrphanFilesProcedure extends IcebergTableProcedure {
     }
 
     private void scanAndDeleteInvalidFiles(String tableLocation, long expiration, Set<String> validFiles,
-                                           HdfsEnvironment hdfsEnvironment) {
+                                           Configuration configuration) {
         try {
             URI uri = new Path(tableLocation).toUri();
-            FileSystem fileSystem = FileSystem.get(uri, hdfsEnvironment.getConfiguration());
+            FileSystem fileSystem = FileSystem.get(uri, configuration);
             RemoteIterator<LocatedFileStatus> allFiles = fileSystem.listFiles(new Path(tableLocation), true);
             List<Path> filesToDelete = new ArrayList<>();
             while (allFiles.hasNext()) {
