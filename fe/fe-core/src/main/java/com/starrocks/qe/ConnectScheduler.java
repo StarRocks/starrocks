@@ -45,8 +45,10 @@ import com.starrocks.common.CloseableLock;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.system.Frontend;
@@ -64,6 +66,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 public class ConnectScheduler {
     private static final Logger LOG = LogManager.getLogger(ConnectScheduler.class);
@@ -357,14 +360,58 @@ public class ConnectScheduler {
         return connectionMap.size();
     }
 
+    public boolean isDrained() {
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            // HTTP: window elapsed (rejecting) and no in-flight HTTP.
+            // JDBC: connectionMap empty (idle JDBC closed from T0; HTTP keep-alives stay until
+            // rejecting then are closed). Leader txn drain is applied by waitForDraining.
+            // Do not seal here: this is polled while waiting min time / leader txns, and
+            // TransactionLoad prepare/commit/rollback must still increment active.
+            return GracefulExitFlag.isHttpRejecting()
+                    && GracefulExitFlag.getActiveHttpRequests() == 0
+                    && connectionMap.isEmpty();
+        }
+    }
+
+    public Set<Long> getActiveExplicitTxnIds() {
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            return connectionMap.values().stream()
+                    .filter(ConnectContext::inActiveExplicitTransaction)
+                    .map(ConnectContext::getTxnId)
+                    .collect(Collectors.toSet());
+        }
+    }
+
     public void closeAllIdleConnection() {
+        // Only select candidates under the lock; run cleanup() after releasing it. A follower
+        // cleanup may forward an explicit-txn rollback to the leader, a synchronous Thrift RPC,
+        // and doing that while holding connStatsLock would stall register/unregisterConnection
+        // (both take the same lock), keeping totalConns above 0 and blocking the graceful-exit
+        // drain until the hard timeout.
+        List<ConnectContext> toCleanup = Lists.newArrayList();
         try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
             connectionMap.values().forEach(context -> {
-                if (context.isIdleLastFor(1000)) {
-                    context.cleanup();
+                // HTTP keep-alives stay until the HTTP accept window elapses (same as ExecuteSqlAction
+                // admission). JDBC idle connections close from T0.
+                if (context instanceof HttpConnectContext && !GracefulExitFlag.isHttpRejecting()) {
+                    return;
+                }
+                if (context.shouldCloseWhenIdle(1000)) {
+                    toCleanup.add(context);
                 }
             });
         }
+        toCleanup.forEach(context -> {
+            // Recheck idleness immediately before cleanup. Between collecting candidates under
+            // the lock and reaching this context in the loop, the connection may have received
+            // and started a new statement (the window can be long when an earlier follower
+            // cleanup waits on a synchronous rollback RPC). Cleanup without rechecking would
+            // close an active client's socket and roll back its explicit transaction
+            // mid-statement.
+            if (context.isIdleLastFor(1000) && context.tryClaimCleanup()) {
+                context.cleanup();
+            }
+        });
     }
 
     public void printAllRunningQuery() {

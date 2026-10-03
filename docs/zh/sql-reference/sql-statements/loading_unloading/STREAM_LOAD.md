@@ -42,7 +42,7 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
   如果您使用 `curl` 执行 Stream Load，系统会自动添加 `Content-Length` 头字段，您无需手动输入。
   :::
 
-- 您必须添加 `Expect` 头字段并将其值指定为 `100-continue`，如 `"Expect:100-continue"`。这有助于在您的作业请求被拒绝时防止不必要的数据传输并减少资源开销。
+- 您可以添加 `Expect` 头字段并将其值指定为 `100-continue`，如 `"Expect:100-continue"`。这有助于在您的作业请求被拒绝时防止不必要的数据传输并减少资源开销。该头字段为可选：L7 代理（如 nginx）可能会剥离该头字段，缺少该头字段也可以接受。
 
 请注意，在 StarRocks 中，某些字面量被 SQL 语言用作保留关键字。请勿在 SQL 语句中直接使用这些关键字。如果您想在 SQL 语句中使用此类关键字，请将其用反引号（`）括起来。请参阅[关键字](../keywords.md)。
 
