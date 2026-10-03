@@ -417,6 +417,15 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 - 説明: Flat JSONで同じ名前を持つカラムの割合。同じ名前を持つカラムの割合がこの値より低い場合、抽出は実行されません。このパラメータは、`enable_json_flat`が`true`に設定されている場合にのみ有効です。
 - 導入バージョン: v3.3.0
 
+### json_max_parse_nesting_depth
+
+- デフォルト: 1024
+- 型: Int
+- 単位:
+- 変更可能: はい
+- 説明: JSON（例: `parse_json`、`CAST AS JSON`、JSON カラムへのインポート）を解析する際に許容されるオブジェクト/配列の最大ネスト深度。パーサーはネストのレベルごとに 1 回再帰するため、上限がないと、深くネストしたドキュメントがスレッドスタックをオーバーフローさせ、BE をクラッシュさせる可能性があります。この値より深くネストした入力は、代わりにデータ品質エラーで失敗します。正の値は上限を設定します。`0` 以下の場合は組み込みのデフォルト値（1024）を維持し、チェックを無効化しません。
+- 導入バージョン: v4.2.0
+
 ### lake_tablet_ignore_invalid_delete_predicate
 
 - デフォルト: false
