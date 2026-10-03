@@ -63,6 +63,7 @@ ADD_BE_LIB(Base
   random/random.cc
   simd/expand.cpp
   simd/filter.cpp
+  simd/gather.cpp
   simd/rle_simd.cpp
   simd/delta_decode.cpp
   stats/ndv_estimator.cpp
