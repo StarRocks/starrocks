@@ -1,0 +1,118 @@
+-- name: test_iceberg_bucket_aware_agg_fallback
+create external catalog iceberg_sql_test_${uuid0}
+PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create table t_fallback (
+  project_id bigint,
+  email string,
+  created_at date
+)
+partition by bucket(project_id, 4), month(created_at)
+properties ("file_format"="parquet");
+-- result:
+-- !result
+insert into t_fallback
+select 100, concat('u', generate_series, '@x.com'), '2024-01-15'
+from table(generate_series(1, 5000));
+-- result:
+-- !result
+insert into t_fallback
+select 100, concat('u', generate_series, '@x.com'), '2024-01-15'
+from table(generate_series(1, 5000));
+-- result:
+-- !result
+insert into t_fallback
+select generate_series % 7, concat('v', generate_series, '@x.com'), '2024-02-15'
+from table(generate_series(1, 5000));
+-- result:
+-- !result
+set pipeline_dop = 2;
+-- result:
+-- !result
+set enable_bucket_aware_execution_on_lake = true;
+-- result:
+-- !result
+set lake_bucket_aware_min_buckets_per_worker = 1000000;
+-- result:
+-- !result
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+-- result:
+5000	5000
+-- !result
+select project_id, count(*) from t_fallback where project_id = 100 group by project_id order by project_id;
+-- result:
+100	10000
+-- !result
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+-- result:
+10000
+-- !result
+set enable_bucket_aware_execution_on_lake = false;
+-- result:
+-- !result
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+-- result:
+5000	5000
+-- !result
+select project_id, count(*) from t_fallback where project_id = 100 group by project_id order by project_id;
+-- result:
+100	10000
+-- !result
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+-- result:
+10000
+-- !result
+set enable_bucket_aware_execution_on_lake = true;
+-- result:
+-- !result
+set lake_bucket_aware_min_buckets_per_worker = 1.0;
+-- result:
+-- !result
+select count(*), count(distinct email) from (select project_id, email, count(*) c from t_fallback where project_id = 100 group by project_id, email) t;
+-- result:
+5000	5000
+-- !result
+select count(*) from (select project_id, email, count(*) c from t_fallback group by project_id, email) t;
+-- result:
+10000
+-- !result
+set lake_bucket_aware_min_buckets_per_worker = 1000000;
+-- result:
+-- !result
+function: assert_explain_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'merge finalize')
+-- result:
+None
+-- !result
+function: assert_explain_not_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'update finalize')
+-- result:
+None
+-- !result
+set lake_bucket_aware_min_buckets_per_worker = 0;
+-- result:
+-- !result
+function: assert_explain_contains('select project_id, email, count(*) from t_fallback where project_id = 100 group by project_id, email', 'update finalize')
+-- result:
+None
+-- !result
+set lake_bucket_aware_min_buckets_per_worker = 1.0;
+-- result:
+-- !result
+set pipeline_dop = 0;
+-- result:
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.t_fallback force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
