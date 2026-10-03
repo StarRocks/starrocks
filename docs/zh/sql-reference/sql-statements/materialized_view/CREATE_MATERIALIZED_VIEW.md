@@ -350,7 +350,7 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
   - `excluded_refresh_tables` 控制的是是否参与刷新。上述例子中，如 A 表同时存在于 `excluded_trigger_table` 和 `excluded_refresh_tables` 中时，当 B 表更新触发了物化视图刷新时，只会刷新分区[3]。
   :::
 
-- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。
+- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并刷新当前分区和 N-1 个历史分区。如果分区数不足 N，则刷新所有已存在的分区。如果物化视图存在提前创建的未来分区，将会刷新所有提前创建的分区。该属性不支持 `EFFECTIVE_REFRESH_MODE` 为 `INCREMENTAL` 或 `AUTO` 的物化视图，因为增量维护要求基线完整。如需将此类物化视图的首次全量刷新分批，请改用 `partition_refresh_number`；此后的刷新只处理基表的变更数据，不受这两个属性影响。
 - `mv_rewrite_staleness_second`：只要**基表最新修改时间**与该物化视图最近一次被确认的**完整**刷新之间的差值不超过此属性指定的时间间隔，则此物化视图可直接用于查询改写，无论基表数据是否更新。由于比较的对象是基表最新修改时间（而非当前时钟时间），因此自上次完整刷新以来基表未发生变更的物化视图会一直可用于查询改写，无论经过多长时间。否则，StarRocks 通过检查基表数据是否变更决定该物化视图能否用于查询改写。请注意，仅覆盖部分分区的刷新操作（例如手动执行的 `REFRESH ... PARTITION START ... END`，或受 `auto_refresh_partitions_limit` 限制的刷新）不会更新该新鲜度基线。单位：秒。该属性自 v3.0 起支持。
 - `colocate_with`：异步物化视图的 Colocation Group。更多信息请参阅 [Colocate Join](../../../using_starrocks/Colocate_join.md)。该属性自 v3.0 起支持。
 - `unique_constraints` 和 `foreign_key_constraints`：创建 View Delta Join 查询改写的异步物化视图时的 Unique Key 约束和外键约束。更多信息请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views.md#view-delta-join-改写)。该属性自 v3.0 起支持。
