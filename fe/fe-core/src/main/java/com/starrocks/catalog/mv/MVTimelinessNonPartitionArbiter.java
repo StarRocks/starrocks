@@ -79,8 +79,12 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
                 return MvUpdateInfo.fullRefresh(mv);
             }
 
+<<<<<<< HEAD
             // Check if any partitions have been deleted from external tables
             if (hasDeletedPartitions(mv, tableInfo, table)) {
+=======
+            if (hasDeletedPartitions(mv, table, /* pinnedVersionRange */ null)) {
+>>>>>>> 8600f8bc580 ([BugFix] Refresh mv partitions that outlived a dropped base partition (#62450))
                 logMVPrepare(mv, "Non-partitioned base table has deleted partitions, need refresh totally.");
                 return MvUpdateInfo.fullRefresh(mv);
             }

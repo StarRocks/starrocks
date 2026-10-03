@@ -1,0 +1,204 @@
+-- name: test_mv_refresh_dropped_base_partition
+-- Dropping a base partition must not leave its rows behind in a materialized view that outlives it.
+-- The mv partition is only dropped as an orphan when it covered nothing else, so a coarser or
+-- unpartitioned mv keeps serving the dropped rows unless it is recomputed.
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE base_f (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('day', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- 2026-08 is sealed: nothing is written to it again, so the dropped day and any later write land in
+-- different mv partitions. Sharing one would let the mv be recomputed by accident.
+INSERT INTO base_f VALUES ('2026-08-10 00:00:00', 1, 20), ('2026-08-11 00:00:00', 2, 10), ('2026-09-09 00:00:00', 3, 50);
+
+create materialized view mv_rollup
+partition by (date_trunc('month', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+
+create materialized view mv_unpartitioned
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+
+create materialized view mv_same_grain
+partition by (date_trunc('day', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+
+refresh materialized view mv_rollup with sync mode;
+refresh materialized view mv_unpartitioned with sync mode;
+refresh materialized view mv_same_grain with sync mode;
+
+-- The sealed month must match the base table before the drop, or the result after it means nothing.
+set enable_materialized_view_rewrite = false;
+select sum(imp) from base_f where event_day < '2026-09-01';
+select sum(imp) from mv_rollup where event_day < '2026-09-01';
+select sum(imp) from mv_unpartitioned where event_day < '2026-09-01';
+select sum(imp) from mv_same_grain where event_day < '2026-09-01';
+
+ALTER TABLE base_f DROP PARTITION p20260810;
+refresh materialized view mv_rollup with sync mode;
+refresh materialized view mv_unpartitioned with sync mode;
+refresh materialized view mv_same_grain with sync mode;
+
+-- Base truth is 10. Any mv still reporting 30 kept the dropped partition's row.
+select sum(imp) from base_f where event_day < '2026-09-01';
+select sum(imp) from mv_rollup where event_day < '2026-09-01';
+select sum(imp) from mv_unpartitioned where event_day < '2026-09-01';
+select sum(imp) from mv_same_grain where event_day < '2026-09-01';
+
+-- The coarser mv keeps its partition, the same-grain one loses it with the base partition.
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_rollup';
+select count(*) from information_schema.partitions_meta where db_name = 'db_${uuid0}' and table_name = 'mv_same_grain';
+
+-- A query against the base table must not be answered from a stale mv.
+set enable_materialized_view_rewrite = true;
+select sum(imp) from base_f;
+set enable_materialized_view_rewrite = false;
+select sum(imp) from base_f;
+
+drop materialized view mv_rollup;
+drop materialized view mv_unpartitioned;
+drop materialized view mv_same_grain;
+
+-- A non-ref base table is not partition-aligned with the mv, so losing one of its partitions
+-- invalidates every mv partition, not a subset.
+CREATE TABLE fact_d (d date NOT NULL, id bigint NOT NULL, imp bigint SUM NOT NULL DEFAULT "0")
+AGGREGATE KEY(d, id)
+PARTITION BY date_trunc('day', d)
+DISTRIBUTED BY HASH(d, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO fact_d VALUES ('2026-08-10', 1, 10), ('2026-08-11', 2, 20);
+
+CREATE TABLE dim_d (d date NOT NULL, label int NOT NULL)
+DUPLICATE KEY(d)
+PARTITION BY date_trunc('day', d)
+DISTRIBUTED BY HASH(d) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO dim_d VALUES ('2026-08-10', 7), ('2026-08-11', 8);
+
+create materialized view mv_fact_dim
+partition by (date_trunc('day', fd))
+REFRESH DEFERRED MANUAL
+distributed by hash(fd) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select f.d as fd, f.id as fid, f.imp as fimp, dm.label as dlabel
+   from fact_d f left join dim_d dm on f.d = dm.d;
+refresh materialized view mv_fact_dim with sync mode;
+select fd, dlabel from mv_fact_dim order by fd;
+
+ALTER TABLE dim_d DROP PARTITION p20260810;
+refresh materialized view mv_fact_dim with sync mode;
+-- 2026-08-10 lost its dimension row, so the label must be NULL rather than the deleted 7.
+select fd, dlabel from mv_fact_dim order by fd;
+
+drop materialized view mv_fact_dim;
+
+-- Two levels coarser: one mv partition covers both months, so it outlives the drop as well.
+create materialized view mv_rollup_year
+partition by (date_trunc('year', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+-- A bare partition column is 1:1 with the base table, so its mv partition is dropped as an orphan.
+create materialized view mv_bare_column
+partition by (event_day)
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_f group by event_day, id;
+refresh materialized view mv_rollup_year with sync mode;
+refresh materialized view mv_bare_column with sync mode;
+
+set enable_materialized_view_rewrite = false;
+select sum(imp) from base_f where event_day < '2026-09-01';
+select sum(imp) from mv_rollup_year where event_day < '2026-09-01';
+select sum(imp) from mv_bare_column where event_day < '2026-09-01';
+
+ALTER TABLE base_f DROP PARTITION p20260811;
+refresh materialized view mv_rollup_year with sync mode;
+refresh materialized view mv_bare_column with sync mode;
+
+-- The sealed month is now empty in the base table, so both mvs must report nothing for it.
+select sum(imp) from base_f where event_day < '2026-09-01';
+select sum(imp) from mv_rollup_year where event_day < '2026-09-01';
+select sum(imp) from mv_bare_column where event_day < '2026-09-01';
+
+drop materialized view mv_rollup_year;
+drop materialized view mv_bare_column;
+
+-- An mv finer than its base table fans out across the whole base range, and every one of its
+-- partitions under a dropped base partition loses its only source and is dropped as an orphan.
+CREATE TABLE base_monthly (
+  event_day datetime NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(event_day, id)
+PARTITION BY date_trunc('month', event_day)
+DISTRIBUTED BY HASH(event_day, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO base_monthly VALUES ('2026-07-10 00:00:00', 1, 10), ('2026-08-10 00:00:00', 2, 20);
+
+create materialized view mv_finer_day
+partition by (date_trunc('day', event_day))
+REFRESH DEFERRED MANUAL
+distributed by hash(event_day, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select event_day, id, sum(imp) as imp from base_monthly group by event_day, id;
+refresh materialized view mv_finer_day with sync mode;
+select sum(imp) from mv_finer_day where event_day < '2026-08-01';
+
+ALTER TABLE base_monthly DROP PARTITION p202607;
+refresh materialized view mv_finer_day with sync mode;
+select sum(imp) from base_monthly where event_day < '2026-08-01';
+select sum(imp) from mv_finer_day where event_day < '2026-08-01';
+drop materialized view mv_finer_day;
+
+-- List partitioning is 1:1 with the mv, so the dropped value's mv partition goes with it.
+CREATE TABLE base_list (
+  province varchar(64) NOT NULL,
+  id bigint NOT NULL,
+  imp bigint SUM NOT NULL DEFAULT "0"
+)
+AGGREGATE KEY(province, id)
+PARTITION BY LIST (province) (
+  PARTITION pbj VALUES IN ("beijing"),
+  PARTITION pgd VALUES IN ("guangdong")
+)
+DISTRIBUTED BY HASH(province, id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+INSERT INTO base_list VALUES ('beijing', 1, 10), ('guangdong', 2, 20);
+
+create materialized view mv_list
+partition by (province)
+REFRESH DEFERRED MANUAL
+distributed by hash(province, id) buckets 3
+PROPERTIES ("replication_num" = "1")
+as select province, id, sum(imp) as imp from base_list group by province, id;
+refresh materialized view mv_list with sync mode;
+select sum(imp) from mv_list;
+
+ALTER TABLE base_list DROP PARTITION pgd;
+refresh materialized view mv_list with sync mode;
+select sum(imp) from base_list;
+select sum(imp) from mv_list;
+select province from mv_list order by province;
+drop materialized view mv_list;
+
+drop database db_${uuid0};

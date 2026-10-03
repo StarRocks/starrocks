@@ -1,0 +1,99 @@
+-- name: test_ivm_auto_rollup_drop_partition_recovers @cloud
+CREATE TABLE ar_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ar_base VALUES ('2026-08-10',1,20),('2026-08-11',2,10),('2026-09-09',3,50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ar
+PARTITION BY (date_trunc('month', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'auto')
+AS SELECT dt, k, SUM(v) AS v FROM ar_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]TASK_NAME=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar';
+[UC]REFRESH MATERIALIZED VIEW mv_ar WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+INSERT INTO ar_base VALUES ('2026-09-09',4,7);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ar WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+ALTER TABLE ar_base DROP PARTITION p20260810;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ar WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+PCT
+-- !result
+SELECT IS_ACTIVE, LAST_REFRESH_MODE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ar';
+-- result:
+true	NON_APPEND_ONLY_CHANGE
+-- !result
+SELECT sum(v) FROM ar_base WHERE dt < '2026-09-01';
+-- result:
+10
+-- !result
+SELECT sum(v) FROM mv_ar WHERE dt < '2026-09-01';
+-- result:
+10
+-- !result
+INSERT INTO ar_base VALUES ('2026-09-09',5,3);
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ar WITH SYNC MODE;
+SELECT get_json_string(EXTRA_MESSAGE, '$.refreshMode') FROM information_schema.task_runs WHERE TASK_NAME = '${TASK_NAME}' ORDER BY FINISH_TIME DESC, QUERY_ID DESC LIMIT 1;
+-- result:
+INCREMENTAL
+-- !result
+SELECT dt, k, v FROM mv_ar ORDER BY dt, k;
+-- result:
+2026-08-11	2	10
+2026-09-09	3	50
+2026-09-09	4	7
+2026-09-09	5	3
+-- !result
+SELECT dt, k, sum(v) FROM ar_base GROUP BY dt, k ORDER BY dt, k;
+-- result:
+2026-08-11	2	10
+2026-09-09	3	50
+2026-09-09	4	7
+2026-09-09	5	3
+-- !result
+-- name: test_ivm_incremental_rollup_drop_partition_reports @cloud
+CREATE TABLE ir_base (dt date, k int, v bigint SUM) AGGREGATE KEY(dt, k)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(k) BUCKETS 2 PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+INSERT INTO ir_base VALUES ('2026-08-10',1,20),('2026-08-11',2,10),('2026-09-09',3,50);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv_ir
+PARTITION BY (date_trunc('month', `dt`))
+DISTRIBUTED BY HASH(`dt`) BUCKETS 2
+REFRESH DEFERRED MANUAL
+PROPERTIES ('replication_num' = '1', 'refresh_mode' = 'incremental')
+AS SELECT dt, k, SUM(v) AS v FROM ir_base GROUP BY dt, k;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+ALTER TABLE ir_base DROP PARTITION p20260810;
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW mv_ir WITH SYNC MODE;
+SELECT IS_ACTIVE, LAST_REFRESH_STATE FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME='mv_ir';
+-- result:
+false	FAILED
+-- !result

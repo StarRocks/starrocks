@@ -881,7 +881,12 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
-            Assertions.assertNull(execPlan);
+            // part_tbl2 still has par_date=2020-01-05, so the mv partition survives holding rows joined against a
+            // part_tbl1 partition that is gone: it must be recomputed, and the join now yields nothing.
+            Assertions.assertNotNull(execPlan);
+            Assertions.assertEquals(Sets.newHashSet("p20200105"),
+                    mvContext.getRefreshScope().getMvPartitionsToRefresh().getPartitionNames());
+            PlanTestBase.assertContains(execPlan.getExplainString(TExplainLevel.NORMAL), "0:EMPTYSET");
         }
 
         // run 5
