@@ -149,7 +149,7 @@ public class AutovacuumDaemon extends LeaderDaemon {
         ThreadPoolExecutor executor = executorService;
         if (executor != null) {
             executorService = null;
-            shutdownNowAndAwaitTermination("AutovacuumDaemon.executorService", executor);
+            shutdownAndAwaitTermination("AutovacuumDaemon.executorService", executor);
         }
         // Every task has terminated (each removes its own vacuumingPartitions entry in a finally), so it is
         // now safe to clear any residue left by queued-but-never-run tasks, along with the transient
@@ -324,8 +324,6 @@ public class AutovacuumDaemon extends LeaderDaemon {
         }
     }
 
-    // Carries the partition id so onStopped() can identify queued-but-never-run tasks returned by
-    // shutdownNow() and release exactly their vacuumingPartitions reservations.
     // A snapshot of a partition that needs vacuuming, captured under the table lock. lastVacuumTime is
     // sampled here so this round's ordering stays stable even if the partition is updated concurrently.
     private static class VacuumCandidate {

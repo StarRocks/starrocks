@@ -1463,8 +1463,8 @@ public class GlobalStateMgr {
         journalWriter.startDaemon();
 
         // Verify the previous leader session (if any) has fully quiesced before starting a new one.
-        // Demotion stops the leader-only daemons fire-and-forget; if a straggler is still alive, restart
-        // for a clean slate rather than run two workers against the same singleton state. Done before
+        // Demotion only waits for journal-visible state resets before follower replay. Other workers
+        // may still be finishing, so check all previous-session work here. Done before
         // feType flips to LEADER so no new leader work (or a stale straggler's admission) can slip in.
         assertLeaderSessionQuiescedOrExit();
 
@@ -1695,6 +1695,11 @@ public class GlobalStateMgr {
                 || type == FrontendNodeType.UNKNOWN;
     }
 
+    /** Also reject work queued in a previous leader session, even if this FE has been re-elected. */
+    public boolean isAgentTaskDispatchDisallowed(LeaderLease lease) {
+        return isAgentTaskDispatchDisallowed() || !activeLeaderLease.equals(lease);
+    }
+
     @VisibleForTesting
     LeaderRoleState getLeaderRoleState() {
         return leaderRoleState;
@@ -1832,11 +1837,9 @@ public class GlobalStateMgr {
      * demotion and the FE singletons become reusable when this node is re-elected.
      */
     void stopLeaderOnlyDaemonThreads() {
-        // Fire-and-forget: request stop on every leader-only daemon/pool and return WITHOUT joining, so
-        // this single state-change thread is not blocked draining ~40 daemons (a stuck one used to force
-        // System.exit here, degrading a graceful transfer into a restart). Each daemon's worker self-cleans
-        // in onStopped() and deregisters on exit; the re-activation cleanliness gate then verifies quiescence
-        // and exits only if a straggler is still alive when this node is re-elected.
+        // Request every cooperative stop without joining. Only journal-visible state resets are awaited
+        // before follower replay; other workers drain asynchronously and are checked before re-activation.
+        // Each daemon drains its owned pools and cleans up on its worker; no business thread is interrupted.
         // Stop in the reverse order of startLeaderOnlyDaemonThreads().
         if (RunMode.isSharedDataMode()) {
             stopOne("tabletReshardJobMgr", () -> tabletReshardJobMgr.stopBestEffort());
@@ -1921,13 +1924,10 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Re-activation cleanliness gate. Demotion stops leader-only daemons fire-and-forget (no join, see
-     * {@link #stopLeaderOnlyDaemonThreads()}), so a straggler whose interrupt was eaten may still be
-     * alive when this node is re-elected. Before serving as leader again this verifies the previous
-     * session's workers finished: a fresh worker running concurrently with a straggler against the same
-     * singleton state is strictly worse than a restart. If any straggler remains, it logs the offenders
-     * (and how long the leader role state has lingered) and terminates the process for a clean restart.
-     * Called before feType is set to LEADER so no new leader work starts while a previous session lingers.
+     * Re-activation cleanliness gate. Demotion waits only for journal-visible state resets before
+     * follower replay; other workers and pools may finish asynchronously. The previous session must
+     * have finished all workers, callbacks and cleanup before starting another worker against the
+     * same singleton state. Log any remaining workers/pools and exit for a clean restart.
      */
     private void assertLeaderSessionQuiescedOrExit() {
         List<String> stragglers = findLeaderSessionStragglers();
@@ -1955,7 +1955,7 @@ public class GlobalStateMgr {
             stragglers.add(daemon.getName());
         }
         // Leader-session pools with no owning daemon (no isRunning to cover them): a pool is a straggler
-        // only if a previous demotion shut it down (fire-and-forget, no await) and it has not terminated.
+        // only if a previous demotion shut it down (stop requested, not yet terminated) and it has not terminated.
         if (loadingLoadTaskScheduler != null
                 && loadingLoadTaskScheduler.isShutdown() && !loadingLoadTaskScheduler.isTerminated()) {
             stragglers.add("loadingLoadTaskScheduler(pool)");
@@ -2118,17 +2118,12 @@ public class GlobalStateMgr {
     }
 
     /**
-     * Wait for the leader-only daemons whose onStopped() rewrites JOURNAL-VISIBLE state (alter-job
-     * fields, routine-load job state) to fully quiesce before the follower replayer starts. Their
-     * resets restore shared objects to the last durable state, while the replayer mutates the SAME
-     * objects when it applies the new leader's journal - and replay takes no job monitor, so a reset
-     * running after (or interleaved with) replay would tear freshly replayed durable state (e.g. an
-     * optimize job left WAITING_TXN with its just-replayed tmpPartitionIds cleared) with nothing to
-     * ever repair it. Daemons whose onStopped() only drops leader-session transients (queues, pools,
-     * slot counts) stay fire-and-forget; the re-activation gate still covers those.
-     * The wait shares the leader_demotion_drain_timeout_sec budget (a fresh slice for this stage);
-     * a daemon stuck in onStopped() past it fails the stage and runDemotionStage exits the process -
-     * the pre-demotion behavior for a leader that cannot stop cleanly.
+     * Wait only for daemons whose onStopped() resets journal-visible state before follower replay.
+     * Alter and routine-load resets mutate the same job objects as replay, so a late reset could
+     * overwrite newly replayed state. Their cleanup also waits for the tasks it depends on.
+     * Other leader-session workers and pools finish asynchronously: a long-running task alone must
+     * not prevent this FE from becoming a follower. The re-activation gate checks the whole session.
+     * This reset stage gets its own configured timeout, independently of journal sealing.
      */
     private void awaitJournalVisibleStateResets() {
         LeaderDaemon.awaitQuiesced(

@@ -196,17 +196,6 @@ public class CheckpointController extends LeaderDaemon {
         }
     }
 
-    /**
-     * Interrupt-unsafe: the worker calls BDBJE/JE directly (getFinalizedJournalId /
-     * deleteJournals -> removeDatabase) where an interrupt can invalidate the environment, and
-     * blocks in uninterruptible HttpURLConnection reads. It stops cooperatively instead: the
-     * isStopRequested() polling between phases + onStopRequested() (waking the result queue and
-     * disconnecting the in-flight HTTP connection).
-     */
-    @Override
-    protected boolean interruptOnStop() {
-        return false;
-    }
 
     protected void runCheckpointController() {
         // ignore return value in normal checkpoint controller
@@ -529,8 +518,7 @@ public class CheckpointController extends LeaderDaemon {
                 MetaHelper.httpGet(url, PUT_TIMEOUT_SECOND * 1000, conn -> {
                     // Publish-point self-check (see downloadImage): without it, a stop landing in the
                     // check-then-publish gap leaves this worker blocked on a socket read for up to
-                    // PUT_TIMEOUT_SECOND (an hour) with no interrupt possible (interruptOnStop is
-                    // false), keeping isRunning true and tripping the re-activation gate into exit.
+                    // PUT_TIMEOUT_SECOND (an hour) with no interrupt, keeping isRunning true and tripping the re-activation gate into exit.
                     inFlightConnection = conn;
                     if (isStopRequested()) {
                         conn.disconnect();

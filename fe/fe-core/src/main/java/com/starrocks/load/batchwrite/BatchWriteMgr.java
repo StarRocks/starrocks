@@ -65,9 +65,7 @@ public class BatchWriteMgr extends LeaderDaemon {
     // An assigner that manages the assignment of coordinator backends.
     private final CoordinatorBackendAssigner coordinatorBackendAssigner;
 
-    // A thread pool executor for executing batch write tasks. Not final: shutdownNow() in
-    // onStopped() and rebuilt by start() so leader-side worker threads exit promptly on
-    // demotion and a fresh pool is available after re-election.
+    // Leader-session pool: cooperatively drained by onStopped and rebuilt by start on re-election.
     private volatile ThreadPoolExecutor threadPoolExecutor;
 
     // Rebuilt together with threadPoolExecutor so it never holds a reference to a shut down pool.
@@ -107,35 +105,18 @@ public class BatchWriteMgr extends LeaderDaemon {
 
     @Override
     protected void onStopped() {
-        // mergeCommitJobs and the per-table backend-assigner registrations are leader-session
-        // bookkeeping: BE coordinators are picked again when the next leader sees the next
-        // request. Drop the registrations so a new leader does not inherit assignments made
-        // against a sealed editlog. The owned thread pool and the coordinator assigner are
-        // shut down so their worker threads exit promptly during demotion drain; both are
-        // rebuilt by start() on re-election.
+        // Stop admission and let assigned work finish before clearing session bookkeeping. Stopping
+        // the assigner also settles queued assignment futures, so pool tasks cannot wait on them forever.
+        shutdownLeaderExecutor(threadPoolExecutor);
+        coordinatorBackendAssigner.stop();
+        shutdownAndAwaitTermination("BatchWriteMgr.threadPoolExecutor", threadPoolExecutor);
         lock.writeLock().lock();
         try {
-            for (MergeCommitJob job : mergeCommitJobs.values()) {
-                try {
-                    coordinatorBackendAssigner.unregisterBatchWrite(job.getId());
-                } catch (Throwable t) {
-                    LOG.warn("unregister batch write {} failed", job.getId(), t);
-                }
-            }
             mergeCommitJobs.clear();
             MergeCommitMetricRegistry.getInstance().setJobNum(0);
         } finally {
             lock.writeLock().unlock();
         }
-        try {
-            coordinatorBackendAssigner.stop();
-        } catch (Throwable t) {
-            LOG.warn("stop coordinatorBackendAssigner failed", t);
-        }
-        // shutdownNow() interrupts in-flight merge-commit submissions; wait until the pool actually
-        // terminates so this worker does not clear isRunning while a merge-commit task is still running
-        // (the re-activation gate reads isRunning as the single quiescence signal). start() rebuilds it.
-        shutdownNowAndAwaitTermination("BatchWriteMgr.threadPoolExecutor", threadPoolExecutor);
     }
 
     /**
@@ -215,6 +196,11 @@ public class BatchWriteMgr extends LeaderDaemon {
      * @return A Pair containing the status of the operation and the MergeCommitJob instance.
      */
     private Pair<TStatus, MergeCommitJob> getOrCreateJob(TableId tableId, StreamLoadKvParams params, UserIdentity userIdentity) {
+        if (shouldStop() || threadPoolExecutor.isShutdown()) {
+            TStatus status = new TStatus(TStatusCode.SERVICE_UNAVAILABLE);
+            status.setError_msgs(Collections.singletonList("leader is stopping"));
+            return new Pair<>(status, null);
+        }
         BatchWriteId uniqueId = new BatchWriteId(tableId, params);
         MergeCommitJob load = mergeCommitJobs.get(uniqueId);
 

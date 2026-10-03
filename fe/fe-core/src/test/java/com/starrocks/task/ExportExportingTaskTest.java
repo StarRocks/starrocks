@@ -14,6 +14,9 @@
 
 package com.starrocks.task;
 
+import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.ProfilingExecPlan;
+import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.load.ExportJob;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -24,34 +27,82 @@ import java.util.Collections;
 public class ExportExportingTaskTest {
 
     @Test
-    public void testInterruptDuringAwaitLeavesJobExportingForNextLeader() {
-        // Leader demotion stops the export executors with shutdownNow(), which interrupts the
-        // thread running exec(). The interrupt must be treated as a shutdown signal: the job
-        // stays EXPORTING so the next leader reschedules it - it must NOT be cancelled as a
-        // business TIMEOUT - and the doExportingThread reference must be released either way.
+    public void testInterruptedAwaitUsesNormalExportFailurePath() {
+        java.util.concurrent.atomic.AtomicBoolean profileRegistered = new java.util.concurrent.atomic.AtomicBoolean();
+        new mockit.MockUp<ProfileManager>() {
+            @mockit.Mock
+            public String pushProfile(ProfilingExecPlan plan, RuntimeProfile profile) {
+                Assertions.assertEquals("Query", profile.getName());
+                profileRegistered.set(true);
+                return "export-profile";
+            }
+        };
         ExportJob job = Mockito.mock(ExportJob.class);
         Mockito.when(job.getState()).thenReturn(ExportJob.JobState.EXPORTING);
         Mockito.when(job.getTimeoutSecond()).thenReturn(3600);
         Mockito.when(job.getCreateTimeMs()).thenReturn(System.currentTimeMillis());
         Mockito.when(job.isReplayed()).thenReturn(false);
         Mockito.when(job.getCoordList()).thenReturn(Collections.emptyList());
+        Mockito.when(job.getSql()).thenReturn("EXPORT TABLE test_table");
 
         ExportExportingTask task = new ExportExportingTask(job);
         try {
-            // With the interrupt status set on entry, subTasksDoneSignal.await() throws
-            // InterruptedException immediately (even with count == 0), exercising the
-            // shutdown branch of exec().
+            // A plain wait failure is not a leader handoff; retain normal job failure/profile handling.
             Thread.currentThread().interrupt();
             task.exec();
-            Assertions.assertTrue(Thread.currentThread().isInterrupted(),
-                    "exec must re-assert the interrupt so the pool thread unwinds promptly");
+            Assertions.assertFalse(Thread.currentThread().isInterrupted());
         } finally {
             // Clear the flag so it cannot leak into other tests on this worker thread.
             Thread.interrupted();
         }
 
-        Mockito.verify(job, Mockito.never()).cancelInternal(Mockito.any(), Mockito.anyString());
+        Mockito.verify(job).cancelInternal(com.starrocks.load.ExportFailMsg.CancelType.TIMEOUT, "timeout");
         Mockito.verify(job, Mockito.never()).finish();
         Mockito.verify(job).setDoExportingThread(null);
+        Assertions.assertTrue(profileRegistered.get());
     }
+    @Test
+    public void testCooperativeDemotionLeavesWaitingExportForNextLeader() throws Exception {
+        java.util.concurrent.atomic.AtomicBoolean demoting = new java.util.concurrent.atomic.AtomicBoolean();
+        new mockit.MockUp<com.starrocks.server.GlobalStateMgr>() {
+            @mockit.Mock
+            public boolean isLeaderDemoting() {
+                return demoting.get();
+            }
+        };
+        ExportJob job = Mockito.mock(ExportJob.class);
+        Mockito.when(job.getState()).thenReturn(ExportJob.JobState.EXPORTING);
+        Mockito.when(job.getTimeoutSecond()).thenReturn(3600);
+        Mockito.when(job.getCreateTimeMs()).thenReturn(System.currentTimeMillis());
+        Mockito.when(job.getCoordList()).thenReturn(Collections.emptyList());
+        ExportExportingTask task = new ExportExportingTask(job);
+        com.starrocks.common.jmockit.Deencapsulation.setField(task, "subTasksDoneSignal",
+                new com.starrocks.common.util.concurrent.MarkedCountDownLatch<Integer, Integer>(1));
+        java.util.concurrent.atomic.AtomicReference<Throwable> failure = new java.util.concurrent.atomic.AtomicReference<>();
+        Thread worker = new Thread(() -> {
+            try {
+                task.exec();
+            } catch (Throwable t) {
+                failure.set(t);
+            }
+        });
+        worker.setDaemon(true);
+        worker.start();
+        try {
+            org.awaitility.Awaitility.await().atMost(3, java.util.concurrent.TimeUnit.SECONDS)
+                    .until(() -> worker.getState() == Thread.State.TIMED_WAITING);
+            demoting.set(true);
+            worker.join(3000L);
+            Assertions.assertFalse(worker.isAlive());
+            Assertions.assertNull(failure.get());
+            Assertions.assertFalse(worker.isInterrupted());
+            Mockito.verify(job, Mockito.never()).cancelInternal(Mockito.any(), Mockito.anyString());
+            Mockito.verify(job, Mockito.never()).finish();
+            Mockito.verify(job).setDoExportingThread(null);
+        } finally {
+            demoting.set(true);
+            worker.join(3000L);
+        }
+    }
+
 }

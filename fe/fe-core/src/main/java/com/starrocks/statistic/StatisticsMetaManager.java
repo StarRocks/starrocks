@@ -489,14 +489,11 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-    private void trySleep(long millis) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + millis;
-        while (!isStopRequested()) {
-            long remaining = deadline - System.currentTimeMillis();
-            if (remaining <= 0) {
-                return;
-            }
-            Thread.sleep(Math.min(remaining, 100L));
+    private void trySleep(long millis) {
+        try {
+            sleepUntilNextStep(millis);
+        } catch (InterruptedException e) {
+            LOG.warn("Statistics metadata retry wait failed", e);
         }
     }
 
@@ -527,7 +524,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-    public boolean alterTable(String tableName) throws InterruptedException {
+    public boolean alterTable(String tableName) {
         ConnectContext context = StatisticUtils.buildConnectContext();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
         Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
@@ -540,7 +537,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-    public boolean alterFullStatisticsTable(ConnectContext context, Table table) throws InterruptedException {
+    public boolean alterFullStatisticsTable(ConnectContext context, Table table) {
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 if (columnName.equalsIgnoreCase("collection_size")) {
@@ -566,7 +563,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
                     }
 
                     while (table.getColumn(columnName) == null) {
-                        if (isStopRequested()) {
+                        if (shouldStop()) {
                             return false;
                         }
                         // `alter table` may be sync in the shared-nothing cluster. So we need to check if job is done.
@@ -596,22 +593,22 @@ public class StatisticsMetaManager extends LeaderDaemon {
         return true;
     }
 
-    private void refreshStatisticsTable(String tableName) throws InterruptedException {
-        while (!isStopRequested() && !checkTableExist(tableName)) {
+    private void refreshStatisticsTable(String tableName) {
+        while (!shouldStop() && !checkTableExist(tableName)) {
             if (createTable(tableName)) {
                 break;
             }
             LOG.warn("create statistics table " + tableName + " failed");
             trySleep(10000);
         }
-        if (isStopRequested()) {
+        if (shouldStop()) {
             return;
         }
         if (checkTableExist(tableName)) {
             StatisticUtils.alterSystemTableReplicationNumIfNecessary(tableName);
         }
 
-        while (!isStopRequested() && !checkTableCompatible(tableName)) {
+        while (!shouldStop() && !checkTableCompatible(tableName)) {
             if (alterTable(tableName)) {
                 break;
             }
@@ -621,16 +618,16 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     @Override
-    protected void runAfterLeaseValid() throws InterruptedException {
+    protected void runAfterLeaseValid() {
         // To make UT pass, some UT will create database and table
         trySleep(Config.statistic_manager_sleep_time_sec * 1000);
-        while (!isStopRequested() && !checkDatabaseExist()) {
+        while (!shouldStop() && !checkDatabaseExist()) {
             if (createDatabase()) {
                 break;
             }
             trySleep(10000);
         }
-        if (isStopRequested()) {
+        if (shouldStop()) {
             return;
         }
 
@@ -643,7 +640,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
         refreshStatisticsTable(QUERY_HISTORY_TABLE_NAME);
         refreshStatisticsTable(PARTITION_ACCESS_TIME_TABLE_NAME);
-        if (isStopRequested()) {
+        if (shouldStop()) {
             return;
         }
 
@@ -656,30 +653,25 @@ public class StatisticsMetaManager extends LeaderDaemon {
     }
 
     public void createStatisticsTablesForTest() {
-        try {
-            while (!checkDatabaseExist()) {
-                if (createDatabase()) {
-                    break;
-                }
-                trySleep(1);
+        while (!checkDatabaseExist()) {
+            if (createDatabase()) {
+                break;
             }
+            trySleep(1);
+        }
 
-            boolean existsSample = false;
-            boolean existsFull = false;
-            while (!existsSample || !existsFull) {
-                existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
-                existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
-                if (!existsSample) {
-                    createTable(SAMPLE_STATISTICS_TABLE_NAME);
-                }
-                if (!existsFull) {
-                    createTable(FULL_STATISTICS_TABLE_NAME);
-                }
-                trySleep(1);
+        boolean existsSample = false;
+        boolean existsFull = false;
+        while (!existsSample || !existsFull) {
+            existsSample = checkTableExist(SAMPLE_STATISTICS_TABLE_NAME);
+            existsFull = checkTableExist(FULL_STATISTICS_TABLE_NAME);
+            if (!existsSample) {
+                createTable(SAMPLE_STATISTICS_TABLE_NAME);
             }
-        } catch (InterruptedException e) {
-            // Test helper: just restore the interrupt flag and return.
-            Thread.currentThread().interrupt();
+            if (!existsFull) {
+                createTable(FULL_STATISTICS_TABLE_NAME);
+            }
+            trySleep(1);
         }
     }
 

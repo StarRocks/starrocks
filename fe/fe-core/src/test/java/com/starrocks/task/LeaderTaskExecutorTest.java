@@ -139,12 +139,13 @@ public class LeaderTaskExecutorTest {
     }
 
     @Test
-    public void testCloseInterruptsInFlightTaskFast() throws Exception {
-        // Demotion-drain contract: close() uses shutdownNow() so an in-flight task blocked in
-        // an interruptible wait is cancelled immediately instead of waiting out its own await.
+    public void testCloseDrainsRunningTaskWithoutInterruptingAndSkipsQueuedWork() throws Exception {
+        // Closing cannot make an active task appear quiesced, and queued work must not start.
         LeaderTaskExecutor target = new LeaderTaskExecutor("leader_task_executor_interrupt_test", 1, 10, false);
         target.start();
         java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean queuedRan = new java.util.concurrent.atomic.AtomicBoolean(false);
         java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean(false);
         LeaderTask blocked = new LeaderTask() {
             {
@@ -155,7 +156,7 @@ public class LeaderTaskExecutorTest {
             protected void exec() {
                 entered.countDown();
                 try {
-                    new java.util.concurrent.CountDownLatch(1).await();
+                    release.await();
                 } catch (InterruptedException e) {
                     interrupted.set(true);
                 }
@@ -164,10 +165,28 @@ public class LeaderTaskExecutorTest {
         Assertions.assertTrue(target.submit(blocked));
         Assertions.assertTrue(entered.await(5, TimeUnit.SECONDS));
 
-        target.close(5000L);
+        try {
+            Assertions.assertTrue(target.submit(new LeaderTask() {
+                {
+                    this.signature = 99L;
+                }
 
-        Assertions.assertTrue(interrupted.get(), "shutdownNow must interrupt the in-flight task");
+                @Override
+                protected void exec() {
+                    queuedRan.set(true);
+                }
+            }));
+            target.close(0L);
+            Assertions.assertTrue(target.isShutdown());
+            Assertions.assertFalse(target.isTerminated(), "a live body must remain visible to the session drain");
+            Assertions.assertFalse(interrupted.get());
+        } finally {
+            release.countDown();
+            target.close(5000L);
+        }
         Assertions.assertTrue(target.executor.isTerminated());
+        Assertions.assertFalse(interrupted.get());
+        Assertions.assertFalse(queuedRan.get());
     }
 
     private class TestLeaderTask extends LeaderTask {

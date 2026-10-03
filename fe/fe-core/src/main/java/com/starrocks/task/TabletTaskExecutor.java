@@ -33,6 +33,7 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentResult;
@@ -502,6 +503,7 @@ public class TabletTaskExecutor {
 
     // Visible for testing
     static CompletableFuture<Boolean> sendTask(Long backendId, List<AgentTask> agentBatchTask) {
+        LeaderLease lease = GlobalStateMgr.getCurrentState().captureLeaderLease();
         return CompletableFuture.supplyAsync(() -> {
             try {
                 // Same dispatch fence as AgentBatchTask.run(): a demoting/non-leader node must not send
@@ -510,7 +512,7 @@ public class TabletTaskExecutor {
                 // throwing), so without this check nothing would stop the send. The RuntimeException is
                 // the lambda's established failure mode; callers count the latch down and fail the DDL.
                 GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-                if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+                if (globalStateMgr.isAgentTaskDispatchDisallowed(lease)) {
                     throw new RuntimeException("node is demoting or not the leader ("
                             + globalStateMgr.getFeType() + "), refuse to send create-replica tasks");
                 }

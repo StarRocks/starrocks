@@ -63,8 +63,7 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
 
     private final Set<Long> vacuumingPartitions = Sets.newConcurrentHashSet();
 
-    // Not final: shutdownNow() in onStopped() interrupts in-flight full-vacuum tasks so
-    // they exit promptly; start() rebuilds the pool on re-election.
+    // Leader-session pool, drained by onStopped and rebuilt by start on re-election.
     // Package-private so same-package tests can swap in a stuck pool to exercise the
     // restart guard without reflection.
     volatile BlockingThreadPoolExecutorService executorService = newExecutorService();
@@ -97,7 +96,7 @@ public class FullVacuumDaemon extends LeaderDaemon implements Writable {
         // this worker does not clear isRunning until the full-vacuum tasks are quiescent (the re-activation
         // gate reads isRunning as the single quiescence signal). Only then clear vacuumingPartitions so
         // stale partition ids do not make the next leader skip partitions.
-        shutdownNowAndAwaitTermination("FullVacuumDaemon.executorService", executorService);
+        shutdownAndAwaitTermination("FullVacuumDaemon.executorService", executorService);
         vacuumingPartitions.clear();
     }
 

@@ -171,8 +171,8 @@ public class JournalWriter {
      * guarantees the journal queue is empty here.
      */
     public long close(long timeoutMs) {
-        // Flip out of RUNNING (if still running) so stopDaemon's interrupt is a graceful stop rather than the
-        // RUNNING-state process exit in runOneCycle.
+        // Seal before requesting cooperative stop, so any concurrent write failure follows the
+        // sealing path. stopDaemon never interrupts the writer.
         writerState.compareAndSet(WriterState.RUNNING, WriterState.SEALING);
         stopDaemon(timeoutMs);
         writerState.set(WriterState.CLOSED);

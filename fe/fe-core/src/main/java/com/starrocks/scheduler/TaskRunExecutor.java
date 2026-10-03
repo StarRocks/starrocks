@@ -27,19 +27,18 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
-    // Not final: leader demotion shuts the pool down (shutdownNow interrupts in-flight task runs so
-    // their INSERTs abort instead of racing the next leader's re-driven run of the same task) and
-    // TaskManager.start() rebuilds it on re-election.
+    // Leader-session pool: demotion closes admission; re-activation requires termination before rebuilding it.
     private volatile ExecutorService taskRunPool = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_task_runs_threads_num, "starrocks-taskrun-pool", true);
 
-    /** Demotion: stop accepting task runs and interrupt in-flight ones (their transactions abort). */
-    public void shutdownNow() {
-        taskRunPool.shutdownNow();
+    /** Close task-run admission; already running bodies finish without interruption. */
+    public void shutdown() {
+        taskRunPool.shutdown();
     }
 
     /**
@@ -84,7 +83,8 @@ public class TaskRunExecutor {
             return false;
         }
 
-        if (taskRunPool.isShutdown()) {
+        ExecutorService sessionPool = taskRunPool;
+        if (sessionPool.isShutdown()) {
             // Leader demotion already stopped the pool; do not journal a PENDING -> RUNNING transition
             // for a run that can never start here. The re-elected leader re-drives it from PENDING.
             LOG.warn("taskRunPool is shut down (leader demoting), refuse task run {}", status.getTaskName());
@@ -100,6 +100,10 @@ public class TaskRunExecutor {
         });
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
+            // Complete the queued future without starting another statement for the stopped session.
+            if (sessionPool.isShutdown()) {
+                throw new RejectedExecutionException("leader session is stopping");
+            }
             try {
                 Constants.TaskRunState runState = taskRun.executeTaskRun();
                 status.setState(runState);
@@ -116,7 +120,7 @@ public class TaskRunExecutor {
                         "TaskRun: name[" + status.getTaskName() + "]");
             }
             return status.getState();
-        }, taskRunPool);
+        }, sessionPool);
         future.whenComplete((r, e) -> {
             if (e == null) {
                 taskRun.getFuture().complete(r);

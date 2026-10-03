@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LeaderLease;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TAgentServiceVersion;
@@ -171,8 +172,12 @@ public class AgentBatchTask implements Runnable {
 
     @Override
     public void run() {
+        run(GlobalStateMgr.getCurrentState().captureLeaderLease());
+    }
+
+    void run(LeaderLease lease) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+        if (globalStateMgr.isAgentTaskDispatchDisallowed(lease)) {
             // A demoting/non-leader node must not dispatch BE agent tasks. The AgentTaskQueue.addTask
             // guard only covers enqueue/tracking, but many callers submit an already-built AgentBatchTask
             // without addTask, and a lingering leader-session thread can reach here during the follower
@@ -195,7 +200,7 @@ public class AgentBatchTask implements Runnable {
             // destructive drop/alter tasks) to BE during the follower window. A small check-to-RPC window
             // remains (see the pre-loop comment: narrowed, not closed); the re-elected leader re-drives the
             // re-drivable task types from durable state.
-            if (globalStateMgr.isAgentTaskDispatchDisallowed()) {
+            if (globalStateMgr.isAgentTaskDispatchDisallowed(lease)) {
                 LOG.warn("stop dispatching remaining agent task(s): node is no longer an active leader "
                         + "(feType={}, demoting={})", globalStateMgr.getFeType(), globalStateMgr.isLeaderDemoting());
                 return;

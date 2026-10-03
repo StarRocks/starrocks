@@ -78,10 +78,7 @@ public class RoutineLoadTaskSchedulerTest {
     }
 
     @Test
-    public void testProcessPropagatesInterruptFromPoll() throws Exception {
-        // Leader demotion interrupts the scheduler worker. The interrupt surfacing from the
-        // needScheduleTasksQueue.poll must PROPAGATE out of process() (so the LeaderDaemon
-        // loop exits promptly) instead of being swallowed by the broad catch(Exception).
+    public void testPollFailureDoesNotRequestLeaderStop() throws Exception {
         new Expectations() {
             {
                 routineLoadManager.getClusterIdleSlotNum();
@@ -94,7 +91,9 @@ public class RoutineLoadTaskSchedulerTest {
         RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler(routineLoadManager);
         try {
             Thread.currentThread().interrupt();
-            Assertions.assertThrows(InterruptedException.class, scheduler::process);
+            Assertions.assertDoesNotThrow(scheduler::process);
+            Assertions.assertFalse(scheduler.isStopRequested());
+            Assertions.assertFalse(Thread.currentThread().isInterrupted());
         } finally {
             // Clear the flag so it cannot leak into other tests on this worker thread.
             Thread.interrupted();
@@ -318,8 +317,7 @@ public class RoutineLoadTaskSchedulerTest {
 
     @Test
     public void testOnStoppedShutsDownPoolsAndStartRebuildsThem() {
-        // onStopped() must shutdownNow() both executors so their worker threads exit promptly
-        // during the drain. A subsequent start() must rebuild both pools so the scheduler is
+        // onStopped() must close and drain both executors before the next session. A subsequent start() must rebuild both pools so the scheduler is
         // reusable when the FE is re-elected.
         RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
         ScheduledExecutorService originalScheduler =
@@ -337,23 +335,49 @@ public class RoutineLoadTaskSchedulerTest {
 
         // The original pools are terminated, so start() should hit the rebuild branches.
         scheduler.start();
-        ScheduledExecutorService rebuiltScheduler =
-                Deencapsulation.getField(scheduler, "scheduledExecutorService");
-        ExecutorService rebuiltThreadPool = Deencapsulation.getField(scheduler, "threadPool");
-        Assertions.assertNotSame(originalScheduler, rebuiltScheduler,
-                "scheduledExecutorService must be rebuilt on re-election");
-        Assertions.assertNotSame(originalThreadPool, rebuiltThreadPool,
-                "threadPool must be rebuilt on re-election");
-        Assertions.assertFalse(rebuiltScheduler.isShutdown());
-        Assertions.assertFalse(rebuiltThreadPool.isShutdown());
+        try {
+            ScheduledExecutorService rebuiltScheduler =
+                    Deencapsulation.getField(scheduler, "scheduledExecutorService");
+            ExecutorService rebuiltThreadPool = Deencapsulation.getField(scheduler, "threadPool");
+            Assertions.assertNotSame(originalScheduler, rebuiltScheduler,
+                    "scheduledExecutorService must be rebuilt on re-election");
+            Assertions.assertNotSame(originalThreadPool, rebuiltThreadPool,
+                    "threadPool must be rebuilt on re-election");
+            Assertions.assertFalse(rebuiltScheduler.isShutdown());
+            Assertions.assertFalse(rebuiltThreadPool.isShutdown());
+        } finally {
+            // Cleanup still uses the mocked manager; finish it before JMockit restores real methods.
+            scheduler.setStop();
+            Awaitility.await().timeout(5, TimeUnit.SECONDS).until(() -> !scheduler.isRunning());
+        }
+    }
 
-        scheduler.setStop();
+    @Test
+    public void testStopDiscardsLongDelayedRetryWithoutWaitingForItsDeadline() throws Exception {
+        RoutineLoadTaskScheduler scheduler = new RoutineLoadTaskScheduler();
+        ScheduledExecutorService pool = Deencapsulation.getField(scheduler, "scheduledExecutorService");
+        java.util.concurrent.atomic.AtomicBoolean ran = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.Future<?> delayed = pool.schedule(() -> ran.set(true), 1, TimeUnit.HOURS);
+        Thread cleanup = new Thread(() -> Deencapsulation.invoke(scheduler, "onStopped"));
+        cleanup.setDaemon(true);
+        cleanup.start();
+        try {
+            cleanup.join(3000L);
+            Assertions.assertFalse(cleanup.isAlive(), "a delayed retry must not consume the session drain budget");
+            Assertions.assertTrue(pool.isTerminated());
+            Assertions.assertTrue(delayed.isCancelled());
+            Assertions.assertFalse(ran.get());
+        } finally {
+            delayed.cancel(false);
+            pool.shutdown();
+            cleanup.join(3000L);
+        }
     }
 
     @Test
     public void testOnStoppedClearsQueueAfterPoolsTerminate() {
         // Race fix: a delay-runnable scheduled by the previous leader can fire mid-onStopped()
-        // and call needScheduleTasksQueue.put() before the interrupt from shutdownNow() lands.
+        // and call needScheduleTasksQueue.put() before it observes the stop request.
         // If clear() runs before the pools drain, that stale put survives demotion and the
         // next leader polls it. Pin the invariant by routing the production clear() through a
         // queue subclass that records whether both pools were already terminated at the

@@ -1216,15 +1216,4 @@ public class ClusterSnapshotTest {
         ClusterSnapshotMgr mgr = new ClusterSnapshotMgr();
         Assertions.assertDoesNotThrow(() -> mgr.stopBestEffort());
     }
-
-    @Test
-    public void testSchedulerInterruptOnStopOptedOut() {
-        // The scheduler's worker drives checkpoints inline (BDBJE getMaxJournalId /
-        // deleteJournals + image I/O), where an interrupt can invalidate the environment -
-        // it must opt out of the default interrupt-based stop and rely on cooperative
-        // isStopRequested() polling.
-        ClusterSnapshotJobScheduler scheduler = new ClusterSnapshotJobScheduler(null, null);
-        Assertions.assertFalse(scheduler.interruptOnStop());
-    }
-
 }

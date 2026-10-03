@@ -194,22 +194,19 @@ public class BackupHandlerTest {
 
     @Test
     public void testOnStoppedSwallowsRepoMgrStopFailure() throws Exception {
-        // The per-handler try/catch around repoMgr.stopBestEffort() must absorb any failure so
-        // a misbehaving RepositoryMgr cannot abort the leader-demotion drain (which would
-        // leave the FE in a half-demoted state). stopBestEffort is final on LeaderDaemon; observe
-        // the safety net by making interruptOnStop() throw - stopBestEffort evaluates it, so the
-        // exception bubbles up into BackupHandler's catch.
+        // A failing notification hook must not prevent recording the repository stop request.
         TestBackupHandler handler = new TestBackupHandler(GlobalStateMgr.getCurrentState());
         RepositoryMgr throwingRepoMgr = new RepositoryMgr() {
             @Override
-            protected boolean interruptOnStop() {
+            protected void onStopRequested() {
                 throw new RuntimeException("simulated repo stop failure");
             }
         };
         org.apache.commons.lang3.reflect.FieldUtils.writeField(handler, "repoMgr", throwingRepoMgr, true);
 
         Assertions.assertDoesNotThrow(handler::callOnStopped,
-                "onStopped must absorb a throwing repoMgr.stopBestEffort");
+                "a notification failure must not skip the rest of cleanup");
+        Assertions.assertTrue(throwingRepoMgr.isStopRequested());
     }
 
     @Test

@@ -318,6 +318,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
         List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
+            if (shouldStop()) {
+                return;
+            }
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
                 AgentTaskQueue.addTask(task);
@@ -342,6 +345,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // try to finish the transaction, if failed just retry in next loop
         Set<Long> publishingTransactions = getPublishingTransactions();
         for (TransactionState transactionState : readyTransactionStates) {
+            if (shouldStop()) {
+                return;
+            }
             if (!Config.shared_nothing_publish_use_thread_pool) {
                 tryFinishTransaction(transactionState);
             } else {
@@ -370,6 +376,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
     }
 
     private void tryFinishTransaction(TransactionState transactionState) throws StarRocksException {
+        if (shouldStop()) {
+            return;
+        }
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         Map<Long, PublishVersionTask> transTasks = transactionState.getPublishVersionTasks();
@@ -1459,8 +1468,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
      * version is already visible), so dropping in-flight tasks is safe - the new leader
      * will resubmit publish from {@code GlobalTransactionMgr.getReadyToPublishTransactions}.
      *
-     * shutdownNow() interrupts the publish/delete-txnlog workers, then awaitTermination
-     * waits (with no deadline) until they actually terminate, so isRunning is never cleared
+     * Orderly shutdown and awaitTermination wait for the publish/delete-txnlog bodies to finish
+     * without interrupting them, so isRunning is never cleared
      * while a worker is alive. The executor references are then nulled so the next call to
      * {@link #getTaskExecutor()} rebuilds a fresh pool on re-election.
      */
@@ -1471,8 +1480,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // the re-activation gate reads isRunning as the single quiescence signal. Then null the fields so
         // the getters lazily rebuild fresh pools on re-election, and clear the leader-session dedup sets
         // (the next leader resubmits from getReadyToPublishTransactions; BE publish is idempotent).
-        shutdownNowAndAwaitTermination("PublishVersionDaemon.taskExecutor", taskExecutor);
-        shutdownNowAndAwaitTermination("PublishVersionDaemon.deleteTxnLogExecutor", deleteTxnLogExecutor);
+        shutdownAndAwaitTermination("PublishVersionDaemon.taskExecutor", taskExecutor);
+        shutdownAndAwaitTermination("PublishVersionDaemon.deleteTxnLogExecutor", deleteTxnLogExecutor);
         taskExecutor = null;
         deleteTxnLogExecutor = null;
         if (publishingTransactionIds != null) {

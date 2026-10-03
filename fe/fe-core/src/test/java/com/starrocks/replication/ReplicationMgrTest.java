@@ -200,6 +200,18 @@ public class ReplicationMgrTest {
     }
 
     @Test
+    public void testDemotionCleanupFailurePropagates() {
+        replicationMgr.runAfterLeaseValid();
+        new MockUp<ReplicationJob>() {
+            @Mock
+            public void resetLeaderSessionTaskState() {
+                throw new IllegalStateException("simulated replication cleanup failure");
+            }
+        };
+        Assertions.assertThrows(IllegalStateException.class, replicationMgr::onStopped);
+    }
+
+    @Test
     public void testDemotionResetsTaskBookkeepingForCrashRecovery() {
         Assertions.assertEquals(ReplicationJobState.INITIALIZING, job.getState());
 

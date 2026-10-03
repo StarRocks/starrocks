@@ -1665,7 +1665,7 @@ This topic introduces the following types of FE configurations:
 - Type: Int
 - Unit: Seconds
 - Is mutable: Yes
-- Description: Timeout used during leader demotion to seal and stop the journal writer and to wait for in-flight leader WAL applies to drain. If the journal writer cannot be sealed within this time, the demotion stage fails and the FE process is terminated for a clean restart, rather than let a stale leader's write slip past the WAL-apply fence. Increase this if sealing the journal writer or draining in-flight applies routinely needs more than the default during demotion.
+- Description: Timeout for leader demotion to drain in-flight WAL applies and seal and stop the journal writer. The same timeout applies separately to waiting for SchemaChange, Rollup, and RoutineLoad state resets required before follower replay starts. Other leader-session workers and thread pools finish asynchronously; their termination is checked before this FE becomes leader again. Demotion uses cooperative stop requests and does not interrupt active business tasks. If journal sealing or a required state reset times out, the FE process exits for a clean restart. A cleanup failure also causes the FE to exit.
 - Introduced in: v4.2.0
 
 ### `lock_checker_interval_second`

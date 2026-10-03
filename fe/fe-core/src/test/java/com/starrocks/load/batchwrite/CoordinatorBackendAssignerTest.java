@@ -54,6 +54,11 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         assigner.start();
     }
 
+    @org.junit.jupiter.api.AfterEach
+    public void stopAssigner() {
+        assigner.stop();
+    }
+
     // to be compatible with old api
     private void registerBatchWrite(long loadId, long warehouseId, TableId tableId, int expectParallel) {
         assigner.registerBatchWrite(
@@ -291,7 +296,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
 
     @Test
     public void testStopShutsDownExecutorAndStartRebuilds() throws Exception {
-        // stop() interrupts the scheduler worker so its blocking poll() returns and
+        // stop() wakes the scheduler through its queue so its blocking poll() returns and
         // runSchedule exits; the executor must terminate within the drain timeout. A
         // subsequent start() then creates a fresh executor for the re-elected leader.
         ExecutorService originalExecutor = readSingleExecutor();
@@ -308,11 +313,7 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
 
     @Test
     public void testStopClearsAssignerStateForLeaderHandoff() throws Exception {
-        // BatchWriteMgr.onStopped() pushes async UNREGISTER_LOAD tasks for each merge-commit
-        // job, but stop() then drops the queue via shutdownNow() before they run. To keep
-        // leader-session load ownership from leaking into the next leader, stop() must
-        // synchronously clear warehouseMetas / registeredLoadMetas / taskPriorityQueue after
-        // the worker terminates.
+        // Shutdown must clear every assignment after the running task finishes.
         registerBatchWrite(1L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1);
         registerBatchWrite(2L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_2), 1);
         Awaitility.await().timeout(5, TimeUnit.SECONDS)
@@ -335,6 +336,52 @@ public class CoordinatorBackendAssignerTest extends BatchWriteTestBase {
         assertTrue(registeredLoadMetas.isEmpty(), "registeredLoadMetas must be cleared on stop");
         assertTrue(warehouseMetasMap.isEmpty(), "warehouseMetas must be cleared on stop");
         assertTrue(queue.isEmpty(), "taskPriorityQueue must be cleared on stop");
+    }
+
+    @Test
+    public void testStopWaitsForRunningAssignmentAndSettlesQueuedFutures() throws Exception {
+        java.util.concurrent.CountDownLatch entered = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.CountDownLatch release = new java.util.concurrent.CountDownLatch(1);
+        java.util.concurrent.atomic.AtomicBoolean interrupted = new java.util.concurrent.atomic.AtomicBoolean();
+        java.util.concurrent.atomic.AtomicBoolean queuedRan = new java.util.concurrent.atomic.AtomicBoolean();
+        CoordinatorBackendAssignerImpl.Task running = new CoordinatorBackendAssignerImpl.Task(
+                100L, CoordinatorBackendAssignerImpl.EventType.REGISTER_LOAD, () -> {
+                    entered.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        interrupted.set(true);
+                    }
+                });
+        CoordinatorBackendAssignerImpl.Task queued = new CoordinatorBackendAssignerImpl.Task(
+                101L, CoordinatorBackendAssignerImpl.EventType.REGISTER_LOAD, () -> queuedRan.set(true));
+        @SuppressWarnings("unchecked")
+        PriorityBlockingQueue<CoordinatorBackendAssignerImpl.Task> queue =
+                (PriorityBlockingQueue<CoordinatorBackendAssignerImpl.Task>) readPrivateField("taskPriorityQueue");
+        queue.add(running);
+        assertTrue(entered.await(3, TimeUnit.SECONDS));
+        queue.add(queued);
+        ExecutorService pool = readSingleExecutor();
+        Thread cleanup = new Thread(assigner::stop);
+        cleanup.setDaemon(true);
+        cleanup.start();
+        try {
+            Awaitility.await().atMost(3, TimeUnit.SECONDS).until(pool::isShutdown);
+            assertTrue(cleanup.isAlive());
+            assertFalse(interrupted.get());
+            assertFalse(running.future.isDone());
+        } finally {
+            release.countDown();
+            cleanup.join(5000L);
+        }
+        assertFalse(cleanup.isAlive());
+        assertTrue(running.future.isDone());
+        assertTrue(queued.future.isCompletedExceptionally());
+        assertFalse(queuedRan.get());
+        assertFalse(interrupted.get());
+        assertTrue(queue.isEmpty());
+        org.junit.jupiter.api.Assertions.assertThrows(RejectedExecutionException.class,
+                () -> registerBatchWrite(999L, 1, new TableId(DB_NAME_1, TABLE_NAME_1_1), 1));
     }
 
     private Object readPrivateField(String name) throws Exception {
