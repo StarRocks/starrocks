@@ -128,9 +128,8 @@ public class PCTTableSnapshotInfo extends BaseTableSnapshotInfo {
                 // if the partition names are not equal, it means the partition has changed.
                 return !snapShotOlapTable.getVisiblePartitionNames().equals(partitionNames);
             } else if (snapshotPartitionInfo.isListPartition()) {
-                OlapTable snapshotOlapTable = (OlapTable) baseTable;
-                PCellSortedSet snapshotPartitionMap = snapshotOlapTable.getListPartitionItems();
-                PCellSortedSet currentPartitionMap = snapshotOlapTable.getListPartitionItems();
+                PCellSortedSet snapshotPartitionMap = snapShotOlapTable.getListPartitionItems();
+                PCellSortedSet currentPartitionMap = ((OlapTable) table).getListPartitionItems();
                 return ListPartitionDiffer.hasListPartitionChanged(snapshotPartitionMap, currentPartitionMap);
             } else {
                 PCellSortedSet snapshotPartitionMap = snapShotOlapTable.getRangePartitionMap();
