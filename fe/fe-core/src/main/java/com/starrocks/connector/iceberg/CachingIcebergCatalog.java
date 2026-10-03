@@ -32,6 +32,7 @@ import com.starrocks.memory.estimate.Estimator;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.ContentFile;
 import org.apache.iceberg.DataFile;
@@ -156,8 +157,13 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                     new com.github.benmanes.caffeine.cache.CacheLoader<IcebergTableName, Map<String, Partition>>() {
                         @Override
                         public Map<String, Partition> load(IcebergTableName key) throws Exception {
-                            ConnectContext context = new ConnectContext();
+                            ConnectContext context = StatisticUtils.buildBotContext();
                             context.setOnlyReadIcebergCache(true);
+                            if (context.getAuthToken() == null && getSecurityType() == IcebergRESTCatalog.Security.JWT) {
+                                throw new StarRocksConnectorException(
+                                        "No bot token available for JWT REST catalog partition load %s.%s",
+                                        key.dbName, key.tableName);
+                            }
                             Table nativeTable = getTable(context, key.dbName, key.tableName);
                             IcebergTable icebergTable =
                                     IcebergTable.builder()
@@ -225,6 +231,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     @Override
     public IcebergCatalogType getIcebergCatalogType() {
         return delegate.getIcebergCatalogType();
+    }
+
+    @Override
+    public IcebergRESTCatalog.Security getSecurityType() {
+        return delegate.getSecurityType();
     }
 
     @Override

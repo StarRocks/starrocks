@@ -1041,4 +1041,88 @@ public class GlobalStateMgrTest {
         method.setAccessible(true);
         return (TStatus) method.invoke(globalStateMgr, thriftAddress, tableName, partitions);
     }
+
+    @Test
+    public void testInitTokenProviderDisabled() {
+        boolean saved = Config.use_bot_for_background_tasks;
+        try {
+            Config.use_bot_for_background_tasks = false;
+            GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+            globalStateMgr.initTokenProvider();
+            Assertions.assertNull(globalStateMgr.getTokenProvider(),
+                    "no token provider should be created when use_bot_for_background_tasks is false");
+        } finally {
+            Config.use_bot_for_background_tasks = saved;
+        }
+    }
+
+    @Test
+    public void testInitTokenProviderEnabledWithValidConfig() {
+        boolean savedEnabled = Config.use_bot_for_background_tasks;
+        String savedUrl = Config.background_task_client_token_issuer_url;
+        String savedId = Config.background_task_client_id;
+        String savedSecret = Config.background_task_client_password;
+        String savedJwks = Config.background_task_client_token_jwks_url;
+        String savedScope = Config.background_task_client_scope;
+        String savedAudience = Config.background_task_client_audience;
+        String savedIssuer = Config.background_task_client_issuer;
+        String savedPrincipal = Config.background_task_client_principal_field;
+        try {
+            Config.use_bot_for_background_tasks = true;
+            Config.background_task_client_token_issuer_url = "https://issuer.example.com";
+            Config.background_task_client_id = "test-client";
+            Config.background_task_client_password = "test-secret";
+            Config.background_task_client_token_jwks_url = "https://issuer.example.com/jwks";
+            // exercise the optional-param branches too
+            Config.background_task_client_scope = "test-scope";
+            Config.background_task_client_audience = "test-audience";
+            Config.background_task_client_issuer = "test-issuer";
+            Config.background_task_client_principal_field = "sub";
+
+            GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+            globalStateMgr.initTokenProvider();
+            Assertions.assertNotNull(globalStateMgr.getTokenProvider(),
+                    "token provider should be built from a complete config");
+        } finally {
+            Config.use_bot_for_background_tasks = savedEnabled;
+            Config.background_task_client_token_issuer_url = savedUrl;
+            Config.background_task_client_id = savedId;
+            Config.background_task_client_password = savedSecret;
+            Config.background_task_client_token_jwks_url = savedJwks;
+            Config.background_task_client_scope = savedScope;
+            Config.background_task_client_audience = savedAudience;
+            Config.background_task_client_issuer = savedIssuer;
+            Config.background_task_client_principal_field = savedPrincipal;
+        }
+    }
+
+    @Test
+    public void testInitTokenProviderEnabledWithInvalidConfigStaysNull() {
+        boolean savedEnabled = Config.use_bot_for_background_tasks;
+        String savedUrl = Config.background_task_client_token_issuer_url;
+        String savedId = Config.background_task_client_id;
+        String savedSecret = Config.background_task_client_password;
+        String savedJwks = Config.background_task_client_token_jwks_url;
+        try {
+            // enabled, but mandatory url/clientId/secret/jwksUrl are blank: builder.build()
+            // throws IllegalArgumentException, which initTokenProvider catches and leaves the
+            // provider null rather than failing FE startup.
+            Config.use_bot_for_background_tasks = true;
+            Config.background_task_client_token_issuer_url = "";
+            Config.background_task_client_id = "";
+            Config.background_task_client_password = "";
+            Config.background_task_client_token_jwks_url = "";
+
+            GlobalStateMgr globalStateMgr = new GlobalStateMgr(new NodeMgr());
+            globalStateMgr.initTokenProvider();
+            Assertions.assertNull(globalStateMgr.getTokenProvider(),
+                    "an incomplete bot config must not build a provider, and must not throw");
+        } finally {
+            Config.use_bot_for_background_tasks = savedEnabled;
+            Config.background_task_client_token_issuer_url = savedUrl;
+            Config.background_task_client_id = savedId;
+            Config.background_task_client_password = savedSecret;
+            Config.background_task_client_token_jwks_url = savedJwks;
+        }
+    }
 }
