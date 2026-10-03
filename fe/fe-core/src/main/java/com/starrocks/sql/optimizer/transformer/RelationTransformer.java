@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
@@ -166,6 +167,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.MATERIALIZED;
+import static com.starrocks.sql.ast.CTERelation.CTEMaterializationHint.NONE;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.parser.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -221,7 +223,11 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
     public LogicalPlan transform(Relation relation) {
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
             QueryRelation queryRelation = (QueryRelation) relation;
-            if (queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1
+            // When cbo_cte_force_reuse_inlined_node_count is on, a single-referenced CTE may still be
+            // force-materialized to avoid inline bloat, so it must reach buildCTEAnchorAndProducer
+            // instead of being short-circuited to inline here.
+            boolean forceReuseByInlinedNode = session.getSessionVariable().getCboCTEForceReuseInlinedNodeCount() > 0;
+            if (!forceReuseByInlinedNode && queryRelation.getCteRelations().stream().noneMatch(c -> c.getRefs() > 1
                     || c.getMaterializationHint() == MATERIALIZED)) {
                 return visit(relation);
             }
@@ -256,20 +262,44 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
                 case NONE -> cteRelation.getRefs() <= 1
                         || (cteContext.isForceInline() && !cteContext.hasRegisteredCte(cteRelation.getCteMouldId()));
             };
-            if (shouldInline) {
+            // cbo_cte_force_reuse_inlined_node_count: a CTE that would be inlined is still worth
+            // materializing when inlining would blow up its scalar expression. Peek its producer and
+            // force reuse if the cascaded inlined size exceeds the threshold.
+            int forceReuseInlinedNodeCount = session.getSessionVariable().getCboCTEForceReuseInlinedNodeCount();
+            boolean peekForInlinedSize = shouldInline && cteRelation.getMaterializationHint() == NONE
+                    && forceReuseInlinedNodeCount > 0;
+            if (shouldInline && !peekForInlinedSize) {
                 continue;
             }
 
+            // Register the CTE BEFORE building the producer, exactly as the non-peek path always did,
+            // so cte-id allocation order is unchanged when the feature is off. When only peeking, take
+            // a snapshot first so a peek that decides to inline can be fully rolled back (it registers
+            // this CTE and any nested CTEs, which would otherwise drift isForceInline() for later CTEs).
+            CTETransformerContext.Memento memento = peekForInlinedSize ? cteContext.save() : null;
             int cteId = cteContext.registerCte(cteRelation.getCteMouldId());
-            if (cteRelation.getMaterializationHint() == MATERIALIZED) {
-                cteContext.addForceCTE(cteId);
-            }
             LogicalCTEAnchorOperator anchorOperator = new LogicalCTEAnchorOperator(cteId);
             LogicalCTEProduceOperator produceOperator = new LogicalCTEProduceOperator(cteId);
             LogicalPlan producerPlan =
                     new RelationTransformer(columnRefFactory, session,
                             new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields())),
                             cteContext, mvTransformerContext).transform(cteRelation.getCteQueryStatement().getQueryRelation());
+
+            boolean forceMaterialize = cteRelation.getMaterializationHint() == MATERIALIZED;
+            if (peekForInlinedSize && estimateInlinedSize(producerPlan.getRootBuilder(),
+                    forceReuseInlinedNodeCount) > forceReuseInlinedNodeCount) {
+                forceMaterialize = true;
+                shouldInline = false;
+            }
+            if (shouldInline) {
+                // Peeked but the CTE is not expression-heavy; inline as usual: drop the producer and
+                // roll back the registration (and any nested registrations from the peek).
+                cteContext.restore(memento);
+                continue;
+            }
+            if (forceMaterialize) {
+                cteContext.addForceCTE(cteId);
+            }
             OptExprBuilder produceOptBuilder =
                     new OptExprBuilder(produceOperator, Lists.newArrayList(producerPlan.getRootBuilder()),
                             producerPlan.getRootBuilder().getExpressionMapping());
@@ -302,6 +332,70 @@ public class RelationTransformer implements AstVisitorExtendInterface<LogicalPla
         }
 
         return new Pair<>(root, anchorOptBuilder);
+    }
+
+    // Estimate the scalar node count of a CTE producer's output expression AFTER inlining -- i.e. with
+    // every un-materialized CTE it references expanded in place (cascaded). A materialized CTE (a
+    // CTEConsume leaf) or a base column is a leaf of weight 1, so the estimate is bounded by the
+    // materialization boundaries already chosen for lower CTEs. This is the "would inlining this CTE
+    // blow up?" signal, mirroring Calcite's node-count bloat budget but at the CTE-decision layer.
+    private int estimateInlinedSize(OptExprBuilder rootBuilder, int limit) {
+        Map<ColumnRefOperator, ScalarOperator> definitions = Maps.newHashMap();
+        collectColumnDefinitions(rootBuilder.getRoot(), definitions);
+        Operator rootOp = rootBuilder.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> outputMap;
+        if (rootOp instanceof LogicalProjectOperator) {
+            outputMap = ((LogicalProjectOperator) rootOp).getColumnRefMap();
+        } else if (rootOp.getProjection() != null) {
+            outputMap = rootOp.getProjection().getColumnRefMap();
+        } else {
+            return 0;
+        }
+        int max = 0;
+        for (ScalarOperator expr : outputMap.values()) {
+            max = Math.max(max, expandedSize(expr, definitions, Sets.newHashSet(), limit));
+            if (max > limit) {
+                break;
+            }
+        }
+        return max;
+    }
+
+    // Collect column -> defining-expression across all projection layers in the producer subtree, so a
+    // column reference can be expanded into its definition. CTEConsume / scan output columns have no
+    // definition here and therefore stay leaves (materialization boundaries).
+    private void collectColumnDefinitions(OptExpression node, Map<ColumnRefOperator, ScalarOperator> definitions) {
+        Operator op = node.getOp();
+        if (op instanceof LogicalProjectOperator) {
+            definitions.putAll(((LogicalProjectOperator) op).getColumnRefMap());
+        } else if (op.getProjection() != null) {
+            definitions.putAll(op.getProjection().getColumnRefMap());
+        }
+        for (OptExpression child : node.getInputs()) {
+            collectColumnDefinitions(child, definitions);
+        }
+    }
+
+    private int expandedSize(ScalarOperator op, Map<ColumnRefOperator, ScalarOperator> definitions,
+                             Set<ColumnRefOperator> visiting, int limit) {
+        if (op instanceof ColumnRefOperator) {
+            ColumnRefOperator ref = (ColumnRefOperator) op;
+            ScalarOperator def = definitions.get(ref);
+            if (def == null || !visiting.add(ref)) {
+                return 1;
+            }
+            int size = expandedSize(def, definitions, visiting, limit);
+            visiting.remove(ref);
+            return size;
+        }
+        int size = 1;
+        for (ScalarOperator child : op.getChildren()) {
+            size += expandedSize(child, definitions, visiting, limit);
+            if (size > limit) {
+                break;
+            }
+        }
+        return size;
     }
 
     @Override
