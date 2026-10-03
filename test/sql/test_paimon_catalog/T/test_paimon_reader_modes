@@ -1,0 +1,16 @@
+-- name: test_paimon_reader_modes
+function: paimon_stage("${uuid0}", "paimon_test.scalar_types")
+function: create_paimon_catalog("paimon_readers_${uuid0}", "filesystem", "${uuid0}")
+set paimon_reader_mode = 'native';
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "native")
+function: assert_paimon_native_profile("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id")
+set paimon_reader_mode = 'jni';
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "jni")
+set paimon_reader_mode = 'auto';
+[ORDER]select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id;
+function: assert_paimon_reader("select id, c_int, c_smallint from paimon_readers_${uuid0}.paimon_test.scalar_types order by id", "scalar_types", "starrocks")
+CLEANUP {
+function: paimon_cleanup("paimon_readers_${uuid0}", "${uuid0}")
+} END CLEANUP

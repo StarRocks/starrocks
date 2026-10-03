@@ -856,8 +856,32 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
+  sql-tester-unit-tests:
+    name: SQL-Tester Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    needs: test-checker
+    if: needs.test-checker.outputs.test_change == 'true'
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: test/requirements.txt
+      - name: Install SQL-Tester dependencies
+        run: python -m pip install -r test/requirements.txt
+      - name: Check SQL-Tester cleanup lifecycle
+        working-directory: test
+        run: python -m unittest lib.test_sql_case_cleanup -v
+
   test-checker:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     needs: basic-checker
     name: TEST FILTER
     if: needs.basic-checker.outputs.PASS == 'true'
@@ -869,6 +893,17 @@ jobs:
       test_change: ${{ steps.path-filter.outputs.test }}
       pre_build_conclusion: ${{ steps.check-integration-test-results.outputs.pre_build_conclusion }}
     steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Check Paimon fixtures
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 -m unittest build-support/test_check_paimon_fixture.py -v
+          python3 build-support/check_paimon_fixture.py --base "origin/${BASE_REF}"
+
       - uses: dorny/paths-filter@v3
         id: path-filter
         with:
