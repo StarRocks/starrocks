@@ -134,10 +134,13 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 ## 多边形叠加运算
 
-支持具有兼容 CRS 的原生 XY 多边形及多多边形；4326 和 3857 均使用笛卡尔语义。NULL 参数返回 NULL。单个组成部分返回 POLYGON，多个返回 MULTIPOLYGON，空结果返回 POLYGON EMPTY。无效拓扑返回错误。精度与资源限制见链接页面。
+支持具有兼容 CRS 的原生 XY 多边形及多多边形；4326 和 3857 均使用笛卡尔语义。NULL 参数返回 NULL。`ST_Union`、`ST_Difference` 和 `ST_SymDifference` 的单个组成部分返回 POLYGON，多个返回 MULTIPOLYGON，空结果返回 POLYGON EMPTY。无效拓扑返回错误。精度与资源限制见链接页面。
+
+`ST_Intersection` 还保留公共边和孤立接触点：无面积时返回线或点类型，混合维度返回 GEOMETRYCOLLECTION。已被较高维结果覆盖的部分不会重复返回；不相交的输入返回 POLYGON EMPTY。
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
+| `ST_Intersection(GEOMETRY, GEOMETRY)` | 120341 | [ST_Intersection](st_intersection.md) |
 | `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
 | `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
 | `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |

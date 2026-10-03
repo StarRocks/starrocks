@@ -2152,6 +2152,10 @@ Status GeoFunctions::native_geo_overlay_close(FunctionContext* context, Function
     return Status::OK();
 }
 
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_intersection(FunctionContext* context, const Columns& columns) {
+    return geo_overlay(context, columns, GeoOverlayKind::INTERSECTION);
+}
+
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_union(FunctionContext* context, const Columns& columns) {
     return geo_overlay(context, columns, GeoOverlayKind::UNION);
 }

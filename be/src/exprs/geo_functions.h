@@ -103,6 +103,7 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_intersects);
     DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
+    DEFINE_VECTORIZED_FN(st_geometry_intersection);
     DEFINE_VECTORIZED_FN(st_geometry_union);
     DEFINE_VECTORIZED_FN(st_geometry_difference);
     DEFINE_VECTORIZED_FN(st_geometry_sym_difference);
