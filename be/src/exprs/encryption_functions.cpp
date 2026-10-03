@@ -883,8 +883,7 @@ struct EncodeColumnToDigest {
                 digests[row].update(&marker, 1);
             }
         } else {
-            // Fallback for unsupported types (JSON, HLL, OBJECT, STRUCT, ARRAY, MAP, etc.)
-            // Cast to string representation and encode
+            // Types folded in through their string rendering: JSON, VARIANT, GEOGRAPHY, GEOMETRY.
             auto* col = data_col ? down_cast<const ColumnType*>(data_col) : nullptr;
             const auto* null_data = null_col ? null_col->immutable_data().data() : nullptr;
             for (size_t row = 0; row < chunk_size; row++) {
@@ -938,11 +937,16 @@ StatusOr<ColumnPtr> EncryptionFunctions::encode_fingerprint_sha256(FunctionConte
         }
         LogicalType type = type_desc->type;
 
-        // Use type dispatch to call the appropriate template specialization
-        type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
+        // type_dispatch_filter covers only APPLY_FOR_ALL_SCALAR_TYPE: an argument it does not reach
+        // contributes nothing at all -- not even a null marker -- so its values would all hash alike.
+        bool encoded = type_dispatch_filter(type, false, [&]<LogicalType LT>() -> bool {
             EncodeColumnToDigest<LT>::encode(data_col, null_col, chunk_size, is_const, digests);
             return true;
         });
+        if (!encoded) {
+            return Status::NotSupported(fmt::format("encode_fingerprint_sha256 does not support type {} (argument {})",
+                                                    type_to_string(type), col_idx));
+        }
     }
 
     // Build result column with raw binary digests as VARBINARY

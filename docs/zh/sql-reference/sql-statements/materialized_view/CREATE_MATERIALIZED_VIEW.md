@@ -490,7 +490,7 @@ StarRocks v4.1 引入了 `refresh_mode` 参数，用于控制物化视图的刷�
 | Select                          | 支持                                                                                                              |
 | From `<Table>`                  | 仅支持 Iceberg 表，不支持其他类型表                                                                              |
 | Filter                          | 支持                                                                                                              |
-| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li></ul>     |
+| Group By 聚合                   | 支持  <ul><li>暂不支持含有 `distinct` 的聚合函数。</li><li>暂不支持无 GROUP BY 的聚合。</li><li>暂不支持以复杂类型（ARRAY、MAP、STRUCT）的列作为 GROUP BY 或 SELECT DISTINCT 的键，此类键在 CREATE 时即被拒绝。</li></ul>     |
 | Inner Join                      | 支持                                                                                                              |
 | Union All                       | 支持                                                                                                              |
 | Left/Right/Full Outer Join      | 暂不支持                                                                                                          |
