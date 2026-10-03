@@ -150,6 +150,14 @@ public:
     // Number of rssid slots already assigned (accumulated) in current pending batch rowset build.
     uint32_t assigned_segment_idx() const { return _pending_rowset_data.assigned_segment_idx; }
 
+    // The rowset batch_apply_opwrite() has merged so far, and the partial-update rewrites to apply to
+    // it, keyed by segment position in that rowset. set_final_rowset() materializes the two as one
+    // rowset whose id is the tablet's next_rowset_id().
+    const RowsetMetadataPB& pending_rowset() const { return _pending_rowset_data.rowset_pb; }
+    const std::map<int, SegmentFileInfo>& pending_replace_segments() const {
+        return _pending_rowset_data.replace_segments;
+    }
+
     void finalize_sstable_meta(const PersistentIndexSstableMetaPB& sstable_meta);
 
     void remove_compacted_sst(const TxnLogPB_OpCompaction& op_compaction);
