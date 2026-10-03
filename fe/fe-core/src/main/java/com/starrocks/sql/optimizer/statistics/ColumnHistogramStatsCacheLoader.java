@@ -52,7 +52,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                                                      @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
                 List<TStatisticData> statisticData =
                         queryHistogramStatistics(connectContext, cacheKey.tableId, Lists.newArrayList(cacheKey.column));
@@ -87,7 +87,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
             }
 
             try {
-                ConnectContext connectContext = StatisticUtils.buildConnectContext();
+                ConnectContext connectContext = StatisticUtils.buildConnectContextWithAuth();
                 connectContext.setThreadLocalInfo();
 
                 List<TStatisticData> histogramStatsDataList = queryHistogramStatistics(connectContext, tableId, columns);

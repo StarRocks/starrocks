@@ -23,7 +23,9 @@ import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.AlterMVJobExecutor;
 import com.starrocks.alter.OptimizeTask;
+import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.JWTTokenProvider;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.catalog.Database;
@@ -334,27 +336,51 @@ public class TaskRun implements Comparable<TaskRun> {
      * Root-based: always use the ROOT to refresh the MV
      * - It's suitable for LDAP-based authorization system, which lacks a proper user for authorization
      */
-    private void switchUser(ConnectContext context) {
+    public void switchUser(ConnectContext context) {
         if (!Config.mv_use_creator_based_authorization) {
+            LOG.info("TaskRun switchUser: creator-based auth disabled, using ROOT identity");
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         } else {
+            // SR-internal identity: always the creator's real identity/roles, or the ephemeral
+            // fallback if they have no persistent account. This is independent of whether a JWT
+            // is available below — a JWT authenticates the *external* REST catalog call, it does
+            // not imply the task should run as ROOT for StarRocks-internal (e.g. native table) auth.
             context.setQualifiedUser(status.getUser());
-            if (status.getUserIdentity() != null) {
-                context.setCurrentUserIdentity(status.getUserIdentity());
-            } else {
-                context.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
-            }
-            // For internal task runs (e.g., MV refresh), always activate all roles of the task user
-            // to avoid relying on session default roles which may be empty (causing privilege errors).
+            context.setCurrentUserIdentity(status.getUserIdentity() != null
+                    ? status.getUserIdentity()
+                    : UserIdentity.createEphemeralUserIdent(status.getUser(), "%"));
             try {
                 context.setCurrentRoleIds(GlobalStateMgr.getCurrentState().getAuthorizationMgr()
                         .getRoleIdsByUser(context.getCurrentUserIdentity()));
             } catch (PrivilegeException e) {
                 LOG.warn("TaskRun {} set role failed", taskRunId, e);
-                // Fallback to previous behavior if fetching roles fails
                 context.setCurrentRoleIds(context.getCurrentUserIdentity());
+            }
+            LOG.info("TaskRun switchUser: using creator identity (user={})", status.getUser());
+
+            // External-catalog auth token: orthogonal to the identity above. Prefer the caller's
+            // JWT (user-triggered REFRESH) over the bot's (background refresh).
+            String jwtToken = null;
+            if (parentRunCtx != null && parentRunCtx.getAuthToken() != null) {
+                jwtToken = parentRunCtx.getAuthToken();
+                LOG.info("TaskRun switchUser: using caller JWT token (user={}, token_prefix={})",
+                        status.getUser(), jwtToken.substring(0, Math.min(5, jwtToken.length())));
+            } else {
+                JWTTokenProvider tokenProvider = GlobalStateMgr.getCurrentState().getTokenProvider();
+                if (tokenProvider != null) {
+                    try {
+                        jwtToken = tokenProvider.getToken();
+                        LOG.info("TaskRun switchUser: using bot JWT token (user={}, token_prefix={})",
+                                status.getUser(), jwtToken.substring(0, Math.min(5, jwtToken.length())));
+                    } catch (AuthenticationException e) {
+                        LOG.warn("TaskRun switchUser: failed to get bot token", e);
+                    }
+                }
+            }
+            if (jwtToken != null) {
+                context.setAuthToken(jwtToken);
             }
         }
     }
