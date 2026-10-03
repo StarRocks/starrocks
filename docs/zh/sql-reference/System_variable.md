@@ -663,6 +663,14 @@ FROM test;
 * **默认值**：true
 * **引入版本**：v3.3.20、v3.4.9、v3.5.8、v4.0.2
 
+### enable_json_extract_fusion
+
+* **说明**：为使用常量路径的 VARCHAR JSON 启用快速提取。默认值为 `true`。`SET` 修改当前会话，`SET GLOBAL` 设置新会话的默认值。优化器还可以合并 `json_query(parse_json(value), path)` 和箭头表达式。CAST 保留目标类型及错误处理规则。
+
+  当 `sql_mode` 包含 `ALLOW_THROW_EXCEPTION` 时，提取会校验整个文档并报告 JSON 解析错误。未启用该模式时，快速路径读取指定值，不保证检测路径之外的无效值；提取过程中遇到的错误返回 NULL。通配符、切片和非常量路径使用完整解析器。设置为 `false` 可同时关闭优化器合并和快速提取，恢复完整文档解析。
+
+  同步 Stream Load 和 Routine Load 不会将此会话变量传递给 BE，因此这些路径仍禁用快速提取。
+
 ### enable_insert_strict
 
 * 描述：是否在使用 INSERT from FILES() 导入数据时启用严格模式。有效值：`true` 和 `false`（默认值）。启用严格模式时，系统仅导入合格的数据行，过滤掉不合格的行，并返回不合格行的详细信息。更多信息请参见 [严格模式](../loading/strict_mode.md)。在早于 v3.4.0 的版本中，当 `enable_insert_strict` 设置为 `true` 时，INSERT 作业会在出现不合格行时失败。
