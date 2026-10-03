@@ -278,6 +278,14 @@ public:
         return *this;
     }
 
+    // Flexible partial update: the explicit PTabletWriterOpenRequest.flexible_partial_update flag (set by
+    // the sink from TOlapTableSink.flexible_partial_update). The writer never infers it from the slot
+    // names.
+    DeltaWriterBuilder& set_flexible_partial_update(bool flexible_partial_update) {
+        _flexible_partial_update = flexible_partial_update;
+        return *this;
+    }
+
     DeltaWriterBuilder& set_column_to_expr_value(const std::map<std::string, std::string>* column_to_expr_value) {
         _column_to_expr_value = column_to_expr_value;
         return *this;
@@ -340,6 +348,7 @@ private:
     int64_t _max_buffer_size{0};
     bool _miss_auto_increment_column{false};
     PartialUpdateMode _partial_update_mode{PartialUpdateMode::ROW_MODE};
+    bool _flexible_partial_update{false};
     const std::map<std::string, std::string>* _column_to_expr_value{nullptr};
     PUniqueId _load_id;
     RuntimeProfile* _profile{nullptr};

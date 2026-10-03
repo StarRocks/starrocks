@@ -30,6 +30,7 @@ namespace starrocks {
 
 class JsonReader;
 class JsonParser;
+class ColumnSetDict;
 class JsonScanner : public FileScanner {
 public:
     JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
@@ -177,6 +178,26 @@ private:
     // for _op_col_index -- for the object-order null-fill path. Both empty for non-routine-load.
     StreamSourceMetaColumns _meta_col_by_slot_id;
     std::unordered_map<int, TRoutineLoadMetaColumn> _meta_col_by_index;
+
+    // === Flexible partial update (per-row column sets) ===
+    // True when this load is a flexible partial update: different rows update different
+    // column subsets, and a per-row set-id is emitted into the hidden "__cset__" column.
+    // Taken from the explicit TBrokerScanRangeParams.flexible_partial_update flag set by the
+    // FE scan node; never inferred from the slot names.
+    bool _flexible_partial_update{false};
+    // Chunk column index of the hidden "__cset__" set-id column (-1 if absent). Only looked
+    // up when _flexible_partial_update is set.
+    int _cset_col_index{-1};
+    // Per-load dictionary (set-id <-> present value-column name-set). Interned by the
+    // scanner; read by the co-located tablet writer when building RowsetTxnMetaPB.
+    // Retained from FlexiblePartialUpdateRegistry by txn_id; released in the destructor.
+    std::shared_ptr<ColumnSetDict> _cset_dict;
+    int64_t _cset_txn_id = 0;
+    // Reusable scratch: the present value-column names of the current row.
+    std::vector<std::string> _row_present_cols;
+    // Chunk-column-index -> column name, for columns that participate in a set's mask
+    // (every real value/key column except "__op" and "__cset__"). Built once at open.
+    std::vector<std::string> _cset_mask_col_names;
 
     ByteBufferPtr _file_stream_buffer;
 

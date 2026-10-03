@@ -163,6 +163,7 @@ set(STORAGE_FILES
     unique_iterator.cpp
     delta_writer.cpp
     memtable.cpp
+    flexible_row_merger.cpp
     base_compaction.cpp
     cumulative_compaction.cpp
     compaction.cpp

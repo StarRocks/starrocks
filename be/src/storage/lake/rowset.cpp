@@ -22,10 +22,13 @@
 #include "base/debug/trace.h"
 #include "base/testutil/sync_point.h"
 #include "base/utility/defer_op.h"
+#include "column/chunk_factory.h"
 #include "column/datum_convert.h"
+#include "column/fixed_length_column.h"
 #include "common/config_exec_fwd.h"
 #include "common/config_ingest_fwd.h"
 #include "common/config_lake_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "fs/fs_factory.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_env.h"
@@ -803,6 +806,118 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator(const 
         seg_iterators[i] = std::move(res).value();
     }
     return seg_iterators;
+}
+
+StatusOr<ChunkIteratorPtr> Rowset::get_segment_iterator_with_schema(int index, const Schema& schema,
+                                                                    const TabletSchemaCSPtr& segment_schema,
+                                                                    bool file_data_cache, OlapReaderStatistics* stats) {
+    if (index < 0 || index >= metadata().segment_metas_size()) {
+        return Status::InvalidArgument(fmt::format("segment index {} out of range, tablet:{} rowset:{} segments:{}",
+                                                   index, tablet_id(), metadata().id(),
+                                                   metadata().segment_metas_size()));
+    }
+    auto root_loc = _tablet_mgr->tablet_root_location(tablet_id());
+    LakeIOOptions lake_io_opts{.fill_data_cache = file_data_cache, .fill_metadata_cache = file_data_cache};
+    SegmentReadOptions seg_options;
+    ASSIGN_OR_RETURN(seg_options.fs, FileSystemFactory::CreateSharedFromString(root_loc));
+    seg_options.stats = stats;
+    seg_options.lake_io_opts = lake_io_opts;
+    // |schema| may name a column that only |segment_schema| has (the reserved-uid "__cset__"), so the
+    // iterator must resolve column descriptors against |segment_schema|, the schema the segment is
+    // opened with.
+    seg_options.tablet_schema = segment_schema;
+
+    const auto& segment_meta = metadata().segment_metas(index);
+    FileInfo segment_info{.path = _tablet_mgr->segment_location(tablet_id(), segment_meta.filename()),
+                          .fs = seg_options.fs};
+    if (LIKELY(segment_meta.has_size())) {
+        segment_info.size = segment_meta.size();
+    }
+    if (segment_meta.has_bundle_file_offset()) {
+        segment_info.bundle_file_offset = segment_meta.bundle_file_offset();
+    }
+    if (segment_meta.has_encryption_meta()) {
+        segment_info.encryption_meta = segment_meta.encryption_meta();
+    }
+    // A fresh open bound to |segment_schema| rather than TabletManager::load_segment(): the metacache may
+    // already hold this path as a Segment opened with the tablet schema, which has no column reader for a
+    // column the tablet schema lacks, and a cache hit ignores the schema passed in. Segment::open() does
+    // not publish the Segment in the metacache either, so this narrow Segment never reaches a later reader
+    // of the path.
+    size_t footer_size_hint = 16 * 1024;
+    auto segment_or = Segment::open(seg_options.fs, segment_info, get_segment_idx(metadata(), index), segment_schema,
+                                    &footer_size_hint, nullptr, lake_io_opts, _tablet_mgr);
+    if (!segment_or.ok()) {
+        if (segment_or.status().is_not_found() && config::experimental_lake_ignore_lost_segment) {
+            // A null iterator, as get_each_segment_iterator() leaves for a lost segment.
+            LOG(WARNING) << "Ignored lost segment " << segment_meta.filename();
+            return ChunkIteratorPtr{};
+        }
+        return segment_or.status().clone_and_prepend(
+                fmt::format("get_segment_iterator_with_schema failed tablet:{} rowset:{} segidx:{}", tablet_id(),
+                            metadata().id(), index));
+    }
+    auto seg_ptr = std::move(segment_or).value();
+    // Same contract as get_each_segment_iterator(): a zero-row segment gets a non-null empty iterator,
+    // and the same tablet range narrows a shared segment, so the rows emitted here line up one to one
+    // with a get_each_segment_iterator() read of the same rowset.
+    if (seg_ptr->num_rows() == 0) {
+        return new_empty_iterator(schema, config::vector_chunk_size);
+    }
+    ASSIGN_OR_RETURN(auto shared_segment_range, get_seek_range());
+    RETURN_IF_ERROR(set_segment_tablet_range(index, shared_segment_range, &seg_options));
+    auto res = seg_ptr->new_iterator(schema, seg_options);
+    if (res.status().is_end_of_file()) {
+        return ChunkIteratorPtr{};
+    }
+    return res;
+}
+
+StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_schema(
+        const Schema& schema, const TabletSchemaCSPtr& segment_schema, bool file_data_cache,
+        OlapReaderStatistics* stats) {
+    TRACE_COUNTER_SCOPE_LATENCY_US("get_each_segment_with_schema_us");
+    std::vector<ChunkIteratorPtr> seg_iterators(metadata().segment_metas_size());
+    for (int index = 0; index < metadata().segment_metas_size(); index++) {
+        ASSIGN_OR_RETURN(seg_iterators[index],
+                         get_segment_iterator_with_schema(index, schema, segment_schema, file_data_cache, stats));
+    }
+    return seg_iterators;
+}
+
+StatusOr<std::vector<int16_t>> Rowset::read_column_set_ids(int index) {
+    // The delta writer stores the per-row set-id as a SMALLINT column under a reserved unique id that the
+    // tablet schema does not have, so read it through a one-column schema that has it. TabletSchema::copy
+    // keeps the tablet schema's short key count, which a schema without key columns must not carry.
+    TabletColumn cset_col(STORAGE_AGGREGATE_REPLACE, TYPE_SMALLINT, /*is_nullable=*/false, kCsetReservedColumnUid,
+                          sizeof(int16_t));
+    cset_col.set_name(LOAD_CSET_COLUMN);
+    std::vector<TabletColumn> cset_cols;
+    cset_cols.emplace_back(std::move(cset_col));
+    auto cset_tschema = TabletSchema::copy(*tablet_schema(), cset_cols);
+    cset_tschema->set_num_short_key_columns(0);
+    Schema cset_schema = ChunkHelper::convert_schema(cset_tschema);
+
+    OlapReaderStatistics stats;
+    ASSIGN_OR_RETURN(auto iter, get_segment_iterator_with_schema(index, cset_schema, cset_tschema, true, &stats));
+    std::vector<int16_t> set_ids;
+    if (iter == nullptr) {
+        // No rows of this segment belong to this tablet.
+        return set_ids;
+    }
+    DeferOp close_iter([&]() { iter->close(); });
+    auto chunk = ChunkFactory::new_chunk(cset_schema, config::vector_chunk_size);
+    while (true) {
+        chunk->reset();
+        auto st = iter->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        RETURN_IF_ERROR(st);
+        const auto* ids = down_cast<const Int16Column*>(chunk->get_column_by_index(0).get())->immutable_data().data();
+        set_ids.insert(set_ids.end(), ids, ids + chunk->num_rows());
+    }
+    return set_ids;
 }
 
 StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_delvec(

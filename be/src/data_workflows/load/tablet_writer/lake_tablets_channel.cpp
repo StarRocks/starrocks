@@ -17,6 +17,7 @@
 #include <bthread/mutex.h>
 #include <fmt/format.h>
 
+#include <atomic>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +29,7 @@
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "common/config_ingest_fwd.h"
+#include "common/flexible_partial_update.h"
 #include "common/runtime_profile.h"
 #include "common/statusor.h"
 #include "common/system/backend_options.h"
@@ -319,6 +321,9 @@ private:
     int64_t _txn_id = -1;
     int64_t _index_id = -1;
     std::shared_ptr<OlapTableSchemaParam> _schema;
+    // Flexible partial update: set once this channel received entries of the per-load column-set dictionary
+    // and took its registry reference (released in the destructor).
+    std::atomic<bool> _cset_dict_retained{false};
 
     std::vector<Sender> _senders;
 
@@ -421,6 +426,9 @@ LakeTabletsChannel::LakeTabletsChannel(lake::TabletManager* tablet_manager, cons
 
 LakeTabletsChannel::~LakeTabletsChannel() {
     _mem_pool.reset();
+    if (_cset_dict_retained.load()) {
+        FlexiblePartialUpdateRegistry::instance()->release(_txn_id);
+    }
 }
 
 Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
@@ -541,6 +549,33 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->set_status_code(TStatusCode::INVALID_ARGUMENT);
         response->mutable_status()->add_error_msgs("out-of-order packet");
         return;
+    }
+
+    // Flexible partial update: the sender ships every entry of the load's per-row column-set dictionary with
+    // the first request whose rows use it. Merge the entries into this node's registry (keyed by _txn_id)
+    // before the rows are written: the delta writers decode the set-ids when their memtables flush, which
+    // can happen during any write. Senders ship overlapping ranges in any order; merge() extends the
+    // dictionary and rejects entries that disagree with it.
+    if (request.has_column_set_dict() && request.column_set_dict().sets_size() > 0) {
+        const auto& dict_pb = request.column_set_dict();
+        std::vector<std::vector<std::string>> sets;
+        sets.reserve(dict_pb.sets_size());
+        for (const auto& set_pb : dict_pb.sets()) {
+            sets.emplace_back(set_pb.column_names().begin(), set_pb.column_names().end());
+        }
+        // Hold a reference for the life of this channel (released in the destructor) so the entry outlives
+        // every writer that reads it; requests of several senders may arrive concurrently, so take it once.
+        if (!_cset_dict_retained.exchange(true)) {
+            FlexiblePartialUpdateRegistry::instance()->retain(_txn_id);
+        }
+        auto st = dict_pb.first_set_id() < 0
+                          ? Status::InvalidArgument("negative first_set_id in the column-set dictionary")
+                          : FlexiblePartialUpdateRegistry::instance()->get_or_create(_txn_id)->merge(
+                                    static_cast<size_t>(dict_pb.first_set_id()), sets);
+        if (!st.ok()) {
+            st.to_protobuf(response->mutable_status());
+            return;
+        }
     }
 
     auto res = _create_write_context(chunk, request, response);
@@ -1010,6 +1045,7 @@ Status LakeTabletsChannel::_create_delta_writers(const PTabletWriterOpenRequest&
                                               .set_mem_tracker(_mem_tracker)
                                               .set_schema_id(schema_id)
                                               .set_partial_update_mode(params.partial_update_mode())
+                                              .set_flexible_partial_update(params.flexible_partial_update())
                                               .set_column_to_expr_value(&_column_to_expr_value)
                                               .set_load_id(params.id())
                                               .set_profile(_profile)

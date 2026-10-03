@@ -263,6 +263,10 @@ struct TOlapTableSink {
     // combined txn logs (each writing CN produces a PARTIAL txn log for the tablet; the sender
     // aggregates them into one before writing the combined log).
     36: optional bool enable_multi_node_write
+    // Flexible partial update (shared-data primary key tables only): different rows of one load may
+    // update different column subsets. The plan carries a hidden "__cset__" SMALLINT slot (the per-row
+    // column-set id) immediately before the "__op" slot, so "__op" stays the last column.
+    37: optional bool flexible_partial_update
 }
 
 struct TSchemaTableSink {

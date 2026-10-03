@@ -91,6 +91,13 @@ enum PartialUpdateMode {
     AUTO_MODE = 3;
     COLUMN_UPDATE_MODE = 4;
 }
+// Flexible partial update: one entry of the per-rowset column-set dictionary.
+message PartialUpdateColumnSetPB {
+    // Unique ids of the columns declared by every row whose "__cset__" set-id is the index of this
+    // entry in RowsetTxnMetaPB.distinct_column_sets.
+    repeated uint32 column_unique_ids = 1;
+}
+
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
     repeated uint32 partial_update_column_unique_ids = 2;
@@ -107,6 +114,17 @@ message RowsetTxnMetaPB {
     optional int32 auto_increment_partial_update_column_uid = 7;
     // the value of the column express
     map<string, string> column_to_expr_value = 8;
+
+    // Flexible partial update: the per-rowset column-set dictionary. The rowset's segments carry a
+    // hidden "__cset__" column (reserved unique id, see be/src/common/flexible_partial_update.h) whose
+    // per-row value indexes this list, so each row updates exactly the columns of its own entry.
+    // partial_update_column_ids / partial_update_column_unique_ids above still list the UNION of all
+    // entries. A BE that does not know these fields would apply the union to every row and overwrite
+    // the columns a row did not declare, so flexible partial update must only be enabled once every
+    // BE/CN understands them.
+    repeated PartialUpdateColumnSetPB distinct_column_sets = 9;
+    // True when this rowset was written by a flexible partial update.
+    optional bool flexible_partial_update = 10;
 }
 
 message RowsetMetaPB {
