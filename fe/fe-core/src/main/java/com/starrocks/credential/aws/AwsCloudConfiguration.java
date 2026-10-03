@@ -15,6 +15,7 @@
 package com.starrocks.credential.aws;
 
 import com.staros.proto.FileStoreInfo;
+import com.starrocks.connector.share.credential.AwsSseCUtil;
 import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
@@ -43,6 +44,15 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
     private int numOfPartitionedPrefix = 0;
 
+    // SSE-C (Server-Side Encryption with Customer-provided key). When enabled, the base64 key and its
+    // base64 MD5 are threaded to the BE data reader (via toThrift) and to the S3A metadata path (via
+    // applyToConfiguration). The Iceberg S3FileIO metadata path is handled separately in IcebergConnector.
+    private boolean enableSseC = false;
+
+    private String sseCKey;
+
+    private String sseCKeyMd5;
+
     public AwsCloudConfiguration(AwsCloudCredential awsCloudCredential) {
         this.awsCloudCredential = awsCloudCredential;
     }
@@ -65,6 +75,22 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
     public AwsCloudCredential getAwsCloudCredential() {
         return this.awsCloudCredential;
+    }
+
+    public boolean isEnableSseC() {
+        return this.enableSseC;
+    }
+
+    // Re-attach SSE-C material from another AWS configuration when this one has none. Used for the vended
+    // credentials path, where the configuration is rebuilt from only the session credentials/region/endpoint
+    // and would otherwise drop the catalog's SSE-C key, so BE data reads would stop sending the SSE-C headers.
+    public void copySseCFrom(AwsCloudConfiguration source) {
+        if (this.enableSseC || source == null || !source.enableSseC) {
+            return;
+        }
+        this.enableSseC = true;
+        this.sseCKey = source.sseCKey;
+        this.sseCKeyMd5 = source.sseCKeyMd5;
     }
 
     @Override
@@ -90,6 +116,12 @@ public class AwsCloudConfiguration extends CloudConfiguration {
 
         configuration.set(Constants.PATH_STYLE_ACCESS, String.valueOf(getEnablePathStyleAccess()));
         configuration.set(Constants.SECURE_CONNECTIONS, String.valueOf(enableSSL));
+        if (enableSseC) {
+            // Hadoop S3A SSE-C keys (Hadoop 3.3.1+). Covers the S3A fallback and non-Iceberg Hadoop
+            // catalogs; S3A derives the key MD5 itself, so only the key is needed here.
+            configuration.set("fs.s3a.encryption.algorithm", AwsSseCUtil.SSE_C_ALGORITHM_S3A);
+            configuration.set("fs.s3a.encryption.key", sseCKey);
+        }
         awsCloudCredential.applyToConfiguration(configuration);
     }
 
@@ -124,6 +156,15 @@ public class AwsCloudConfiguration extends CloudConfiguration {
             enablePathStyleAccess = Boolean.parseBoolean(
                 properties.get(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS));
         }
+        // Validate SSE-C material eagerly so a bad key (or a supplied MD5 that does not match the key) fails
+        // catalog creation with a clear message. validateAndGetKeyMd5 returns the validated MD5, and null when
+        // SSE-C is not requested.
+        String keyMd5 = AwsSseCUtil.validateAndGetKeyMd5(properties);
+        enableSseC = AwsSseCUtil.isSseCEnabled(properties);
+        if (enableSseC) {
+            sseCKey = properties.get(CloudConfigurationConstants.AWS_S3_SSE_KEY).trim();
+            sseCKeyMd5 = keyMd5;
+        }
     }
 
     @Override
@@ -134,6 +175,13 @@ public class AwsCloudConfiguration extends CloudConfiguration {
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_PATH_STYLE_ACCESS,
                 String.valueOf(getEnablePathStyleAccess()));
         properties.put(CloudConfigurationConstants.AWS_S3_ENABLE_SSL, String.valueOf(enableSSL));
+        if (enableSseC) {
+            // Threaded to the BE data reader, which sets the SSE-C headers per GetObject/HeadObject request.
+            properties.put(CloudConfigurationConstants.AWS_S3_SSE_TYPE,
+                    CloudConfigurationConstants.AWS_S3_SSE_TYPE_SSE_C);
+            properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY, sseCKey);
+            properties.put(CloudConfigurationConstants.AWS_S3_SSE_KEY_MD5, sseCKeyMd5);
+        }
         awsCloudCredential.toThrift(properties);
     }
 
@@ -166,6 +214,7 @@ public class AwsCloudConfiguration extends CloudConfiguration {
                 ", cred=" + awsCloudCredential.toCredString() +
                 ", enablePathStyleAccess=" + getEnablePathStyleAccess() +
                 ", enableSSL=" + enableSSL +
+                ", enableSseC=" + enableSseC +
                 '}';
     }
 }

@@ -839,4 +839,23 @@ TEST_F(S3FileSystemTest, test_write_with_direct_write_and_content_type) {
     EXPECT_OK(fs->delete_file(uri));
 }
 
+// Network-free: writing to an SSE-C configured S3 filesystem must be rejected before any S3 request, because
+// the output streams do not send the SSE-C customer-key headers (SSE-C applies to reads only). The rejection
+// happens before any client is created, so no bucket or endpoint is required.
+TEST(S3FileSystemSseCTest, new_writable_file_rejected_for_sse_c) {
+    std::map<std::string, std::string> properties;
+    properties[AWS_S3_SSE_TYPE] = "sse-c";
+    properties[AWS_S3_SSE_KEY] = "base64-key";
+    TCloudConfiguration cloud_configuration;
+    cloud_configuration.__set_cloud_type(TCloudType::AWS);
+    cloud_configuration.__set_cloud_properties(properties);
+
+    FSOptions options(&cloud_configuration);
+    auto fs = new_fs_s3(options);
+    auto result = fs->new_writable_file("s3://bucket/sse-c-write.dat");
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.status().is_not_supported()) << result.status();
+    ASSERT_NE(std::string::npos, result.status().to_string().find("SSE-C"));
+}
+
 } // namespace starrocks

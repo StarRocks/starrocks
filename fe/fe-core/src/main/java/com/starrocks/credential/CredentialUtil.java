@@ -37,6 +37,7 @@ public class CredentialUtil {
         // Mask for aws's credential
         doMask(properties, CloudConfigurationConstants.AWS_S3_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_S3_SECRET_KEY);
+        doMask(properties, CloudConfigurationConstants.AWS_S3_SSE_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY);
         doMask(properties, CloudConfigurationConstants.AWS_GLUE_SECRET_KEY);
 
