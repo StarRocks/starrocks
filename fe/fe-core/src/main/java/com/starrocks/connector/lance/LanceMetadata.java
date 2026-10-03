@@ -19,9 +19,19 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LanceTable;
+import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
+import com.starrocks.common.tvr.TvrVersionRange;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.StatisticsCalcUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +42,7 @@ import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class LanceMetadata implements ConnectorMetadata {
     private final String catalogName;
+    private final CloudConfiguration cloudConfiguration;
     private final Map<String, String> properties;
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<String, List<Table>> tables = new ConcurrentHashMap<>();
@@ -39,6 +50,7 @@ public class LanceMetadata implements ConnectorMetadata {
     public LanceMetadata(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
         this.properties = properties;
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         bootstrapMetadata();
     }
 
@@ -66,14 +78,22 @@ public class LanceMetadata implements ConnectorMetadata {
                         if (colonIdx > 0) {
                             String name = field.substring(0, colonIdx).trim();
                             String typeStr = field.substring(colonIdx + 1).trim();
-                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr)));
+                            // Configured schemas do not declare nullability. Keep null-sensitive optimizer
+                            // rewrites valid even when the underlying dataset contains nulls.
+                            columns.add(new Column(name, LanceApiConverter.parseType(typeStr), true));
                         }
                     }
                 }
-                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(), tblName, columns, uri);
+                LanceTable table = new LanceTable(CONNECTOR_ID_GENERATOR.getNextId().asLong(),
+                        tblName, columns, uri, catalogName, dbName);
                 addTable(dbName, table);
             }
         }
+    }
+
+    @Override
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 
     @Override
@@ -110,6 +130,20 @@ public class LanceMetadata implements ConnectorMetadata {
                 .filter(t -> t.getName().equalsIgnoreCase(tblName))
                 .findFirst()
                 .orElse(null);
+    }
+
+    @Override
+    public Statistics getTableStatistics(OptimizerContext session,
+                                         Table table,
+                                         Map<ColumnRefOperator, Column> columns,
+                                         List<PartitionKey> partitionKeys,
+                                         ScalarOperator predicate,
+                                         long limit,
+                                         TvrVersionRange versionRange) {
+        // Dataset statistics are not available yet. Leave predicate and LIMIT evaluation to the optimizer.
+        return StatisticsCalcUtils.estimateScanColumns(table, columns, session)
+                .setOutputRowCount(Config.default_statistics_output_row_count)
+                .build();
     }
 
     // Helpers for unit tests to register metadata manually in Phase 1 (local catalogs)
