@@ -255,7 +255,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
 
-        assertPlanContains(execPlan, "partitions=1/7");
+        assertPlanContains(execPlan, "partitions=1/1");
         Collection<Partition> partitions = materializedView.getPartitions();
         Assertions.assertEquals(7, partitions.size());
 
@@ -300,7 +300,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         processor = getPartitionBasedRefreshProcessor(taskRun);
         mvContext = processor.getMvContext();
         execPlan = mvContext.getExecPlan();
-        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/6");
+        assertPlanContains(execPlan, "par_date >= '2020-01-03', 9: par_date < '2020-01-04'", "partitions=2/2");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "t1",
                 ImmutableList.of("par_col=0"));
@@ -351,7 +351,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         execPlan = mvContext.getExecPlan();
 
         assertPlanContains(execPlan, "l_shipdate >= '1998-01-04', 16: l_shipdate < '1998-01-05'",
-                "partitions=1/6");
+                "partitions=1/1");
 
         mockedHiveMetadata.updateTable("tpch", "orders");
 
@@ -444,7 +444,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan,
                 "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/6");
+                "partitions=2/2");
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assertions.assertEquals(6, partitions.size());
@@ -590,7 +590,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan,
                 "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/6");
+                "partitions=2/2");
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assertions.assertEquals(6, partitions.size());
@@ -645,7 +645,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         execPlan = mvContext.getExecPlan();
         assertPlanContains(execPlan,
                 "PARTITION PREDICATES: 16: l_shipdate >= '1998-01-02', 16: l_shipdate < '1998-01-04'",
-                "partitions=2/6");
+                "partitions=2/2");
 
         Collection<Partition> partitions = materializedView.getPartitions();
         Assertions.assertEquals(6, partitions.size());
@@ -739,7 +739,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assertions.assertTrue(plan.contains("PARTITION PREDICATES: 16: l_shipdate >= '1998-01-01', " +
                 "16: l_shipdate < '1998-01-03'"));
-        Assertions.assertTrue(plan.contains("partitions=2/6"));
+        Assertions.assertTrue(plan.contains("partitions=2/2"));
     }
 
     @Test
@@ -761,7 +761,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
         Assertions.assertTrue(
                 plan.contains("PARTITION PREDICATES: 15: l_shipdate >= '1998-01-01', 15: l_shipdate < '1998-01-03'"));
-        Assertions.assertTrue(plan.contains("partitions=5/8"));
+        Assertions.assertTrue(plan.contains("partitions=5/5"));
     }
 
     @Test
@@ -862,11 +862,11 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "     TABLE: part_tbl1\n" +
                     "     PARTITION PREDICATES: 4: par_date IS NOT NULL, 4: par_date >= '2020-01-05', 4: par_date < " +
                     "'2020-01-06'\n" +
-                    "     partitions=1/5");
+                    "     partitions=1/1");
             PlanTestBase.assertContains(plan, "     TABLE: part_tbl2\n" +
                     "     PARTITION PREDICATES: 8: par_date IS NOT NULL, 8: par_date >= '2020-01-05', 8: par_date < " +
                     "'2020-01-06'\n" +
-                    "     partitions=1/5");
+                    "     partitions=1/1");
         }
 
         // run 4
@@ -959,7 +959,7 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "TABLE: t1_par\n" +
                     "     PARTITION PREDICATES: 10: par_date >= '2020-01-05', " +
                     "10: par_date < '2020-01-06'\n" +
-                    "     partitions=1/7");
+                    "     partitions=1/1");
             // TODO: multi-column partitions cannot prune partitions.
             PlanTestBase.assertContains(plan, "TABLE: t2_par\n" +
                     "     PARTITION PREDICATES: 4: par_col IS NOT NULL\n" +

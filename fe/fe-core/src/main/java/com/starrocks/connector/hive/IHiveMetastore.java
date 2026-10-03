@@ -42,6 +42,9 @@ public interface IHiveMetastore extends IMetastore {
 
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 
+    Map<String, Partition> getPartitionsByFilter(String dbName, String tableName,
+                                                 List<String> partitionColumnNames, String filter);
+
     default Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionNames) {
         return Maps.newHashMap();
     }

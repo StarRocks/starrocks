@@ -300,6 +300,22 @@ public class CachingHiveMetastore extends CachingMetastore implements IHiveMetas
     }
 
     @Override
+    public Map<String, Partition> getPartitionsByFilter(String dbName, String tableName,
+                                                        List<String> partitionColumnNames, String filter) {
+        DatabaseTableName databaseTableName = DatabaseTableName.of(dbName, tableName);
+        lastAccessTimeMap.put(databaseTableName, System.currentTimeMillis());
+
+        Map<String, Partition> partitions =
+                metastore.getPartitionsByFilter(dbName, tableName, partitionColumnNames, filter);
+        Map<HivePartitionName, Partition> cachedPartitions = partitions.entrySet().stream()
+                .collect(Collectors.toMap(
+                        entry -> HivePartitionName.of(dbName, tableName, entry.getKey()),
+                        Map.Entry::getValue));
+        partitionCache.putAll(cachedPartitions);
+        return partitions;
+    }
+
+    @Override
     public boolean partitionExists(Table table, List<String> partitionValues) {
         return metastore.partitionExists(table, partitionValues);
     }

@@ -66,6 +66,9 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.Split;
 
+import java.time.DateTimeException;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
@@ -73,6 +76,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
@@ -83,6 +87,7 @@ import static com.starrocks.connector.paimon.PaimonMetadata.getRowCount;
 
 public class OptExternalPartitionPruner {
     private static final Logger LOG = LogManager.getLogger(OptExternalPartitionPruner.class);
+    private static final int MAX_IN_COMBINATIONS = 64;
 
     public static LogicalScanOperator prunePartitions(OptimizerContext context,
                                                       LogicalScanOperator logicalScanOperator) {
@@ -163,6 +168,27 @@ public class OptExternalPartitionPruner {
             }
         }
         return equalPredicates;
+    }
+
+    private static Map<ColumnRefOperator, List<String>> getColumnINConstantValues(ScalarOperator predicate) {
+        List<ScalarOperator> predicateList = Utils.extractConjuncts(predicate);
+        Map<ColumnRefOperator, List<String>> result = Maps.newHashMap();
+        for (ScalarOperator op : predicateList) {
+            if (op instanceof InPredicateOperator) {
+                InPredicateOperator inOp = (InPredicateOperator) op;
+                if (!inOp.isNotIn() && inOp.getChild(0).isColumnRef()
+                        && inOp.allValuesMatch(ScalarOperator::isConstantRef)) {
+                    ColumnRefOperator colRef = (ColumnRefOperator) inOp.getChild(0);
+                    List<String> values = new ArrayList<>();
+                    for (int i = 1; i < inOp.getChildren().size(); i++) {
+                        ConstantOperator constant = inOp.getChild(i).cast();
+                        values.add(constant.toString());
+                    }
+                    result.put(colRef, values);
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -267,6 +293,214 @@ public class OptExternalPartitionPruner {
         }
     }
 
+    private static List<Optional<List<String>>> getEffectiveInPartitionValues(
+            LogicalScanOperator operator, List<Column> partitionColumns, ScalarOperator predicate) {
+        Map<ColumnRefOperator, List<String>> inValues = getColumnINConstantValues(predicate);
+        Map<ColumnRefOperator, List<String>> dateRangeValues =
+                getDateRangeConstantValues(operator, partitionColumns, predicate);
+        if (dateRangeValues != null && !dateRangeValues.isEmpty()) {
+            for (ScalarOperator equality : getColumnEQConstantPredicates(predicate)) {
+                ColumnRefOperator column = (ColumnRefOperator) equality.getChild(0);
+                ConstantOperator constant = (ConstantOperator) equality.getChild(1);
+                mergePartitionValues(inValues, column, Lists.newArrayList(constant.toString()));
+            }
+            dateRangeValues.forEach((column, values) -> mergePartitionValues(inValues, column, values));
+        }
+        return buildEffectivePartitionValues(operator, partitionColumns, inValues);
+    }
+
+    private static void mergePartitionValues(Map<ColumnRefOperator, List<String>> valuesByColumn,
+                                             ColumnRefOperator column, List<String> values) {
+        valuesByColumn.merge(column, values, (left, right) -> {
+            List<String> intersection = new ArrayList<>(left);
+            intersection.retainAll(right);
+            return intersection;
+        });
+    }
+
+    private static List<Optional<List<String>>> buildEffectivePartitionValues(
+            LogicalScanOperator operator, List<Column> partitionColumns,
+            Map<ColumnRefOperator, List<String>> valuesByColumn) {
+        if (valuesByColumn.isEmpty()) {
+            return null;
+        }
+
+        List<Optional<List<String>>> result = new ArrayList<>();
+        boolean hasAny = false;
+        for (Column column : partitionColumns) {
+            ColumnRefOperator columnRef = operator.getColumnReference(column);
+            if (valuesByColumn.containsKey(columnRef)) {
+                result.add(Optional.of(valuesByColumn.get(columnRef)));
+                hasAny = true;
+            } else {
+                result.add(Optional.empty());
+            }
+        }
+        return hasAny ? result : null;
+    }
+
+    // Convert a bounded DATE range, including a normalized BETWEEN predicate, into discrete partition values.
+    // Returning null means that at least one DATE range cannot be included in the partition-value fast path.
+    private static Map<ColumnRefOperator, List<String>> getDateRangeConstantValues(
+            LogicalScanOperator operator, List<Column> partitionColumns, ScalarOperator predicate) {
+        Map<ColumnRefOperator, DateRangeBounds> dateRanges = Maps.newHashMap();
+        Set<ColumnRefOperator> datePartitionColumns = partitionColumns.stream()
+                .filter(column -> column.getType().isDate())
+                .map(operator::getColumnReference)
+                .collect(Collectors.toSet());
+        if (datePartitionColumns.isEmpty()) {
+            return Maps.newHashMap();
+        }
+
+        for (ScalarOperator conjunct : Utils.extractConjuncts(predicate)) {
+            if (!(conjunct instanceof BinaryPredicateOperator)) {
+                continue;
+            }
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) conjunct;
+            if (!(binaryPredicate.getChild(0) instanceof ColumnRefOperator) ||
+                    !(binaryPredicate.getChild(1) instanceof ConstantOperator)) {
+                continue;
+            }
+            ColumnRefOperator column = (ColumnRefOperator) binaryPredicate.getChild(0);
+            ConstantOperator constant = (ConstantOperator) binaryPredicate.getChild(1);
+            if (!datePartitionColumns.contains(column) || !constant.getType().isDate() || constant.isNull() ||
+                    !binaryPredicate.getBinaryType().isRange()) {
+                continue;
+            }
+            dateRanges.computeIfAbsent(column, ignored -> new DateRangeBounds())
+                    .update(binaryPredicate.getBinaryType(), constant.getDate().toLocalDate());
+        }
+
+        Map<ColumnRefOperator, List<String>> result = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, DateRangeBounds> entry : dateRanges.entrySet()) {
+            List<String> values = entry.getValue().enumerate();
+            if (values == null) {
+                return null;
+            }
+            result.put(entry.getKey(), values);
+        }
+        return result;
+    }
+
+    private static final class DateRangeBounds {
+        private LocalDate lowerBound;
+        private LocalDate upperBound;
+        private boolean lowerInclusive;
+        private boolean upperInclusive;
+
+        private void update(BinaryType binaryType, LocalDate value) {
+            switch (binaryType) {
+                case GE:
+                    updateLowerBound(value, true);
+                    break;
+                case GT:
+                    updateLowerBound(value, false);
+                    break;
+                case LE:
+                    updateUpperBound(value, true);
+                    break;
+                case LT:
+                    updateUpperBound(value, false);
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        private void updateLowerBound(LocalDate value, boolean inclusive) {
+            if (lowerBound == null || value.isAfter(lowerBound)) {
+                lowerBound = value;
+                lowerInclusive = inclusive;
+            } else if (value.equals(lowerBound)) {
+                lowerInclusive &= inclusive;
+            }
+        }
+
+        private void updateUpperBound(LocalDate value, boolean inclusive) {
+            if (upperBound == null || value.isBefore(upperBound)) {
+                upperBound = value;
+                upperInclusive = inclusive;
+            } else if (value.equals(upperBound)) {
+                upperInclusive &= inclusive;
+            }
+        }
+
+        private List<String> enumerate() {
+            if (lowerBound == null || upperBound == null) {
+                return null;
+            }
+
+            try {
+                LocalDate first = lowerInclusive ? lowerBound : lowerBound.plusDays(1);
+                LocalDate last = upperInclusive ? upperBound : upperBound.minusDays(1);
+                long distance = ChronoUnit.DAYS.between(first, last);
+                if (distance < 0) {
+                    return new ArrayList<>();
+                }
+                if (distance >= MAX_IN_COMBINATIONS) {
+                    return null;
+                }
+
+                List<String> values = new ArrayList<>((int) distance + 1);
+                for (long offset = 0; offset <= distance; offset++) {
+                    values.add(first.plusDays(offset).toString());
+                }
+                return values;
+            } catch (DateTimeException e) {
+                return new ArrayList<>();
+            }
+        }
+    }
+
+    private static List<String> listPartitionNamesForInValues(
+            Table table, List<Optional<List<String>>> inPartitionValues) {
+        long combinations = 1;
+        for (Optional<List<String>> values : inPartitionValues) {
+            if (values.isPresent()) {
+                long size = values.get().size();
+                if (size == 0) {
+                    return new ArrayList<>();
+                }
+                combinations = Math.multiplyExact(combinations, size);
+                if (combinations > MAX_IN_COMBINATIONS) {
+                    return null;
+                }
+            }
+        }
+
+        List<List<Optional<String>>> allCombinations = new ArrayList<>();
+        allCombinations.add(new ArrayList<>());
+        for (Optional<List<String>> values : inPartitionValues) {
+            List<List<Optional<String>>> newCombinations = new ArrayList<>();
+            for (List<Optional<String>> existing : allCombinations) {
+                if (values.isPresent()) {
+                    for (String value : values.get()) {
+                        List<Optional<String>> copy = new ArrayList<>(existing);
+                        copy.add(Optional.of(value));
+                        newCombinations.add(copy);
+                    }
+                } else {
+                    List<Optional<String>> copy = new ArrayList<>(existing);
+                    copy.add(Optional.empty());
+                    newCombinations.add(copy);
+                }
+            }
+            allCombinations = newCombinations;
+        }
+
+        Set<String> partitionNames = Sets.newConcurrentHashSet();
+        CompletableFuture<?>[] futures = allCombinations.stream()
+                .map(values -> CompletableFuture.runAsync(() -> {
+                    List<String> names = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), values);
+                    partitionNames.addAll(names);
+                }))
+                .toArray(CompletableFuture[]::new);
+        CompletableFuture.allOf(futures).join();
+        return new ArrayList<>(partitionNames);
+    }
+
     // get equivalence predicate which column ref is partition column
     public static List<Optional<ScalarOperator>> getEffectivePartitionPredicate(LogicalScanOperator operator,
                                                                                 List<Column> partitionColumns,
@@ -336,16 +570,50 @@ public class OptExternalPartitionPruner {
                 checkPartitionFilterRequired(operator, context, table, partitionColumns);
 
                 // get partition names
-                List<String> partitionNames;
-                // check if the partition predicate could be used for filter partition names
+                List<String> partitionNames = null;
+                boolean partitionNamesFiltered = false;
+                // Prefer partition-value APIs for equality, IN, and small bounded DATE ranges.
                 List<Optional<ScalarOperator>> effectivePartitionPredicate =
                         getEffectivePartitionPredicate(operator, partitionColumns, operator.getPredicate());
-                if (effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)) {
+                boolean hasEffectivePartitionPredicate =
+                        effectivePartitionPredicate.stream().anyMatch(Optional::isPresent);
+                if (hasEffectivePartitionPredicate) {
                     List<Optional<String>> partitionValues = getPartitionValue(effectivePartitionPredicate);
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNamesByValue(table.getCatalogName(), table.getCatalogDBName(),
                                     table.getCatalogTableName(), partitionValues);
+                    partitionNamesFiltered = true;
                 } else {
+                    List<Optional<List<String>>> inPartitionValues =
+                            getEffectiveInPartitionValues(operator, partitionColumns, operator.getPredicate());
+                    if (inPartitionValues != null) {
+                        partitionNames = listPartitionNamesForInValues(table, inPartitionValues);
+                        partitionNamesFiltered = partitionNames != null;
+                    }
+                }
+
+                // Use the HMS filter API only when the partition-value fast paths cannot handle the predicate.
+                if (partitionNames == null) {
+                    Optional<HivePartitionFilterConverter.Result> metastoreFilter =
+                            HivePartitionFilterConverter.convert(
+                                    operator, partitionColumns, operator.getPredicate());
+                    if (metastoreFilter.isPresent() && metastoreFilter.get().requiresFilterApi()) {
+                        Optional<List<String>> filteredPartitionNames =
+                                GlobalStateMgr.getCurrentState().getMetadataMgr()
+                                        .listPartitionNamesByFilter(
+                                                table.getCatalogName(), table.getCatalogDBName(),
+                                                table.getCatalogTableName(), metastoreFilter.get().getFilter());
+                        if (filteredPartitionNames.isPresent()) {
+                            partitionNames = filteredPartitionNames.get();
+                            partitionNamesFiltered = true;
+                            LOG.debug("Use HMS partition filter [{}] for table {}.{}.{}",
+                                    metastoreFilter.get().getFilter(), table.getCatalogName(),
+                                    table.getCatalogDBName(), table.getCatalogTableName());
+                        }
+                    }
+                }
+
+                if (partitionNames == null) {
                     partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
                             .listPartitionNames(table.getCatalogName(), table.getCatalogDBName(),
                                     table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT);
@@ -355,12 +623,11 @@ public class OptExternalPartitionPruner {
                 // reproduce the true denominator in partitions=X/Y. The list used for pruning above may
                 // already be value-filtered, which would collapse the denominator to the pruned count.
                 if (context.getDumpInfo() != null) {
-                    List<String> allPartitionNames =
-                            effectivePartitionPredicate.stream().anyMatch(Optional::isPresent)
-                                    ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
-                                            table.getCatalogName(), table.getCatalogDBName(),
-                                            table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
-                                    : partitionNames;
+                    List<String> allPartitionNames = partitionNamesFiltered
+                            ? GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                                    table.getCatalogName(), table.getCatalogDBName(),
+                                    table.getCatalogTableName(), ConnectorMetadataRequestContext.DEFAULT)
+                            : partitionNames;
                     context.getDumpInfo().getHMSTable(table.getResourceName(), table.getCatalogDBName(),
                             table.getCatalogTableName()).setPartitionNames(allPartitionNames);
                 }
