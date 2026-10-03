@@ -373,6 +373,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
+        // The existence check shouldn't be fooled by a stale cached entry.
+        icebergCatalog.invalidateCache(dbName, viewName);
         if (getView(context, dbName, viewName) != null) {
             if (stmt.isSetIfNotExists()) {
                 LOG.info("create view[{}] which already exists", viewName);
@@ -386,6 +388,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
         icebergCatalog.createView(context, catalogName, viewDefinition, stmt.isReplace());
+        asyncRefreshOthersFeMetadataCache(dbName, viewName);
     }
 
     @Override
@@ -397,6 +400,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
+        // ALTER is a read-modify-write that rebuilds the view on top of its current definition, so drop any
+        // cached copy first and read it fresh; a stale copy could silently drop a concurrent out-of-band change.
+        icebergCatalog.invalidateCache(dbName, viewName);
         if (getView(context, dbName, viewName) == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + viewName);
         }
@@ -408,6 +414,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
         }
+        asyncRefreshOthersFeMetadataCache(dbName, viewName);
     }
 
     @Override
@@ -780,6 +787,7 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         if (icebergTable != null && icebergTable.isIcebergView()) {
             icebergCatalog.dropView(context, stmt.getDbName(), stmt.getTableName());
+            asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
             return;
         }
 
@@ -2519,6 +2527,20 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (isResourceMappingCatalog(catalogName)) {
             refreshTableWithResource(table);
+        } else if (table.isIcebergView()) {
+            // The catalog returns a view under its fully-qualified name (catalog.db.view). Strip the known
+            // catalog and database prefix rather than the last dot, so a quoted view name like "a.b" stays intact.
+            // Hive/Glue fold identifiers, so match the prefix case-insensitively to line up with the cache key.
+            IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+            boolean caseFolding = catalogType == IcebergCatalogType.HIVE_CATALOG
+                    || catalogType == IcebergCatalogType.GLUE_CATALOG;
+            String prefix = catalogName + "." + srDbName + ".";
+            String qualifiedName = table.getName();
+            boolean hasPrefix = caseFolding
+                    ? qualifiedName.regionMatches(true, 0, prefix, 0, prefix.length())
+                    : qualifiedName.startsWith(prefix);
+            String viewName = hasPrefix ? qualifiedName.substring(prefix.length()) : qualifiedName;
+            icebergCatalog.invalidateCache(srDbName, viewName);
         } else {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getCatalogDBName();
