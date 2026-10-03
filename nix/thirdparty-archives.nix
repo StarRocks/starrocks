@@ -9,6 +9,11 @@ let
       md5 = "955b6faedf32ec2ce1b7725561d15618";
       sha256 = "00nnmg2mazx8i1brxzvbmfq5j7738md884373nx8jq0096di4222";
     };
+    "ALP-31ca0ed.tar.gz" = {
+      url = "https://github.com/cwida/ALP/archive/31ca0ed11c93c99d3f5b5c30e01a3e1c3832d3ce.tar.gz";
+      md5 = "9cfe18ea74d6d970d0722fc3890ee3a5";
+      sha256 = "1wxnj6s5ydrblidgaih0cgbq9ag3x97w2l82y10l1b88hnjhf208";
+    };
     "arrow-apache-arrow-24.0.0.tar.gz" = {
       url = "https://github.com/apache/arrow/archive/refs/tags/apache-arrow-24.0.0.tar.gz";
       md5 = "66c53bd00baa79034bd2ca167beea436";
@@ -530,6 +535,7 @@ let
       "xxHash-0.8.3.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
+      "ALP-31ca0ed.tar.gz"
     ];
     "aarch64-linux" = [
       "starrocks-clucene-2026.06.23.tar.gz"
@@ -601,6 +607,7 @@ let
       "xxHash-0.8.3.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
+      "ALP-31ca0ed.tar.gz"
     ];
     "aarch64-darwin" = [
       "starrocks-clucene-2026.06.23.tar.gz"
@@ -672,6 +679,7 @@ let
       "xxHash-0.8.3.tar.gz"
       "BLAKE3-1.8.5.tar.gz"
       "benchgen-26.03.11.tar.gz"
+      "ALP-31ca0ed.tar.gz"
     ];
   };
 
@@ -747,6 +755,7 @@ let
       "XXHASH"
       "BLAKE3"
       "BENCHGEN"
+      "ALP"
     ];
     "aarch64-linux" = [
       "CLUCENE"
@@ -818,6 +827,7 @@ let
       "XXHASH"
       "BLAKE3"
       "BENCHGEN"
+      "ALP"
     ];
     "aarch64-darwin" = [
       "CLUCENE"
@@ -889,6 +899,7 @@ let
       "XXHASH"
       "BLAKE3"
       "BENCHGEN"
+      "ALP"
     ];
   };
 
@@ -929,6 +940,7 @@ let
       "s2"
       "h3"
       "bitshuffle"
+      "alp"
       "croaringbitmap"
       "cctz"
       "fmt"
@@ -1001,6 +1013,7 @@ let
       "s2"
       "h3"
       "bitshuffle"
+      "alp"
       "croaringbitmap"
       "cctz"
       "fmt"
@@ -1072,6 +1085,7 @@ let
       "s2"
       "h3"
       "bitshuffle"
+      "alp"
       "croaringbitmap"
       "cctz"
       "fmt"

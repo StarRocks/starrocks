@@ -20,6 +20,7 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/raw_container_checked.h"
+#include "storage/rowset/alp_page.h"
 #include "storage/rowset/bitshuffle_wrapper.h"
 
 namespace starrocks {
@@ -184,15 +185,111 @@ private:
     std::unique_ptr<BitShuffleDataDecoder> _bit_shuffle_decoder;
 };
 
+// Fully decodes an ALP_ENCODING data page at page-load time, mirroring
+// BitShuffleDataDecoder: the page cache then holds raw float/double values
+// and AlpPageDecoder is a plain memcpy decoder.
+class AlpDataDecoder : public DataDecoder {
+public:
+    AlpDataDecoder() = default;
+    ~AlpDataDecoder() override = default;
+
+    Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
+                            std::unique_ptr<std::vector<uint8_t>>* page, Slice* page_slice) override {
+        if (page_slice->size < ALP_PAGE_HEADER_SIZE) {
+            return Status::Corruption(strings::Substitute("invalid ALP page size:$0", page_slice->size));
+        }
+        size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + 0);
+        size_t encoded_size = decode_fixed32_le((const uint8_t*)page_slice->data + 4);
+        size_t num_padded = decode_fixed32_le((const uint8_t*)page_slice->data + 8);
+        size_t size_of_element = decode_fixed32_le((const uint8_t*)page_slice->data + 12);
+        if (size_of_element != 4 && size_of_element != 8) {
+            return Status::Corruption(strings::Substitute("invalid ALP size_of_element:$0", size_of_element));
+        }
+        if (num_padded != alppage::padded_element_count(num_elements)) {
+            return Status::Corruption(
+                    strings::Substitute("ALP element count corrupted, padded:$0, num:$1", num_padded, num_elements));
+        }
+        if (encoded_size < ALP_PAGE_HEADER_SIZE || encoded_size > page_slice->size) {
+            return Status::Corruption(
+                    strings::Substitute("invalid ALP encoded size:$0, page size:$1", encoded_size, page_slice->size));
+        }
+        // Every 1024-value vector costs at least its meta bytes in the encoded
+        // body, which bounds the decoded size a valid page can claim; reject
+        // implausible counts before they drive the allocation below. (The
+        // remaining ratio is legitimate: a constant column stores 1024 values
+        // in one 16-byte meta.)
+        if (num_padded / ALP_PAGE_VECTOR_SIZE * ALP_PAGE_VECTOR_META_SIZE > encoded_size - ALP_PAGE_HEADER_SIZE) {
+            return Status::Corruption(strings::Substitute("implausible ALP element count:$0 for encoded size:$1",
+                                                          num_padded, encoded_size));
+        }
+        // The writer caps a page's raw bytes by data_page_size, an int32
+        // config, so no legitimate page can decode past INT32_MAX plus one
+        // vector of padding regardless of the writer's configuration.
+        if (num_padded * size_of_element > (size_t)INT32_MAX + ALP_PAGE_VECTOR_SIZE * size_of_element) {
+            return Status::Corruption(
+                    strings::Substitute("implausible ALP decoded size:$0", num_padded * size_of_element));
+        }
+
+        size_t header_size = ALP_PAGE_HEADER_SIZE;
+        // Retain only the real values: the tail vector's padding is decoded
+        // into scratch space inside alp_decode_body and dropped, so partial
+        // pages do not waste page-cache memory.
+        size_t data_size = num_elements * size_of_element;
+
+        std::unique_ptr<std::vector<uint8_t>> decoded_page(new std::vector<uint8_t>());
+        size_t new_size = page_slice->size + data_size - (encoded_size - header_size);
+        RETURN_IF_ERROR(raw::stl_vector_resize_uninitialized_checked(decoded_page.get(), new_size));
+        memcpy(decoded_page->data(), page_slice->data, header_size);
+
+        const uint8_t* body = (const uint8_t*)page_slice->data + header_size;
+        size_t body_size = encoded_size - header_size;
+        if (size_of_element == 4) {
+            RETURN_IF_ERROR(
+                    alppage::alp_decode_body<float>(body, body_size, num_padded, num_elements,
+                                                    reinterpret_cast<float*>(decoded_page->data() + header_size)));
+        } else {
+            RETURN_IF_ERROR(
+                    alppage::alp_decode_body<double>(body, body_size, num_padded, num_elements,
+                                                     reinterpret_cast<double*>(decoded_page->data() + header_size)));
+        }
+
+        DCHECK(footer->has_type()) << "type must be set";
+        uint32_t null_size = 0;
+        if (footer->type() == DATA_PAGE) {
+            null_size = footer->data_page_footer().nullmap_size();
+        }
+        // The trailer sizes come from the page footer; a malformed page could
+        // claim more trailer bytes than the input actually holds (reading past
+        // page_slice and writing past decoded_page below), or fewer, leaving
+        // surplus bytes inside the cached page whose footer is parsed from its
+        // very end. The input must be consumed exactly.
+        if (page_slice->size - encoded_size != (size_t)null_size + footer_size) {
+            return Status::Corruption(
+                    strings::Substitute("ALP page trailer mismatch, page size:$0, encoded size:$1, trailer size:$2",
+                                        page_slice->size, encoded_size, (size_t)null_size + footer_size));
+        }
+        memcpy(decoded_page->data() + header_size + data_size, page_slice->data + encoded_size,
+               null_size + footer_size);
+
+        *page = std::move(decoded_page);
+        *page_slice = Slice((*page)->data(), header_size + data_size + null_size + footer_size);
+        return Status::OK();
+    }
+};
+
 static DataDecoder g_base_decoder;
 static BitShuffleDataDecoder g_bit_shuffle_decoder;
 static BinaryDictDataDecoder g_binary_dict_decoder;
 static DictDictDecoder g_dict_dict_decoder;
+static AlpDataDecoder g_alp_data_decoder;
 
 DataDecoder* DataDecoder::get_data_decoder(EncodingTypePB encoding) {
     switch (encoding) {
     case BIT_SHUFFLE: {
         return &g_bit_shuffle_decoder;
+    }
+    case ALP_ENCODING: {
+        return &g_alp_data_decoder;
     }
     case DICT_ENCODING: {
         return &g_binary_dict_decoder;
