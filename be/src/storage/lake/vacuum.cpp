@@ -1517,7 +1517,13 @@ static StatusOr<BundleTabletMetaState> check_bundle_tablet_meta_state(
     ASSIGN_OR_RETURN(auto serialized_string, TabletManager::read_bundle_metadata_file_with_meter(
                                                      fs.get(), meta_path, /*skip_fill_local_cache=*/true));
     // Parse the bundle tablet metadata from the serialized string.
-    ASSIGN_OR_RETURN(auto bundle_metadata, TabletManager::parse_bundle_tablet_metadata(meta_path, serialized_string));
+    BundleTabletMetadataPtr bundle_metadata;
+    RETURN_IF_ERROR(TabletManager::parse_bundle_metadata_with_reread(
+            fs.get(), meta_path, /*skip_fill_local_cache=*/true, std::move(serialized_string),
+            [&](const std::string&, const BundleTabletMetadataPtr& footer) {
+                bundle_metadata = footer;
+                return Status::OK();
+            }));
     bool shared_meta_contains_deleted_tablet = false;
     bool shared_meta_contains_alive_tablet = false;
     // Check if the shared metadata contains tablets that are not to be deleted.

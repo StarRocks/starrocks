@@ -21,9 +21,11 @@
 #include <atomic>
 #include <chrono>
 #include <fstream>
+#include <limits>
 #include <thread>
 
 #include "base/bthreads/util.h"
+#include "base/coding.h"
 #include "base/failpoint/fail_point.h"
 #include "base/path/filesystem_util.h"
 #include "base/testutil/assert.h"
@@ -45,6 +47,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/storage_metrics.h"
 #include "storage/tablet_schema.h"
+#include "storage/utils.h"
 #include "test_util.h"
 
 // NOTE: intend to put the following header to the end of the include section
@@ -2149,6 +2152,167 @@ TEST_F(LakeTabletManagerTest, put_bundle_tablet_metadata_checksum) {
         EXPECT_FALSE(res.ok());
         EXPECT_TRUE(res.status().is_corruption()) << res.status();
         EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr("checksum"));
+    }
+}
+
+// A tablet page that fails verification may come from a read that mixed locally cached blocks of one
+// write of the bundle with remote blocks of another, while the object itself is intact. The drop hook
+// stands in for the cache drop: restoring the intact bundle proves the page was verified again against
+// a fresh read, and leaving the damage in place proves a bundle that stays bad is still reported.
+// Covers both readers of a bundle, the one for a single tablet and the one for every tablet at once,
+// and each way a page fails verification.
+TEST_F(LakeTabletManagerTest, bundle_readers_reread_corrupted_page) {
+    lake::ConfigResetGuard<bool> checksum_guard(&config::lake_enable_protobuf_file_checksum, true);
+    lake::ConfigResetGuard<bool> clear_cache_guard(&config::lake_clear_corrupted_cache_meta, true);
+
+    auto fs = FileSystem::Default();
+    auto overwrite = [&](const std::string& path, const std::string& content) {
+        ASSERT_OK(fs->delete_file(path));
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(path));
+        ASSERT_OK(wf->append(content));
+        ASSERT_OK(wf->close());
+    };
+    auto read_file = [&](const std::string& path) {
+        ASSIGN_OR_ABORT(auto rf, fs->new_random_access_file(path));
+        ASSIGN_OR_ABORT(auto content, rf->read_all());
+        return content;
+    };
+
+    TabletSchemaPB schema_pb;
+    schema_pb.set_id(10);
+    schema_pb.set_num_short_key_columns(1);
+    schema_pb.set_keys_type(DUP_KEYS);
+    schema_pb.set_num_rows_per_row_block(65535);
+    auto* c0 = schema_pb.add_column();
+    c0->set_unique_id(0);
+    c0->set_name("c0");
+    c0->set_type("INT");
+    c0->set_is_key(true);
+    c0->set_is_nullable(false);
+    // Writes a one-tablet bundle for |tablet_id| at version 2.
+    auto write_bundle = [&](int64_t tablet_id) {
+        TabletMetadataPB metadata;
+        metadata.set_id(tablet_id);
+        metadata.set_version(2);
+        metadata.mutable_schema()->CopyFrom(schema_pb);
+        (*metadata.mutable_historical_schemas())[10].CopyFrom(schema_pb);
+        std::map<int64_t, TabletMetadataPB> metadatas;
+        metadatas.emplace(tablet_id, metadata);
+        ASSERT_OK(_tablet_manager->put_bundle_tablet_metadata(metadatas));
+    };
+
+    std::string bundle_path;
+    std::string intact_content;
+    bool restore_on_drop = true;
+    int cache_drops = 0;
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp clear_sync_point([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::corrupted_tablet_meta_handler");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::corrupted_tablet_meta_handler", [&](void* arg) {
+        ++cache_drops;
+        if (restore_on_drop) {
+            overwrite(bundle_path, intact_content);
+        }
+        *(Status*)arg = Status::OK();
+    });
+
+    struct Reader {
+        const char* name;
+        std::function<StatusOr<TabletMetadataPtr>(int64_t tablet_id)> read;
+    };
+    const std::vector<Reader> readers = {
+            {"single tablet", [&](int64_t tablet_id) { return _tablet_manager->get_tablet_metadata(tablet_id, 2); }},
+            {"all tablets",
+             [&](int64_t) -> StatusOr<TabletMetadataPtr> {
+                 ASSIGN_OR_RETURN(auto metas, lake::TabletManager::get_metas_from_bundle_tablet_metadata(bundle_path));
+                 if (metas.size() != 1) {
+                     return Status::InternalError(fmt::format("expect 1 tablet in the bundle, got {}", metas.size()));
+                 }
+                 return metas[0];
+             }},
+    };
+
+    for (bool checksum : {true, false}) {
+        config::lake_enable_protobuf_file_checksum = checksum;
+        auto tablet_id = next_id();
+        bundle_path = _tablet_manager->bundle_tablet_metadata_location(tablet_id, 2);
+        write_bundle(tablet_id);
+        intact_content = read_file(bundle_path);
+        ASSIGN_OR_ABORT(auto footer, lake::TabletManager::parse_bundle_tablet_metadata(bundle_path, intact_content));
+        const auto& page = footer->tablet_meta_pages().at(tablet_id);
+
+        // Garbles only this tablet's page; the page is tiny once the schema is stripped, so a
+        // fixed-size overwrite would spill into the footer.
+        std::string garbled_content = intact_content;
+        garbled_content.replace(page.offset(), page.size(), page.size(), static_cast<char>(0xFF));
+        // Points the page past the end of the file with an offset that makes offset + size wrap around.
+        std::string beyond_end_content;
+        {
+            auto bad_footer = *footer;
+            (*bad_footer.mutable_tablet_meta_pages())[tablet_id].set_offset(std::numeric_limits<uint64_t>::max());
+            std::string footer_bytes;
+            ASSERT_TRUE(bad_footer.SerializeToString(&footer_bytes));
+            uint64_t size_field = decode_fixed64_le(
+                    (const uint8_t*)(intact_content.data() + intact_content.size() - sizeof(uint64_t)));
+            const uint64_t footer_size = size_field & ~LAKE_BUNDLE_META_CHECKSUM_FLAG;
+            const size_t tail_size = sizeof(uint64_t) + (checksum ? sizeof(uint32_t) : 0);
+            beyond_end_content = intact_content.substr(0, intact_content.size() - tail_size - footer_size);
+            beyond_end_content.append(footer_bytes);
+            size_field = footer_bytes.size();
+            if (checksum) {
+                put_fixed32_le(&beyond_end_content,
+                               olap_adler32(ADLER32_INIT, footer_bytes.data(), footer_bytes.size()));
+                size_field |= LAKE_BUNDLE_META_CHECKSUM_FLAG;
+            }
+            put_fixed64_le(&beyond_end_content, size_field);
+        }
+
+        struct Damage {
+            const char* name;
+            const std::string& content;
+            const char* error;
+        };
+        const std::vector<Damage> damages = {
+                {"garbled page", garbled_content, checksum ? "mismatched checksum of tablet" : "deserialized tablet"},
+                {"page beyond the end", beyond_end_content, "too small"},
+        };
+        for (const auto& damage : damages) {
+            for (const auto& reader : readers) {
+                SCOPED_TRACE(fmt::format("{} bundle, {}, {} reader", checksum ? "checksummed" : "legacy", damage.name,
+                                         reader.name));
+                // With lake_clear_corrupted_cache_meta off there is no cache drop and therefore no second read.
+                config::lake_clear_corrupted_cache_meta = false;
+                restore_on_drop = true;
+                cache_drops = 0;
+                overwrite(bundle_path, damage.content);
+                _tablet_manager->metacache()->prune();
+                auto res = reader.read(tablet_id);
+                ASSERT_TRUE(res.status().is_corruption()) << res.status();
+                EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr(damage.error));
+                EXPECT_EQ(0, cache_drops);
+
+                // The damage is gone after the drop, so the second read succeeds.
+                config::lake_clear_corrupted_cache_meta = true;
+                _tablet_manager->metacache()->prune();
+                res = reader.read(tablet_id);
+                ASSERT_OK(res.status());
+                EXPECT_EQ(tablet_id, res.value()->id());
+                EXPECT_EQ(2, res.value()->version());
+                EXPECT_EQ(1, cache_drops);
+
+                // The damage is still there after the drop, so the second read reports it.
+                restore_on_drop = false;
+                cache_drops = 0;
+                overwrite(bundle_path, damage.content);
+                _tablet_manager->metacache()->prune();
+                res = reader.read(tablet_id);
+                ASSERT_TRUE(res.status().is_corruption()) << res.status();
+                EXPECT_THAT(res.status().to_string(), ::testing::HasSubstr(damage.error));
+                EXPECT_EQ(1, cache_drops);
+            }
+        }
     }
 }
 
