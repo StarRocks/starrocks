@@ -210,6 +210,11 @@ struct TBrokerRangeDesc {
     15: optional TEnvelopeType envelope
     // last modification time of the file in milliseconds (epoch), for rejected-record anchors
     16: optional i64 modification_time
+    // Set when start_offset and start_offset + size are known to fall on record boundaries, which
+    // the frontend can only establish by asking a backend for them (get_csv_splits). The scanner
+    // then reads the range as it stands, instead of discarding a leading partial record and running
+    // past the end to finish a trailing one. Only meaningful for uncompressed CSV.
+    17: optional bool record_aligned
 }
 
 enum TObjectStoreType {

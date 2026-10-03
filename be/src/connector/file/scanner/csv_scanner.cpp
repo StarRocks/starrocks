@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "compute_env/load_path/load_path_state_helper.h"
+#include "formats/csv/csv_record_framer.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/runtime_state.h"
@@ -171,6 +172,54 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     }
 }
 
+Status CSVScanner::get_split_offsets(int64_t split_size, std::vector<int64_t>* offsets) {
+    constexpr size_t kReadBufferSize = 1024 * 1024;
+
+    if (_scan_range.ranges.size() != 1) {
+        return Status::InvalidArgument("split discovery expects exactly one file per scan range");
+    }
+    const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
+    if (range_desc.format_type != TFileFormatType::FORMAT_CSV_PLAIN) {
+        // A compressed file has no usable byte offsets to hand back, and is never split.
+        return Status::NotSupported("split discovery only applies to uncompressed CSV");
+    }
+
+    const TNetworkAddress address =
+            _scan_range.broker_addresses.empty() ? TNetworkAddress() : _scan_range.broker_addresses[0];
+    std::shared_ptr<SequentialFile> file;
+    RETURN_IF_ERROR(create_sequential_file(range_desc, address, _scan_range.params, &file));
+
+    ++_counter->num_files_read;
+
+    CSVRecordFramer framer(_parse_options, split_size);
+    raw::RawVector<char> buffer;
+    buffer.resize(kReadBufferSize);
+    while (true) {
+        // Accounted for the way ScannerCSVReader::_fill_buffer accounts for the reads it does. The
+        // load waits on this pass and it reads the file end to end, so leaving it out would hide
+        // half the bytes fetched and all of this phase's latency.
+        ++_counter->file_read_count;
+        auto res = [&] {
+            SCOPED_RAW_TIMER(&_counter->file_read_ns);
+            return file->read(buffer.data(), buffer.size());
+        }();
+        // Reaching the end of a file is reported as an empty read rather than an error, but check
+        // for the status too, as the SequentialFile contract allows either.
+        if (res.status().is_end_of_file()) {
+            break;
+        }
+        RETURN_IF_ERROR(res.status());
+        if (*res == 0) {
+            break;
+        }
+        _state->update_num_bytes_scan_from_source(*res);
+        framer.feed(buffer.data(), *res);
+    }
+    framer.finish();
+    *offsets = framer.split_offsets();
+    return Status::OK();
+}
+
 void CSVScanner::close() {
     FileScanner::close();
 };
@@ -254,12 +303,15 @@ Status CSVScanner::_init_reader() {
 
         _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
         _curr_reader->set_counter(_counter);
+        const bool record_aligned = range_desc.__isset.record_aligned && range_desc.record_aligned;
         if (range_desc.size > 0 && range_desc.format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
             // Does not set limit for compressed file.
             _curr_reader->set_limit(range_desc.size);
+            if (record_aligned) {
+                _curr_reader->set_limit_at_record_boundary();
+            }
         }
         if (range_desc.start_offset > 0) {
-            // Skip the first record started from |start_offset|.
             auto status = file->skip(range_desc.start_offset);
             if (status.is_time_out()) {
                 // open this file next time
@@ -267,8 +319,17 @@ Status CSVScanner::_init_reader() {
                 _curr_reader.reset();
                 return status;
             }
-            CSVReader::Record dummy;
-            RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            if (!record_aligned) {
+                // The range starts at an arbitrary byte, so it opens partway through a record that
+                // belongs to the range before it, and that partial record is discarded here.
+                //
+                // Seeking to the next row delimiter is only right when no delimiter can appear
+                // inside a field. When one can - an enclosed field spanning lines - this lands
+                // mid-record and the range is read wrongly, which is why such files are cut on
+                // boundaries from get_csv_splits and arrive here already aligned.
+                CSVReader::Record dummy;
+                RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            }
         } else {
             // NOTE: if the file is split into multiple ranges, the first range is responsible to increase the counter.
             ++_counter->num_files_read;

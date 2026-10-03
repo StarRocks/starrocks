@@ -32,6 +32,7 @@ set(FORMAT_CSV_TEST_FILES
     csv/boolean_converter_test.cpp
     csv/csv_file_writer_test.cpp
     csv/csv_reader_test.cpp
+    csv/csv_record_framer_test.cpp
     csv/date_converter_test.cpp
     csv/datetime_converter_test.cpp
     csv/decimalv2_converter_test.cpp

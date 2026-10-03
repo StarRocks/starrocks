@@ -25,6 +25,7 @@ import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchArrowSchemaRequest;
 import com.starrocks.proto.PFetchArrowSchemaResult;
 import com.starrocks.proto.PFetchDataResult;
+import com.starrocks.proto.PGetCsvSplitsResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PProcessDictionaryCacheRequest;
@@ -105,6 +106,12 @@ public class PBackendServiceWithMetrics implements PBackendService {
     public Future<PGetFileSchemaResult> getFileSchema(PGetFileSchemaRequest request) {
         increaseMetrics();
         return pBackendService.getFileSchema(request);
+    }
+
+    @Override
+    public Future<PGetCsvSplitsResult> getCsvSplits(PGetCsvSplitsRequest request) {
+        increaseMetrics();
+        return pBackendService.getCsvSplits(request);
     }
 
     @Override
