@@ -19,6 +19,7 @@ Supported statements include:
 - [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) (from v3.0 onwards)
 - [INSERT](../INSERT.md) (from v3.0 onwards)
 - [CACHE SELECT](../../../../data_source/data_cache/block_cache_warmup.md) (from v3.3 onwards)
+- [UPDATE](../../table_bucket_part_index/UPDATE.md) (from v4.2 onwards)
 
 You can view the list of tasks by querying `INFORMATION_SCHEMA.tasks`, or view the execution history of tasks by querying `INFORMATION_SCHEMA.task_runs`. For more information, see [Usage Notes](#usage-notes).
 
@@ -64,7 +65,7 @@ AS insert into t2 select * from t1;
 | task_name          | Yes     | The name of the task.                                                                               |
 | schedule_start     | No      | The start time for the scheduled task.                                                                 |
 | schedule_interval  | No      | The interval at which the scheduled task is executed, with a minimum interval of 10 seconds.          |
-| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) and [INSERT](../INSERT.md). |
+| etl_statement      | Yes     | The ETL statement that you want to submit as an asynchronous task. StarRocks currently supports submitting asynchronous tasks for [CREATE TABLE AS SELECT](../../table_bucket_part_index/CREATE_TABLE_AS_SELECT.md), [INSERT](../INSERT.md), and [UPDATE](../../table_bucket_part_index/UPDATE.md). |
 
 ## Return value
 
@@ -160,4 +161,15 @@ PROPERTIES (
     "session.insert_timeout" = "10000"
 )
 AS insert into t2 select * from t1;
+```
+
+Example 7: Submit an asynchronous task for an UPDATE statement that refreshes a Primary Key table from a staging table. The task will be regularly executed at an interval of 5 minutes:
+
+```SQL
+SUBMIT TASK etl_update
+SCHEDULE EVERY(INTERVAL 5 MINUTE)
+AS
+UPDATE target_tbl SET v1 = src.v1
+FROM staging_tbl src
+WHERE target_tbl.pk = src.pk;
 ```
