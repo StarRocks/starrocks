@@ -74,6 +74,10 @@ FROM data_source
 
   - `strict_mode`
 
+  - `pause_on_fatal_parse_error`
+
+  - `skip_on_fatal_parse_error`
+
   - `timezone`
 
   For detailed parameter descriptions, see [CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#job_properties).

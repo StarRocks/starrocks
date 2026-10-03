@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <sstream>
 #include <utility>
@@ -29,6 +30,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/runtime_profile.h"
 #include "common/simdjson_util.h"
+#include "compute_env/load/stream_load_metrics.h"
 #include "compute_env/load_path/load_path_state_helper.h"
 #include "connector/file/scanner/stream_source_meta.h"
 #include "exprs/cast_expr.h"
@@ -46,6 +48,10 @@
 namespace starrocks {
 
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
+
+// Routine-load job property, forwarded by the FE in TBrokerScanRangeParams.properties.
+// See JsonScanner::_skip_on_fatal_parse_error.
+static const char* const SKIP_ON_FATAL_PARSE_ERROR_PROPERTY = "skip_on_fatal_parse_error";
 
 // Constant slices for the binary __op column (0 = upsert, 1 = delete).
 // Avoids per-row std::string allocation in CDC load paths.
@@ -82,6 +88,21 @@ Status JsonScanner::open() {
     }
     if (range.__isset.strip_outer_array) {
         _strip_outer_array = range.strip_outer_array;
+    }
+
+    // skip_on_fatal_parse_error: only where one buffer == one message. A broker/local file is one
+    // buffer for the whole file, so honouring it there would silently drop a file remainder; a
+    // compressed stream goes through CompressedStreamLoadPipeReader, whose buffer boundaries have
+    // not been shown to equal message boundaries. Both keep today's fail-the-task behaviour.
+    const bool uncompressed = !range.__isset.compression_type ||
+                              range.compression_type == TCompressionType::NO_COMPRESSION ||
+                              range.compression_type == TCompressionType::UNKNOWN_COMPRESSION;
+    if (range.file_type == TFileType::FILE_STREAM && uncompressed && _scan_range.params.__isset.properties) {
+        auto it = _scan_range.params.properties.find(SKIP_ON_FATAL_PARSE_ERROR_PROPERTY);
+        if (it != _scan_range.params.properties.end()) {
+            // Same parsing as FileScanner::open() uses for properties["case_sensitive"].
+            std::istringstream(it->second) >> std::boolalpha >> _skip_on_fatal_parse_error;
+        }
     }
 
     return Status::OK();
@@ -294,6 +315,7 @@ JsonReader::JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner
           _slot_descs(std::move(slot_descs)),
           _type_descs(std::move(type_descs)),
           _range_desc(range_desc),
+          _skip_on_fatal_parse_error(scanner->_skip_on_fatal_parse_error),
           _envelope_type(range_desc.__isset.envelope ? range_desc.envelope : TEnvelopeType::NONE) {
     _meta_col_by_slot_id = build_stream_source_meta_columns(_scanner->_scan_range.params.stream_source_meta_columns);
     int index = 0;
@@ -321,6 +343,15 @@ Status JsonReader::open() {
         if (!st.is_time_out()) {
             _append_error_msg("", st.to_string());
         }
+        if (_skip_on_fatal_parse_error && st.is_data_quality_error()) {
+            // The very first message is malformed. Count it, drop it, and report the reader as
+            // open with an exhausted parser: the next read_chunk() pulls the next message. This
+            // site never counted a filtered row before, so the increment lives here.
+            _counter->num_rows_filtered++;
+            _skip_malformed_message(st);
+            _closed = false;
+            return Status::OK();
+        }
         return st;
     }
     _empty_parser = false;
@@ -347,6 +378,17 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = fmt::format("Unrecognized json format, error: {}", simdjson::error_message(e.error()));
         _append_error_msg("", err_msg);
+        if (_skip_on_fatal_parse_error) {
+            // Defensive path: nearly every simdjson call below is wrapped, but one that escapes
+            // may have done so mid-row (_construct_row_with_jsonpath appends columns one at a
+            // time). The rollback inside _skip_malformed_message truncates every column to the
+            // row count at which this message started, which also removes any half-built row;
+            // then hand back what was read from earlier messages. The next read_chunk() pulls the
+            // next message.
+            _counter->num_rows_filtered++;
+            _skip_malformed_message(status_from_json_parse_error(err_msg), /*row_already_rejected=*/false, chunk);
+            return Status::OK();
+        }
         return status_from_json_parse_error(err_msg);
     }
 }
@@ -378,8 +420,13 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
  */
 Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
     int32_t rows_read = 0;
+    // A new chunk: whatever the in-flight message already wrote went into the previous chunk and
+    // has been handed out, so its rollback point in THIS chunk is the beginning.
+    _message_first_row = 0;
     while (rows_read < rows_to_read) {
         if (_empty_parser) {
+            // Rollback point for the message about to be parsed (see _skip_malformed_message).
+            _message_first_row = chunk->num_rows();
             auto st = _read_and_parse_json();
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
@@ -393,6 +440,13 @@ Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
                 // Parse error.
                 _counter->num_rows_filtered++;
                 _append_error_msg("", st.to_string());
+                if (_skip_on_fatal_parse_error && st.is_data_quality_error()) {
+                    // Structurally unparseable message (not JSON at all, bad UTF-8, ...). Skip it
+                    // and let the next iteration read the next message. EOF and timeout were
+                    // returned above, so a run of N bad messages costs N iterations, then EOF.
+                    _skip_malformed_message(st, /*row_already_rejected=*/false, chunk);
+                    continue;
+                }
                 return st;
             }
             _empty_parser = false;
@@ -444,6 +498,21 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
     simdjson::ondemand::object row;
     auto parser = down_cast<ParserType*>(_parser.get());
 
+    // skip_on_fatal_parse_error contract: one bad message = one filtered row, and no row from it.
+    // Structural truncation ({"a": 1, "b": }) is caught by the pre-validation below, before any
+    // column is built. Other lazily detected simdjson errors (an unescaped control character in a
+    // string that is read, a malformed number) still surface TWICE: _construct_row fails on the value
+    // (that row is filtered and counted below), and the next get_current()/advance() reports the
+    // same, now latched, error for the same document. When the skip follows a row that failed INSIDE
+    // the parser, the message is not counted again.
+    //
+    // "Inside the parser" is decided by the status kind: every simdjson failure in _construct_row
+    // (formats/json/nullable_column.cpp, extract_from_object, the catch in read_chunk) is a
+    // DataQualityError, while a value that merely does not fit the column (strict mode) is an
+    // InvalidArgument. So an ordinary bad row followed by a structurally broken next document still
+    // counts twice — two distinct problems. With the option off this flag is never read.
+    bool prev_row_failed_in_parser = false;
+
     while (*rows_read < rows_to_read) {
         // Reset to sentinel so any stale read of _cdc_op is caught by DCHECK.
         _cdc_op = 0xFF;
@@ -452,9 +521,42 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             if (st.is_end_of_file()) {
                 return st;
             }
-            _counter->num_rows_filtered++;
+            const bool skip = _skip_on_fatal_parse_error && st.is_data_quality_error();
+            if (!(skip && prev_row_failed_in_parser)) {
+                _counter->num_rows_filtered++;
+            }
             _append_error_msg(parser->left_bytes_string(MAX_ERROR_LOG_LENGTH), st.to_string());
+            if (skip) {
+                // The common poison-message path (see above). The document stream is not
+                // resumable past a structural error, so treat the remainder of THIS message as
+                // exhausted — _read_chunk_with_except() consumes EndOfFile from here by rearming
+                // the parser and reading the next message. Pipe EOF never comes through this
+                // function, so the two cannot be confused.
+                _skip_malformed_message(st, /*row_already_rejected=*/prev_row_failed_in_parser, chunk);
+                return Status::EndOfFile("skip malformed message");
+            }
             return st;
+        }
+        if (_skip_on_fatal_parse_error) {
+            // Validate the whole document BEFORE any column is built from it. simdjson ondemand is
+            // lazy: on {"a": 1, "b": } find_field() answers SUCCESS for every field and the structural
+            // error only latches for the next get_current()/advance(). Without this check a row is
+            // assembled from the readable prefix (the broken tail becomes NULL) and — because the skip
+            // keeps the task alive — committed, so the message would both count as a filtered row and
+            // leave a partial row behind (observed with jsonpaths in a downstream deployment).
+            // count_fields() walks every field and value of the object and fails with
+            // TAPE_ERROR/INCOMPLETE on such a document; reset() rewinds it for _construct_row. With the
+            // option off this is not run — the partial row is built as before and dies with the task.
+            [[maybe_unused]] size_t field_count = 0;
+            if (auto err = row.count_fields().get(field_count); err != simdjson::SUCCESS) {
+                st = status_from_json_parse_error(
+                        fmt::format("Failed to validate json document. error: {}", simdjson::error_message(err)));
+                _counter->num_rows_filtered++;
+                _append_error_msg(parser->left_bytes_string(MAX_ERROR_LOG_LENGTH), st.to_string());
+                _skip_malformed_message(st, /*row_already_rejected=*/false, chunk);
+                return Status::EndOfFile("skip malformed message");
+            }
+            row.reset();
         }
         size_t chunk_row_num = chunk->num_rows();
         // For Debezium CDC format, capture the op type before constructing the row,
@@ -463,6 +565,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             _cdc_op = down_cast<DebeziumJsonDocumentStreamParser*>(_parser.get())->current_op();
         }
         st = _construct_row(&row, chunk);
+        prev_row_failed_in_parser = !st.ok() && st.is_data_quality_error();
         if (!st.ok()) {
             if (_counter->num_rows_filtered++ < MAX_ERROR_LINES_IN_FILE) {
                 // We would continue to construct row even if error is returned,
@@ -488,12 +591,56 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
             if (st.is_end_of_file()) {
                 return st;
             }
-            _counter->num_rows_filtered++;
+            const bool skip = _skip_on_fatal_parse_error && st.is_data_quality_error();
+            if (!(skip && prev_row_failed_in_parser)) {
+                _counter->num_rows_filtered++;
+            }
             _append_error_msg("", st.to_string());
+            if (skip) {
+                // Same as the get_current() site: the previous row is complete (or already
+                // rolled back above) and counted; abandon the rest of this message.
+                _skip_malformed_message(st, /*row_already_rejected=*/prev_row_failed_in_parser, chunk);
+                return Status::EndOfFile("skip malformed message");
+            }
             return st;
         }
     }
     return Status::OK();
+}
+
+void JsonReader::_skip_malformed_message(const Status& st, bool row_already_rejected, Chunk* chunk) {
+    DCHECK(_skip_on_fatal_parse_error);
+    // A skipped message is atomic: every row it already appended to this chunk goes away, whether
+    // a complete leading object of a truncated array / json_root document or a half-built row left
+    // by an escaped exception. Rows from earlier messages (below _message_first_row) stay. Rows
+    // that failed _construct_row were rolled back one by one and stay counted as filtered; the
+    // message itself is counted once by the caller.
+    if (chunk != nullptr && chunk->num_rows() > _message_first_row) {
+        chunk->set_num_rows(_message_first_row);
+    }
+    // The offending payload and its source meta are still in _payload / _file_stream_buffer: the
+    // next _read_file_stream() replaces them, so everything that wants them runs here, first.
+    // When _read_rows already wrote the failing row as a rejected record (the lazy-parse case,
+    // where the same document surfaces twice), the payload is not recorded again — one message,
+    // one rejected record. The metric and the WARNING below are per skipped message regardless.
+    if (_state->enable_log_rejected_record() && _payload != nullptr && !row_already_rejected) {
+        LoadPathStateHelper::append_rejected_record_to_file(_state, std::string(_payload, _payload_size),
+                                                            st.to_string(), _file->filename());
+    }
+    std::string meta = "none";
+    if (_file_stream_buffer != nullptr && _file_stream_buffer->meta()->type() != ByteBufferMetaType::NONE) {
+        meta = _file_stream_buffer->meta()->to_string();
+    }
+    // One line per skipped message on purpose: consumer lag used to be the only signal that a
+    // poison message existed; with skipping enabled this line (and the metric) is that signal.
+    LOG(WARNING) << "skip_on_fatal_parse_error: dropping malformed message, meta: " << meta
+                 << ", size: " << _payload_size << ", error: " << st.message();
+    StreamLoadMetrics::instance()->routine_load_skipped_malformed_messages_total.increment(1);
+
+    // _read_and_parse_json() flips _empty_parser to false BEFORE parse(); rearm so the caller's loop
+    // reads the next message. _parser is left alone: the next _read_and_parse_json() replaces it
+    // unconditionally and nothing dereferences it while _empty_parser is true.
+    _empty_parser = true;
 }
 
 Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
@@ -901,6 +1048,13 @@ Status JsonReader::_check_ndjson() {
     // Check the content format according to the first non-space character.
     // Treat json string started with '{' as ndjson.
     // Treat json string started with '[' as json array.
+    //
+    // _is_ndjson describes THIS payload, so start from false: one JsonReader reads many messages
+    // (routine load), and with json_root set the parser is chosen by this flag. Without the reset a
+    // `[...]` message following a `{...}` message was handed to the document-stream parser and
+    // rejected as "array type in json document stream" — a task failure today, and with
+    // skip_on_fatal_parse_error a silently dropped, perfectly valid message.
+    _is_ndjson = false;
     for (size_t i = 0; i < _payload_size; ++i) {
         // Skip spaces at the string head.
         const auto& c = _payload[i];

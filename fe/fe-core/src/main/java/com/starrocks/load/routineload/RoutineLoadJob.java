@@ -150,6 +150,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
     public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = false;
+    // See CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR. Stored in jobProperties like its
+    // sibling, so it needs no metadata-version change and shows up in SHOW ROUTINE LOAD automatically.
+    public static final boolean DEFAULT_SKIP_ON_FATAL_PARSE_ERROR = false;
 
     protected static final String STAR_STRING = "*";
 
@@ -414,6 +417,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
         jobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(stmt.isPauseOnFatalParseError()));
+        jobProperties.put(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR, String.valueOf(stmt.isSkipOnFatalParseError()));
         if (stmt.getMergeConditionStr() != null) {
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
@@ -668,6 +672,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         String value = jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR);
         if (value == null) {
             return DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
+        }
+        return Boolean.valueOf(value);
+    }
+
+    public boolean isSkipOnFatalParseError() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR);
+        if (value == null) {
+            return DEFAULT_SKIP_ON_FATAL_PARSE_ERROR;
         }
         return Boolean.valueOf(value);
     }
@@ -1966,6 +1978,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR).append("\"=\"");
         sb.append(isPauseOnFatalParseError()).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.SKIP_ON_FATAL_PARSE_ERROR).append("\"=\"");
+        sb.append(isSkipOnFatalParseError()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
         sb.append(getTimezone()).append("\",\n");
