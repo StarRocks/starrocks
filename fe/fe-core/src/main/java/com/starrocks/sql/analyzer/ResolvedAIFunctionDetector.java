@@ -17,10 +17,13 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DataCacheSelectStatement;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.ParseNode;
 import com.starrocks.sql.ast.PivotRelation;
+import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
@@ -76,6 +79,25 @@ public final class ResolvedAIFunctionDetector {
         @Override
         public Void visitAlterViewClause(AlterViewClause node, Void context) {
             return visit(node.getQueryStatement(), context);
+        }
+
+        @Override
+        public Void visitPrepareStatement(PrepareStmt node, Void context) {
+            return visit(node.getInnerStmt(), context);
+        }
+
+        @Override
+        public Void visitSubmitTaskStatement(SubmitTaskStmt node, Void context) {
+            super.visitSubmitTaskStatement(node, context);
+            if (node.getDataCacheSelectStmt() != null) {
+                visit(node.getDataCacheSelectStmt(), context);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDataCacheSelectStatement(DataCacheSelectStatement node, Void context) {
+            return visit(node.getInsertStmt(), context);
         }
 
         @Override

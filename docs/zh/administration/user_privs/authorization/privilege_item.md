@@ -22,6 +22,19 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 
 <PrivCreateWarehouse />
 
+| 权限 | 说明 |
+| --- | --- |
+| USE AI FUNCTIONS | 执行 AI 函数需要 SYSTEM 上的 `USE AI FUNCTIONS` 或对应 AI FUNCTION 函数族上的 `USAGE`。使用 Provider 的调用还需要所选 AI PROVIDER 上的 `USAGE`，两类授权不能互相替代。 |
+
+### AI FUNCTION / AI PROVIDER
+
+| 权限 | 说明 |
+| --- | --- |
+| USAGE | 使用指定的公开 AI 函数族或 Provider。 |
+
+SYSTEM 函数保留原配置路由，不要求 Provider 授权。Provider 的 CREATE、ALTER、DROP、SET DEFAULT、SHOW 和 DESC 仍要求 SYSTEM OPERATE，USAGE 不授予这些管理操作权限。
+
+
 ### 资源组权限 (RESOURCE GROUP)
 
 | 权限  | 用途                                                         |

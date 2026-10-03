@@ -6,6 +6,8 @@ sidebar_position: 21
 
 # AI 文本函数
 
+函数和 Provider 的授权要求见 [AI 函数权限](ai_functions.mdx#ai-function-privileges)。
+
 这些函数使用 [ai_complete](ai_complete.md#配置) 的 SYSTEM 聊天端点和凭证，构造特定任务的提示词并返回相应类型的结果。使用这些新函数前，请先升级所有 FE 和 BE 节点。
 
 :::warning

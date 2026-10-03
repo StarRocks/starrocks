@@ -29,6 +29,17 @@ REVOKE
     FROM { ROLE | USER} {<role_name>|<user_identity>}
 ```
 
+#### AI functions and providers
+
+```sql
+REVOKE USE AI FUNCTIONS ON SYSTEM FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI FUNCTION <function_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON AI PROVIDER <provider_name> FROM {ROLE <role_name> | USER <user_identity>};
+REVOKE USAGE ON ALL AI PROVIDERS FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+Revocation applies to subsequent executions and replanning, including prepared EXECUTE. It does not cancel an in-flight query. This feature adds native authorization checks; external access controllers that do not implement AI checks deny these operations.
+
 #### Resource group
 
 ```SQL

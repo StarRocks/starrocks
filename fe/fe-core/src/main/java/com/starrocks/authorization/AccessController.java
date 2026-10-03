@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.UserIdentity;
+import com.starrocks.context.ai.AIProvider;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.pipe.PipeName;
@@ -28,6 +29,16 @@ import java.util.Map;
 
 public interface AccessController {
     default void checkSystemAction(ConnectContext context, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAIFunctionAction(ConnectContext context, String family, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        throw new AccessDeniedException();
+    }
+
+    default void checkAIProviderAction(ConnectContext context, AIProvider provider, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }

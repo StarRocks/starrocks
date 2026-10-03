@@ -38,6 +38,18 @@ import GrantWarehouse from '../../../_assets/commonMarkdown/grant_warehouse.mdx'
 
 <GrantCreateWarehouse />
 
+#### AI 函数与 Provider
+
+```sql
+GRANT USE AI FUNCTIONS ON SYSTEM TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI FUNCTION <function_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON AI PROVIDER <provider_name> TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+GRANT USAGE ON ALL AI PROVIDERS TO {ROLE <role_name> | USER <user_identity>} [WITH GRANT OPTION];
+```
+
+AI FUNCTION 使用不带数据库前缀、无参数签名的公开内建函数族名称。`USE AI FUNCTIONS` 不包含 Provider 使用权限，也不包含 AI FUNCTION 对象的转授权权限。Provider 名称保持精确匹配。参见 [AI 权限](../../sql-functions/ai-functions/ai_functions.mdx#ai-function-privileges)。
+
+
 #### Resource group 相关
 
 ```SQL

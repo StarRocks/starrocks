@@ -66,6 +66,7 @@ import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.ResolvedAIFunctionDetector;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DataDescription;
@@ -926,6 +927,8 @@ public class Load {
                         e.getDetailMsg(), entry.getKey());
             }
 
+            rejectAIExpression(expr);
+
             // check if contain aggregation
             // collectAll (not collect): collect() stops at the first match and does not descend, so it
             // would miss a function nested inside another, e.g. an aggregate in from_unixtime(sum(x)).
@@ -965,6 +968,8 @@ public class Load {
 
             expr = ExprUtils.analyzeAndCastFold(expr);
 
+            rejectAIExpression(expr);
+
             // check if contain aggregation
             // collectAll (not collect): collect() stops at the first match and does not descend, so it
             // would miss a function nested inside another, e.g. an aggregate in from_unixtime(sum(x)).
@@ -1002,7 +1007,14 @@ public class Load {
             Expr expr = ExprSubstitutionVisitor.rewrite(entry.getValue(), smap);
             expr = ExprUtils.analyzeAndCastFold(expr);
 
+            rejectAIExpression(expr);
             exprsByName.put(entry.getKey(), expr);
+        }
+    }
+
+    public static void rejectAIExpression(Expr expression) throws StarRocksException {
+        if (ResolvedAIFunctionDetector.contains(expression)) {
+            throw new StarRocksException("AI functions are not supported in LOAD expressions");
         }
     }
 

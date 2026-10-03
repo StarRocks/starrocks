@@ -3416,6 +3416,10 @@ public class GlobalStateMgr {
         return functionSet.getFunction(desc, mode);
     }
 
+    public String getGrantableAIFunctionFamily(String name) {
+        return functionSet.getGrantableAIFunctionFamily(name);
+    }
+
     public boolean isAggregateFunction(String functionName) {
         return functionSet.isAggregateFunction(functionName);
     }

@@ -12,6 +12,39 @@ import Experimental from '../../../_assets/commonMarkdown/_experimental.mdx'
 
 AI functions call configured model services from SQL. For text generation, see [ai_complete](ai_complete.md).
 
+## AI function privileges {/* #ai-function-privileges */}
+
+AI-function execution requires `USE AI FUNCTIONS` on SYSTEM or `USAGE` on the individual AI FUNCTION family. Provider-backed calls additionally require `USAGE` on the selected AI PROVIDER. Neither grant implies the other.
+
+These grants cover `ai_complete`, `ai_sentiment`, `ai_classify`, `ai_extract`, `ai_fix_grammar`, `ai_redact`, `ai_translate`, `ai_similarity`, `ai_summarize`, `ai_filter`, `ai_embed`, `ai_custom_query`, and `ai_custom_embedding`. Overloads share the same family grant. The legacy `ai_query(VARCHAR, JSON)` builtin is outside this permission model.
+
+The `public` role receives no implicit AI grant. The built-in `root` and `db_admin` roles have global AI-function usage and usage on all providers. Existing table, column, and view privileges still apply. Reading a view does not grant permission to execute its AI functions.
+
+```sql
+GRANT USAGE ON AI FUNCTION ai_complete TO ROLE ai_user;
+GRANT USE AI FUNCTIONS ON SYSTEM TO ROLE ai_user;
+GRANT USAGE ON AI PROVIDER support_chat TO ROLE ai_user;
+GRANT USAGE ON ALL AI PROVIDERS TO ROLE ai_admin;
+```
+
+Provider names are exact and case-sensitive. Grants follow the provider UUID: ALTER retains grants, but dropping and recreating a provider with the same name does not. `ON ALL AI PROVIDERS` also covers future providers. A single provider named `*` cannot be granted separately; use the explicit ALL syntax when appropriate.
+
+SYSTEM functions keep their existing configuration route and do not require a provider grant. Provider CREATE, ALTER, DROP, SET DEFAULT, SHOW, and DESC still require SYSTEM OPERATE; USAGE does not authorize those management operations.
+
+Revoking function or provider privileges applies to subsequent executions and replanning, including prepared EXECUTE. It does not cancel an in-flight query. This feature adds native authorization checks; external access controllers that do not implement AI checks deny these operations.
+
+Synchronous sessions retain the existing external-user role behavior: revoking a role from an external group does not remove that role from an already authenticated session. Reconnect to refresh the identity. Revoking privileges from the role still affects subsequent checks in existing sessions.
+
+Upgrade every FE before enabling these grants. Older FEs do not enforce these object types and may reject metadata containing them. Do not ignore unknown privilege metadata to work around an incompatible downgrade. Existing non-administrator users must receive explicit AI privileges after upgrading.
+
+### Asynchronous execution
+
+AI calls in user-submitted tasks require a successfully authenticated creator identity. At each run, StarRocks resolves the creator's current groups and roles and applies the same function and provider checks. The task does not persist a grant result, group membership, or provider credentials. As with existing creator-based tasks, current granted roles are activated at execution; the submitting session's active-role selection is not a saved policy.
+
+Recreate old AI tasks that lack creator authentication metadata. Submitting AI tasks after `EXECUTE AS`, or with authentication checking disabled, is not supported; reconnect and authenticate as the intended creator. A missing user, security integration, or configured group provider causes execution to fail, not to fall back to root. The `mv_use_creator_based_authorization` setting does not change the identity of these AI tasks.
+
+AI expressions are not supported in MV refresh, PIPE, or Load expression execution. Ordinary tasks without AI retain their existing behavior. Complete the FE upgrade before enabling AI tasks; older FEs cannot enforce or forward the new task-identity contract.
+
 ## Reducing AI input rows {/* #reducing-ai-input-rows */}
 
 For an `ORDER BY ... LIMIT` query with a positive `LIMIT` and no `OFFSET`, StarRocks can select candidate rows before

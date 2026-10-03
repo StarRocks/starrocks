@@ -112,8 +112,12 @@ public class TaskRunExecutor {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
-                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId(),
-                        "TaskRun: name[" + status.getTaskName() + "]");
+                // Identity restoration can fail before the task-run context has been constructed.
+                // Do not replace that failure with a null-context error from accounting cleanup.
+                if (taskRun.getRunCtx() != null) {
+                    WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId(),
+                            "TaskRun: name[" + status.getTaskName() + "]");
+                }
             }
             return status.getState();
         }, taskRunPool);

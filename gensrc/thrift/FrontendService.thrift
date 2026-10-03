@@ -932,6 +932,17 @@ struct TUpdateMiniEtlTaskStatusRequest {
     3: required AgentService.TMiniLoadEtlStatusResult etlTaskStatus
 }
 
+// Authentication provenance for AI task creation/restoration, not a snapshot of privileges or credentials.
+struct TTaskExecutionIdentity {
+    1: optional i32 version
+    2: optional string user
+    3: optional string host
+    4: optional bool is_domain
+    5: optional bool is_ephemeral
+    6: optional string security_integration
+    7: optional string distinguished_name
+}
+
 struct TMasterOpRequest {
     1: required string user
     2: required string db
@@ -969,6 +980,8 @@ struct TMasterOpRequest {
     40: optional list<string> user_groups;
 
     101: optional i64 warehouse_id    // begin from 101, in case of conflict with other's change
+    102: optional TTaskExecutionIdentity task_execution_identity
+    103: optional string query_source
 }
 
 struct TNotifyForwardDeploymentFinishedRequest {

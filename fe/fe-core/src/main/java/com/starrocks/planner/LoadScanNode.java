@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprSubstitutionMap;
 import com.starrocks.sql.ast.expression.ExprSubstitutionVisitor;
 import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.load.Load;
 import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.warehouse.cngroup.ComputeResource;
@@ -87,6 +88,7 @@ public abstract class LoadScanNode extends ScanNode {
         }
         whereExpr = ExprSubstitutionVisitor.rewrite(whereExpr, smap);
         whereExpr = ExprUtils.analyzeAndCastFold(whereExpr);
+        Load.rejectAIExpression(whereExpr);
 
         if (!whereExpr.getType().isBoolean()) {
             throw new StarRocksException("where statement is not a valid statement return bool");

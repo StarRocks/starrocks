@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.TaskExecutionIdentity;
 import com.starrocks.authentication.UserIdentityUtils;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.catalog.Column;
@@ -1230,6 +1231,22 @@ public class ConnectProcessor {
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ctx.getState().reset();
+        ctx.setAuthenticatedTaskIdentity(null);
+        try {
+            if (request.isSetQuery_source()) {
+                ctx.setQuerySource(QueryDetail.QuerySource.valueOf(request.getQuery_source()));
+            } else if (request.isSetTask_execution_identity()) {
+                throw new IllegalArgumentException("Missing forwarded query source");
+            }
+        } catch (IllegalArgumentException e) {
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError("Invalid forwarded execution identity metadata; upgrade all Frontends before using AI tasks");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            result.setState(ctx.getState().getStateType().toString());
+            result.setErrorMsg(ctx.getState().getErrorMessage());
+            return result;
+        }
         ctx.setMultiStmt(false);
         if (request.isSetResourceInfo()) {
             ctx.getSessionVariable().setResourceGroup(request.getResourceInfo().getGroup());
@@ -1263,6 +1280,12 @@ public class ConnectProcessor {
             result.setState(ctx.getState().getStateType().toString());
             result.setErrorMsg(ctx.getState().getErrorMessage());
             return result;
+        }
+
+        if (request.isSetCurrent_user_ident() && request.getCurrent_user_ident().isSetUsername()
+                && request.getCurrent_user_ident().isSetHost() && request.getCurrent_user_ident().isSetIs_domain()
+                && request.getCurrent_user_ident().isSetIs_ephemeral()) {
+            TaskExecutionIdentity.restoreForwarded(ctx, request.getTask_execution_identity());
         }
 
         if (request.isSetUser_groups()) {

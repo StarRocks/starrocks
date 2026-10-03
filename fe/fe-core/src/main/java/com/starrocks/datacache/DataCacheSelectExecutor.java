@@ -20,6 +20,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -36,6 +37,7 @@ import com.starrocks.warehouse.cngroup.ComputeResourceProvider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -126,6 +128,14 @@ public class DataCacheSelectExecutor {
         context.setQualifiedUser(connectContext.getQualifiedUser());
         context.setCurrentUserIdentity(connectContext.getCurrentUserIdentity());
         context.setCurrentRoleIds(connectContext.getCurrentRoleIds());
+        if (connectContext.getQuerySource() == QueryDetail.QuerySource.TASK) {
+            // Preserve the task's authorization subject through the cache-select internal INSERT.
+            context.setQuerySource(connectContext.getQuerySource());
+            context.setGroups(new HashSet<>(connectContext.getGroups()));
+            context.setSecurityIntegration(connectContext.getSecurityIntegration());
+            context.setDistinguishedName(connectContext.getDistinguishedName());
+            context.setAuthenticatedTaskIdentity(connectContext.getAuthenticatedTaskIdentity());
+        }
         context.setAuditEventBuilder(connectContext.getAuditEventBuilder());
         context.setResourceGroup(connectContext.getResourceGroup());
         context.setSessionId(connectContext.getSessionId());
