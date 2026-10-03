@@ -1990,7 +1990,11 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                           total_files++;
                                           total_bytes += entry.size.value_or(0);
 
-                                          // should consider segment files, sst, del file, delvector, vector index, idx, lcrm
+                                          // Consider segments, sst, del, delvector, vector index, idx, lcrm and cols.
+                                          // A DCG index rewrite can leave an unreferenced .cols if its txn log
+                                          // cannot be saved or its alter is cancelled. Live DCGs are filtered
+                                          // by check_reference_files below; in-flight rewrites are protected
+                                          // by the same txn-id / mtime gates as other data files.
                                           // NOTE: .idx files are produced by the ADD INDEX fast path (Index
                                           // Delta Group). Active .idx files are referenced from
                                           // TabletMetadataPB.idg_meta; dropped ones enter orphan_files via
@@ -2016,7 +2020,7 @@ static StatusOr<std::map<std::string, DirEntry>> list_data_files(FileSystem* fs,
                                           if (!is_segment(entry.name) && !is_sst(entry.name) &&
                                               !is_delvec(entry.name) && !is_del(entry.name) &&
                                               !is_vector_index(entry.name) && !is_idx(entry.name) &&
-                                              !is_lcrm(entry.name)) {
+                                              !is_lcrm(entry.name) && !is_cols(entry.name)) {
                                               return true;
                                           }
                                           if (!entry.mtime.has_value()) {
