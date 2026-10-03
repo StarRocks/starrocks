@@ -243,10 +243,11 @@ StatusOr<bool> MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uin
                 _tablet_id, st.message()));
     }
 
+    // `chunk` is shared by every tablet the load writes to; only `size` of its rows are in this memtable.
     if (chunk.has_rows()) {
         _chunk_memory_usage += chunk.memory_usage() * size / chunk.num_rows();
         _chunk_bytes_usage += _chunk->bytes_usage(cur_row_count, size);
-        _total_rows += chunk.num_rows();
+        _total_rows += size;
     }
 
     // if memtable is full, push it to the flush executor,
