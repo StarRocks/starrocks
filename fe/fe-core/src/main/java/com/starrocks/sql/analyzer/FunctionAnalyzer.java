@@ -1056,6 +1056,17 @@ public class FunctionAnalyzer {
             Expr newChildExpr = new StringLiteral(originType.toTypeString());
             node.getParams().exprs().set(0, newChildExpr);
             node.setChild(0, newChildExpr);
+        } else if (FunctionSet.ST_BUFFER.equalsIgnoreCase(fnName) && argumentTypes.length == 2 &&
+                argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY) {
+            GeoTypeDescriptor descriptor = ((ScalarType) argumentTypes[0]).getGeoDescriptor();
+            if (descriptor == null) {
+                throw new SemanticException("ST_Buffer requires a GEOMETRY CRS descriptor");
+            }
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(argumentTypes[0]);
+            }
         } else if ((FunctionSet.ST_INTERSECTION.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_UNION.equalsIgnoreCase(fnName) ||
                 FunctionSet.ST_DIFFERENCE.equalsIgnoreCase(fnName) ||

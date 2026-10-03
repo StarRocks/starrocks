@@ -103,6 +103,10 @@ public:
     DEFINE_VECTORIZED_FN(st_geography_intersects);
     DEFINE_VECTORIZED_FN(st_geometry_intersects);
 
+    DEFINE_VECTORIZED_FN(st_geometry_buffer);
+    static Status native_geo_buffer_prepare(FunctionContext*, FunctionContext::FunctionStateScope);
+    static Status native_geo_buffer_close(FunctionContext*, FunctionContext::FunctionStateScope);
+
     DEFINE_VECTORIZED_FN(st_geometry_intersection);
     DEFINE_VECTORIZED_FN(st_geometry_union);
     DEFINE_VECTORIZED_FN(st_geometry_difference);

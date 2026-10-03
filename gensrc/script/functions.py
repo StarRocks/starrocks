@@ -1201,7 +1201,8 @@ vectorized_functions = [
 
     # Contract 5.4 scalar ID reservations; comments do not register overloads.
     # Reserved 120400: ST_Buffer / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
-    # Reserved 120401: ST_Buffer / 2 (GEOMETRY, DOUBLE) -> GEOMETRY.
+    [120401, "ST_Buffer", False, False, "GEOMETRY", ["GEOMETRY", "DOUBLE"],
+     "GeoFunctions::st_geometry_buffer", "GeoFunctions::native_geo_buffer_prepare", "GeoFunctions::native_geo_buffer_close"],
     # Reserved 120410: ST_SimplifyPreserveTopology / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY.
     # Reserved 120411: ST_SimplifyPreserveTopology / 2 (GEOMETRY, DOUBLE) -> GEOMETRY.
     # Window ST_CoverageSimplify reservations belong to FunctionSet's analytic section.
