@@ -415,4 +415,40 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
         starRocksAssert.dropMaterializedView(mvName);
     }
+
+    @Test
+    public void testRangePartitionWithPartitionTTLNumber() throws Exception {
+        MockedMetadataMgr metadataMgr = (MockedMetadataMgr) connectContext.getGlobalStateMgr().getMetadataMgr();
+        MockedJDBCMetadata mockedJDBCMetadata =
+                (MockedJDBCMetadata) metadataMgr.getOptionalMetadata(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME).get();
+        mockedJDBCMetadata.initPartitions();
+
+        String mvName = "mv_with_partition_ttl_number";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW " + mvName + "\n" +
+                "PARTITION BY (`d`)\n" +
+                "DISTRIBUTED BY HASH(`a`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"partition_ttl_number\" = \"2\"\n" +
+                ")\n" +
+                "AS SELECT `a`, `b`, `c`, `d`  FROM `jdbc0`.`partitioned_db0`.`tbl0`;");
+
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName));
+
+        // initial refresh: tbl0 has date partitions. TTL=2 keeps 2 partitions.
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
+        Assertions.assertEquals(2, materializedView.getPartitions().size());
+
+        // add a new partition and refresh incrementally
+        mockedJDBCMetadata.addPartitions();
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mvName + " with sync mode");
+
+        // incremental refresh must trim the oldest partition and retain at most 2 partitions
+        Assertions.assertEquals(2, materializedView.getPartitions().size());
+
+        starRocksAssert.dropMaterializedView(mvName);
+    }
 }
