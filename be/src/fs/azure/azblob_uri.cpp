@@ -41,6 +41,17 @@ bool AzBlobURI::parse(std::string_view uri) {
         _is_path_style = false;
 
         return parse_hdfs_style(tokens[1]);
+    } else if (is_adls2()) {
+        _is_path_style = false;
+        if (!parse_hdfs_style(tokens[1])) {
+            return false;
+        }
+        if (_endpoint_suffix != "dfs.core.windows.net" && _endpoint_suffix != "dfs.core.usgovcloudapi.net" &&
+            _endpoint_suffix != "dfs.core.chinacloudapi.cn") {
+            return false;
+        }
+        _endpoint_suffix.replace(0, 4, "blob.");
+        return true;
     } else {
         return false;
     }
@@ -144,7 +155,7 @@ bool AzBlobURI::parse_hdfs_style(std::string_view uri_with_no_scheme) {
 }
 
 std::string AzBlobURI::get_http_style_scheme() const {
-    if (_scheme == kWasbsScheme) {
+    if (_scheme == kWasbsScheme || is_adls2()) {
         return kHttpsScheme;
     } else if (_scheme == kWasbScheme) {
         return kHttpScheme;

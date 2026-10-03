@@ -48,6 +48,7 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 
 public class AzureCloudConfigurationProvider implements CloudConfigurationProvider {
 
+    public static final String AZURE_ADLS2_USE_NATIVE_SDK = "azure.adls2.use_native_sdk";
     public static final String ADLS_ENDPOINT = "dfs.core.windows.net";
     public static final String BLOB_ENDPOINT = "blob.core.windows.net";
     public static final String ADLS_SAS_TOKEN = "adls.sas-token.";
@@ -102,7 +103,8 @@ public class AzureCloudConfigurationProvider implements CloudConfigurationProvid
                 properties.getOrDefault(AZURE_ADLS2_OAUTH2_TOKEN_FILE, "")
         );
         if (adls2.validate()) {
-            return new AzureCloudConfiguration(adls2);
+            return new AzureCloudConfiguration(adls2,
+                    Boolean.parseBoolean(properties.getOrDefault(AZURE_ADLS2_USE_NATIVE_SDK, "false")));
         }
         return null;
     }

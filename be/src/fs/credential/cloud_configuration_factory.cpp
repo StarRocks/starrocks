@@ -98,6 +98,82 @@ const AzureCloudConfiguration CloudConfigurationFactory::create_azure(
     return azure_cloud_configuration;
 }
 
+StatusOr<AzureCloudConfiguration> CloudConfigurationFactory::create_adls2(const TCloudConfiguration& configuration,
+                                                                          const std::string& dfs_host) {
+    if (!configuration.__isset.cloud_type || configuration.cloud_type != TCloudType::AZURE) {
+        return Status::InvalidArgument("Native ADLS requires Azure cloud configuration");
+    }
+    const auto& properties = configuration.cloud_properties;
+    auto get = [&](const std::string& key, std::string fallback = "") {
+        auto it = properties.find(key + "." + dfs_host);
+        if (it != properties.end()) return it->second;
+        it = properties.find(key);
+        return it != properties.end() ? it->second : fallback;
+    };
+    AzureCloudConfiguration result;
+    auto& credential = result.azure_cloud_credential;
+    const auto type = get("fs.azure.account.auth.type", "SharedKey");
+    if (type == "SharedKey") {
+        if (!get("fs.azure.account.keyprovider").empty()) {
+            return Status::NotSupported("Native ADLS does not support custom key providers");
+        }
+        credential.shared_key = get("fs.azure.account.key");
+        if (credential.shared_key.empty()) return Status::InvalidArgument("Missing native ADLS shared key");
+    } else if (type == "SAS") {
+        const auto provider = get("fs.azure.sas.token.provider.type");
+        if (!provider.empty() && provider != "org.apache.hadoop.fs.azurebfs.sas.FixedSASTokenProvider") {
+            return Status::NotSupported("Native ADLS supports fixed SAS tokens only");
+        }
+        credential.sas_token = get("fs.azure.sas.fixed.token");
+        if (!credential.sas_token.empty() && credential.sas_token.front() == '?') credential.sas_token.erase(0, 1);
+        if (credential.sas_token.empty()) return Status::InvalidArgument("Missing native ADLS SAS token");
+    } else if (type == "OAuth") {
+        credential.client_id = get("fs.azure.account.oauth2.client.id");
+        if (credential.client_id.empty()) return Status::InvalidArgument("Missing native ADLS OAuth client ID");
+        const auto provider = get("fs.azure.account.oauth.provider.type");
+        const std::string prefix = "org.apache.hadoop.fs.azurebfs.oauth2.";
+        if (provider == prefix + "ClientCredsTokenProvider") {
+            credential.client_secret = get("fs.azure.account.oauth2.client.secret");
+            const auto endpoint = get("fs.azure.account.oauth2.client.endpoint");
+            const auto host_end = endpoint.find('/', 8);
+            const auto tenant_end =
+                    host_end == std::string::npos ? std::string::npos : endpoint.find('/', host_end + 1);
+            if (endpoint.rfind("https://", 0) != 0 || endpoint.find_first_of("?#@") != std::string::npos ||
+                host_end == std::string::npos || host_end == 8 || tenant_end == std::string::npos ||
+                tenant_end == host_end + 1 ||
+                (endpoint.substr(tenant_end) != "/oauth2/token" &&
+                 endpoint.substr(tenant_end) != "/oauth2/v2.0/token") ||
+                credential.client_secret.empty()) {
+                return Status::InvalidArgument("Native ADLS requires a client secret and HTTPS tenant OAuth endpoint");
+            }
+            credential.tenant_id = endpoint.substr(host_end + 1, tenant_end - host_end - 1);
+            credential.authority_host = endpoint.substr(0, host_end);
+        } else if (provider == prefix + "WorkloadIdentityTokenProvider") {
+            credential.token_file = get("fs.azure.account.oauth2.token.file");
+            credential.tenant_id = get("fs.azure.account.oauth2.msi.tenant");
+            if (credential.token_file.empty() || credential.tenant_id.empty()) {
+                return Status::InvalidArgument("Native ADLS workload identity requires a token file and tenant ID");
+            }
+            std::string authority = "https://login.microsoftonline.com/";
+            if (dfs_host.ends_with(".chinacloudapi.cn")) authority = "https://login.chinacloudapi.cn/";
+            if (dfs_host.ends_with(".usgovcloudapi.net")) authority = "https://login.microsoftonline.us/";
+            credential.authority_host = get("fs.azure.account.oauth2.msi.authority", authority);
+            if (credential.authority_host.rfind("https://", 0) != 0) {
+                return Status::InvalidArgument("Native ADLS requires an HTTPS authority host");
+            }
+        } else if (provider == prefix + "MsiTokenProvider") {
+            if (!get("fs.azure.account.oauth2.msi.endpoint").empty()) {
+                return Status::NotSupported("Native ADLS does not support a custom MSI endpoint");
+            }
+        } else {
+            return Status::NotSupported("Unsupported native ADLS OAuth provider");
+        }
+    } else {
+        return Status::NotSupported("Unsupported native ADLS authentication type");
+    }
+    return result;
+}
+
 template <typename ReturnType>
 ReturnType CloudConfigurationFactory::get_or_default(const std::map<std::string, std::string>& properties,
                                                      const std::string& key, ReturnType default_value) {

@@ -285,6 +285,15 @@ StarRocks 支持通过以下认证方式来访问 Data Lake Storage Gen2：
 > - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`。
 > - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<path>/<file_name>`。
 
+### 使用原生 SDK 读取
+
+读取外表或文件时，在 ADLS2 认证属性中设置 `"azure.adls2.use_native_sdk" = "true"`，可让 BE/CN 通过原生 Azure SDK 读取 `abfs://` 和 `abfss://` 文件。默认值为 `false`，保留 Hadoop I/O。该选项仅影响数据文件读取，不改变 FE 元数据 I/O。不支持通过此原生路径写入 ADLS 文件。
+
+原生 reader 使用 HTTPS 访问存储账户的 Blob 端点。除 DFS 端点外，还需确保 Blob 端点可访问，包括使用私有端点的部署。支持 Azure 公有云、美国政府云和中国区的标准端点，不支持自定义端点。共享密钥、固定 SAS、客户端密钥、用户分配的托管标识和工作负载标识复用现有 ADLS2 配置。使用工作负载标识时，配置的 token 文件必须在所有参与读取的 BE/CN 以及 FE 上存在。不支持自定义 Hadoop 凭证提供程序或自定义 MSI 端点。不支持或缺失的凭证会明确报错，不会使用进程默认标识。
+
+关闭此属性可恢复使用 Hadoop。原生路径保留现有的存储 I/O profiling。
+
+
 ### 基于 Managed Identity 认证鉴权
 
 如果选择 Managed Identity 鉴权方式，您必须提前完成如下准备工作：
