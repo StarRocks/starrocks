@@ -241,11 +241,38 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature: st_area(varchar)");
     }
     @Test
+    public void testNativeGeoBufferContract() {
+        for (String crs : new String[] {"EPSG:3857", "EPSG:4326"}) {
+            String geometry = "ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', '" + crs + "')";
+            for (String radius : new String[] {"1.0", "-1.0", "0", "NULL", "CAST(2 AS DOUBLE)"}) {
+                String sql = "select ST_Buffer(" + geometry + ", " + radius + ")";
+                assertFunctionContract(sql, 120401, PrimitiveType.GEOMETRY);
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+                ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs), output.getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_Area(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), r)) " +
+                "from (select CAST(1 AS DOUBLE) r union all select CAST(2 AS DOUBLE)) radii");
+        analyzeSuccess("select ST_SRID(ST_Buffer(ST_GeomFromText('POINT EMPTY', 'EPSG:4326'), 1))");
+        analyzeFail("select ST_Buffer(ST_GeogFromText('POINT (0 0)'), 1)", "No matching function with signature");
+        analyzeFail("select ST_Buffer('POINT (0 0)', 1)", "No matching function with signature");
+        analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'))",
+                "No matching function with signature");
+        analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 8)",
+                "No matching function with signature");
+        for (String function : new String[] {"ST_SimplifyPreserveTopology", "ST_CoverageSimplify"}) {
+            analyzeFail("select " + function + "(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1)",
+                    "No matching function with signature");
+        }
+    }
+
+    @Test
     public void testNativeGeoPolygonOverlayContract() {
         String geometry = "ST_GeomFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))', 'EPSG:3857')";
         String geography = "ST_GeogFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))')";
-        String[] functions = {"ST_Union", "ST_Difference", "ST_SymDifference"};
-        long[] ids = {120351, 120361, 120371};
+        String[] functions = {"ST_Intersection", "ST_Union", "ST_Difference", "ST_SymDifference"};
+        long[] ids = {120341, 120351, 120361, 120371};
         for (int i = 0; i < functions.length; ++i) {
             String function = functions[i];
             String sql = "select " + function + "(" + geometry + ", " + geometry + ")";
@@ -276,8 +303,9 @@ public class AnalyzeFunctionTest {
             analyzeFail("select " + function + "(" + geometry + ", " + geometry + ", 0)",
                     "No matching function with signature");
         }
-        analyzeFail("select ST_Intersection(" + geometry + ", " + geometry + ")",
-                "No matching function with signature");
+        analyzeSuccess("select ST_Area(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_AsText(ST_Intersection(" + geometry + ", " + geometry + "))");
+        analyzeSuccess("select ST_Transform(ST_Intersection(" + geometry + ", " + geometry + "), 4326)");
     }
 
     @Test

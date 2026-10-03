@@ -205,6 +205,8 @@ public class FunctionSet {
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
     public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_BUFFER = "st_buffer";
+    public static final String ST_INTERSECTION = "st_intersection";
     public static final String ST_UNION = "st_union";
     public static final String ST_DIFFERENCE = "st_difference";
     public static final String ST_SYMDIFFERENCE = "st_symdifference";
@@ -1612,6 +1614,13 @@ public class FunctionSet {
                 IntegerType.INT, ArrayType.ARRAY_BIGINT, false, false, false));
 
         // analytic functions
+        // Contract 5.4 window reservations, without overloads or BE dispatch.
+        // Analytic builtins currently resolve by name/type, not generated scalar IDs.
+        // Reserve separate IDs for explicit future signatures (no default-argument alias):
+        // Reserved 120420: ST_CoverageSimplify / 2 (GEOGRAPHY, DOUBLE) -> GEOGRAPHY, window.
+        // Reserved 120421: ST_CoverageSimplify / 2 (GEOMETRY, DOUBLE) -> GEOMETRY, window.
+        // Reserved 120430: ST_CoverageSimplify / 3 (GEOGRAPHY, DOUBLE, BOOLEAN) -> GEOGRAPHY, window.
+        // Reserved 120431: ST_CoverageSimplify / 3 (GEOMETRY, DOUBLE, BOOLEAN) -> GEOMETRY, window.
         // Rank
         addBuiltin(AggregateFunction.createAnalyticBuiltin(RANK,
                 Collections.emptyList(), IntegerType.BIGINT, VarbinaryType.VARBINARY));
