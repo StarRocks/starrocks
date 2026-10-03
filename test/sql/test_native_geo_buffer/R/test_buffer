@@ -1,0 +1,50 @@
+-- name: test_native_geo_buffer
+
+SELECT ROUND(ST_Area(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1.0)), 6);
+-- result:
+3.121445
+-- !result
+SELECT ST_Area(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), -1.0));
+-- result:
+64.0
+-- !result
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), -5.0));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 0));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), NULL));
+-- result:
+None
+-- !result
+SELECT ST_SRID(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000)), ST_GeometryType(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000));
+-- result:
+4326	POLYGON
+-- !result
+SELECT ST_AsText(ST_Buffer(ST_GeomFromText('MULTILINESTRING EMPTY', 'EPSG:3857'), 1));
+-- result:
+POLYGON EMPTY
+-- !result
+SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(10 0))', 'EPSG:3857'), 1));
+-- result:
+MULTIPOLYGON
+-- !result
+SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(1 0))', 'EPSG:3857'), 1));
+-- result:
+POLYGON
+-- !result
+SET pipeline_dop=4;
+-- result:
+-- !result
+SELECT id, ST_Area(ST_Buffer(ST_GeomFromText('POLYGON ((0 0,10 0,10 10,0 10,0 0))', 'EPSG:3857'), r)) FROM (SELECT 1 AS id, CAST(0 AS DOUBLE) AS r UNION ALL SELECT 2, CAST(-1 AS DOUBLE) UNION ALL SELECT 3, CAST(NULL AS DOUBLE)) radii ORDER BY id;
+-- result:
+1	100.0
+2	64.0
+3	None
+-- !result
+SET pipeline_dop=1;
+-- result:
+-- !result

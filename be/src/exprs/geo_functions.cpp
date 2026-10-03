@@ -32,6 +32,7 @@
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
 #include "common/logging.h"
+#include "geo/geo_buffer.h"
 #include "geo/geo_measurements.h"
 #include "geo/geo_overlay.h"
 #include "geo/geo_types.h"
@@ -985,6 +986,73 @@ StatusOr<ColumnPtr> geo_overlay(FunctionContext* context, const Columns& columns
         RETURN_IF_ERROR(overlay_checkpoint(context));
     }
     if (constant) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+struct NativeGeoBufferState {
+    Status status = Status::OK();
+    std::unique_ptr<PreparedGeoBuffer> input;
+};
+
+Status buffer_checkpoint(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
+        RETURN_IF_ERROR(context->state()->check_query_state("ST_Buffer"));
+        RETURN_IF_ERROR(context->state()->check_mem_limit("ST_Buffer"));
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2) {
+        return Status::InvalidArgument("ST_Buffer requires a context and two arguments");
+    }
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    const size_t size = columns[0]->size();
+    if (columns[1]->size() != size) return Status::InvalidArgument("ST_Buffer argument sizes differ");
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto* output =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    if (!is_geo_compute_compatible(input.data->descriptor(), output->descriptor())) {
+        return Status::InvalidArgument("ST_Buffer return CRS does not match its input");
+    }
+    ColumnViewer<TYPE_DOUBLE> distances(columns[1]);
+    const auto* prepared =
+            reinterpret_cast<const NativeGeoBufferState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::unique_ptr<PreparedGeoBuffer> batch_constant;
+    const bool constant = input.constant && columns[1]->is_constant();
+    const size_t rows = constant && size != 0 ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        RETURN_IF_ERROR(buffer_checkpoint(context));
+        if (input.is_null(row) || distances.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        const double distance = distances.value(row);
+        if (!std::isfinite(distance)) return Status::InvalidArgument("ST_Buffer requires a finite distance");
+        std::unique_ptr<PreparedGeoBuffer> varying;
+        const PreparedGeoBuffer* model;
+        if (prepared != nullptr) {
+            RETURN_IF_ERROR(prepared->status);
+            model = prepared->input.get();
+            if (model == nullptr) return Status::InvalidArgument("ST_Buffer constant geometry is NULL");
+        } else {
+            auto* target = input.constant ? &batch_constant : &varying;
+            if (!input.constant || *target == nullptr) {
+                ASSIGN_OR_RETURN(*target, PreparedGeoBuffer::prepare(input.wkb(row),
+                                                                     [&] { return buffer_checkpoint(context); }));
+            }
+            model = target->get();
+        }
+        ASSIGN_OR_RETURN(auto geometry, model->buffer(distance, [&] { return buffer_checkpoint(context); }));
+        std::string wkb;
+        RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
+        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(buffer_checkpoint(context));
+    }
+    if (constant && size != 0) return ConstColumn::create(std::move(result), size);
     return result;
 }
 
@@ -2117,6 +2185,38 @@ StatusOr<ColumnPtr> GeoFunctions::st_geometry_transform(FunctionContext* context
     }
     if (constant) return ConstColumn::create(std::move(result), size);
     return result;
+}
+
+Status GeoFunctions::native_geo_buffer_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    auto prepared = std::make_unique<NativeGeoBufferState>();
+    const auto& column = context->get_constant_column(0);
+    if (!column->only_null() && column->size() != 0) {
+        // Keep plan-time errors lazy until a non-NULL row uses this geometry.
+        auto input = geo_input<TYPE_GEOMETRY>(column);
+        prepared->status = input.status();
+        if (prepared->status.ok()) {
+            auto model = PreparedGeoBuffer::prepare(input->wkb(0), [&] { return buffer_checkpoint(context); });
+            prepared->status = model.status();
+            if (prepared->status.ok()) prepared->input = std::move(model.value());
+        }
+    }
+    RETURN_IF_ERROR(buffer_checkpoint(context));
+    context->set_function_state(scope, prepared.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_buffer_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoBufferState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_buffer(FunctionContext* context, const Columns& columns) {
+    return geo_buffer(context, columns);
 }
 
 Status GeoFunctions::native_geo_overlay_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

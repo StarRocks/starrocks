@@ -141,3 +141,11 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
 | `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
 | `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
+## 笛卡尔缓冲区
+
+支持原生 XY POINT、LINESTRING、POLYGON 及其 MULTI 类型。距离为输入 CRS 单位下的有限有符号值；圆角近似、NULL 传播、空结果为多边形 EMPTY。结果保留 CRS。本部分不提供 GEOGRAPHY、集合、Z/M、选项或简化函数。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |

@@ -141,3 +141,11 @@ Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in
 | `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
 | `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
 | `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
+## Cartesian buffer
+
+Native XY POINT, LINESTRING, POLYGON and their MULTI families; finite signed distance in input CRS units, round approximation, NULL propagation and polygonal EMPTY output. The result preserves CRS. GEOGRAPHY, collections, Z/M, options and simplification functions are not available in this slice.
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
