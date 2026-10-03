@@ -199,6 +199,15 @@ message ColumnMetaPB {
     // for json flat column only
     optional bytes name = 33;
     optional int32 compression_level = 34;
+    // Pointer to the per-column, per-segment compression-dictionary page (a
+    // DICTIONARY_PAGE holding the dictionary bytes). Present only for a column
+    // written with a per-column ZSTD compression dictionary; left unset for every
+    // other column, so a segment without such a column serializes byte-identically
+    // to before.
+    // The bytes are always raw content -- a verbatim sample of the column's own
+    // data -- and are loaded with ZSTD_dct_rawContent, so a sample that happens to
+    // begin with ZSTD_MAGIC_DICTIONARY is never misparsed as a structured dictionary.
+    optional PagePointerPB zstd_compression_dict_page = 35;
 }
 
 message SegmentFooterPB {
