@@ -100,6 +100,7 @@ This section describes privileges that are available on different objects.
 | Privilege | Description                             |
 | --------- | --------------------------------------- |
 | SELECT    | Queries data in a view.                 |
+| EXPORT    | Exports data from a StarRocks view.     |
 | ALTER     | Modifies the definition of a view.      |
 | DROP      | Deletes a logical view.                 |
 | ALL       | Has all the above privileges on a view. |
@@ -109,6 +110,7 @@ This section describes privileges that are available on different objects.
 | Privilege | Description                                          |
 | --------- | ---------------------------------------------------- |
 | SELECT    | Queries a materialized view to accelerate queries.   |
+| EXPORT    | Exports data from a StarRocks materialized view.     |
 | ALTER     | Changes a materialized view.                         |
 | REFRESH   | Refreshes a materialized view.                       |
 | DROP      | Deletes a materialized view.                         |

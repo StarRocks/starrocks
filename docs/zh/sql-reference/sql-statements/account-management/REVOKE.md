@@ -115,7 +115,7 @@ REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    { ALTER | DROP | SELECT | EXPORT | ALL [PRIVILEGES]}
     ON { VIEW <view_name> [, < view_name >,...]
        ｜ ALL VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
@@ -132,7 +132,7 @@ REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
 
 ```SQL
 REVOKE
-    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    { SELECT | ALTER | REFRESH | DROP | EXPORT | ALL [PRIVILEGES]}
     ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
        ｜ ALL MATERIALIZED VIEWS} IN 
            { { DATABASE <database_name> [,<database_name>,...] } | ALL [DATABASES] }

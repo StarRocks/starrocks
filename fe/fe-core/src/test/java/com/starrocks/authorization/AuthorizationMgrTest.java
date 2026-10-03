@@ -1709,6 +1709,46 @@ public class AuthorizationMgrTest {
     }
 
     @Test
+    public void testViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.VIEW, new TableName("db", "view1"));
+    }
+
+    @Test
+    public void testMaterializedViewExportPrivilege() throws Exception {
+        checkExportPrivilege(ObjectType.MATERIALIZED_VIEW, new TableName("db3", "mv1"));
+    }
+
+    private void checkExportPrivilege(ObjectType objectType, TableName name) throws Exception {
+        String object = objectType.toString() + " " + name.getDb() + "." + name.getTbl();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant select on " + object + " to test_user", ctx), ctx);
+        setCurrentUserAndRoles(ctx, testUser);
+        assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+
+        for (String privilege : List.of("EXPORT", "ALL PRIVILEGES")) {
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "grant " + privilege + " on " + object + " to test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            checkExportAction(objectType, name);
+
+            setCurrentUserAndRoles(ctx, UserIdentity.ROOT);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke " + privilege + " on " + object + " from test_user", ctx), ctx);
+            setCurrentUserAndRoles(ctx, testUser);
+            assertThrows(AccessDeniedException.class, () -> checkExportAction(objectType, name));
+        }
+    }
+
+    private void checkExportAction(ObjectType objectType, TableName name) throws AccessDeniedException {
+        if (objectType.equals(ObjectType.VIEW)) {
+            Authorizer.checkViewAction(ctx, name, PrivilegeType.EXPORT);
+        } else {
+            Authorizer.checkMaterializedViewAction(ctx, name, PrivilegeType.EXPORT);
+        }
+    }
+
+    @Test
     public void testGrantView() throws Exception {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user view_user", ctx), ctx);

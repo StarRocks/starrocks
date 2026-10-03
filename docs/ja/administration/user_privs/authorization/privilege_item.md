@@ -100,6 +100,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                             |
 | ---- | -------------------------------- |
 | SELECT | ビューのデータをクエリします。   |
+| EXPORT | StarRocks ビューからデータをエクスポートします。 |
 | ALTER  | ビューの定義を変更します。       |
 | DROP   | ビューを削除します。             |
 | ALL    | ビューに対して上記すべての権限を持ちます。 |
@@ -109,6 +110,7 @@ import PrivWarehouse from '../../../_assets/commonMarkdown/priv_warehouse.mdx'
 | 権限 | 説明                                          |
 | ---- | --------------------------------------------- |
 | SELECT | クエリを高速化するためにマテリアライズドビューをクエリします。 |
+| EXPORT | StarRocks マテリアライズドビューからデータをエクスポートします。 |
 | ALTER  | マテリアライズドビューを変更します。         |
 | REFRESH | マテリアライズドビューを更新します。         |
 | DROP   | マテリアライズドビューを削除します。         |
