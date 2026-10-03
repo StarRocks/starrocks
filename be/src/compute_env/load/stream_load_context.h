@@ -281,6 +281,11 @@ public:
     bool use_streaming = false;
     TFileFormatType::type format = TFileFormatType::FORMAT_CSV_PLAIN;
 
+    // Set from the FE's answer to the plan request, not from the header this BE parsed. It is
+    // echoed in the load result so a caller can tell a load that actually got the behavior from one
+    // where either half of the cluster is too old to know the option and dropped it in silence.
+    bool fill_default_on_absent_key = false;
+
     TStreamLoadPutResult put_result;
 
     int64_t number_total_rows = 0;

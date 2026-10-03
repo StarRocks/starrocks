@@ -53,7 +53,8 @@ const std::vector<std::string> LOAD_PARAMETER_NAMES = {HTTP_FORMAT_KEY,
                                                        HTTP_JSONPATHS,
                                                        HTTP_JSONROOT,
                                                        HTTP_STRIP_OUTER_ARRAY,
-                                                       HTTP_ENVELOPE};
+                                                       HTTP_ENVELOPE,
+                                                       HTTP_FILL_DEFAULT_ON_ABSENT_KEY};
 
 std::ostream& operator<<(std::ostream& out, const BatchWriteId& id) {
     out << "db: " << id.db << ", table: " << id.table << ", load_params: {";

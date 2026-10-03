@@ -48,6 +48,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_INTERVAL_MS;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_PARALLEL;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_ENVELOPE;
+import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FILL_DEFAULT_ON_ABSENT_KEY;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_FORMAT;
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_WAREHOUSE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -152,6 +153,28 @@ public class BatchWriteMgrTest extends BatchWriteTestBase {
         assertEquals(TStatusCode.INVALID_ARGUMENT, result.getStatus().getStatus_code());
         assertEquals(List.of("envelope=debezium is only supported on PRIMARY KEY tables"),
                 result.getStatus().getError_msgs());
+        assertEquals(0, batchWriteMgr.numJobs());
+    }
+
+    /**
+     * Merge Commit never reaches the BE's own check on this header, and it does not report the
+     * effective setting back either, so a value that is neither true nor false has to be rejected
+     * here. Accepting it would silently turn the option off and load NULL over the DEFAULT.
+     */
+    @Test
+    public void testRequestLoadRejectsNonBoolFillDefaultOnAbsentKey() {
+        StreamLoadKvParams params = new StreamLoadKvParams(new HashMap<>() {{
+                put(HTTP_FORMAT, "json");
+                put(HTTP_FILL_DEFAULT_ON_ABSENT_KEY, "ture");
+                put(HTTP_BATCH_WRITE_INTERVAL_MS, "100000");
+                put(HTTP_BATCH_WRITE_PARALLEL, "4");
+            }});
+        RequestLoadResult result = batchWriteMgr.requestLoad(
+                tableId4, params, UserIdentity.ROOT, allNodes.get(0).getId(), allNodes.get(0).getHost());
+        assertFalse(result.isOk());
+        assertEquals(TStatusCode.INVALID_ARGUMENT, result.getStatus().getStatus_code());
+        assertTrue(result.getStatus().getError_msgs().get(0)
+                .contains("Invalid fill_default_on_absent_key format"));
         assertEquals(0, batchWriteMgr.numJobs());
     }
 

@@ -117,4 +117,23 @@ TEST(StreamLoadContextTest, set_need_rollback_rejects_empty_callback) {
     ASSERT_DEATH(ctx.set_need_rollback(nullptr), "callback");
 }
 
+// The confirmation field only appears when the option was accepted, so a caller can tell an
+// accepted option from a version that ignored it. Every other load result stays byte for byte as
+// it was.
+TEST(StreamLoadContextTest, load_result_reports_fill_default_on_absent_key) {
+    StreamLoadContext ctx(nullptr);
+    ctx.db = "db";
+    ctx.table = "tbl";
+    ctx.label = "label";
+    ctx.id = UniqueId::gen_uid();
+
+    EXPECT_EQ(std::string::npos, ctx.to_json().find("FillDefaultOnAbsentKey"));
+    EXPECT_EQ(std::string::npos, ctx.to_resp_json("commit", Status::OK()).find("FillDefaultOnAbsentKey"));
+
+    ctx.fill_default_on_absent_key = true;
+
+    EXPECT_NE(std::string::npos, ctx.to_json().find("\"FillDefaultOnAbsentKey\": true"));
+    EXPECT_NE(std::string::npos, ctx.to_resp_json("commit", Status::OK()).find("\"FillDefaultOnAbsentKey\": true"));
+}
+
 } // namespace starrocks

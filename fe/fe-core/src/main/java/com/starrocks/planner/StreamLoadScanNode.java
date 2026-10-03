@@ -54,6 +54,7 @@ import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.expression.ExprToThrift;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AggregateType;
+import com.starrocks.sql.ast.KeysType;
 import com.starrocks.sql.ast.expression.ArithmeticExpr;
 import com.starrocks.sql.ast.expression.Expr;
 import com.starrocks.sql.ast.expression.ExprUtils;
@@ -79,6 +80,7 @@ import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.type.HLLType;
 import com.starrocks.type.PrimitiveType;
+import com.starrocks.type.Type;
 import com.starrocks.warehouse.cngroup.ComputeResource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -333,6 +335,117 @@ public class StreamLoadScanNode extends LoadScanNode {
         }
     }
 
+    /**
+     * The expression to fill a column with when a row's JSON object has no key for it. This is the
+     * same expression the plan would use had the column been left off the columns list, so a filled
+     * value means exactly what a DEFAULT already means for a load.
+     *
+     * <p>Returns null when the column must not be filled. A column rows merge on is refused: a
+     * primary, unique or aggregate key identifies a row, so filling it from a default would give
+     * every row missing that key the same key, and they would replace or aggregate into one another.
+     * A duplicate key table's key is only a sort key, so it is filled like any other column. A
+     * REPLACE_IF_NOT_NULL column is refused for the same reason partial_update is: absence is how
+     * that column keeps its stored value, so filling it would overwrite the value the user meant to
+     * keep. A column with no usable default is also refused, which leaves today's NULL behavior in
+     * place. So is a JSON or complex typed column that this load reads as text, for the reason
+     * given on {@link #isReadAsTextButNotDeclaredText}.
+     */
+    private Expr buildDefaultExprForAbsentKey(SlotDescriptor dstSlotDesc, SlotDescriptor srcSlotDesc)
+            throws StarRocksException {
+        Column column = dstSlotDesc.getColumn();
+        if (column.isKey() && !isDuplicateKeyTable()) {
+            return null;
+        }
+        if (column.isAutoIncrement()) {
+            return null;
+        }
+        if (column.getAggregationType() == AggregateType.REPLACE_IF_NOT_NULL) {
+            return null;
+        }
+        if (isReadAsTextButNotDeclaredText(dstSlotDesc, srcSlotDesc)) {
+            return null;
+        }
+        Expr expr = buildDefaultExpr(column);
+        if (expr == null) {
+            return null;
+        }
+        // Cast the way the plan casts a default for a column that was left off the columns list, so
+        // the two paths agree on the value and not just on which expression produced it.
+        return castToSlot(dstSlotDesc, expr);
+    }
+
+    /**
+     * Whether this load reads the column as text even though the column is not declared as text,
+     * and the declared type is one that cannot survive the trip.
+     *
+     * <p>{@link Load#initColumns} gives a table column's source slot either the column's own type
+     * or plain VARCHAR. It picks VARCHAR whenever the column appears in the arguments of any entry
+     * in the column expression list, because the schema type and the type that expression implies
+     * can disagree. Three things put a column in that list: a mapping expression the caller wrote
+     * in the columns header, a generated column whose expression reads it, which is added for
+     * every generated column whether or not a columns header was sent, and a column with a shadow
+     * twin while a schema change on it is in progress.
+     *
+     * <p>Comparing the two types spots all three, because it looks at the effect rather than the
+     * cause. The comparison accounts for length, so a VARCHAR column referenced by a mapping is
+     * correctly seen as retyped, which is why the declared type is checked as well. On the non
+     * vectorized path every source slot is text, so every JSON and complex column reads as retyped
+     * here. That is the right answer rather than an accident, because on that path they really are
+     * all read as text. Stream load always takes the vectorized path regardless.
+     *
+     * <p>Only JSON and the complex types are refused. Every other defaultable type reaches its
+     * destination through text unharmed, either because the scanner already reads it as text or
+     * because its text form converts back exactly. JSON does not, because converting it to text
+     * unwraps a string and the destination then parses the contents as JSON again, so a string
+     * default can come back as an array. The complex types have no conversion to text at all, and
+     * the default is built when the scan opens, so attempting one fails the whole load before a
+     * row is read, including rows that did supply the column.
+     */
+    private boolean isReadAsTextButNotDeclaredText(SlotDescriptor dstSlotDesc, SlotDescriptor srcSlotDesc) {
+        if (srcSlotDesc == null) {
+            return false;
+        }
+        Type dstType = dstSlotDesc.getColumn().getType();
+        if (!dstType.isJsonType() && !dstType.isComplexType()) {
+            return false;
+        }
+        return !dstType.equals(srcSlotDesc.getType());
+    }
+
+    /**
+     * The column's DEFAULT as an expression, or null when it has none this load can use.
+     *
+     * <p>A constant DEFAULT is usually a rendered string, but a complex one such as
+     * {@code ARRAY<INT> DEFAULT [1, 2]} is stored as an expression object instead, and for those
+     * {@code calculatedDefaultValue()} returns null. Reading the expression object is what keeps
+     * those columns from silently falling back to NULL.
+     *
+     * <p>Anything that cannot be turned into a usable expression returns null rather than throwing.
+     * The column is supplied by this load, so refusing to fill it leaves the existing NULL behavior
+     * in place; failing the load instead would break loads that work today.
+     */
+    private Expr buildDefaultExpr(Column column) {
+        Column.DefaultValueType defaultValueType = column.getDefaultValueType();
+        if (defaultValueType == Column.DefaultValueType.CONST) {
+            if (column.getDefaultExpr() != null && column.getDefaultExpr().hasExprObject()) {
+                return column.getDefaultExpr().obtainExpr();
+            }
+            String defaultValue = column.calculatedDefaultValue();
+            return defaultValue == null ? null : new StringLiteral(defaultValue);
+        }
+        if (defaultValueType == Column.DefaultValueType.VARY
+                && isValidDefaultFunction(column.getDefaultExpr().getExpr())) {
+            return column.getDefaultExpr().obtainExpr();
+        }
+        return null;
+    }
+
+    /** Only a duplicate key table's key is a pure sort key, with no row merging behind it. */
+    private boolean isDuplicateKeyTable() {
+        return dstTable instanceof OlapTable
+                && ((OlapTable) dstTable).getKeysType() == KeysType.DUP_KEYS;
+    }
+
     private void finalizeParams() throws StarRocksException {
         boolean negative = streamLoadInfo.getNegative();
         Map<Integer, Integer> destSidToSrcSidWithoutTrans = Maps.newHashMap();
@@ -348,6 +461,17 @@ public class StreamLoadScanNode extends LoadScanNode {
                 SlotDescriptor srcSlotDesc = slotDescByName.get(dstSlotDesc.getColumn().getName());
                 if (srcSlotDesc != null) {
                     destSidToSrcSidWithoutTrans.put(dstSlotDesc.getId().asInt(), srcSlotDesc.getId().asInt());
+                    // The column IS supplied by this load, so an absent key in a given row would
+                    // otherwise store NULL over the column's DEFAULT. When the load asked for it,
+                    // hand the column's default expression down so the scanner can fill that row
+                    // instead. A key present with a null value is untouched: that is a supplied value.
+                    if (streamLoadInfo.isFillDefaultOnAbsentKey()) {
+                        Expr defaultExpr = buildDefaultExprForAbsentKey(dstSlotDesc, srcSlotDesc);
+                        if (defaultExpr != null) {
+                            paramCreateContext.params.putToDefault_expr_of_src_slot(
+                                    srcSlotDesc.getId().asInt(), ExprToThrift.treeToThrift(defaultExpr));
+                        }
+                    }
                     // If dest is allowed null, we set source to nullable
                     if (dstSlotDesc.getColumn().isAllowNull()) {
                         srcSlotDesc.setIsNullable(true);
