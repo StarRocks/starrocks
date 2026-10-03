@@ -379,6 +379,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 && sessionVariable.isEnableScanDataCache()
                 && !sessionVariable.getHdfsBackendSelectorForceRebalance();
         int candidateCount = useCacheReplicaSpread ? Math.max(kCandidateNumber, cacheReplicaNum) : kCandidateNumber;
+        if (!useCacheReplicaSpread && sessionVariable.isEnableScanDataCache()
+                && !sessionVariable.getHdfsBackendSelectorForceRebalance()) {
+            candidateCount = 1;
+        }
         for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
             TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
             List<ComputeNode> backends = hashRing.get(scanRangeLocations, candidateCount);

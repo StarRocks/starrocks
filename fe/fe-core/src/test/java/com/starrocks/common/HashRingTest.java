@@ -22,12 +22,14 @@ import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.PlainHashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -139,5 +141,76 @@ public class HashRingTest {
         List<String> nodes = generateNodes(kNodeSize);
         PlainHashRing hashRing = new PlainHashRing(Hashing.murmur3_128(), funnel, nodes);
         testWithHashRing(hashRing, nodes);
+    }
+
+    @Test
+    public void testConsistentHashRingFewerNodesThanRequested() {
+        // Requesting more distinct nodes than exist returns exactly the available nodes
+        // (deduplicated) and terminates, for any cluster size down to a single node.
+        for (int nodeSize = 1; nodeSize <= 3; nodeSize++) {
+            List<String> nodes = generateNodes(nodeSize);
+            ConsistentHashRing<String, String> hashRing =
+                    new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+            for (String key : generateKeys(kKeySize)) {
+                List<String> got = hashRing.get(key, nodeSize + 2);
+                Assertions.assertEquals(nodeSize, got.size());
+                Assertions.assertEquals(nodeSize, new HashSet<>(got).size());
+            }
+        }
+    }
+
+    @Test
+    public void testConsistentHashRingPrimaryStableAcrossCandidateCount() {
+        // The primary node must not depend on how many candidates are requested, so asking
+        // for a single candidate yields the same placement as asking for several.
+        List<String> nodes = generateNodes(kNodeSize);
+        ConsistentHashRing<String, String> hashRing =
+                new ConsistentHashRing<>(Hashing.murmur3_128(), funnel, funnel, nodes, kVirtualNumber);
+        for (String key : generateKeys(kKeySize)) {
+            List<String> one = hashRing.get(key, 1);
+            List<String> three = hashRing.get(key, 3);
+            Assertions.assertEquals(1, one.size());
+            Assertions.assertEquals(3, three.size());
+            Assertions.assertEquals(3, new HashSet<>(three).size());
+            Assertions.assertEquals(one.get(0), three.get(0));
+        }
+    }
+
+    @Test
+    public void testConsistentHashRingStopsAfterOnlyPhysicalNode() {
+        class Node {
+            int hashCalls;
+
+            @Override
+            public int hashCode() {
+                hashCalls++;
+                return 1;
+            }
+        }
+        Node node = new Node();
+        Funnel<Node> nodeFunnel = (value, sink) -> sink.putInt(1);
+        ConsistentHashRing<String, Node> ring = new ConsistentHashRing<>(
+                Hashing.murmur3_128(), funnel, nodeFunnel, Collections.singletonList(node), 256);
+        node.hashCalls = 0;
+        Assertions.assertEquals(Collections.singletonList(node), ring.get("key", 3));
+        Assertions.assertTrue(node.hashCalls <= 2, "lookup must stop at the first virtual node");
+    }
+
+    @Test
+    public void testConsistentHashRingNodeCountTracksMembership() {
+        ConsistentHashRing<String, String> ring = new ConsistentHashRing<>(
+                Hashing.murmur3_128(), funnel, funnel, Collections.emptyList(), kVirtualNumber);
+        Assertions.assertTrue(ring.get("key", 3).isEmpty());
+        ring.addNode("a");
+        ring.addNode("a");
+        Assertions.assertEquals(Collections.singletonList("a"), ring.get("key", 3));
+        ring.addNode("b");
+        Assertions.assertEquals(2, ring.get("key", 3).size());
+        ring.removeNode("a");
+        Assertions.assertEquals(Collections.singletonList("b"), ring.get("key", 3));
+        Assertions.assertTrue(ring.get("key", 0).isEmpty());
+        Assertions.assertTrue(ring.get("key", -1).isEmpty());
+        ring.removeNode("b");
+        Assertions.assertTrue(ring.get("key", 3).isEmpty());
     }
 }

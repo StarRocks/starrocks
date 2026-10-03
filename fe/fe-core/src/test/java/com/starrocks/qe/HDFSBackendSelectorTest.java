@@ -33,6 +33,9 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import mockit.Expectations;
+import mockit.Invocation;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -671,6 +674,56 @@ public class HDFSBackendSelectorTest {
             Assertions.fail("expected StarRocksException for an empty worker set");
         } catch (Exception e) {
             Assertions.assertEquals("Failed to find backend to execute", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testHashCandidateCountPreservesCacheReplicasAndRebalance() throws Exception {
+        SessionVariable sessionVariable = new SessionVariable();
+        new Expectations() {
+            {
+                hdfsScanNode.getId();
+                result = scanNodeId;
+                hdfsScanNode.getTableName();
+                result = "hive_tbl";
+                hiveTable.getTableLocation();
+                result = "hdfs://dfs00/dataset/";
+                context.getSessionVariable();
+                result = sessionVariable;
+            }
+        };
+        List<Integer> requested = new ArrayList<>();
+        new MockUp<ConsistentHashRing>() {
+            @Mock
+            public List get(Invocation invocation, Object key, int distinctNumber) {
+                requested.add(distinctNumber);
+                return invocation.proceed(key, distinctNumber);
+            }
+        };
+        ImmutableMap<Long, ComputeNode> computeNodes = createComputeNodes(10);
+        for (int replicas : new int[] {1, 2, 5}) {
+            for (boolean cache : new boolean[] {false, true}) {
+                for (boolean rebalance : new boolean[] {false, true}) {
+                    sessionVariable.setHdfsBackendSelectorCacheReplicaNum(replicas);
+                    sessionVariable.setEnableScanDataCache(cache);
+                    sessionVariable.setHdfsBackendSelectorForceRebalance(rebalance);
+                    requested.clear();
+                    DefaultWorkerProvider workerProvider = new DefaultWorkerProvider(
+                            ImmutableMap.of(), computeNodes, ImmutableMap.of(), computeNodes,
+                            true, WarehouseManager.DEFAULT_RESOURCE);
+                    HDFSBackendSelector selector = new HDFSBackendSelector(hdfsScanNode, createScanRanges(1, 10000),
+                            new FragmentScanRangeAssignment(), workerProvider, false, false, false, context);
+                    selector.computeScanRangeAssignment();
+                    int expected = 3;
+                    if (cache && !rebalance) {
+                        expected = replicas == 1 ? 1 : Math.max(3, replicas);
+                    }
+                    Assertions.assertFalse(requested.isEmpty());
+                    for (int count : requested) {
+                        Assertions.assertEquals(expected, count);
+                    }
+                }
+            }
         }
     }
 }
