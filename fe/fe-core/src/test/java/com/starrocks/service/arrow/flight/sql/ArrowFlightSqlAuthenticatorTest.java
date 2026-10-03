@@ -15,18 +15,14 @@
 package com.starrocks.service.arrow.flight.sql;
 
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
 import com.starrocks.service.arrow.flight.sql.auth2.ArrowFlightSqlAuthenticator;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlSessionManager;
-import com.starrocks.system.Frontend;
 import org.apache.arrow.flight.CallHeaders;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
-
-import java.util.List;
+import org.mockito.Mockito;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -92,64 +88,76 @@ class ArrowFlightSqlAuthenticatorTest {
     }
 
     @Test
-    void testValidateBearerToken_unknownTokenAllowedWhenProxyEnabledAndValidFe() {
+    void testValidateBearerToken_unknownTokenForwardedWhenProxyEnabledAndClaimedFeIsDifferentAndKnown() {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        // Token from valid remote FE, not found in local cache
+        // Token claims to belong to a different, known FE and isn't found in this FE's local
+        // cache - i.e. it's genuinely misrouted, not necessarily forged. It must be let through so
+        // it can be forwarded to that FE (see ArrowFlightSqlServiceImpl's forward*ToRemoteFE
+        // methods), which will run this exact same check against its own cache before trusting it.
         String remoteToken = "10.0.6.7|some-uuid";
         doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(remoteToken);
+        when(sessionManager.isLocalToken(remoteToken)).thenReturn(false);
 
         try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
-                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
-
+                MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                        mockStatic(ArrowFlightSqlSessionManager.class, Mockito.CALLS_REAL_METHODS)) {
             mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
-
-            // Mock FE list to include the remote FE
-            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
-            NodeMgr mockNodeMgr = mock(NodeMgr.class);
-            Frontend mockFe = mock(Frontend.class);
-            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
-            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
-            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
-            when(mockFe.getHost()).thenReturn("10.0.6.7");
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.isValidFeHost("10.0.6.7")).thenReturn(true);
 
             CallHeaders headers = mock(CallHeaders.class);
             when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + remoteToken);
 
-            // Token allowed through because FE host is valid
             CallHeaderAuthenticator.AuthResult result = authenticator.authenticate(headers);
             assertEquals(remoteToken, result.getPeerIdentity());
         }
     }
 
     @Test
-    void testValidateBearerToken_unknownTokenRejectedWhenInvalidFe() {
+    void testValidateBearerToken_unknownTokenRejectedWhenClaimedFeIsSelf() {
         ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
         ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
 
-        // Token from unknown FE, not found in local cache
-        String maliciousToken = "malicious.host|some-uuid";
-        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(maliciousToken);
+        // Token claims to be owned by this very FE (isLocalToken == true) but is missing from
+        // this FE's local cache, meaning it is forged rather than merely misrouted. This FE is
+        // the one and only authority for tokens naming itself, so it must reject outright and
+        // never forward - forwarding here would just be trusting the caller's own claim.
+        String forgedToken = "10.0.6.7|forged-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(forgedToken);
+        when(sessionManager.isLocalToken(forgedToken)).thenReturn(true);
 
-        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
-                MockedStatic<GlobalStateMgr> mockedGlobalState = mockStatic(GlobalStateMgr.class)) {
-
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class)) {
             mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
 
-            // Mock FE list that does NOT include the malicious host
-            GlobalStateMgr mockGlobalState = mock(GlobalStateMgr.class);
-            NodeMgr mockNodeMgr = mock(NodeMgr.class);
-            Frontend mockFe = mock(Frontend.class);
-            mockedGlobalState.when(GlobalStateMgr::getCurrentState).thenReturn(mockGlobalState);
-            when(mockGlobalState.getNodeMgr()).thenReturn(mockNodeMgr);
-            when(mockNodeMgr.getFrontends(null)).thenReturn(List.of(mockFe));
-            when(mockFe.getHost()).thenReturn("10.0.1.107");  // Different host
+            CallHeaders headers = mock(CallHeaders.class);
+            when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + forgedToken);
+
+            assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
+        }
+    }
+
+    @Test
+    void testValidateBearerToken_unknownTokenRejectedWhenClaimedFeIsUnknown() {
+        ArrowFlightSqlSessionManager sessionManager = mock(ArrowFlightSqlSessionManager.class);
+        ArrowFlightSqlAuthenticator authenticator = new ArrowFlightSqlAuthenticator(sessionManager);
+
+        // Token claims to be from a host that isn't a known FE in the cluster at all. Even though
+        // it's not "local", it must never be forwarded - doing so would let a caller direct this FE
+        // to open a connection to an arbitrary/malicious host.
+        String maliciousToken = "malicious.host|some-uuid";
+        doThrow(new IllegalArgumentException("Invalid token")).when(sessionManager).validateToken(maliciousToken);
+        when(sessionManager.isLocalToken(maliciousToken)).thenReturn(false);
+
+        try (MockedStatic<GlobalVariable> mockedGlobalVar = mockStatic(GlobalVariable.class);
+                MockedStatic<ArrowFlightSqlSessionManager> mockedSessionMgr =
+                        mockStatic(ArrowFlightSqlSessionManager.class, Mockito.CALLS_REAL_METHODS)) {
+            mockedGlobalVar.when(GlobalVariable::isArrowFlightProxyEnabled).thenReturn(true);
+            mockedSessionMgr.when(() -> ArrowFlightSqlSessionManager.isValidFeHost("malicious.host")).thenReturn(false);
 
             CallHeaders headers = mock(CallHeaders.class);
             when(headers.get(Auth2Constants.AUTHORIZATION_HEADER)).thenReturn(Auth2Constants.BEARER_PREFIX + maliciousToken);
 
-            // Token rejected because FE host is not valid
             assertThrows(RuntimeException.class, () -> authenticator.authenticate(headers));
         }
     }
