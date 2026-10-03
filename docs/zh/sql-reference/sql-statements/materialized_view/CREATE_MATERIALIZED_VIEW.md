@@ -342,7 +342,11 @@ ALTER MATERIALIZED VIEW <mv_name> SET ("bloom_filter_columns" = "");
 - `partition_refresh_strategy`：单次刷新中物化视图的刷新策略。当值为`adaptive`，会根据基表分区的数据量来自行判断此次刷新需要刷新的分区数，此策略会极大地提高刷新效率。如不指定该属性，默认是`strict`, 即单次刷新完全由`partition_refresh_number`来控制。
 - `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
 
-- `excluded_refresh_tables`：在此项属性中列出的基表，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+- `excluded_refresh_tables`：在此项属性中列出的基表或视图，其数据产生变化时不会更新至物化视图。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+
+  :::note
+  在 `excluded_refresh_tables` 中列出的基表或视图，当其通过 `CREATE OR REPLACE VIEW` 或 `DROP` + `CREATE` 等方式被重建时，同样**不会**强制刷新依赖它的物化视图。物化视图仍会变为 inactive 状态，但其可见版本映射（visible version map）会被保留，因此后续刷新不会重写所有分区。如需无视 `excluded_refresh_tables` 的配置强制刷新物化视图，可使用 `REFRESH MATERIALIZED VIEW <mv_name> FORCE`。
+  :::
 
   :::tip
   `excluded_trigger_tables` 和 `excluded_refresh_tables` 的区别为：
