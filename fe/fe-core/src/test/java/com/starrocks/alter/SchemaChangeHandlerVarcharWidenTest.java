@@ -16,20 +16,28 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.persist.EditLog;
+import com.starrocks.persist.TableColumnAlterInfo;
+import com.starrocks.persist.WALApplier;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.expression.TypeDef;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.TypeFactory;
 import com.starrocks.utframe.TestWithFeService;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -302,6 +310,104 @@ public class SchemaChangeHandlerVarcharWidenTest extends TestWithFeService {
         Assertions.assertTrue(exception.getMessage().contains("primary key column[k1] cannot be nullable"),
                 exception.getMessage());
         assertColumnType(tableName, tableName, "k1", PrimitiveType.VARCHAR, 10);
+    }
+
+    @Test
+    public void testFastSchemaEvolutionInvalidatesGlobalDictForAllVarcharColumns() throws Exception {
+        // A schema change does not bump the partition visible version that a global dict's validity is
+        // checked against, so the fast-schema-evolution path must invalidate every varchar column's
+        // dict -- not just the altered one -- or a query would decode a new rowset against a stale dict
+        // and fail with "Dict Decode failed". Regression for the fuzz-found mut_286 crash.
+        String tableName = "t_fast_dict_invalidate";
+        createTable("CREATE TABLE test." + tableName + " (\n"
+                + "  k1 VARCHAR(10) NOT NULL,\n"
+                + "  name VARCHAR(50),\n"
+                + "  v1 INT\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(k1)\n"
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES (\n"
+                + "  \"replication_num\" = \"1\",\n"
+                + "  \"fast_schema_evolution\" = \"true\"\n"
+                + ");");
+
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<CacheDictManager>() {
+            @Mock
+            public void removeGlobalDict(OlapTable table, ColumnId columnName) {
+                invalidated.add(columnName.getId());
+            }
+        };
+
+        // Widening the key column takes the fast path (updateCatalogForFastSchemaEvolution).
+        AlterJobV2 job = analyzeAndCreateJob(
+                "ALTER TABLE test." + tableName + " MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL",
+                tableName);
+        Assertions.assertNull(job);
+
+        String k1Id = getColumn(tableName, tableName, "k1").getColumnId().getId();
+        String nameId = getColumn(tableName, tableName, "name").getColumnId().getId();
+        String v1Id = getColumn(tableName, tableName, "v1").getColumnId().getId();
+        Assertions.assertTrue(invalidated.contains(k1Id), "altered varchar column must be invalidated");
+        Assertions.assertTrue(invalidated.contains(nameId),
+                "varchar column not participating in the alter must still be invalidated");
+        Assertions.assertFalse(invalidated.contains(v1Id), "non-varchar column must not be invalidated");
+    }
+
+    @Test
+    public void testReplayFastSchemaEvolutionInvalidatesGlobalDict() throws Exception {
+        // A follower applies OP_FAST_ALTER_TABLE_COLUMNS through replayFastSchemaEvolutionMetaChange,
+        // which calls applyFastSchemaEvolutionMetaChangeInternal directly and never enters the leader
+        // wrapper (updateCatalogForFastSchemaEvolution). The dict invalidation must therefore live on
+        // that shared internal path, or a follower that replayed the change keeps serving a stale dict
+        // and hits the same "Dict Decode failed" failure the leader fix was meant to prevent.
+        String tableName = "t_fast_dict_invalidate_replay";
+        createTable("CREATE TABLE test." + tableName + " (\n"
+                + "  k1 VARCHAR(10) NOT NULL,\n"
+                + "  name VARCHAR(50),\n"
+                + "  v1 INT\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(k1)\n"
+                + "DISTRIBUTED BY HASH(k1) BUCKETS 1\n"
+                + "PROPERTIES (\n"
+                + "  \"replication_num\" = \"1\",\n"
+                + "  \"fast_schema_evolution\" = \"true\"\n"
+                + ");");
+
+        List<String> invalidated = new ArrayList<>();
+        new MockUp<CacheDictManager>() {
+            @Mock
+            public void removeGlobalDict(OlapTable table, ColumnId columnName) {
+                invalidated.add(columnName.getId());
+            }
+        };
+
+        // Capture the WAL record the leader journals WITHOUT applying it on the leader, so the
+        // invalidations we observe below come solely from the replay path -- exactly a follower that
+        // sees only the journal entry.
+        final TableColumnAlterInfo[] captured = new TableColumnAlterInfo[1];
+        new MockUp<EditLog>() {
+            @Mock
+            public void logModifyTableAddOrDrop(TableColumnAlterInfo info, WALApplier walApplier) {
+                captured[0] = info;
+            }
+        };
+
+        AlterJobV2 job = analyzeAndCreateJob(
+                "ALTER TABLE test." + tableName + " MODIFY COLUMN k1 VARCHAR(30) KEY NOT NULL",
+                tableName);
+        Assertions.assertNull(job);
+        Assertions.assertNotNull(captured[0], "leader must journal the fast schema evolution");
+        Assertions.assertTrue(invalidated.isEmpty(), "leader apply was suppressed, so nothing invalidated yet");
+
+        // Follower path: apply the journaled change through replay and assert it invalidates the dict.
+        GlobalStateMgr.getCurrentState().getSchemaChangeHandler()
+                .replayFastSchemaEvolutionMetaChange(captured[0]);
+
+        Assertions.assertTrue(invalidated.contains("k1"), "altered varchar column must be invalidated on replay");
+        Assertions.assertTrue(invalidated.contains("name"),
+                "other varchar column must also be invalidated on replay");
+        Assertions.assertFalse(invalidated.contains("v1"), "non-varchar column must not be invalidated");
     }
 
     private AlterJobV2 analyzeAndCreateJob(String sql, String tableName) throws Exception {
