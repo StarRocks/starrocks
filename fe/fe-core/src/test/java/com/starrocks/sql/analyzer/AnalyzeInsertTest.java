@@ -575,7 +575,44 @@ public class AnalyzeInsertTest {
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
-                "select 1 as a, 2 as a", "expect column names to be distinct, but got duplicate(s): [a]");
+                "select 1 as a, 2 as a",
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [a]");
+    }
+
+    @Test
+    public void testTableFunctionTableDuplicateColumnNames() {
+        String join = "select l.*, r.* from (select 1 as id, 'x' as name) l join (select 1 as id, 'y' as name) r " +
+                "on l.id = r.id";
+
+        // csv writes columns by position, duplicate names only repeat in the header
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"csv.include_header\" = \"true\", \"single\" = \"true\") select * from (" + join + ") t");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\") " +
+                "select 1 as abc, 2 as ABC");
+
+        // parquet and orc store names in the file schema
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\") " + join,
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"orc\") " + join,
+                "expect column names to be distinct (case-insensitive) for orc format, but got duplicate(s): [id, name]");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"CSV\") " + join);
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"Parquet\") " + join,
+                "expect column names to be distinct (case-insensitive) for Parquet format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"avro\") " + join,
+                "expect column names to be distinct (case-insensitive) for avro format, but got duplicate(s): [id, name]");
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\") " +
+                "select 1 as abc, 2 as ABC",
+                "expect column names to be distinct (case-insensitive) for parquet format, but got duplicate(s): [ABC]");
+
+        // partition_by only rejects a name it cannot resolve to exactly one column
+        analyzeFail("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"partition_by\" = \"ID\") " + join,
+                "partition column(s) [ID] are ambiguous, more than one output column has the same name");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"csv\", " +
+                "\"partition_by\" = \"k\") select l.*, r.*, 3 as k from (select 1 as id) l join (select 1 as id) r " +
+                "on l.id = r.id");
+        analyzeSuccess("insert into files (\"path\" = \"s3://path/to/directory/\", \"format\" = \"parquet\", " +
+                "\"partition_by\" = \"K1\") select 1 as k1, 2 as k2");
     }
 
     @Test
