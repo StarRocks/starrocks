@@ -25,3 +25,7 @@ Monitoring metrics are listed alphabetically in these files:
 - [q - r](./metric_details/q-r.md)
 - [s](./metric_details/s.md)
 - [t - z](./metric_details/t-z.md)
+
+## Catalog query metrics
+
+FE groups catalog query counts, errors, and latency by the `catalog_type` label. When Lance SQL execution is enabled, Lance scans use `catalog_type="lance"` for `catalog_query_total`, `catalog_query_err`, and `catalog_query_latency_ms`.
