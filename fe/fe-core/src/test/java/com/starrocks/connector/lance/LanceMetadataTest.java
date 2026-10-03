@@ -101,6 +101,7 @@ public class LanceMetadataTest {
         Assertions.assertTrue(discovered.isLanceTable());
         LanceTable lanceDiscovered = (LanceTable) discovered;
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getUri());
+        Assertions.assertEquals("lance_catalog", lanceDiscovered.getCatalogName());
         Assertions.assertEquals("s3://bucket/users", lanceDiscovered.getTableLocation());
         Assertions.assertFalse(lanceDiscovered.isSupported()); // verified unsupported in planning
 

@@ -266,6 +266,7 @@ import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
+import static com.starrocks.sql.common.ErrorType.UNSUPPORTED;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 import static com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.isColumnEqualConstant;
 import static com.starrocks.thrift.PlanNodesConstants.ROW_ID_COLUMN_NAME;
@@ -1837,6 +1838,13 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), odpsScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalLanceScan(OptExpression optExpression, ExecPlan context) {
+            // The planner and execution modules are supplied by the following Lance changes.
+            throw new StarRocksPlannerException("Lance scan execution is not available",
+                    UNSUPPORTED);
         }
 
         public PlanFragment visitPhysicalKuduScan(OptExpression optExpression, ExecPlan context) {
