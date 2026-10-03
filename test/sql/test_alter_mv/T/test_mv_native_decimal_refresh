@@ -1,0 +1,29 @@
+-- name: test_mv_native_decimal_refresh
+CREATE TABLE decimal_base (id INT, amount DECIMAL(10,2)) DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES('replication_num'='1');
+INSERT INTO decimal_base VALUES (1,12.34);
+CREATE MATERIALIZED VIEW decimal_mv DISTRIBUTED BY HASH(id) BUCKETS 1
+REFRESH DEFERRED MANUAL AS SELECT id,amount FROM decimal_base;
+[UC] REFRESH MATERIALIZED VIEW decimal_mv FORCE WITH SYNC MODE;
+SELECT * FROM decimal_mv ORDER BY id;
+ADMIN SET FRONTEND CONFIG('enable_active_materialized_view_schema_strict_check'='false');
+ALTER TABLE decimal_base MODIFY COLUMN amount DECIMAL(12,4);
+function: wait_alter_table_finish()
+ALTER MATERIALIZED VIEW decimal_mv ACTIVE;
+INSERT INTO decimal_base VALUES (2,12.3456);
+-- Rounding is not a filtered row: refresh must reject the schema before INSERT.
+[UC] REFRESH MATERIALIZED VIEW decimal_mv FORCE WITH SYNC MODE;
+SELECT IS_ACTIVE, INACTIVE_REASON LIKE '%column schema not compatible%'
+FROM information_schema.materialized_views WHERE TABLE_SCHEMA = database() AND TABLE_NAME = 'decimal_mv';
+-- Failed refresh preserves the previous contents.
+SELECT * FROM decimal_mv ORDER BY id;
+SET enable_materialized_view_rewrite = false;
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+SET enable_materialized_view_rewrite = true;
+SET materialized_view_rewrite_mode = 'default';
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+SET materialized_view_rewrite_mode = 'force';
+SELECT id,amount FROM decimal_base WHERE amount = 12.3456;
+SET materialized_view_rewrite_mode = 'default';
+DROP MATERIALIZED VIEW decimal_mv;
+DROP TABLE decimal_base;
