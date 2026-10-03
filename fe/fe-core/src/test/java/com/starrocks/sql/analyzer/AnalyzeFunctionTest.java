@@ -20,7 +20,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.expression.FunctionCallExpr;
 import com.starrocks.sql.ast.expression.StringLiteral;
-import com.starrocks.type.AnyGeographyType;
+import com.starrocks.type.ArrayType;
 import com.starrocks.type.GeoTypeDescriptor;
 import com.starrocks.type.PrimitiveType;
 import com.starrocks.type.ScalarType;
@@ -38,6 +38,10 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
+    private static final ScalarType CRS84_GEOGRAPHY = ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+            new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                    GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                    "OGC:CRS84", 4326));
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -65,7 +69,7 @@ public class AnalyzeFunctionTest {
     public void testNativeGeographySqlBoundary() {
         QueryRelation relation = ((QueryStatement) analyzeSuccess(
                 "select ST_GeogFromText('POINT (1 2)')")).getQueryRelation();
-        Assertions.assertEquals(AnyGeographyType.GEOGRAPHY,
+        Assertions.assertEquals(CRS84_GEOGRAPHY,
                 ((SelectRelation) relation).getOutputExpression().get(0).getType());
 
         analyzeSuccess("select ST_AsText(ST_GeogFromText('POINT EMPTY'))");
@@ -343,13 +347,74 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature: st_transform");
     }
 
+    @Test
+    public void testH3Contract() {
+        String point = "ST_GeogFromText('POINT (0 0)')";
+        String polygon = "ST_GeogFromText('POLYGON ((0 0, 1 0, 1 1, 0 1, 0 0))')";
+        assertFunctionContract("select H3_FromGeo(" + point + ", 3)", 120500, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_GridDisk(617700169958293503, 1)", 120501);
+        assertFunctionContract("select H3_ToParent(617700169958293503, 2)", 120502, PrimitiveType.BIGINT);
+        assertH3ArrayContract("select H3_ToChildren(617700169958293503, 4)", 120503);
+        assertFunctionContract("select H3_Resolution(617700169958293503)", 120504, PrimitiveType.INT);
+        assertH3ArrayContract("select H3_PolygonToCells(" + polygon + ", 3)", 120506);
+
+        QueryStatement statement = (QueryStatement) analyzeSuccess(
+                "select H3_ToBoundary(617700169958293503)");
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(120505, call.getFn().getFunctionId());
+        ScalarType type = (ScalarType) call.getType();
+        Assertions.assertEquals(PrimitiveType.GEOGRAPHY, type.getPrimitiveType());
+        Assertions.assertEquals(new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                GeoTypeDescriptor.CoordinateSystem.SPHERICAL, GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL,
+                "OGC:CRS84", 4326), type.getGeoDescriptor());
+        analyzeFail("select H3_FromGeo(ST_GeomFromText('POINT (0 0)', 'EPSG:4326'), 3)",
+                "No matching function with signature: h3_fromgeo");
+    }
+
+    @Test
+    public void testH3SqlPlanning() throws Exception {
+        String cell = "592035265791393791";
+        String point = "ST_GeogFromText('POINT (0 0)')";
+        String polygon = "ST_GeogFromText('POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))')";
+        // Cover SQL-tester query planning, including optimizer statistics and fragment construction.
+        for (String sql : List.of(
+                "SELECT IF(H3_FromGeo(" + point + ", 3) = " + cell + ", 'OK', 'FAIL')",
+                "SELECT IF(H3_Resolution(" + cell + ") = 3 AND H3_ToParent(" + cell + ", 3) = " + cell +
+                        " AND array_length(H3_ToChildren(" + cell + ", 3)) = 1, 'OK', 'FAIL')",
+                "SELECT IF(array_length(H3_GridDisk(" + cell + ", 0)) = 1 AND array_contains(H3_GridDisk(" +
+                        cell + ", 0), " + cell + "), 'OK', 'FAIL')",
+                "SELECT IF(ST_GeometryType(H3_ToBoundary(" + cell + ")) = 'ST_Polygon', 'OK', 'FAIL')",
+                "SELECT IF(array_contains(H3_PolygonToCells(" + polygon + ", 3), " + cell + "), 'OK', 'FAIL')",
+                "SELECT IF(H3_Resolution(CAST(NULL AS BIGINT)) IS NULL AND " +
+                        "H3_FromGeo(ST_GeogFromText('POINT EMPTY'), 3) IS NULL, 'OK', 'FAIL')",
+                "SELECT IF(array_length(H3_PolygonToCells(ST_GeogFromText('POLYGON EMPTY'), 3)) = 0, 'OK', 'FAIL')",
+                "SELECT H3_FromGeo(ST_GeogFromText('POINT (0 0)', 4326), 3)",
+                "SELECT H3_FromGeo(ST_GeogFromWKB(ST_AsWKB(" + point + ")), 3)",
+                "SELECT H3_FromGeo(ST_GeogFromWKB(ST_AsWKB(" + point + "), 4326), 3)",
+                "SELECT H3_FromGeo(ST_Centroid(" + polygon + "), 3)")) {
+            UtFrameUtils.getPlanAndFragment(getConnectContext(), sql).second.getFragments().forEach(fragment -> {
+                fragment.toThrift();
+            });
+        }
+    }
+
+    private static void assertH3ArrayContract(String sql, long functionId) {
+        QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
+        FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
+                .getOutputExpression().get(0);
+        Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
+        Assertions.assertTrue(call.getType().isArrayType(), sql);
+        Assertions.assertEquals(PrimitiveType.BIGINT, ((ArrayType) call.getType()).getItemType().getPrimitiveType(), sql);
+    }
+
     private static void assertFunctionContract(String sql, long functionId, PrimitiveType returnType) {
         QueryStatement statement = (QueryStatement) analyzeSuccess(sql);
         FunctionCallExpr call = (FunctionCallExpr) ((SelectRelation) statement.getQueryRelation())
                 .getOutputExpression().get(0);
         Assertions.assertEquals(functionId, call.getFn().getFunctionId(), sql);
         if (returnType == PrimitiveType.GEOGRAPHY) {
-            Assertions.assertEquals(AnyGeographyType.GEOGRAPHY, call.getType(), sql);
+            Assertions.assertEquals(CRS84_GEOGRAPHY, call.getType(), sql);
         } else {
             Assertions.assertEquals(returnType, call.getType().getPrimitiveType(), sql);
         }

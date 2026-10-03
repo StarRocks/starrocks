@@ -14,21 +14,29 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#ifdef WITH_H3
+#include <h3/h3api.h>
+#endif
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <limits>
 #include <thread>
+#include <unordered_set>
 
 #include "butil/time.h"
 #include "column/column_viewer.h"
 #include "column/geo_column.h"
 #include "column/nullable_column.h"
+#include "common/config_expr_fwd.h"
 #include "exprs/builtin_functions.h"
 #include "exprs/geo_functions.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks {
 
@@ -2006,6 +2014,13 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
             {120300, "ST_SRID", "INT", {"GEOMETRY"}},
             {120305, "ST_SetSRID", "GEOMETRY", {"GEOMETRY", "INT"}},
             {120310, "ST_Transform", "GEOMETRY", {"GEOMETRY", "INT"}},
+            {120500, "H3_FromGeo", "BIGINT", {"GEOGRAPHY", "INT"}},
+            {120501, "H3_GridDisk", "ARRAY_BIGINT", {"BIGINT", "INT"}},
+            {120502, "H3_ToParent", "BIGINT", {"BIGINT", "INT"}},
+            {120503, "H3_ToChildren", "ARRAY_BIGINT", {"BIGINT", "INT"}},
+            {120504, "H3_Resolution", "INT", {"BIGINT"}},
+            {120505, "H3_ToBoundary", "GEOGRAPHY", {"BIGINT"}},
+            {120506, "H3_PolygonToCells", "ARRAY_BIGINT", {"GEOGRAPHY", "INT"}},
     };
 
     for (const auto& function : expected) {
@@ -2026,4 +2041,253 @@ TEST_F(geographyFunctionsTest, nativeGeoFunctionRegistryContract) {
     }
 }
 
+#ifdef WITH_H3
+TEST_F(geographyFunctionsTest, h3CellAndArrayContract) {
+    constexpr int64_t expected = 0x83754efffffffffLL; // H3 4.5.0: POINT (0 0), resolution 3
+    auto point = geography({"POINT (0 0)"});
+    auto res3 = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    std::unique_ptr<FunctionContext> from_context(FunctionContext::create_test_context(
+            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    auto from = GeoFunctions::h3_from_geo(from_context.get(), {point, res3});
+    ASSERT_TRUE(from.ok()) << from.status();
+    ColumnViewer<TYPE_BIGINT> from_view(*from);
+    EXPECT_EQ(expected, from_view.value(0));
+    EXPECT_GT(from_view.value(0), 1LL << 53);
+
+    auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(expected, 1);
+    auto cell_resolution = GeoFunctions::h3_resolution(nullptr, {cell});
+    ASSERT_TRUE(cell_resolution.ok()) << cell_resolution.status();
+    EXPECT_EQ(3, ColumnViewer<TYPE_INT>(*cell_resolution).value(0));
+
+    auto parent = GeoFunctions::h3_to_parent(nullptr, {cell, res3});
+    ASSERT_TRUE(parent.ok()) << parent.status();
+    EXPECT_EQ(expected, ColumnViewer<TYPE_BIGINT>(*parent).value(0));
+
+    auto children = GeoFunctions::h3_to_children(nullptr, {cell, res3});
+    ASSERT_TRUE(children.ok()) << children.status();
+    ASSERT_EQ(1, (*children)->get(0).get_array().size());
+    EXPECT_EQ(expected, (*children)->get(0).get_array()[0].get_int64());
+
+    auto k0 = ColumnHelper::create_const_column<TYPE_INT>(0, 1);
+    auto disk = GeoFunctions::h3_grid_disk(nullptr, {cell, k0});
+    ASSERT_TRUE(disk.ok()) << disk.status();
+    ASSERT_EQ(1, (*disk)->get(0).get_array().size());
+    EXPECT_EQ(expected, (*disk)->get(0).get_array()[0].get_int64());
+
+    EXPECT_FALSE(GeoFunctions::h3_resolution(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(-1, 1)}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(-1, 1)}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_to_parent(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(4, 1)}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(2, 1)}).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3BoundaryAndPolygonFill) {
+    constexpr int64_t cell_value = 0x83754efffffffffLL;
+    auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
+    std::unique_ptr<FunctionContext> boundary_context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    auto boundary = GeoFunctions::h3_to_boundary(boundary_context.get(), {cell});
+    ASSERT_TRUE(boundary.ok()) << boundary.status();
+    EXPECT_TRUE((*boundary)->is_constant());
+    const auto* data =
+            down_cast<const GeoColumn*>(down_cast<const ConstColumn*>((*boundary).get())->data_column().get());
+    WkbGeometry geometry;
+    ASSERT_TRUE(WkbCodec::parse_wkb(data->get_wkb(0), &geometry).ok());
+    ASSERT_EQ(WkbGeometryType::POLYGON, geometry.type);
+    ASSERT_EQ(1, geometry.rings.size());
+    CellBoundary library_boundary{};
+    ASSERT_EQ(E_SUCCESS, cellToBoundary(static_cast<H3Index>(cell_value), &library_boundary));
+    EXPECT_EQ(static_cast<size_t>(library_boundary.numVerts + 1), geometry.rings[0].size());
+    EXPECT_EQ(geometry.rings[0].front(), geometry.rings[0].back());
+
+    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
+    auto res3 = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    auto cells = GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3});
+    ASSERT_TRUE(cells.ok()) << cells.status();
+    ASSERT_FALSE((*cells)->get(0).get_array().empty());
+    std::unordered_set<int64_t> unique;
+    const auto filled = (*cells)->get(0).get_array();
+    for (const auto& element : filled) {
+        const int64_t value = element.get_int64();
+        EXPECT_TRUE(isValidCell(static_cast<H3Index>(value)));
+        EXPECT_TRUE(unique.emplace(value).second);
+    }
+    EXPECT_TRUE(unique.contains(cell_value));
+
+    auto with_hole =
+            geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5), "
+                       "(-1 -1, -1 1, 1 1, 1 -1, -1 -1))"});
+    auto hole_cells = GeoFunctions::h3_polygon_to_cells(nullptr, {with_hole, res3});
+    ASSERT_TRUE(hole_cells.ok()) << hole_cells.status();
+    const auto holed = (*hole_cells)->get(0).get_array();
+    for (const auto& element : holed) {
+        EXPECT_NE(cell_value, element.get_int64());
+    }
+
+    auto bad_resolution = ColumnHelper::create_const_column<TYPE_INT>(16, 1);
+    auto empty = geography({"POLYGON EMPTY"});
+    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {empty, bad_resolution}).ok());
+    auto empty_result = GeoFunctions::h3_polygon_to_cells(nullptr, {empty, res3});
+    ASSERT_TRUE(empty_result.ok()) << empty_result.status();
+    EXPECT_TRUE((*empty_result)->get(0).get_array().empty());
+}
+
+TEST_F(geographyFunctionsTest, h3PolygonToCellsCancelled) {
+    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
+    auto resolution = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    RuntimeState state;
+    state.init_instance_mem_tracker();
+    std::unique_ptr<FunctionContext> context(FunctionContext::create_context(
+            &state, nullptr, TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT)),
+            {geography_type(), TypeDescriptor(TYPE_INT)}));
+
+    state.set_is_cancelled(true);
+    auto result = GeoFunctions::h3_polygon_to_cells(context.get(), {polygon, resolution});
+    ASSERT_FALSE(result.ok());
+    EXPECT_TRUE(result.status().is_cancelled()) << result.status();
+}
+
+TEST_F(geographyFunctionsTest, h3InvalidCellsAndLimits) {
+    constexpr int64_t cell_value = 0x83754efffffffffLL;
+    auto cell = ColumnHelper::create_const_column<TYPE_BIGINT>(cell_value, 1);
+    auto res3 = ColumnHelper::create_const_column<TYPE_INT>(3, 1);
+    auto k1 = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
+    auto k2 = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
+    EXPECT_FALSE(GeoFunctions::h3_resolution(nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(0, 1)}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_from_geo(
+                         nullptr, {geography({"POINT (0 0)"}), ColumnHelper::create_const_column<TYPE_INT>(16, 1)})
+                         .ok());
+    EXPECT_FALSE(
+            GeoFunctions::h3_to_children(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(-1, 1)}).ok());
+
+    std::array<H3Index, 7> neighbors{};
+    ASSERT_EQ(E_SUCCESS, gridDisk(cell_value, 1, neighbors.data()));
+    const auto found = std::find_if(neighbors.begin(), neighbors.end(),
+                                    [cell_value](H3Index value) { return value != H3_NULL && value != cell_value; });
+    ASSERT_NE(neighbors.end(), found);
+    H3Index edge = 0;
+    ASSERT_EQ(E_SUCCESS, cellsToDirectedEdge(cell_value, *found, &edge));
+    EXPECT_FALSE(GeoFunctions::h3_resolution(
+                         nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(edge), 1)})
+                         .ok());
+    H3Index vertex = 0;
+    ASSERT_EQ(E_SUCCESS, cellToVertex(cell_value, 0, &vertex));
+    EXPECT_FALSE(GeoFunctions::h3_resolution(
+                         nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(vertex), 1)})
+                         .ok());
+
+    struct SavedLimits {
+        int64_t cells = config::h3_max_cells_per_row;
+        int32_t k = config::h3_max_grid_disk_k;
+        int64_t vertices = config::h3_max_polygon_vertices;
+        int32_t components = config::h3_max_polygon_components;
+        int64_t bytes = config::h3_max_working_bytes;
+        int64_t work = config::h3_max_estimated_work_per_row;
+        ~SavedLimits() {
+            config::h3_max_cells_per_row = cells;
+            config::h3_max_grid_disk_k = k;
+            config::h3_max_polygon_vertices = vertices;
+            config::h3_max_polygon_components = components;
+            config::h3_max_working_bytes = bytes;
+            config::h3_max_estimated_work_per_row = work;
+        }
+    } saved;
+    config::h3_max_cells_per_row = 1;
+    EXPECT_TRUE(GeoFunctions::h3_grid_disk(nullptr, {cell, ColumnHelper::create_const_column<TYPE_INT>(0, 1)}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, k1}).ok());
+    config::h3_max_cells_per_row = saved.cells;
+    config::h3_max_grid_disk_k = 1;
+    EXPECT_TRUE(GeoFunctions::h3_grid_disk(nullptr, {cell, k1}).ok());
+    EXPECT_FALSE(GeoFunctions::h3_grid_disk(nullptr, {cell, k2}).ok());
+    config::h3_max_grid_disk_k = saved.k;
+
+    auto polygon = geography({"POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))"});
+    config::h3_max_polygon_vertices = 4;
+    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
+    config::h3_max_polygon_vertices = 5;
+    EXPECT_TRUE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
+    config::h3_max_polygon_vertices = saved.vertices;
+    config::h3_max_working_bytes = 1;
+    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
+    config::h3_max_working_bytes = saved.bytes;
+    config::h3_max_estimated_work_per_row = 1;
+    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {polygon, res3}).ok());
+    config::h3_max_estimated_work_per_row = saved.work;
+    auto multi =
+            geography({"MULTIPOLYGON (((-5 -5, -4 -5, -4 -4, -5 -4, -5 -5)), "
+                       "((4 4, 5 4, 5 5, 4 5, 4 4)))"});
+    config::h3_max_polygon_components = 1;
+    EXPECT_FALSE(GeoFunctions::h3_polygon_to_cells(nullptr, {multi, res3}).ok());
+}
+
+TEST_F(geographyFunctionsTest, h3SeamPolarAndPentagon) {
+    auto points = geography({"POINT (179.9 0)", "POINT (0 89.9)"});
+    auto resolution = ColumnHelper::create_const_column<TYPE_INT>(1, 2);
+    std::unique_ptr<FunctionContext> from_context(FunctionContext::create_test_context(
+            {geography_type(), TypeDescriptor(TYPE_INT)}, TypeDescriptor(TYPE_BIGINT)));
+    auto cells = GeoFunctions::h3_from_geo(from_context.get(), {points, resolution});
+    ASSERT_TRUE(cells.ok()) << cells.status();
+    ColumnViewer<TYPE_BIGINT> cell_view(*cells);
+    std::unique_ptr<FunctionContext> boundary_context(
+            FunctionContext::create_test_context({TypeDescriptor(TYPE_BIGINT)}, geography_type()));
+    for (int i = 0; i < 2; ++i) {
+        const H3Index cell = static_cast<H3Index>(cell_view.value(i));
+        ASSERT_TRUE(isValidCell(cell));
+        auto boundary = GeoFunctions::h3_to_boundary(
+                boundary_context.get(),
+                {ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(cell), 1)});
+        ASSERT_TRUE(boundary.ok()) << boundary.status();
+    }
+
+    std::array<H3Index, 12> pentagons{};
+    ASSERT_EQ(E_SUCCESS, getPentagons(1, pentagons.data()));
+    ASSERT_TRUE(isValidCell(pentagons[0]));
+    auto disk = GeoFunctions::h3_grid_disk(
+            nullptr, {ColumnHelper::create_const_column<TYPE_BIGINT>(static_cast<int64_t>(pentagons[0]), 1),
+                      ColumnHelper::create_const_column<TYPE_INT>(1, 1)});
+    ASSERT_TRUE(disk.ok()) << disk.status();
+    const auto ring = (*disk)->get(0).get_array();
+    std::unordered_set<int64_t> unique;
+    for (const auto& item : ring) {
+        ASSERT_GT(item.get_int64(), 0);
+        ASSERT_TRUE(isValidCell(static_cast<H3Index>(item.get_int64())));
+        ASSERT_TRUE(unique.insert(item.get_int64()).second);
+    }
+    EXPECT_TRUE(unique.contains(static_cast<int64_t>(pentagons[0])));
+}
+
+TEST_F(geographyFunctionsTest, h3PreparedPolygonAcrossBatchesAndThreads) {
+    auto polygon = ConstColumn::create(geography({"POLYGON ((-20 -20, 20 -20, 20 20, -20 20, -20 -20))"}), 2);
+    std::unique_ptr<FunctionContext> context(
+            FunctionContext::create_test_context({geography_type(), TypeDescriptor(TYPE_INT)},
+                                                 TypeDescriptor::create_array_type(TypeDescriptor(TYPE_BIGINT))));
+    context->set_constant_columns({polygon, nullptr});
+    ASSERT_TRUE(GeoFunctions::h3_prepare(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    ASSERT_NE(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto at_two = GeoFunctions::h3_polygon_to_cells(context.get(),
+                                                    {polygon, ColumnHelper::create_const_column<TYPE_INT>(2, 2)});
+    ASSERT_TRUE(at_two.ok()) << at_two.status();
+    auto at_three = GeoFunctions::h3_polygon_to_cells(context.get(),
+                                                      {polygon, ColumnHelper::create_const_column<TYPE_INT>(3, 2)});
+    ASSERT_TRUE(at_three.ok()) << at_three.status();
+    EXPECT_NE((*at_two)->get(0).get_array().size(), (*at_three)->get(0).get_array().size());
+    EXPECT_EQ(2, (*at_three)->size());
+
+    std::atomic<bool> valid{true};
+    const auto run = [&](int resolution) {
+        for (int i = 0; i < 4; ++i) {
+            auto result = GeoFunctions::h3_polygon_to_cells(
+                    context.get(), {polygon, ColumnHelper::create_const_column<TYPE_INT>(resolution, 2)});
+            if (!result.ok() || (*result)->get(0).get_array().empty()) valid.store(false);
+        }
+    };
+    std::thread first(run, 2);
+    std::thread second(run, 3);
+    first.join();
+    second.join();
+    EXPECT_TRUE(valid.load());
+    ASSERT_TRUE(GeoFunctions::h3_close(context.get(), FunctionContext::FRAGMENT_LOCAL).ok());
+    EXPECT_EQ(nullptr, context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+}
+
+#endif // WITH_H3
 } // namespace starrocks

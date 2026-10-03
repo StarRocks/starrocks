@@ -152,3 +152,17 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## H3 网格函数
+
+几何参数需要原生 XY CRS84 GEOGRAPHY；网格索引是有符号 BIGINT。有效性、NULL/EMPTY、填充近似和限制见 [H3 函数](h3-functions.md)。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |

@@ -152,3 +152,17 @@ Geography 座標は対応する経度と緯度の範囲内である必要があ�
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## H3 セル関数
+
+ジオメトリ引数にはネイティブ XY CRS84 GEOGRAPHY が必要です。セル ID は符号付き BIGINT です。有効性、NULL/EMPTY、近似フィル、制限については [H3 関数](h3-functions.md) を参照してください。
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |

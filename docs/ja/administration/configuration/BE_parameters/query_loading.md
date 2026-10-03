@@ -41,6 +41,47 @@ SELECT * FROM information_schema.be_configs [WHERE NAME LIKE "%<name_pattern>%"]
 
 ## クエリ
 
+### H3 リソース制限
+
+以下の変更可能な正の BE 設定は H3 関数の 1 行を制限します。超過時は部分結果ではなくエラーになります。関数と中心フィルについては [H3 関数](../../../sql-reference/sql-functions/spatial-functions/h3-functions.md) を参照してください。
+
+#### h3_max_cells_per_row
+
+- Default: 100000
+- Is mutable: Yes
+- Limit: cells / pre-deduplication expansion slots.
+
+#### h3_max_grid_disk_k
+
+- Default: 128
+- Is mutable: Yes
+- Limit: grid steps.
+
+#### h3_max_polygon_vertices
+
+- Default: 10000
+- Is mutable: Yes
+- Limit: coordinate positions including ring closure.
+
+#### h3_max_polygon_components
+
+- Default: 256
+- Is mutable: Yes
+- Limit: polygon components including empty components.
+
+#### h3_max_working_bytes
+
+- Default: 67108864
+- Is mutable: Yes
+- Limit: bytes of per-worker preparation and temporary buffers.
+
+#### h3_max_estimated_work_per_row
+
+- Default: 10000000
+- Is mutable: Yes
+- Limit: sum of estimated slots times (component positions + 1).
+
+
 ### ai_function_request_timeout_ms
 
 - デフォルト: 600000

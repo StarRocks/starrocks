@@ -1112,6 +1112,17 @@ public class FunctionAnalyzer {
                 fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
                         GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
             }
+        } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
+                FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
+            // These producers have a fixed CRS84 result, which must be concrete before planning.
+            fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            if (fn != null) {
+                fn = fn.copy();
+                fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOGRAPHY,
+                        new GeoTypeDescriptor(GeoTypeDescriptor.LogicalType.GEOGRAPHY,
+                                GeoTypeDescriptor.CoordinateSystem.SPHERICAL,
+                                GeoTypeDescriptor.EdgeAlgorithm.SPHERICAL, "OGC:CRS84", 4326)));
+            }
         } else if (FunctionSet.ST_CENTROID.equalsIgnoreCase(fnName) && argumentTypes.length == 1 &&
                 (argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOGRAPHY ||
                         argumentTypes[0].getPrimitiveType() == PrimitiveType.GEOMETRY)) {

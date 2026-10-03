@@ -152,3 +152,17 @@ Native XY POINT, LINESTRING, POLYGON and their MULTI families; finite signed dis
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## H3 cell functions
+
+These overloads require native XY CRS84 GEOGRAPHY for geometry arguments; the cell is a signed BIGINT. See [H3 functions](h3-functions.md) for validity, NULL/EMPTY, fill approximation, and limits.
+
+| Signature | Function ID | Result |
+| --- | ---: | --- |
+| `H3_FromGeo(GEOGRAPHY, INT)` | 120500 | `BIGINT` |
+| `H3_GridDisk(BIGINT, INT)` | 120501 | `ARRAY<BIGINT>` |
+| `H3_ToParent(BIGINT, INT)` | 120502 | `BIGINT` |
+| `H3_ToChildren(BIGINT, INT)` | 120503 | `ARRAY<BIGINT>` |
+| `H3_Resolution(BIGINT)` | 120504 | `INT` |
+| `H3_ToBoundary(BIGINT)` | 120505 | `GEOGRAPHY` |
+| `H3_PolygonToCells(GEOGRAPHY, INT)` | 120506 | `ARRAY<BIGINT>` |
