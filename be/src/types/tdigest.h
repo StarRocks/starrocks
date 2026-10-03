@@ -127,7 +127,7 @@ public:
     TDigest() : TDigest(1000) {}
     explicit TDigest(Value compression) : TDigest(compression, 0) {}
     explicit TDigest(const char* src) { this->deserialize(src); }
-    explicit TDigest(const Slice& src) { this->deserialize(src.data); }
+    explicit TDigest(const Slice& src) { this->deserialize(src.data, src.size); }
     TDigest(Value compression, Index bufferSize) : TDigest(compression, bufferSize, 0) {}
     TDigest(Value compression, Index unmergedSize, Index mergedSize);
     TDigest(std::vector<Centroid>&& processed, std::vector<Centroid>&& unprocessed, Value compression,
@@ -170,8 +170,22 @@ public:
     // been reached.
     bool add(Value x, Weight w);
     void add(std::vector<Centroid>::const_iterator iter, std::vector<Centroid>::const_iterator end);
+    // Upper bound for centroid array sizes in a deserialized blob. Must cover
+    // the largest legitimate intermediate state (the _unprocessed buffer
+    // before process() runs has capacity 8 * ceil(compression), and the
+    // percentile_approx MAX_COMPRESSION is 10000 → 80000 centroids). 131072
+    // = 1 << 17 gives ~60% headroom past that ceiling and still protects
+    // against OOM from corrupted or truncated input.
+    static constexpr size_t kMaxCentroidsDeserialize = 1 << 17;
+
     uint64_t serialize_size() const;
     size_t serialize(uint8_t* writer) const;
+    // Bounded variant. Returns false and resets the digest to an empty state
+    // if the blob is truncated or declares an oversized centroid array.
+    bool deserialize(const char* data, size_t size);
+    // Legacy unsafe wrapper for callers that do not carry the blob length;
+    // delegates to the bounded variant with an unbounded size. Prefer the
+    // bounded overload at new call sites.
     void deserialize(const char* type_reader);
 
 private:

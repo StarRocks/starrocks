@@ -129,6 +129,10 @@ bool ObjectColumn<T>::append_strings(const Slice* data, size_t size) {
                 return false;
             }
             _pool.emplace_back(std::move(*variant_result));
+        } else if constexpr (std::is_same_v<T, PercentileValue>) {
+            if (!deserialize_and_append(s)) {
+                return false;
+            }
         } else {
             _pool.emplace_back(s);
         }
@@ -220,8 +224,11 @@ bool ObjectColumn<T>::deserialize_and_append(const Slice& src) {
     } else if constexpr (std::is_same_v<T, HyperLogLog>) {
         res = _pool.emplace_back().deserialize(src);
     } else if constexpr (std::is_same_v<T, PercentileValue>) {
-        _pool.emplace_back(src);
-        res = true;
+        T value;
+        res = value.deserialize(src.data, src.size);
+        if (res) {
+            _pool.emplace_back(std::move(value));
+        }
     }
 
     return res;

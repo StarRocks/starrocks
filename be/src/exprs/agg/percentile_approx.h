@@ -66,11 +66,18 @@ public:
 
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
+        if (src.size < sizeof(double)) {
+            ctx->set_error("Invalid percentile intermediate header");
+            return;
+        }
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
         PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
+        if (!src_percentile.percentile->deserialize(src.data + sizeof(double), src.size - sizeof(double))) {
+            ctx->set_error("Invalid percentile intermediate digest");
+            return;
+        }
 
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->merge(src_percentile.percentile.get());
@@ -329,9 +336,16 @@ public:
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
-        // Read quantile count
+        if (src.size < sizeof(uint32_t)) {
+            ctx->set_error("Invalid percentile array intermediate header");
+            return;
+        }
         uint32_t count;
         memcpy(&count, src.data, sizeof(uint32_t));
+        if (count > (src.size - sizeof(uint32_t)) / sizeof(double)) {
+            ctx->set_error("Invalid percentile array quantile count");
+            return;
+        }
 
         // Initialize targetQuantiles if empty (first merge without prior update)
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
@@ -341,7 +355,11 @@ public:
 
         // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
         PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
+        size_t offset = sizeof(uint32_t) + count * sizeof(double);
+        if (!src_percentile.percentile->deserialize(src.data + offset, src.size - offset)) {
+            ctx->set_error("Invalid percentile array intermediate digest");
+            return;
+        }
 
         // Merge into current state
         int64_t prev_memory = data(state).percentile->mem_usage();
@@ -487,9 +505,16 @@ public:
         const auto* binary_column = down_cast<const BinaryColumn*>(column);
         Slice src = binary_column->get_slice(row_num);
 
-        // Read quantile count
+        if (src.size < sizeof(uint32_t)) {
+            ctx->set_error("Invalid percentile array intermediate header");
+            return;
+        }
         uint32_t count;
         memcpy(&count, src.data, sizeof(uint32_t));
+        if (count > (src.size - sizeof(uint32_t)) / sizeof(double)) {
+            ctx->set_error("Invalid percentile array quantile count");
+            return;
+        }
 
         // Initialize targetQuantiles if empty (first merge without prior update)
         if (UNLIKELY(data(state).targetQuantiles.empty())) {
@@ -499,7 +524,11 @@ public:
 
         // Deserialize TDigest (skip quantiles array, only need TDigest for merging)
         PercentileApproxState src_percentile(compression);
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(uint32_t) + count * sizeof(double));
+        size_t offset = sizeof(uint32_t) + count * sizeof(double);
+        if (!src_percentile.percentile->deserialize(src.data + offset, src.size - offset)) {
+            ctx->set_error("Invalid percentile array intermediate digest");
+            return;
+        }
 
         // Merge into current state
         int64_t prev_memory = data(state).percentile->mem_usage();
