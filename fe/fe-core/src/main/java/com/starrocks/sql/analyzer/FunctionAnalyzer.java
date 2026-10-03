@@ -1100,7 +1100,9 @@ public class FunctionAnalyzer {
                 fn.setRetType(ScalarType.createGeoType(PrimitiveType.GEOMETRY,
                         GeoTypeDescriptor.geometry("EPSG:" + targetSrid)));
             }
-        } else if (FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName) && argumentTypes.length == 1) {
+        } else if ("st_geogfromtext".equalsIgnoreCase(fnName) || "st_geogfromwkb".equalsIgnoreCase(fnName) ||
+                FunctionSet.H3_TOBOUNDARY.equalsIgnoreCase(fnName)) {
+            // These producers have a fixed CRS84 result, which must be concrete before planning.
             fn = ExprUtils.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             if (fn != null) {
                 fn = fn.copy();
