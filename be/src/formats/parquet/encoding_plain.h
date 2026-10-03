@@ -21,11 +21,13 @@
 #include "base/bit/bit_util.h"
 #include "base/coding.h"
 #include "base/container/raw_container.h"
+#include "base/simd/simd.h"
 #include "base/string/faststring.h"
 #include "base/string/slice.h"
 #include "base/types/int256.h"
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "column/raw_data_visitor.h"
 #include "column/vectorized_fwd.h"
@@ -134,13 +136,30 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
-        size_t max_fetch = count * SIZE_OF_TYPE;
-        if (max_fetch + _offset > _data.size) {
+        if (_offset > _data.size || count > (_data.size - _offset) / SIZE_OF_TYPE) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        auto n = dst->append_numbers(_data.data + _offset, max_fetch);
-        DCHECK_EQ(count, n);
+        if (count == 0) {
+            return Status::OK();
+        }
+        const size_t max_fetch = count * SIZE_OF_TYPE;
+        // Scattered per-value copies are slower than memcpy even for sparse masks.
+        // Skip fully rejected runs; keep the bulk path for mixed batches and INT96.
+        if (filter == nullptr || !std::is_arithmetic_v<T> || _has_selected_values(filter, count)) {
+            auto n = dst->append_numbers(_data.data + _offset, max_fetch);
+            DCHECK_EQ(count, n);
+        } else {
+            auto* data_column = down_cast<FixedLengthColumnBase<T>*>(ColumnHelper::get_data_column(dst));
+            // Preserve row positions and non-NULL flags while avoiding the input copy.
+            auto& values = data_column->get_data();
+            const size_t old_size = values.size();
+            raw::stl_vector_resize_uninitialized(&values, old_size + count);
+            memset(values.data() + old_size, 0, max_fetch);
+            if (dst->is_nullable()) {
+                down_cast<NullableColumn*>(dst)->null_column_raw_ptr()->append_default(count);
+            }
+        }
         _offset += max_fetch;
         return Status::OK();
     }
@@ -167,6 +186,31 @@ public:
     }
 
 private:
+    static bool _has_selected_values(const FilterData* filter, size_t count) {
+        if (filter[0] != 0) return true;
+#ifdef __AVX2__
+        // Reduce four vectors before branching so fully rejected batches do not
+        // pay the latency of a separate test/branch for every 32 bytes.
+        while (count >= 128) {
+            const auto* p = reinterpret_cast<const __m256i*>(filter);
+            const __m256i a = _mm256_or_si256(_mm256_loadu_si256(p), _mm256_loadu_si256(p + 1));
+            const __m256i b = _mm256_or_si256(_mm256_loadu_si256(p + 2), _mm256_loadu_si256(p + 3));
+            const __m256i bits = _mm256_or_si256(a, b);
+            if (!_mm256_testz_si256(bits, bits)) return true;
+            filter += 128;
+            count -= 128;
+        }
+#endif
+        while (count >= sizeof(uint64_t)) {
+            uint64_t bits;
+            memcpy(&bits, filter, sizeof(bits));
+            if (bits != 0) return true;
+            filter += sizeof(bits);
+            count -= sizeof(bits);
+        }
+        return SIMD::contains_nonzero_bit(filter, count);
+    }
+
     enum { SIZE_OF_TYPE = sizeof(T) };
 
     Slice _data;

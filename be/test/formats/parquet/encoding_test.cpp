@@ -16,10 +16,13 @@
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <limits>
 #include <random>
+#include <type_traits>
 
 #include "base/simd/byte_stream_split.h"
+#include "base/testutil/assert.h"
 #include "column/binary_column.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -33,6 +36,187 @@ public:
     ParquetEncodingTest() = default;
     ~ParquetEncodingTest() override = default;
 };
+
+template <typename T>
+class ParquetPlainSelectionTest : public testing::Test {
+protected:
+    void set_values(const std::vector<T>& values) {
+        constexpr auto type = std::is_same_v<T, int32_t>
+                                      ? tparquet::Type::INT32
+                                      : std::is_same_v<T, int64_t> ? tparquet::Type::INT64
+                                                                   : std::is_same_v<T, float> ? tparquet::Type::FLOAT
+                                                                                              : tparquet::Type::DOUBLE;
+        const EncodingInfo* encoding = nullptr;
+        ASSERT_OK(EncodingInfo::get(type, tparquet::Encoding::PLAIN, &encoding));
+        ASSERT_OK(encoding->create_encoder(&_encoder));
+        ASSERT_OK(_encoder->append(reinterpret_cast<const uint8_t*>(values.data()), values.size()));
+        _encoded = _encoder->build();
+        ASSERT_OK(encoding->create_decoder(&_decoder));
+        ASSERT_OK(_decoder->set_data(_encoded));
+    }
+
+    static void check_values(const Column& column, const std::vector<T>& expected) {
+        const auto* data = down_cast<const FixedLengthColumnBase<T>*>(ColumnHelper::get_data_column(&column));
+        const auto values = data->immutable_data();
+        ASSERT_EQ(expected.size(), values.size());
+        for (size_t i = 0; i < expected.size(); ++i) {
+            // NULL payload bytes are unspecified. The tests check their null masks separately.
+            if (column.is_null(i)) continue;
+            // Also check NaN payloads and signed zero without floating-point comparisons.
+            EXPECT_EQ(0, memcmp(&expected[i], &values[i], sizeof(T))) << "row=" << i;
+        }
+    }
+
+    static NullInfos null_info(std::initializer_list<uint8_t> nulls) {
+        NullInfos info;
+        info.reset_with_capacity(nulls.size());
+        size_t i = 0;
+        for (uint8_t is_null : nulls) {
+            info.nulls_data()[i] = is_null;
+            info.num_nulls += is_null;
+            info.num_ranges += i == 0 || is_null != info.nulls_data()[i - 1];
+            ++i;
+        }
+        return info;
+    }
+
+    std::unique_ptr<Encoder> _encoder;
+    std::unique_ptr<Decoder> _decoder;
+    Slice _encoded;
+};
+
+using PlainNumericTypes = ::testing::Types<int32_t, int64_t, float, double>;
+TYPED_TEST_SUITE(ParquetPlainSelectionTest, PlainNumericTypes);
+
+TYPED_TEST(ParquetPlainSelectionTest, MixedSelectionKeepsBulkValuesAndCursor) {
+    using T = TypeParam;
+    ASSERT_NO_FATAL_FAILURE(this->set_values({11, 12, 13, 14, 15, 16, 17, 18, 19, 20}));
+    auto column = FixedLengthColumn<T>::create();
+    column->append(99);
+    const FilterData filter[] = {1, 0, 7, 0, 0, 1};
+    ASSERT_OK(this->_decoder->next_batch(6, ColumnContentType::VALUE, column.get(), filter));
+    this->check_values(*column, {99, 11, 12, 13, 14, 15, 16});
+
+    ASSERT_OK(this->_decoder->skip(1));
+    ASSERT_OK(this->_decoder->next_batch(2, ColumnContentType::VALUE, column.get()));
+    const FilterData reject[] = {0};
+    ASSERT_OK(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get(), reject));
+    this->check_values(*column, {99, 11, 12, 13, 14, 15, 16, 18, 19, 0});
+    EXPECT_FALSE(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get()).ok());
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, AllSelectedAndRejectedDoNotCreateNulls) {
+    using T = TypeParam;
+    ASSERT_NO_FATAL_FAILURE(this->set_values({11, 12, 13, 14}));
+    for (FilterData selected : {0, 1, 7}) {
+        ASSERT_OK(this->_decoder->set_data(this->_encoded));
+        auto column = NullableColumn::create(FixedLengthColumn<T>::create(), NullColumn::create());
+        const FilterData filter[] = {selected, selected, selected};
+        ASSERT_OK(this->_decoder->next_batch(0, ColumnContentType::VALUE, column.get(), filter));
+        EXPECT_EQ(0, column->size());
+        ASSERT_OK(this->_decoder->next_batch(3, ColumnContentType::VALUE, column.get(), filter));
+        ASSERT_OK(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get()));
+        this->check_values(*column, selected ? std::vector<T>{11, 12, 13, 14} : std::vector<T>{0, 0, 0, 14});
+        EXPECT_FALSE(column->has_null());
+        for (auto is_null : column->immutable_null_column_data()) EXPECT_EQ(0, is_null);
+    }
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, NullableRowsKeepTheirOriginalNullMask) {
+    using T = TypeParam;
+    ASSERT_NO_FATAL_FAILURE(this->set_values({11, 12, 13, 14, 15, 16, 17}));
+    auto column = NullableColumn::create(FixedLengthColumn<T>::create(), NullColumn::create());
+    ASSERT_TRUE(column->append_nulls(1));
+    const T prefix = 99;
+    ASSERT_EQ(1, column->append_numbers(&prefix, sizeof(T)));
+    auto nulls = this->null_info({0, 1, 0, 0, 1, 0, 0, 1, 0});
+    const FilterData filter[] = {1, 1, 0, 1, 0, 0, 1, 1, 0};
+    ASSERT_OK(this->_decoder->next_batch_with_nulls(9, nulls, ColumnContentType::VALUE, column.get(), filter));
+    ASSERT_OK(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get()));
+    this->check_values(*column, {0, 99, 11, 0, 12, 13, 0, 14, 15, 0, 0, 17});
+    const std::vector<uint8_t> expected_nulls = {1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0};
+    const auto& actual_nulls = column->immutable_null_column_data();
+    EXPECT_EQ(expected_nulls, std::vector<uint8_t>(actual_nulls.begin(), actual_nulls.end()));
+    EXPECT_TRUE(column->has_null());
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, AllNullRowsDoNotConsumeEncodedValues) {
+    using T = TypeParam;
+    ASSERT_NO_FATAL_FAILURE(this->set_values({11, 12}));
+    auto column = NullableColumn::create(FixedLengthColumn<T>::create(), NullColumn::create());
+    auto nulls = this->null_info({1, 1, 1});
+    const FilterData filter[] = {0, 1, 0};
+    ASSERT_OK(this->_decoder->next_batch_with_nulls(3, nulls, ColumnContentType::VALUE, column.get(), filter));
+    for (size_t i = 0; i < 3; ++i) EXPECT_TRUE(column->is_null(i));
+    const FilterData tail[] = {0, 1};
+    ASSERT_OK(this->_decoder->next_batch(2, ColumnContentType::VALUE, column.get(), tail));
+    this->check_values(*column, {0, 0, 0, 11, 12});
+    EXPECT_FALSE(column->is_null(3));
+    EXPECT_FALSE(column->is_null(4));
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, RejectedRowsStillValidateInputBounds) {
+    using T = TypeParam;
+    ASSERT_NO_FATAL_FAILURE(this->set_values({11, 12}));
+    auto column = FixedLengthColumn<T>::create();
+    column->append(99);
+    const FilterData reject[] = {0, 0, 0};
+    EXPECT_FALSE(this->_decoder->next_batch(3, ColumnContentType::VALUE, column.get(), reject).ok());
+    EXPECT_FALSE(
+            this->_decoder
+                    ->next_batch(std::numeric_limits<size_t>::max(), ColumnContentType::VALUE, column.get(), reject)
+                    .ok());
+    this->check_values(*column, {99});
+    ASSERT_OK(this->_decoder->next_batch(2, ColumnContentType::VALUE, column.get()));
+    this->check_values(*column, {99, 11, 12});
+
+    ASSERT_OK(this->_decoder->set_data(Slice(this->_encoded.data, this->_encoded.size - 1)));
+    EXPECT_FALSE(this->_decoder->next_batch(2, ColumnContentType::VALUE, column.get(), reject).ok());
+    this->check_values(*column, {99, 11, 12});
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, SelectedValuesKeepTheirBitPatterns) {
+    using T = TypeParam;
+    std::vector<T> values = {std::numeric_limits<T>::lowest(), 19, std::numeric_limits<T>::max(), 21, -17};
+    if constexpr (std::is_floating_point_v<T>) {
+        values.insert(values.end(),
+                      {31, std::numeric_limits<T>::quiet_NaN(), 37, -T{0}, 41, std::numeric_limits<T>::infinity()});
+    }
+    ASSERT_NO_FATAL_FAILURE(this->set_values(values));
+    std::vector<FilterData> filter(values.size(), 1);
+    std::vector<T> expected = values;
+    for (size_t i = 1; i < values.size(); i += 2) {
+        filter[i] = 0;
+    }
+    auto column = FixedLengthColumn<T>::create();
+    ASSERT_OK(this->_decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get(), filter.data()));
+    this->check_values(*column, expected);
+}
+
+TYPED_TEST(ParquetPlainSelectionTest, UnalignedMasksAndBoundaryLengthsKeepValuesAndCursor) {
+    using T = TypeParam;
+    for (size_t count : {7, 8, 31, 127, 128, 129, 257}) {
+        std::vector<T> values(count + 1);
+        for (size_t i = 0; i < values.size(); ++i) values[i] = static_cast<T>(i + 1);
+        ASSERT_NO_FATAL_FAILURE(this->set_values(values));
+        // Offset the mask and put a non-canonical true value at its final byte.
+        std::vector<FilterData> mask(count + 1, 0);
+        mask.back() = 0x80;
+        auto column = FixedLengthColumn<T>::create();
+        ASSERT_OK(this->_decoder->next_batch(count, ColumnContentType::VALUE, column.get(), mask.data() + 1));
+        ASSERT_OK(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get()));
+        this->check_values(*column, values);
+
+        ASSERT_OK(this->_decoder->set_data(this->_encoded));
+        column->reset_column();
+        mask.back() = 0;
+        ASSERT_OK(this->_decoder->next_batch(count, ColumnContentType::VALUE, column.get(), mask.data() + 1));
+        ASSERT_OK(this->_decoder->next_batch(1, ColumnContentType::VALUE, column.get()));
+        std::vector<T> expected(count + 1, T{});
+        expected.back() = values.back();
+        this->check_values(*column, expected);
+    }
+}
 
 template <typename T, bool is_dictionary>
 struct DecoderChecker {
