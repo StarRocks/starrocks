@@ -35,8 +35,9 @@ If yes, please specify the type of change:
   - [ ] This pr needs auto generate documentation
 - [ ] This is a backport pr
 
-## Bugfix cherry-pick branch check:
-- [ ] I have checked the version labels which the pr will be auto-backported to the target branch
-  - [ ] 4.1
-  - [ ] 4.0
-  - [ ] 3.5
+## Backport:
+Backport targets are computed automatically from the PR type and per-branch metadata
+(`.github/.status` / `.github/.lts`): BugFix/Doc/UT → recent releases ∪ recent LTS,
+Enhancement → recent releases, others → none. No manual version checkboxes.
+- To exclude a branch: comment `/no-backport branch-X` before merge (`/no-backport` for none).
+- To add a branch beyond the computed set: comment `@Mergifyio backport branch-X` after merge.
