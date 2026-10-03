@@ -74,6 +74,7 @@ public:
 
     const UniqueId& id() { return _id; }
     time_t last_visit_time() const { return _last_visit_time; }
+    void update_last_visit_time() { _last_visit_time = time(nullptr); }
     void set_grp(const UniqueId& grp_id) { _grp_id = grp_id; }
 
 protected:

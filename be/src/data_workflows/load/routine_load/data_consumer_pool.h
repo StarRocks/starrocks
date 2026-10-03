@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <ctime>
 #include <memory>
 #include <mutex>
@@ -52,12 +53,9 @@ class Status;
 class DataConsumerPool {
 public:
     DataConsumerPool(int64_t max_pool_size)
-            : _is_closed(std::make_shared<bool>(false)), _max_pool_size(max_pool_size) {}
+            : _is_closed(std::make_shared<std::atomic_bool>(false)), _max_pool_size(max_pool_size) {}
 
-    ~DataConsumerPool() {
-        std::unique_lock<std::mutex> l(_lock);
-        *_is_closed = true;
-    }
+    ~DataConsumerPool() { stop(); }
 
     void stop();
 
@@ -79,7 +77,7 @@ private:
     void _clean_idle_consumer_bg();
 
     std::mutex _lock;
-    std::shared_ptr<bool> _is_closed;
+    std::shared_ptr<std::atomic_bool> _is_closed;
     std::list<std::shared_ptr<DataConsumer>> _pool;
     int64_t _max_pool_size;
 
