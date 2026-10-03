@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
@@ -412,6 +413,88 @@ public class ExpressionStatisticCalculator {
                     .setAverageRowSize(caseWhenOperator.getType().getTypeSize())
                     .setDistinctValuesCount(distinctValues)
                     .build();
+        }
+
+        private ScalarOperator getChildForCastOperator(ScalarOperator operator) {
+            if (operator instanceof CastOperator) {
+                operator = getChildForCastOperator(operator.getChild(0));
+            }
+            return operator;
+        }
+
+        @Override
+        public ColumnStatistic visitInPredicate(InPredicateOperator operator, Void context) {
+           final var inputColumnStatistics = operator.getChild(0).accept(this, context);
+           final var matchList = operator
+                   .getChildren()
+                   .stream()
+                   .skip(1)
+                   .map(this::getChildForCastOperator)
+                   .distinct();
+           final var constantOperatorMatchList = matchList
+                   .filter(ConstantOperator.class::isInstance)
+                   .map(ConstantOperator.class::cast);
+           final boolean allValuesAreConstants = matchList.count() == constantOperatorMatchList.count();
+
+            if (!allValuesAreConstants) {
+                // Subqueries and column references are not supported for statistics propagation yet and return the current statistic
+                return super.visitInPredicate(operator, context);
+            }
+            
+            final Map<String, Long> inputMcvs = inputColumnStatistics.getHistogram().getMCV();
+            final var matchListMcvKeys = constantOperatorMatchList
+                    // NULL is handled separately and is not an MCV match.
+                    .filter(constant -> !constant.isNull())
+
+                    // Convert to the representation used by MCV keys.
+                    .map(constant -> constant.castTo(VarcharType.VARCHAR))
+                    .flatMap(Optional::stream)
+                    .map(ConstantOperator::toString)
+                    .distinct();
+
+            final var matchListValuesWithMcvMatch = matchListMcvKeys.filter(inputMcvs::containsKey);
+
+            final long matchedMcvRows = matchListValuesWithMcvMatch
+                    // Look up and sum matching MCV frequencies.
+                    .mapToLong(inputMcvs::get)
+                    .sum();
+
+            final boolean matchListContainsNull = constantOperatorMatchList.anyMatch(ConstantOperator::isNull);
+
+            final var resultBuilder = ColumnStatistic.builder()
+                    .setMinValue(0) 
+                    .setMaxValue(1)
+                    .setDistinctValuesCount(2);
+
+            if (!matchListContainsNull) {
+                // The matchlist does not contain NULL, therefore the possible values are TRUE, FALSE, NULL.
+                // Only null values from the null fraction will become NULLs.
+                //resultBuilder.setNullsFraction(inputColumnStatistics.getNullsFraction()); 
+            } else {
+                if (operator.isNotIn()) {
+                    // The matchlist contains NULL, and the operator is negated, therefore the possible valuse are FALSE, NULL.
+                    // The nullsFraction is larger than the input nullsFraction, but we can't exactly calculate this with the given MCVs.
+                    resultBuilder.setMinValue(0);
+                    resultBuilder.setMaxValue(0);
+                    resultBuilder.setDistinctValuesCount(1);
+                } else {
+                    // The matchlist contains NULL, and the operator is not negated, therefore the possible valuse are TRUE, NULL.
+                    // The nullsFraction is larger than the input nullsFraction, but we can't exactly calculate this with the given MCVs.
+                    resultBuilder.setMinValue(1);
+                    resultBuilder.setMaxValue(1);
+                    resultBuilder.setDistinctValuesCount(1);
+                }
+            }
+
+            Map<String, Long> mcvs = new HashMap<>();
+            // We only propagate mcv values we know about, and don't do estimates for all other values.
+            if (operator.isNotIn()) {
+                mcvs.put(booleanToMcvValue(false), matchedMcvRows);
+            } else {
+                mcvs.put(booleanToMcvValue(true), matchedMcvRows);
+            }
+
+            return resultBuilder.build();
         }
 
         @Override
