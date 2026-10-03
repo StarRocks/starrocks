@@ -31,15 +31,19 @@ arrow::Status NoOpHeaderAuthServerMiddlewareFactory::StartCall(
     return arrow::Status::OK();
 }
 
-void NoOpBearerAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {
-    std::string bearer_token = FindKeyValPrefixInCallHeaders(_incoming_headers, kAuthHeader, kBearerPrefix);
-    *_is_valid = (bearer_token == std::string(kBearerDefaultToken));
-}
+void NoOpBearerAuthServerMiddleware::SendingHeaders(arrow::flight::AddCallHeaders* outgoing_headers) {}
 
+// This factory deliberately does not gate on the bearer header: the BE Flight server is not
+// the authentication boundary. The FE authenticates the ADBC client and only then mints the
+// per-query ticket (query id + result fragment id) that the client presents here; verifying
+// that ticket in DoGetStatement() is what actually authenticates the call. See the comment in
+// ArrowFlightSqlServer::start() (arrow_flight_sql_service.cpp) for the full flow. Do not turn
+// this into a real bearer-token check: callers are never told to send kBearerDefaultToken, so
+// doing so would reject every legitimate request.
 arrow::Status NoOpBearerAuthServerMiddlewareFactory::StartCall(
         const arrow::flight::CallInfo& info, const arrow::flight::ServerCallContext& context,
         std::shared_ptr<arrow::flight::ServerMiddleware>* middleware) {
-    *middleware = std::make_shared<NoOpBearerAuthServerMiddleware>(context.incoming_headers(), &_is_valid);
+    *middleware = std::make_shared<NoOpBearerAuthServerMiddleware>();
     return arrow::Status::OK();
 }
 
