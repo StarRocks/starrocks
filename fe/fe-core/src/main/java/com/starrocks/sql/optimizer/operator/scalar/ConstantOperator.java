@@ -621,7 +621,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
 
             } else if (desc.isChar() || desc.isVarchar()) {
-                res =  ConstantOperator.createChar(childString, desc);
+                res = ConstantOperator.createChar(childString, desc);
             } else if (desc.isScalarType(PrimitiveType.BINARY) || desc.isScalarType(PrimitiveType.VARBINARY)) {
                 res = ConstantOperator.createBinary(childString.getBytes(), desc);
             }
@@ -630,6 +630,37 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         }
 
         return Optional.ofNullable(res);
+    }
+
+    // Explicit SQL casts may truncate; generic type adaptation must preserve values for sink validation.
+    public Optional<ConstantOperator> castToExplicitly(Type desc) {
+        if (isNull()) {
+            return Optional.of(ConstantOperator.createNull(desc));
+        }
+        Optional<ConstantOperator> result = castTo(desc);
+        if (!desc.isChar() || ((ScalarType) desc).getLength() < 0) {
+            return result;
+        }
+        int maxChars = ((ScalarType) desc).getLength();
+        return result.map(value -> value.isNull() ? value :
+                ConstantOperator.createChar(truncateToCodePoints(value.getVarchar(), maxChars), desc));
+    }
+
+    // Truncate to the first maxChars Unicode code points (MySQL CHAR(N) semantics). ASCII fast paths first.
+    private static String truncateToCodePoints(String value, int maxChars) {
+        if (maxChars <= 0) {
+            return "";
+        }
+        if (value.length() <= maxChars) {
+            // UTF-16 length is an upper bound on the code-point count, so the value already fits.
+            return value;
+        }
+        int codePointCount = value.codePointCount(0, value.length());
+        if (codePointCount <= maxChars) {
+            return value;
+        }
+        int endIndex = value.offsetByCodePoints(0, maxChars);
+        return value.substring(0, endIndex);
     }
 
     /**
@@ -642,8 +673,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
      * <p>
      * The BE implements binary -> string as a raw passthrough of the underlying column
      * (VectorizedCastToStringExpr in be/src/exprs/cast_expr_tpl.hpp: VARBINARY and VARCHAR share the same
-     * physical BinaryColumn, so the cast is the identity, with neither hex encoding nor length truncation).
-     * FE folding has to produce exactly the same bytes.
+     * physical BinaryColumn, so type adaptation is the identity, with neither hex encoding nor length truncation).
+     * FE folding has to produce exactly the same bytes; explicit CHAR(N) truncation is applied afterwards.
      */
     private Optional<ConstantOperator> castBinaryTo(Type desc) {
         byte[] bytes = isNull() ? null : getBinary();

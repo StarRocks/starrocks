@@ -83,13 +83,15 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        // remove same type cast
+        // Remove same type casts, except explicit bounded CHAR casts: declared string lengths are not
+        // runtime bounds (e.g. VARCHAR(N) casts preserve oversized values).
         if (operator.getType().isDecimalOfAnyVersion()) {
             if (operator.getType().getPrimitiveType().equals(operator.getChild(0).getType().getPrimitiveType())
                     && operator.getType().equals(operator.getChild(0).getType())) {
                 return inheritVarcharLengthAfterReduceCast(operator);
             }
-        } else if (operator.getType().matchesType(operator.getChild(0).getType())) {
+        } else if (operator.getType().matchesType(operator.getChild(0).getType())
+                && !operator.isTruncatingCharCast()) {
             return inheritVarcharLengthAfterReduceCast(operator);
         }
 
