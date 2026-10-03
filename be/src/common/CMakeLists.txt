@@ -21,6 +21,7 @@ set(COMMON_FILES
   brpc/brpc_stub_cache.cpp
   brpc/internal_service_recoverable_stub.cpp
   brpc/lake_service_recoverable_stub.cpp
+  brpc/stub_inflight_limiter.cpp
   brpc_helper.cpp
   configbase.cpp
   config_update_registry.cpp
