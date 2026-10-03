@@ -21,6 +21,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.summary.AuditLoaderMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.type.BooleanType;
 import com.starrocks.type.IntegerType;
@@ -324,5 +325,22 @@ class StatisticUtilsTest extends PlanTestBase {
 
         Assertions.assertThrows(SemanticException.class,
                 () -> StatisticUtils.getQueryStatisticsColumnType(table, "nonexistent"));
+    }
+
+    @Test
+    void systemWriterDatabasesAreExcludedFromAutoCollection() {
+        // These databases are written by an FE-side daemon on a fixed interval, so their health
+        // never settles and the collector would re-analyze them without end. The audit database is
+        // the reason this test exists: unlike the history tables, which sit in _statistics_ and are
+        // covered by it implicitly, it is a database of its own and only this list keeps it out.
+        Assertions.assertTrue(
+                StatisticUtils.statisticDatabaseBlackListCheck(AuditLoaderMgr.AUDIT_DB_NAME));
+        Assertions.assertTrue(
+                StatisticUtils.statisticDatabaseBlackListCheck(StatsConstants.STATISTICS_DB_NAME));
+        Assertions.assertTrue(StatisticUtils.statisticDatabaseBlackListCheck("information_schema"));
+        // Matching is case-insensitive, and an unknown database is still collected as usual.
+        Assertions.assertTrue(
+                StatisticUtils.statisticDatabaseBlackListCheck(AuditLoaderMgr.AUDIT_DB_NAME.toUpperCase()));
+        Assertions.assertFalse(StatisticUtils.statisticDatabaseBlackListCheck("some_user_db"));
     }
 }
