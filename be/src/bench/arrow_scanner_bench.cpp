@@ -24,14 +24,18 @@
 #include <utility>
 #include <vector>
 
+#include "base/utility/defer_op.h"
 #include "column/chunk.h"
+#include "compute_env/load/load_stream_mgr.h"
+#include "compute_env/load/stream_load_pipe.h"
 #include "connector/file/scanner/arrow_scanner.h"
 #include "connector/file/scanner/json_scanner.h"
-#include "exec/exec_env.h"
 #include "gen_cpp/Descriptors_types.h"
+#include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
+#include "runtime/service_contexts.h"
 #include "types/type_descriptor.h"
 
 namespace starrocks {
@@ -151,7 +155,7 @@ static DescriptorTbl* create_descriptor_table(RuntimeState* state, ObjectPool* p
 }
 
 static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& path, TFileFormatType::type format_type,
-                                           DescriptorTbl* desc_tbl) {
+                                           DescriptorTbl* desc_tbl, TFileType::type file_type = TFileType::FILE_LOCAL) {
     TBrokerScanRangeParams* params = pool->add(new TBrokerScanRangeParams());
     params->strict_mode = true;
     params->src_tuple_id = 0;
@@ -181,7 +185,7 @@ static TBrokerScanRange* create_scan_range(ObjectPool* pool, const std::string& 
     range.__set_path(path);
     range.start_offset = 0;
     range.size = LONG_MAX;
-    range.file_type = TFileType::FILE_LOCAL;
+    range.file_type = file_type;
     range.__set_format_type(format_type);
     range.__set_num_of_columns_from_file(src_tuple->slots().size());
 
@@ -269,6 +273,117 @@ static void BM_ArrowScanner(benchmark::State& state) {
     state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
 }
 
+class BenchDiscreteStreamLoadPipe : public StreamLoadPipe {
+public:
+    using StreamLoadPipe::StreamLoadPipe;
+    bool is_discrete_message_pipe() const override { return true; }
+};
+
+static void BM_ArrowRoutineLoadPipeScanner(benchmark::State& state) {
+    std::ifstream file(g_arrow_file_path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        state.SkipWithError("Failed to open Arrow bench stream file");
+        return;
+    }
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::string arrow_bytes(file_size, '\0');
+    if (!file.read(&arrow_bytes[0], file_size)) {
+        state.SkipWithError("Failed to read Arrow bench stream file");
+        return;
+    }
+
+    LoadStreamMgr load_stream_mgr;
+    RuntimeServices runtime_services;
+    runtime_services.load_stream_mgr = &load_stream_mgr;
+    QueryExecutionServices query_execution_services;
+    query_execution_services.runtime = &runtime_services;
+    ObjectPool pool;
+    TQueryOptions query_options;
+    query_options.query_type = TQueryType::LOAD;
+    TQueryGlobals query_globals;
+    query_globals.time_zone = "UTC";
+    auto* runtime_state =
+            pool.add(new RuntimeState(TUniqueId(), query_options, query_globals, &query_execution_services, nullptr));
+    runtime_state->init_instance_mem_tracker();
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(runtime_state->instance_mem_tracker());
+
+    auto* desc_tbl = create_descriptor_table(runtime_state, &pool);
+    runtime_state->set_desc_tbl(desc_tbl);
+
+    const auto pipe_id = UniqueId::gen_uid();
+    auto* scan_range = create_scan_range(&pool, "bench_arrow_routine_load_pipe", TFileFormatType::FORMAT_ARROW,
+                                         desc_tbl, TFileType::FILE_STREAM);
+    scan_range->ranges[0].__set_load_id(pipe_id.to_thrift());
+
+    for (auto _ : state) {
+        std::shared_ptr<StreamLoadPipe> pipe =
+                std::make_shared<BenchDiscreteStreamLoadPipe>(1024 * 1024, 64 * 1024 * 1024);
+        Status st = load_stream_mgr.put(pipe_id, pipe);
+        if (!st.ok()) {
+            state.SkipWithError(st.to_string().c_str());
+            break;
+        }
+        DeferOp remove_pipe([&]() { load_stream_mgr.remove(pipe_id); });
+
+        auto buffer = ByteBuffer::allocate_with_tracker(arrow_bytes.size());
+        if (!buffer.ok()) {
+            state.SkipWithError(buffer.status().to_string().c_str());
+            break;
+        }
+        auto bb = std::move(buffer).value();
+        bb->put_bytes(arrow_bytes.data(), arrow_bytes.size());
+        bb->flip_to_read();
+        st = pipe->append(std::move(bb));
+        if (st.ok()) {
+            st = pipe->finish();
+        }
+        if (!st.ok()) {
+            state.SkipWithError(st.to_string().c_str());
+            break;
+        }
+
+        auto profile = pool.add(new RuntimeProfile("arrow_routine_load_bench_prof"));
+        auto counter = pool.add(new ScannerCounter());
+        auto scanner = std::make_unique<ArrowScanner>(runtime_state, profile, *scan_range, counter);
+
+        st = scanner->open();
+        if (!st.ok()) {
+            state.SkipWithError(("Failed to open ArrowScanner for pipe: " + st.to_string()).c_str());
+            break;
+        }
+
+        int64_t total_rows = 0;
+        bool scanner_failed = false;
+        while (true) {
+            auto res = scanner->get_next();
+            if (res.status().is_end_of_file()) {
+                break;
+            }
+            if (!res.ok()) {
+                state.SkipWithError(("Failed to scan chunk from pipe: " + res.status().to_string()).c_str());
+                scanner_failed = true;
+                break;
+            }
+            auto chunk = res.value();
+            if (chunk) {
+                total_rows += chunk->num_rows();
+            }
+        }
+        scanner->close();
+        if (scanner_failed) {
+            break;
+        }
+        if (total_rows != kNumRows) {
+            state.SkipWithError("Arrow pipe benchmark did not ingest every input row");
+            break;
+        }
+        benchmark::DoNotOptimize(total_rows);
+    }
+
+    state.SetItemsProcessed(static_cast<int64_t>(state.iterations()) * kNumRows);
+}
+
 static void BM_JsonScanner(benchmark::State& state) {
     ObjectPool pool;
     TQueryOptions query_options;
@@ -316,6 +431,7 @@ static void BM_JsonScanner(benchmark::State& state) {
 
 BENCHMARK(BM_JsonScanner)->Unit(benchmark::kMillisecond);
 BENCHMARK(BM_ArrowScanner)->Unit(benchmark::kMillisecond);
+BENCHMARK(BM_ArrowRoutineLoadPipeScanner)->Unit(benchmark::kMillisecond);
 
 } // namespace starrocks
 
