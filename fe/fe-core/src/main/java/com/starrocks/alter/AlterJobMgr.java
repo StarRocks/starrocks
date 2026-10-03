@@ -256,15 +256,8 @@ public class AlterJobMgr {
         LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
-            ConnectContext context = ConnectContext.buildInner();
-            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
-            context.setCurrentUserIdentity(UserIdentity.ROOT);
-            context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-            String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
-            QueryStatement mvQueryStatement = null;
             try {
+<<<<<<< HEAD
                 mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (Exception e) {
                 LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
@@ -286,8 +279,13 @@ public class AlterJobMgr {
             if (task == null) {
                 throw new SemanticException("Can not find running task for materialized view [%s]",
                         materializedView.getName());
+=======
+                return resolveActivate(materializedView, reason, isReplay);
+            } catch (RuntimeException e) {
+                applyActivateFailure(materializedView, e);
+                throw e;
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
             }
-            return new AlterMaterializedViewStatusContext(status, reason, Lists.newArrayList(baseTableInfos), task);
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
             Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
@@ -309,6 +307,108 @@ public class AlterJobMgr {
         }
     }
 
+<<<<<<< HEAD
+=======
+    /**
+     * The analysis half of an ACTIVE transition: re-parse and re-analyze the MV's definition and resolve the
+     * base tables it names. Every step can reach the connector of an external base table. It does not modify
+     * the MV, so the leader runs it before taking the MV write lock (see
+     * {@code AlterMVJobExecutor#resolveBeforeLock}); a failure that has to be recorded on the MV is left to
+     * {@link #applyActivateFailure}, for the caller to apply once it holds the lock.
+     */
+    public AlterMaterializedViewStatusContext resolveActivate(
+            MaterializedView materializedView, String reason, boolean isReplay) {
+        ConnectContext context = ConnectContext.buildInner();
+        context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
+        context.setCurrentUserIdentity(UserIdentity.ROOT);
+        context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+        String createMvSql = materializedView.getMaterializedViewDdlStmt(false, isReplay);
+        QueryStatement mvQueryStatement = null;
+        try {
+            mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
+        } catch (Exception e) {
+            LOG.warn("alter mv {} to active failed", materializedView.getName(), e);
+            throw new SemanticException(String.format("Can not active materialized view [%s]" +
+                    " because analyze materialized view define sql: \n\n%s" +
+                    "\n\nCause an error: %s", materializedView.getName(), createMvSql, e.getMessage()), e);
+        }
+
+        Map<TableName, Table> tableNameTableMap =
+                AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(mvQueryStatement);
+        Set<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap);
+        // Skip checks to maintain eventual consistency when replay
+        if (!isReplay) {
+            MaterializedViewAnalyzer.checkBaseTables(
+                    tableNameTableMap, materializedView.getPartitionInfo().isUnPartitioned());
+        }
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(materializedView);
+        if (task == null) {
+            throw new SemanticException("Can not find running task for materialized view [%s]",
+                    materializedView.getName());
+        }
+        return new AlterMaterializedViewStatusContext(AlterMaterializedViewStatusClause.ACTIVE, reason,
+                Lists.newArrayList(baseTableInfos), task);
+    }
+
+    /**
+     * Record on the MV what a failed {@link #resolveActivate} found out about it. Only an incompatible column
+     * schema is recorded: it replaces the inactive reason, so that SHOW MATERIALIZED VIEWS says why the MV
+     * cannot be activated. Must run under the MV write lock.
+     */
+    public static void applyActivateFailure(MaterializedView materializedView, Throwable failure) {
+        for (Throwable t = failure; t != null; t = t.getCause()) {
+            if (t instanceof IncompatibleSchemaException) {
+                materializedView.setInactiveAndReason(((IncompatibleSchemaException) t).inactiveReason);
+                return;
+            }
+        }
+    }
+
+    /**
+     * Thrown by {@link #recreateMVQuery} when the re-analyzed definition no longer produces the MV's columns.
+     */
+    public static class IncompatibleSchemaException extends SemanticException {
+        private final String inactiveReason;
+
+        public IncompatibleSchemaException(String inactiveReason) {
+            super(inactiveReason);
+            this.inactiveReason = inactiveReason;
+        }
+    }
+
+    /**
+     * The fallible half of an ACTIVE transition: install the freshly resolved base tables and rebuild the
+     * MV's relationship. This re-analyses partition exprs and re-checks every base table, so it can leave
+     * the MV inactive in two different shapes -- by throwing (getBaseTablePartitionColumnMapImpl), or by
+     * reporting a clean negative verdict without throwing at all (checkIsActiveOnLoadBlocking). Callers
+     * must therefore judge the outcome by {@link MaterializedView#isActive()}, never by the absence of an
+     * exception.
+     *
+     * <p>The leader runs this BEFORE journaling. {@link com.starrocks.persist.WALApplier}'s contract is
+     * "apply can not fail", and a journal entry is durable and unrevocable: recording the activation first
+     * would leave the log claiming active while memory says inactive, and a permanently broken MV would
+     * add one such entry per MVActiveChecker round, without bound.
+     */
+    public void rebuildRelationshipForActivate(
+            MaterializedView materializedView, AlterMaterializedViewStatusContext context) {
+        materializedView.setBaseTableInfos(context.baseTableInfos());
+        materializedView.fixRelationship();
+    }
+
+    /**
+     * The pure in-memory half of an ACTIVE transition: resume the MV's refresh scheduler. Safe to run
+     * inside a WAL applier, unlike {@link #rebuildRelationshipForActivate}.
+     */
+    public void resumeTaskForActivate(AlterMaterializedViewStatusContext context, boolean isReplay) {
+        // resume the mv scheduler
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        taskManager.resumeTask(context.task(), isReplay);
+    }
+
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
     public void applyAlterMaterializedViewStatus(
             MaterializedView materializedView, AlterMaterializedViewStatusContext context, boolean isReplay) {
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(context.status())) {
@@ -379,10 +479,16 @@ public class AlterJobMgr {
             if (!isSchemaCompatible(existed, created)) {
                 LOG.warn("Active materialized view {} failed, column schema changed: {} != {}",
                         materializedView.getName(), existed.toString(), created.toString());
+<<<<<<< HEAD
                 String message = MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
                         existed.toString(), created.toString());
                 materializedView.setInactiveAndReason(message);
                 throw new SemanticException(message);
+=======
+                // Not recorded on the MV here: the caller may not hold the MV lock, see applyActivateFailure.
+                throw new IncompatibleSchemaException(MaterializedViewExceptions.inactiveReasonForColumnNotCompatible(
+                            existed.toString(), created.toString()));
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
             }
         }
 

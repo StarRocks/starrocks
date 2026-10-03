@@ -28,6 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -709,4 +710,60 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
 
         starRocksAssert.dropMaterializedView(mvName);
     }
+<<<<<<< HEAD
+=======
+
+    /**
+     * ALTER MATERIALIZED VIEW ... SET ("partition_retention_condition" = ...) runs under the MV's write lock,
+     * and analyzing the condition re-gets the external ref base table from its connector -- an HMS / REST
+     * round trip for iceberg. The lookups have to happen before the lock. A list-partitioned MV is used so
+     * that every lookup site is exercised (partition-expr adjust map, partition selector, retention analysis).
+     * Sampled where the real connector would be contacted, confined to the test thread: the async MV plan
+     * cache resolves the same table from its own executor.
+     */
+    @Test
+    public void testAlterMVRetentionConditionResolvesIcebergBaseTableOutsideTheLock() throws Exception {
+        String mvName = "iceberg_retention_lock_mv";
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                "PARTITION BY (id, data, date_trunc('day', ts))\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_multi_day_tz` as a;");
+        Thread testThread = Thread.currentThread();
+        AtomicInteger calls = new AtomicInteger();
+        AtomicBoolean resolvedUnderLock = new AtomicBoolean(false);
+        // Probed at the connector: under the lock MvUtils.getTable is still called, but answered from the
+        // tables pre-resolved before it (PreResolvedBaseTables) without reaching the connector.
+        new MockUp<MockIcebergMetadata>() {
+            @Mock
+            public Table getTable(Invocation invocation, ConnectContext context, String dbName, String tblName) {
+                if (Thread.currentThread() == testThread) {
+                    calls.incrementAndGet();
+                    // OR-accumulated: a later lock-free lookup must not erase a locked one
+                    resolvedUnderLock.compareAndSet(false, LockHoldDepth.isUnderLock());
+                }
+                return invocation.proceed(context, dbName, tblName);
+            }
+        };
+        try {
+            starRocksAssert.alterMvProperties(String.format("alter materialized view %s set (" +
+                    "\"partition_retention_condition\" = \"date_trunc('day', ts) >= current_date() - interval 1 year\")",
+                    mvName));
+
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable("test", mvName);
+            Assertions.assertEquals("date_trunc('day', ts) >= current_date() - interval 1 year",
+                    mv.getTableProperty().getPartitionRetentionCondition());
+            Assertions.assertTrue(mv.getRetentionConditionExpr().isPresent());
+            Assertions.assertTrue(calls.get() > 0, "the iceberg base table was never re-got, so the check below is vacuous");
+            Assertions.assertFalse(resolvedUnderLock.get(),
+                    "ALTER MV SET partition_retention_condition re-got the iceberg base table under the MV's lock");
+        } finally {
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+    }
+>>>>>>> 638803fe2a9... [BugFix] Resolve base tables before the MV lock when activating an MV (#64205)
 }
