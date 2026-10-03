@@ -47,8 +47,10 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.type.IntegerType;
+import com.starrocks.type.VarbinaryType;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
 
@@ -64,7 +66,7 @@ import java.util.stream.Stream;
 
 import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.EQUALITY_DELETE_TABLE_COMMENT;
-import static com.starrocks.catalog.IcebergTable.SPEC_ID;
+import static com.starrocks.catalog.IcebergTable.PARTITION_ID;
 
 public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
     public IcebergEqualityDeleteRewriteRule() {
@@ -128,20 +130,26 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         long limit = scanOperator.getLimit();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
-        boolean hasPartitionEvolution = deleteSchemas.stream().map(IcebergDeleteSchema::specId).distinct().count() > 1;
-        if (hasPartitionEvolution && !context.getSessionVariable().enableReadIcebergEqDeleteWithPartitionEvolution()) {
-            throw new StarRocksConnectorException("Equality delete files aren't supported for tables with partition evolution." +
-                    "You can execute `set enable_read_iceberg_equality_delete_with_partition_evolution = true` then rerun it");
-        }
 
-        List<List<Integer>> allIds = deleteSchemas.stream()
-                .map(IcebergDeleteSchema::equalityIds)
+        // One anti-join leg per distinct (equalityIds, partition scope). Scope mirrors Iceberg's
+        // DeleteFileIndex routing: a delete file under an unpartitioned spec is GLOBAL (applies to
+        // every data file), otherwise PARTITIONED (applies only within its own (specId, partition),
+        // matched via the $partition_id key). This is what scopes partitioned equality deletes so they
+        // don't delete same-key rows in other partitions, including across partition evolution.
+        Map<Integer, PartitionSpec> specs = table.specs();
+        List<IcebergMORParams> eqDeleteLegs = deleteSchemas.stream()
+                .map(schema -> IcebergMORParams.ofEqDelete(schema.equalityIds(),
+                        specs.get(schema.specId()).isUnpartitioned()
+                                ? IcebergMORParams.EqDeleteScope.GLOBAL
+                                : IcebergMORParams.EqDeleteScope.PARTITIONED))
                 .distinct()
-                .toList();
+                .collect(Collectors.toList());
+        boolean hasPartitionLeg = eqDeleteLegs.stream()
+                .anyMatch(leg -> leg.getEqDeleteScope() == IcebergMORParams.EqDeleteScope.PARTITIONED);
 
         List<IcebergMORParams> tableFullMorParams = Stream.concat(
                         Stream.of(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE),
-                        allIds.stream().map(ids -> IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, ids)))
+                        eqDeleteLegs.stream())
                 .collect(Collectors.toList());
         IcebergTableMORParams icebergTableFullMorParams = new IcebergTableMORParams(icebergTable.getId(), tableFullMorParams);
 
@@ -151,15 +159,18 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
 
         ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion = ImmutableMap.builder();
         LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
-                deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution);
+                deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionLeg);
         icebergDataFileWithDeleteScanOp.setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
         icebergDataFileWithDeleteScanOp.setTableFullMORParams(icebergTableFullMorParams);
         icebergDataFileWithDeleteScanOp.setFromEqDeleteRewriteRule(true);
         OptExpression optExpression = OptExpression.create(icebergDataFileWithDeleteScanOp);
 
-        for (int i = 0; i < allIds.size(); i++) {
-            List<Integer> equalityIds = allIds.get(i);
-            String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds);
+        for (int i = 0; i < eqDeleteLegs.size(); i++) {
+            IcebergMORParams leg = eqDeleteLegs.get(i);
+            List<Integer> equalityIds = leg.getEqualityIds();
+            boolean partitionLeg = leg.getEqDeleteScope() == IcebergMORParams.EqDeleteScope.PARTITIONED;
+            String equalityDeleteTableName = buildEqualityDeleteTableName(icebergTable, equalityIds)
+                    + "_" + leg.getEqDeleteScope();
             List<String> columnNames = equalityIds.stream()
                     .map(id -> table.schema().findColumnName(id))
                     .toList();
@@ -178,13 +189,15 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                 columnToColRef.put(column, columnRef);
             }
 
-            fillExtendedColumns(columnRefFactory, colRefToColumn, columnToColRef, hasPartitionEvolution, icebergTable);
+            // The partitioned leg carries $partition_id and joins on it; the global leg does not, so it
+            // applies to every data file (Iceberg global delete semantics).
+            fillExtendedColumns(columnRefFactory, colRefToColumn, columnToColRef, partitionLeg, icebergTable);
             LogicalIcebergEqualityDeleteScanOperator eqScanOp = new LogicalIcebergEqualityDeleteScanOperator(
                     equalityDeleteTable, colRefToColumn.build(), columnToColRef.build(), -1, null,
                     scanOperator.getTvrVersionRange());
             eqScanOp.setOriginPredicate(scanOperator.getPredicate());
             eqScanOp.setTableFullMORParams(icebergTableFullMorParams);
-            eqScanOp.setMORParams(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, equalityIds));
+            eqScanOp.setMORParams(leg);
 
             ScalarOperator onPredicate = buildOnPredicate(
                     icebergDataFileWithDeleteScanOp.getColumnNameToColRefMap(), eqScanOp.getOutputColumns());
@@ -195,7 +208,9 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                     .setOnPredicate(onPredicate)
                     .setOriginalOnPredicate(onPredicate);
 
-            if (i == allIds.size() - 1) {
+            // Limit may only sit on the topmost anti-join: an inner leg's limit would cap rows that a
+            // higher leg can still delete, yielding a wrong limited result.
+            if (i == eqDeleteLegs.size() - 1) {
                 builder.setLimit(limit);
             }
 
@@ -299,7 +314,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             LogicalIcebergScanOperator scanOperator,
             ColumnRefFactory columnRefFactory,
             ImmutableMap.Builder<ColumnRefOperator, ScalarOperator> projectForUnion,
-            boolean hasPartitionEvolution) {
+            boolean addPartitionId) {
         IcebergTable noDeleteTable = (IcebergTable) scanOperator.getTable();
         String tableName = noDeleteTable.getName() + "_" + "with_delete_file";
         IcebergTable withDeleteIcebergTable = new IcebergTable(
@@ -353,7 +368,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
             }
         }
 
-        fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, hasPartitionEvolution, noDeleteTable);
+        fillExtendedColumns(columnRefFactory, newColRefToColBuilder, newColToColRefBuilder, addPartitionId, noDeleteTable);
 
         // build new table's predicate
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(originToNewCols);
@@ -377,18 +392,20 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
     private void fillExtendedColumns(ColumnRefFactory columnRefFactory,
                                      ImmutableMap.Builder<ColumnRefOperator, Column> newColRefToColumnMetaMapBuilder,
                                      ImmutableMap.Builder<Column, ColumnRefOperator> newColumnMetaToColRefMapBuilder,
-                                     boolean hasPartitionEvolution,
+                                     boolean addPartitionId,
                                      IcebergTable icebergTable) {
         Column column = new Column(DATA_SEQUENCE_NUMBER, IntegerType.BIGINT, true);
         ColumnRefOperator columnRef = buildNewColumnRef(column, columnRefFactory, icebergTable);
         newColRefToColumnMetaMapBuilder.put(columnRef, column);
         newColumnMetaToColRefMapBuilder.put(column, columnRef);
 
-        if (hasPartitionEvolution) {
-            Column specIdcolumn = new Column(SPEC_ID, IntegerType.INT, true);
-            ColumnRefOperator specIdColumnRef = buildNewColumnRef(specIdcolumn, columnRefFactory, icebergTable);
-            newColRefToColumnMetaMapBuilder.put(specIdColumnRef, specIdcolumn);
-            newColumnMetaToColRefMapBuilder.put(specIdcolumn, specIdColumnRef);
+        // $partition_id scopes a partitioned equality delete to its own (specId, partition). It replaces
+        // the old $spec_id-only handling, which distinguished spec identity but not partition value.
+        if (addPartitionId) {
+            Column partitionIdColumn = new Column(PARTITION_ID, VarbinaryType.VARBINARY, true);
+            ColumnRefOperator partitionIdColumnRef = buildNewColumnRef(partitionIdColumn, columnRefFactory, icebergTable);
+            newColRefToColumnMetaMapBuilder.put(partitionIdColumnRef, partitionIdColumn);
+            newColumnMetaToColRefMapBuilder.put(partitionIdColumn, partitionIdColumnRef);
         }
     }
 
