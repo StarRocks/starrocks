@@ -1235,6 +1235,11 @@ public class AuthorizerStmtVisitor implements AstVisitorExtendInterface<Void, Co
 
     @Override
     public Void visitCreateAnalyzeJobStatement(CreateAnalyzeJobStmt statement, ConnectContext context) {
+        if (!statement.isNative()) {
+            Authorizer.checkActionForAnalyzeStatement(context,
+                    new TableName(statement.getCatalogName(), statement.getDbName(), statement.getTableName()));
+            return null;
+        }
         Set<TableName> tableNames = AnalyzerUtils.getAllTableNamesForAnalyzeJobStmt(statement.getDbId(), statement.getTableId());
         tableNames.forEach(tableName -> Authorizer.checkActionForAnalyzeStatement(context, tableName));
         return null;
