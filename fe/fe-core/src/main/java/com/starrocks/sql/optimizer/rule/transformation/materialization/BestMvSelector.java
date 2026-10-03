@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.BaseMaterializedViewRewriteRule;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import org.apache.commons.collections4.CollectionUtils;
@@ -53,20 +54,50 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class BestMvSelector {
-    private final List<OptExpression> mvValidExpressions;
+    // Per-attempt rewrite results. The {@link BaseMaterializedViewRewriteRule.RewriteResult}
+    // carries each MV's rewritten {@code OptExpression} plus carrier signals
+    // (e.g. {@code hasPercentileNonSubsumeRewrite}) consumed by CandidateScore.
+    private final List<BaseMaterializedViewRewriteRule.RewriteResult> mvCandidates;
     private final OptimizerContext optimizerContext;
     private final OptExpression queryPlan;
     private final boolean isAggQuery;
     private final Rule rule;
 
-    public BestMvSelector(List<OptExpression> mvValidExpressions,
+    public BestMvSelector(List<BaseMaterializedViewRewriteRule.RewriteResult> mvCandidates,
                           OptimizerContext optimizerContext,
                           OptExpression queryPlan, Rule rule) {
-        this.mvValidExpressions = mvValidExpressions;
+        this.mvCandidates = mvCandidates;
         this.optimizerContext = optimizerContext;
         this.queryPlan = queryPlan;
         this.isAggQuery = queryPlan.getOp() instanceof LogicalAggregationOperator;
         this.rule = rule;
+    }
+
+    /**
+     * Convenience factory for callers that have a plain list of OptExpressions
+     * (e.g. tests) and don't need to carry per-rewrite signals.
+     */
+    public static BestMvSelector forExpressions(List<OptExpression> expressions,
+                                                OptimizerContext optimizerContext,
+                                                OptExpression queryPlan, Rule rule) {
+        List<BaseMaterializedViewRewriteRule.RewriteResult> wrapped = expressions.stream()
+                .map(BaseMaterializedViewRewriteRule.RewriteResult::of)
+                .collect(Collectors.toList());
+        return new BestMvSelector(wrapped, optimizerContext, queryPlan, rule);
+    }
+
+    private OptExpression expressionAt(int idx) {
+        return mvCandidates.get(idx).expression();
+    }
+
+    private int candidateCount() {
+        return mvCandidates.size();
+    }
+
+    private List<OptExpression> candidateExpressions() {
+        return mvCandidates.stream()
+                .map(BaseMaterializedViewRewriteRule.RewriteResult::expression)
+                .collect(Collectors.toList());
     }
 
     public enum ChooseMode {
@@ -114,8 +145,8 @@ public class BestMvSelector {
     }
 
     public List<OptExpression> selectBest(boolean isConsiderQueryDataLayout) {
-        if (mvValidExpressions.isEmpty()) {
-            return mvValidExpressions;
+        if (mvCandidates.isEmpty()) {
+            return Lists.newArrayList();
         }
         List<Table> queryTables = MvUtils.getAllTables(queryPlan);
         // add query's context
@@ -127,12 +158,12 @@ public class BestMvSelector {
 
     private List<OptExpression> selectBest(List<Table> queryTables,
                                            boolean isConsiderQueryDataLayout) {
-        if (mvValidExpressions.size() == 1 && !isConsiderQueryDataLayout) {
+        if (candidateCount() == 1 && !isConsiderQueryDataLayout) {
             logMVRewrite(optimizerContext, rule, "[ChooseBestMV] Only one candidate mv, skip best mv select.");
-            return mvValidExpressions;
+            return candidateExpressions();
         }
         // compute the statistics of OptExpression
-        calculateStatistics(mvValidExpressions, optimizerContext);
+        calculateStatistics(candidateExpressions(), optimizerContext);
 
         // split predicates' columns to equivalence and non-equivalence sets which its names are all lower case.
         Set<ScalarOperator> queryPredicates = MvUtils.getAllValidPredicatesFromScans(queryPlan);
@@ -148,8 +179,8 @@ public class BestMvSelector {
         List<CandidateContext> contexts = Lists.newArrayList();
         int globalIdx = 0;
         // add all mvs' context first
-        for (int i = 0; i < mvValidExpressions.size(); i++) {
-            OptExpression mvOptExpression = mvValidExpressions.get(i);
+        for (int i = 0; i < candidateCount(); i++) {
+            OptExpression mvOptExpression = expressionAt(i);
             List<Table> mvTables = MvUtils.getAllTables(mvOptExpression);
             queryTables.stream().forEach(originalTable -> mvTables.remove(originalTable));
             CandidateContext candidateContext = buildCandidateContext(
@@ -160,6 +191,9 @@ public class BestMvSelector {
                         mvTables.stream().map(Table::getName).collect(Collectors.joining(",")));
                 continue;
             }
+            // Per-rewrite carrier read from RewriteResult — see CandidateScore.
+            candidateContext.getScore().hasPercentileNonSubsumeRewrite =
+                    mvCandidates.get(i).hasPercentileNonSubsumeRewrite();
             globalIdx += 1;
             contexts.add(candidateContext);
         }
@@ -241,8 +275,15 @@ public class BestMvSelector {
         public int aggCount;
         public int joinCount;
 
+        // First-class preference: a rewrite that succeeded only because we
+        // permitted a percentile MV with smaller compression than the query
+        // ranks below any rewrite that did not need that fallback. Stays
+        // false for non-percentile rewrites so other comparisons are unchanged.
+        public boolean hasPercentileNonSubsumeRewrite = false;
+
         /**
          * Compare two CandidateScore, the comparison logic is as follows:
+         * - Prefer subsume percentile rewrites over non-subsume fallbacks.
          * - Compare by agg/join/scan count, smaller is better.
          * - Compare by distribution score, larger is better.
          * - Compare by group by key num, smaller is better.
@@ -259,7 +300,13 @@ public class BestMvSelector {
             if (this == other) {
                 return 0;
             }
-            int ret = 0;
+            int ret;
+            // First-class signal: subsume candidates outrank non-subsume.
+            // Boolean.compare(false, true) = -1 → subsume sorts first.
+            ret = Boolean.compare(this.hasPercentileNonSubsumeRewrite, other.hasPercentileNonSubsumeRewrite);
+            if (ret != 0) {
+                return ret;
+            }
             // smaller is better
             ret = Integer.compare(this.aggCount, other.aggCount);
             if (ret != 0) {

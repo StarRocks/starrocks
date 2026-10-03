@@ -64,6 +64,11 @@ public:
 
     Value quantile(Value q) { return _tdigest.quantile(q); }
 
+    // Compression the underlying digest was built with. Forwarded so the merge
+    // path can adopt the compression carried inside a deserialized intermediate
+    // blob instead of re-deriving it from the function context.
+    double compression() const { return _tdigest.compression(); }
+
 private:
     enum PercentileDataType { TDIGEST = 0 };
     TDigest _tdigest;
