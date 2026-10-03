@@ -21,6 +21,7 @@ set(EXEC_RUNTIME_TEST_FILES
     ${BE_TEST_MACOS_LINK_STUBS}
     ${BE_TEST_JNI_ENV_STUB}
     pipeline_driver_exec_runtime_test.cpp
+    pipeline_driver_memory_test.cpp
     pipeline_event_scheduler_exec_runtime_test.cpp
     pipeline_execution_group_exec_runtime_test.cpp
     pipeline_builder_context_exec_runtime_test.cpp
