@@ -58,6 +58,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Locale;
 
 public class NetUtils {
     private static final Logger LOG = LogManager.getLogger(NetUtils.class);
@@ -192,6 +193,12 @@ public class NetUtils {
         }
         if (pair.length != 2) {
             throw new AnalysisException("invalid host port: " + hostPort);
+        }
+        // Normalize IPv6 address to lowercase for consistent comparison with the BE side.
+        // IPv6 addresses are case-insensitive by RFC 5952, but different
+        // hex casing can cause raw string comparisons to fail (e.g., BE heartbeat).
+        if (InetAddressValidator.getInstance().isValidInet6Address(pair[0])) {
+            pair[0] = pair[0].toLowerCase(Locale.ENGLISH);
         }
         return pair;
     }
