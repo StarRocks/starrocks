@@ -37,6 +37,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 1;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(true);
@@ -69,6 +71,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 2;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(false);
@@ -101,6 +105,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 4;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(false);
@@ -133,6 +139,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 7;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
@@ -176,6 +184,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 0;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.STRICT);
@@ -202,6 +212,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 0;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(MaterializedView.PartitionRefreshStrategy.FORCE);
@@ -226,6 +238,8 @@ public class MVRefreshParamsTest {
             Config.mv_refresh_force_partition_type = 1;
             
             MaterializedView mv = Mockito.mock(MaterializedView.class);
+            
+            Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.PCT);
             PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
             Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
             Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(true);
@@ -249,5 +263,60 @@ public class MVRefreshParamsTest {
             // Restore original config value
             Config.mv_refresh_force_partition_type = originalValue;
         }
+    }
+
+    private static MVRefreshParams standingForceParams(MaterializedView.RefreshMode mode, boolean viaConfig) {
+        MaterializedView mv = Mockito.mock(MaterializedView.class);
+        PartitionInfo partitionInfo = Mockito.mock(PartitionInfo.class);
+        Mockito.when(mv.getPartitionInfo()).thenReturn(partitionInfo);
+        Mockito.when(partitionInfo.isUnPartitioned()).thenReturn(true);
+        Mockito.when(mv.getCurrentRefreshMode()).thenReturn(mode);
+        Mockito.when(mv.getPartitionRefreshStrategy()).thenReturn(viaConfig
+                ? MaterializedView.PartitionRefreshStrategy.STRICT
+                : MaterializedView.PartitionRefreshStrategy.FORCE);
+        return new MVRefreshParams(mv, new HashMap<>());
+    }
+
+    /**
+     * The config is cluster-wide and whoever sets it cannot know which views are incrementally
+     * maintained, which is why it is scoped at the refresh rather than where it is set.
+     */
+    @Test
+    public void testStandingForceDoesNotApplyToIncrementalOrAuto() {
+        for (MaterializedView.RefreshMode mode : new MaterializedView.RefreshMode[] {
+                MaterializedView.RefreshMode.AUTO, MaterializedView.RefreshMode.INCREMENTAL}) {
+            Assertions.assertFalse(standingForceParams(mode, false).isForce(),
+                    "partition_refresh_strategy=force must not force " + mode);
+            int original = Config.mv_refresh_force_partition_type;
+            try {
+                Config.mv_refresh_force_partition_type = 1;
+                Assertions.assertFalse(standingForceParams(mode, true).isForce(),
+                        "mv_refresh_force_partition_type must not force " + mode);
+            } finally {
+                Config.mv_refresh_force_partition_type = original;
+            }
+        }
+    }
+
+    @Test
+    public void testStandingForceStillAppliesToPct() {
+        Assertions.assertTrue(standingForceParams(MaterializedView.RefreshMode.PCT, false).isForce());
+        int original = Config.mv_refresh_force_partition_type;
+        try {
+            Config.mv_refresh_force_partition_type = 1;
+            Assertions.assertTrue(standingForceParams(MaterializedView.RefreshMode.PCT, true).isForce());
+        } finally {
+            Config.mv_refresh_force_partition_type = original;
+        }
+    }
+
+    /** The keyword is analyzer-rejected for these views, so reaching isForce with it set is not expected. */
+    @Test
+    public void testExplicitKeywordIsUnaffectedByTheGuard() {
+        MaterializedView mv = Mockito.mock(MaterializedView.class);
+        Mockito.when(mv.getCurrentRefreshMode()).thenReturn(MaterializedView.RefreshMode.AUTO);
+        Map<String, String> properties = new HashMap<>();
+        properties.put(TaskRun.FORCE, "true");
+        Assertions.assertTrue(new MVRefreshParams(mv, properties).isForce());
     }
 }

@@ -218,6 +218,37 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
+<<<<<<< HEAD
+=======
+     * Why a refresh ran in a mode other than incremental. Empty means no mode decision was made --
+     * the view is configured PCT, or the run predates this field.
+     */
+    public enum RefreshModeReason {
+        /**
+         * A base table change that is not append-only. Coarse on purpose: a delta trait only says
+         * monotonic or retractable, so a partition drop, a truncate, an overwrite, an external delete
+         * and a row delete all arrive here. Splits once traits carry the change shape.
+         */
+        NON_APPEND_ONLY_CHANGE,
+        /**
+         * The recorded baseline is no longer an ancestor of the table head, so no delta spans the gap.
+         * Not only expiry: a rollback, a table replacement and a cherry-pick break the ancestry too.
+         */
+        BASELINE_UNREACHABLE,
+        /** No baseline at all to read a delta from: the first refresh, or one after a metadata repair. */
+        BASELINE_MISSING,
+        /** A version in the window was published while change data capture was off on that base table. */
+        CHANGE_CAPTURE_DISABLED,
+        /**
+         * A fallback nothing above classifies. Reaching this means an internal invariant broke or a
+         * new fallback path was added without a reason; the error message carries the detail.
+         */
+        UNKNOWN
+    }
+
+
+    /**
+>>>>>>> f224b2e734e ([BugFix] Stop a standing force setting from re-materializing an incrementally maintained materialized view (#62039))
      * Reason for materialized view being inactive.
      * @param isActive whether the materialized view is active
      * @param reason the reason for being inactive
