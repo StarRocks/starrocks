@@ -41,12 +41,6 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.expression.Expr;
-import com.starrocks.sql.ast.expression.ExprUtils;
-import com.starrocks.sql.ast.expression.SlotRef;
->>>>>>> 0e754de ([BugFix] Do not push NULL-passing runtime filters below RepeatNode on nulled grouping keys (#80051))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -191,7 +185,7 @@ public class RepeatNode extends PlanNode {
 
     // Whether expr uses a grouping key that some grouping set replaces with NULL.
     private boolean usesNulledSlot(Expr expr) {
-        for (int slotId : ExprUtils.getUsedSlotIds(expr)) {
+        for (int slotId : expr.getUsedSlotIds()) {
             boolean grouped = repeatSlotIdList.stream().anyMatch(s -> s.contains(slotId));
             boolean nulled = repeatSlotIdList.stream().anyMatch(s -> !s.contains(slotId));
             if (grouped && nulled) {
