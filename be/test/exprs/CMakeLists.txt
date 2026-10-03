@@ -40,6 +40,7 @@ set(EXPR_TEST_FILES
     binary_predicate_test.cpp
     bitmap_functions_test.cpp
     geography_functions_test.cpp
+    geo_overlay_test.cpp
     hash_functions_test.cpp
     http_request_functions_test.cpp
     hyperloglog_functions_test.cpp

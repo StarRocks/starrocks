@@ -41,9 +41,44 @@ TEST(MemhookTest, test_should_report_large_memory_alloc) {
 // The remaining mem hook behavior is only testable when the production hook is enabled.
 #if STARROCKS_ENABLE_JEMALLOC_MEM_HOOK
 
+#include <atomic>
 #include <vector>
 
+#ifdef BE_TEST
+// The test hook counts allocations globally; production uses query trackers.
+extern std::atomic<int64_t> g_mem_usage;
+#endif
+
+#include "geo/geo_overlay.h"
+#include "runtime/current_thread.h"
+
 namespace starrocks {
+
+TEST(MemhookTest, polygonOverlayPreparedAllocationsAreAccountedAndReleased) {
+    WkbGeometry polygon;
+    ASSERT_TRUE(
+            WkbCodec::parse_wkt("POLYGON ((0 0,4 0,4 4,0 4,0 0))", &polygon, WkbCoordinateSemantics::GEOMETRY_CARTESIAN)
+                    .ok());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(polygon, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    // Warm up Boost before measuring the lifetime of one prepared model.
+    auto warmup = PreparedGeoPolygon::prepare(Slice(wkb));
+    ASSERT_TRUE(warmup.ok());
+    warmup.value().reset();
+#ifdef BE_TEST
+    auto consumed = [] { return ::g_mem_usage.load(); };
+#else
+    MemTracker tracker(-1, "polygon overlay");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    auto consumed = [] { return tls_thread_status.get_consumed_bytes(); };
+#endif
+    const auto before = consumed();
+    auto prepared = PreparedGeoPolygon::prepare(Slice(wkb));
+    ASSERT_TRUE(prepared.ok()) << prepared.status();
+    EXPECT_GT(consumed(), before);
+    prepared.value().reset();
+    EXPECT_EQ(before, consumed());
+}
 
 static void try_malloc_memory(size_t size) {
     std::vector<int8_t> arr;

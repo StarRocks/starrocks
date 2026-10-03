@@ -132,6 +132,16 @@ Geography 坐标必须位于支持的经纬度范围内。Geometry 构造函数�
 
 该契约由聚焦的 FE analyzer 测试验证重载解析、返回类型、旧版兼容性和函数 ID，并由 BE registry 测试验证每个原生 ID。现有 BE 函数测试覆盖常量、Nullable、变化输入、`EMPTY`、格式错误输入、类型、维度、CRS 和描述符行为。
 
+## 多边形叠加运算
+
+支持具有兼容 CRS 的原生 XY 多边形及多多边形；4326 和 3857 均使用笛卡尔语义。NULL 参数返回 NULL。单个组成部分返回 POLYGON，多个返回 MULTIPOLYGON，空结果返回 POLYGON EMPTY。无效拓扑返回错误。精度与资源限制见链接页面。
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_Union(GEOMETRY, GEOMETRY)` | 120351 | [ST_Union](st_union.md) |
+| `ST_Difference(GEOMETRY, GEOMETRY)` | 120361 | [ST_Difference](st_difference.md) |
+| `ST_SymDifference(GEOMETRY, GEOMETRY)` | 120371 | [ST_SymDifference](st_symdifference.md) |
+
 ## H3 网格函数
 
 几何参数需要原生 XY CRS84 GEOGRAPHY；网格索引是有符号 BIGINT。有效性、NULL/EMPTY、填充近似和限制见 [H3 函数](h3-functions.md)。

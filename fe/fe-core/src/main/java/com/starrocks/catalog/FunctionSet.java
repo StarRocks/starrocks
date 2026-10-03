@@ -205,6 +205,9 @@ public class FunctionSet {
     public static final String ST_ASWKT = "st_aswkt";
     public static final String ST_CIRCLE = "st_circle";
     public static final String ST_CENTROID = "st_centroid";
+    public static final String ST_UNION = "st_union";
+    public static final String ST_DIFFERENCE = "st_difference";
+    public static final String ST_SYMDIFFERENCE = "st_symdifference";
     public static final String H3_TOBOUNDARY = "h3_toboundary";
     public static final String ST_SRID = "st_srid";
     public static final String ST_SETSRID = "st_setsrid";

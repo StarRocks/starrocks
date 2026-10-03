@@ -238,6 +238,46 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature: st_area(varchar)");
     }
     @Test
+    public void testNativeGeoPolygonOverlayContract() {
+        String geometry = "ST_GeomFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))', 'EPSG:3857')";
+        String geography = "ST_GeogFromText('POLYGON ((0 0,2 0,2 2,0 2,0 0))')";
+        String[] functions = {"ST_Union", "ST_Difference", "ST_SymDifference"};
+        long[] ids = {120351, 120361, 120371};
+        for (int i = 0; i < functions.length; ++i) {
+            String function = functions[i];
+            String sql = "select " + function + "(" + geometry + ", " + geometry + ")";
+            assertFunctionContract(sql, ids[i], PrimitiveType.GEOMETRY);
+            QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+            ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+            Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), output.getGeoDescriptor());
+            for (String arguments : new String[] {geometry + ", NULL", "NULL, " + geometry}) {
+                QueryRelation nullRelation = ((QueryStatement) analyzeSuccess(
+                        "select " + function + "(" + arguments + ")")).getQueryRelation();
+                ScalarType nullableOutput = (ScalarType) ((SelectRelation) nullRelation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry("EPSG:3857"), nullableOutput.getGeoDescriptor());
+            }
+            String degrees = geometry.replace("EPSG:3857", "EPSG:4326");
+            QueryRelation degreeRelation = ((QueryStatement) analyzeSuccess(
+                    "select ST_SRID(" + function + "(" + degrees + ", " + degrees + "))")).getQueryRelation();
+            Assertions.assertEquals(PrimitiveType.INT,
+                    ((SelectRelation) degreeRelation).getOutputExpression().get(0).getType().getPrimitiveType());
+            analyzeFail("select " + function + "(" + geometry + ", " + degrees + ")",
+                    "requires compatible GEOMETRY CRS descriptors");
+            analyzeFail("select " + function + "(" + geography + ", " + geography + ")",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "(" + geography + ", " + geometry + ")",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "('POLYGON EMPTY', 'POLYGON EMPTY')",
+                    "No matching function with signature");
+            analyzeFail("select " + function + "(" + geometry + ")", "No matching function with signature");
+            analyzeFail("select " + function + "(" + geometry + ", " + geometry + ", 0)",
+                    "No matching function with signature");
+        }
+        analyzeFail("select ST_Intersection(" + geometry + ", " + geometry + ")",
+                "No matching function with signature");
+    }
+
+    @Test
     public void testNativeGeoCrsContract() {
         String geometry = "ST_GeomFromText('POINT (10 20)', 'EPSG:4326')";
         String geography = "ST_GeogFromText('POINT (10 20)')";
