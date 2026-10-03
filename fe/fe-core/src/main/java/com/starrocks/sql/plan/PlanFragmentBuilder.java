@@ -48,6 +48,7 @@ import com.starrocks.catalog.system.information.LoadTrackingLogsSystemTable;
 import com.starrocks.catalog.system.information.LoadsSystemTable;
 import com.starrocks.catalog.system.information.MaterializedViewRefreshJobsSystemTable;
 import com.starrocks.catalog.system.information.RoutineLoadJobsSystemTable;
+import com.starrocks.catalog.system.information.RunningTransactionsSystemTable;
 import com.starrocks.catalog.system.information.StreamLoadsSystemTable;
 import com.starrocks.catalog.system.information.TaskRunsSystemTable;
 import com.starrocks.common.AnalysisException;
@@ -280,7 +281,8 @@ public class PlanFragmentBuilder {
             LoadsSystemTable.NAME,
             LoadTrackingLogsSystemTable.NAME,
             StreamLoadsSystemTable.NAME,
-            RoutineLoadJobsSystemTable.NAME
+            RoutineLoadJobsSystemTable.NAME,
+            RunningTransactionsSystemTable.NAME
     );
 
     public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
@@ -2227,9 +2229,16 @@ public class PlanFragmentBuilder {
                         switch (columnRefOperator.getName()) {
                             case "TABLE_SCHEMA":
                             case "DATABASE_NAME":
-                                scanNode.setSchemaDb(escapeLike
-                                        ? PatternMatcher.escapeLikeValue(constantOperator.getVarchar())
-                                        : constantOperator.getVarchar());
+                                // running_transactions carries its own filters so the shared db/label fields
+                                // keep one meaning across scanners.
+                                if (scanNode.getTableName()
+                                        .equalsIgnoreCase(RunningTransactionsSystemTable.NAME)) {
+                                    scanNode.setRunningTxnDb(constantOperator.getVarchar());
+                                } else {
+                                    scanNode.setSchemaDb(escapeLike
+                                            ? PatternMatcher.escapeLikeValue(constantOperator.getVarchar())
+                                            : constantOperator.getVarchar());
+                                }
                                 break;
                             case "TABLE_NAME":
                                 scanNode.setSchemaTable(escapeLike
@@ -2252,7 +2261,12 @@ public class PlanFragmentBuilder {
                                 scanNode.setTxnId(constantOperator.getBigint());
                                 break;
                             case "LABEL":
-                                scanNode.setLabel(constantOperator.getVarchar());
+                                if (scanNode.getTableName()
+                                        .equalsIgnoreCase(RunningTransactionsSystemTable.NAME)) {
+                                    scanNode.setRunningTxnLabel(constantOperator.getVarchar());
+                                } else {
+                                    scanNode.setLabel(constantOperator.getVarchar());
+                                }
                                 break;
                             case "JOB_ID":
                                 // task_runs and materialized_view_refresh_jobs key JOB_ID by a string (UUID), so

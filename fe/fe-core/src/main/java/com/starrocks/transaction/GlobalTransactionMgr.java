@@ -61,6 +61,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.thrift.TRunningTxnInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -78,6 +79,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -821,6 +823,37 @@ public class GlobalTransactionMgr implements MemoryTrackable {
             }
         }
         return transactionStateList;
+    }
+
+    // Cross-database snapshot of running transactions for information_schema.running_transactions.
+    // When dbId is non-null only that database's manager is queried (the pushed-down db filter); otherwise
+    // every database manager is snapshotted. Each manager is locked and released independently
+    // (getRunningTransactions holds only its own read lock), so no two txn locks are ever held at once and
+    // there is no cross-manager lock ordering. dbIdToDatabaseTransactionMgrs is a ConcurrentMap, so the
+    // iteration needs no global lock. Rows carry raw db/table ids; name resolution happens off-lock in the
+    // view's row producer.
+    // dbAllowed decides, per database, whether the caller may see it. It is tested BEFORE that database's
+    // rows are built, so a database the caller cannot see costs one check rather than a row per running
+    // transaction. Pass a predicate that always returns true to collect everything.
+    public List<TRunningTxnInfo> getRunningTransactions(Long dbId, Predicate<Long> dbAllowed) {
+        List<TRunningTxnInfo> out = Lists.newArrayList();
+        if (dbId != null) {
+            if (!dbAllowed.test(dbId)) {
+                return out;
+            }
+            DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+            if (dbTransactionMgr != null) {
+                out.addAll(dbTransactionMgr.getRunningTransactions());
+            }
+            return out;
+        }
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            if (!dbAllowed.test(entry.getKey())) {
+                continue;
+            }
+            out.addAll(entry.getValue().getRunningTransactions());
+        }
+        return out;
     }
 
     public List<TransactionStateBatch> getReadyPublishTransactionsBatch() {

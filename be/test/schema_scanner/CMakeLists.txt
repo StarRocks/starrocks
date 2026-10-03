@@ -30,6 +30,7 @@ set(SCHEMA_SCANNER_TEST_FILES
     schema_materialized_view_refresh_jobs_scanner_test.cpp
     schema_materialized_views_scanner_test.cpp
     schema_partitions_meta_scanner_test.cpp
+    schema_running_transactions_scanner_test.cpp
     schema_scanner_core_test.cpp
     schema_scanner_test.cpp
     schema_scanners_test.cpp

@@ -394,6 +394,31 @@ public class ScanTest extends PlanTestBase {
     }
 
     @Test
+    public void testRunningTransactionsSchemaScanPushesExactDbName() throws Exception {
+        // running_transactions resolves the pushed-down database with an exact getDb() lookup, the same way
+        // loads does, so the planner must hand it the literal name. If it were escaped for LIKE matching, a
+        // database whose name contains '_' would arrive as 'my\_db', the exact lookup would miss, and the
+        // query would silently return no rows instead of that database's transactions.
+        String sql = "select txn_id from information_schema.running_transactions where database_name = 'test_db'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("test_db", scanNode.getRunningTxnDb());
+        // The value lands on this table's own field. The shared schema db field keeps a single meaning for
+        // every other scanner, which is why it must stay unset here.
+        Assertions.assertNull(scanNode.getSchemaDb());
+    }
+
+    @Test
+    public void testRunningTransactionsSchemaScanPushesExactLabel() throws Exception {
+        // LABEL is split the same way as DATABASE_NAME. The loads-style scanners treat their label field as a
+        // LIKE pattern, so running_transactions takes its own field to keep an exact match exact.
+        String sql = "select txn_id from information_schema.running_transactions where label = 'my_label'";
+        ExecPlan plan = getExecPlan(sql);
+        SchemaScanNode scanNode = (SchemaScanNode) plan.getScanNodes().get(0);
+        Assertions.assertEquals("my_label", scanNode.getRunningTxnLabel());
+    }
+
+    @Test
     public void testSchemaScanWithLikePattern() throws Exception {
         String sql = "select column_name from information_schema.columns " +
                 "where table_schema like 'test_%' and table_name like 'my_table%'";
