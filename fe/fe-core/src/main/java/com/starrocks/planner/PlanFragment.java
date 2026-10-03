@@ -507,7 +507,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             result.setQuery_global_dict_exprs(exprs);
         }
         if (!loadGlobalDicts.isEmpty()) {
-            result.setLoad_global_dicts(dictToThrift(loadGlobalDicts));
+            result.setLoad_global_dicts(loadDictToThrift(loadGlobalDicts));
         }
         if (cacheParam != null) {
             if (ConnectContext.get() != null) {
@@ -567,6 +567,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return result;
     }
 
+    private List<TGlobalDict> loadDictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+        List<TGlobalDict> result = dictToThrift(dicts);
+        for (int i = 0; i < dicts.size(); i++) {
+            result.get(i).setVersion(dicts.get(i).second.getContentIdentity());
+        }
+        return result;
+    }
+
     // normalize dicts of the fragment, it is different from dictToThrift in three points:
     // 1. SlotIds must be replaced by remapped SlotIds;
     // 2. dict should be sorted according to its corresponding remapped SlotIds;
@@ -580,7 +588,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
             TGlobalDict globalDict = new TGlobalDict();
             globalDict.setColumnId(dictPair.first);
-            globalDict.setVersion(dictPair.second.getCollectedVersion());
+            globalDict.setVersion(dictPair.second.getContentIdentity());
             result.add(globalDict);
         }
         return result;
