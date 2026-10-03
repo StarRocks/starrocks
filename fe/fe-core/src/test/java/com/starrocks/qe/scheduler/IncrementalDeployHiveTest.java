@@ -36,6 +36,40 @@ import java.util.Map;
 public class IncrementalDeployHiveTest extends SchedulerConnectorTestBase {
 
     @Test
+    public void testOlapFlagDoesNotBatchConnectorScans() throws Exception {
+        // enable_olap_incremental_scan_ranges must not switch connector (Hive) scans to
+        // incremental delivery when enable_connector_incremental_scan_ranges is off, even though
+        // both feed the single job-level incrementalScanRanges flag.
+        connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(false);
+        connectContext.getSessionVariable().setEnableOlapIncrementalScanRanges(true);
+        try {
+            List<TExecPlanFragmentParams> requests = new ArrayList<>();
+            new MockUp<Deployer>() {
+                @Mock
+                public void deployFragments(DeployState deployState) {
+                    for (List<FragmentInstanceExecState> execStates : deployState.getThreeStageExecutionsToDeploy()) {
+                        for (FragmentInstanceExecState execState : execStates) {
+                            requests.add(execState.getRequestToDeploy().deepCopy());
+                        }
+                    }
+                }
+            };
+            startScheduling("select * from hive0.file_split_db.file_split_tbl");
+            // No empty/has_more sentinel means the connector scan was not batched.
+            for (TExecPlanFragmentParams r : requests) {
+                for (List<TScanRangeParams> v : r.params.getPer_node_scan_ranges().values()) {
+                    for (TScanRangeParams p : v) {
+                        Assertions.assertFalse(p.isSetEmpty() && p.isEmpty(),
+                                "connector scan must not emit an incremental sentinel when its flag is off");
+                    }
+                }
+            }
+        } finally {
+            connectContext.getSessionVariable().setEnableOlapIncrementalScanRanges(false);
+        }
+    }
+
+    @Test
     public void testSchedule() throws Exception {
         // test different settings.
         connectContext.getSessionVariable().setEnableConnectorIncrementalScanRanges(true);
