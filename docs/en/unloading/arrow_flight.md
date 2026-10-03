@@ -185,6 +185,12 @@ SET GLOBAL arrow_flight_proxy = 'your-proxy-hostname:Port';
 
 :::
 
+##### Proxy backpressure timeout
+
+The mutable FE configuration `arrow_flight_proxy_backpressure_timeout_ms` limits how long a proxy result stream can continuously wait for its downstream client to become ready. The default is `300000` milliseconds (5 minutes). It applies to both FE-to-BE and FE-to-FE proxy streams. Each readiness wait has a fresh timeout; this is not a total query or transfer timeout, and time spent reading upstream is not counted. An earlier client RPC deadline still applies.
+
+When the wait expires, the proxy cancels the upstream stream, releases the result worker, and reports `DEADLINE_EXCEEDED` to the client. Values must be positive integers, up to `2147483647` milliseconds. A zero or negative value rejects new proxy result streams with `INTERNAL`; it does not disable the timeout. Changes apply to newly opened proxy result streams without an FE restart; existing streams retain the value captured when they started.
+
 #### Establish connection
 
 On the client side, create an Arrow Flight SQL client using the following information:
