@@ -40,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
@@ -417,7 +418,7 @@ public class AuthenticationHandler {
         Set<String> groups = new HashSet<>();
         if (isGroupProviderUsed(accessControlContext)) {
             groups.addAll(resolveGroupsFromProviders(context.getCurrentUserIdentity(),
-                    context.getDistinguishedName(), authenticationResult.groupProviderName));
+                    context.getDistinguishedName(), authenticationResult.groupProviderName, accessControlContext));
         }
         if (isMemberOfUsed(accessControlContext)) {
             groups.addAll(accessControlContext.getMemberOfGroups());
@@ -517,9 +518,25 @@ public class AuthenticationHandler {
      * </ul>
      * Callers that want "the groups of this session" should read AccessControlContext#getGroups()
      * instead.
+     * <p>
+     * This form resolves without a session context, which is what callers such as EXECUTE AS need: it
+     * resolves groups for the impersonated identity while the session context still carries the
+     * authenticating user's token, so a context-aware provider would derive groups for the wrong user.
      */
     public static Set<String> resolveGroupsFromProviders(UserIdentity userIdentity, String distinguishedName,
                                                          List<String> groupProviderList) {
+        return resolveGroupsFromProviders(userIdentity, distinguishedName, groupProviderList, null);
+    }
+
+    /**
+     * The form above, plus the session's {@link AccessControlContext}. A provider that implements
+     * {@link AccessControlContextAwareGroupProvider} receives it and can resolve membership from the
+     * credentials the session authenticated with; every other provider is called exactly as before.
+     */
+    public static Set<String> resolveGroupsFromProviders(UserIdentity userIdentity,
+                                                         String distinguishedName,
+                                                         List<String> groupProviderList,
+                                                         @Nullable AccessControlContext accessControlContext) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         HashSet<String> groups = new HashSet<>();
@@ -528,7 +545,16 @@ public class AuthenticationHandler {
             if (groupProvider == null) {
                 continue;
             }
-            groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
+
+            if (accessControlContext != null
+                    && groupProvider instanceof AccessControlContextAwareGroupProvider awareGroupProvider) {
+                groups.addAll(awareGroupProvider.getGroup(
+                        userIdentity,
+                        distinguishedName,
+                        accessControlContext));
+            } else {
+                groups.addAll(groupProvider.getGroup(userIdentity, distinguishedName));
+            }
         }
 
         return groups;

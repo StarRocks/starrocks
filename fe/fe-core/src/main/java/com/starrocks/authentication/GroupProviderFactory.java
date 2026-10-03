@@ -27,6 +27,7 @@ public class GroupProviderFactory {
                     .add(UnixGroupProvider.TYPE)
                     .add(FileGroupProvider.TYPE)
                     .add(LDAPGroupProvider.TYPE)
+                    .add(ExtensionGroupProvider.TYPE)
                     .build();
 
     public static void checkGroupProviderIsSupported(String groupProviderType) {
@@ -45,6 +46,8 @@ public class GroupProviderFactory {
             groupProvider = new UnixGroupProvider(name, propertyMap);
         } else if (type.equalsIgnoreCase(LDAPGroupProvider.TYPE)) {
             groupProvider = new LDAPGroupProvider(name, propertyMap);
+        } else if (type.equalsIgnoreCase(ExtensionGroupProvider.TYPE)) {
+            groupProvider = new ExtensionGroupProvider(name, propertyMap);
         }
 
         Preconditions.checkNotNull(groupProvider);
