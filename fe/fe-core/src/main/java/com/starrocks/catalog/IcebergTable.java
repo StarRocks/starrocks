@@ -30,6 +30,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.IcebergTableOperation;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.procedure.AddFilesProcedure;
 import com.starrocks.connector.iceberg.procedure.CherryPickSnapshotProcedure;
@@ -74,6 +75,7 @@ import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Partitioning;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.SortDirection;
 import org.apache.iceberg.SortField;
 import org.apache.iceberg.SortOrder;
@@ -279,6 +281,27 @@ public class IcebergTable extends Table {
     public boolean hasPartitionTransformedEvolution() {
         return (!isV2Format() && getReadSpec().fields().stream().anyMatch(field -> field.transform().isVoid())) ||
                 (isV2Format() && getReadSpec().specId() > 0);
+    }
+
+    public boolean isCurrentSnapshotAllOnCurrentSpec() {
+        org.apache.iceberg.Table t = getNativeTable();
+        if (t.specs().size() <= 1) {
+            return true;
+        }
+
+        Snapshot snapshot = t.currentSnapshot();
+        if (snapshot == null) {
+            return true;
+        }
+
+        int currentSpecId = t.spec().specId();
+        try {
+            return IcebergUtil.isSnapshotAllOnSpec(snapshot, t.io(), currentSpecId);
+        } catch (Exception e) {
+            LOG.warn("Failed to check manifests for iceberg table {}, fall back to strict partition-evolution check",
+                    getName(), e);
+            return false;
+        }
     }
 
     public boolean isV2Format() {
