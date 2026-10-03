@@ -19,6 +19,7 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.RejectedRecordsRowAccessPolicy;
 import com.starrocks.authorization.ranger.RangerAccessController;
+import com.starrocks.authorization.ranger.RangerAccessResourceBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -172,29 +173,34 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkViewAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        hasPermission(
-                RangerStarRocksResource.builder()
-                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                        .setDatabase(tableName.getDb())
-                        .setView(tableName.getTbl())
-                        .build(),
-                context.getCurrentUserIdentity(),
-                context.getGroups(),
-                privilegeType);
+        checkViewLikeObjectAction(context, tableName, privilegeType, false);
     }
 
     @Override
     public void checkAnyActionOnView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        hasPermission(
-                RangerStarRocksResource.builder()
-                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                        .setDatabase(tableName.getDb())
-                        .setView(tableName.getTbl())
-                        .build(),
-                context.getCurrentUserIdentity(),
-                context.getGroups(),
-                PrivilegeType.ANY);
+        checkViewLikeObjectAction(context, tableName, PrivilegeType.ANY, false);
+    }
+
+    /**
+     * Shared view / materialized view privilege check. The catalog is resolved from the {@link TableName}
+     * (defaulting to the internal catalog when absent) so that views/MVs in external catalogs are checked
+     * against the correct Ranger resource instead of always being looked up under the internal catalog.
+     */
+    private void checkViewLikeObjectAction(ConnectContext context, TableName tableName,
+                                           PrivilegeType privilegeType, boolean materializedView)
+            throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null
+                ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
+        RangerAccessResourceBuilder builder = RangerStarRocksResource.builder()
+                .setCatalog(catalog)
+                .setDatabase(tableName.getDb());
+        if (materializedView) {
+            builder.setMaterializedView(tableName.getTbl());
+        } else {
+            builder.setView(tableName.getTbl());
+        }
+        hasPermission(builder.build(), context.getCurrentUserIdentity(), context.getGroups(), privilegeType);
     }
 
     @Override
@@ -220,31 +226,49 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
+    public void checkAnyActionOnAnyView(ConnectContext context, String catalog, String db) throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalog, db);
+        checkAnyActionOnAnyViewLikeObject(context, catalog, database, database.getViews(), false);
+    }
+
+    /**
+     * Shared "does the user have any action on any view/materialized view in this db" check for a
+     * (possibly external) catalog. The only per-type difference is the object collection and whether
+     * the Ranger resource is a view or a materialized view.
+     */
+    private void checkAnyActionOnAnyViewLikeObject(ConnectContext context, String catalog, Database database,
+                                                   List<? extends Table> objects, boolean materializedView)
+            throws AccessDeniedException {
+        for (Table table : objects) {
+            try {
+                RangerAccessResourceBuilder builder = RangerStarRocksResource.builder()
+                        .setCatalog(catalog)
+                        .setDatabase(database.getFullName());
+                if (materializedView) {
+                    builder.setMaterializedView(table.getName());
+                } else {
+                    builder.setView(table.getName());
+                }
+                hasPermission(builder.build(), context.getCurrentUserIdentity(), context.getGroups(),
+                        PrivilegeType.ANY);
+            } catch (AccessDeniedException e) {
+                continue;
+            }
+            return;
+        }
+        throw new AccessDeniedException();
+    }
+
+    @Override
     public void checkMaterializedViewAction(ConnectContext context, TableName tableName,
                                             PrivilegeType privilegeType) throws AccessDeniedException {
-        hasPermission(
-                RangerStarRocksResource.builder()
-                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                        .setDatabase(tableName.getDb())
-                        .setMaterializedView(tableName.getTbl())
-                        .build(),
-                context.getCurrentUserIdentity(),
-                context.getGroups(),
-                privilegeType);
+        checkViewLikeObjectAction(context, tableName, privilegeType, true);
     }
 
     @Override
     public void checkAnyActionOnMaterializedView(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
-        hasPermission(
-                RangerStarRocksResource.builder()
-                        .setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                        .setDatabase(tableName.getDb())
-                        .setMaterializedView(tableName.getTbl())
-                        .build(),
-                context.getCurrentUserIdentity(),
-                context.getGroups(),
-                PrivilegeType.ANY);
+        checkViewLikeObjectAction(context, tableName, PrivilegeType.ANY, true);
     }
 
     @Override
@@ -268,6 +292,13 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             return;
         }
         throw new AccessDeniedException();
+    }
+
+    @Override
+    public void checkAnyActionOnAnyMaterializedView(ConnectContext context, String catalog, String db)
+            throws AccessDeniedException {
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalog, db);
+        checkAnyActionOnAnyViewLikeObject(context, catalog, database, database.getMaterializedViews(), true);
     }
 
     @Override
