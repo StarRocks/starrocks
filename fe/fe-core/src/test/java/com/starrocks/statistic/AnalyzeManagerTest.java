@@ -31,6 +31,14 @@ import java.time.LocalTime;
 
 public class AnalyzeManagerTest extends PlanTestBase {
     @Test
+    public void testClearStalePartitionStatsWithEmptyAnalyzeStatus() {
+        AnalyzeMgr analyzeMgr = new AnalyzeMgr();
+        analyzeMgr.getAnalyzeStatusMap().clear();
+        Deencapsulation.setField(analyzeMgr, "lastCleanTime", LocalDateTime.MIN);
+        Assertions.assertDoesNotThrow(() -> Deencapsulation.invoke(analyzeMgr, "clearStalePartitionStats"));
+    }
+
+    @Test
     public void testClearStatisticFromDroppedTable() {
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(new BasicStatsMeta(
                 1, 2, Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
