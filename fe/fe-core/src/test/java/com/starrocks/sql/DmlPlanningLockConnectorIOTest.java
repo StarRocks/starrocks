@@ -16,6 +16,7 @@ package com.starrocks.sql;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -73,6 +74,8 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
 
     private final Map<String, Boolean> underLock = Maps.newConcurrentMap();
     private volatile Thread testThread;
+    // Off by default: the DML tests pin getTable, and a DML target resolve may ask getDb on the way.
+    private boolean probeCreateTarget;
 
     private void record(String key) {
         if (Thread.currentThread() != testThread) {
@@ -90,6 +93,23 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
                                   String tblName) {
                 if (!CatalogMgr.isInternalCatalog(catalogName)) {
                     record("getTable:" + catalogName + "." + tblName);
+                }
+                return invocation.proceed(context, catalogName, dbName, tblName);
+            }
+
+            @Mock
+            public Database getDb(Invocation invocation, ConnectContext context, String catalogName, String dbName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    record("getDb:" + catalogName + "." + dbName);
+                }
+                return invocation.proceed(context, catalogName, dbName);
+            }
+
+            @Mock
+            public boolean tableExists(Invocation invocation, ConnectContext context, String catalogName,
+                                       String dbName, String tblName) {
+                if (probeCreateTarget && !CatalogMgr.isInternalCatalog(catalogName)) {
+                    record("tableExists:" + catalogName + "." + tblName);
                 }
                 return invocation.proceed(context, catalogName, dbName, tblName);
             }
@@ -284,6 +304,60 @@ public class DmlPlanningLockConnectorIOTest extends ConnectorPlanTestBase {
         plan(sql);
         Assertions.assertTrue(connectContext.getPreResolvedWriteTargets().isEmpty(),
                 "the pre-resolved target was left behind, so the analyzer resolved its own copy instead");
+    }
+
+    /**
+     * A CTAS into an external catalog locks only the internal tables its SELECT reads, yet
+     * {@code CreateTableAnalyzer} used to ask the target catalog, with that lock held, whether the database
+     * and the table exist -- the {@code tableExists} / {@code getDb} failures of the dynamic sql-test run.
+     */
+    @Test
+    public void testACtasIntoAConnectorTargetAnalyzesWithoutTheLock() throws Exception {
+        probeCreateTarget = true;
+        probeConnectorCalls();
+        String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_before_lock AS SELECT pk, v1 FROM test.tprimary";
+        plan(sql);
+        Assertions.assertTrue(underLock.containsKey("tableExists:iceberg0.ctas_before_lock"),
+                "the CTAS never asked whether its target exists, the probe proves nothing: " + underLock);
+        assertNothingWentRemoteUnderTheLock(sql);
+        Assertions.assertTrue(connectContext.getPreResolvedWriteTargets().isEmpty(),
+                "the pre-resolved create target was left behind, so the analyzer asked the catalog again");
+    }
+
+    /** The reverse of the test above: without the pre-pass both questions go back inside the lock. */
+    @Test
+    public void testWithoutThePrePassTheCtasTargetGoesBackUnderTheLock() throws Exception {
+        boolean saved = Config.enable_experimental_external_table_preparse;
+        Config.enable_experimental_external_table_preparse = false;
+        try {
+            probeCreateTarget = true;
+            probeConnectorCalls();
+            String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_under_lock AS SELECT pk, v1 FROM test.tprimary";
+            plan(sql);
+            assertOnlyTheseWentRemoteUnderTheLock(sql, "getDb:iceberg0.unpartitioned_db",
+                    "tableExists:iceberg0.ctas_under_lock");
+        } finally {
+            Config.enable_experimental_external_table_preparse = saved;
+        }
+    }
+
+    /**
+     * The pre-pass must not change the answer: a target the catalog reports as existing is still rejected,
+     * i.e. the analyzer honors the answer it is handed. The mocked iceberg catalog reports no table as
+     * existing, so the answer is forced here.
+     */
+    @Test
+    public void testACtasOntoAnExistingConnectorTableIsStillRejected() {
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public boolean tableExists(ConnectContext context, String catalogName, String dbName, String tblName) {
+                return "ctas_exists".equals(tblName);
+            }
+        };
+        String sql = "CREATE TABLE iceberg0.unpartitioned_db.ctas_exists AS SELECT pk, v1 FROM test.tprimary";
+        Exception e = Assertions.assertThrows(Exception.class, () -> plan(sql));
+        Assertions.assertTrue(e.getMessage() != null && e.getMessage().contains("already exists"),
+                "expected the table-exists error, got: " + e.getMessage());
     }
 
     /**
