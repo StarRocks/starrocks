@@ -33,6 +33,7 @@ import io.delta.kernel.Table;
 import io.delta.kernel.data.ColumnarBatch;
 import io.delta.kernel.data.FilteredColumnarBatch;
 import io.delta.kernel.data.Row;
+import io.delta.kernel.defaults.engine.hadoopio.HadoopFileIO;
 import io.delta.kernel.engine.Engine;
 import io.delta.kernel.exceptions.TableNotFoundException;
 import io.delta.kernel.internal.InternalScanFileUtils;
@@ -125,7 +126,8 @@ public abstract class DeltaLakeMetastore implements IDeltaLakeMetastore {
         if (metastoreTable.getCloudConfiguration() != null) {
             metastoreTable.getCloudConfiguration().applyToConfiguration(snapshotConf);
         }
-        DeltaLakeEngine deltaLakeEngine = DeltaLakeEngine.create(snapshotConf, properties, checkpointCache, jsonCache);
+        DeltaLakeEngine deltaLakeEngine =
+                DeltaLakeEngine.create(new HadoopFileIO(snapshotConf), properties, checkpointCache, jsonCache);
         SnapshotImpl snapshot;
 
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "DeltaLake.getSnapshot")) {
