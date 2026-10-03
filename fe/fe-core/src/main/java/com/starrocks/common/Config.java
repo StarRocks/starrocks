@@ -1916,6 +1916,11 @@ public class Config extends ConfigBase {
             "build ast tree in materialized view initialization")
     public static boolean enable_materialized_view_text_based_rewrite = true;
 
+    @ConfField(mutable = true, comment = "whether to allow creating an Iceberg materialized view that lives in an " +
+            "Iceberg REST catalog (Mechanism C). The MV definition + freshness are owned by the Iceberg catalog; " +
+            "StarRocks drives refresh. Off by default; depends on the unreleased Iceberg materialized-view spec.")
+    public static boolean enable_iceberg_materialized_view = false;
+
     /**
      * When the materialized view fails to start FE due to metadata problems,
      * you can try to open this configuration,

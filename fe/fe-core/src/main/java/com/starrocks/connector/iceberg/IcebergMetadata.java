@@ -30,6 +30,7 @@ import com.starrocks.catalog.TableName;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -81,13 +82,18 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTablePartitionStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -144,6 +150,7 @@ import org.apache.iceberg.StarRocksIcebergTableScan;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.CommitFailedException;
 import org.apache.iceberg.exceptions.CommitStateUnknownException;
@@ -416,6 +423,74 @@ public class IcebergMetadata implements ConnectorMetadata {
         } else {
             throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
         }
+    }
+
+    // ---- Iceberg materialized view (Mechanism C) ----
+    // Marks an Iceberg View as a StarRocks-produced materialized view living in the Iceberg catalog.
+    public static final String MV_STORAGE_VIEW_PROPERTY = "starrocks.materialized_view";
+
+    /**
+     * Mechanism C: create an Iceberg-catalog-resident materialized view = an empty &lt;mv&gt;__storage Iceberg
+     * table plus a linked Iceberg View whose current version carries the storageTable identifier. StarRocks keeps
+     * no native MaterializedView; the IRC is the source of truth. Validation (feature flag, all-Iceberg base
+     * tables, representable schema) runs in MaterializedViewAnalyzer before reaching here.
+     */
+    @Override
+    public void createMaterializedView(CreateMaterializedViewStatement statement) throws DdlException {
+        if (icebergCatalog.getIcebergCatalogType() != IcebergCatalogType.REST_CATALOG) {
+            throw new DdlException("Iceberg materialized views are only supported on REST catalogs");
+        }
+        ConnectContext context = ConnectContext.get();
+        String dbName = statement.getDbName();
+        String mvName = statement.getTblName();
+        List<Column> columns = statement.getMvColumnItems();
+        String storageTable = IcebergMVStorage.storageTableName(mvName);
+
+        // 1. the backing <mv>__storage Iceberg table (empty; populated by refresh)
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
+        icebergCatalog.createTable(context, dbName, storageTable, schema, PartitionSpec.unpartitioned(),
+                null /* location: catalog default */, SortOrder.unsorted(), Maps.newHashMap());
+
+        // 2. the Iceberg spec materialized view (View -> storageTable linkage)
+        Namespace ns = IcebergApiConverter.convertDbNameToNamespace(dbName);
+        TableIdentifier storageIdent = TableIdentifier.of(ns, storageTable);
+        ConnectorViewDefinition viewDefinition = IcebergMVStorage.buildViewDefinition(
+                catalogName, dbName, mvName, statement.getComment(), columns, statement.getInlineViewDef());
+        icebergCatalog.createMaterializedViewStorageView(context, catalogName, viewDefinition, storageIdent, true);
+
+        // TODO(mechanism-c): register a refresh Task keyed by the IRC identifier (catalog.db.name) and wire the
+        // transient-hydration seam in MVTaskRunProcessor.prepare(). C.0 scaffolding creates the IRC objects only.
+    }
+
+    @Override
+    public void dropMaterializedView(DropMaterializedViewStmt stmt) throws DdlException, MetaNotFoundException {
+        ConnectContext context = ConnectContext.get();
+        String dbName = stmt.getDbName();
+        String mvName = stmt.getMvName();
+        try {
+            icebergCatalog.dropView(context, dbName, IcebergMVStorage.storageViewName(mvName));
+        } finally {
+            icebergCatalog.dropTable(context, dbName, IcebergMVStorage.storageTableName(mvName), true);
+        }
+        // TODO(mechanism-c): delete the local refresh Task + freshness cache.
+    }
+
+    @Override
+    public void alterMaterializedView(AlterMaterializedViewStmt stmt)
+            throws DdlException, MetaNotFoundException, AnalysisException {
+        AlterTableClause clause = stmt.getAlterTableClause();
+        if (!(clause instanceof TableRenameClause)) {
+            throw new DdlException("Only RENAME is supported for an Iceberg-catalog materialized view (Mechanism C)");
+        }
+        ConnectContext context = ConnectContext.get();
+        String dbName = stmt.getDbName();
+        String oldMvName = stmt.getMvName();
+        String newMvName = ((TableRenameClause) clause).getNewTableName();
+        // Rename the backing storage table. TODO(mechanism-c): also rename the linked Iceberg View once a REST
+        // catalog renameView path is available (not guaranteed atomic with the table rename).
+        icebergCatalog.renameTable(context, dbName,
+                IcebergMVStorage.storageTableName(oldMvName), IcebergMVStorage.storageTableName(newMvName));
+        // TODO(mechanism-c): update the local refresh Task binding to the new IRC identifier.
     }
 
     @Override

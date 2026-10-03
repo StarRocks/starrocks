@@ -184,6 +184,31 @@ public interface IcebergCatalog extends MemoryTrackable {
         throw new StarRocksConnectorException("This catalog doesn't support creating/alter views");
     }
 
+    /**
+     * Create the Iceberg spec materialized view (Mechanism C): an Iceberg View whose current version carries a
+     * storageTable identifier pointing at the backing &lt;mv&gt;__storage table.
+     */
+    default boolean createMaterializedViewStorageView(ConnectContext context, String catalogName,
+                                                      ConnectorViewDefinition definition,
+                                                      TableIdentifier storageTable, boolean replace) {
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
+        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
+        ViewBuilder viewBuilder = getViewBuilder(context, TableIdentifier.of(ns, definition.getViewName()));
+        viewBuilder = viewBuilder.withSchema(schema)
+                .withQuery(STARROCKS_DIALECT, definition.getInlineViewDef())
+                .withDefaultNamespace(ns)
+                .withDefaultCatalog(definition.getCatalogName())
+                .withProperties(buildViewProperties(definition, catalogName))
+                .withLocation(defaultTableLocation(context, ns, definition.getViewName()))
+                .withStorageTableIdentifier(storageTable);
+        if (replace) {
+            viewBuilder.createOrReplace();
+        } else {
+            viewBuilder.create();
+        }
+        return true;
+    }
+
     default boolean alterView(ConnectContext context, View currentView, ConnectorViewDefinition connectorViewDefinition) {
         return alterViewDefault(context, currentView, connectorViewDefinition);
     }
