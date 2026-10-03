@@ -1,0 +1,61 @@
+-- name: test_null_predicate_derive_edges
+CREATE DATABASE test_null_derive_edges_${uuid0};
+USE test_null_derive_edges_${uuid0};
+CREATE TABLE t (id INT, a INT, b INT, d DECIMAL(18, 2), g INT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO t VALUES
+(1, NULL, NULL, NULL, 1), (2, 0, 1, 0.50, 1), (3, 2, 1, 1.25, 1),
+(4, 3, 2, 2.50, 2), (5, 4, NULL, NULL, 2), (6, NULL, 3, 1.25, 3), (7, 5, 4, -1.00, 3);
+CREATE TABLE probes (id INT, g INT, v INT)
+DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+INSERT INTO probes VALUES (1, 1, 9), (2, 2, 9), (3, 3, 9), (4, 4, 9), (5, 4, NULL), (6, 2, 3), (7, 2, NULL);
+SET cbo_derive_predicate_null_alternative = true;
+-- Disjoint ranges retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a < 0 OR a IS NULL) AND (a > 10 OR a IS NULL) ORDER BY id;
+-- Touching open/closed bounds also retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a < 2 OR a IS NULL) AND (a >= 2 OR a IS NULL) ORDER BY id;
+-- A discrete set and a disjoint range retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a <=> 2 OR a IS NULL) AND (a < 0 OR a IS NULL) ORDER BY id;
+-- A null-rejecting range makes the same intersection empty.
+[ORDER]SELECT id FROM t WHERE (a <=> 2 OR a IS NULL) AND a < 0 ORDER BY id;
+-- DECIMAL discrete values plus a NULL alternative.
+[ORDER]SELECT id FROM t WHERE (d <=> 1.25 AND g = 1) OR (d IS NULL AND g = 2) ORDER BY id;
+-- DECIMAL range rejects NULL without losing boundary values.
+[ORDER]SELECT id FROM t WHERE (d > 1.00 OR d IS NULL) AND d <= 2.50 ORDER BY id;
+-- The relation a > b may use the non-null bound of b.
+[ORDER]SELECT id FROM t WHERE (b > 1 OR b IS NULL) AND a > b ORDER BY id;
+-- A NULL-only source has no finite bound to propagate.
+[ORDER]SELECT id FROM t WHERE b IS NULL AND a > b ORDER BY id;
+-- Correlated NOT IN: NULL, nonempty, empty and matching groups; NULL probes too.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a = 3 OR r.a IS NULL)) ORDER BY p.id;
+-- Correlated NOT IN with an intersection containing only NULL.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a < 0 OR r.a IS NULL) AND (r.a > 10 OR r.a IS NULL)) ORDER BY p.id;
+-- Correlated NOT IN after a null-rejecting conjunct removes NULL.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a = 3 OR r.a IS NULL) AND r.a >= 0) ORDER BY p.id;
+SET cbo_derive_predicate_null_alternative = false;
+-- Disjoint ranges retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a < 0 OR a IS NULL) AND (a > 10 OR a IS NULL) ORDER BY id;
+-- Touching open/closed bounds also retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a < 2 OR a IS NULL) AND (a >= 2 OR a IS NULL) ORDER BY id;
+-- A discrete set and a disjoint range retain only NULL.
+[ORDER]SELECT id FROM t WHERE (a <=> 2 OR a IS NULL) AND (a < 0 OR a IS NULL) ORDER BY id;
+-- A null-rejecting range makes the same intersection empty.
+[ORDER]SELECT id FROM t WHERE (a <=> 2 OR a IS NULL) AND a < 0 ORDER BY id;
+-- DECIMAL discrete values plus a NULL alternative.
+[ORDER]SELECT id FROM t WHERE (d <=> 1.25 AND g = 1) OR (d IS NULL AND g = 2) ORDER BY id;
+-- DECIMAL range rejects NULL without losing boundary values.
+[ORDER]SELECT id FROM t WHERE (d > 1.00 OR d IS NULL) AND d <= 2.50 ORDER BY id;
+-- The relation a > b may use the non-null bound of b.
+[ORDER]SELECT id FROM t WHERE (b > 1 OR b IS NULL) AND a > b ORDER BY id;
+-- A NULL-only source has no finite bound to propagate.
+[ORDER]SELECT id FROM t WHERE b IS NULL AND a > b ORDER BY id;
+-- Correlated NOT IN: NULL, nonempty, empty and matching groups; NULL probes too.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a = 3 OR r.a IS NULL)) ORDER BY p.id;
+-- Correlated NOT IN with an intersection containing only NULL.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a < 0 OR r.a IS NULL) AND (r.a > 10 OR r.a IS NULL)) ORDER BY p.id;
+-- Correlated NOT IN after a null-rejecting conjunct removes NULL.
+[ORDER]SELECT p.id FROM probes p WHERE p.v NOT IN (SELECT r.a FROM t r WHERE r.g = p.g AND (r.a = 3 OR r.a IS NULL) AND r.a >= 0) ORDER BY p.id;
+SET cbo_derive_predicate_null_alternative = true;
+DROP DATABASE test_null_derive_edges_${uuid0};

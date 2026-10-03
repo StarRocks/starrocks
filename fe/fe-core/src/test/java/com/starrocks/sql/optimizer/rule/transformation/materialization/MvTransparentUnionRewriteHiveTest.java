@@ -105,7 +105,10 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 for (int i = 0; i < sqls.length; i++) {
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION");
+                    // the query touches only fresh MV partitions and the stale-partition
+                    // compensation predicate contradicts the query predicate, so the
+                    // compensation branch is pruned and no UNION is needed
+                    PlanTestBase.assertNotContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                     PlanTestBase.assertContains(plan, expects[i]);
                 }
@@ -136,7 +139,8 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 String[] expects = {
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: 25: l_shipdate >= '1998-01-02', " +
-                                "(25: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (25: l_shipdate IS NULL)\n" +
+                                "(25: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (25: l_shipdate IS NULL), " +
+                                "25: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
                                 "     partitions=2/6",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -153,7 +157,8 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 "     partitions=3/4", // case 2
                         "     TABLE: lineitem_par\n" +
                                 "     PARTITION PREDICATES: 26: l_shipdate >= '1998-01-02', " +
-                                "(26: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (26: l_shipdate IS NULL)\n" +
+                                "(26: l_shipdate IN ('1998-01-02', '1998-01-05')) OR (26: l_shipdate IS NULL), " +
+                                "26: l_shipdate IN ('1998-01-02', '1998-01-05')\n" +
                                 "     NON-PARTITION PREDICATES: 25: l_suppkey > 1\n" +
                                 "     MIN/MAX PREDICATES: 25: l_suppkey > 1\n" +
                                 "     partitions=2/6",
@@ -222,7 +227,9 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION");
+                    // the query touches only fresh MV partitions, the compensation branch is
+                    // pruned and no UNION is needed
+                    PlanTestBase.assertNotContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
@@ -256,7 +263,9 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                 };
                 for (String query : sqls) {
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ":UNION");
+                    // the query touches only fresh MV partitions, the compensation branch is
+                    // pruned and no UNION is needed
+                    PlanTestBase.assertNotContains(plan, ":UNION");
                     PlanTestBase.assertContains(plan, "mv0");
                 }
             }
@@ -327,12 +336,15 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                 " ON a.l_orderkey = b.o_orderkey and a.l_shipdate=b.o_orderdate " +
                                 "WHERE a.l_shipdate <= '1998-01-05' and a.l_suppkey > 100;",
                 };
-                // lineitem and order have no intersected dates.
+                // lineitem and order have no intersected dates, and the stale-partition
+                // compensation contradicts the join dates, so the compensation branch is
+                // pruned and the query is answered from the MV alone
                 for (String query : sqls) {
                     logSysInfo(query);
                     String plan = getFragmentPlan(query);
-                    PlanTestBase.assertContains(plan, ": lineitem_par");
-                    PlanTestBase.assertContains(plan, ":UNION", ": mv0");
+                    PlanTestBase.assertNotContains(plan, ": lineitem_par");
+                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, ": mv0");
                 }
             }
         });
@@ -375,7 +387,8 @@ public class MvTransparentUnionRewriteHiveTest extends MVTestBase {
                                         "     partitions=3/4", // case 1
                                 "     TABLE: lineitem_par\n" +
                                         "     PARTITION PREDICATES: 41: l_shipdate >= '1998-01-01', " +
-                                        "(41: l_shipdate < '1998-01-02') OR (41: l_shipdate IS NULL)\n" +
+                                        "(41: l_shipdate < '1998-01-02') OR (41: l_shipdate IS NULL), " +
+                                        "41: l_shipdate < '1998-01-02'\n" +
                                         "     NON-PARTITION PREDICATES: 40: l_suppkey > 1\n" +
                                         "     MIN/MAX PREDICATES: 40: l_suppkey > 1\n" +
                                         "     partitions=1/6",
