@@ -1,0 +1,94 @@
+-- name: test_stats_cleanup_after_modify_column_type
+create database sc_stats_${uuid0};
+-- result:
+-- !result
+use sc_stats_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c1` int,
+  `c_str` varchar(64)
+)
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 values (1, '2'), (2, '19'), (3, '30');
+-- result:
+-- !result
+analyze full table t1 with sync mode;
+select column_name, `min`, `max` from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' order by column_name;
+-- result:
+c1	1	3
+c_str	19	30
+-- !result
+alter table t1 modify column c_str bigint;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("sc_stats_${uuid0}", "t1")
+-- result:
+FINISHED
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait stale stats cleanup and re-collection after type change"}
+  result=select count(*) from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' and column_name = 'c_str' and `min` = '2' and `max` = '30';
+  CHECK: str(to_array(${result})[0][0]) == "1"
+} END LOOP
+
+select column_name, `min`, `max` from default_catalog._statistics_.column_statistics where table_name = 'sc_stats_${uuid0}.t1' order by column_name;
+-- result:
+c1	1	3
+c_str	2	30
+-- !result
+drop database sc_stats_${uuid0};
+-- result:
+-- !result
+CLEANUP {
+    drop database if exists sc_stats_${uuid0};
+} END CLEANUP
+
+-- name: test_histogram_cleanup_after_modify_column_type
+create database sc_hist_${uuid0};
+-- result:
+-- !result
+use sc_hist_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c1` int,
+  `c_str` varchar(64)
+)
+DUPLICATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ('replication_num' = '1');
+-- result:
+-- !result
+insert into t1 select generate_series, cast(generate_series as varchar) from table(generate_series(1, 100));
+-- result:
+-- !result
+analyze full table t1 with sync mode;
+[UC] ANALYZE TABLE t1 UPDATE HISTOGRAM ON c_str PROPERTIES('histogram_sample_ratio' = '1.0') WITH SYNC MODE;
+[UC]histTime=select update_time from default_catalog._statistics_.histogram_statistics where table_name = 'sc_hist_${uuid0}.t1' and column_name = 'c_str';
+-- result:
+
+-- !result
+alter table t1 modify column c_str bigint;
+-- result:
+-- !result
+function: wait_table_schema_change_finish("sc_hist_${uuid0}", "t1")
+-- result:
+FINISHED
+-- !result
+LOOP {
+  PROPERTY: {"timeout": 120, "interval": 5, "desc": "wait stale histogram cleanup and re-collection after type change"}
+  result=select count(*) from default_catalog._statistics_.histogram_statistics where table_name = 'sc_hist_${uuid0}.t1' and column_name = 'c_str' and update_time > '${histTime}';
+  CHECK: str(to_array(${result})[0][0]) == "1"
+} END LOOP
+
+drop database sc_hist_${uuid0};
+-- result:
+-- !result
+CLEANUP {
+    drop database if exists sc_hist_${uuid0};
+} END CLEANUP
