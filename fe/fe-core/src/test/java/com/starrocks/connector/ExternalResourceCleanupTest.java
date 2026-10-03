@@ -74,6 +74,7 @@ import org.apache.iceberg.util.TableScanUtil;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedConstruction;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 
@@ -411,16 +412,17 @@ public class ExternalResourceCleanupTest {
         TestBatchIterator batchIter = new TestBatchIterator(batch);
         Mockito.when(scan.getScanFiles(engine, true)).thenReturn(batchIter);
 
-        FileScanTask fileTask = Mockito.mock(FileScanTask.class);
+        com.starrocks.connector.delta.FileScanTask fileTask =
+                Mockito.mock(com.starrocks.connector.delta.FileScanTask.class);
         DeltaLakeAddFileStatsSerDe serDe = Mockito.mock(DeltaLakeAddFileStatsSerDe.class);
 
         try (MockedStatic<InternalScanFileUtils> internalMock = Mockito.mockStatic(InternalScanFileUtils.class);
-                MockedStatic<ScanFileUtils> scanFileMock = Mockito.mockStatic(ScanFileUtils.class)) {
+                MockedConstruction<ScanFileUtils.FileScanTaskConverter> converters = Mockito.mockConstruction(
+                        ScanFileUtils.FileScanTaskConverter.class, (converter, context) ->
+                                Mockito.when(converter.convert(Mockito.anyBoolean(), Mockito.eq(row), Mockito.isNull()))
+                                        .thenReturn(Pair.create(fileTask, serDe)))) {
             internalMock.when(() -> InternalScanFileUtils.getDeletionVectorDescriptorFromRow(row))
                     .thenReturn((DeletionVectorDescriptor) null);
-            scanFileMock.when(() -> ScanFileUtils.convertFromRowToFileScanTask(
-                            Mockito.anyBoolean(), Mockito.eq(row), Mockito.eq(meta), Mockito.anyLong(), Mockito.isNull()))
-                    .thenReturn(Pair.create(fileTask, serDe));
 
             // invoke iterator
             Method iteratorMethod = DeltaLakeMetadata.class.getDeclaredMethod(
@@ -428,17 +430,23 @@ public class ExternalResourceCleanupTest {
                     com.starrocks.sql.optimizer.operator.scalar.ScalarOperator.class, boolean.class);
             iteratorMethod.setAccessible(true);
             @SuppressWarnings("unchecked")
-            CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
-                    (CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>>)
+            CloseableIterator<Pair<com.starrocks.connector.delta.FileScanTask, DeltaLakeAddFileStatsSerDe>> iterator =
+                    (CloseableIterator<Pair<com.starrocks.connector.delta.FileScanTask, DeltaLakeAddFileStatsSerDe>>)
                             iteratorMethod.invoke(metadata, table, ConstantOperator.TRUE, false);
 
             Assertions.assertTrue(iterator.hasNext());
-            Pair<FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
+            Pair<com.starrocks.connector.delta.FileScanTask, DeltaLakeAddFileStatsSerDe> pair = iterator.next();
             Assertions.assertEquals(fileTask, pair.first);
             Assertions.assertFalse(iterator.hasNext());
             iterator.close();
             Assertions.assertTrue(rowIter.closed);
             Assertions.assertTrue(batchIter.closed);
+
+            // Use fresh iterators for the independent statistics scan and verify their cleanup too.
+            TestRowIterator collectRows = new TestRowIterator(row);
+            Mockito.when(batch.getRows()).thenReturn(collectRows);
+            TestBatchIterator collectBatches = new TestBatchIterator(batch);
+            Mockito.when(scan.getScanFiles(engine, true)).thenReturn(collectBatches);
 
             // trigger collectDeltaLakePlanFiles to populate splitTasks
             GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder()
@@ -457,9 +465,12 @@ public class ExternalResourceCleanupTest {
             Field splitField = DeltaLakeMetadata.class.getDeclaredField("splitTasks");
             splitField.setAccessible(true);
             @SuppressWarnings("unchecked")
-            Map<PredicateSearchKey, List<FileScanTask>> splits =
-                    (Map<PredicateSearchKey, List<FileScanTask>>) splitField.get(metadata);
-            Assertions.assertTrue(splits.containsKey(key));
+            Map<PredicateSearchKey, List<com.starrocks.connector.delta.FileScanTask>> splits =
+                    (Map<PredicateSearchKey, List<com.starrocks.connector.delta.FileScanTask>>) splitField.get(metadata);
+            Assertions.assertEquals(List.of(fileTask), splits.get(key));
+            Assertions.assertTrue(collectRows.closed);
+            Assertions.assertTrue(collectBatches.closed);
+            Assertions.assertEquals(2, converters.constructed().size());
         }
     }
 
@@ -605,6 +616,8 @@ public class ExternalResourceCleanupTest {
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
         Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(nativeTbl.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
+        Mockito.when(table.getReadSchema()).thenReturn(schema);
         Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");
         Mockito.when(table.getCatalogTableName()).thenReturn("tbl");
@@ -767,6 +780,7 @@ public class ExternalResourceCleanupTest {
         org.apache.iceberg.Table nativeTbl = Mockito.mock(org.apache.iceberg.Table.class);
         org.apache.iceberg.Schema schema = new org.apache.iceberg.Schema(List.of());
         Mockito.when(nativeTbl.schema()).thenReturn(schema);
+        Mockito.when(table.getReadSchema()).thenReturn(schema);
         Mockito.when(nativeTbl.spec()).thenReturn(org.apache.iceberg.PartitionSpec.unpartitioned());
         Mockito.when(table.getNativeTable()).thenReturn(nativeTbl);
         Mockito.when(table.getCatalogDBName()).thenReturn("db");

@@ -230,6 +230,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
         ScanBuilderImpl scanBuilder = (ScanBuilderImpl) snapshot.getScanBuilder();
         ScanImpl scan = (ScanImpl) scanBuilder.withFilter(deltaLakePredicate).build();
         long estimateRowSize = table.getColumns().stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        ScanFileUtils.FileScanTaskConverter converter = new ScanFileUtils.FileScanTaskConverter(metadata, estimateRowSize);
         CloseableIterator<Pair<FileScanTask, DeltaLakeAddFileStatsSerDe>> baseIterator = new CloseableIterator<>() {
             CloseableIterator<FilteredColumnarBatch> scanFilesAsBatches;
             CloseableIterator<Row> scanFileRows;
@@ -249,8 +250,7 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
                 Row scanFileRow = scanFileRows.next();
 
                 DeletionVectorDescriptor dv = InternalScanFileUtils.getDeletionVectorDescriptorFromRow(scanFileRow);
-                return ScanFileUtils.convertFromRowToFileScanTask(enableCollectColumnStats, scanFileRow, metadata,
-                        estimateRowSize, dv);
+                return converter.convert(enableCollectColumnStats, scanFileRow, dv);
             }
 
             private void ensureOpen() {
