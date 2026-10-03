@@ -29,6 +29,7 @@ import static com.starrocks.connector.delta.DeltaLakeConnector.HIVE_METASTORE_UR
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;
+    private final DeltaLakeSnapshotStatisticsCache snapshotStatisticsCache = new DeltaLakeSnapshotStatisticsCache();
     protected final IDeltaLakeMetastore metastore;
     protected final long perQueryMetastoreMaxNum;
     private final HdfsEnvironment hdfsEnvironment;
@@ -61,7 +62,7 @@ public class DeltaLakeMetadataFactory {
 
         Optional<DeltaLakeCacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new DeltaLakeMetadata(hdfsEnvironment, catalogName, metastoreOperations,
-                cacheUpdateProcessor.orElse(null), connectorProperties);
+                cacheUpdateProcessor.orElse(null), connectorProperties, snapshotStatisticsCache);
     }
 
     public synchronized Optional<DeltaLakeCacheUpdateProcessor> getCacheUpdateProcessor() {
@@ -76,6 +77,7 @@ public class DeltaLakeMetadataFactory {
     }
 
     public void metastoreCacheInvalidateCache() {
+        snapshotStatisticsCache.invalidateAll();
         if (metastore instanceof CachingDeltaLakeMetastore) {
             ((CachingDeltaLakeMetastore) metastore).invalidateAll();
         } else {
