@@ -131,6 +131,9 @@ public class StatementPlanner {
 
         boolean needWholePhaseLock = true;
         PlannerMetaLocker plannerMetaLocker = null;
+        // Internal queries may share the caller's context but have a different EXPLAIN mode.
+        StatementBase.ExplainLevel previousExplainLevel = session.getExplainLevel();
+        session.setExplainLevel(stmt.isExplain() ? stmt.getExplainLevel() : null);
         // 1. For all queries, we need db lock when analyze phase
         try (var guard = session.bindScope();
                 var ignoredBudget = StatisticsLoadBudget.openScope(session)) {
@@ -203,6 +206,7 @@ public class StatementPlanner {
             }
             throw e;
         } finally {
+            session.setExplainLevel(previousExplainLevel);
             if (needWholePhaseLock && plannerMetaLocker != null) {
                 unLock(plannerMetaLocker);
             }
@@ -473,9 +477,15 @@ public class StatementPlanner {
     public static ExecPlan planInsertStmt(PlannerMetaLocker plannerMetaLocker,
                                           InsertStmt insertStmt,
                                           ConnectContext connectContext) {
-        // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetry
-        boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
-        return new InsertPlanner(plannerMetaLocker, useOptimisticLock, null).plan(insertStmt, connectContext);
+        StatementBase.ExplainLevel previousExplainLevel = connectContext.getExplainLevel();
+        connectContext.setExplainLevel(insertStmt.isExplain() ? insertStmt.getExplainLevel() : null);
+        try {
+            // if use optimistic lock, we will unlock it in InsertPlanner#buildExecPlanWithRetry
+            boolean useOptimisticLock = isLockFreeInsertStmt(insertStmt, connectContext);
+            return new InsertPlanner(plannerMetaLocker, useOptimisticLock, null).plan(insertStmt, connectContext);
+        } finally {
+            connectContext.setExplainLevel(previousExplainLevel);
+        }
     }
 
     /**
