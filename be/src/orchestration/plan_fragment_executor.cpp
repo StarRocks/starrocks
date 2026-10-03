@@ -111,7 +111,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
 
     // set up plan
     DCHECK(request.__isset.fragment);
-    RETURN_IF_ERROR(ExecFactory::create_tree(_runtime_state, obj_pool(), request.fragment.plan, *desc_tbl, &_plan));
+    TPlan* tplan = obj_pool()->add(new TPlan(request.fragment.plan));
+    RETURN_IF_ERROR(ExecFactory::create_tree(_runtime_state, obj_pool(), *tplan, *desc_tbl, &_plan));
     _runtime_state->set_fragment_root_id(_plan->id());
 
     auto* fragment_dict_state = _runtime_state->fragment_dict_state();

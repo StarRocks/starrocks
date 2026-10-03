@@ -56,6 +56,8 @@ public:
 
     ~OlapScanOperator() override;
 
+    void set_precondition_ready(RuntimeState* state) override;
+
     bool has_output() const override;
     bool is_finished() const override;
 
