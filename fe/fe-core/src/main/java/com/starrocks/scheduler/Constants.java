@@ -47,7 +47,10 @@ public class Constants {
         MV,
         INSERT,
         PIPE,
-        DATACACHE_SELECT;
+        DATACACHE_SELECT,
+        // Mechanism C: refresh of an Iceberg-catalog (IRC) materialized view; driven by IcebergMVRefreshProcessor,
+        // keyed by the IRC identifier (catalog.db.name) with no local MaterializedView.
+        ICEBERG_MV;
 
         // Whether the task source is mergeable, only MV is mergeable by default.
         public boolean isMergeable() {

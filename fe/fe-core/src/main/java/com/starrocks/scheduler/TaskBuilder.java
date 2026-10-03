@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MaterializedViewRefreshType;
@@ -42,6 +43,7 @@ import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -159,6 +161,105 @@ public class TaskBuilder {
         }
         handleSpecialTaskProperties(task);
         return task;
+    }
+
+    public static String getIcebergMvTaskName(String catalogName, String dbName, String mvName) {
+        return "iceberg-mv-" + catalogName + "." + dbName + "." + mvName;
+    }
+
+    /**
+     * Mechanism C: build the refresh Task for an Iceberg-catalog (IRC) materialized view. The task is keyed by the
+     * IRC identifier (catalog.db.name) rather than a local MV id, its definition is the
+     * {@code INSERT OVERWRITE <mv>__storage SELECT ...} SQL, and the base-table identifiers are stashed in the
+     * properties so {@link IcebergMVRefreshProcessor} can rebuild the RefreshState at refresh time.
+     */
+    public static Task buildIcebergMvTask(String catalogName, String dbName, String mvName, String definitionSql,
+                                          List<BaseTableInfo> baseTableInfos, RefreshSchemeClause refreshSchemeDesc)
+            throws DdlException {
+        Task task = new Task(getIcebergMvTaskName(catalogName, dbName, mvName));
+        task.setSource(Constants.TaskSource.ICEBERG_MV);
+        task.setCatalogName(catalogName);
+        task.setDbName(dbName);
+        task.setDefinition(definitionSql);
+        task.setExpireTime(0L);
+
+        Map<String, String> taskProperties = Maps.newHashMap();
+        taskProperties.put(IcebergMVRefreshProcessor.PROP_BASE_TABLES,
+                IcebergMVRefreshProcessor.encodeBaseTables(baseTableInfos));
+        task.setProperties(taskProperties);
+
+        if (ConnectContext.get() != null) {
+            task.setCreateUser(ConnectContext.get().getCurrentUserIdentity().getUser());
+            task.setUserIdentity(ConnectContext.get().getCurrentUserIdentity());
+        }
+        setIcebergMvSchedule(task, refreshSchemeDesc);
+        handleSpecialTaskProperties(task);
+        return task;
+    }
+
+    // Derive the Task schedule from the MV's refresh scheme without a local MaterializedView (C.0): ASYNC with an
+    // interval -> PERIODICAL; everything else -> MANUAL.
+    private static void setIcebergMvSchedule(Task task, RefreshSchemeClause refreshSchemeDesc) throws DdlException {
+        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+            AsyncRefreshSchemeDesc async = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+            IntervalLiteral interval = async.getIntervalLiteral();
+            if (interval != null) {
+                long period = ((IntLiteral) interval.getValue()).getLongValue();
+                TimeUnit timeUnit =
+                        TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
+                long startTime = async.isDefineStartTime()
+                        ? Utils.getLongFromDateTime(async.getStartTime())
+                        : System.currentTimeMillis() / 1000;
+                task.setSchedule(new TaskSchedule(startTime, period, timeUnit));
+                task.setType(Constants.TaskType.PERIODICAL);
+                return;
+            }
+        }
+        task.setType(Constants.TaskType.MANUAL);
+    }
+
+    // ---- Mechanism C: Iceberg-catalog (IRC) MV refresh task lifecycle ----
+
+    public static void registerIcebergMvTask(String catalogName, String dbName, String mvName, String insertSql,
+                                             String querySql, List<BaseTableInfo> baseTableInfos,
+                                             RefreshSchemeClause refreshSchemeDesc) throws DdlException {
+        Task task = buildIcebergMvTask(catalogName, dbName, mvName, insertSql, baseTableInfos, refreshSchemeDesc);
+        task.getProperties().put(IcebergMVRefreshProcessor.PROP_QUERY, querySql);
+        GlobalStateMgr.getCurrentState().getTaskManager().createTask(task);
+    }
+
+    public static void dropIcebergMvTask(String catalogName, String dbName, String mvName) {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = tm.getTask(getIcebergMvTaskName(catalogName, dbName, mvName));
+        if (task != null) {
+            tm.dropTasks(List.of(task.getId()));
+        }
+    }
+
+    /** Rebind the refresh Task to the new name/storage table on RENAME; preserves schedule + stashed properties. */
+    public static void renameIcebergMvTask(String catalogName, String dbName, String oldMvName, String newMvName,
+                                           String newStorageTable) throws DdlException {
+        TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task oldTask = tm.getTask(getIcebergMvTaskName(catalogName, dbName, oldMvName));
+        if (oldTask == null) {
+            return;
+        }
+        String querySql = oldTask.getProperties().get(IcebergMVRefreshProcessor.PROP_QUERY);
+        String newInsertSql = String.format("INSERT OVERWRITE `%s`.`%s`.`%s` %s",
+                catalogName, dbName, newStorageTable, querySql);
+        Task newTask = new Task(getIcebergMvTaskName(catalogName, dbName, newMvName));
+        newTask.setSource(Constants.TaskSource.ICEBERG_MV);
+        newTask.setCatalogName(catalogName);
+        newTask.setDbName(dbName);
+        newTask.setDefinition(newInsertSql);
+        newTask.setExpireTime(0L);
+        newTask.setProperties(Maps.newHashMap(oldTask.getProperties()));
+        newTask.setType(oldTask.getType());
+        newTask.setSchedule(oldTask.getSchedule());
+        newTask.setCreateUser(oldTask.getCreateUser());
+        newTask.setUserIdentity(oldTask.getUserIdentity());
+        tm.createTask(newTask);
+        tm.dropTasks(List.of(oldTask.getId()));
     }
 
     public static Task rebuildMvTask(MaterializedView materializedView, String dbName,

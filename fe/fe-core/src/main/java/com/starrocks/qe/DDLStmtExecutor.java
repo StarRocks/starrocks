@@ -42,6 +42,7 @@ import com.starrocks.lake.TabletRepairHelper;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -457,9 +458,16 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
-                // The priority of manual refresh is higher than that of general refresh
-                String taskRunId = context.getGlobalStateMgr().getLocalMetastore().refreshMaterializedView(stmt);
-                info.add(taskRunId);
+                if (isIcebergCatalogMv(stmt.getCatalogName())) {
+                    // IRC materialized view: trigger its dedicated ICEBERG_MV refresh Task (there is no local MV).
+                    String taskName = TaskBuilder.getIcebergMvTaskName(
+                            stmt.getCatalogName(), stmt.getDbName(), stmt.getMvName());
+                    info.add(context.getGlobalStateMgr().getTaskManager().executeTask(taskName).getQueryId());
+                } else {
+                    // The priority of manual refresh is higher than that of general refresh
+                    String taskRunId = context.getGlobalStateMgr().getLocalMetastore().refreshMaterializedView(stmt);
+                    info.add(taskRunId);
+                }
             });
 
             ShowResultSetMetaData metaData = new ShowResultMetaFactory().getMetadata(stmt);

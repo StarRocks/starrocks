@@ -2068,6 +2068,19 @@ public class ConnectContext {
         return isCTAS;
     }
 
+    // Mechanism C: when an Iceberg-catalog materialized-view refresh runs, this carries the serialized Iceberg
+    // RefreshState to be stamped into the <mv>__storage overwrite snapshot summary at finishSink commit time.
+    // Null for all other work, so normal Iceberg writes are unaffected.
+    private String icebergMVRefreshState;
+
+    public void setIcebergMVRefreshState(String icebergMVRefreshState) {
+        this.icebergMVRefreshState = icebergMVRefreshState;
+    }
+
+    public String getIcebergMVRefreshState() {
+        return icebergMVRefreshState;
+    }
+
     public interface Listener {
         /**
          * Trigger when query is finished
