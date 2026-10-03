@@ -19,6 +19,8 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.scheduler.TaskRunScheduler;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TListSessionsOptions;
 import com.starrocks.thrift.TListSessionsRequest;
@@ -56,6 +58,7 @@ public class TemporaryTableCleaner extends LeaderDaemon  {
         Set<UUID> aliveSessions;
         try {
             aliveSessions = getAliveSessions();
+            aliveSessions.addAll(getAliveTaskRunSessions());
         } catch (Exception e) {
             return;
         }
@@ -77,6 +80,22 @@ public class TemporaryTableCleaner extends LeaderDaemon  {
                 metadataMgr.cleanTemporaryTables(sessionId);
             }
         });
+    }
+
+    private Set<UUID> getAliveTaskRunSessions() {
+        Set<UUID> aliveTaskRunSessions = new HashSet<>();
+        TaskRunScheduler scheduler = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunScheduler();
+        addTaskRunSessions(aliveTaskRunSessions, scheduler.getCopiedRunningTaskRuns());
+        addTaskRunSessions(aliveTaskRunSessions, scheduler.getCopiedRunningSyncTaskRuns());
+        return aliveTaskRunSessions;
+    }
+
+    private void addTaskRunSessions(Set<UUID> aliveSessions, Set<TaskRun> taskRuns) {
+        for (TaskRun taskRun : taskRuns) {
+            if (taskRun != null && taskRun.getRunCtx() != null && taskRun.getRunCtx().getSessionId() != null) {
+                aliveSessions.add(taskRun.getRunCtx().getSessionId());
+            }
+        }
     }
 
     // only used for testing
