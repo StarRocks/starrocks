@@ -20,17 +20,22 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableName;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.iceberg.MockIcebergMetadata;
+import com.starrocks.connector.iceberg.MockIcebergTable;
 import com.starrocks.scheduler.mv.pct.MVPCTRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.expression.SlotRef;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
@@ -708,5 +713,205 @@ public class PartitionBasedMvRefreshProcessorIcebergTest extends MVTestBase {
         }
 
         starRocksAssert.dropMaterializedView(mvName);
+    }
+
+    @Test
+    public void testRefreshPartitionedMvWithIcebergPrefixPartitionEvolution() throws Exception {
+        // t0_evolution_append evolved from (id) to (id, data). An MV partitioned by id maps every partition
+        // name, whichever spec produced it, onto the MV partition for that id.
+        String mvName = "iceberg_evolution_prefix_mv";
+        String query = "SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_evolution_append` as a";
+        try {
+            starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                    "PARTITION BY id\n" +
+                    "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS " + query + ";");
+
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MaterializedView mv = ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(testDb.getFullName(), mvName));
+            Assertions.assertFalse(mv.getPartitionInfo().isUnPartitioned());
+            triggerRefreshMv(testDb, mv);
+
+            // id=1, id=2 (spec 0) and id=3/data=a, id=3/data=b (spec 1) -> three MV partitions
+            Collection<Partition> partitions = mv.getPartitions();
+            Assertions.assertEquals(3, partitions.size());
+
+            // a change in one spec-1 partition refreshes only the MV partition of that id
+            MockIcebergMetadata mockIcebergMetadata =
+                    (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                            getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+            mockIcebergMetadata.updatePartitions("partitioned_transforms_db", "t0_evolution_append",
+                    ImmutableList.of("id=3/data=b"));
+            Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(taskRun);
+            MVPCTRefreshProcessor processor = getPartitionBasedRefreshProcessor(taskRun);
+            ExecPlan execPlan = processor.getMvContext().getExecPlan();
+            // the MV is range-partitioned on the int column, so the refresh predicate is the range [3, 4)
+            assertPlanContains(execPlan, "PREDICATES: 1: id >= 3, 1: id < 4");
+
+            // a change in one spec-0 partition, whose name carries only id, refreshes only the MV partition of
+            // that id
+            mockIcebergMetadata.updatePartitions("partitioned_transforms_db", "t0_evolution_append",
+                    ImmutableList.of("id=1"));
+            processor = refreshAndGetProcessor(testDb, mv);
+            execPlan = processor.getMvContext().getExecPlan();
+            assertPlanContains(execPlan, "PREDICATES: 1: id >= 1, 1: id < 2");
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mvName);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+    }
+
+    @Test
+    public void testCreatePartitionedMvOnIcebergPrefixEvolutionRejectsAppendedColumn() {
+        // data only exists in spec 1: spec-0 partition names have no value for it, so refuse the MV.
+        String mvName = "iceberg_evolution_prefix_bad_mv";
+        try {
+            starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                    "PARTITION BY data\n" +
+                    "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                    "REFRESH DEFERRED MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`t0_evolution_append` as a;");
+            Assertions.fail("Should fail because data is missing from the historical partition spec");
+        } catch (Exception e) {
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("data"), e.getMessage());
+        }
+    }
+
+    private static MVPCTRefreshProcessor refreshAndGetProcessor(Database testDb, MaterializedView mv) throws Exception {
+        Task task = TaskBuilder.buildMvTask(mv, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+        return getPartitionBasedRefreshProcessor(taskRun);
+    }
+
+    private MaterializedView createMvPartitionedById(String mvName, String tableName) throws Exception {
+        starRocksAssert.useDatabase("test").withMaterializedView("CREATE MATERIALIZED VIEW `test`.`" + mvName + "`\n" +
+                "PARTITION BY id\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                "REFRESH DEFERRED MANUAL\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")\n" +
+                "AS SELECT id, data, ts FROM `iceberg0`.`partitioned_transforms_db`.`" + tableName + "` as a;");
+        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        return (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                .getTable(testDb.getFullName(), mvName);
+    }
+
+    @Test
+    public void testRefreshPartitionedMvRejectsIcebergEvolutionAfterCreate() throws Exception {
+        // The MV is created while t0_evolution_after_mv has a single spec (id), so only the refresh-time check
+        // can catch the evolution to (data) that follows.
+        String mvName = "iceberg_evolution_after_mv";
+        try {
+            MaterializedView mv = createMvPartitionedById(mvName, "t0_evolution_after_mv");
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MVPCTRefreshProcessor processor = refreshAndGetProcessor(testDb, mv);
+
+            IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME,
+                            "partitioned_transforms_db", "t0_evolution_after_mv");
+            table.getNativeTable().updateSpec().removeField("id").addField("data").commit();
+            Assertions.assertEquals(2, table.getNativeTable().specs().size());
+
+            DmlException e = Assertions.assertThrows(DmlException.class, processor::collectBaseTableSnapshotInfos);
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"), e.getMessage());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mvName);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+    }
+
+    @Test
+    public void testRefreshPartitionedMvRejectsIcebergEvolutionWhenRefSlotsUnresolved() throws Exception {
+        // Without the ref base table partition slots a ref base table looks like a non-ref one, so the
+        // refresh must not skip the ref column check.
+        String mvName = "iceberg_evolution_unresolved_slots_mv";
+        try {
+            MaterializedView mv = createMvPartitionedById(mvName, "t0_evolution_append");
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MVPCTRefreshProcessor processor = refreshAndGetProcessor(testDb, mv);
+
+            // JMockit discards a MockUp created inside a test when the test ends.
+            new MockUp<MaterializedView>() {
+                @Mock
+                public Map<Table, List<SlotRef>> getRefBaseTablePartitionSlots() {
+                    return new HashMap<>();
+                }
+            };
+            DmlException e = Assertions.assertThrows(DmlException.class,
+                    processor::collectBaseTableSnapshotInfos);
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("partition column mapping is unavailable"), e.getMessage());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mvName);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
+    }
+
+    @Test
+    public void testRefreshPartitionedMvFindsReplacedIcebergRefTableByName() throws Exception {
+        // The slot map is keyed by a t0_evolution_append whose UUID differs from the table the refresh
+        // resolves, so IcebergTable.equals misses it and only the catalog-name fallback finds the ref column.
+        // data is outside the prefix shared by both specs, so finding it must reject the refresh.
+        String mvName = "iceberg_evolution_replaced_ref_mv";
+        try {
+            MaterializedView mv = createMvPartitionedById(mvName, "t0_evolution_append");
+            Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+            MVPCTRefreshProcessor processor = refreshAndGetProcessor(testDb, mv);
+
+            IcebergTable table = (IcebergTable) GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getTable(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME,
+                            "partitioned_transforms_db", "t0_evolution_append");
+            IcebergTable replaced = new MockIcebergTable(table.getId(), table.getName(), table.getCatalogName(),
+                    table.getResourceName(), table.getCatalogDBName(), table.getCatalogTableName(),
+                    table.getBaseSchema(), table.getNativeTable(), table.getIcebergProperties(), table.getComment()) {
+                @Override
+                public String getTableIdentifier() {
+                    return super.getTableIdentifier() + "-replaced";
+                }
+            };
+            Assertions.assertNotEquals(table, replaced);
+
+            new MockUp<MaterializedView>() {
+                @Mock
+                public Map<Table, List<SlotRef>> getRefBaseTablePartitionSlots() {
+                    Map<Table, List<SlotRef>> slots = new HashMap<>();
+                    slots.put(replaced, Lists.newArrayList(new SlotRef(
+                            new TableName("iceberg0", "partitioned_transforms_db", "t0_evolution_append"), "data")));
+                    return slots;
+                }
+            };
+            DmlException e = Assertions.assertThrows(DmlException.class,
+                    processor::collectBaseTableSnapshotInfos);
+            Assertions.assertTrue(e.getMessage().contains("partition evolution"), e.getMessage());
+            Assertions.assertTrue(e.getMessage().contains("data"), e.getMessage());
+        } finally {
+            try {
+                starRocksAssert.dropMaterializedView(mvName);
+            } catch (Exception e) {
+                // do nothing
+            }
+        }
     }
 }

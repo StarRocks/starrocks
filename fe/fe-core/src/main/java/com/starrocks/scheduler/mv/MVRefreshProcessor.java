@@ -43,6 +43,7 @@ import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshPlanner;
 import com.starrocks.mv.refresh.pct.MVPCTRefreshSynchronizer;
@@ -68,6 +69,7 @@ import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionRef;
+import com.starrocks.sql.ast.expression.SlotRef;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PCellSetMapping;
 import com.starrocks.sql.common.PCellSortedSet;
@@ -764,6 +766,39 @@ public abstract class MVRefreshProcessor {
     }
 
     /**
+     * The columns of this base table that the MV partitions by, in MV partition column order. For a base table
+     * that is not a ref base table the result holds an empty list. Returns Optional.empty() when the MV's ref
+     * base table partition slots are not resolved (for example right after its metadata cache is reset), because
+     * then a ref base table cannot be told apart from a non-ref one.
+     */
+    private Optional<List<String>> getRefBaseTablePartitionColumnNames(Table table) {
+        Map<Table, List<SlotRef>> refBaseTablePartitionSlots = mv.getRefBaseTablePartitionSlots();
+        if (refBaseTablePartitionSlots.isEmpty()) {
+            return Optional.empty();
+        }
+        List<SlotRef> slotRefs = refBaseTablePartitionSlots.get(table);
+        if (slotRefs == null && table instanceof IcebergTable) {
+            // IcebergTable.equals and hashCode compare the catalog, the database and getTableIdentifier(), which
+            // includes the Iceberg table UUID. Fall back to the catalog, database and table names so that a table
+            // replaced under the same name (a new UUID) is still checked against the MV's ref partition columns.
+            IcebergTable icebergTable = (IcebergTable) table;
+            slotRefs = refBaseTablePartitionSlots.entrySet().stream()
+                    .filter(entry -> entry.getKey() instanceof IcebergTable)
+                    .filter(entry -> ((IcebergTable) entry.getKey()).getCatalogName().equals(icebergTable.getCatalogName())
+                            && ((IcebergTable) entry.getKey()).getCatalogDBName().equals(icebergTable.getCatalogDBName())
+                            && ((IcebergTable) entry.getKey()).getCatalogTableName()
+                            .equals(icebergTable.getCatalogTableName()))
+                    .map(Map.Entry::getValue)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (slotRefs == null) {
+            return Optional.of(Lists.newArrayList());
+        }
+        return Optional.of(slotRefs.stream().map(SlotRef::getColumnName).collect(Collectors.toList()));
+    }
+
+    /**
      * Collect all base table snapshot infos for the mv which the snapshot infos are kept and used in the final
      * update meta phase.
      * 1. deep copy of the base table's metadata may be time costing, we can optimize it later.
@@ -808,12 +843,21 @@ public abstract class MVRefreshProcessor {
 
                 // Non-partitioned MVs do full refresh without base partition mapping.
                 if (table instanceof IcebergTable && !mv.getPartitionInfo().isUnPartitioned()) {
-                    IcebergTable icebergTable = (IcebergTable) table;
-                    if (icebergTable.getNativeTable().specs().size() > 1) {
-                        throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s " +
-                                        "has undergone partition evolution (%d partition specs), which is not supported",
-                                db.getFullName(), mv.getName(), table.getName(),
-                                icebergTable.getNativeTable().specs().size());
+                    org.apache.iceberg.Table nativeTable = ((IcebergTable) table).getNativeTable();
+                    if (nativeTable.specs().size() > 1) {
+                        Optional<List<String>> refPartitionColumnNames = getRefBaseTablePartitionColumnNames(table);
+                        Optional<String> incompatible = refPartitionColumnNames.isEmpty()
+                                ? Optional.of("the materialized view's partition column mapping is unavailable, so "
+                                        + "its partition columns cannot be checked against every partition spec")
+                                : IcebergPartitionUtils.checkPartitionEvolutionCompatible(nativeTable,
+                                        refPartitionColumnNames.get());
+                        if (incompatible.isPresent()) {
+                            throw new DmlException("Materialized view %s.%s refresh failed: base Iceberg table %s " +
+                                            "has undergone partition evolution (%d partition specs), which is not " +
+                                            "supported: %s",
+                                    db.getFullName(), mv.getName(), table.getName(), nativeTable.specs().size(),
+                                    incompatible.get());
+                        }
                     }
                 }
 

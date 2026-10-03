@@ -19,6 +19,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -54,6 +55,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -253,10 +255,17 @@ public class MaterializedViewAnalyzer {
             }
 
             if (!allowIcebergPartitionEvolution && table instanceof IcebergTable) {
-                IcebergTable icebergTable = (IcebergTable) table;
-                if (icebergTable.getNativeTable().specs().size() > 1) {
-                    throw new SemanticException("Do not support create materialized view when base iceberg table " +
-                            table.getName() + " has done partition evolution", tableName.getPos());
+                org.apache.iceberg.Table nativeTable = ((IcebergTable) table).getNativeTable();
+                if (nativeTable.specs().size() > 1) {
+                    // The MV's partition columns are checked against the specs later, once they are resolved,
+                    // in IcebergTablePartitionHandler.
+                    Optional<String> incompatible = IcebergPartitionUtils.checkPartitionEvolutionCompatible(
+                            nativeTable, ImmutableList.of());
+                    if (incompatible.isPresent()) {
+                        throw new SemanticException("Do not support create materialized view when base iceberg table " +
+                                table.getName() + " has done partition evolution: " + incompatible.get(),
+                                tableName.getPos());
+                    }
                 }
             }
             if (!FeConstants.isReplayFromQueryDump && !isSupportedExternalTables(table)) {
