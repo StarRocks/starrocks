@@ -96,9 +96,9 @@ explain select * from t1 where k2=1196389819;
 
 
 -- name: test_create_error
-create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(k2, '%Y-%m-%d');
+create table t(k1 int, k2 bigint, v int sum) AGGREGATE KEY(k1,k2) partition by from_unixtime(v, '%Y-%m-%d');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: AGG_KEYS table should specify aggregate type for non-key column[__generated_partition_column_0].')
+E: (1064, 'Getting analyzing error. Detail message: The partition expr should base on key column.')
 -- !result
 create table t(k1 int, k2 bigint, v int) PRIMARY KEY(k1) partition by from_unixtime(k2, '%Y-%m-%d');
 -- result:
