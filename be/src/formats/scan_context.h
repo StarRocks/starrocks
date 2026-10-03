@@ -275,6 +275,8 @@ struct FormatScanContext {
     int64_t scan_range_length = std::numeric_limits<int64_t>::max();
     int32_t scan_range_id = -1;
     std::map<int32_t, TExprMinMaxValue> min_max_values;
+    // Null counts of the columns counted by COUNT(col) placeholders, keyed by counted slot id.
+    std::map<int32_t, int64_t> null_value_counts;
     std::map<int32_t, TExpr> extended_column_exprs;
     std::optional<int64_t> first_row_id;
     int64_t file_record_count = 0;
@@ -283,6 +285,9 @@ struct FormatScanContext {
 
     // Table/lake schema used by Parquet schema evolution matching.
     const TIcebergSchema* lake_schema = nullptr;
+
+    // COUNT(col) placeholder slot id -> slot id of the column it counts, from the scan plan node.
+    std::map<SlotId, SlotId> non_null_count_slots;
 
     // Non-owning predicate state built by upper scan orchestration.
     const PredicateTree* predicate_tree = nullptr;
@@ -311,6 +316,7 @@ struct FormatScanContext {
     } split;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+    // The file can be answered from its record count, and from its null counts for any COUNT(col).
     bool can_use_count_optimization() const;
     bool has_count_column() const { return _count_slot.has_value(); }
     bool can_use_min_max_optimization() const;
@@ -340,6 +346,15 @@ struct FormatScanContext {
     // Used by both the count-opt aggregated path (output_rows=1, value=row_count)
     // and the per-row fallback (output_rows=row_count, value=1).
     void append_or_update_count_column_to_chunk(ChunkPtr* chunk, size_t output_rows, int64_t value);
+
+    // Emit `output_rows` rows of 0 for each COUNT(col) placeholder. Rows read from the file are counted by
+    // COUNT(col) itself, so the placeholders only carry the counts of files answered from statistics.
+    void append_or_update_non_null_count_columns_to_chunk(ChunkPtr* chunk, size_t output_rows);
+
+    // Emit the COUNT(col) part of the single row that stands for a file answered from statistics: each
+    // placeholder carries the file's non-null count on its first split and 0 on any other, and the counted
+    // columns, the only materialized columns left, are NULL so COUNT(col) adds nothing for the file.
+    void append_file_non_null_counts_to_chunk(ChunkPtr* chunk);
     MutableColumnPtr create_min_max_value_column(SlotDescriptor* slot_desc, const TExprMinMaxValue& value,
                                                  size_t row_count);
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
@@ -365,10 +380,15 @@ struct FormatScanContext {
     void merge_split_tasks();
 
 private:
+    bool _has_all_null_value_counts() const;
+
     // ___count___ column for COUNT(*) optimization.
     // Separated from not_existed_slots because it is an execution marker,
     // not a schema-evolution missing column.
     std::optional<SlotDescriptor*> _count_slot;
+
+    // COUNT(col) placeholder columns, keys of non_null_count_slots, taken out of the materialized columns.
+    std::vector<SlotDescriptor*> _non_null_count_slots;
 };
 
 } // namespace starrocks

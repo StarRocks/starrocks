@@ -715,6 +715,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             if (_scanner_ctx->format_scan_context.has_count_column()) {
                 _scanner_ctx->format_scan_context.append_or_update_count_column_to_chunk(chunk, rows_read, 1);
             }
+            _scanner_ctx->format_scan_context.append_or_update_non_null_count_columns_to_chunk(chunk, rows_read);
         }
 
         if (!_orc_reader->has_lazy_load_context()) {

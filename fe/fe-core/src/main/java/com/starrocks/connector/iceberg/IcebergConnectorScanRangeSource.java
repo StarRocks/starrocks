@@ -130,6 +130,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private final boolean useMinMaxOpt;
     private final PartitionIdGenerator partitionIdGenerator;
     private final boolean usedForDelete;
+    /**
+     * Iceberg field id of each column counted by a rewritten COUNT(col), keyed by its slot id.
+     */
+    private final Map<Integer, Integer> countedFieldIdBySlot;
 
     public IcebergConnectorScanRangeSource(IcebergTable table,
                                            RemoteFileInfoSource remoteFileInfoSource,
@@ -152,6 +156,24 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
                                            boolean recordScanFiles,
                                            boolean useMinMaxOpt,
                                            boolean usedForDelete) {
+        this(table, remoteFileInfoSource, morParams, desc, bucketProperties, partitionIdGenerator, recordScanFiles,
+                useMinMaxOpt, usedForDelete, List.of());
+    }
+
+    /**
+     * @param countedSlots slots of the columns counted by a rewritten COUNT(col), whose per-file null counts each
+     *                     scan range carries so the backend can answer the count without reading the file
+     */
+    public IcebergConnectorScanRangeSource(IcebergTable table,
+                                           RemoteFileInfoSource remoteFileInfoSource,
+                                           IcebergMORParams morParams,
+                                           TupleDescriptor desc,
+                                           Optional<List<BucketProperty>> bucketProperties,
+                                           PartitionIdGenerator partitionIdGenerator,
+                                           boolean recordScanFiles,
+                                           boolean useMinMaxOpt,
+                                           boolean usedForDelete,
+                                           List<SlotDescriptor> countedSlots) {
         this.table = table;
         this.remoteFileInfoSource = remoteFileInfoSource;
         this.morParams = morParams;
@@ -165,6 +187,22 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         this.partitionIdGenerator = partitionIdGenerator;
         this.useMinMaxOpt = useMinMaxOpt;
         this.usedForDelete = usedForDelete;
+        this.countedFieldIdBySlot = countedFieldIds(countedSlots);
+    }
+
+    /**
+     * Resolves counted columns against the read schema, the schema their names come from, so a time-travel
+     * read looks up the field ids of the snapshot it reads.
+     */
+    private Map<Integer, Integer> countedFieldIds(List<SlotDescriptor> countedSlots) {
+        Map<Integer, Integer> fieldIds = new HashMap<>();
+        for (SlotDescriptor slot : countedSlots) {
+            Types.NestedField field = table.getReadSchema().findField(slot.getColumn().getName());
+            if (field != null) {
+                fieldIds.put(slot.getId().asInt(), field.fieldId());
+            }
+        }
+        return fieldIds;
     }
 
     public void clearScannedFiles() {
@@ -425,6 +463,10 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         hdfsScanRange.setRecord_count(file.recordCount());
         hdfsScanRange.setIs_first_split(isFirstSplit);
 
+        if (!countedFieldIdBySlot.isEmpty()) {
+            hdfsScanRange.setNull_value_counts(nullValueCountsBySlot(file));
+        }
+
         if (useMinMaxOpt && file.nullValueCounts() != null && file.valueCounts() != null) {
             // fill min/max value
             Map<Integer, TExprMinMaxValue> tExprMinMaxValueMap = IcebergUtil.toThriftMinMaxValueBySlots(
@@ -438,6 +480,22 @@ public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
         }
 
         return hdfsScanRange;
+    }
+
+    /**
+     * Null counts of the counted columns in this file, keyed by slot id. A column the file records no plausible
+     * null count for is left out, and the backend then reads the file to count it.
+     */
+    private Map<Integer, Long> nullValueCountsBySlot(ContentFile<?> file) {
+        Map<Integer, Long> fileNullCounts = file.nullValueCounts() == null ? Map.of() : file.nullValueCounts();
+        Map<Integer, Long> nullCounts = new HashMap<>();
+        countedFieldIdBySlot.forEach((slotId, fieldId) -> {
+            Long nullCount = fileNullCounts.get(fieldId);
+            if (nullCount != null && nullCount >= 0 && nullCount <= file.recordCount()) {
+                nullCounts.put(slotId, nullCount);
+            }
+        });
+        return nullCounts;
     }
 
     private void setExtendedColumns(SlotDescriptor slot, Map<Integer, TExpr> extendedColumns, LiteralExpr value) {

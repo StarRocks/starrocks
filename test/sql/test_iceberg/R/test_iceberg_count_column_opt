@@ -1,0 +1,102 @@
+-- name: test_iceberg_count_column_opt
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true");
+-- result:
+-- !result
+create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+use iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+create external table ice_tbl_0(
+    c_int int,
+    c_string string,
+    c_double double,
+    c_date date
+);
+-- result:
+-- !result
+insert into ice_tbl_0 values (1, 'a', 1.0, '2025-01-01'), (2, null, null, '2025-01-02'), (null, 'c', 3.0, null);
+-- result:
+-- !result
+insert into ice_tbl_0 values (4, null, 4.0, '2025-01-04'), (null, null, null, null);
+-- result:
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+function: assert_explain_contains('select count(*), count(c_int), count(c_string) from ice_tbl_0', '___count___c_string')
+-- result:
+None
+-- !result
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date) from ice_tbl_0;
+-- result:
+5	3	2	3	3
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+-- result:
+-- !result
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date) from ice_tbl_0;
+-- result:
+5	3	2	3	3
+-- !result
+alter table ice_tbl_0 add column c_new int;
+-- result:
+-- !result
+insert into ice_tbl_0 values (5, 'e', 5.0, '2025-01-05', 50), (6, 'f', null, null, null);
+-- result:
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date), count(c_new) from ice_tbl_0;
+-- result:
+7	5	4	4	4	1
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+-- result:
+-- !result
+select count(*), count(c_int), count(c_string), count(c_double), count(c_date), count(c_new) from ice_tbl_0;
+-- result:
+7	5	4	4	4	1
+-- !result
+create external table ice_tbl_1(
+    c_int int,
+    c_string string,
+    p int
+) partition by (p);
+-- result:
+-- !result
+insert into ice_tbl_1 values (1, 'a', 1), (null, 'b', 1), (3, null, 2), (null, null, 2), (5, 'e', 2);
+-- result:
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+function: assert_explain_contains('select p, count(c_int) from ice_tbl_1 group by p', '___count___c_int')
+-- result:
+None
+-- !result
+select p, count(*), count(c_int), count(c_string) from ice_tbl_1 group by p order by p;
+-- result:
+1	2	1	2
+2	3	2	1
+-- !result
+drop table ice_tbl_0 force;
+-- result:
+-- !result
+drop table ice_tbl_1 force;
+-- result:
+-- !result
+drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
