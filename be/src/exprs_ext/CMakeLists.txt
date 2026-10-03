@@ -34,11 +34,13 @@ target_link_libraries(ExprDict PRIVATE ComputeEnv Storage Platform StoragePrimit
 set(EXPR_TABLE_FUNCTION_FILES
   table_function/list_rowsets_factory_extension.cpp
   table_function/list_rowsets.cpp
+  table_function/parquet_read_rows_factory_extension.cpp
+  table_function/parquet_read_rows.cpp
 )
 
 ADD_BE_LIB(ExprTableFunction ${EXPR_TABLE_FUNCTION_FILES})
 target_link_libraries(ExprTableFunction PUBLIC Expr Runtime)
-target_link_libraries(ExprTableFunction PRIVATE Storage)
+target_link_libraries(ExprTableFunction PRIVATE Storage FileSystem)
 
 set(EXPR_UTILITY_FILES
   utility/utility_functions.cpp
