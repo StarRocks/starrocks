@@ -41,6 +41,12 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.expression.Expr;
+import com.starrocks.sql.ast.expression.ExprUtils;
+import com.starrocks.sql.ast.expression.SlotRef;
+>>>>>>> 0e754de ([BugFix] Do not push NULL-passing runtime filters below RepeatNode on nulled grouping keys (#80051))
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -152,6 +158,47 @@ public class RepeatNode extends PlanNode {
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return getChildren().stream().allMatch(PlanNode::canUseRuntimeAdaptiveDop);
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        // Below this node a row still carries its real value in every grouping key, but above it the
+        // row is also replicated into the grouping sets that replace some of those keys with NULL.
+        // Dropping the row on such a key here therefore also drops it from those NULL-keyed groups.
+        // That is only harmless when the filter would have rejected the NULL-keyed copy as well;
+        // otherwise e.g. the ROLLUP grand-total row silently loses rows.
+        if (mayPassNull(context.getDescription()) && usesNulledSlot(probeExpr)) {
+            return false;
+        }
+        // A partitioned (shuffle) filter picks the partition to probe by hashing partitionByExprs. On a
+        // nulled key that hash differs between the real value seen here and the NULL a copy carries above,
+        // so a row can be probed against the wrong partition and dropped regardless of the filter's NULL
+        // policy.
+        if (partitionByExprs.stream().anyMatch(this::usesNulledSlot)) {
+            return false;
+        }
+        return super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
+    }
+
+    private static boolean mayPassNull(RuntimeFilterDescription description) {
+        // TOPN_FILTER and AGG_IN_FILTER are built from the aggregation's own groups, so they can keep a
+        // NULL-keyed group (NULLS FIRST, or a NULL group among the first LIMIT groups).
+        return description.runtimeFilterType().isTopNFilter()
+                || description.runtimeFilterType().isAggInFilter()
+                || description.getEqualForNull();
+    }
+
+    // Whether expr uses a grouping key that some grouping set replaces with NULL.
+    private boolean usesNulledSlot(Expr expr) {
+        for (int slotId : ExprUtils.getUsedSlotIds(expr)) {
+            boolean grouped = repeatSlotIdList.stream().anyMatch(s -> s.contains(slotId));
+            boolean nulled = repeatSlotIdList.stream().anyMatch(s -> !s.contains(slotId));
+            if (grouped && nulled) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
