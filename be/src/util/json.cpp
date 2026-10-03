@@ -100,8 +100,14 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
         auto end = src.get_data() + src.get_size();
         auto iter = std::find_if_not(src.get_data(), end, std::iswspace);
         if (iter != end && is_json_start_char(*iter)) {
-            // Parse it as an object or array
-            auto b = vpack::Parser::fromJson(src.get_data(), src.get_size());
+            // Parse it as an object or array. Invalid JSON is common in dirty data, so use the parser's
+            // error-code API: reporting it by throwing costs a full C++ unwind per row and serializes all
+            // threads on the unwinder lock.
+            vpack::Exception error(vpack::Exception::InternalError);
+            auto b = vpack::Parser::tryFromJson(src.get_data(), src.get_size(), &error);
+            if (b == nullptr) {
+                return fromVPackException(error);
+            }
             JsonValue res;
             res.assign(*b);
             return res;

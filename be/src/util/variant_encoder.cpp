@@ -851,9 +851,37 @@ StatusOr<VariantRowValue> VariantEncoder::encode_json_to_variant(const JsonValue
     vpack::Slice slice = json.to_vslice();
     std::unordered_set<std::string> keys;
     RETURN_IF_ERROR(collect_object_keys(slice, &keys));
+<<<<<<< HEAD:be/src/util/variant_encoder.cpp
     ASSIGN_OR_RETURN(auto metadata_result, build_variant_metadata(keys));
     ASSIGN_OR_RETURN(std::string value, encode_json_to_variant_value(slice, metadata_result.key_to_id));
     return VariantRowValue::create(metadata_result.metadata, value);
+=======
+    std::unordered_map<std::string, uint32_t> key_to_id;
+    ASSIGN_OR_RETURN(auto metadata, build_variant_metadata(keys, &key_to_id));
+    ASSIGN_OR_RETURN(std::string value, encode_json_to_variant_value(slice, key_to_id));
+    return VariantRowValue::create(metadata, value);
+}
+
+StatusOr<VariantRowValue> VariantEncoder::encode_json_text_to_variant(std::string_view json_text) {
+    if (json_text.empty()) {
+        return encode_json_to_variant(JsonValue::from_string(Slice("", 0)));
+    }
+    // Plain scalar text (for example "abc") is accepted as a string value. Detect it through the parser's
+    // error-code API: a throw per non-JSON row would be far too expensive. The catch only remains as a safety
+    // net for exceptions that are not caused by the input, so it costs nothing on the hot path.
+    try {
+        auto builder = vpack::Parser::tryFromJson(json_text.data(), json_text.size(), nullptr);
+        if (builder == nullptr) {
+            return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
+        }
+        JsonValue parsed;
+        parsed.assign(*builder);
+        return encode_json_to_variant(parsed);
+    } catch (const vpack::Exception&) {
+        // Keep backward compatibility for plain scalar text input (for example "abc").
+        return encode_json_to_variant(JsonValue::from_string(Slice(json_text.data(), json_text.size())));
+    }
+>>>>>>> bd9c74c ([BugFix] Report invalid JSON from velocypack without throwing per row (#78831)):be/src/column/variant_encoder.cpp
 }
 
 Status VariantEncoder::encode_column(const ColumnPtr& column, const TypeDescriptor& type,
