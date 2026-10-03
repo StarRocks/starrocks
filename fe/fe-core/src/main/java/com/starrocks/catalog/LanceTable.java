@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.gson.annotations.SerializedName;
 import com.starrocks.planner.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.thrift.TLanceTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -24,13 +23,10 @@ import java.util.List;
 
 public class LanceTable extends Table {
 
-    @SerializedName(value = "uri")
     private final String uri;
 
-    @SerializedName(value = "catalogName")
     private final String catalogName;
 
-    @SerializedName(value = "dbName")
     private final String dbName;
 
     public LanceTable(long id, String name, List<Column> schema, String uri) {
@@ -69,7 +65,6 @@ public class LanceTable extends Table {
 
     @Override
     public boolean isSupported() {
-        // Enable SQL only when the planner, JNI reader, and BE connector are available together.
         return false;
     }
 
