@@ -2,7 +2,7 @@
 SELECT IF(H3_FromGeo(ST_GeogFromText('POINT (0 0)'), 3) = 592035265791393791, 'OK', 'FAIL');
 SELECT IF(H3_Resolution(592035265791393791) = 3 AND H3_ToParent(592035265791393791, 3) = 592035265791393791 AND array_length(H3_ToChildren(592035265791393791, 3)) = 1, 'OK', 'FAIL');
 SELECT IF(array_length(H3_GridDisk(592035265791393791, 0)) = 1 AND array_contains(H3_GridDisk(592035265791393791, 0), 592035265791393791), 'OK', 'FAIL');
-SELECT IF(ST_GeometryType(H3_ToBoundary(592035265791393791)) = 'POLYGON', 'OK', 'FAIL');
+SELECT IF(ST_GeometryType(H3_ToBoundary(592035265791393791)) = 'ST_Polygon', 'OK', 'FAIL');
 SELECT IF(array_contains(H3_PolygonToCells(ST_GeogFromText('POLYGON ((-5 -5, 5 -5, 5 5, -5 5, -5 -5))'), 3), 592035265791393791), 'OK', 'FAIL');
 SELECT IF(H3_Resolution(CAST(NULL AS BIGINT)) IS NULL AND H3_FromGeo(ST_GeogFromText('POINT EMPTY'), 3) IS NULL, 'OK', 'FAIL');
 SELECT IF(array_length(H3_PolygonToCells(ST_GeogFromText('POLYGON EMPTY'), 3)) = 0, 'OK', 'FAIL');

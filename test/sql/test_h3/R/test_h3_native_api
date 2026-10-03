@@ -11,7 +11,7 @@ SELECT IF(array_length(H3_GridDisk(592035265791393791, 0)) = 1 AND array_contain
 -- result:
 OK
 -- !result
-SELECT IF(ST_GeometryType(H3_ToBoundary(592035265791393791)) = 'POLYGON', 'OK', 'FAIL');
+SELECT IF(ST_GeometryType(H3_ToBoundary(592035265791393791)) = 'ST_Polygon', 'OK', 'FAIL');
 -- result:
 OK
 -- !result

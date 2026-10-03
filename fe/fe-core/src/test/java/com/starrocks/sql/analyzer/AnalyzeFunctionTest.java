@@ -356,7 +356,7 @@ public class AnalyzeFunctionTest {
                         " AND array_length(H3_ToChildren(" + cell + ", 3)) = 1, 'OK', 'FAIL')",
                 "SELECT IF(array_length(H3_GridDisk(" + cell + ", 0)) = 1 AND array_contains(H3_GridDisk(" +
                         cell + ", 0), " + cell + "), 'OK', 'FAIL')",
-                "SELECT IF(ST_GeometryType(H3_ToBoundary(" + cell + ")) = 'POLYGON', 'OK', 'FAIL')",
+                "SELECT IF(ST_GeometryType(H3_ToBoundary(" + cell + ")) = 'ST_Polygon', 'OK', 'FAIL')",
                 "SELECT IF(array_contains(H3_PolygonToCells(" + polygon + ", 3), " + cell + "), 'OK', 'FAIL')",
                 "SELECT IF(H3_Resolution(CAST(NULL AS BIGINT)) IS NULL AND " +
                         "H3_FromGeo(ST_GeogFromText('POINT EMPTY'), 3) IS NULL, 'OK', 'FAIL')",
