@@ -65,3 +65,10 @@ if (WITH_CONNECTOR_MYSQL)
             ConnectorMySQL
     )
 endif()
+
+if (WITH_CONNECTOR_LANCE)
+    target_compile_definitions(ModuleBootstrap PRIVATE STARROCKS_WITH_CONNECTOR_LANCE)
+    target_link_libraries(ModuleBootstrap PRIVATE
+            ConnectorLance
+    )
+endif()

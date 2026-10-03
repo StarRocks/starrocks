@@ -251,3 +251,25 @@ if (WITH_CONNECTOR_ELASTICSEARCH)
     target_link_libraries(connector_elasticsearch_test ${CONNECTOR_ELASTICSEARCH_TEST_LINK_LIBS} gtest_main)
     set_target_properties(connector_elasticsearch_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 endif()
+
+if (WITH_CONNECTOR_LANCE)
+    add_executable(connector_lance_test
+            ${BE_TEST_MACOS_LINK_STUBS}
+            ${BE_TEST_JNI_ENV_STUB}
+            hive/hive_test_main.cpp
+            lance/lance_connector_test.cpp
+    )
+    target_compile_definitions(connector_lance_test PRIVATE
+            LANCE_TEST_DATASET="${CMAKE_BINARY_DIR}/lance-rust/testdata/rows.lance")
+    # Keep the native reader's BE dependency closure ahead of thirdparty archives.
+    # CMake otherwise appends transitive archives after their static providers.
+    target_link_libraries(connector_lance_test
+            ConnectorLance FormatOrc FormatCore ComputeEnv Cache StoragePrimitive
+            ExecPrimitive Expr Geo Runtime Platform FileSystem IO ColumnSortCore
+            ChunkCore ColumnCore Types Common Base Gutil StarRocksGen
+            ${CONNECTOR_COMMON_TEST_DEPENDENCIES}
+            ${STARROCKS_STATIC_LINK_LIBS}
+            ${WL_LINK_DYNAMIC} ${STARROCKS_SYSTEM_LINK_LIBS} ${WRAP_LINKER_FLAGS}
+            ${WL_START_GROUP} gmock gtest ${WL_END_GROUP} jvm)
+    set_target_properties(connector_lance_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
+endif()
