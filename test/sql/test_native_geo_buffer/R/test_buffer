@@ -22,7 +22,7 @@ None
 -- !result
 SELECT ST_SRID(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000)), ST_GeometryType(ST_Buffer(ST_GeomFromText('POINT (37 55)', 'EPSG:4326'), 1000));
 -- result:
-4326	POLYGON
+4326	ST_Polygon
 -- !result
 SELECT ST_AsText(ST_Buffer(ST_GeomFromText('MULTILINESTRING EMPTY', 'EPSG:3857'), 1));
 -- result:
@@ -30,11 +30,11 @@ POLYGON EMPTY
 -- !result
 SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(10 0))', 'EPSG:3857'), 1));
 -- result:
-MULTIPOLYGON
+ST_MultiPolygon
 -- !result
 SELECT ST_GeometryType(ST_Buffer(ST_GeomFromText('MULTIPOINT ((0 0),(1 0))', 'EPSG:3857'), 1));
 -- result:
-POLYGON
+ST_Polygon
 -- !result
 SET pipeline_dop=4;
 -- result:
