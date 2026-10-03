@@ -175,7 +175,12 @@ public class PaimonPredicateConverter extends ScalarOperatorVisitor<Predicate, P
 
     @Override
     public Predicate visitLargeInPredicate(LargeInPredicateOperator operator, PaimonPredicateContext context) {
-        throw new UnsupportedOperationException("not support large in predicate in the PaimonPredicateConverter");
+        // Serializing a huge IN list into every split's predicate is too expensive.
+        // Drop the conjunct here and let the BE evaluate it row-wise instead of failing
+        // the whole query.
+        LOG.debug("Skip pushing large IN predicate ({} values) down to Paimon",
+                operator.getConstantCount());
+        return null;
     }
 
     @Override
