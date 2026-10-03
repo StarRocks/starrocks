@@ -151,6 +151,7 @@ public class HistogramUtils {
             }
         }
 
-        return new Histogram(buckets, convertMCV(histogramString));
+        Map<String, Long> mcv = convertMCV(histogramString);
+        return buckets.isEmpty() ? new Histogram(mcv) : new Histogram(buckets, mcv);
     }
 }

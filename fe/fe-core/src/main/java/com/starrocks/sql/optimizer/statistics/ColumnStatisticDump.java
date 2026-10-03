@@ -140,7 +140,7 @@ public class ColumnStatisticDump {
                     bucketList.add(bucketDump.toBucket());
                 }
             }
-            return new Histogram(bucketList, mcv);
+            return bucketList.isEmpty() ? new Histogram(mcv) : new Histogram(bucketList, mcv);
         }
     }
 

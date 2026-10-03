@@ -68,8 +68,8 @@ public class StatisticsEstimateUtils {
         // and keeping unique keys as-is. Only merge if neither side has buckets and the MCVs
         // represent a majority of the total rows to avoid propagation irrelevant MCVs that could be used
         // for a bad estimation downstream.
-        final var mergedHistogram =
-                mergeHistogramsForUnion(left.getHistogram(), leftRowCount, right.getHistogram(), rightRowCount);
+        final var mergedHistogram = mergeHistogramsForUnion(left.getHistogram(), right.getHistogram(), newRange,
+                newRowCount, newNonNullRowCount);
         if (mergedHistogram != null) {
             builder.setHistogram(mergedHistogram);
         }
@@ -77,8 +77,8 @@ public class StatisticsEstimateUtils {
         return builder.build();
     }
 
-    private static Histogram mergeHistogramsForUnion(Histogram left, double leftRowCount,
-                                                     Histogram right, double rightRowCount) {
+    private static Histogram mergeHistogramsForUnion(Histogram left, Histogram right, StatisticRangeValues range,
+                                                     double totalRowCount, double nonNullRowCount) {
         if (left == null && right == null) {
             return null;
         }
@@ -99,14 +99,13 @@ public class StatisticsEstimateUtils {
         boolean noBuckets = (left == null || left.getBuckets().isEmpty()) && (right == null || right.getBuckets().isEmpty());
 
         // The merged MCV rows account for at least 50% of the total rows.
-        final double totalRowCount = leftRowCount + rightRowCount;
         final long mcvRowCount = mergedMcv.values().stream().mapToLong(Long::longValue).sum();
         final var mcvRowPropagationThreshold = ConnectContext.get().getSessionVariable()
                 .getMcvRowPercentagePropagationThreshold();
         boolean mcvRepresentative = totalRowCount > 0 && mcvRowCount >= mcvRowPropagationThreshold * totalRowCount;
 
         if (noBuckets || mcvRepresentative) {
-            return new Histogram(List.of(), mergedMcv);
+            return Histogram.ofSingleBucket(range.getLow(), range.getHigh(), nonNullRowCount, mergedMcv);
         }
 
         return null;
