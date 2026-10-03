@@ -44,6 +44,8 @@
 #include "fs/fs_factory.h"
 #include "fs/fs_util.h"
 #include "platform/key_cache.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_env.h"
 #include "storage/chunk_helper.h"
 #include "storage/datum_variant.h"
 #include "storage/del_vector.h"
@@ -642,6 +644,195 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_seg_delvecs_empty_entry) {
     ASSERT_OK(publish_single_version(_tablet_metadata->id(), 2, txn_id).status());
     // No masking, no crash: all rows visible.
     EXPECT_EQ(k0.size(), read_rows(_tablet_metadata->id(), 2));
+}
+
+// P3: end-to-end proof that the publish-path memory gate returns a retryable ResourceBusy
+// under memory pressure, and that a retry succeeds once the budget frees -- mirroring FE's indefinite
+// publish retry. No 221MB metadata needed: we make the estimate vs the (settable) tracker limit collide.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_gate_rejects_then_recovers) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    auto* tracker = RuntimeEnv::GetInstance()->lake_publish_mem_tracker();
+    ASSERT_NE(tracker, nullptr);
+    const int64_t saved_limit = tracker->limit();
+
+    // Pick a limit far larger than a tiny tablet's estimate (k * SpaceUsedLong) so the publish takes the
+    // NORMAL reservation path, then fill the tracker so that path is rejected (not the oversized-slot path).
+    const int64_t kLimit = 256L * 1024 * 1024; // 256MB >> estimate of this small tablet
+    tracker->set_limit(kLimit);
+    tracker->consume(kLimit); // occupy the whole budget
+
+    // NOTE: TEST_publish_single_version wraps any non-ok result into Status::InternalError (test helper
+    // convenience), so we assert the publish was throttled by inspecting the (preserved) message rather
+    // than the code. The production RPC path preserves the real ResourceBusy code to FE
+    // (lake_service.cpp: res.status().is_resource_busy() -> to_protobuf), which the RAII unit test covers.
+    auto rejected = publish_single_version(tablet_id, 2, txn_id).status();
+    EXPECT_FALSE(rejected.ok()) << "expected publish to be throttled, but it succeeded";
+    EXPECT_NE(std::string::npos, rejected.to_string().find("publish throttled: lake publish memory limit"))
+            << "expected the lake publish memory-gate rejection, got: " << rejected;
+
+    tracker->release(kLimit); // free the budget, as an in-flight publish finishing would
+    // Retry succeeds once memory is available again (mirrors FE's indefinite publish retry).
+    EXPECT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    tracker->set_limit(saved_limit); // restore for subsequent tests
+}
+
+// The gate's remaining admission routes, driven through lake::publish_version rather than constructed
+// directly, so they run the same instantiation the production path uses.
+
+// A tracker limit of zero or below is the rollback lever: the gate is off and every publish is admitted
+// no matter how large the estimate.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_gate_kill_switch_admits) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    auto* tracker = RuntimeEnv::GetInstance()->lake_publish_mem_tracker();
+    ASSERT_NE(tracker, nullptr);
+    const int64_t saved_limit = tracker->limit();
+
+    tracker->set_limit(0); // gate disabled
+    EXPECT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    EXPECT_EQ(0, tracker->consumption()); // a disabled gate must still release whatever it charged
+
+    tracker->set_limit(saved_limit);
+}
+
+// An estimate larger than the whole budget takes the oversized route: admitted through the single
+// process-wide slot, charging the shared tracker nothing, and the slot is released on scope exit so a
+// second publish can follow.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_gate_oversized_admits_without_charging) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    auto* tracker = RuntimeEnv::GetInstance()->lake_publish_mem_tracker();
+    ASSERT_NE(tracker, nullptr);
+    const int64_t saved_limit = tracker->limit();
+
+    // One byte of budget, so even this tiny tablet's estimate exceeds it and takes the oversized route
+    // rather than the normal reserve-or-fail one.
+    tracker->set_limit(1);
+    EXPECT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+    EXPECT_EQ(0, tracker->consumption()); // oversized never charges the shared budget
+
+    // The slot was released, so a second oversized publish is admitted rather than rejected forever.
+    EXPECT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    tracker->set_limit(saved_limit);
+}
+
+// Fitting inside the lake budget is not enough. A publish that would carry the process past the urgent
+// line is refused even when the lake tracker is completely empty.
+TEST_P(LakePrimaryKeyPublishTest, test_publish_mem_gate_rejects_without_process_headroom) {
+    if (GetParam().enable_transparent_data_encryption) {
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true, true);
+    auto tablet_id = _tablet_metadata->id();
+    int64_t txn_id = next_id();
+    ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                               .set_tablet_manager(_tablet_mgr.get())
+                                               .set_tablet_id(tablet_id)
+                                               .set_txn_id(txn_id)
+                                               .set_partition_id(_partition_id)
+                                               .set_mem_tracker(_mem_tracker.get())
+                                               .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
+                                               .build());
+    ASSERT_OK(delta_writer->open());
+    ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+    ASSERT_OK(delta_writer->finish_with_txnlog());
+    delta_writer->close();
+
+    auto* lake_tracker = RuntimeEnv::GetInstance()->lake_publish_mem_tracker();
+    auto* process_tracker = RuntimeEnv::GetInstance()->process_mem_tracker();
+    ASSERT_NE(lake_tracker, nullptr);
+    ASSERT_NE(process_tracker, nullptr);
+    const int64_t saved_lake_limit = lake_tracker->limit();
+    const int64_t process_limit = process_tracker->limit();
+    if (process_limit <= 0) {
+        return; // unlimited process tracker in this environment, nothing to be near the edge of
+    }
+    const int32_t urgent_pct = config::lake_publish_process_memory_urgent_pct;
+    if (urgent_pct <= 0) {
+        return; // backstop disabled
+    }
+
+    // Leave the lake budget wide open so only the process check can refuse this publish.
+    lake_tracker->set_limit(256L * 1024 * 1024);
+
+    // Sit exactly on the urgent line. The entry backstop trips only when consumption is strictly above it,
+    // so it lets this through, and then any positive estimate pushes the total past the line.
+    const int64_t ceiling = process_limit / 100 * urgent_pct;
+    const int64_t current = process_tracker->consumption();
+    if (current >= ceiling) {
+        lake_tracker->set_limit(saved_lake_limit);
+        return; // already over the line in this environment, the entry backstop owns the rejection
+    }
+    const int64_t pad = ceiling - current;
+    process_tracker->consume(pad);
+
+    auto rejected = publish_single_version(tablet_id, 2, txn_id).status();
+    EXPECT_FALSE(rejected.ok()) << "expected the publish to be refused for lack of process headroom";
+    EXPECT_EQ(0, lake_tracker->consumption()); // a refused publish charges nothing
+
+    process_tracker->release(pad);
+    // With the headroom back, the same publish is admitted, so this is retryable backpressure.
+    EXPECT_OK(publish_single_version(tablet_id, 2, txn_id).status());
+
+    lake_tracker->set_limit(saved_lake_limit);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
