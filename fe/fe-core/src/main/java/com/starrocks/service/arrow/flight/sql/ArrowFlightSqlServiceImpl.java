@@ -22,6 +22,7 @@ import com.google.common.collect.Maps;
 import com.google.protobuf.Any;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.Message;
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
@@ -917,33 +918,32 @@ public class ArrowFlightSqlServiceImpl implements FlightSqlProducer, AutoCloseab
      * For non-query statements or if analysis fails, a placeholder schema is returned.
      */
     private Schema buildSchemaFromQuery(ArrowFlightSqlConnectContext ctx, String query) {
-        try {
-            try (var scope = ctx.bindScope()) {
-                List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(query, ctx.getSessionVariable());
-                if (stmts.isEmpty()) {
-                    return buildPlaceholderSchema();
-                }
-                StatementBase stmt = stmts.get(0);
-                if (!(stmt instanceof QueryStatement)) {
-                    return buildPlaceholderSchema();
-                }
-                stmt.setOrigStmt(new OriginStatement(query));
-
-                Analyzer.analyze(stmt, ctx);
-
-                QueryStatement queryStmt = (QueryStatement) stmt;
-                List<String> colNames = queryStmt.getQueryRelation().getColumnOutputNames();
-                List<Expr> outputExprs = queryStmt.getQueryRelation().getOutputExpression();
-
-                List<Field> arrowFields = Lists.newArrayList();
-                for (int i = 0; i < colNames.size(); i++) {
-                    Expr expr = outputExprs.get(i);
-                    Field arrowField = ArrowUtils.convertToArrowType(
-                            expr.getOriginType(), colNames.get(i), expr.isNullable());
-                    arrowFields.add(arrowField);
-                }
-                return new Schema(arrowFields);
+        try (var scope = ctx.bindScope()) {
+            List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(query, ctx.getSessionVariable());
+            if (stmts.isEmpty()) {
+                return buildPlaceholderSchema();
             }
+            StatementBase stmt = stmts.get(0);
+            if (!(stmt instanceof QueryStatement)) {
+                return buildPlaceholderSchema();
+            }
+            stmt.setOrigStmt(new OriginStatement(query));
+            SecurityPolicyRewriteRule.markRelationsForRewrite(stmt);
+
+            Analyzer.analyze(stmt, ctx);
+
+            QueryStatement queryStmt = (QueryStatement) stmt;
+            List<String> colNames = queryStmt.getQueryRelation().getColumnOutputNames();
+            List<Expr> outputExprs = queryStmt.getQueryRelation().getOutputExpression();
+
+            List<Field> arrowFields = Lists.newArrayList();
+            for (int i = 0; i < colNames.size(); i++) {
+                Expr expr = outputExprs.get(i);
+                Field arrowField = ArrowUtils.convertToArrowType(
+                        expr.getOriginType(), colNames.get(i), expr.isNullable());
+                arrowFields.add(arrowField);
+            }
+            return new Schema(arrowFields);
         } catch (Exception e) {
             LOG.warn("[ARROW] Failed to analyze query for schema in createPreparedStatement, " +
                     "falling back to placeholder schema. query={}", query, e);

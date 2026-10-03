@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.http;
 
+import com.starrocks.authorization.SecurityPolicyRewriteRule;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
@@ -72,6 +73,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         Tracers.init(ctx, "TIMER", null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
+        SecurityPolicyRewriteRule.markRelationsForRewrite(parsedStmt);
         String sql = parsedStmt.getOrigStmt().originStmt;
 
         executor = new StmtExecutor(ctx, parsedStmt);
