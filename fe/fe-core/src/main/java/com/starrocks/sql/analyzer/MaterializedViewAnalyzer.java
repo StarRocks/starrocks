@@ -54,6 +54,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.iceberg.IcebergMVStorage;
 import com.starrocks.mv.analyzer.MVPartitionSlotRefResolver;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -450,6 +451,13 @@ public class MaterializedViewAnalyzer {
                 statement.setCurrentRefreshMode(refreshMode);
             }
 
+            // Mechanism C: an Iceberg-catalog materialized view is created in the IRC (connector-owned, no native
+            // MaterializedView). Run the reduced IRC analysis and return, skipping the native (OLAP) path below.
+            if (Config.enable_iceberg_materialized_view && isIcebergCatalog(catalog)) {
+                analyzeIcebergCatalogMaterializedView(statement, queryStatement, context);
+                return null;
+            }
+
             // collect table from query statement
             if (!DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalog)) {
                 throw new SemanticException("Materialized view can only be created in default_catalog. " +
@@ -632,6 +640,54 @@ public class MaterializedViewAnalyzer {
                         mvColumns.get(theBeginIndexOfValue).getType(), theBeginIndexOfValue);
             }
             return keyCols;
+        }
+
+        private boolean isIcebergCatalog(String catalog) {
+            if (Strings.isNullOrEmpty(catalog) || DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalog)) {
+                return false;
+            }
+            String type = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalog);
+            return "iceberg".equalsIgnoreCase(type);
+        }
+
+        /**
+         * Mechanism C reduced analysis for an Iceberg-catalog materialized view: validate base tables (all must be
+         * Iceberg), generate the output columns, and verify the schema is representable in an Iceberg catalog. The
+         * native OLAP analysis (partition/distribution/refresh-scheme) is intentionally skipped - the MV lives in
+         * the IRC and its data lands in a non-partitioned &lt;mv&gt;__storage table (C.0 = full refresh).
+         */
+        private void analyzeIcebergCatalogMaterializedView(CreateMaterializedViewStatement statement,
+                                                           QueryStatement queryStatement, ConnectContext context) {
+            // C.0 is non-partitioned with Iceberg-managed storage; reject OLAP-specific clauses explicitly rather
+            // than silently ignoring them.
+            if (CollectionUtils.isNotEmpty(statement.getPartitionByExprs())) {
+                throw new SemanticException("PARTITION BY is not supported for an Iceberg-catalog materialized view "
+                        + "(C.0 is non-partitioned, full-refresh only)");
+            }
+            if (statement.getDistributionDesc() != null) {
+                throw new SemanticException("DISTRIBUTED BY is not supported for an Iceberg-catalog materialized view "
+                        + "(the storage table is managed by Iceberg)");
+            }
+            Map<TableName, Table> tableNameTableMap =
+                    AnalyzerUtils.collectAllConnectorTableAndViewWithViewDefinition(queryStatement);
+            Set<BaseTableInfo> baseTableInfos = getBaseTableInfos(tableNameTableMap);
+            if (baseTableInfos.isEmpty()) {
+                throw new SemanticException("Can not find base table in query statement");
+            }
+            statement.setBaseTableInfos(Lists.newArrayList(baseTableInfos));
+            // C.0: all base tables must be Iceberg (RefreshState records one snapshot-id per source table).
+            IcebergMVStorage.validateAllIcebergBaseTables(statement.getBaseTableInfos());
+
+            List<ColWithComment> colWithComments = statement.getColWithComments();
+            MvKeyLayout keyLayout = resolveMvKeyLayout(statement, context);
+            List<Pair<Column, Integer>> mvColumnPairs = genMaterializedViewColumns(statement.getKeysType(),
+                    statement.getRowIdStrategy(), queryStatement, colWithComments, keyLayout);
+            List<Column> mvColumns = mvColumnPairs.stream().map(pair -> pair.first).collect(Collectors.toList());
+            statement.setMvColumnItems(mvColumns);
+            IcebergMVStorage.validateIcebergSchema(mvColumns);
+            // TODO(mechanism-c): refresh Task registration (keyed by the IRC identifier catalog.db.name) and the
+            // transient hydration seam in MVTaskRunProcessor.prepare() are wired in a later step. The DDL executor
+            // routes CREATE to IcebergMetadata.createMaterializedView, which creates the IRC View + storage table.
         }
 
         /**

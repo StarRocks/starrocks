@@ -34,6 +34,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheSelectExecutor;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -42,6 +43,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.FunctionRefAnalyzer;
@@ -400,7 +402,12 @@ public class DDLStmtExecutor {
         public ShowResultSet visitCreateMaterializedViewStatement(CreateMaterializedViewStatement stmt,
                                                                   ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
+                // Mechanism C: an Iceberg-catalog MV is owned by the IRC (connector), not LocalMetastore.
+                if (isIcebergCatalogMv(stmt.getCatalogName())) {
+                    getConnectorMvMetadata(stmt.getCatalogName()).createMaterializedView(stmt);
+                } else {
+                    context.getGlobalStateMgr().getLocalMetastore().createMaterializedView(stmt);
+                }
             });
             return null;
         }
@@ -408,7 +415,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropMaterializedViewStatement(DropMaterializedViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().dropMaterializedView(stmt);
+                if (isIcebergCatalogMv(stmt.getCatalogName())) {
+                    getConnectorMvMetadata(stmt.getCatalogName()).dropMaterializedView(stmt);
+                } else {
+                    context.getGlobalStateMgr().getLocalMetastore().dropMaterializedView(stmt);
+                }
             });
             return null;
         }
@@ -417,9 +428,28 @@ public class DDLStmtExecutor {
         public ShowResultSet visitAlterMaterializedViewStatement(AlterMaterializedViewStmt stmt,
                                                                  ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().alterMaterializedView(stmt);
+                if (isIcebergCatalogMv(stmt.getCatalogName())) {
+                    getConnectorMvMetadata(stmt.getCatalogName()).alterMaterializedView(stmt);
+                } else {
+                    context.getGlobalStateMgr().getLocalMetastore().alterMaterializedView(stmt);
+                }
             });
             return null;
+        }
+
+        // Mechanism C: an MV whose catalog is an external Iceberg catalog is owned by the IRC and handled by the
+        // connector metadata, not LocalMetastore.
+        private static boolean isIcebergCatalogMv(String catalog) {
+            if (Strings.isNullOrEmpty(catalog) || !CatalogMgr.isExternalCatalog(catalog)) {
+                return false;
+            }
+            return "iceberg".equalsIgnoreCase(
+                    GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalog));
+        }
+
+        private static ConnectorMetadata getConnectorMvMetadata(String catalog) throws DdlException {
+            return GlobalStateMgr.getCurrentState().getMetadataMgr().getOptionalMetadata(catalog)
+                    .orElseThrow(() -> new DdlException("Catalog not found for materialized view: " + catalog));
         }
 
         @Override
