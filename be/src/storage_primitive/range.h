@@ -524,11 +524,13 @@ template class Range<>;
 template class Range<ordinal_t>;
 using RowIdRange = Range<rowid_t>;
 using OridinalRange = Range<ordinal_t>;
+using OrdinalRange = Range<ordinal_t>;
 
 template class SparseRange<>;
 template class SparseRange<ordinal_t>;
 using RowIdSparseRange = SparseRange<rowid_t>;
 using OridinalSparseRange = SparseRange<ordinal_t>;
+using OrdinalSparseRange = SparseRange<ordinal_t>;
 
 template class SparseRangeIterator<>;
 template class SparseRangeIterator<ordinal_t>;
