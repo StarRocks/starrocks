@@ -49,6 +49,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -1038,6 +1039,17 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
         return resultBackends;
+    }
+
+    public List<Long> getLabelledBackendsIds(Multimap<String, String> locationLabel) {
+        if (locationLabel == null || locationLabel.isEmpty()) {
+            return getBackendIds();
+        }
+
+        return idToBackendRef.values().stream()
+                .filter(backend -> TabletChecker.isLocationMatch(locationLabel, backend.getSingleLevelLocationKV()))
+                .map(Backend::getId)
+                .collect(Collectors.toList());
     }
 
     public List<Long> getBackendIds() {
