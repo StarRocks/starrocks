@@ -313,7 +313,7 @@ template <class ForwardIt>
 Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt begin, ForwardIt end,
                        std::vector<std::string>* values) {
     Status s;
-    Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    std::unique_ptr<Iterator> iiter(rep_->index_block->NewIterator(rep_->options.comparator));
     std::unique_ptr<Iterator> current_block_itr_ptr;
 
     // return true if find k
@@ -373,7 +373,6 @@ Status Table::MultiGet(const ReadOptions& options, const Slice* keys, ForwardIt 
     if (s.ok()) {
         s = iiter->status();
     }
-    delete iiter;
     TRACE_COUNTER_INCREMENT("continue_block_read_cnt", continue_block_read_cnt);
     TRACE_COUNTER_INCREMENT("sst_bloom_filter_rows", sst_bloom_filter_rows);
     TRACE_COUNTER_INCREMENT("multiget_t1_us", multiget_t1_us);
