@@ -902,4 +902,44 @@ public class RangerInterfaceTest {
         Assertions.assertFalse(scanColumns.containsKey(null),
                 "scanColumns must NOT contain a null key (silent drop guard). Got: " + scanColumns);
     }
+
+    @Test
+    public void testAstTraverserSetsNeedRewrittenByPolicyOnPrepareStmt() throws Exception {
+        String sql = "PREPARE p1 FROM 'SELECT v1, v2 FROM db.t1 WHERE k1 = ?'";
+        StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        List<Relation> relations = Lists.newArrayList();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                relations.add(relation);
+                return null;
+            }
+        }.visit(stmt);
+
+        Assertions.assertFalse(relations.isEmpty(), "AstTraverser must visit relations inside PrepareStmt");
+        Assertions.assertTrue(relations.get(0).isNeedRewrittenByPolicy(),
+                "Relations inside PrepareStmt must have needRewrittenByPolicy set to true");
+    }
+
+    @Test
+    public void testAstTraverserSetsNeedRewrittenByPolicyOnPivot() throws Exception {
+        String sql = "SELECT * FROM db.t1 PIVOT (SUM(v1) FOR v2 IN (1, 2))";
+        StatementBase stmt = SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+
+        List<Relation> relations = Lists.newArrayList();
+        new AstTraverser<Void, Void>() {
+            @Override
+            public Void visitRelation(Relation relation, Void context) {
+                relation.setNeedRewrittenByPolicy(true);
+                relations.add(relation);
+                return null;
+            }
+        }.visit(stmt);
+
+        Assertions.assertFalse(relations.isEmpty(), "AstTraverser must visit relations inside Pivot");
+        Assertions.assertTrue(relations.stream().allMatch(Relation::isNeedRewrittenByPolicy),
+                "Relations inside Pivot must have needRewrittenByPolicy set to true");
+    }
 }
