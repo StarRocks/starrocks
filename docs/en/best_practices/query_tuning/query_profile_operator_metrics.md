@@ -318,6 +318,10 @@ Typical scenarios that can make Exchange Operator the bottleneck of a query:
 | OverallTime | Total time for the entire transmission process, i.e., from sending the first data packet to confirming the correct reception of the last data packet. |
 | RpcAvgTime | Average time for RPC. |
 | RpcCount | Total number of RPCs. |
+| RpcBusyStubSelectionCount | Number of RPCs assigned to a connection that already had in-flight RPCs. |
+| RpcSelectedStubInflightMax | Maximum number of RPCs already in flight on a selected connection. |
+| RpcStubCreatedOnContentionCount | Number of connections created because all existing connections were busy. |
+| RpcSelectionAtConnectionLimitCount | Number of RPCs assigned to an existing connection because the per-server connection limit had been reached. |
 
 #### Exchange Source Operator
 

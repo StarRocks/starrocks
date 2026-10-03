@@ -28,6 +28,7 @@
 #include "common/brpc/internal_service_recoverable_stub.h"
 #include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "common/system/backend_options.h"
 #include "exec/exec_env.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -68,6 +69,8 @@ public:
 class ExchangeSinkOperatorTest : public ::testing::Test {
 public:
     void SetUp() override {
+        _saved_brpc_connection_type = config::brpc_connection_type;
+        _saved_brpc_max_connections_per_server = config::brpc_max_connections_per_server;
         BackendOptions::set_localhost("0.0.0.0");
 
         _exec_env = ExecEnv::GetInstance();
@@ -115,7 +118,11 @@ public:
         _factory->set_runtime_state(_runtime_state.get());
     }
 
-    void TearDown() override { _query_context->set_query_execution_services(nullptr); }
+    void TearDown() override {
+        _query_context->set_query_execution_services(nullptr);
+        config::brpc_connection_type = _saved_brpc_connection_type;
+        config::brpc_max_connections_per_server = _saved_brpc_max_connections_per_server;
+    }
 
     // Build a minimal single-column INT chunk.
     static ChunkPtr make_chunk() {
@@ -137,6 +144,8 @@ protected:
     TPlanFragmentDestination _destination;
 
     AlwaysOverflowCodec _overflow_codec;
+    std::string _saved_brpc_connection_type;
+    int32_t _saved_brpc_max_connections_per_server{0};
 };
 
 // When enable_rpc_compress_overflow_skip=true and the codec reports overflow,
@@ -189,6 +198,8 @@ class HangingInternalService : public starrocks::PInternalService {
 public:
     using Latch = CountDownLatch;
 
+    explicit HangingInternalService(int expected_requests = 1) : received(expected_requests) {}
+
     void transmit_chunk(google::protobuf::RpcController* /*controller*/,
                         const starrocks::PTransmitChunkParams* /*request*/, starrocks::PTransmitChunkResult* response,
                         google::protobuf::Closure* done) override {
@@ -201,7 +212,7 @@ public:
         done->Run();
     }
 
-    Latch received{1};
+    Latch received;
     Latch release{1};
 };
 
@@ -245,6 +256,7 @@ protected:
 // never responds, then cancel and assert the buffer reaches the finished state quickly (i.e. the
 // failure callback fired with ECANCELED) rather than blocking until the RPC timeout.
 TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
+    config::brpc_connection_type = "pooled";
     brpc::Server server;
     HangingInternalService service;
     brpc::ServerOptions options;
@@ -271,6 +283,8 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
 
     // Wait until the server has actually received the RPC, guaranteeing it is in-flight.
     ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
+    EXPECT_EQ(0, stub->num_in_flight_rpcs());
+    EXPECT_EQ(0, stub->num_in_flight_payload_bytes());
     EXPECT_FALSE(buffer->is_finished());
 
     const auto cancel_start = std::chrono::steady_clock::now();
@@ -283,10 +297,146 @@ TEST_F(SinkBufferCancelTest, cancel_aborts_inflight_rpc) {
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     EXPECT_TRUE(buffer->is_finished());
+    EXPECT_EQ(0, stub->num_in_flight_rpcs());
+    EXPECT_EQ(0, stub->num_in_flight_payload_bytes());
+
+    RuntimeProfile profile("pooled exchange");
+    buffer->update_profile(&profile);
+    EXPECT_EQ(0, profile.get_counter("RpcBusyStubSelectionCount")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcSelectedStubInflightMax")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcStubCreatedOnContentionCount")->value());
+    EXPECT_EQ(0, profile.get_counter("RpcSelectionAtConnectionLimitCount")->value());
 
     const auto elapsed =
             std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - cancel_start);
     EXPECT_LT(elapsed.count(), 30) << "cancellation did not abort the in-flight RPC promptly";
+}
+
+TEST_F(SinkBufferCancelTest, single_mode_selects_least_loaded_stub_and_reports_contention) {
+    config::brpc_connection_type = "single";
+    config::brpc_max_connections_per_server = 2;
+
+    brpc::Server server;
+    HangingInternalService service(/*expected_requests*/ 3);
+    brpc::ServerOptions options;
+    options.num_threads = 4;
+    ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+    bool service_released = false;
+    DeferOp stop_server([&] {
+        if (!service_released) {
+            service.release.count_down();
+        }
+        server.Stop(0);
+        server.Join();
+    });
+
+    BthreadTimer timer;
+    ASSERT_OK(timer.start());
+    BrpcStubCache cache(&timer);
+    RpcServices rpc_services;
+    rpc_services.brpc_stub_cache = &cache;
+    QueryExecutionServices query_execution_services = _exec_env->query_execution_services();
+    query_execution_services.rpc = &rpc_services;
+    _runtime_state->set_query_execution_services(&query_execution_services);
+    DeferOp restore_services(
+            [&] { _runtime_state->set_query_execution_services(&_exec_env->query_execution_services()); });
+
+    auto initial_stub = cache.get_stub(server.listen_address());
+    ASSERT_NE(nullptr, initial_stub);
+
+    std::vector<std::shared_ptr<SinkBuffer>> buffers;
+    for (int i = 0; i < 3; ++i) {
+        auto dest_id = make_dest_id(/*lo*/ 1000 + i);
+        auto buffer = make_remote_sink_buffer(server.listen_address().port, dest_id);
+        buffer->incr_sinker(_runtime_state.get());
+        auto request = make_request(dest_id, server.listen_address().port, initial_stub);
+        ASSERT_OK(buffer->add_request(request));
+        buffers.emplace_back(std::move(buffer));
+    }
+
+    ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
+
+    RuntimeProfile first_profile("first single exchange");
+    buffers[0]->update_profile(&first_profile);
+    EXPECT_EQ(0, first_profile.get_counter("RpcBusyStubSelectionCount")->value());
+    EXPECT_EQ(0, first_profile.get_counter("RpcStubCreatedOnContentionCount")->value());
+
+    RuntimeProfile second_profile("second single exchange");
+    buffers[1]->update_profile(&second_profile);
+    EXPECT_EQ(1, second_profile.get_counter("RpcStubCreatedOnContentionCount")->value());
+    EXPECT_EQ(0, second_profile.get_counter("RpcSelectionAtConnectionLimitCount")->value());
+
+    RuntimeProfile third_profile("third single exchange");
+    buffers[2]->update_profile(&third_profile);
+    EXPECT_EQ(1, third_profile.get_counter("RpcBusyStubSelectionCount")->value());
+    EXPECT_EQ(1, third_profile.get_counter("RpcSelectedStubInflightMax")->value());
+    EXPECT_EQ(1, third_profile.get_counter("RpcSelectionAtConnectionLimitCount")->value());
+
+    auto pool = cache.get_or_create_pool(initial_stub->endpoint());
+    ASSERT_EQ(2, pool->_stubs.size());
+
+    service.release.count_down();
+    service_released = true;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while ((pool->_stubs[0]->num_in_flight_rpcs() != 0 || pool->_stubs[1]->num_in_flight_rpcs() != 0) &&
+           std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_EQ(0, pool->_stubs[0]->num_in_flight_rpcs());
+    EXPECT_EQ(0, pool->_stubs[1]->num_in_flight_rpcs());
+    for (const auto& buffer : buffers) {
+        buffer->cancel_one_sinker(_runtime_state.get());
+    }
+    const auto finish_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    for (const auto& buffer : buffers) {
+        while (!buffer->is_finished() && std::chrono::steady_clock::now() < finish_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        EXPECT_TRUE(buffer->is_finished());
+    }
+}
+
+TEST_F(SinkBufferCancelTest, single_mode_falls_back_to_request_stub_without_cache) {
+    config::brpc_connection_type = "single";
+
+    brpc::Server server;
+    HangingInternalService service;
+    brpc::ServerOptions options;
+    options.num_threads = 2;
+    ASSERT_EQ(server.AddService(&service, brpc::SERVER_DOESNT_OWN_SERVICE), 0);
+    ASSERT_EQ(server.Start(0, &options), 0);
+    DeferOp stop_server([&] {
+        service.release.count_down();
+        server.Stop(0);
+        server.Join();
+    });
+
+    RpcServices rpc_services;
+    QueryExecutionServices query_execution_services = _exec_env->query_execution_services();
+    query_execution_services.rpc = &rpc_services;
+    _runtime_state->set_query_execution_services(&query_execution_services);
+    DeferOp restore_services(
+            [&] { _runtime_state->set_query_execution_services(&_exec_env->query_execution_services()); });
+
+    auto dest_id = make_dest_id(/*lo*/ 2000);
+    auto buffer = make_remote_sink_buffer(server.listen_address().port, dest_id);
+    buffer->incr_sinker(_runtime_state.get());
+    auto stub = std::make_shared<PInternalService_RecoverableStub>(server.listen_address());
+    ASSERT_OK(stub->reset_channel());
+
+    auto request = make_request(dest_id, server.listen_address().port, stub);
+    ASSERT_OK(buffer->add_request(request));
+    ASSERT_TRUE(service.received.wait_for(std::chrono::seconds(10)));
+    EXPECT_EQ(1, stub->num_in_flight_rpcs());
+
+    buffer->cancel_one_sinker(_runtime_state.get());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    while (!buffer->is_finished() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    EXPECT_TRUE(buffer->is_finished());
+    EXPECT_EQ(0, stub->num_in_flight_rpcs());
 }
 
 // cancel_one_sinker() must be safe when there are no in-flight RPCs registered (the swap-and-reset

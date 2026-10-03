@@ -18,6 +18,7 @@ set(COMMON_FILES
   bloom_filter.cpp
   block_split_bloom_filter.cpp
   bthread_timer.cpp
+  brpc/brpc_connection_load.cpp
   brpc/brpc_stub_cache.cpp
   brpc/internal_service_recoverable_stub.cpp
   brpc/lake_service_recoverable_stub.cpp

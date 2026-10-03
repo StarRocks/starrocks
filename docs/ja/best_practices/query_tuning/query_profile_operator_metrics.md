@@ -306,6 +306,10 @@ OLAP_SCANオペレーターに似ていますが、Iceberg/Hive/Hudi/Deltaなど
 | OverallTime | 転送プロセス全体の合計時間。つまり、最初のデータパケットの送信から最後のデータパケットの正常受信確認までの時間。 |
 | RpcAvgTime | RPCの平均時間。 |
 | RpcCount | RPCの総数。 |
+| RpcBusyStubSelectionCount | すでに処理中の RPC がある接続に割り当てられた RPC の数。 |
+| RpcSelectedStubInflightMax | 選択された接続ですでに処理中だった RPC 数の最大値。 |
+| RpcStubCreatedOnContentionCount | 既存の接続がすべてビジー状態だったために作成された接続の数。 |
+| RpcSelectionAtConnectionLimitCount | サーバーごとの接続数上限に達していたため、既存の接続に割り当てられた RPC の数。 |
 
 #### エクスチェンジソースオペレーター
 

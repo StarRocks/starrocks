@@ -16,6 +16,7 @@
 
 #include "base/brpc/recoverable_closure.h"
 #include "base/status.h"
+#include "common/brpc/brpc_connection_load.h"
 #include "gen_cpp/internal_service.pb.h"
 
 namespace starrocks {
@@ -24,6 +25,30 @@ class PInternalService_RecoverableStub : public PInternalService_Stub,
                                          public std::enable_shared_from_this<PInternalService_RecoverableStub> {
 public:
     using RecoverableClosureType = RecoverableClosure<PInternalService_RecoverableStub>;
+
+    class RpcInFlightGuard {
+    public:
+        RpcInFlightGuard() = default;
+        ~RpcInFlightGuard();
+
+        RpcInFlightGuard(RpcInFlightGuard&& other) noexcept;
+        RpcInFlightGuard& operator=(RpcInFlightGuard&& other) noexcept;
+
+        RpcInFlightGuard(const RpcInFlightGuard&) = delete;
+        RpcInFlightGuard& operator=(const RpcInFlightGuard&) = delete;
+
+        PInternalService_RecoverableStub* stub() const { return _stub.get(); }
+        int64_t in_flight_before() const { return _load_guard.in_flight_before(); }
+        void reset();
+
+    private:
+        friend class PInternalService_RecoverableStub;
+
+        explicit RpcInFlightGuard(std::shared_ptr<PInternalService_RecoverableStub> stub, int64_t payload_bytes);
+
+        std::shared_ptr<PInternalService_RecoverableStub> _stub;
+        BrpcConnectionLoadGuard _load_guard;
+    };
 
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint, std::string protocol = "",
                                      int64_t connection_group_seed = 0);
@@ -37,9 +62,20 @@ public:
     }
 
     int64_t connection_group() const { return _connection_group.load(); }
+    int64_t num_in_flight_rpcs() const;
+    int64_t num_in_flight_payload_bytes() const;
+    const butil::EndPoint& endpoint() const { return _endpoint; }
+
+    RpcInFlightGuard reserve_rpc(int64_t payload_bytes = 0);
+
+    using PInternalService_Stub::transmit_chunk;
+    void transmit_chunk(RpcInFlightGuard reservation, ::google::protobuf::RpcController* controller,
+                        const ::starrocks::PTransmitChunkParams* request, ::starrocks::PTransmitChunkResult* response,
+                        ::google::protobuf::Closure* done);
 
 private:
     std::shared_ptr<starrocks::PInternalService_Stub> _stub;
+    std::shared_ptr<BrpcConnectionLoad> _connection_load;
     const butil::EndPoint _endpoint;
     std::atomic<int64_t> _connection_group = 0;
     // Distinguishes stubs that share the same endpoint.

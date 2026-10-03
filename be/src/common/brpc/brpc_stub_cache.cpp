@@ -14,16 +14,23 @@
 
 #include "common/brpc/brpc_stub_cache.h"
 
+#include <algorithm>
+#include <limits>
+
 #include "base/failpoint/fail_point.h"
 #include "base/metrics.h"
 #include "base/time/time.h"
+#include "common/config_exec_flow_fwd.h"
 #include "common/config_network_fwd.h"
+#include "common/config_rpc_client_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #ifndef __APPLE__
 #include "gen_cpp/lake_service.pb.h"
 #endif
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(brpc_stub_cache_create_stub_failed);
 
 namespace {
 
@@ -118,7 +125,7 @@ bool BrpcStubCache::replace_cleanup_task_locked(const butil::EndPoint& endpoint,
     return false;
 }
 
-std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
+std::shared_ptr<BrpcStubCache::StubPool> BrpcStubCache::get_or_create_pool(const butil::EndPoint& endpoint) {
     std::lock_guard<SpinLock> l(_lock);
 
     auto stub_pool = _stub_map.seek(endpoint);
@@ -135,13 +142,17 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
         if (!status.ok()) {
             LOG(WARNING) << "Failed to schedule brpc cleanup task: " << endpoint;
             _stub_map.erase(endpoint);
-            return new_pool->get_or_create(endpoint);
+            return new_pool;
         }
     } else {
         (*stub_pool)->_cleanup_task->renew_deadline_locked(absolute_deadline_us(config::brpc_stub_expire_s));
     }
 
-    return (*stub_pool)->get_or_create(endpoint);
+    return *stub_pool;
+}
+
+std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const butil::EndPoint& endpoint) {
+    return get_or_create_pool(endpoint)->get_or_create(endpoint);
 }
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const TNetworkAddress& taddr) {
@@ -168,6 +179,14 @@ std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::get_stub(const 
     return get_stub(endpoint);
 }
 
+StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::acquire_least_loaded_stub(const butil::EndPoint& endpoint,
+                                                                                int64_t payload_bytes) {
+    if (config::brpc_connection_type != "single") {
+        return Status::NotSupported("dynamic bRPC stub selection requires connection_type=single");
+    }
+    return get_or_create_pool(endpoint)->acquire_least_loaded(endpoint, payload_bytes);
+}
+
 BrpcStubCache::StubPool::StubPool() {
     _stubs.reserve(config::brpc_max_connections_per_server);
 }
@@ -179,19 +198,72 @@ BrpcStubCache::StubPool::~StubPool() {
 
 std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::get_or_create(
         const butil::EndPoint& endpoint) {
+    std::lock_guard l(_mutex);
     if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
-        auto stub =
-                std::make_shared<PInternalService_RecoverableStub>(endpoint, "", static_cast<int64_t>(_stubs.size()));
-        if (!stub->reset_channel().ok()) {
-            return nullptr;
+        auto stub = _create_stub_locked(endpoint);
+        if (stub != nullptr) {
+            _last_selected_idx = static_cast<int64_t>(_stubs.size()) - 1;
         }
-        _stubs.push_back(stub);
         return stub;
     }
-    if (++_idx >= config::brpc_max_connections_per_server) {
-        _idx = 0;
+    if (++_last_selected_idx >= static_cast<int64_t>(_stubs.size())) {
+        _last_selected_idx = 0;
     }
-    return _stubs[_idx];
+    return _stubs[static_cast<size_t>(_last_selected_idx)];
+}
+
+std::shared_ptr<PInternalService_RecoverableStub> BrpcStubCache::StubPool::_create_stub_locked(
+        const butil::EndPoint& endpoint) {
+    FAIL_POINT_TRIGGER_RETURN(brpc_stub_cache_create_stub_failed, nullptr);
+    auto stub = std::make_shared<PInternalService_RecoverableStub>(endpoint, "", static_cast<int64_t>(_stubs.size()));
+    if (!stub->reset_channel().ok()) {
+        return nullptr;
+    }
+    _stubs.push_back(stub);
+    return stub;
+}
+
+StatusOr<BrpcStubCache::StubSelection> BrpcStubCache::StubPool::acquire_least_loaded(const butil::EndPoint& endpoint,
+                                                                                     int64_t payload_bytes) {
+    std::lock_guard l(_mutex);
+    const size_t size = _stubs.size();
+    size_t selected = 0;
+    int64_t minimum = std::numeric_limits<int64_t>::max();
+    const int64_t batch_bytes = std::max<int64_t>(config::max_transmit_batched_bytes, 1);
+    if (size > 0) {
+        const size_t start = static_cast<size_t>(_last_selected_idx + 1) % size;
+        for (size_t offset = 0; offset < size; ++offset) {
+            const size_t index = (start + offset) % size;
+            const int64_t in_flight = _stubs[index]->num_in_flight_rpcs();
+            if (in_flight == 0) {
+                _last_selected_idx = static_cast<int64_t>(index);
+                return StubSelection{.reservation = _stubs[index]->reserve_rpc(payload_bytes)};
+            }
+            const int64_t load = in_flight + _stubs[index]->num_in_flight_payload_bytes() / batch_bytes;
+            if (load < minimum) {
+                minimum = load;
+                selected = index;
+            }
+        }
+    }
+
+    const bool at_connection_limit = size >= config::brpc_max_connections_per_server;
+    if (!at_connection_limit) {
+        auto stub = _create_stub_locked(endpoint);
+        if (stub != nullptr) {
+            _last_selected_idx = static_cast<int64_t>(size);
+            return StubSelection{.reservation = stub->reserve_rpc(payload_bytes), .created_on_contention = size > 0};
+        }
+        LOG(WARNING) << "Failed to create bRPC stub on contention for endpoint: " << endpoint;
+    }
+
+    if (_stubs.empty()) {
+        return Status::ServiceUnavailable("empty bRPC stub pool");
+    }
+    // If no idle stub exists and the pool cannot grow, reuse the least-loaded busy stub.
+    _last_selected_idx = static_cast<int64_t>(selected);
+    return StubSelection{.reservation = _stubs[selected]->reserve_rpc(payload_bytes),
+                         .selected_at_connection_limit = at_connection_limit};
 }
 
 void HttpBrpcStubCache::initialize(BthreadTimer* timer) {
