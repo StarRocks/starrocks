@@ -61,6 +61,20 @@ public class PartitionPruneTest extends PlanTestBase {
                 + "\"in_memory\" = \"false\"\n"
                 + ");");
 
+        starRocksAssert.withTable("CREATE TABLE `expr_partition_bucket_prune` (\n"
+                + "  `ts` bigint NOT NULL COMMENT \"\",\n"
+                + "  `country` varchar(64) NOT NULL COMMENT \"\",\n"
+                + "  `os` varchar(64) NOT NULL COMMENT \"\",\n"
+                + "  `device_id` varchar(128) NOT NULL COMMENT \"\"\n"
+                + ") ENGINE=OLAP\n"
+                + "DUPLICATE KEY(`ts`, `country`, `os`, `device_id`)\n"
+                + "PARTITION BY RANGE(from_unixtime(`ts`))\n"
+                + "(PARTITION p20240612 VALUES [('2024-06-12 00:00:00'), ('2024-06-13 00:00:00')))\n"
+                + "DISTRIBUTED BY HASH(`country`, `os`) BUCKETS 4\n"
+                + "PROPERTIES (\n"
+                + "\"replication_num\" = \"1\"\n"
+                + ");");
+
         starRocksAssert.withTable("CREATE TABLE `ptest_case` (\n"
                 + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
                 + "  `d2` date    NULL COMMENT \"\",\n"
@@ -190,6 +204,14 @@ public class PartitionPruneTest extends PlanTestBase {
                 "     PREDICATES: 2: d2 = '2020-07-01'\n" +
                 "     partitions=1/4\n" +
                 "     rollup: ptest"));
+    }
+
+    @Test
+    public void testBucketPruneOnExprPartitionTableWithAndPredicate() throws Exception {
+        String plan = getFragmentPlan("select device_id from expr_partition_bucket_prune partition(p20240612) "
+                + "where country = 'JOR' and os = 'Ios' and device_id > '8A49A522'");
+        assertContains(plan, "partitions=1/1");
+        assertContains(plan, "tabletRatio=1/4");
     }
 
     @Test
