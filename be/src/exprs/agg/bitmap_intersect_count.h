@@ -1,0 +1,207 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <string>
+#include <vector>
+
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/object_column.h"
+#include "column/runtime_type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "exprs/agg/intersect_count.h"
+#include "exprs/function_context.h"
+#include "gutil/casts.h"
+#include "types/bitmap_value.h"
+
+namespace starrocks {
+
+template <LogicalType LT>
+static BitmapValue bitmap_intersect_get_const_bitmap(FunctionContext* ctx,
+                                                     const BitmapIntersect<BitmapRuntimeCppType<LT>>& intersect,
+                                                     int column_idx) {
+    auto arg_column = ctx->get_constant_column(column_idx);
+    auto arg_value = ColumnHelper::get_const_value<LT>(arg_column);
+    if constexpr (lt_is_string_or_binary<LT>) {
+        std::string key(arg_value.data, arg_value.size);
+        return intersect.get_bitmap(key);
+    } else {
+        return intersect.get_bitmap(arg_value);
+    }
+}
+
+template <LogicalType LT, typename T = BitmapRuntimeCppType<LT>, bool Difference = false>
+class BitmapCountEachColumnAggregateFunction final
+        : public AggregateFunctionBatchHelper<BitmapIntersectAggregateState<BitmapRuntimeCppType<LT>>,
+                                              BitmapCountEachColumnAggregateFunction<LT, T, Difference>> {
+public:
+    using InputColumnType = RunTimeColumnType<LT>;
+
+    void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {}
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        DCHECK(columns[0]->is_object());
+
+        auto& intersect = this->data(state).intersect;
+        if (!this->data(state).initial) {
+            for (int i = 2; i < ctx->get_num_constant_columns(); ++i) {
+                auto arg_column = ctx->get_constant_column(i);
+                auto arg_value = ColumnHelper::get_const_value<LT>(arg_column);
+                if constexpr (lt_is_string_or_binary<LT>) {
+                    std::string key(arg_value.data, arg_value.size);
+                    intersect.add_key(key);
+                } else {
+                    intersect.add_key(arg_value);
+                }
+            }
+            this->data(state).initial = true;
+        }
+
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(columns[0]);
+        const auto* key_column = down_cast<const InputColumnType*>(columns[1]);
+
+        auto bitmap_value = bitmap_column->get_pool()[row_num];
+        auto key_value = GetContainer<LT>::get_data(key_column)[row_num];
+
+        if constexpr (lt_is_string_or_binary<LT>) {
+            std::string key(key_value.data, key_value.size);
+            intersect.update(key, bitmap_value);
+        } else {
+            intersect.update(key_value, bitmap_value);
+        }
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        auto& intersect = this->data(state).intersect;
+        Slice slice = column->get(row_num).get_slice();
+        intersect.merge(BitmapIntersect<T>((char*)slice.data));
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        DCHECK(to->is_binary());
+        auto& intersect = this->data(state).intersect;
+
+        auto* column = down_cast<BinaryColumn*>(to);
+        Bytes& bytes = column->get_bytes();
+
+        size_t old_size = bytes.size();
+        size_t new_size = old_size + intersect.size();
+        bytes.resize(new_size);
+
+        intersect.serialize(reinterpret_cast<char*>(bytes.data() + old_size));
+
+        column->get_offset().emplace_back(new_size);
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     MutableColumnPtr& dst) const override {
+        DCHECK(src[0]->is_object());
+
+        BitmapIntersect<BitmapRuntimeCppType<LT>> intersect;
+        for (int i = 2; i < src.size(); ++i) {
+            auto arg_value = ColumnHelper::get_const_value<LT>(src[i]);
+            if constexpr (lt_is_string_or_binary<LT>) {
+                std::string key(arg_value.data, arg_value.size);
+                intersect.add_key(key);
+            } else {
+                intersect.add_key(arg_value);
+            }
+        }
+
+        const auto* bitmap_column = down_cast<const BitmapColumn*>(src[0].get());
+        const auto* key_column = down_cast<const InputColumnType*>(src[1].get());
+
+        size_t new_size = 0;
+        std::vector<BitmapIntersect<BitmapRuntimeCppType<LT>>> intersect_chunks;
+        intersect_chunks.reserve(chunk_size);
+        for (int i = 0; i < chunk_size; ++i) {
+            BitmapIntersect<BitmapRuntimeCppType<LT>> intersect_per_row(intersect);
+
+            auto bitmap_value = bitmap_column->get_pool()[i];
+            auto key_value = GetContainer<LT>::get_data(key_column)[i];
+
+            if constexpr (lt_is_string_or_binary<LT>) {
+                std::string key(key_value.data, key_value.size);
+                intersect_per_row.update(key, bitmap_value);
+            } else {
+                intersect_per_row.update(key_value, bitmap_value);
+            }
+
+            new_size += intersect_per_row.size();
+            intersect_chunks.emplace_back(intersect_per_row);
+        }
+
+        auto* dst_column = down_cast<BinaryColumn*>(dst.get());
+        Bytes& bytes = dst_column->get_bytes();
+        size_t old_size = bytes.size();
+        const size_t final_size = old_size + new_size;
+        bytes.resize(final_size);
+
+        auto& offsets = dst_column->get_offset();
+        offsets.resize(chunk_size + 1);
+
+        for (int i = 0; i < chunk_size; ++i) {
+            auto& intersect = intersect_chunks[i];
+            intersect.serialize(reinterpret_cast<char*>(bytes.data() + old_size));
+            old_size += intersect.size();
+            offsets.set(i + 1, old_size);
+        }
+    }
+
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto& intersect = this->data(state).intersect;
+        auto* col = down_cast<ArrayColumn*>(to);
+
+        BitmapValue head_bitmap = bitmap_intersect_get_const_bitmap<LT>(ctx, intersect, 2);
+
+        DatumArray result;
+        result.reserve(ctx->get_num_constant_columns() - 1);
+        result.emplace_back(static_cast<int64_t>(head_bitmap.cardinality()));
+
+        for (int i = 3; i < ctx->get_num_constant_columns(); ++i) {
+            BitmapValue bitmap = bitmap_intersect_get_const_bitmap<LT>(ctx, intersect, i);
+            BitmapValue common = head_bitmap;
+            common &= bitmap;
+
+            if constexpr (Difference) {
+                BitmapValue diff = head_bitmap;
+                diff -= common;
+                result.emplace_back(static_cast<int64_t>(diff.cardinality()));
+            } else {
+                result.emplace_back(static_cast<int64_t>(common.cardinality()));
+            }
+        }
+
+        col->append_datum(result);
+    }
+
+    std::string get_name() const override {
+        if constexpr (Difference) {
+            return "bitmap difference count each column";
+        }
+        return "bitmap intersect count each column";
+    }
+};
+
+template <LogicalType LT, typename T = BitmapRuntimeCppType<LT>>
+using BitmapIntersectCountEachColumnAggregateFunction = BitmapCountEachColumnAggregateFunction<LT, T, false>;
+
+template <LogicalType LT, typename T = BitmapRuntimeCppType<LT>>
+using BitmapDifferenceCountEachColumnAggregateFunction = BitmapCountEachColumnAggregateFunction<LT, T, true>;
+
+} // namespace starrocks
