@@ -365,9 +365,8 @@ void validate_paths(const std::vector<Path>& paths, const Retained& kept, const 
             const int ab = ring_relation(a, kept[i], b, kept[j], budget);
             const int ba = ring_relation(b, kept[j], a, kept[i], budget);
             if (a.polygon == b.polygon) {
-                const bool valid = a.ring == 0   ? (ab == -1 && ba == 1)
-                                   : b.ring == 0 ? (ab == 1 && ba == -1)
-                                                 : (ab == -1 && ba == -1);
+                const bool valid = a.ring == 0 ? (ab == -1 && ba == 1)
+                                               : b.ring == 0 ? (ab == 1 && ba == -1) : (ab == -1 && ba == -1);
                 if (!valid)
                     throw Stop{Status::InvalidArgument("ST_SimplifyPreserveTopology hole ownership is invalid")};
             }
