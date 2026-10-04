@@ -147,11 +147,19 @@ Native XY polygons and multipolygons with compatible CRS; Cartesian semantics in
 
 ## Cartesian buffer
 
-Native XY POINT, LINESTRING, POLYGON and their MULTI families; finite signed distance in input CRS units, round approximation, NULL propagation and polygonal EMPTY output. The result preserves CRS. GEOGRAPHY, collections, Z/M, options and simplification functions are not available in this slice.
+Native XY POINT, LINESTRING, POLYGON and their MULTI families; finite signed distance in input CRS units, round approximation, NULL propagation and polygonal EMPTY output. The result preserves CRS. GEOGRAPHY, collections, Z/M and options are unsupported by ST_Buffer.
 
 | Signature | Function ID | Reference |
 | --- | ---: | --- |
 | `ST_Buffer(GEOMETRY, DOUBLE)` | 120401 | [ST_Buffer](st_buffer.md) |
+
+## Topology preserving simplification
+
+Cartesian XY scalar geometry with preserved families, rings, contacts, typed empty children and CRS. Tolerance uses input coordinate units. GEOGRAPHY, Z/M and cross-row coverage simplification are unsupported.
+
+| Signature | Function ID | Reference |
+| --- | ---: | --- |
+| `ST_SimplifyPreserveTopology(GEOMETRY, DOUBLE)` | 120411 | [ST_SimplifyPreserveTopology](st_simplifypreservetopology.md) |
 
 ## H3 cell functions
 

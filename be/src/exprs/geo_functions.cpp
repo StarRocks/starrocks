@@ -35,6 +35,7 @@
 #include "geo/geo_buffer.h"
 #include "geo/geo_measurements.h"
 #include "geo/geo_overlay.h"
+#include "geo/geo_topology_simplify.h"
 #include "geo/geo_types.h"
 #include "geo/wkb.h"
 #include "runtime/runtime_state.h"
@@ -1051,6 +1052,73 @@ StatusOr<ColumnPtr> geo_buffer(FunctionContext* context, const Columns& columns)
         RETURN_IF_ERROR(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN));
         result->append_datum(Datum(Slice(wkb)));
         RETURN_IF_ERROR(buffer_checkpoint(context));
+    }
+    if (constant && size != 0) return ConstColumn::create(std::move(result), size);
+    return result;
+}
+
+struct NativeGeoTopologySimplifyState {
+    Status status = Status::OK();
+    std::unique_ptr<PreparedGeoTopologySimplify> input;
+};
+
+Status simplify_checkpoint(FunctionContext* context) {
+    if (context != nullptr && context->state() != nullptr) {
+        RETURN_IF_CANCELLED(context->state());
+        RETURN_IF_ERROR(context->state()->check_query_state("ST_SimplifyPreserveTopology"));
+        RETURN_IF_ERROR(context->state()->check_mem_limit("ST_SimplifyPreserveTopology"));
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> geo_simplify(FunctionContext* context, const Columns& columns) {
+    if (context == nullptr || columns.size() != 2) {
+        return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a context and two arguments");
+    }
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    const size_t size = columns[0]->size();
+    if (columns[1]->size() != size) return Status::InvalidArgument("ST_SimplifyPreserveTopology argument sizes differ");
+    if (columns[0]->only_null() || columns[1]->only_null()) return ColumnHelper::create_const_null_column(size);
+    ASSIGN_OR_RETURN(auto input, geo_input<TYPE_GEOMETRY>(columns[0]));
+    ASSIGN_OR_RETURN(auto result, create_geometry_result(context));
+    const auto* output =
+            down_cast<const GeoColumn*>(down_cast<const NullableColumn*>(result.get())->data_column().get());
+    if (!is_geo_compute_compatible(input.data->descriptor(), output->descriptor())) {
+        return Status::InvalidArgument("ST_SimplifyPreserveTopology return CRS does not match its input");
+    }
+    ColumnViewer<TYPE_DOUBLE> tolerances(columns[1]);
+    const auto* prepared = reinterpret_cast<const NativeGeoTopologySimplifyState*>(
+            context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    std::unique_ptr<PreparedGeoTopologySimplify> batch_constant;
+    const bool constant = input.constant && columns[1]->is_constant();
+    const size_t rows = constant && size != 0 ? 1 : size;
+    for (size_t row = 0; row < rows; ++row) {
+        RETURN_IF_ERROR(simplify_checkpoint(context));
+        if (input.is_null(row) || tolerances.is_null(row)) {
+            result->append_nulls(1);
+            continue;
+        }
+        const double tolerance = tolerances.value(row);
+        if (!std::isfinite(tolerance) || tolerance < 0)
+            return Status::InvalidArgument("ST_SimplifyPreserveTopology requires a finite nonnegative tolerance");
+        std::unique_ptr<PreparedGeoTopologySimplify> varying;
+        const PreparedGeoTopologySimplify* model;
+        if (prepared != nullptr) {
+            RETURN_IF_ERROR(prepared->status);
+            model = prepared->input.get();
+            if (model == nullptr)
+                return Status::InvalidArgument("ST_SimplifyPreserveTopology constant geometry is NULL");
+        } else {
+            auto* target = input.constant ? &batch_constant : &varying;
+            if (!input.constant || *target == nullptr) {
+                ASSIGN_OR_RETURN(*target, PreparedGeoTopologySimplify::prepare(
+                                                  input.wkb(row), [&] { return simplify_checkpoint(context); }));
+            }
+            model = target->get();
+        }
+        ASSIGN_OR_RETURN(auto wkb, model->simplify(tolerance, [&] { return simplify_checkpoint(context); }));
+        result->append_datum(Datum(Slice(wkb)));
+        RETURN_IF_ERROR(simplify_checkpoint(context));
     }
     if (constant && size != 0) return ConstColumn::create(std::move(result), size);
     return result;
@@ -2217,6 +2285,41 @@ Status GeoFunctions::native_geo_buffer_close(FunctionContext* context, FunctionC
 
 StatusOr<ColumnPtr> GeoFunctions::st_geometry_buffer(FunctionContext* context, const Columns& columns) {
     return geo_buffer(context, columns);
+}
+
+Status GeoFunctions::native_geo_simplify_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(0)) return Status::OK();
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    auto prepared = std::make_unique<NativeGeoTopologySimplifyState>();
+    const auto& column = context->get_constant_column(0);
+    if (!column->only_null() && column->size() != 0) {
+        // Keep plan-time errors lazy until a non-NULL row uses this geometry.
+        auto input = geo_input<TYPE_GEOMETRY>(column);
+        prepared->status = input.status();
+        if (prepared->status.ok()) {
+            auto model =
+                    PreparedGeoTopologySimplify::prepare(input->wkb(0), [&] { return simplify_checkpoint(context); });
+            prepared->status = model.status();
+            if (prepared->status.is_cancelled() || prepared->status.is_mem_limit_exceeded()) return prepared->status;
+            if (prepared->status.ok()) prepared->input = std::move(model.value());
+        }
+    }
+    RETURN_IF_ERROR(simplify_checkpoint(context));
+    context->set_function_state(scope, prepared.release());
+    return Status::OK();
+}
+
+Status GeoFunctions::native_geo_simplify_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        delete reinterpret_cast<NativeGeoTopologySimplifyState*>(context->get_function_state(scope));
+        context->set_function_state(scope, nullptr);
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> GeoFunctions::st_geometry_simplify_preserve_topology(FunctionContext* context,
+                                                                         const Columns& columns) {
+    return geo_simplify(context, columns);
 }
 
 Status GeoFunctions::native_geo_overlay_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {

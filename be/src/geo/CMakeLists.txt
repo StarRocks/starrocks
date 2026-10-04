@@ -41,6 +41,7 @@ endif()
 
 ADD_BE_LIB(Geo
     geo_buffer.cpp
+    geo_topology_simplify.cpp
     geo_common.cpp
     geo_measurements.cpp
     geo_overlay.cpp

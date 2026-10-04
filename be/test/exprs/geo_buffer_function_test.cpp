@@ -311,7 +311,7 @@ TEST(GeoBufferFunctionTest, RegistryActivatesOnlyGeometryBufferAndItsLifecycle) 
     ASSERT_TRUE(fn->scalar_function(ctx.get(), {fixed, radius(-1)}).ok());
     ASSERT_TRUE(fn->close_function(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
     EXPECT_EQ(nullptr, ctx->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    for (uint64_t id : {120400, 120410, 120411, 120420, 120421, 120430, 120431})
+    for (uint64_t id : {120400, 120410, 120420, 120421, 120430, 120431})
         EXPECT_EQ(nullptr, BuiltinFunctions::find_builtin_function(id));
 }
 

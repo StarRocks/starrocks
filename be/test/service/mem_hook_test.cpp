@@ -51,6 +51,7 @@ extern std::atomic<int64_t> g_mem_usage;
 
 #include "geo/geo_buffer.h"
 #include "geo/geo_overlay.h"
+#include "geo/geo_topology_simplify.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
@@ -109,6 +110,64 @@ TEST(MemhookTest, bufferPreparedAndScratchAllocationsAreAccountedAndReleased) {
             auto result = input.value()->buffer(distance);
             ASSERT_TRUE(result.ok()) << result.status();
         }
+    }
+    EXPECT_EQ(before, consumed());
+}
+
+TEST(MemhookTest, topologySimplifyPreparedAndScratchAllocationsAreAccountedAndReleased) {
+    WkbGeometry geometry;
+    ASSERT_TRUE(WkbCodec::parse_wkt("GEOMETRYCOLLECTION (POLYGON ((0 0,1 0,2 0,2 2,0 2,0 0)),"
+                                    "POINT (1e300 0),POINT (1e-300 0))",
+                                    &geometry, WkbCoordinateSemantics::GEOMETRY_CARTESIAN)
+                        .ok());
+    std::string wkb;
+    ASSERT_TRUE(WkbCodec::to_wkb(geometry, &wkb, WkbCoordinateSemantics::GEOMETRY_CARTESIAN).ok());
+    {
+        auto warmup = PreparedGeoTopologySimplify::prepare(Slice(wkb));
+        ASSERT_TRUE(warmup.ok());
+        ASSERT_TRUE(warmup.value()->simplify(1).ok());
+        // CI runs each test in a fresh process. Warm exception-runtime caches
+        // too, so their first-use allocation is not mistaken for leaked scratch.
+        auto error = warmup.value()->simplify(1, [] { return Status::MemoryLimitExceeded("warmup"); });
+        ASSERT_TRUE(error.status().is_mem_limit_exceeded());
+    }
+#ifdef BE_TEST
+    auto consumed = [] { return ::g_mem_usage.load(); };
+#else
+    MemTracker tracker(-1, "topology simplify");
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(&tracker);
+    auto consumed = [] { return tls_thread_status.get_consumed_bytes(); };
+#endif
+    const auto before = consumed();
+    {
+        auto input = PreparedGeoTopologySimplify::prepare(Slice(wkb));
+        ASSERT_TRUE(input.ok()) << input.status();
+        const auto prepared_bytes = consumed();
+        EXPECT_GT(prepared_bytes, before);
+        for (double tolerance : {1.0, 0.01, 0.0}) {
+            int64_t peak = prepared_bytes;
+            {
+                auto result = input.value()->simplify(tolerance, [&] {
+                    peak = std::max(peak, consumed());
+                    return Status::OK();
+                });
+                ASSERT_TRUE(result.ok()) << result.status();
+                EXPECT_GT(consumed(), prepared_bytes); // Retained output WKB.
+                if (tolerance > 0) {
+                    EXPECT_GT(peak, prepared_bytes); // Exact/index scratch.
+                }
+            }
+            EXPECT_EQ(prepared_bytes, consumed());
+        }
+        {
+            int checks = 0;
+            auto result = input.value()->simplify(1, [&] {
+                return ++checks == 3 ? Status::MemoryLimitExceeded("simplify scratch limit") : Status::OK();
+            });
+            ASSERT_FALSE(result.ok());
+            EXPECT_TRUE(result.status().is_mem_limit_exceeded());
+        }
+        EXPECT_EQ(prepared_bytes, consumed());
     }
     EXPECT_EQ(before, consumed());
 }

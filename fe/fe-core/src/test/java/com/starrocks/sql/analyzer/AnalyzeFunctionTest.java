@@ -261,10 +261,36 @@ public class AnalyzeFunctionTest {
                 "No matching function with signature");
         analyzeFail("select ST_Buffer(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 8)",
                 "No matching function with signature");
-        for (String function : new String[] {"ST_SimplifyPreserveTopology", "ST_CoverageSimplify"}) {
+        for (String function : new String[] {"ST_CoverageSimplify"}) {
             analyzeFail("select " + function + "(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1)",
                     "No matching function with signature");
         }
+    }
+
+    @Test
+    public void testNativeGeoTopologySimplifyContract() {
+        for (String crs : new String[] {"EPSG:3857", "EPSG:4326"}) {
+            String geometry = "ST_GeomFromText('LINESTRING (0 0,1 0,2 0)', '" + crs + "')";
+            for (String tolerance : new String[] {"0.01", "0", "NULL", "CAST(2 AS DOUBLE)"}) {
+                String sql = "select ST_SimplifyPreserveTopology(" + geometry + ", " + tolerance + ")";
+                assertFunctionContract(sql, 120411, PrimitiveType.GEOMETRY);
+                QueryRelation relation = ((QueryStatement) analyzeSuccess(sql)).getQueryRelation();
+                ScalarType output = (ScalarType) ((SelectRelation) relation).getOutputExpression().get(0).getType();
+                Assertions.assertEquals(GeoTypeDescriptor.geometry(crs), output.getGeoDescriptor());
+            }
+        }
+        analyzeSuccess("select ST_SRID(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('MULTIPOLYGON EMPTY', 'EPSG:4326'), 0))");
+        analyzeSuccess("select ST_AsText(ST_SimplifyPreserveTopology(" +
+                "ST_GeomFromText('GEOMETRYCOLLECTION (POINT EMPTY,LINESTRING (0 0,1 0,2 0))', 'EPSG:3857'), t)) " +
+                "from (select CAST(0 AS DOUBLE) t union all select CAST(1 AS DOUBLE)) tolerances");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeogFromText('POINT (0 0)'), 1)",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology('POINT (0 0)', 1)", "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'))",
+                "No matching function with signature");
+        analyzeFail("select ST_SimplifyPreserveTopology(ST_GeomFromText('POINT (0 0)', 'EPSG:3857'), 1, 2)",
+                "No matching function with signature");
     }
 
     @Test
