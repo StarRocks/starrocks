@@ -74,6 +74,11 @@ public:
     static Status parse_wkb(const Slice& input, WkbGeometry* output,
                             WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);
 
+    // A compute kernel may lower the existing element/allocation limit before
+    // decoding. The limit counts geometry nodes, rings and coordinates together.
+    static Status parse_wkb_bounded(const Slice& input, WkbGeometry* output, size_t max_elements,
+                                   WkbCoordinateSemantics semantics);
+
     // Emit canonical little-endian OGC WKB.
     static Status to_wkb(const WkbGeometry& geometry, std::string* output,
                          WkbCoordinateSemantics semantics = WkbCoordinateSemantics::GEOGRAPHY_CRS84);

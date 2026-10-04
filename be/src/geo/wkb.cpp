@@ -14,6 +14,7 @@
 
 #include "geo/wkb.h"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstring>
@@ -408,7 +409,10 @@ private:
 
 class WkbReader {
 public:
-    explicit WkbReader(const Slice& input) : _data(reinterpret_cast<const uint8_t*>(input.data)), _size(input.size) {}
+    explicit WkbReader(const Slice& input, size_t max_elements = kMaxElements)
+            : _data(reinterpret_cast<const uint8_t*>(input.data)),
+              _size(input.size),
+              _max_elements(std::min<size_t>(max_elements, kMaxElements)) {}
 
     Status parse(WkbGeometry* output) {
         if (_size > kMaxInputBytes) {
@@ -571,7 +575,7 @@ private:
     }
 
     Status consume_declared_children(size_t count) {
-        if (count > kMaxElements - _declared_children) {
+        if (count > _max_elements - _declared_children) {
             return invalid_wkb("geometry exceeds child allocation safety limit");
         }
         _declared_children += count;
@@ -579,7 +583,7 @@ private:
     }
 
     Status check_elements(size_t count) const {
-        if (count > kMaxElements - _elements) {
+        if (count > _max_elements - _elements) {
             return invalid_wkb("geometry exceeds element safety limit");
         }
         return Status::OK();
@@ -587,7 +591,7 @@ private:
 
     Status read_count(bool little_endian, uint32_t* output) {
         RETURN_IF_ERROR(read_uint32(little_endian, output));
-        if (*output > kMaxElements) {
+        if (*output > _max_elements) {
             return invalid_wkb("element count exceeds safety limit");
         }
         return Status::OK();
@@ -641,6 +645,7 @@ private:
     size_t _position = 0;
     size_t _elements = 0;
     size_t _declared_children = 0;
+    size_t _max_elements;
 };
 
 Status consume_validation_elements(size_t count, size_t* elements) {
@@ -907,6 +912,11 @@ Status WkbCodec::parse_wkt(std::string_view input, WkbGeometry* output, WkbCoord
 }
 
 Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output, WkbCoordinateSemantics semantics) {
+    return parse_wkb_bounded(input, output, kMaxElements, semantics);
+}
+
+Status WkbCodec::parse_wkb_bounded(const Slice& input, WkbGeometry* output, size_t max_elements,
+                                 WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKB output must not be null");
     }
@@ -914,7 +924,7 @@ Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output, WkbCoordinat
         return invalid_wkb("input is empty");
     }
     *output = WkbGeometry();
-    WkbReader reader(input);
+    WkbReader reader(input, max_elements);
     RETURN_IF_ERROR(reader.parse(output));
     return validate_geometry(*output, semantics);
 }
