@@ -126,6 +126,10 @@ TEST(MemhookTest, topologySimplifyPreparedAndScratchAllocationsAreAccountedAndRe
         auto warmup = PreparedGeoTopologySimplify::prepare(Slice(wkb));
         ASSERT_TRUE(warmup.ok());
         ASSERT_TRUE(warmup.value()->simplify(1).ok());
+        // CI runs each test in a fresh process. Warm exception-runtime caches
+        // too, so their first-use allocation is not mistaken for leaked scratch.
+        auto error = warmup.value()->simplify(1, [] { return Status::MemoryLimitExceeded("warmup"); });
+        ASSERT_TRUE(error.status().is_mem_limit_exceeded());
     }
 #ifdef BE_TEST
     auto consumed = [] { return ::g_mem_usage.load(); };
