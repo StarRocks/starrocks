@@ -450,6 +450,15 @@ struct GeoCoverageSimplify::Impl {
                 last_node = node;
             }
             if (first == kAbsent) invalid("ST_CoverageSimplify empty polygon ring");
+            // The consecutive run can cross the circular seam. Remove its
+            // trailing occurrence before linking the ring, without changing
+            // the original WKB or the admitted coordinate/byte counts.
+            if (previous != first && last_node == first_node) {
+                const uint32_t trailing = previous;
+                previous = occurrences[trailing].previous;
+                nodes[first_node].occurrences.pop_back();
+                occurrences.pop_back();
+            }
             occurrences[first].previous = previous;
             occurrences[previous].next = first;
             rings.push_back({first, uint32_t(occurrences.size() - first), component, r != 0, Integer(0)});

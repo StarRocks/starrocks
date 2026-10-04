@@ -130,6 +130,97 @@ TEST(GeoCoverageTest, ZeroValidatesAndPreservesOriginalWkb) {
     EXPECT_EQ(c->kernel_calls(), 0);
     for (size_t i = 0; i < inputs.size(); ++i) EXPECT_EQ(c->result(i)->value().to_string(), inputs[i]);
 }
+TEST(GeoCoverageTest, RepeatedClosingCoordinatesInShellsAndHoles) {
+    const std::vector<std::pair<std::string, std::string>> cases{
+            {"POLYGON ((0 0,0 2,2 2,2 0,0 0,0 0))", "POLYGON ((0 0,0 2,2 2,2 0,0 0))"},
+            {"POLYGON ((0 0,0 0,0 2,0 2,2 2,2 0,0 0,0 0,0 0))", "POLYGON ((0 0,0 2,2 2,2 0,0 0))"},
+            {"POLYGON ((0 0,0 8,8 8,8 0,0 0),(2 2,6 2,6 6,2 6,2 2,2 2,2 2))",
+             "POLYGON ((0 0,0 8,8 8,8 0,0 0),(2 2,6 2,6 6,2 6,2 2))"},
+            {"POLYGON ((0 0,0 0,0 8,8 8,8 0,0 0,0 0),(2 2,2 2,6 2,6 6,2 6,2 2,2 2))",
+             "POLYGON ((0 0,0 8,8 8,8 0,0 0),(2 2,6 2,6 6,2 6,2 2))"},
+            {"MULTIPOLYGON (((0 0,0 2,2 2,2 0,0 0,0 0)),((4 0,4 2,6 2,6 0,4 0,4 0)))",
+             "MULTIPOLYGON (((0 0,0 2,2 2,2 0,0 0)),((4 0,4 2,6 2,6 0,4 0)))"}};
+    for (const auto& [repeated_text, control_text] : cases) {
+        SCOPED_TRACE(repeated_text);
+        const auto repeated = wkb(repeated_text), control = wkb(control_text);
+        ASSERT_GT(positions(decoded(Slice(repeated))), positions(decoded(Slice(control))));
+        for (double tolerance : {0.0, 1.0}) {
+            for (bool boundary : {false, true}) {
+                TestAllocator allocator;
+                auto c = make(allocator), expected = make(allocator);
+                ASSERT_TRUE(c->append(Slice(repeated)).ok());
+                ASSERT_TRUE(expected->append(Slice(control)).ok());
+                auto status = c->finish(tolerance, boundary);
+                ASSERT_TRUE(status.ok()) << status;
+                ASSERT_TRUE(expected->finish(tolerance, boundary).ok());
+                const auto output = c->result(0)->value().to_string();
+                if (tolerance == 0)
+                    EXPECT_EQ(output, repeated);
+                else
+                    EXPECT_EQ(output, expected->result(0)->value().to_string());
+                c.reset();
+                expected.reset();
+                EXPECT_EQ(allocator.live, 0);
+            }
+        }
+    }
+}
+TEST(GeoCoverageTest, RepeatedClosingCoordinatesOnSharedCoverageEdges) {
+    const std::vector<std::string> repeated{wkb("POLYGON ((2 0,0 0,0 2,2 2,2 0,2 0,2 0))"),
+                                            wkb("POLYGON ((2 0,2 2,4 2,4 0,2 0,2 0))")};
+    const std::vector<std::string> control{wkb("POLYGON ((2 0,0 0,0 2,2 2,2 0))"),
+                                           wkb("POLYGON ((2 0,2 2,4 2,4 0,2 0))")};
+    for (double tolerance : {0.0, 1.0}) {
+        for (bool boundary : {false, true}) {
+            TestAllocator allocator;
+            auto c = make(allocator), expected = make(allocator);
+            append(*c, repeated);
+            append(*expected, control);
+            auto status = c->finish(tolerance, boundary);
+            ASSERT_TRUE(status.ok()) << status;
+            ASSERT_TRUE(expected->finish(tolerance, boundary).ok());
+            ASSERT_EQ(c->rows(), repeated.size());
+            for (size_t row = 0; row < repeated.size(); ++row) {
+                EXPECT_EQ(c->result(row)->value().to_string(),
+                          tolerance == 0 ? repeated[row] : expected->result(row)->value().to_string());
+            }
+        }
+    }
+}
+TEST(GeoCoverageTest, RepeatedClosingCoordinatesStillCountTowardsAdmissionLimits) {
+    const auto input = wkb("POLYGON ((0 0,0 2,2 2,2 0,0 0,0 0))");
+    ASSERT_EQ(positions(decoded(Slice(input))), 6);
+    TestAllocator allocator;
+    GeoCoverageLimits limits;
+    limits.vertices = 6;
+    limits.input_bytes = input.size();
+    auto exact = make(allocator, limits);
+    ASSERT_TRUE(exact->append(Slice(input)).ok());
+    auto status = exact->finish(0);
+    ASSERT_TRUE(status.ok()) << status;
+    EXPECT_EQ(exact->result(0)->value().to_string(), input);
+    --limits.vertices;
+    auto too_many = make(allocator, limits);
+    EXPECT_FALSE(too_many->append(Slice(input)).ok());
+    ++limits.vertices;
+    --limits.input_bytes;
+    auto too_large = make(allocator, limits);
+    EXPECT_FALSE(too_large->append(Slice(input)).ok());
+}
+TEST(GeoCoverageTest, CircularDeduplicationDoesNotRepairInvalidRings) {
+    for (const auto& text : {"POLYGON ((0 0,0 2,2 2,0 0,2 0,0 0,0 0))", "POLYGON ((0 0,0 0,0 0,0 0,0 0))",
+                             "POLYGON ((0 0,0 2,0 0,0 0))"}) {
+        SCOPED_TRACE(text);
+        const auto input = wkb(text);
+        for (double tolerance : {0.0, 1.0}) {
+            TestAllocator allocator;
+            auto c = make(allocator);
+            ASSERT_TRUE(c->append(Slice(input)).ok());
+            EXPECT_FALSE(c->finish(tolerance).ok());
+            EXPECT_FALSE(c->result(0).ok());
+        }
+    }
+}
 TEST(GeoCoverageTest, RowMappingNullEmptyMultiAndIslands) {
     TestAllocator allocator;
     auto c = make(allocator);
