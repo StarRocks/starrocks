@@ -916,7 +916,7 @@ Status WkbCodec::parse_wkb(const Slice& input, WkbGeometry* output, WkbCoordinat
 }
 
 Status WkbCodec::parse_wkb_bounded(const Slice& input, WkbGeometry* output, size_t max_elements,
-                                 WkbCoordinateSemantics semantics) {
+                                   WkbCoordinateSemantics semantics) {
     if (output == nullptr) {
         return Status::InvalidArgument("WKB output must not be null");
     }
