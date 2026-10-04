@@ -50,6 +50,8 @@ FROM data_source
 
     详细的参数介绍，请参见 [CREATE ROUTINE LOAD](CREATE_ROUTINE_LOAD.md#load_properties)。
 
+    当 ALTER 修改 `COLUMNS` 或 `WHERE` 时，该语句会使用创建作业时保存的 `sql_mode`（而不是当前会话的 `sql_mode`）重新解析，因为 Follower FE 和 FE 重启时都是这样读取它的。如果某个表达式在该模式下含义不同（例如 `a || b` 默认表示 `OR`，而在 `PIPES_AS_CONCAT` 下表示字符串拼接），ALTER 会被拒绝。请将会话的 `sql_mode` 设置为与作业相同的值，或改用含义明确的表达式（`concat(a, b)`）。如果作业的 `COLUMNS` 或 `WHERE` 定义无法写回持久化语句并解析为相同的表达式，ALTER 同样会被拒绝，错误信息中会给出该表达式。仅修改作业属性或数据源属性的 ALTER 不会改变现有的导入定义。
+
 - **`job_properties`**
 
   导入作业的属性。语法如下：
